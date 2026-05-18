@@ -4,6 +4,7 @@ import { SuperDocUIProvider, useSetSuperDoc, useSuperDocUI } from './provider.js
 import {
   useSuperDocCommand,
   useSuperDocComments,
+  useSuperDocContentControls,
   useSuperDocTrackChanges,
   useSuperDocSelection,
   useSuperDocToolbar,
@@ -120,14 +121,16 @@ describe('domain hooks', () => {
     expect(selection?.activeCommentIds).toEqual(['c1']);
   });
 
-  it('useSuperDocComments / useSuperDocTrackChanges / useSuperDocToolbar return initial empties before ready', () => {
+  it('useSuperDocComments / useSuperDocTrackChanges / useSuperDocContentControls / useSuperDocToolbar return initial empties before ready', () => {
     let comments: ReturnType<typeof useSuperDocComments> | undefined;
     let trackChanges: ReturnType<typeof useSuperDocTrackChanges> | undefined;
+    let contentControls: ReturnType<typeof useSuperDocContentControls> | undefined;
     let toolbar: ReturnType<typeof useSuperDocToolbar> | undefined;
 
     function Probe() {
       comments = useSuperDocComments();
       trackChanges = useSuperDocTrackChanges();
+      contentControls = useSuperDocContentControls();
       toolbar = useSuperDocToolbar();
       return null;
     }
@@ -140,6 +143,7 @@ describe('domain hooks', () => {
 
     expect(comments).toEqual({ items: [], activeIds: [], total: 0 });
     expect(trackChanges).toEqual({ items: [], total: 0, activeId: null });
+    expect(contentControls).toEqual({ items: [], activeIds: [], activeId: null, total: 0 });
     expect(toolbar).toEqual({ context: null, commands: {} });
   });
 

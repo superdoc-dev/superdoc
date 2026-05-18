@@ -123,6 +123,7 @@ export function computeCaretLayoutRectGeometry(
   includeDomFallback = true,
 ): CaretLayoutRect | null {
   if (!layout) return null;
+  const originalPos = pos;
 
   // Geometry-based calculation from layout engine
   let effectivePos = pos;
@@ -214,29 +215,115 @@ export function computeCaretLayoutRectGeometry(
   const pageEl = getPageElementByIndex(painterHost ?? null, hit.pageIndex);
   const pageRect = pageEl?.getBoundingClientRect();
 
-  // Find span containing this pos and measure actual DOM position
+  if (includeDomFallback && pageRect) {
+    const selection = pageEl?.ownerDocument?.getSelection();
+    if (selection?.rangeCount && selection.isCollapsed) {
+      const nativeRange = selection.getRangeAt(0);
+      if (typeof nativeRange.getBoundingClientRect === 'function') {
+        const nativeRect = nativeRange.getBoundingClientRect();
+        const inPageBounds =
+          Number.isFinite(nativeRect.left) &&
+          Number.isFinite(nativeRect.top) &&
+          Number.isFinite(nativeRect.height) &&
+          nativeRect.height > 0 &&
+          nativeRect.left >= pageRect.left - 2 &&
+          nativeRect.left <= pageRect.right + 2 &&
+          nativeRect.top >= pageRect.top - 2 &&
+          nativeRect.top <= pageRect.bottom + 2;
+        const nativeX = (nativeRect.left - pageRect.left) / zoom;
+        const nativeY = (nativeRect.top - pageRect.top) / zoom;
+        const withinGeometrySanity = Math.abs(nativeX - result.x) <= 80;
+        if (inPageBounds && withinGeometrySanity) {
+          return {
+            pageIndex: hit.pageIndex,
+            x: nativeX,
+            y: nativeY,
+            height: line.lineHeight,
+          };
+        }
+      }
+    }
+  }
+
+  // Find span containing this pos and measure actual DOM position.
+  // Prefer a local line-scoped lookup first (fast path), then fall back to a
+  // bounded page-level probe near the target PM position.
   let domCaretX: number | null = null;
   let domCaretY: number | null = null;
-  const spanEls = pageEl?.querySelectorAll('span[data-pm-start][data-pm-end]');
-  for (const spanEl of Array.from(spanEls ?? [])) {
-    const pmStart = Number((spanEl as HTMLElement).dataset.pmStart);
-    const pmEnd = Number((spanEl as HTMLElement).dataset.pmEnd);
-    if (effectivePos >= pmStart && effectivePos <= pmEnd && spanEl.firstChild?.nodeType === Node.TEXT_NODE) {
-      const textNode = spanEl.firstChild as Text;
-      const charIndex = Math.min(effectivePos - pmStart, textNode.length);
-      const rangeObj = document.createRange();
-      rangeObj.setStart(textNode, charIndex);
-      rangeObj.setEnd(textNode, charIndex);
-      if (typeof rangeObj.getBoundingClientRect !== 'function') {
-        break;
+  const spanCandidates: HTMLElement[] = [];
+  const pushUnique = (el: HTMLElement) => {
+    if (!spanCandidates.includes(el)) spanCandidates.push(el);
+  };
+  const collectSpans = (root: ParentNode | null | undefined) => {
+    if (!root) return;
+    const spans = root.querySelectorAll('span[data-pm-start][data-pm-end]');
+    for (const span of Array.from(spans)) {
+      if (span instanceof HTMLElement) {
+        pushUnique(span);
       }
-      const rangeRect = rangeObj.getBoundingClientRect();
-      if (pageRect) {
-        domCaretX = (rangeRect.left - pageRect.left) / zoom;
-        domCaretY = (rangeRect.top - pageRect.top) / zoom;
-      }
+    }
+  };
+
+  const lineEls = pageEl?.querySelectorAll('.superdoc-line[data-pm-start][data-pm-end]');
+  let localLineEl: HTMLElement | null = null;
+  for (const lineEl of Array.from(lineEls ?? [])) {
+    if (!(lineEl instanceof HTMLElement)) continue;
+    const lineStart = Number(lineEl.dataset.pmStart);
+    const lineEnd = Number(lineEl.dataset.pmEnd);
+    if (!Number.isFinite(lineStart) || !Number.isFinite(lineEnd)) continue;
+    if (effectivePos >= lineStart && effectivePos <= lineEnd) {
+      localLineEl = lineEl;
       break;
     }
+  }
+  collectSpans(localLineEl);
+
+  if (spanCandidates.length === 0) {
+    const MAX_PM_DISTANCE = 8;
+    const pageSpans = pageEl?.querySelectorAll('span[data-pm-start][data-pm-end]');
+    for (const span of Array.from(pageSpans ?? [])) {
+      if (!(span instanceof HTMLElement)) continue;
+      const pmStart = Number(span.dataset.pmStart);
+      const pmEnd = Number(span.dataset.pmEnd);
+      if (!Number.isFinite(pmStart) || !Number.isFinite(pmEnd)) continue;
+      if (effectivePos >= pmStart && effectivePos <= pmEnd) {
+        pushUnique(span);
+        continue;
+      }
+      if (Math.abs(pmStart - effectivePos) <= MAX_PM_DISTANCE || Math.abs(pmEnd - effectivePos) <= MAX_PM_DISTANCE) {
+        pushUnique(span);
+      }
+    }
+  }
+
+  const domProbePositions = Array.from(new Set([originalPos, effectivePos, originalPos - 1, originalPos + 1])).filter(
+    (candidate) => candidate >= 0,
+  );
+
+  let resolved = false;
+  for (const probePos of domProbePositions) {
+    for (const spanEl of spanCandidates) {
+      const pmStart = Number((spanEl as HTMLElement).dataset.pmStart);
+      const pmEnd = Number((spanEl as HTMLElement).dataset.pmEnd);
+      if (probePos >= pmStart && probePos <= pmEnd && spanEl.firstChild?.nodeType === Node.TEXT_NODE) {
+        const textNode = spanEl.firstChild as Text;
+        const charIndex = Math.min(probePos - pmStart, textNode.length);
+        const rangeObj = document.createRange();
+        rangeObj.setStart(textNode, charIndex);
+        rangeObj.setEnd(textNode, charIndex);
+        if (typeof rangeObj.getBoundingClientRect !== 'function') {
+          continue;
+        }
+        const rangeRect = rangeObj.getBoundingClientRect();
+        if (pageRect) {
+          domCaretX = (rangeRect.left - pageRect.left) / zoom;
+          domCaretY = (rangeRect.top - pageRect.top) / zoom;
+          resolved = true;
+          break;
+        }
+      }
+    }
+    if (resolved) break;
   }
 
   // If we found a DOM caret position, prefer it to avoid residual drift

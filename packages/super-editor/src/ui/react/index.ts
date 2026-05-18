@@ -33,6 +33,7 @@ export {
 export {
   useSuperDocSelection,
   useSuperDocComments,
+  useSuperDocContentControls,
   useSuperDocTrackChanges,
   useSuperDocToolbar,
   useSuperDocCommand,

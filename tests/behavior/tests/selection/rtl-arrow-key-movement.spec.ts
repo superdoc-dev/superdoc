@@ -5,6 +5,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, 'fixtures/rtl-mixed-bidi.docx');
+const MIXED_BIDI_DOC_PATH = path.resolve(__dirname, 'fixtures/mixed-bidi-2.docx');
 
 test.skip(!fs.existsSync(DOC_PATH), 'RTL fixture not available');
 
@@ -294,5 +295,215 @@ test.describe('RTL arrow key cursor movement (SD-2390)', () => {
 
     const direction = await insertedLine.evaluate((el) => getComputedStyle(el).direction);
     expect(direction).toBe('rtl');
+  });
+
+  test('ArrowLeft/ArrowRight at mixed-bidi boundary moves one visual step', async ({ superdoc }) => {
+    await superdoc.loadDocument(MIXED_BIDI_DOC_PATH);
+    await superdoc.waitForStable();
+
+    const boundaryPoint = await superdoc.page.evaluate(() => {
+      const lines = Array.from(document.querySelectorAll('.superdoc-line'));
+      for (const line of lines) {
+        const spans = Array.from(line.querySelectorAll('span[data-pm-start][data-pm-end]')) as HTMLElement[];
+        const rtlSpan = spans.find((span) => /[\u0590-\u05FF\u0600-\u06FF]/.test(span.textContent ?? ''));
+        const ltrSpan = spans.find((span) => /[A-Za-z]/.test(span.textContent ?? ''));
+        if (!rtlSpan || !ltrSpan) continue;
+        const ltrRect = ltrSpan.getBoundingClientRect();
+        return { x: ltrRect.left + 2, y: ltrRect.top + ltrRect.height / 2 };
+      }
+      return null;
+    });
+
+    expect(boundaryPoint).not.toBeNull();
+    if (!boundaryPoint) return;
+
+    await superdoc.page.mouse.click(boundaryPoint.x, boundaryPoint.y);
+    await superdoc.waitForStable();
+
+    const before = await superdoc.getSelection();
+    const xBefore = await superdoc.page.evaluate((pos) => {
+      const pe = (window as any).superdoc?.activeEditor?.presentationEditor;
+      return pe?.computeCaretLayoutRect(pos)?.x;
+    }, before.from);
+
+    await superdoc.page.keyboard.press('ArrowRight');
+    await superdoc.waitForStable();
+
+    const afterRight = await superdoc.getSelection();
+    const xAfterRight = await superdoc.page.evaluate((pos) => {
+      const pe = (window as any).superdoc?.activeEditor?.presentationEditor;
+      return pe?.computeCaretLayoutRect(pos)?.x;
+    }, afterRight.from);
+
+    await superdoc.page.keyboard.press('ArrowLeft');
+    await superdoc.waitForStable();
+
+    const afterLeft = await superdoc.getSelection();
+    const xAfterLeft = await superdoc.page.evaluate((pos) => {
+      const pe = (window as any).superdoc?.activeEditor?.presentationEditor;
+      return pe?.computeCaretLayoutRect(pos)?.x;
+    }, afterLeft.from);
+
+    expect(afterRight.from).not.toBe(before.from);
+    expect(Math.abs(xAfterRight - xBefore)).toBeGreaterThan(0.1);
+    expect(afterLeft.from).toBe(before.from);
+    expect(Math.abs(xAfterLeft - xBefore)).toBeLessThanOrEqual(1.0);
+  });
+
+  test('Shift+Arrow across mixed-bidi boundary keeps split non-overlapping selection rects', async ({
+    superdoc,
+    browserName,
+  }) => {
+    test.fixme(
+      browserName === 'firefox',
+      'Firefox paints mixed-bidi boundary selection with a different overlay geometry (no stable split-rect pattern).',
+    );
+
+    await superdoc.loadDocument(MIXED_BIDI_DOC_PATH);
+    await superdoc.waitForStable();
+
+    const boundaryPoint = await superdoc.page.evaluate(() => {
+      const lines = Array.from(document.querySelectorAll('.superdoc-line'));
+      for (const line of lines) {
+        const spans = Array.from(line.querySelectorAll('span[data-pm-start][data-pm-end]')) as HTMLElement[];
+        const rtlSpan = spans.find((span) => /[\u0590-\u05FF\u0600-\u06FF]/.test(span.textContent ?? ''));
+        const ltrSpan = spans.find((span) => /[A-Za-z]/.test(span.textContent ?? ''));
+        if (!rtlSpan || !ltrSpan) continue;
+        const ltrRect = ltrSpan.getBoundingClientRect();
+        return { x: ltrRect.left + 2, y: ltrRect.top + ltrRect.height / 2 };
+      }
+      return null;
+    });
+
+    expect(boundaryPoint).not.toBeNull();
+    if (!boundaryPoint) return;
+
+    await superdoc.page.mouse.click(boundaryPoint.x, boundaryPoint.y);
+    await superdoc.waitForStable();
+
+    const evaluateSplitRects = async () =>
+      superdoc.page.evaluate(() => {
+        const layer = document.querySelector('.presentation-editor__selection-layer--local');
+        if (!layer) return { hasSplit: false, rectCount: 0 };
+
+        const rects = Array.from(layer.children)
+          .map((child) => (child as HTMLElement).getBoundingClientRect())
+          .filter((r) => r.width > 0 && r.height > 0)
+          .map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height }));
+
+        const Y_SAME_LINE_THRESHOLD_PX = 3;
+        for (let i = 0; i < rects.length; i++) {
+          for (let j = i + 1; j < rects.length; j++) {
+            const a = rects[i]!;
+            const b = rects[j]!;
+            if (Math.abs(a.y - b.y) > Y_SAME_LINE_THRESHOLD_PX) continue;
+            const aRight = a.x + a.width;
+            const bRight = b.x + b.width;
+            const overlap = Math.max(0, Math.min(aRight, bRight) - Math.max(a.x, b.x));
+            if (overlap === 0) {
+              return { hasSplit: true, rectCount: rects.length };
+            }
+          }
+        }
+
+        return { hasSplit: false, rectCount: rects.length };
+      });
+
+    await superdoc.page.keyboard.down('Shift');
+    await superdoc.page.keyboard.press('ArrowRight');
+    await superdoc.page.keyboard.press('ArrowRight');
+    await superdoc.page.keyboard.up('Shift');
+    await superdoc.waitForStable();
+
+    const selAfterRight = await superdoc.getSelection();
+    expect(selAfterRight.to - selAfterRight.from).toBeGreaterThan(0);
+    const splitAfterRight = await evaluateSplitRects();
+
+    await superdoc.page.mouse.click(boundaryPoint.x, boundaryPoint.y);
+    await superdoc.waitForStable();
+
+    await superdoc.page.keyboard.down('Shift');
+    await superdoc.page.keyboard.press('ArrowLeft');
+    await superdoc.page.keyboard.press('ArrowLeft');
+    await superdoc.page.keyboard.up('Shift');
+    await superdoc.waitForStable();
+
+    const selAfterLeft = await superdoc.getSelection();
+    expect(selAfterLeft.to - selAfterLeft.from).toBeGreaterThan(0);
+    const splitAfterLeft = await evaluateSplitRects();
+
+    const bestRectCount = Math.max(splitAfterRight.rectCount, splitAfterLeft.rectCount);
+    expect(bestRectCount).toBeGreaterThan(0);
+    expect(splitAfterRight.hasSplit || splitAfterLeft.hasSplit).toBe(true);
+  });
+
+  test('Typing Latin in RTL mixed-bidi boundary does not cause caret drift/snap-back', async ({ superdoc }) => {
+    await superdoc.loadDocument(MIXED_BIDI_DOC_PATH);
+    await superdoc.waitForStable();
+
+    const boundaryPoint = await superdoc.page.evaluate(() => {
+      const lines = Array.from(document.querySelectorAll('.superdoc-line'));
+      for (const line of lines) {
+        const spans = Array.from(line.querySelectorAll('span[data-pm-start][data-pm-end]')) as HTMLElement[];
+        const rtlSpan = spans.find((span) => /[\u0590-\u05FF\u0600-\u06FF]/.test(span.textContent ?? ''));
+        const ltrSpan = spans.find((span) => /[A-Za-z]/.test(span.textContent ?? ''));
+        if (!rtlSpan || !ltrSpan) continue;
+        const ltrRect = ltrSpan.getBoundingClientRect();
+        return { x: ltrRect.left + 2, y: ltrRect.top + ltrRect.height / 2 };
+      }
+      return null;
+    });
+
+    expect(boundaryPoint).not.toBeNull();
+    if (!boundaryPoint) return;
+
+    const getCaret = async () => {
+      const sel = await superdoc.getSelection();
+      const x = await superdoc.page.evaluate((pos) => {
+        const pe = (window as any).superdoc?.activeEditor?.presentationEditor;
+        return pe?.computeCaretLayoutRect(pos)?.x ?? null;
+      }, sel.from);
+      return { pos: sel.from, x };
+    };
+
+    await superdoc.page.mouse.click(boundaryPoint.x, boundaryPoint.y);
+    await superdoc.waitForStable();
+
+    const c0 = await getCaret();
+    expect(c0.x).not.toBeNull();
+    if (c0.x == null) return;
+
+    await superdoc.page.keyboard.insertText('A');
+    await superdoc.waitForStable();
+    const c1 = await getCaret();
+
+    await superdoc.page.keyboard.insertText('B');
+    await superdoc.waitForStable();
+    const c2 = await getCaret();
+
+    await superdoc.page.keyboard.insertText('C');
+    await superdoc.waitForStable();
+    const c3 = await getCaret();
+
+    expect(c1.x).not.toBeNull();
+    expect(c2.x).not.toBeNull();
+    expect(c3.x).not.toBeNull();
+    if (c1.x == null || c2.x == null || c3.x == null) return;
+
+    const d1 = c1.x - c0.x;
+    const d2 = c2.x - c1.x;
+    const d3 = c3.x - c2.x;
+
+    // Boundary ambiguity can yield a zero delta for one keystroke; that's fine.
+    // Drift/snap-back signal is a direction reversal between non-zero steps.
+    const nonZeroSigns = [Math.sign(d1), Math.sign(d2), Math.sign(d3)].filter((s) => s !== 0);
+    if (nonZeroSigns.length >= 2) {
+      const first = nonZeroSigns[0]!;
+      expect(nonZeroSigns.every((s) => s === first)).toBe(true);
+    }
+    // PM position must still advance with typing even if visual X is near-stationary at boundary.
+    expect(c1.pos).toBeGreaterThan(c0.pos);
+    expect(c2.pos).toBeGreaterThan(c1.pos);
+    expect(c3.pos).toBeGreaterThan(c2.pos);
   });
 });

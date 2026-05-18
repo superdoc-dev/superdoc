@@ -75,6 +75,7 @@ import { debugLog, updateSelectionDebugHud, type SelectionDebugHudState } from '
 import { renderCellSelectionOverlay } from './selection/CellSelectionOverlay.js';
 import { renderCaretOverlay, renderSelectionRects } from './selection/LocalSelectionOverlayRendering.js';
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from './selection/CaretGeometry.js';
+import { shouldUseNativeCaretFallback } from './selection/native-caret-fallback.js';
 import {
   computeCaretRectFromVisibleTextOffset as computeCaretRectFromVisibleTextOffsetFromHelper,
   computeSelectionRectsFromVisibleTextOffsets as computeSelectionRectsFromVisibleTextOffsetsFromHelper,
@@ -9805,9 +9806,16 @@ export class PresentationEditor extends EventEmitter {
 
   /**
    * Compute caret position, preferring DOM when available, falling back to geometry.
+   *
+   * SD-3170: the native-selection refinement inside computeCaretLayoutRectGeometry
+   * reads the browser's collapsed selection rect and prefers it over geometry.
+   * That's only sound when the requested `pos` is the local user's actual caret.
+   * Arbitrary-position queries (remote collaborator cursors, vertical-arrow
+   * navigation binary search) must not get the local rect substituted in.
    */
   #computeCaretLayoutRect(pos: number): { pageIndex: number; x: number; y: number; height: number } | null {
-    const geometry = this.#computeCaretLayoutRectGeometry(pos, true);
+    const useNativeFallback = shouldUseNativeCaretFallback(this.editor?.state?.selection, pos);
+    const geometry = this.#computeCaretLayoutRectGeometry(pos, useNativeFallback);
     let dom: { pageIndex: number; x: number; y: number } | null = null;
     try {
       dom = this.#computeDomCaretPageLocal(pos);

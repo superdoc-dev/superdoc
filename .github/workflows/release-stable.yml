@@ -29,9 +29,12 @@ concurrency:
   # `git push origin stable`, leaving npm/PyPI tarballs published without
   # a corresponding tag/commit pushed.
   # [skip ci] writeback runs use a per-run group so they cannot evict a real
-  # pending stable push while the bundle is active.
+  # pending stable push while the bundle is active. queue: max keeps GitHub
+  # from dropping older pending stable releases when a stable push touches
+  # multiple wrapper packages; default queue: single only allows one pending.
   group: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[skip ci]') && format('release-stable-skip-{0}', github.run_id) || 'release-stable' }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   release:
@@ -123,6 +126,11 @@ jobs:
 
       - name: Package shape gates
         run: node tests/consumer-typecheck/package-shape-gate.mjs
+
+      - name: Legacy public no-growth gates (SD-3176)
+        run: |
+          node tests/consumer-typecheck/snapshot-super-editor-package-exports.mjs --check
+          node tests/consumer-typecheck/snapshot-superdoc-legacy-exports.mjs --check
 
       - name: Release stable packages (orchestrator)
         id: stable_release

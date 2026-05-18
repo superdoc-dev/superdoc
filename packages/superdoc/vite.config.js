@@ -237,6 +237,36 @@ export default defineConfig(({ mode, command }) => {
           'super-editor/docx-zipper': '@core/DocxZipper',
           'super-editor/converter': '@core/super-converter/SuperConverter',
           'super-editor/file-zipper': '@core/super-converter/zipper.js',
+          // SD-3178 (Phase 3 of SD-3175): explicit public facade entries.
+          // Build emits the artifacts alongside the existing entries so the
+          // facade declarations are available for postbuild verification.
+          // AIDEV-NOTE: `package.json#exports` is intentionally not yet
+          // updated to point at these entries. Phase 4 (a separate child
+          // of SD-3175) owns the contract switch. Adding `./public` or
+          // `./public/...` entries here without that ticket ships new
+          // public subpaths under the radar.
+          'public': 'src/public/index.ts',
+          // SD-3179: legacy headless-toolbar facade entry. Classified as
+          // legacy public compatibility surface in
+          // `docs/architecture/package-boundaries.md` Decision 4. New
+          // custom UI integrations should use the `superdoc/ui` /
+          // `superdoc/ui/react` entries instead.
+          'public/legacy/headless-toolbar': 'src/public/legacy/headless-toolbar.ts',
+          // SD-3180: legacy leaf facade entries mirroring the existing
+          // single-export legacy subpaths. Same classification as
+          // headless-toolbar above.
+          'public/legacy/converter': 'src/public/legacy/converter.ts',
+          'public/legacy/docx-zipper': 'src/public/legacy/docx-zipper.ts',
+          'public/legacy/file-zipper': 'src/public/legacy/file-zipper.ts',
+          // SD-3182: first supported-surface facade entry. The
+          // `superdoc/ui/react` subpath is the strategic React binding
+          // surface. SD-3147 classification: 12 public + 1 legacy/public-compat.
+          'public/ui-react': 'src/public/ui-react.ts',
+          // SD-3183: ui controller facade. 70 symbols (49 public + 21
+          // legacy/public-compat per SD-3147). Re-export source MUST stay
+          // `@superdoc/super-editor/ui` (narrow), not the root barrel —
+          // `audit-bundle.cjs` enforces shape on `dist/public/ui.es.js`.
+          'public/ui': 'src/public/ui.ts',
         },
         external: [
           'yjs',

@@ -1066,6 +1066,7 @@ export const makeDefaultItems = ({
   const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'formattingMarks'];
   const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo'];
   const shouldUseLgCompactStyles = availableWidth <= RESPONSIVE_BREAKPOINTS.lg;
+  const shouldIncludeFormattingMarks = superToolbar.config?.showFormattingMarksButton === true;
 
   if (shouldUseLgCompactStyles) {
     documentMode.attributes.value = {
@@ -1114,7 +1115,7 @@ export const makeDefaultItems = ({
     linkedStyles,
     separator,
     ruler,
-    formattingMarks,
+    ...(shouldIncludeFormattingMarks ? [formattingMarks] : []),
     copyFormat,
     clearFormatting,
     aiButton,
@@ -1136,7 +1137,7 @@ export const makeDefaultItems = ({
     const getLinkedStylesIndex = toolbarItems.findIndex((item) => item.name.value === 'linkedStyles');
     toolbarItems.splice(getLinkedStylesIndex - 1, 2);
 
-    const filterItems = ['ruler', 'formattingMarks', 'zoom', 'undo', 'redo'];
+    const filterItems = ['ruler', 'zoom', 'undo', 'redo'];
     toolbarItems = toolbarItems.filter((item) => !filterItems.includes(item.name.value));
   }
 

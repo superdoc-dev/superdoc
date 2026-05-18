@@ -267,3 +267,37 @@ input:focus {
   color: var(--demo-text-muted);
   font-weight: 600;
 }
+
+/*
+ * Contextual smart-field chip (SD-3157). Floats over the active smart-
+ * field SDT showing field label + live value. Wired in field-chip.ts
+ * against `ui.contentControls.observe` + `getRect`. Renders alongside
+ * SuperDoc's built-in SDT chrome by design — the chip demonstrates
+ * additive contextual UI, not a chrome replacement (that's SD-3159).
+ */
+.sd-field-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--demo-bg, #ffffff);
+  border: 1px solid var(--demo-accent, #2563eb);
+  color: var(--demo-accent, #2563eb);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sd-field-chip__label {
+  font-weight: 600;
+}
+
+.sd-field-chip__value {
+  color: var(--demo-text, #18181b);
+  font-weight: 400;
+}

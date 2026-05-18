@@ -144,6 +144,52 @@ describe('TextAlign extension', () => {
     });
   });
 
+  it('maps alignment per paragraph for mixed LTR/RTL selections', () => {
+    const ltrParagraph = {
+      type: { name: 'paragraph' },
+      attrs: { paragraphProperties: { rightToLeft: false, justification: 'center' } },
+    };
+    const rtlParagraph = {
+      type: { name: 'paragraph' },
+      attrs: { paragraphProperties: { rightToLeft: true, justification: 'center' } },
+    };
+    const state = {
+      doc: {
+        resolve: vi.fn((pos) => ({ pos })),
+        nodesBetween: vi.fn((_from, _to, callback) => {
+          callback(ltrParagraph, 1);
+          callback(rtlParagraph, 10);
+        }),
+      },
+      selection: {
+        ranges: [
+          {
+            $from: { pos: 1 },
+            $to: { pos: 20 },
+          },
+        ],
+      },
+    };
+    const tr = { setNodeMarkup: vi.fn() };
+    const dispatch = vi.fn();
+
+    const result = commands.setTextAlign('left')({
+      commands: { updateAttributes: vi.fn(() => true) },
+      state,
+      tr,
+      dispatch,
+    });
+
+    expect(result).toBe(true);
+    expect(tr.setNodeMarkup).toHaveBeenNthCalledWith(1, 1, undefined, {
+      paragraphProperties: { rightToLeft: false, justification: 'left' },
+    });
+    expect(tr.setNodeMarkup).toHaveBeenNthCalledWith(2, 10, undefined, {
+      paragraphProperties: { rightToLeft: true, justification: 'right' },
+    });
+    expect(dispatch).toHaveBeenCalledWith(tr);
+  });
+
   it('returns false for unsupported alignment values', () => {
     const updateAttributes = vi.fn(() => true);
 

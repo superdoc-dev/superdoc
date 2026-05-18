@@ -47,6 +47,7 @@ import { markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
  * @property {string} [aiApiKey=null] - API key for AI integration
  * @property {string} [aiEndpoint=null] - Endpoint for AI integration
  * @property {ToolbarItem[]} [customButtons=[]] - Custom buttons to add to the toolbar
+ * @property {boolean} [showFormattingMarksButton=false] - Show the formatting marks (pilcrow) button in the toolbar. Distinct from `layoutEngineOptions.showFormattingMarks`, which controls whether the marks render in the document.
  */
 
 /**
@@ -180,6 +181,7 @@ export class SuperToolbar extends EventEmitter {
     aiApiKey: null,
     aiEndpoint: null,
     customButtons: [],
+    showFormattingMarksButton: false,
   };
 
   /**

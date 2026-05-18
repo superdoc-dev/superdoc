@@ -4,6 +4,7 @@ import { h, defineComponent, ref, shallowRef, reactive, nextTick } from 'vue';
 import { DOCX } from '@superdoc/common';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
+import { Mapping, StepMap } from 'prosemirror-transform';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { Extension } from '../../super-editor/src/editors/v1/core/Extension.js';
 import {
@@ -120,6 +121,7 @@ vi.mock('@superdoc/super-editor', () => ({
   SuperEditor: SuperEditorStub,
   AIWriter: AIWriterStub,
   getTrackedChangeIndex: getTrackedChangeIndexMock,
+  TrackChangesBasePluginKey: 'TrackChangesBasePluginKey',
   PresentationEditor: class PresentationEditorMock {
     static getInstance(documentId) {
       return mockState.instances.get(documentId);
@@ -194,6 +196,7 @@ const buildCommentsStore = () => ({
   handleEditorLocationsUpdate: vi.fn(),
   clearEditorCommentPositions: vi.fn(),
   handleTrackedChangeUpdate: vi.fn(),
+  refreshTrackedChangeCommentsByIds: vi.fn(),
   syncTrackedChangePositionsWithDocument: vi.fn(),
   syncTrackedChangeComments: vi.fn(),
   removePendingComment: vi.fn(),
@@ -999,6 +1002,72 @@ describe('SuperDoc.vue', () => {
 
     expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).not.toHaveBeenCalled();
     expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+  });
+
+  it('refreshes only touched tracked-change comments from normal body transactions', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+    const transaction = {
+      getMeta: vi.fn((key) =>
+        key === 'TrackChangesBasePluginKey'
+          ? {
+              insertedMark: { attrs: { id: 'tracked-insert-1' } },
+              deletionMark: { attrs: { id: 'tracked-delete-1' } },
+              formatMark: { attrs: { id: 'tracked-format-1' } },
+            }
+          : undefined,
+      ),
+    };
+
+    options.onTransaction({ editor: editorMock, transaction, duration: 3 });
+
+    expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).not.toHaveBeenCalled();
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    expect(commentsStoreStub.refreshTrackedChangeCommentsByIds).not.toHaveBeenCalled();
+
+    await Promise.resolve();
+    expect(commentsStoreStub.refreshTrackedChangeCommentsByIds).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: editorMock,
+      changeIds: ['tracked-insert-1', 'tracked-delete-1', 'tracked-format-1'],
+      broadcastChanges: true,
+    });
+  });
+
+  it('refreshes tracked-change comments found in changed transaction ranges', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+    const trackedNode = {
+      marks: [{ type: { name: 'trackInsert' }, attrs: { id: 'tracked-range-1' } }],
+    };
+    const transaction = {
+      docChanged: true,
+      doc: {
+        content: { size: 20 },
+        nodesBetween: vi.fn((from, to, visitor) => visitor(trackedNode)),
+      },
+      mapping: new Mapping([new StepMap([4, 0, 1])]),
+      getMeta: vi.fn(() => undefined),
+    };
+
+    options.onTransaction({ editor: editorMock, transaction, duration: 3 });
+
+    await Promise.resolve();
+    expect(transaction.doc.nodesBetween).toHaveBeenCalledWith(3, 6, expect.any(Function));
+    expect(commentsStoreStub.refreshTrackedChangeCommentsByIds).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: editorMock,
+      changeIds: ['tracked-range-1'],
+      broadcastChanges: true,
+    });
   });
 
   it('reconciles replay updates by importedId before commentId to avoid duplicate comments', async () => {

@@ -20,3 +20,11 @@
  */
 
 export { applyRtlStyles, shouldUseSegmentPositioning } from './rtl-styles.js';
+export {
+  resolveRunDirectionAttribute,
+  normalizeRtlDateTokenForWordParity,
+  RTL_DATE_LIKE_TOKEN_RE,
+  STRONG_RTL_CHAR_RE,
+  LATIN_DIGIT_NEUTRAL_ONLY_RE,
+  type RunDirAttribute,
+} from './run-direction.js';

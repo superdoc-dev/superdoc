@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { FlowBlock, Layout, Line, Measure, ParaFragment } from '@superdoc/contracts';
 
 import { computeCaretLayoutRectGeometry, type ComputeCaretLayoutRectGeometryDeps } from '../selection/CaretGeometry.js';
@@ -327,6 +327,184 @@ describe('CaretGeometry', () => {
       const result = computeCaretLayoutRectGeometry(deps, 5, true);
       expect(result).not.toBe(null);
       expect(result?.pageIndex).toBe(0);
+    });
+
+    it('uses native collapsed selection rect when in page bounds', () => {
+      const block = createMockParagraphBlock('1-para', 1, 12);
+      const line = createMockLine(1, 12, 16);
+      const measure = createMockParagraphMeasure([line]);
+      const fragment = createMockParaFragment('1-para', 10, 10, 200, 16, 0, 1, 1, 12);
+      const layout = createMockLayout(fragment);
+
+      const deps: ComputeCaretLayoutRectGeometryDeps = {
+        layout,
+        blocks: [block],
+        measures: [measure],
+        painterHost: mockDom.painterHost,
+        viewportHost: mockDom.viewportHost,
+        visibleHost: mockDom.visibleHost,
+        zoom: 1,
+      };
+
+      const pageEl = mockDom.painterHost.querySelector('.superdoc-page') as HTMLElement;
+      expect(pageEl).toBeTruthy();
+
+      vi.spyOn(pageEl, 'getBoundingClientRect').mockReturnValue({
+        left: 100,
+        top: 200,
+        right: 500,
+        bottom: 700,
+        width: 400,
+        height: 500,
+        x: 100,
+        y: 200,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const nativeRange = {
+        getBoundingClientRect: () =>
+          ({
+            left: 150,
+            top: 230,
+            right: 150,
+            bottom: 246,
+            width: 0,
+            height: 16,
+            x: 150,
+            y: 230,
+            toJSON: () => ({}),
+          }) as DOMRect,
+      };
+
+      vi.spyOn(pageEl.ownerDocument, 'getSelection').mockReturnValue({
+        rangeCount: 1,
+        isCollapsed: true,
+        getRangeAt: () => nativeRange as Range,
+      } as Selection);
+
+      const result = computeCaretLayoutRectGeometry(deps, 5, true);
+      expect(result).not.toBe(null);
+      expect(result?.x).toBeCloseTo(50, 3);
+      expect(result?.y).toBeCloseTo(30, 3);
+    });
+
+    it('does not use native selection rect when includeDomFallback is false', () => {
+      const block = createMockParagraphBlock('1-para', 1, 12);
+      const line = createMockLine(1, 12, 16);
+      const measure = createMockParagraphMeasure([line]);
+      const fragment = createMockParaFragment('1-para', 10, 10, 200, 16, 0, 1, 1, 12);
+      const layout = createMockLayout(fragment);
+
+      const deps: ComputeCaretLayoutRectGeometryDeps = {
+        layout,
+        blocks: [block],
+        measures: [measure],
+        painterHost: mockDom.painterHost,
+        viewportHost: mockDom.viewportHost,
+        visibleHost: mockDom.visibleHost,
+        zoom: 1,
+      };
+
+      const pageEl = mockDom.painterHost.querySelector('.superdoc-page') as HTMLElement;
+      expect(pageEl).toBeTruthy();
+
+      vi.spyOn(pageEl, 'getBoundingClientRect').mockReturnValue({
+        left: 100,
+        top: 200,
+        right: 500,
+        bottom: 700,
+        width: 400,
+        height: 500,
+        x: 100,
+        y: 200,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const nativeRange = {
+        getBoundingClientRect: () =>
+          ({
+            left: 150,
+            top: 230,
+            right: 150,
+            bottom: 246,
+            width: 0,
+            height: 16,
+            x: 150,
+            y: 230,
+            toJSON: () => ({}),
+          }) as DOMRect,
+      };
+
+      vi.spyOn(pageEl.ownerDocument, 'getSelection').mockReturnValue({
+        rangeCount: 1,
+        isCollapsed: true,
+        getRangeAt: () => nativeRange as Range,
+      } as Selection);
+
+      const result = computeCaretLayoutRectGeometry(deps, 5, false);
+      expect(result).not.toBe(null);
+      // includeDomFallback=false should keep geometry-path output, not native DOM selection coordinates.
+      expect(result?.x).not.toBeCloseTo(50, 3);
+      expect(result?.y).not.toBeCloseTo(30, 3);
+    });
+
+    it('ignores in-bounds native selection rect when it is far from geometry result', () => {
+      const block = createMockParagraphBlock('1-para', 1, 12);
+      const line = createMockLine(1, 12, 16);
+      const measure = createMockParagraphMeasure([line]);
+      const fragment = createMockParaFragment('1-para', 10, 10, 200, 16, 0, 1, 1, 12);
+      const layout = createMockLayout(fragment);
+
+      const deps: ComputeCaretLayoutRectGeometryDeps = {
+        layout,
+        blocks: [block],
+        measures: [measure],
+        painterHost: mockDom.painterHost,
+        viewportHost: mockDom.viewportHost,
+        visibleHost: mockDom.visibleHost,
+        zoom: 1,
+      };
+
+      const pageEl = mockDom.painterHost.querySelector('.superdoc-page') as HTMLElement;
+      expect(pageEl).toBeTruthy();
+
+      vi.spyOn(pageEl, 'getBoundingClientRect').mockReturnValue({
+        left: 100,
+        top: 200,
+        right: 500,
+        bottom: 700,
+        width: 400,
+        height: 500,
+        x: 100,
+        y: 200,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const nativeRange = {
+        getBoundingClientRect: () =>
+          ({
+            left: 480,
+            top: 230,
+            right: 480,
+            bottom: 246,
+            width: 0,
+            height: 16,
+            x: 480,
+            y: 230,
+            toJSON: () => ({}),
+          }) as DOMRect,
+      };
+
+      vi.spyOn(pageEl.ownerDocument, 'getSelection').mockReturnValue({
+        rangeCount: 1,
+        isCollapsed: true,
+        getRangeAt: () => nativeRange as Range,
+      } as Selection);
+
+      const result = computeCaretLayoutRectGeometry(deps, 5, true);
+      expect(result).not.toBe(null);
+      // Native rect is in page bounds but implausibly far from geometry; should be ignored.
+      expect(result?.x).not.toBeCloseTo(380, 3);
     });
 
     it('handles virtualized content (no DOM element available)', () => {

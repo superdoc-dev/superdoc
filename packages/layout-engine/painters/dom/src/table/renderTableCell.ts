@@ -467,6 +467,14 @@ const getMeasuredBlockHeight = (measure: Measure | undefined): number => {
   return 'height' in measure && typeof measure.height === 'number' ? measure.height : 0;
 };
 
+const isAnchoredMediaBlock = (
+  block: ParagraphBlock | TableBlock | ImageBlock | DrawingBlock | undefined,
+  measure: Measure | undefined,
+): boolean =>
+  (block?.kind === 'image' || block?.kind === 'drawing') &&
+  (measure?.kind === 'image' || measure?.kind === 'drawing') &&
+  block.anchor?.isAnchored === true;
+
 const sliceSdtBoundaryForParagraph = (
   baseBoundary: SdtBoundaryOptions | undefined,
   localStartLine: number,
@@ -772,29 +780,41 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     const contentWidthPx = Math.max(0, effectiveCellWidth - paddingLeft - paddingRight);
     const contentHeightPx = Math.max(0, rowHeight - paddingTop - paddingBottom);
     let paragraphContextY = 0;
+    const betweenEntryBlockIndexes: number[] = [];
     const betweenInfoByBlockIndex = computeBetweenBorderContext(
-      cellBlocks.slice(0, Math.min(blockMeasures.length, cellBlocks.length)).map((block, index) => {
+      cellBlocks.slice(0, Math.min(blockMeasures.length, cellBlocks.length)).flatMap((block, index) => {
         const measure = blockMeasures[index];
+        if (isAnchoredMediaBlock(block, measure)) {
+          return [];
+        }
         const y = paragraphContextY;
         const height = getMeasuredBlockHeight(measure);
         paragraphContextY += height;
+        betweenEntryBlockIndexes.push(index);
         if (block?.kind !== 'paragraph' || measure?.kind !== 'paragraph' || !block.attrs?.borders) {
-          return {
+          return [
+            {
+              blockId: block?.id ?? `cell-block:${index}`,
+              x: 0,
+              y,
+              height,
+            },
+          ];
+        }
+        return [
+          {
             blockId: block?.id ?? `cell-block:${index}`,
             x: 0,
             y,
             height,
-          };
-        }
-        return {
-          blockId: block.id,
-          x: 0,
-          y,
-          height,
-          borders: block.attrs.borders,
-          borderHash: hashParagraphBorders(block.attrs.borders),
-        };
+            borders: block.attrs.borders,
+            borderHash: hashParagraphBorders(block.attrs.borders),
+          },
+        ];
       }),
+    );
+    const betweenInfoByOriginalBlockIndex = new Map(
+      Array.from(betweenInfoByBlockIndex, ([entryIndex, info]) => [betweenEntryBlockIndexes[entryIndex], info]),
     );
     let flowCursorY = 0;
     const anchoredBlocks: Array<{ block: ImageBlock | DrawingBlock; measure: ImageMeasure | DrawingMeasure }> = [];
@@ -921,7 +941,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           paddingTop,
           flowCursorY,
           sdtBoundary: sdtBoundaries[i],
-          betweenInfo: betweenInfoByBlockIndex.get(i),
+          betweenInfo: betweenInfoByOriginalBlockIndex.get(i),
           context,
           renderLine,
           applySdtDataset,

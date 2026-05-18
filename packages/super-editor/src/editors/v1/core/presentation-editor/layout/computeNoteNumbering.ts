@@ -23,6 +23,12 @@ export type NumberingOptions = {
   defaultRestart?: 'continuous' | 'eachPage' | 'eachSect';
   /** §17.11.11 — section-index → override config. Sections without overrides are absent. */
   sectionConfigs?: Map<number, SectionNoteConfig>;
+  /**
+   * §17.11.19 eachPage — per-ref page assignment from a prior layout pass.
+   * When provided AND the active restart is `eachPage`, the counter resets at
+   * each page boundary. Refs not in the map are treated as page 0 (initial).
+   */
+  refPageById?: Map<string, number>;
 };
 
 /**
@@ -44,8 +50,10 @@ export function computeNoteNumbering(
 
   const seen = new Set<string>();
   const sectionConfigs = options.sectionConfigs ?? new Map<number, SectionNoteConfig>();
+  const refPageById = options.refPageById;
   let counter = options.startCounter;
   let sectionIndex = 0;
+  let lastPage: number | null = null;
   let anyOverride = false;
 
   const restartFor = (s: number) => sectionConfigs.get(s)?.numRestart ?? options.defaultRestart ?? 'continuous';
@@ -57,9 +65,14 @@ export function computeNoteNumbering(
       const typeName = node?.type?.name;
       if (typeName === 'sectionBreak') {
         const nextSection = sectionIndex + 1;
-        // §17.11.19 — eachSect resets counter at SECTION BOUNDARY to the next section's numStart.
-        if (restartFor(nextSection) === 'eachSect') {
+        // §17.11.19 — at section boundary, reset the counter to the next section's numStart
+        // when its restart policy is anything other than continuous. (For continuous, the counter
+        // carries through from the previous section.) Also clears the page tracker so eachPage
+        // logic restarts cleanly inside the new section.
+        const nextRestart = restartFor(nextSection);
+        if (nextRestart === 'eachSect' || nextRestart === 'eachPage') {
           counter = numStartFor(nextSection);
+          lastPage = null;
         }
         sectionIndex = nextSection;
         return;
@@ -73,6 +86,12 @@ export function computeNoteNumbering(
       order.push(key);
       // §17.11.14 — customMarkFollows refs do not consume an ordinal.
       if (isCustomMarkFollows(node?.attrs?.customMarkFollows)) return;
+      // §17.11.19 eachPage — reset counter when the ref crosses a page boundary.
+      if (refPageById && restartFor(sectionIndex) === 'eachPage') {
+        const thisPage = refPageById.get(key) ?? 0;
+        if (lastPage !== null && thisPage !== lastPage) counter = numStartFor(sectionIndex);
+        lastPage = thisPage;
+      }
       numberById[key] = counter;
       const fmt = numFmtFor(sectionIndex);
       if (fmt) {

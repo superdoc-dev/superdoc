@@ -153,6 +153,72 @@ describe('computeNoteNumbering — §17.11.19 numRestart=eachSect', () => {
   });
 });
 
+describe('computeNoteNumbering — §17.11.19 numRestart=eachPage', () => {
+  it('resets counter at page boundaries when refPageById provided', () => {
+    const state = makeEditorState([
+      { kind: 'ref', id: 'a' },
+      { kind: 'ref', id: 'b' },
+      { kind: 'ref', id: 'c' },
+      { kind: 'ref', id: 'd' },
+    ]);
+    const refPageById = new Map<string, number>([
+      ['a', 0],
+      ['b', 0],
+      ['c', 1],
+      ['d', 1],
+    ]);
+    const result = computeNoteNumbering(state, 'footnoteReference', opts({ defaultRestart: 'eachPage', refPageById }));
+    expect(result.numberById).toEqual({ a: 1, b: 2, c: 1, d: 2 });
+  });
+
+  it('eachPage without refPageById falls back to continuous (first-pass fallback)', () => {
+    const state = makeEditorState([
+      { kind: 'ref', id: 'a' },
+      { kind: 'ref', id: 'b' },
+      { kind: 'ref', id: 'c' },
+    ]);
+    expect(computeNoteNumbering(state, 'footnoteReference', opts({ defaultRestart: 'eachPage' })).numberById).toEqual({
+      a: 1,
+      b: 2,
+      c: 3,
+    });
+  });
+
+  it('section-level eachPage overrides document-wide continuous', () => {
+    const state = makeEditorState([
+      { kind: 'ref', id: 'a' },
+      { kind: 'ref', id: 'b' },
+      { kind: 'sectionBreak' },
+      { kind: 'ref', id: 'c' },
+      { kind: 'ref', id: 'd' },
+    ]);
+    const sectionConfigs = new Map<number, SectionNoteConfig>([[1, { numRestart: 'eachPage' }]]);
+    const refPageById = new Map<string, number>([
+      ['a', 0],
+      ['b', 0],
+      ['c', 1],
+      ['d', 2],
+    ]);
+    const result = computeNoteNumbering(state, 'footnoteReference', opts({ sectionConfigs, refPageById }));
+    // section 0 = continuous (a, b numbered 1, 2). section 1 = eachPage (c → 1 fresh page; d → 1 new page reset).
+    expect(result.numberById).toEqual({ a: 1, b: 2, c: 1, d: 1 });
+  });
+
+  it('eachPage with per-section numStart resets to that value', () => {
+    const state = makeEditorState([
+      { kind: 'ref', id: 'a' },
+      { kind: 'ref', id: 'b' },
+    ]);
+    const sectionConfigs = new Map<number, SectionNoteConfig>([[0, { numRestart: 'eachPage', numStart: 7 }]]);
+    const refPageById = new Map<string, number>([
+      ['a', 0],
+      ['b', 1],
+    ]);
+    const result = computeNoteNumbering(state, 'footnoteReference', opts({ sectionConfigs, refPageById }));
+    expect(result.numberById).toEqual({ a: 1, b: 7 });
+  });
+});
+
 describe('computeNoteNumbering — §17.11.11 + §17.11.18 per-section numFmt', () => {
   it('emits formatById when a section overrides numFmt', () => {
     const state = makeEditorState([{ kind: 'ref', id: 'a' }, { kind: 'sectionBreak' }, { kind: 'ref', id: 'b' }]);

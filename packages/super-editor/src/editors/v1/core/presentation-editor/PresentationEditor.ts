@@ -50,7 +50,16 @@ import { getPageElementByIndex } from '../../dom-observer/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
 import { buildFootnotesInput, type NoteRenderOverride } from './layout/FootnotesBuilder.js';
-import { computeNoteNumbering } from './layout/computeNoteNumbering.js';
+import { computeNoteNumbering, type SectionNoteConfig } from './layout/computeNoteNumbering.js';
+
+/** Stable serialization of section-level note configs for the flow-block cache key. */
+function serializeSectionConfigs(map: Map<number, SectionNoteConfig>): string {
+  if (map.size === 0) return '';
+  return [...map.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([i, c]) => `${i}:${c.numFmt ?? ''}/${c.numStart ?? ''}/${c.numRestart ?? ''}`)
+    .join(';');
+}
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import {
@@ -117,6 +126,9 @@ import {
   readEndnoteNumberFormat,
   readFootnoteNumberStart,
   readEndnoteNumberStart,
+  readFootnoteNumberRestart,
+  readEndnoteNumberRestart,
+  readSectionNoteConfigs,
 } from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
@@ -6047,13 +6059,16 @@ export class PresentationEditor extends EventEmitter {
       try {
         const converter = (this.#editor as Editor & { converter?: Record<string, unknown> }).converter;
 
-        // SD-2986/B1+B2: read footnote/endnote w:numFmt + w:numStart up-front
-        // so the cardinal counters can begin at the configured value.
+        // §17.11.12 (document-wide) + §17.11.11 (section-level) — read both layers.
         let defaultTableStyleId: string | undefined;
         let footnoteNumberFormat: string | undefined;
         let endnoteNumberFormat: string | undefined;
         let footnoteNumberStart = 1;
         let endnoteNumberStart = 1;
+        let footnoteNumberRestart: 'continuous' | 'eachPage' | 'eachSect' | undefined;
+        let endnoteNumberRestart: 'continuous' | 'eachPage' | 'eachSect' | undefined;
+        let footnoteSectionConfigs = new Map<number, SectionNoteConfig>();
+        let endnoteSectionConfigs = new Map<number, SectionNoteConfig>();
         if (converter) {
           const settingsRoot = readSettingsRoot(converter);
           if (settingsRoot) {
@@ -6062,28 +6077,42 @@ export class PresentationEditor extends EventEmitter {
             endnoteNumberFormat = readEndnoteNumberFormat(settingsRoot) ?? undefined;
             footnoteNumberStart = readFootnoteNumberStart(settingsRoot) ?? 1;
             endnoteNumberStart = readEndnoteNumberStart(settingsRoot) ?? 1;
+            footnoteNumberRestart = readFootnoteNumberRestart(settingsRoot) ?? undefined;
+            endnoteNumberRestart = readEndnoteNumberRestart(settingsRoot) ?? undefined;
+          }
+          const documentPart = (converter.convertedXml as Record<string, unknown> | undefined)?.['word/document.xml'];
+          if (documentPart) {
+            footnoteSectionConfigs = readSectionNoteConfigs(documentPart as never, 'w:footnotePr');
+            endnoteSectionConfigs = readSectionNoteConfigs(documentPart as never, 'w:endnotePr');
           }
         }
 
-        // §17.11.14 / §17.11.20 — first-appearance numbering; customMarkFollows refs skip ordinal.
-        const { numberById: footnoteNumberById, order: footnoteOrder } = computeNoteNumbering(
-          this.#editor?.state,
-          'footnoteReference',
-          footnoteNumberStart,
-        );
-        // Invalidate flow block cache when footnote order, numFmt, or numStart changes
-        // (all three are baked into cached reference runs).
-        const footnoteSignature = `${footnoteNumberStart}|${footnoteNumberFormat ?? ''}|${footnoteOrder.join('|')}`;
+        // §17.11.14 / §17.11.20 / §17.11.19 / §17.11.11.
+        const footnoteNumbering = computeNoteNumbering(this.#editor?.state, 'footnoteReference', {
+          startCounter: footnoteNumberStart,
+          defaultNumFmt: footnoteNumberFormat,
+          defaultRestart: footnoteNumberRestart,
+          sectionConfigs: footnoteSectionConfigs,
+        });
+        const footnoteNumberById = footnoteNumbering.numberById;
+        const footnoteFormatById = footnoteNumbering.formatById;
+        const footnoteOrder = footnoteNumbering.order;
+        // Cache key: anything baked into cached reference runs.
+        const footnoteSignature = `${footnoteNumberStart}|${footnoteNumberFormat ?? ''}|${footnoteNumberRestart ?? ''}|${serializeSectionConfigs(footnoteSectionConfigs)}|${footnoteOrder.join('|')}`;
         if (footnoteSignature !== this.#footnoteNumberSignature) {
           this.#flowBlockCache.clear();
           this.#footnoteNumberSignature = footnoteSignature;
         }
-        const { numberById: endnoteNumberById, order: endnoteOrder } = computeNoteNumbering(
-          this.#editor?.state,
-          'endnoteReference',
-          endnoteNumberStart,
-        );
-        const endnoteSignature = `${endnoteNumberStart}|${endnoteNumberFormat ?? ''}|${endnoteOrder.join('|')}`;
+        const endnoteNumbering = computeNoteNumbering(this.#editor?.state, 'endnoteReference', {
+          startCounter: endnoteNumberStart,
+          defaultNumFmt: endnoteNumberFormat,
+          defaultRestart: endnoteNumberRestart,
+          sectionConfigs: endnoteSectionConfigs,
+        });
+        const endnoteNumberById = endnoteNumbering.numberById;
+        const endnoteFormatById = endnoteNumbering.formatById;
+        const endnoteOrder = endnoteNumbering.order;
+        const endnoteSignature = `${endnoteNumberStart}|${endnoteNumberFormat ?? ''}|${endnoteNumberRestart ?? ''}|${serializeSectionConfigs(endnoteSectionConfigs)}|${endnoteOrder.join('|')}`;
         if (endnoteSignature !== this.#endnoteNumberSignature) {
           this.#flowBlockCache.clear();
           this.#endnoteNumberSignature = endnoteSignature;
@@ -6104,6 +6133,8 @@ export class PresentationEditor extends EventEmitter {
               ...(Object.keys(endnoteNumberById).length ? { endnoteNumberById } : {}),
               ...(footnoteNumberFormat ? { footnoteNumberFormat } : {}),
               ...(endnoteNumberFormat ? { endnoteNumberFormat } : {}),
+              ...(footnoteFormatById && Object.keys(footnoteFormatById).length ? { footnoteFormatById } : {}),
+              ...(endnoteFormatById && Object.keys(endnoteFormatById).length ? { endnoteFormatById } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
               ...(defaultTableStyleId ? { defaultTableStyleId } : {}),

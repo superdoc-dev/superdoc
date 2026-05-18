@@ -7,12 +7,10 @@ export function endnoteReferenceToBlock(params: InlineConverterParams): TextRun 
   const { node, converterContext } = params;
   const id = (node.attrs as Record<string, unknown> | undefined)?.id;
   const cardinal = resolveEndnoteDisplayNumber(id, converterContext.endnoteNumberById);
-  const displayText =
-    cardinal != null
-      ? formatFootnoteCardinal(cardinal, converterContext.endnoteNumberFormat)
-      : id != null
-        ? String(id)
-        : '*';
+  // §17.11.11 — per-section numFmt override (endnoteFormatById) wins over the document default.
+  const key = id == null ? null : String(id);
+  const numFmt = (key && converterContext.endnoteFormatById?.[key]) || converterContext.endnoteNumberFormat;
+  const displayText = cardinal != null ? formatFootnoteCardinal(cardinal, numFmt) : id != null ? String(id) : '*';
 
   return buildReferenceMarkerRun(displayText, params);
 }

@@ -17,12 +17,11 @@ export function footnoteReferenceToBlock(params: InlineConverterParams): TextRun
   }
 
   const cardinal = resolveFootnoteDisplayNumber(id, converterContext.footnoteNumberById);
-  const displayText =
-    cardinal != null
-      ? formatFootnoteCardinal(cardinal, converterContext.footnoteNumberFormat)
-      : id != null
-        ? String(id)
-        : '*';
+  // §17.11.11 — per-section numFmt override (footnoteFormatById) wins over the
+  // document-wide footnoteNumberFormat. Falls back to the doc default.
+  const key = id == null ? null : String(id);
+  const numFmt = (key && converterContext.footnoteFormatById?.[key]) || converterContext.footnoteNumberFormat;
+  const displayText = cardinal != null ? formatFootnoteCardinal(cardinal, numFmt) : id != null ? String(id) : '*';
 
   return buildReferenceMarkerRun(displayText, params);
 }

@@ -60,6 +60,15 @@ export type ConverterContext = {
    */
   endnoteNumberFormat?: string;
   /**
+   * §17.11.11 — per-ref OOXML numFmt resolved from section-level w:footnotePr
+   * overrides (when set). When present for an id, supersedes the document-wide
+   * `footnoteNumberFormat`. Absent for documents that use only the document
+   * default — consumers fall back to `footnoteNumberFormat`.
+   */
+  footnoteFormatById?: Record<string, string>;
+  /** §17.11.11 — same as `footnoteFormatById` but for endnotes. */
+  endnoteFormatById?: Record<string, string>;
+  /**
    * Paragraph properties inherited from the containing table's style.
    * Per OOXML spec, table styles can define pPr that applies to all
    * paragraphs within the table. This is set by the table converter

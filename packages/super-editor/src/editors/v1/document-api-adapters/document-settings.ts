@@ -163,6 +163,129 @@ function readNoteNumberStart(settingsRoot: XmlElement, containerName: 'w:footnot
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// w:footnotePr / w:endnotePr  — w:numRestart (§17.11.19, ST_RestartNumber §17.18.74)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type NoteNumberRestart = 'continuous' | 'eachPage' | 'eachSect';
+
+export function readFootnoteNumberRestart(settingsRoot: XmlElement): NoteNumberRestart | null {
+  return readNoteNumberRestart(settingsRoot, 'w:footnotePr');
+}
+
+export function readEndnoteNumberRestart(settingsRoot: XmlElement): NoteNumberRestart | null {
+  return readNoteNumberRestart(settingsRoot, 'w:endnotePr');
+}
+
+function readNoteNumberRestart(
+  settingsRoot: XmlElement,
+  containerName: 'w:footnotePr' | 'w:endnotePr',
+): NoteNumberRestart | null {
+  const container = settingsRoot.elements?.find((entry) => entry.name === containerName);
+  if (!container || !Array.isArray(container.elements)) return null;
+  const el = container.elements.find((entry) => entry.name === 'w:numRestart');
+  if (!el) return null;
+  const val = (el.attributes as Record<string, unknown> | undefined)?.['w:val'];
+  if (val === 'continuous' || val === 'eachPage' || val === 'eachSect') return val;
+  return null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Section-level w:sectPr/w:footnotePr (§17.11.11) — per-section overrides for
+// numFmt, numStart, numRestart. Section-level w:pos is parsed for round-trip but
+// must be IGNORED at render per §17.11.21.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type SectionNoteConfig = {
+  numFmt?: string;
+  numStart?: number;
+  numRestart?: NoteNumberRestart;
+};
+
+/**
+ * Walks `word/document.xml` for `w:sectPr` blocks (both standalone at body level
+ * and inside `w:p/w:pPr`), extracts their `w:footnotePr` / `w:endnotePr`
+ * children, and returns the per-section override config keyed by 0-based
+ * section index. Sections without overrides are absent from the map.
+ *
+ * Per §17.11.11: each property is an override of the document-wide value. Per
+ * §17.11.21: section-level `w:pos` is ignored at render time (we omit it here).
+ */
+export function readSectionNoteConfigs(
+  documentRoot: XmlElement | undefined,
+  containerName: 'w:footnotePr' | 'w:endnotePr',
+): Map<number, SectionNoteConfig> {
+  const result = new Map<number, SectionNoteConfig>();
+  if (!documentRoot) return result;
+
+  const bodyEl = findBody(documentRoot);
+  if (!bodyEl) return result;
+
+  let sectionIndex = 0;
+  for (const child of bodyEl.elements ?? []) {
+    if (child.name === 'w:sectPr') {
+      const config = extractSectionNoteConfig(child, containerName);
+      if (config) result.set(sectionIndex, config);
+      sectionIndex += 1;
+    } else if (child.name === 'w:p') {
+      const sectPr = findChildByName(findChildByName(child, 'w:pPr'), 'w:sectPr');
+      if (sectPr) {
+        const config = extractSectionNoteConfig(sectPr, containerName);
+        if (config) result.set(sectionIndex, config);
+        sectionIndex += 1;
+      }
+    }
+  }
+
+  return result;
+}
+
+function findBody(root: XmlElement): XmlElement | null {
+  if (root.name === 'w:body') return root;
+  if (!Array.isArray(root.elements)) return null;
+  for (const child of root.elements) {
+    if (child.name === 'w:body') return child;
+    const inner = child.elements?.find((g) => g.name === 'w:body');
+    if (inner) return inner;
+  }
+  return null;
+}
+
+function findChildByName(parent: XmlElement | null | undefined, name: string): XmlElement | null {
+  if (!parent) return null;
+  return parent.elements?.find((entry) => entry.name === name) ?? null;
+}
+
+function extractSectionNoteConfig(
+  sectPr: XmlElement,
+  containerName: 'w:footnotePr' | 'w:endnotePr',
+): SectionNoteConfig | null {
+  const container = findChildByName(sectPr, containerName);
+  if (!container) return null;
+  const config: SectionNoteConfig = {};
+
+  const numFmt = findChildByName(container, 'w:numFmt');
+  if (numFmt) {
+    const val = (numFmt.attributes as Record<string, unknown> | undefined)?.['w:val'];
+    if (typeof val === 'string' && val.length > 0) config.numFmt = val;
+  }
+
+  const numStart = findChildByName(container, 'w:numStart');
+  if (numStart) {
+    const val = (numStart.attributes as Record<string, unknown> | undefined)?.['w:val'];
+    const n = typeof val === 'string' || typeof val === 'number' ? Number(val) : NaN;
+    if (Number.isFinite(n) && n >= 1) config.numStart = Math.floor(n);
+  }
+
+  const numRestart = findChildByName(container, 'w:numRestart');
+  if (numRestart) {
+    const val = (numRestart.attributes as Record<string, unknown> | undefined)?.['w:val'];
+    if (val === 'continuous' || val === 'eachPage' || val === 'eachSect') config.numRestart = val;
+  }
+
+  return Object.keys(config).length > 0 ? config : null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // w:evenAndOddHeaders
 // ──────────────────────────────────────────────────────────────────────────────
 

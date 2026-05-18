@@ -106,6 +106,7 @@ export function buildFootnotesInput(
 
   const footnoteNumberById = converterContext?.footnoteNumberById;
   const footnoteNumberFormat = converterContext?.footnoteNumberFormat;
+  const footnoteFormatById = converterContext?.footnoteFormatById;
   const importedFootnotes = Array.isArray(converter?.footnotes) ? converter.footnotes : [];
 
   if (importedFootnotes.length === 0) return null;
@@ -149,7 +150,9 @@ export function buildFootnotesInput(
 
       if (result?.blocks?.length) {
         if (!customMarkIds.has(id)) {
-          ensureFootnoteMarker(result.blocks, id, footnoteNumberById, footnoteNumberFormat);
+          // §17.11.11 — per-id format from section override wins over document default.
+          const numFmtForId = footnoteFormatById?.[id] ?? footnoteNumberFormat;
+          ensureFootnoteMarker(result.blocks, id, footnoteNumberById, numFmtForId);
         }
         blocksById.set(id, result.blocks);
       }

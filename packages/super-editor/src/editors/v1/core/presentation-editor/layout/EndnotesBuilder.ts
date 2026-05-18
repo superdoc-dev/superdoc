@@ -36,6 +36,7 @@ export function buildEndnoteBlocks(
 
   const endnoteNumberById = converterContext?.endnoteNumberById;
   const endnoteNumberFormat = converterContext?.endnoteNumberFormat;
+  const endnoteFormatById = converterContext?.endnoteFormatById;
   const importedEndnotes = Array.isArray(converter?.endnotes) ? converter.endnotes : [];
   if (importedEndnotes.length === 0) return [];
 
@@ -74,7 +75,9 @@ export function buildEndnoteBlocks(
 
       if (result?.blocks?.length) {
         if (!customMarkIds.has(id)) {
-          ensureEndnoteMarker(result.blocks, id, endnoteNumberById, endnoteNumberFormat);
+          // §17.11.11 — per-id format from section override wins over document default.
+          const numFmtForId = endnoteFormatById?.[id] ?? endnoteNumberFormat;
+          ensureEndnoteMarker(result.blocks, id, endnoteNumberById, numFmtForId);
         }
         blocks.push(...result.blocks);
       }

@@ -76,6 +76,7 @@ import {
   isHeaderWordArtWatermark,
   renderDrawingFragment as renderDrawingFragmentElement,
 } from './drawings/renderDrawingFragment.js';
+import { isNonBodyStoryBlockId, shouldApplyPainterReadOnly } from './notes/story.js';
 
 export type {
   PaintSnapshotStructuredContentBlockEntity,
@@ -2747,8 +2748,7 @@ export class DomPainter {
     applySourceAnchorDataset(el, fragment.sourceAnchor);
     applyLayoutIdentityDataset(el, resolveOrBuildFragmentIdentity(fragment, story ?? resolveSectionStory(section)));
 
-    // Footnote content is read-only: prevent cursor placement and typing (blockId prefix from FootnotesBuilder)
-    if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
+    if (shouldApplyPainterReadOnly(fragment.blockId)) {
       el.setAttribute('contenteditable', 'false');
     }
 
@@ -2768,8 +2768,7 @@ export class DomPainter {
     section?: 'body' | 'header' | 'footer',
     resolvedItem?: ResolvedFragmentItem | ResolvedTablePaintItem | ResolvedImageItem | ResolvedDrawingItem,
   ): void {
-    // Footnote content is read-only: prevent cursor placement and typing
-    if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
+    if (shouldApplyPainterReadOnly(fragment.blockId)) {
       el.setAttribute('contenteditable', 'false');
     }
 
@@ -2897,10 +2896,3 @@ const hasFragmentGeometryChanged = (previous: Fragment, next: Fragment): boolean
     typeof previous.height === 'number' &&
     typeof next.height === 'number' &&
     previous.height !== next.height);
-
-const isNonBodyStoryBlockId = (blockId: string | undefined): boolean =>
-  typeof blockId === 'string' &&
-  (blockId.startsWith('footnote-') ||
-    blockId.startsWith('endnote-') ||
-    blockId.startsWith('__sd_semantic_footnote-') ||
-    blockId.startsWith('__sd_semantic_endnote-'));

@@ -67,6 +67,19 @@ export const hasNegatedFormattingMark = (
   return rawActiveMark ? isNegatedMark(rawActiveMark.name, rawActiveMark.attrs) : false;
 };
 
+type FormatCommandsStorage = {
+  storedStyle?: unknown;
+};
+
+const isFormatCommandsStorage = (value: unknown): value is FormatCommandsStorage => {
+  return typeof value === 'object' && value !== null && 'storedStyle' in value;
+};
+
+const hasStoredCopyFormat = (context: ToolbarContext | null) => {
+  const formatCommands = resolveStateEditor(context)?.storage?.formatCommands;
+  return isFormatCommandsStorage(formatCommands) && Boolean(formatCommands.storedStyle);
+};
+
 export const createBoldStateDeriver =
   () =>
   ({ context }: { context: ToolbarContext | null }) => {
@@ -162,7 +175,7 @@ export const createCopyFormatStateDeriver =
   () =>
   ({ context }: { context: ToolbarContext | null }) => {
     return {
-      active: Boolean(resolveStateEditor(context)?.storage?.formatCommands?.storedStyle),
+      active: hasStoredCopyFormat(context),
       disabled: isCommandDisabled(context),
     };
   };

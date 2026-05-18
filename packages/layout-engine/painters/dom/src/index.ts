@@ -48,6 +48,7 @@ export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './runs/index.j
 
 export { applySquareWrapExclusionsToLines } from './utils/anchor-helpers';
 export { buildImagePmSelector, buildInlineImagePmSelector } from './images/image-selectors.js';
+export { isNonBodyStoryBlockId } from './notes/story.js';
 
 // Re-export PM position validation utilities
 export {

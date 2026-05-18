@@ -1835,6 +1835,261 @@ describe('SuperDoc.vue', () => {
     expect(wrapper.find('.floating-comments').exists()).toBe(true);
   });
 
+  it('hides sidebar when comments displayMode is inline', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    commentsStoreStub.getFloatingComments.value = [{ commentId: 'c-1' }];
+    commentsStoreStub.hasInitializedLocations.value = true;
+    superdocStoreStub.isReady.value = true;
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    await nextTick();
+
+    expect(wrapper.vm.showCommentsSidebar).toBe(false);
+    expect(wrapper.find('.superdoc__right-sidebar').exists()).toBe(false);
+  });
+
+  it('hides sidebar in auto mode when compact threshold is reached', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    commentsStoreStub.getFloatingComments.value = [{ commentId: 'c-1' }];
+    commentsStoreStub.hasInitializedLocations.value = true;
+    superdocStoreStub.isReady.value = true;
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    superdocStoreStub.modules.comments.compactBreakpointPx = 760;
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const parentEl = rootEl.parentElement;
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 700 });
+    if (parentEl) {
+      Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 700 });
+    }
+
+    wrapper.vm.recalculateCompactCommentsMode();
+    await nextTick();
+
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+    expect(wrapper.vm.showCommentsSidebar).toBe(false);
+  });
+
+  it('closes comment bubble and suppresses immediate comment activation on right-click', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    document.body.appendChild(wrapper.element);
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.setActiveComment.mockClear();
+    commentsStoreStub.removePendingComment.mockClear();
+
+    const layersEl = wrapper.find('.superdoc__layers').element;
+    layersEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+    expect(commentsStoreStub.removePendingComment).toHaveBeenCalledWith(superdocStub);
+
+    commentsStoreStub.setActiveComment.mockClear();
+    options.onCommentsUpdate({ activeCommentId: 'c1', type: 'trackedChange' });
+    await nextTick();
+
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalledWith(superdocStub, 'c1');
+
+    wrapper.element.remove();
+  });
+
+  it('renders compact comment popover when sidebar is disabled and there is an active thread', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    commentsStoreStub.removePendingComment.mockImplementation(() => {
+      commentsStoreStub.pendingComment.value = null;
+    });
+    commentsStoreStub.setActiveComment.mockImplementation((_, commentId) => {
+      commentsStoreStub.activeComment.value = commentId;
+    });
+    commentsStoreStub.pendingComment.value = { commentId: 'pending-1', selection: { selectionBounds: {} } };
+    await nextTick();
+
+    expect(wrapper.vm.showCommentsSidebar).toBe(false);
+    expect(wrapper.vm.activeCompactComment).toBeTruthy();
+    expect(wrapper.find('.superdoc__compact-comment-popover').exists()).toBe(true);
+    expect(wrapper.findComponent(CommentDialogStub).exists()).toBe(true);
+  });
+
+  it('uses PDF DOM anchor fallback for compact popover positioning when stored bounds are unavailable', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    commentsStoreStub.pendingComment.value = {
+      commentId: 'pending-1',
+      selection: { source: 'pdf', selectionBounds: {} },
+    };
+    await nextTick();
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const layersEl = wrapper.find('.superdoc__layers').element;
+    const anchorEl = document.createElement('div');
+    anchorEl.className = 'sd-comment-anchor';
+    anchorEl.setAttribute('data-id', 'pending-1');
+    rootEl.appendChild(anchorEl);
+
+    rootEl.getBoundingClientRect = () => ({ top: 50, left: 0, right: 900, bottom: 850, width: 900, height: 800 });
+    layersEl.getBoundingClientRect = () => ({ top: 100, left: 0, right: 800, bottom: 700, width: 800, height: 600 });
+    anchorEl.getBoundingClientRect = () => ({ top: 180, left: 10, right: 30, bottom: 200, width: 20, height: 20 });
+
+    superdocStoreStub.selectionPosition.value = { source: 'pdf', top: 100, left: 10, right: 20, bottom: 120 };
+    await nextTick();
+    await nextTick();
+    const style = wrapper.vm.compactCommentPopoverStyle;
+    expect(style.top).not.toBe('12px');
+  });
+
+  it('re-anchors compact popover when clicking between DOCX comment anchors', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    document.body.appendChild(wrapper.element);
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    commentsStoreStub.pendingComment.value = {
+      commentId: 'pending-1',
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    await nextTick();
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const layersEl = wrapper.find('.superdoc__layers').element;
+    rootEl.getBoundingClientRect = () => ({ top: 0, left: 0, right: 1000, bottom: 700, width: 1000, height: 700 });
+    layersEl.getBoundingClientRect = () => ({ top: 0, left: 100, right: 900, bottom: 700, width: 800, height: 700 });
+
+    const anchorA = document.createElement('span');
+    anchorA.className = 'superdoc-comment-highlight';
+    anchorA.setAttribute('data-comment-ids', 'pending');
+    anchorA.getBoundingClientRect = () => ({ top: 100, left: 140, right: 200, bottom: 120, width: 60, height: 20 });
+
+    const anchorB = document.createElement('span');
+    anchorB.className = 'superdoc-comment-highlight';
+    anchorB.setAttribute('data-comment-ids', 'pending');
+    anchorB.getBoundingClientRect = () => ({ top: 180, left: 420, right: 500, bottom: 200, width: 80, height: 20 });
+
+    layersEl.appendChild(anchorA);
+    layersEl.appendChild(anchorB);
+
+    const dispatchPointerDown = (target, x, y) => {
+      const event = new Event('pointerdown', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'button', { value: 0 });
+      Object.defineProperty(event, 'pointerType', { value: 'mouse' });
+      Object.defineProperty(event, 'clientX', { value: x });
+      Object.defineProperty(event, 'clientY', { value: y });
+      target.dispatchEvent(event);
+    };
+
+    dispatchPointerDown(anchorA, 160, 112);
+    await nextTick();
+    const firstStyle = wrapper.vm.compactCommentPopoverStyle;
+
+    dispatchPointerDown(anchorB, 450, 190);
+    await nextTick();
+    const secondStyle = wrapper.vm.compactCommentPopoverStyle;
+
+    expect(firstStyle.left).not.toBe(secondStyle.left);
+    expect(firstStyle.top).not.toBe(secondStyle.top);
+
+    wrapper.element.remove();
+  });
+
+  it('does not early-close compact popover on DOCX pointerdown outside anchors', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    document.body.appendChild(wrapper.element);
+
+    commentsStoreStub.removePendingComment.mockClear();
+    commentsStoreStub.setActiveComment.mockClear();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    commentsStoreStub.pendingComment.value = {
+      commentId: 'pending-1',
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    await nextTick();
+
+    expect(wrapper.find('.superdoc__compact-comment-popover').exists()).toBe(true);
+
+    const layersEl = wrapper.find('.superdoc__layers').element;
+    const outsideNode = document.createElement('div');
+    layersEl.appendChild(outsideNode);
+
+    const event = new Event('pointerdown', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'button', { value: 0 });
+    Object.defineProperty(event, 'pointerType', { value: 'mouse' });
+    Object.defineProperty(event, 'clientX', { value: 300 });
+    Object.defineProperty(event, 'clientY', { value: 300 });
+    outsideNode.dispatchEvent(event);
+    await nextTick();
+
+    expect(commentsStoreStub.removePendingComment).not.toHaveBeenCalled();
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalledWith(superdocStub, null);
+    expect(wrapper.find('.superdoc__compact-comment-popover').exists()).toBe(true);
+
+    wrapper.element.remove();
+  });
+
+  it('does not render compact comment popover when sidebar remains enabled', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    commentsStoreStub.pendingComment.value = { commentId: 'pending-1', selection: { selectionBounds: {} } };
+    await nextTick();
+
+    expect(wrapper.vm.showCommentsSidebar).toBeTruthy();
+    expect(wrapper.find('.superdoc__compact-comment-popover').exists()).toBe(false);
+  });
+
+  it('closes compact comment popover on Escape and restores focus', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const trigger = document.createElement('button');
+    trigger.textContent = 'trigger';
+    document.body.appendChild(trigger);
+    trigger.focus();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    commentsStoreStub.pendingComment.value = { commentId: 'pending-1', selection: { selectionBounds: {} } };
+    await nextTick();
+
+    expect(wrapper.find('.superdoc__compact-comment-popover').exists()).toBe(true);
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+      }),
+    );
+    await nextTick();
+    await nextTick();
+
+    expect(commentsStoreStub.removePendingComment).toHaveBeenCalled();
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+  });
+
   it('hides floating comments sidebar entirely in viewing mode even with comment positions', async () => {
     const superdocStub = createSuperdocStub();
     superdocStub.config.documentMode = 'viewing';
@@ -1848,6 +2103,145 @@ describe('SuperDoc.vue', () => {
 
     expect(wrapper.vm.showCommentsSidebar).toBe(false);
     expect(wrapper.find('.superdoc__right-sidebar').exists()).toBe(false);
+  });
+
+  it('computes compact comments mode for explicit sidebar/inline display modes', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    superdocStoreStub.modules.comments.displayMode = 'sidebar';
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(false);
+  });
+
+  it('computes compact comments mode in auto using compactBreakpointPx override', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const parentEl = rootEl.parentElement;
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 700 });
+    if (parentEl) {
+      Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 700 });
+    }
+
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    superdocStoreStub.modules.comments.compactBreakpointPx = 760;
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 900 });
+    if (parentEl) {
+      Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 900 });
+    }
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(false);
+  });
+
+  it('switches auto mode directly at compactBreakpointPx threshold', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const parentEl = rootEl.parentElement;
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    superdocStoreStub.modules.comments.compactBreakpointPx = 760;
+
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 700 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 700 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    // Still compact below threshold
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 759 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 759 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    // Exits compact at/above threshold
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 760 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 760 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(false);
+  });
+
+  it('switches auto mode directly at measured document threshold when compactBreakpointPx is absent', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const documentEl = wrapper.find('.superdoc__document').element;
+    const parentEl = rootEl.parentElement;
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    delete superdocStoreStub.modules.comments.compactBreakpointPx;
+    delete superdocStoreStub.modules.comments.compactMeasurementSelector;
+
+    // Measured threshold = document(816) + sidebar(320) + gutter(24) = 1160
+    Object.defineProperty(documentEl, 'clientWidth', { configurable: true, value: 816 });
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 1130 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 1130 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    // Still compact below threshold
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 1159 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 1159 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 1160 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 1160 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(false);
+  });
+
+  it('uses compactMeasurementSelector as width source in auto mode when target exists', async () => {
+    const superdocStub = createSuperdocStub();
+    const measurementTarget = document.createElement('div');
+    measurementTarget.id = 'compact-shell';
+    Object.defineProperty(measurementTarget, 'clientWidth', { configurable: true, value: 700 });
+    document.body.appendChild(measurementTarget);
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    superdocStoreStub.modules.comments.compactMeasurementSelector = '#compact-shell';
+    superdocStoreStub.modules.comments.compactBreakpointPx = 760;
+    wrapper.vm.recalculateCompactCommentsMode();
+
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+    measurementTarget.remove();
+  });
+
+  it('holds compact state when measured auto width is invalid (0)', async () => {
+    const superdocStub = createSuperdocStub();
+    const measurementTarget = document.createElement('div');
+    measurementTarget.id = 'compact-shell-invalid';
+    Object.defineProperty(measurementTarget, 'clientWidth', { configurable: true, value: 0 });
+    document.body.appendChild(measurementTarget);
+
+    superdocStub.config.modules.comments.compactMeasurementSelector = '#compact-shell-invalid';
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    superdocStoreStub.modules.comments.compactBreakpointPx = 760;
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+    measurementTarget.remove();
   });
 
   it('ignores comment location updates while in viewing mode', async () => {

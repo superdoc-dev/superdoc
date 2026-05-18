@@ -264,23 +264,22 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
       expect(forwardedEvents).toEqual(['beforeinput']);
     });
 
-    // Simulate a "footnote/header was once active, now the main editor is
-    // active and the previous editor still has native focus" flow. Returning
-    // the stale editor briefly via getTargetDom causes the bridge to register
-    // it in its owned-editors set; switching back makes it a stale candidate.
-    const registerAsPreviouslyOwned = (staleEditor: HTMLElement) => {
-      (getTargetDom as unknown as { mockReturnValueOnce: (value: HTMLElement) => void }).mockReturnValueOnce(
-        staleEditor,
-      );
-      bridge.notifyTargetChanged();
-      bridge.notifyTargetChanged();
+    // Wrap a stale ProseMirror editor in a `.sd-editor-scoped` ancestor so
+    // the bridge recognizes it as a SuperDoc editor (matches the production
+    // DOM where every SuperDoc PM editor sits inside .sd-editor-scoped).
+    const makeSuperDocStaleEditor = (): HTMLElement => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'sd-editor-scoped';
+      const editor = document.createElement('div');
+      editor.className = 'ProseMirror';
+      editor.setAttribute('contenteditable', 'true');
+      wrapper.appendChild(editor);
+      document.body.appendChild(wrapper);
+      return editor;
     };
 
     it('reroutes beforeinput from a stale hidden editor to the active target when window fallback is enabled', () => {
-      const staleBodyEditor = document.createElement('div');
-      staleBodyEditor.className = 'ProseMirror';
-      staleBodyEditor.setAttribute('contenteditable', 'true');
-      document.body.appendChild(staleBodyEditor);
+      const staleBodyEditor = makeSuperDocStaleEditor();
 
       const staleEvent = new InputEvent('beforeinput', {
         data: 'a',
@@ -297,7 +296,6 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
         useWindowFallback: true,
       });
       bridge.bind();
-      registerAsPreviouslyOwned(staleBodyEditor);
 
       staleBodyEditor.dispatchEvent(staleEvent);
 
@@ -313,10 +311,7 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
     });
 
     it('reroutes non-text keyboard commands from a stale hidden editor to the active target', () => {
-      const staleBodyEditor = document.createElement('div');
-      staleBodyEditor.className = 'ProseMirror';
-      staleBodyEditor.setAttribute('contenteditable', 'true');
-      document.body.appendChild(staleBodyEditor);
+      const staleBodyEditor = makeSuperDocStaleEditor();
 
       const staleEvent = new KeyboardEvent('keydown', {
         key: 'Backspace',
@@ -332,7 +327,6 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
         useWindowFallback: true,
       });
       bridge.bind();
-      registerAsPreviouslyOwned(staleBodyEditor);
 
       staleBodyEditor.dispatchEvent(staleEvent);
 

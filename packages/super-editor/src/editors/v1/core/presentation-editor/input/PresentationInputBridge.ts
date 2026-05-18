@@ -28,15 +28,6 @@ export class PresentationInputBridge {
   #onTargetChanged?: (target: HTMLElement | null) => void;
   #listeners: Array<{ type: string; handler: EventListener; target: EventTarget; useCapture: boolean }>;
   #currentTarget: HTMLElement | null = null;
-  /**
-   * DOMs that this bridge has ever owned as a target (main editor, footnote,
-   * header, footer, etc.). Used by #resolveStaleEditorOrigin to ignore
-   * `.ProseMirror[contenteditable="true"]` elements that belong to *another*
-   * editor on the page (e.g. a Tiptap chat composer next to SuperDoc).
-   * Stale-recovery should only redirect when the candidate is a SuperDoc
-   * editor this bridge knows about.
-   */
-  #ownedEditorDoms: WeakSet<HTMLElement> = new WeakSet();
   #destroyed = false;
   #useWindowFallback: boolean;
 
@@ -152,7 +143,6 @@ export class PresentationInputBridge {
       }
     }
     this.#currentTarget = nextTarget;
-    if (nextTarget) this.#ownedEditorDoms.add(nextTarget);
     this.#onTargetChanged?.(nextTarget ?? null);
   }
 
@@ -187,7 +177,6 @@ export class PresentationInputBridge {
     }
 
     this.#currentTarget = target;
-    this.#ownedEditorDoms.add(target);
     try {
       const canceled = !target.dispatchEvent(synthetic) || synthetic.defaultPrevented;
       if (canceled) {
@@ -206,7 +195,6 @@ export class PresentationInputBridge {
     if (!target) return null;
     const isConnected = (target as { isConnected?: boolean }).isConnected;
     if (isConnected === false) return null;
-    this.#ownedEditorDoms.add(target);
     return target;
   }
 
@@ -317,12 +305,14 @@ export class PresentationInputBridge {
       return null;
     }
 
-    // The candidate must be a SuperDoc editor this bridge has owned at some
-    // point (main editor, footnote, header, footer). Without this check the
-    // bridge redirects keystrokes from any unrelated ProseMirror editor on
-    // the page (Tiptap, Remirror, raw PM) because they all carry the same
-    // .ProseMirror[contenteditable="true"] signature.
-    if (!this.#ownedEditorDoms.has(staleEditorTarget)) {
+    // The candidate must be a SuperDoc editor: every SuperDoc editor's
+    // ProseMirror DOM sits inside a `.sd-editor-scoped` ancestor. Without
+    // this check the bridge redirects keystrokes from any unrelated
+    // ProseMirror editor on the page (Tiptap, Remirror, raw PM) because
+    // they share the same .ProseMirror[contenteditable="true"] signature.
+    // Class-based (not WeakSet) so story editors that the bridge has never
+    // explicitly owned still benefit from stale-target recovery.
+    if (!staleEditorTarget.closest('.sd-editor-scoped')) {
       return null;
     }
 

@@ -25,6 +25,7 @@ vi.mock('./plan-wrappers.js', () => ({
 
 import {
   createTableOfContentsWrapper,
+  prepareTableOfContentsInsertion,
   sanitizeTocContentForSchema,
   tocConfigureWrapper,
   tocListWrapper,
@@ -195,6 +196,24 @@ function expectTrackedModeUnsupported(run: () => unknown): void {
 describe('toc wrappers', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('prepareTableOfContentsInsertion resolves page numbers from a fresh layout page map', () => {
+    const { editor } = makeTocEditor();
+    (
+      editor as unknown as { storage: { tableOfContents: { pageMap: Map<string, number>; pageMapDoc: unknown } } }
+    ).storage = {
+      tableOfContents: {
+        pageMap: new Map([['h-1', 3]]),
+        pageMapDoc: editor.state.doc,
+      },
+    };
+
+    const prepared = prepareTableOfContentsInsertion(editor, { at: { kind: 'documentEnd' } });
+    const serialized = JSON.stringify(prepared.content);
+
+    expect(serialized).toContain('"text":"3"');
+    expect(serialized).not.toMatch(/"text":"0"/);
   });
 
   it('uses toc.list nodeId as a valid before/after target for create.tableOfContents', () => {

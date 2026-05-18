@@ -407,7 +407,7 @@ export const makeDefaultItems = ({
   const tableOfContents = useToolbarItem({
     type: 'button',
     name: 'tableOfContents',
-    command: 'insertTableOfContentsFromToolbar',
+    command: 'insertTableOfContents',
     icon: toolbarIcons.tableOfContents,
     active: false,
     tooltip: toolbarTexts.tableOfContents,
@@ -1076,8 +1076,15 @@ export const makeDefaultItems = ({
   const stickyItemsWidth = 120;
   const toolbarPadding = 32;
 
-  const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'formattingMarks'];
-  const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo', 'tableOfContents'];
+  const itemsToHideXL = [
+    'linkedStyles',
+    'clearFormatting',
+    'copyFormat',
+    'ruler',
+    'formattingMarks',
+    'tableOfContents',
+  ];
+  const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo'];
   const shouldUseLgCompactStyles = availableWidth <= RESPONSIVE_BREAKPOINTS.lg;
   const shouldIncludeFormattingMarks = superToolbar.config?.showFormattingMarksButton === true;
 

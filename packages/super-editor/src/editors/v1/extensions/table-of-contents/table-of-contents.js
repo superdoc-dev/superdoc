@@ -1,9 +1,7 @@
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
-import { getBlockIndex } from '../../document-api-adapters/helpers/index-cache.js';
-import { toBlockAddress } from '../../document-api-adapters/helpers/node-address-resolver.js';
 import { prepareTableOfContentsInsertion } from '../../document-api-adapters/plan-engine/toc-wrappers.js';
-import { syncTocBookmarks } from '../../document-api-adapters/helpers/toc-bookmark-sync.js';
+import { resolveTableOfContentsCreateLocation } from './table-of-contents-insertion.js';
 
 export const TableOfContents = Node.create({
   name: 'tableOfContents',
@@ -54,21 +52,6 @@ export const TableOfContents = Node.create({
       );
     };
 
-    const canInsertTableOfContentsAfter = (candidate, editor) => {
-      const tocType = editor.schema.nodes.tableOfContents;
-      const doc = editor.state.doc;
-      if (!tocType || typeof doc?.resolve !== 'function') return true;
-
-      const pos = candidate.end ?? candidate.pos + candidate.node.nodeSize;
-      try {
-        const $pos = doc.resolve(pos);
-        if (typeof $pos.parent?.canReplaceWith !== 'function') return true;
-        return $pos.parent.canReplaceWith($pos.index(), $pos.index(), tocType);
-      } catch {
-        return false;
-      }
-    };
-
     /**
      * Insert a tableOfContents node at the given document position.
      * @param {{ pos: number, instruction?: string, sdBlockId?: string, content?: object[], rightAlignPageNumbers?: boolean }} options
@@ -104,33 +87,24 @@ export const TableOfContents = Node.create({
       insertTableOfContentsAt,
 
       /**
-       * Inserts a TOC at the selection using the same materialization as
+       * Inserts a TOC after the innermost block at the selection, or at document
+       * end when none qualifies. Uses the same materialization as
        * `create.tableOfContents`, applied on the **current command transaction**
        * (must not call `editor.doc.create` here — nested dispatches cause
        * "Applying a mismatched transaction").
        */
-      insertTableOfContentsFromToolbar: () => (props) => {
+      insertTableOfContents: () => (props) => {
         const { editor } = props;
-        const pos = editor.state.selection.from;
-        const index = getBlockIndex(editor);
-        const containing = index.candidates.filter((c) => pos >= c.pos && pos < (c.end ?? c.pos + c.node.nodeSize));
-        const anchor =
-          containing.length > 0
-            ? [...containing]
-                .sort((a, b) => a.node.nodeSize - b.node.nodeSize)
-                .find((candidate) => canInsertTableOfContentsAfter(candidate, editor))
-            : null;
-
-        const at = anchor ? { kind: 'after', target: toBlockAddress(anchor) } : { kind: 'documentEnd' };
 
         let prepared;
         try {
+          const at = resolveTableOfContentsCreateLocation(editor);
           prepared = prepareTableOfContentsInsertion(editor, { at });
         } catch {
           return false;
         }
 
-        const inserted = insertTableOfContentsAt({
+        return insertTableOfContentsAt({
           pos: prepared.pos,
           instruction: prepared.instruction,
           sdBlockId: prepared.sdBlockId,
@@ -139,14 +113,6 @@ export const TableOfContents = Node.create({
             ? { rightAlignPageNumbers: prepared.rightAlignPageNumbers }
             : {}),
         })(props);
-
-        if (inserted && props.dispatch) {
-          globalThis.queueMicrotask(() => {
-            syncTocBookmarks(editor, prepared.sources);
-          });
-        }
-
-        return inserted;
       },
 
       /**

@@ -52,6 +52,7 @@ export const BUILT_IN_COMMAND_IDS = [
   'track-changes-accept-selection',
   'track-changes-reject-selection',
   'image',
+  'table-of-contents-insert',
   'table-insert',
   'table-add-row-before',
   'table-add-row-after',
@@ -105,6 +106,7 @@ export type ToolbarPayloadMap = {
   'track-changes-accept-selection': never;
   'track-changes-reject-selection': never;
   image: never;
+  'table-of-contents-insert': never;
   'table-insert': { rows: number; cols: number };
   'table-add-row-before': never;
   'table-add-row-after': never;
@@ -153,6 +155,7 @@ export type ToolbarValueMap = {
   'track-changes-accept-selection': undefined;
   'track-changes-reject-selection': undefined;
   image: undefined;
+  'table-of-contents-insert': undefined;
   'table-insert': undefined;
   'table-add-row-before': undefined;
   'table-add-row-after': undefined;

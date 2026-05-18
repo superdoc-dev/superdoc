@@ -793,7 +793,7 @@ export type PreparedTableOfContentsInsert = {
 /**
  * Resolves insertion position and materializes TOC content/instruction.
  * Callers that run inside `editor.commands.*` must apply the insert on the
- * **same** command transaction (see `insertTableOfContentsFromToolbar`) —
+ * **same** command transaction (see `insertTableOfContents`) —
  * never call `editor.commands.insertTableOfContentsAt` from here, or nested
  * dispatches can throw "Applying a mismatched transaction".
  */
@@ -820,6 +820,9 @@ export function prepareTableOfContentsInsertion(
     editor.state.doc,
     withRightAlign(config, input.config?.rightAlignPageNumbers),
     editor,
+    {
+      pageMap: getPageMap(editor) ?? undefined,
+    },
   );
 
   const sdBlockId = uuidv4();

@@ -1061,6 +1061,56 @@ describe('createToolbarRegistry', () => {
     });
   });
 
+  it('keeps table-of-contents-insert disabled when create.tableOfContents is unavailable', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['table-of-contents-insert']?.state({
+      context: {
+        ...createContext(),
+        target: {
+          commands: {},
+          doc: {
+            capabilities: () => ({
+              operations: {
+                'create.tableOfContents': { available: false },
+              },
+            }),
+          },
+        },
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: true,
+    });
+  });
+
+  it('enables table-of-contents-insert when create.tableOfContents is available', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['table-of-contents-insert']?.state({
+      context: {
+        ...createContext(),
+        target: {
+          commands: {},
+          doc: {
+            capabilities: () => ({
+              operations: {
+                'create.tableOfContents': { available: true },
+              },
+            }),
+          },
+        },
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: false,
+    });
+  });
+
   it('keeps table-add-row-before disabled state tied to editability', () => {
     const registry = createToolbarRegistry();
     const state = registry['table-add-row-before']?.state({

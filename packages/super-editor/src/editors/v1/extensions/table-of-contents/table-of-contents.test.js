@@ -117,7 +117,7 @@ describe('tableOfContents extension commands', () => {
   });
 });
 
-describe('insertTableOfContentsFromToolbar', () => {
+describe('insertTableOfContents', () => {
   beforeEach(() => {
     mockGetBlockIndex.mockReset();
     mockPrepare.mockReset();
@@ -133,11 +133,19 @@ describe('insertTableOfContentsFromToolbar', () => {
       content: [],
       sources: [],
     });
-    const editor = { schema, state: { selection: { from: 15 } } };
+    const doc = {
+      childCount: 2,
+      child: (index) => ({ nodeSize: index === 0 ? 30 : 10 }),
+      resolve: vi.fn(() => ({
+        index: () => 0,
+        parent: { canReplaceWith: vi.fn(() => true) },
+      })),
+    };
+    const editor = { schema, state: { selection: { from: 15 }, doc } };
     mockGetBlockIndex.mockReturnValue({
       candidates: [
-        { pos: 0, node: { nodeSize: 30 }, nodeType: 'paragraph', nodeId: 'outer' },
-        { pos: 10, node: { nodeSize: 10 }, nodeType: 'paragraph', nodeId: 'inner' },
+        { pos: 1, end: 31, node: { nodeSize: 30 }, nodeType: 'paragraph', nodeId: 'outer' },
+        { pos: 14, end: 24, node: { nodeSize: 10 }, nodeType: 'paragraph', nodeId: 'inner' },
       ],
     });
 
@@ -146,16 +154,51 @@ describe('insertTableOfContentsFromToolbar', () => {
     const dispatch = () => {};
     const state = { schema };
 
-    const result = commands.insertTableOfContentsFromToolbar()({ editor, tr, dispatch, state });
+    const result = commands.insertTableOfContents()({ editor, tr, dispatch, state });
 
     expect(result).toBe(true);
     expect(mockPrepare).toHaveBeenCalledWith(editor, {
       at: { kind: 'after', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'inner' } },
     });
     expect(insert).toHaveBeenCalledWith(7, tocNode);
+    expect(mockSync).not.toHaveBeenCalled();
+  });
 
-    await Promise.resolve();
-    expect(mockSync).toHaveBeenCalledWith(editor, []);
+  it('calls prepare with before-first-block when the selection is at document start', () => {
+    const { commands, schema, tocNode } = createCommandContext();
+    mockPrepare.mockReturnValue({
+      pos: 1,
+      instruction: 'TOC',
+      sdBlockId: 'x',
+      content: [],
+      sources: [],
+    });
+    const tocType = schema.nodes.tableOfContents;
+    const doc = {
+      childCount: 1,
+      child: () => ({ nodeSize: 12 }),
+      resolve: vi.fn((pos) => ({
+        index: () => 0,
+        parent: {
+          canReplaceWith: vi.fn((_from, _to, type) => pos === 1 && type === tocType),
+        },
+      })),
+    };
+    const editor = { schema, state: { selection: { from: 0 }, doc } };
+    mockGetBlockIndex.mockReturnValue({
+      candidates: [{ pos: 1, end: 13, node: { nodeSize: 12 }, nodeType: 'paragraph', nodeId: 'p1' }],
+    });
+
+    const insert = vi.fn();
+    const tr = { insert };
+    const dispatch = () => {};
+    const state = { schema };
+
+    expect(commands.insertTableOfContents()({ editor, tr, dispatch, state })).toBe(true);
+    expect(mockPrepare).toHaveBeenCalledWith(editor, {
+      at: { kind: 'before', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } },
+    });
+    expect(insert).toHaveBeenCalledWith(1, tocNode);
   });
 
   it('calls prepare with documentEnd when no block contains the selection anchor', () => {
@@ -167,9 +210,17 @@ describe('insertTableOfContentsFromToolbar', () => {
       content: [],
       sources: [],
     });
-    const editor = { schema, state: { selection: { from: 999 } } };
+    const doc = {
+      childCount: 1,
+      child: () => ({ nodeSize: 5 }),
+      resolve: vi.fn(() => ({
+        index: () => 0,
+        parent: { canReplaceWith: vi.fn(() => true) },
+      })),
+    };
+    const editor = { schema, state: { selection: { from: 999 }, doc } };
     mockGetBlockIndex.mockReturnValue({
-      candidates: [{ pos: 0, node: { nodeSize: 5 }, nodeType: 'paragraph', nodeId: 'p1' }],
+      candidates: [{ pos: 1, end: 6, node: { nodeSize: 5 }, nodeType: 'paragraph', nodeId: 'p1' }],
     });
 
     const insert = vi.fn();
@@ -177,7 +228,7 @@ describe('insertTableOfContentsFromToolbar', () => {
     const dispatch = () => {};
     const state = { schema };
 
-    expect(commands.insertTableOfContentsFromToolbar()({ editor, tr, dispatch, state })).toBe(true);
+    expect(commands.insertTableOfContents()({ editor, tr, dispatch, state })).toBe(true);
     expect(mockPrepare).toHaveBeenCalledWith(editor, { at: { kind: 'documentEnd' } });
     expect(insert).toHaveBeenCalledWith(99, tocNode);
   });
@@ -213,7 +264,7 @@ describe('insertTableOfContentsFromToolbar', () => {
     const dispatch = () => {};
     const state = { schema };
 
-    expect(commands.insertTableOfContentsFromToolbar()({ editor, tr, dispatch, state })).toBe(true);
+    expect(commands.insertTableOfContents()({ editor, tr, dispatch, state })).toBe(true);
     expect(doc.resolve).toHaveBeenNthCalledWith(1, 20);
     expect(doc.resolve).toHaveBeenNthCalledWith(2, 30);
     expect(mockPrepare).toHaveBeenCalledWith(editor, {
@@ -234,10 +285,10 @@ describe('insertTableOfContentsFromToolbar', () => {
     const dispatch = () => {};
     const state = { schema };
 
-    expect(commands.insertTableOfContentsFromToolbar()({ editor, tr, dispatch, state })).toBe(false);
+    expect(commands.insertTableOfContents()({ editor, tr, dispatch, state })).toBe(false);
   });
 
-  it('does not sync bookmarks during command availability checks without dispatch', async () => {
+  it('does not sync bookmarks during command availability checks without dispatch', () => {
     const { commands, schema } = createCommandContext();
     mockPrepare.mockReturnValue({
       pos: 7,
@@ -246,17 +297,23 @@ describe('insertTableOfContentsFromToolbar', () => {
       content: [],
       sources: [{ sdBlockId: 'heading-1' }],
     });
-    const editor = { schema, state: { selection: { from: 15 } } };
+    const doc = {
+      childCount: 1,
+      child: () => ({ nodeSize: 20 }),
+      resolve: vi.fn(() => ({
+        index: () => 0,
+        parent: { canReplaceWith: vi.fn(() => true) },
+      })),
+    };
+    const editor = { schema, state: { selection: { from: 15 }, doc } };
     mockGetBlockIndex.mockReturnValue({
-      candidates: [{ pos: 10, node: { nodeSize: 10 }, nodeType: 'paragraph', nodeId: 'inner' }],
+      candidates: [{ pos: 1, end: 21, node: { nodeSize: 20 }, nodeType: 'paragraph', nodeId: 'inner' }],
     });
 
     const tr = { insert: vi.fn() };
     const state = { schema };
 
-    expect(commands.insertTableOfContentsFromToolbar()({ editor, tr, dispatch: undefined, state })).toBe(true);
-
-    await Promise.resolve();
+    expect(commands.insertTableOfContents()({ editor, tr, dispatch: undefined, state })).toBe(true);
     expect(tr.insert).not.toHaveBeenCalled();
     expect(mockSync).not.toHaveBeenCalled();
   });

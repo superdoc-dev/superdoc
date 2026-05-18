@@ -12,12 +12,11 @@ import type {
   PartialRowInfo,
   SdtMetadata,
   TableBlock,
-  TableFragment,
   TableMeasure,
   WrapExclusion,
   WrapTextMode,
 } from '@superdoc/contracts';
-import { rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
+import { getCellLines, normalizeZIndex } from '@superdoc/contracts';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
@@ -34,140 +33,18 @@ import { renderTableFragment as renderTableFragmentElement } from './renderTable
 import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
 import { renderTableDrawingFrame } from '../drawings/tableDrawingFrame.js';
 import { renderDrawingContent as renderSharedDrawingContent } from '../drawings/renderDrawingContent.js';
+import {
+  computeRenderedTableFragmentHeight,
+  createEmbeddedTableFragment,
+  getEmbeddedTableSegmentCount,
+  mapEmbeddedTableRowSlice,
+} from './embeddedTableFragment.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];
 type TableCellMeasure = TableRowMeasure['cells'][number];
 
-/**
- * Compute the total segment count for a cell's blocks, matching the layout engine's
- * recursive getCellLines() expansion. Paragraph blocks contribute their line count,
- * embedded tables contribute the sum of their rows' recursive segment counts,
- * and other blocks (images, drawings) contribute 1 segment.
- */
 export function getCellSegmentCount(cell: TableCellMeasure): number {
-  if (cell.blocks && cell.blocks.length > 0) {
-    let total = 0;
-    for (const block of cell.blocks) {
-      if (block.kind === 'paragraph') {
-        total += (block as ParagraphMeasure).lines?.length || 0;
-      } else if (block.kind === 'table') {
-        const tableMeasure = block as TableMeasure;
-        for (const row of tableMeasure.rows) {
-          total += getEmbeddedRowSegmentCount(row);
-        }
-      } else {
-        const blockHeight = 'height' in block ? (block as { height: number }).height : 0;
-        if (blockHeight > 0) total += 1;
-      }
-    }
-    return total;
-  }
-  if (cell.paragraph) {
-    return (cell.paragraph as ParagraphMeasure).lines?.length || 0;
-  }
-  return 0;
-}
-
-/**
- * Compute the segment count for a single embedded table row.
- * If any cell in the row contains nested tables, recursively expand using the
- * tallest cell's segment count. Otherwise, the row is 1 segment.
- * This mirrors the layout engine's getEmbeddedRowLines() logic.
- */
-function getEmbeddedRowSegmentCount(row: TableRowMeasure): number {
-  const hasNestedTable = row.cells.some((cell: TableCellMeasure) => cell.blocks?.some((b) => b.kind === 'table'));
-  if (!hasNestedTable) return 1;
-
-  let maxSegments = 0;
-  for (const cell of row.cells) {
-    maxSegments = Math.max(maxSegments, getCellSegmentCount(cell));
-  }
-  return maxSegments > 0 ? maxSegments : 1;
-}
-
-/**
- * Compute the total recursive segment count for an embedded table.
- */
-function getEmbeddedTableSegmentCount(tableMeasure: TableMeasure): number {
-  let total = 0;
-  for (const row of tableMeasure.rows) {
-    total += getEmbeddedRowSegmentCount(row);
-  }
-  return total;
-}
-
-/**
- * Compute the visible height for a range of table rows, using partial height
- * where a row is only partially rendered (mid-row split).
- */
-function computeVisibleHeight(
-  rows: TableMeasure['rows'],
-  fromRow: number,
-  toRow: number,
-  partialRow?: PartialRowInfo,
-): number {
-  let height = 0;
-  for (let r = fromRow; r < toRow; r++) {
-    if (partialRow && partialRow.rowIndex === r) {
-      height += partialRow.partialHeight;
-    } else {
-      height += rows[r]?.height || 0;
-    }
-  }
-  return height;
-}
-
-/**
- * Compute the visible height of a single cell's content for a given segment range.
- * Handles paragraphs, embedded tables, and non-paragraph blocks (images, drawings).
- * Falls back to cell.paragraph for legacy single-paragraph cells.
- */
-function computeCellVisibleHeight(cell: TableCellMeasure, cellFrom: number, cellTo: number): number {
-  let cellVisHeight = 0;
-  if (cell.blocks && cell.blocks.length > 0) {
-    let segIdx = 0;
-    for (const blk of cell.blocks) {
-      if (blk.kind === 'paragraph') {
-        const lines = (blk as ParagraphMeasure).lines || [];
-        for (const line of lines) {
-          if (segIdx >= cellFrom && segIdx < cellTo) {
-            cellVisHeight += line.lineHeight || 0;
-          }
-          segIdx++;
-        }
-      } else if (blk.kind === 'table') {
-        const nestedTable = blk as TableMeasure;
-        for (const nestedRow of nestedTable.rows) {
-          const nestedRowSegs = getEmbeddedRowSegmentCount(nestedRow);
-          // TODO: use actual segment heights from getEmbeddedRowLines() instead of
-          // even split for more precise height when rows have non-uniform line heights.
-          for (let s = 0; s < nestedRowSegs; s++) {
-            if (segIdx >= cellFrom && segIdx < cellTo) {
-              cellVisHeight += (nestedRow.height || 0) / nestedRowSegs;
-            }
-            segIdx++;
-          }
-        }
-      } else {
-        const blkHeight = 'height' in blk ? (blk as { height: number }).height : 0;
-        if (blkHeight > 0) {
-          if (segIdx >= cellFrom && segIdx < cellTo) {
-            cellVisHeight += blkHeight;
-          }
-          segIdx++;
-        }
-      }
-    }
-  } else if (cell.paragraph) {
-    // Legacy single-paragraph fallback (matches getCellSegmentCount)
-    const lines = (cell.paragraph as ParagraphMeasure).lines || [];
-    for (let i = 0; i < lines.length; i++) {
-      if (i >= cellFrom && i < cellTo) {
-        cellVisHeight += lines[i].lineHeight || 0;
-      }
-    }
-  }
-  return cellVisHeight;
+  return getCellLines(cell).length;
 }
 
 /**
@@ -297,31 +174,14 @@ const renderEmbeddedTable = (
     onSdtContainerChrome,
   } = params;
 
-  const effectiveFromRow = paramFromRow ?? 0;
-  const effectiveToRow = paramToRow ?? table.rows.length;
-
-  const visibleHeight = computeVisibleHeight(measure.rows, effectiveFromRow, effectiveToRow, paramPartialRow);
-
-  // Rescale column widths when measurement-scale exceeds render-scale (SD-1962).
-  // Top-level tables get rescaled by layout-engine's rescaleColumnWidths(), but
-  // embedded tables bypass that path. We reuse the same function here.
-  const columnWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, availableWidth);
-  const fragmentWidth = columnWidths ? availableWidth : measure.totalWidth;
-
-  const fragment: TableFragment = {
-    kind: 'table',
-    blockId: table.id,
-    fromRow: effectiveFromRow,
-    toRow: effectiveToRow,
-    x: 0,
-    y: 0,
-    width: fragmentWidth,
-    height: visibleHeight,
-    columnWidths,
+  const { fragment, effectiveColumnWidths, cellSpacingPx } = createEmbeddedTableFragment({
+    block: table,
+    measure,
+    availableWidth,
+    fromRow: paramFromRow,
+    toRow: paramToRow,
     partialRow: paramPartialRow,
-  };
-  const effectiveColumnWidths = columnWidths ?? measure.columnWidths;
-  const embeddedCellSpacingPx = measure.cellSpacingPx ?? getCellSpacingPx(table.attrs?.cellSpacing);
+  });
 
   const applyFragmentFrame = (el: HTMLElement, frag: Fragment): void => {
     el.style.left = `${frag.x}px`;
@@ -337,7 +197,7 @@ const renderEmbeddedTable = (
     context,
     block: table,
     measure,
-    cellSpacingPx: embeddedCellSpacingPx,
+    cellSpacingPx,
     effectiveColumnWidths,
     renderLine,
     captureLineSnapshot,
@@ -407,10 +267,7 @@ function renderPartialEmbeddedTable(params: {
     onSdtContainerChrome,
   } = params;
 
-  // Compute per-row segment counts (recursive, matching getCellLines/getEmbeddedRowLines).
-  const rowSegmentCounts = tableMeasure.rows.map((row: TableRowMeasure) => getEmbeddedRowSegmentCount(row));
-  const totalTableSegments = rowSegmentCounts.reduce((s: number, c: number) => s + c, 0);
-
+  const totalTableSegments = getEmbeddedTableSegmentCount(tableMeasure);
   const tableStartSegment = cumulativeLineCount;
   const nextCumulativeLineCount = cumulativeLineCount + totalTableSegments;
   const tableEndSegment = nextCumulativeLineCount;
@@ -424,62 +281,19 @@ function renderPartialEmbeddedTable(params: {
   const localFrom = Math.max(0, globalFromLine - tableStartSegment);
   const localTo = Math.min(totalTableSegments, globalToLine - tableStartSegment);
 
-  // Determine which rows to render and whether any need partial rendering
-  let segmentOffset = 0;
-  let embeddedFromRow = -1;
-  let embeddedToRow = -1;
-  // TODO: partialRowInfo is overwritten each iteration — if the visible segment range
-  // cuts through two different multi-segment rows, only the last one's info survives.
-  // TableFragment only supports a single partialRow, so fixing this requires a design change.
-  let partialRowInfo: PartialRowInfo | undefined;
-
-  for (let r = 0; r < tableMeasure.rows.length; r++) {
-    const rowSegs = rowSegmentCounts[r];
-    const rowStart = segmentOffset;
-    const rowEnd = segmentOffset + rowSegs;
-    segmentOffset = rowEnd;
-
-    // Skip rows completely outside the range
-    if (rowEnd <= localFrom || rowStart >= localTo) continue;
-
-    if (embeddedFromRow === -1) embeddedFromRow = r;
-    embeddedToRow = r + 1;
-
-    // Check if this row needs partial rendering (multi-segment row spanning the boundary)
-    if (rowSegs > 1 && (rowStart < localFrom || rowEnd > localTo)) {
-      const rowLocalFrom = Math.max(0, localFrom - rowStart);
-      const rowLocalTo = Math.min(rowSegs, localTo - rowStart);
-      const row = tableMeasure.rows[r];
-
-      const fromLineByCell: number[] = [];
-      const toLineByCell: number[] = [];
-      let partialHeight = 0;
-
-      for (const cell of row.cells) {
-        const cellTotal = getCellSegmentCount(cell);
-        const cellFrom = Math.min(rowLocalFrom, cellTotal);
-        const cellTo = Math.min(rowLocalTo, cellTotal);
-        fromLineByCell.push(cellFrom);
-        toLineByCell.push(cellTo);
-        partialHeight = Math.max(partialHeight, computeCellVisibleHeight(cell, cellFrom, cellTo));
-      }
-
-      partialRowInfo = {
-        rowIndex: r,
-        fromLineByCell,
-        toLineByCell,
-        isFirstPart: rowLocalFrom === 0,
-        isLastPart: rowLocalTo >= rowSegs,
-        partialHeight,
-      };
-    }
-  }
-
-  if (embeddedFromRow === -1) {
+  const rowSlice = mapEmbeddedTableRowSlice({ block, measure: tableMeasure, localFrom, localTo });
+  if (!rowSlice) {
     return { element: null, height: 0, nextCumulativeLineCount, hasSdtContainerChrome: false };
   }
+  const { fromRow: embeddedFromRow, toRow: embeddedToRow, partialRow: partialRowInfo } = rowSlice;
 
-  const visibleHeight = computeVisibleHeight(tableMeasure.rows, embeddedFromRow, embeddedToRow, partialRowInfo);
+  const visibleHeight = computeRenderedTableFragmentHeight({
+    block,
+    measure: tableMeasure,
+    fromRow: embeddedFromRow,
+    toRow: embeddedToRow,
+    partialRow: partialRowInfo,
+  });
   const effectiveSdtBoundary = sdtBoundary
     ? {
         ...sdtBoundary,
@@ -501,7 +315,7 @@ function renderPartialEmbeddedTable(params: {
     table: block,
     measure: tableMeasure,
     availableWidth: contentWidthPx,
-    context: { ...context, section: 'body' },
+    context,
     renderLine,
     captureLineSnapshot,
     renderDrawingContent,
@@ -998,7 +812,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           },
           applySdtDataset,
           renderLine: ({ block, line, lineIndex, isLastLine, resolvedListTextStartPx }) =>
-            renderLine(block, line, { ...context, section: 'body' }, lineIndex, isLastLine, resolvedListTextStartPx),
+            renderLine(block, line, context, lineIndex, isLastLine, resolvedListTextStartPx),
           convertFinalParagraphMark: isLastBlockInCell,
           lineTopOffset: flowCursorY,
         });
@@ -1114,7 +928,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           continue;
         }
         const wrapperEl = rendered.el.classList.contains('superdoc-line') ? undefined : rendered.el;
-        captureLineSnapshot(candidateLine, { ...context, section: 'body' }, { inTableParagraph: false, wrapperEl });
+        captureLineSnapshot(candidateLine, context, { inTableParagraph: false, wrapperEl });
       }
     }
   }

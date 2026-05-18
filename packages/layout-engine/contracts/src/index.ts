@@ -33,6 +33,16 @@ export {
 } from './engines/tables.js';
 
 export { effectiveTableCellSpacing } from './table-cell-spacing.js';
+export {
+  computeCellSliceContentHeight,
+  computeFullCellContentHeight,
+  createCellSliceCursor,
+  describeCellRenderBlocks,
+  getCellLines,
+  getEmbeddedRowLines,
+  type CellRenderBlock,
+  type CellSliceCursor,
+} from './table-cell-slice.js';
 
 // Table column rescaling (moved from layout-engine for cross-stage use)
 export { rescaleColumnWidths } from './table-column-rescale.js';

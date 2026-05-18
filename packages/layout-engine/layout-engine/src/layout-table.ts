@@ -13,13 +13,17 @@ import type {
 } from '@superdoc/contracts';
 import {
   OOXML_PCT_DIVISOR,
+  describeCellRenderBlocks,
+  createCellSliceCursor,
+  computeFullCellContentHeight,
+  getCellLines,
+  getEmbeddedRowLines,
+  getTableVisualDirection,
   rescaleColumnWidths,
   resolveTableWidthAttr,
-  getTableVisualDirection,
 } from '@superdoc/contracts';
 import type { PageState } from './paginator.js';
 import { computeFragmentPmRange, extractBlockPmRange } from './layout-utils.js';
-import { describeCellRenderBlocks, createCellSliceCursor, computeFullCellContentHeight } from './table-cell-slice.js';
 
 /**
  * Ratio of column width (0..1). An anchored table with totalWidth >= columnWidth * this value
@@ -485,77 +489,6 @@ type SplitPointResult = {
  * insufficient space to render even a single line of text.
  */
 const MIN_PARTIAL_ROW_HEIGHT = 20;
-
-/**
- * Get the line segments for a single embedded table row.
- *
- * If any cell in the row contains nested tables, recursively expand using
- * the tallest cell's segments. This enables the layout engine to split at
- * sub-row boundaries even for deeply nested tables (table-in-table-in-table).
- * Otherwise, return the row as a single segment with its measured height.
- */
-export function getEmbeddedRowLines(row: TableRowMeasure): Array<{ lineHeight: number }> {
-  // Check if any cell has nested table blocks
-  const hasNestedTable = row.cells.some((cell) => cell.blocks?.some((b) => b.kind === 'table'));
-
-  if (!hasNestedTable) {
-    // Simple case: no nested tables, row is one segment
-    return [{ lineHeight: row.height || 0 }];
-  }
-
-  // Recursive case: find the cell with the most segments (tallest content)
-  let tallestLines: Array<{ lineHeight: number }> = [];
-  for (const cell of row.cells) {
-    const cellLines = getCellLines(cell);
-    if (cellLines.length > tallestLines.length) {
-      tallestLines = cellLines;
-    }
-  }
-
-  return tallestLines.length > 0 ? tallestLines : [{ lineHeight: row.height || 0 }];
-}
-
-export function getCellLines(cell: TableRowMeasure['cells'][number]): Array<{ lineHeight: number }> {
-  // Multi-block cells use the `blocks` array
-  if (cell.blocks && cell.blocks.length > 0) {
-    const allLines: Array<{ lineHeight: number }> = [];
-    for (const block of cell.blocks) {
-      if (block.kind === 'paragraph') {
-        if ('lines' in block) {
-          const paraBlock = block as ParagraphMeasure;
-          if (paraBlock.lines) {
-            allLines.push(...paraBlock.lines);
-          }
-        }
-      } else if (block.kind === 'table') {
-        // Embedded tables: expand individual rows as separate segments so the
-        // outer table splitter can break at embedded-table row boundaries,
-        // matching MS Word behavior where nested tables paginate across pages.
-        // Recursively expand rows that contain further nested tables.
-        const tableBlock = block as TableMeasure;
-        for (const row of tableBlock.rows) {
-          allLines.push(...getEmbeddedRowLines(row));
-        }
-      } else {
-        // Non-paragraph blocks (images, drawings) are represented as a single
-        // unsplittable segment with their full height. This ensures computePartialRow
-        // accounts for their height when splitting rows across pages.
-        const blockHeight = 'height' in block ? (block as { height: number }).height : 0;
-        if (blockHeight > 0) {
-          allLines.push({ lineHeight: blockHeight });
-        }
-      }
-    }
-    return allLines;
-  }
-
-  // Fallback to single paragraph (backward compatibility)
-  if (cell.paragraph?.lines) {
-    return cell.paragraph.lines;
-  }
-
-  return [];
-}
 
 type CellPadding = { top: number; bottom: number; left: number; right: number };
 

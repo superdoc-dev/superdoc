@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderTableCell, getCellSegmentCount } from './renderTableCell.js';
-import { getCellLines } from '@superdoc/layout-engine';
+import { getCellLines } from '@superdoc/contracts';
 import type {
   ParagraphBlock,
   ParagraphMeasure,
@@ -4426,6 +4426,120 @@ describe('renderTableCell', () => {
       expect(tableChrome?.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Nested Table');
     });
 
+    it('includes embedded table cell spacing in fragment height', () => {
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-spacing-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-spacing-table',
+        rows: [{ id: 'nested-spacing-row', cells: [{ id: 'nested-spacing-cell', blocks: [nestedParagraph] }] }],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 20,
+            cells: [{ width: 80, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 1, blocks: [paragraphMeasure] }],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+        cellSpacingPx: 2,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: { ...baseCellMeasure, blocks: [nestedMeasure], height: 24 },
+        cell: { ...baseCell, blocks: [nestedTable] },
+      });
+
+      const tableEl = cellElement.querySelector<HTMLElement>('[data-block-id="nested-spacing-table"]');
+      expect(tableEl?.style.height).toBe('24px');
+      expect(tableEl?.parentElement?.style.height).toBe('24px');
+    });
+
+    it('includes separate-border outer table height for embedded table fragments', () => {
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-border-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-border-table',
+        attrs: { borderCollapse: 'separate' },
+        rows: [{ id: 'nested-border-row', cells: [{ id: 'nested-border-cell', blocks: [nestedParagraph] }] }],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 20,
+            cells: [{ width: 80, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 1, blocks: [paragraphMeasure] }],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 28,
+        tableBorderWidths: { top: 3, right: 0, bottom: 5, left: 0 },
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: { ...baseCellMeasure, blocks: [nestedMeasure], height: 28 },
+        cell: { ...baseCell, blocks: [nestedTable] },
+      });
+
+      const tableEl = cellElement.querySelector<HTMLElement>('[data-block-id="nested-border-table"]');
+      expect(tableEl?.style.height).toBe('28px');
+      expect(tableEl?.parentElement?.style.height).toBe('28px');
+    });
+
+    it('preserves header and footer render context for nested table paragraphs', () => {
+      const contexts: string[] = [];
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-header-context-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-header-context-table',
+        rows: [
+          { id: 'nested-header-context-row', cells: [{ id: 'nested-header-context-cell', blocks: [nestedParagraph] }] },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 20,
+            cells: [{ width: 80, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 1, blocks: [paragraphMeasure] }],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 20,
+      };
+
+      renderTableCell({
+        ...createBaseDeps(),
+        context: { pageNumber: 1, totalPages: 1, section: 'header' },
+        cellMeasure: { ...baseCellMeasure, blocks: [nestedMeasure] },
+        cell: { ...baseCell, blocks: [nestedTable] },
+        renderLine: (_block, _line, ctx) => {
+          contexts.push(ctx.section);
+          return doc.createElement('div');
+        },
+      });
+
+      expect(contexts).toEqual(['header']);
+    });
+
     it('should set overflow:visible when only rendered nested descendants have SDT chrome', () => {
       const descendantSdt: SdtMetadata = {
         type: 'structuredContent',
@@ -5464,12 +5578,11 @@ describe('renderTableCell', () => {
 });
 
 /**
- * Sync test: renderer's getCellSegmentCount must agree with layout engine's getCellLines().length.
+ * Sync test: renderer's getCellSegmentCount must agree with shared getCellLines().length.
  *
- * These two systems must produce identical segment counts for every cell shape —
- * if they drift, pagination will render the wrong rows or skip content.
+ * This keeps the painter-level wrapper tied to the same segment source used by pagination.
  */
-describe('segment count sync: renderer vs layout engine', () => {
+describe('segment count sync: renderer vs shared table helper', () => {
   const makeParagraph = (lineCount: number): ParagraphMeasure => ({
     kind: 'paragraph',
     lines: Array.from({ length: lineCount }, (_, i) => ({

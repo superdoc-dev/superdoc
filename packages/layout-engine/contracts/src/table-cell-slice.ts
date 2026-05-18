@@ -1,6 +1,13 @@
 import type { ParagraphMeasure, TableCell, TableCellMeasure, TableMeasure, TableRowMeasure } from './index.js';
 import { effectiveTableCellSpacing } from './table-cell-spacing.js';
 
+/**
+ * Shared cell-slice helpers for table pagination and rendering.
+ *
+ * These descriptors are consumed by layout pagination, layout-bridge selection
+ * geometry, and DomPainter nested-table rendering. Keep their height semantics
+ * aligned with the actual table-cell renderer.
+ */
 export type CellRenderBlock = {
   kind: 'paragraph' | 'table' | 'other';
   globalStartLine: number;
@@ -360,6 +367,12 @@ export function computeFullCellContentHeight(
     return spacingBefore + Math.max(lineSum, cellMeasure.paragraph.totalHeight ?? lineSum) + spacingAfter;
   }
 
+  // This function uses measurement semantics: the final paragraph's spacing.after
+  // contributes only when it exceeds cell padding. Renderer-slice helpers skip
+  // last-block spacing.after because DomPainter positions the visible content
+  // inside the already padded cell. Keeping that distinction explicit prevents
+  // row-height preflight from comparing measured row heights to renderer-only
+  // slice heights.
   let height = 0;
   for (let i = 0; i < measuredBlocks.length; i += 1) {
     const measure = measuredBlocks[i];

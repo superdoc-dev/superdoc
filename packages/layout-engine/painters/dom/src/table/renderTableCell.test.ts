@@ -3780,6 +3780,55 @@ describe('renderTableCell', () => {
       expect(shapeGroup.classList.contains('superdoc-shape-group')).toBe(true);
     });
 
+    it('uses the shared textbox renderer for vector shape text when callback is undefined', () => {
+      const vectorShapeBlock = {
+        kind: 'drawing' as const,
+        id: 'drawing-table-textbox',
+        drawingKind: 'vectorShape' as const,
+        geometry: { width: 120, height: 60, rotation: 0, flipH: false, flipV: false },
+        shapeKind: 'rect' as const,
+        fillColor: '#ffffff',
+        strokeColor: '#000000',
+        textAlign: 'center',
+        textVerticalAlign: 'center' as const,
+        textContent: {
+          parts: [{ text: 'Page ' }, { text: '', fieldType: 'PAGE' as const, formatting: { bold: true } }],
+        },
+      };
+
+      const drawingMeasure = {
+        kind: 'drawing' as const,
+        width: 120,
+        height: 60,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        context: { section: 'body', pageIndex: 0, pageNumber: 5, pageNumberText: 'v', totalPages: 8 },
+        cellMeasure: {
+          blocks: [drawingMeasure],
+          width: 140,
+          height: 80,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-shared-textbox',
+          blocks: [vectorShapeBlock],
+          attrs: {},
+        },
+      });
+
+      const shape = cellElement.querySelector('.superdoc-vector-shape') as HTMLElement | null;
+      const textOverlay = shape?.querySelector('div[style*="display: flex"]') as HTMLElement | null;
+      const boldPage = Array.from(textOverlay?.querySelectorAll('span') ?? []).find((span) => span.textContent === 'v');
+      expect(shape).toBeTruthy();
+      expect(textOverlay?.textContent).toBe('Page v');
+      expect(textOverlay?.style.justifyContent).toBe('center');
+      expect(boldPage?.style.fontWeight).toBe('bold');
+    });
+
     it('should pass correct DrawingBlock parameter to callback', () => {
       const shapeGroupBlock = {
         kind: 'drawing' as const,

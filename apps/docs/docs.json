@@ -169,7 +169,7 @@
                   "document-api/common-workflows",
                   {
                     "group": "Features",
-                    "pages": ["document-api/features/content-controls"]
+                    "pages": ["document-api/features/content-controls", "document-api/features/anchored-metadata"]
                   },
                   "document-api/reference/index",
                   "document-api/available-operations",

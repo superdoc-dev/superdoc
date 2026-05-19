@@ -1,0 +1,168 @@
+---
+title: Source-grounded citations in DOCX
+sidebarTitle: Source-grounded citations
+description: Attach source records to spans of generated text so the link survives editing, DOCX export, and Word round-trips.
+keywords: "source-grounded citations, anchored metadata, RAG, AI generation, document grounding, legal AI, structured citations, custom XML"
+---
+
+Generated text in a document is only useful if the reader can verify where it came from. Source-grounded citations bind a span of text in a DOCX to the record that justified it (a case, a statute, a precedent, an internal source), in a way that survives editing, DOCX export, and Word round-trips. SuperDoc implements this with **metadata anchors**: hidden content controls in the body that point to a JSON payload in a custom XML part, all inside the same DOCX file.
+
+For the AI / RAG worked example, see the [`demos/custom-ui`](https://github.com/superdoc-dev/superdoc/tree/main/demos/custom-ui) reference workspace. For the smallest copy-paste form of the API, see the [`metadata-anchors`](https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/metadata-anchors) example.
+
+## Storage contract: what the file contains
+
+A metadata anchor is two halves of a DOCX, kept in sync by a stable id.
+
+**1. The anchor.** A hidden inline content control wraps the cited text in the body. The `w:tag` carries the stable id; `w15:appearance="hidden"` keeps Word from drawing chrome around the span.
+
+```xml
+<w:sdt>
+  <w:sdtPr>
+    <w:tag w:val="cite-001"/>
+    <w15:appearance w15:val="hidden"/>
+  </w:sdtPr>
+  <w:sdtContent>
+    <w:r><w:t>duty of care</w:t></w:r>
+  </w:sdtContent>
+</w:sdt>
+```
+
+**2. The payload.** A namespaced custom XML data part stores the JSON record, keyed by the same id. SuperDoc reads the text content of `<ref id="..." encoding="json">` and `JSON.parse`s it.
+
+```xml
+<!-- customXml/item1.xml -->
+<refs xmlns="urn:your-app:citations:v1">
+  <ref id="cite-001" encoding="json">{"sourceId":"restatement-torts-3rd-s6","sourceType":"statute","provider":"lexisnexis","displayText":"Restatement (Third) of Torts § 6","locator":"§ 6","excerpt":"An actor must exercise reasonable care…"}</ref>
+</refs>
+```
+
+The `w:tag` is a **concrete pointer**, not a fuzzy text search. The id is bound to the SDT element; if the SDT survives an edit (which it does for inline edits inside the anchored range), the link survives. If a user deletes the anchored text in the editor, the SDT goes with it.
+
+The namespace on the `<refs>` element is the consumer's payload-schema URI. Pick one you own. One namespace per payload schema version makes future migrations easier: `urn:your-app:citations:v2` can coexist with v1 entries during a rollout.
+
+## Persisted payload vs render-time signals
+
+The DOCX is the source of truth for *what was cited*. Your provider is the source of truth for *whether the citation still stands*. Split the fields accordingly.
+
+| Field | Persisted in DOCX | Render-time lookup |
+|---|---|---|
+| `citationId` | Yes | |
+| `sourceId` | Yes | |
+| `sourceType` (`'statute'`, `'case'`, `'precedent'`, ...) | Yes | |
+| `provider` (which provider authoritatively backs this source) | Yes | |
+| `displayText` (human-readable source name) | Yes | |
+| `locator` (section, pin cite) | Yes | |
+| `excerpt` (quote from the source) | Yes | |
+| `deepLink` | Yes | |
+| `confidence` | Yes (optional) | |
+| `createdAt` (ISO-8601 string) | Yes (optional) | |
+| Verification status (KeyCite-style signals, Shepard's-style signals) | | Yes |
+| Source freshness / last-validated-at | | Yes |
+| Author profile, jurisdiction notes | | Yes |
+
+Why split: verification status changes independently of the document. Persisting it makes the document lie when the underlying source is later overruled, deprecated, or marked stale.
+
+## Supported creation path: `editor.doc.metadata.*`
+
+The ergonomic path is the Document API surface. Same operation IDs on the browser editor, the Node SDK, and the CLI:
+
+```ts
+editor.doc.metadata.attach({
+  target: { kind: 'selection', start: { kind: 'text', blockId, offset }, end: { ... } },
+  namespace: 'urn:your-app:citations:v1',
+  id: 'cite-001',
+  payload: { citationId: 'cite-001', sourceId: '...', /* ... */ },
+});
+```
+
+For the smallest end-to-end (attach, list, get, resolve, remove), copy [`examples/document-api/metadata-anchors`](https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/metadata-anchors).
+
+For a composed runtime that inserts a draft, attaches per-citation payloads, paints highlights, and drives a sources panel, see [`demos/custom-ui`](https://github.com/superdoc-dev/superdoc/tree/main/demos/custom-ui).
+
+### Pure file-shape generation (storage contract, no SDK)
+
+If you are generating DOCX entirely offline (no SuperDoc runtime, no Node SDK in the pipeline), produce the file shape from the [Storage contract](#storage-contract-what-the-file-contains) section directly. Both halves (SDT in the body, `<ref>` in the custom XML part) must agree on the id for the link to resolve when the file opens in SuperDoc.
+
+This is the path RAG pipelines take when refs are written at generation time, before the file ever opens in SuperDoc. It works, and the DOCX it produces is interchangeable with one written by `editor.doc.metadata.attach`. A first-class offline / pure-server SDK with the same surface is separate work; until that lands, the file-shape path is the offline answer.
+
+## Custom UI binding: `ui.metadata.*`
+
+UI surfaces stay keyed on the metadata id, never on internal node ids. The `ui.metadata.*` handle hides the SDT-node-id lookup.
+
+```ts
+// Painter rect for a highlight overlay, hover popover anchor, etc.
+const rect = ui.metadata.getRect({ id });
+if (rect.success) {
+  positionPopover(rect.rect);
+  paintUnderlines(rect.rects);
+}
+
+// Navigate to a citation from a sources panel.
+await ui.metadata.scrollIntoView({ id, block: 'center' });
+
+// Hover preview: look up which anchor the cursor is over, then read its payload.
+const hits = ui.viewport.entityAt({ x: event.clientX, y: event.clientY });
+for (const hit of hits) {
+  if (hit.entityType === 'contentControl') {
+    const info = editor.doc.metadata.get({ id: hit.entityId });
+    if (info) showPreview(info.payload);
+  }
+}
+```
+
+## Round-trip and lifecycle
+
+| Scenario | Behavior |
+|---|---|
+| SuperDoc DOCX export and reopen | Anchors and payloads preserved. |
+| Open in Word, save, reopen in SuperDoc | Anchors and payloads preserved. Validated by the deterministic fixtures at [`tests/doc-api-stories/tests/word-roundtrip/`](https://github.com/superdoc-dev/superdoc/tree/main/tests/doc-api-stories/tests/word-roundtrip). |
+| Edit inside an anchor | SDT expands to wrap inserted text. Payload unchanged. |
+| Edit crossing an anchor boundary | Follows Word's content control semantics: the anchor can split or absorb depending on the edit. |
+| User deletes the anchored text | Payload survives in custom XML; `metadata.resolve` returns `null`. See the lifecycle note below. |
+| Word Document Inspector with "Custom XML Data" selected for removal | Strips payloads. Intentional Word behavior; out of band for SuperDoc. |
+
+**Lifecycle**: `metadata.list` and `metadata.resolve` can disagree when an anchor has been deleted but the payload survives in custom XML. Lifecycle cleanup behavior is still evolving; in v1, apps should treat `metadata.resolve === null` as "anchor gone, hide from UI" and not trust `list` output as the canonical source of truth.
+
+## Cross-surface: same operations everywhere
+
+Anchored metadata is not editor-specific. The same operation IDs are available on every surface that drives SuperDoc.
+
+| Surface | Binding |
+|---|---|
+| Browser editor | `editor.doc.metadata.*` plus `ui.metadata.*` |
+| Node SDK | bound document handle methods |
+| CLI / MCP / agent tools | wrappers generated from the same operation IDs |
+
+A payload attached by a server-side ingestion job, a citation patched by an agent, and an anchor resolved in the editor all hit the same engine.
+
+## Operation reference at a glance
+
+| Concept | Operation |
+|---|---|
+| Attach a payload to a range | `editor.doc.metadata.attach` |
+| List entries (namespace and `within` filters) | `editor.doc.metadata.list` |
+| Get one payload by id | `editor.doc.metadata.get` |
+| Update payload | `editor.doc.metadata.update` |
+| Remove payload and anchor | `editor.doc.metadata.remove` |
+| Resolve id to its current range | `editor.doc.metadata.resolve` |
+| Painter rect for highlight overlays (browser) | `ui.metadata.getRect` |
+| Scroll viewport to anchored span (browser) | `ui.metadata.scrollIntoView` |
+
+Full inputs, outputs, and failure codes in the [Anchored Metadata reference](/document-api/reference/metadata/index).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Metadata anchors example" icon="code" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/metadata-anchors">
+    Smallest copy-paste form: attach, list, get, resolve, remove, with one button each.
+  </Card>
+  <Card title="Custom UI reference workspace" icon="layout-template" href="https://github.com/superdoc-dev/superdoc/tree/main/demos/custom-ui">
+    Composed workspace that uses these primitives behind a source-grounded citation flow: highlights, hover popovers, sources panel, DOCX round-trip.
+  </Card>
+  <Card title="Anchored metadata reference" icon="book" href="/document-api/reference/metadata/index">
+    Every `metadata.*` operation with inputs, outputs, and failure codes.
+  </Card>
+  <Card title="Word round-trip fixtures" icon="file-check" href="https://github.com/superdoc-dev/superdoc/tree/main/tests/doc-api-stories/tests/word-roundtrip">
+    Deterministic Word-in-the-loop validation for citation round-trips.
+  </Card>
+</CardGroup>

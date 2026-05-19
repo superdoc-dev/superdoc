@@ -32,6 +32,8 @@ mock.module('superdoc/super-editor', () => ({
   getDocumentApiAdapters: () => ({}),
   markdownToPmDoc: () => null,
   initPartsRuntime: () => ({ dispose: () => {} }),
+  // SD-3214: bridge imports this to feed Y.Array entries into the store.
+  syncCommentEntitiesFromCollaboration: () => new Set<string>(),
 }));
 
 mock.module('happy-dom', () => ({

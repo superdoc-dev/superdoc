@@ -8,6 +8,7 @@ import {
   getCommentEntityStore,
   isCommentResolved,
   removeCommentEntityTree,
+  syncCommentEntitiesFromCollaboration,
   toCommentInfo,
   upsertCommentEntity,
   type CommentEntityRecord,
@@ -250,5 +251,187 @@ describe('toCommentInfo', () => {
   it('omits anchoredText when not provided', () => {
     const info = toCommentInfo({ commentId: 'c1' });
     expect(info.anchoredText).toBeUndefined();
+  });
+});
+
+describe('syncCommentEntitiesFromCollaboration (SD-3214)', () => {
+  it('upserts a new browser-authored comment into an empty store', () => {
+    const editor = makeEditorWithConverter();
+    syncCommentEntitiesFromCollaboration(editor, [
+      {
+        commentId: 'c1',
+        commentText: 'Please review this clause.',
+        creatorName: 'Browser User',
+        creatorEmail: 'browser@example.com',
+        createdTime: 1700000000000,
+        isInternal: false,
+      },
+    ]);
+
+    const store = getCommentEntityStore(editor);
+    expect(store).toHaveLength(1);
+    expect(store[0].commentId).toBe('c1');
+    expect(store[0].commentText).toBe('Please review this clause.');
+    expect(store[0].creatorName).toBe('Browser User');
+    expect(store[0].creatorEmail).toBe('browser@example.com');
+    expect(store[0].createdTime).toBe(1700000000000);
+    expect(store[0].isInternal).toBe(false);
+  });
+
+  it('accepts `text` as a fallback for `commentText`', () => {
+    // Some browser writers emit { text } instead of { commentText }; mirror
+    // the alias logic the browser-side loader uses.
+    const editor = makeEditorWithConverter();
+    syncCommentEntitiesFromCollaboration(editor, [{ commentId: 'c1', text: 'short form' }]);
+    const store = getCommentEntityStore(editor);
+    expect(store[0].commentText).toBe('short form');
+  });
+
+  it('skips entries flagged trackedChange:true (those belong to a separate domain)', () => {
+    const editor = makeEditorWithConverter();
+    syncCommentEntitiesFromCollaboration(editor, [
+      { commentId: 'tc-1', trackedChange: true, trackedChangeText: 'inserted', creatorName: 'A' },
+      { commentId: 'c-1', commentText: 'real comment', creatorName: 'B' },
+    ]);
+    const store = getCommentEntityStore(editor);
+    expect(store).toHaveLength(1);
+    expect(store[0].commentId).toBe('c-1');
+  });
+
+  it('skips entries without a commentId', () => {
+    const editor = makeEditorWithConverter();
+    syncCommentEntitiesFromCollaboration(editor, [{ creatorName: 'orphan' }, { commentId: 'c-ok', creatorName: 'X' }]);
+    const store = getCommentEntityStore(editor);
+    expect(store).toHaveLength(1);
+    expect(store[0].commentId).toBe('c-ok');
+  });
+
+  it('falls back to importedId when commentId is missing', () => {
+    const editor = makeEditorWithConverter();
+    syncCommentEntitiesFromCollaboration(editor, [{ importedId: 'imp-1', creatorName: 'X' }]);
+    const store = getCommentEntityStore(editor);
+    expect(store).toHaveLength(1);
+    expect(store[0].commentId).toBe('imp-1');
+    expect(store[0].importedId).toBe('imp-1');
+  });
+
+  it('merges an updated entry without clobbering unchanged fields', () => {
+    const editor = makeEditorWithConverter([
+      {
+        commentId: 'c1',
+        commentText: 'v1',
+        creatorName: 'Author',
+        creatorEmail: 'author@example.com',
+        createdTime: 1,
+      },
+    ]);
+    // Remote update bumps commentText only.
+    syncCommentEntitiesFromCollaboration(editor, [{ commentId: 'c1', commentText: 'v2' }]);
+    const store = getCommentEntityStore(editor);
+    expect(store).toHaveLength(1);
+    expect(store[0].commentText).toBe('v2');
+    expect(store[0].creatorName).toBe('Author');
+    expect(store[0].creatorEmail).toBe('author@example.com');
+    expect(store[0].createdTime).toBe(1);
+  });
+
+  it('propagates resolution metadata', () => {
+    const editor = makeEditorWithConverter([{ commentId: 'c1', commentText: 'hi' }]);
+    syncCommentEntitiesFromCollaboration(editor, [
+      {
+        commentId: 'c1',
+        commentText: 'hi',
+        isDone: true,
+        resolvedTime: 1700000005000,
+        resolvedByEmail: 'resolver@example.com',
+        resolvedByName: 'Resolver',
+      },
+    ]);
+    const store = getCommentEntityStore(editor);
+    expect(store[0].isDone).toBe(true);
+    expect(store[0].resolvedTime).toBe(1700000005000);
+    expect(store[0].resolvedByEmail).toBe('resolver@example.com');
+    expect(store[0].resolvedByName).toBe('Resolver');
+  });
+
+  it('returns the set of synced comment ids (for caller-driven deletion sweep)', () => {
+    const editor = makeEditorWithConverter();
+    const seen = syncCommentEntitiesFromCollaboration(editor, [
+      { commentId: 'c1' },
+      { commentId: 'c2' },
+      { trackedChange: true, commentId: 'tc-1' },
+    ]);
+    expect(seen).toEqual(new Set(['c1', 'c2']));
+  });
+
+  it('is a no-op for empty input', () => {
+    const editor = makeEditorWithConverter([{ commentId: 'pre', commentText: 'kept' }]);
+    syncCommentEntitiesFromCollaboration(editor, []);
+    const store = getCommentEntityStore(editor);
+    expect(store).toHaveLength(1);
+    expect(store[0].commentText).toBe('kept');
+  });
+
+  // Remote-deletion handling: when a prior collab-synced id disappears from
+  // the upstream Y.Array, the helper prunes the matching store entry.
+  it('prunes a previously-synced entry that is no longer in upstream entries', () => {
+    const editor = makeEditorWithConverter();
+    const first = syncCommentEntitiesFromCollaboration(editor, [
+      { commentId: 'a', commentText: 'a' },
+      { commentId: 'b', commentText: 'b' },
+    ]);
+    expect(getCommentEntityStore(editor)).toHaveLength(2);
+    expect(first).toEqual(new Set(['a', 'b']));
+
+    // Remote drops 'a'.
+    const second = syncCommentEntitiesFromCollaboration(editor, [{ commentId: 'b', commentText: 'b' }], {
+      previouslySynced: first,
+    });
+    const store = getCommentEntityStore(editor);
+    expect(store).toHaveLength(1);
+    expect(store[0].commentId).toBe('b');
+    expect(second).toEqual(new Set(['b']));
+  });
+
+  it('does not prune locally-authored entries that were never collab-synced', () => {
+    // 'local' is in the store but never in `previouslySynced` — the helper
+    // must leave it alone even though it isn't in the upstream entries.
+    const editor = makeEditorWithConverter([{ commentId: 'local', commentText: 'cli-authored' }]);
+    syncCommentEntitiesFromCollaboration(editor, [{ commentId: 'remote', commentText: 'r' }], {
+      previouslySynced: new Set<string>(),
+    });
+    const store = getCommentEntityStore(editor);
+    expect(store).toHaveLength(2);
+    expect(store.map((e) => e.commentId).sort()).toEqual(['local', 'remote']);
+  });
+
+  it('prunes thread replies along with the deleted parent', () => {
+    // removeCommentEntityTree cascades to children — confirm via the helper.
+    const editor = makeEditorWithConverter();
+    const first = syncCommentEntitiesFromCollaboration(editor, [
+      { commentId: 'root' },
+      { commentId: 'reply-1', parentCommentId: 'root' },
+      { commentId: 'reply-2', parentCommentId: 'root' },
+      { commentId: 'unrelated' },
+    ]);
+    expect(getCommentEntityStore(editor)).toHaveLength(4);
+
+    syncCommentEntitiesFromCollaboration(editor, [{ commentId: 'unrelated' }], {
+      previouslySynced: first,
+    });
+    const store = getCommentEntityStore(editor);
+    expect(store.map((e) => e.commentId).sort()).toEqual(['unrelated']);
+  });
+
+  it('returns the new sync set unchanged when no removals occur', () => {
+    const editor = makeEditorWithConverter();
+    const first = syncCommentEntitiesFromCollaboration(editor, [{ commentId: 'a' }, { commentId: 'b' }]);
+    const second = syncCommentEntitiesFromCollaboration(
+      editor,
+      [{ commentId: 'a' }, { commentId: 'b' }, { commentId: 'c' }],
+      { previouslySynced: first },
+    );
+    expect(second).toEqual(new Set(['a', 'b', 'c']));
+    expect(getCommentEntityStore(editor)).toHaveLength(3);
   });
 });

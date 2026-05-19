@@ -1,6 +1,5 @@
 """Build script that ensures the CLI binary is executable before wheel packaging."""
 
-import os
 import stat
 from pathlib import Path
 
@@ -13,7 +12,6 @@ class BuildPyWithExecutableBinary(build_py):
 
     def run(self):
         super().run()
-        # After files are copied to build dir, chmod the binary
         if self.build_lib:
             binary_path = Path(self.build_lib) / 'superdoc_sdk_cli_linux_arm64' / 'bin' / 'superdoc'
             if binary_path.exists():

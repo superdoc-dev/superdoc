@@ -98,6 +98,10 @@ async function main() {
   console.log('\n--- Phase 4: sdk codegen ---');
   await run('node', [path.join(REPO_ROOT, 'packages/sdk/codegen/src/generate-all.mjs')]);
 
+  // Phase 6: Python platform setup.py files
+  console.log('\n--- Phase 5: python platform setup ---');
+  await run('node', [path.join(REPO_ROOT, 'packages/sdk/scripts/generate-python-platform-setup.mjs')]);
+
   console.log('\ngenerate:all complete.');
 }
 

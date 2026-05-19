@@ -50,3 +50,8 @@ jobs:
 
       - name: Validate SDK
         run: node packages/sdk/scripts/sdk-validate.mjs
+
+      - name: Verify platform setup.py generation
+        run: |
+          node packages/sdk/scripts/generate-python-platform-setup.mjs
+          git diff --exit-code packages/sdk/langs/python/platforms/*/setup.py

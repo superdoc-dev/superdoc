@@ -102,11 +102,7 @@ export async function stageCompanionBinary(target, { cliPlatformsRoot = CLI_PLAT
   await copyFile(sourcePath, destPath);
 
   if (!target.binaryName.endsWith('.exe')) {
-    try {
-      await chmod(destPath, 0o755);
-    } catch {
-      // Non-fatal; runtime will surface execution errors if permissions are invalid.
-    }
+    await chmod(destPath, 0o755);
   }
 
   console.log(`  Staged ${target.id}: ${path.relative(REPO_ROOT, destPath)} (${(fileStat.size / 1e6).toFixed(1)} MB)`);

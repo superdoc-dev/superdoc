@@ -101,10 +101,13 @@ if (rect.success) {
 await ui.metadata.scrollIntoView({ id, block: 'center' });
 
 // Hover preview: look up which anchor the cursor is over, then read its payload.
+// `hits` is innermost-first; the first `contentControl` hit is the span under
+// the cursor. Use `hit.tag` (the SDT's `w:tag`, which the adapter sets to the
+// metadata id), not `hit.id` (which is the internal SDT node id).
 const hits = ui.viewport.entityAt({ x: event.clientX, y: event.clientY });
 for (const hit of hits) {
-  if (hit.entityType === 'contentControl') {
-    const info = editor.doc.metadata.get({ id: hit.entityId });
+  if (hit.type === 'contentControl' && hit.tag) {
+    const info = editor.doc.metadata.get({ id: hit.tag });
     if (info) showPreview(info.payload);
   }
 }

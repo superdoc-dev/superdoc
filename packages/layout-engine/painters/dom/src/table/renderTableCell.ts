@@ -384,6 +384,7 @@ type TableCellRenderDependencies = {
    * The callback receives a DrawingBlock and must return an HTMLElement.
    * The returned element will have width: 100% and height: 100% styles applied automatically.
    * If undefined, the shared drawing renderer is used.
+   * Image drawings always use the shared image renderer so table image styling and hyperlinks are preserved.
    */
   renderDrawingContent?: (block: DrawingBlock, options?: { clipContainer?: HTMLElement }) => HTMLElement;
   /** Rendering context */
@@ -464,7 +465,7 @@ export type TableCellRenderResult = {
  *   useDefaultBorder: false,
  *   renderLine,
  *   renderDrawingContent: (block) => {
- *     // Custom drawing renderer for vectorShapes and shapeGroups
+ *     // Custom renderer for non-image drawings
  *     const el = document.createElement('div');
  *     // Render drawing content...
  *     return el;

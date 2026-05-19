@@ -828,7 +828,9 @@ describe('renderTableCell', () => {
 
     expect(callbackCount).toBe(0);
     expect(cellElement.querySelector('.callback-drawing-image')).toBeFalsy();
-    expect(cellElement.querySelector('img.superdoc-drawing-image')).toBeTruthy();
+    const image = cellElement.querySelector('img.superdoc-drawing-image') as HTMLImageElement | null;
+    expect(image).toBeTruthy();
+    expect(image?.src).toBe('data:image/png;base64,AAA');
   });
 
   it('pushes text away from wrapSquare anchored images in table cells', () => {

@@ -3,6 +3,7 @@ import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
 import { Slice } from 'prosemirror-model';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { handleBackspace } from '@core/extensions/keymap.js';
 import { STRUCTURED_CONTENT_LOCK_KEY } from './structured-content-lock-plugin.js';
 
 /**
@@ -503,6 +504,36 @@ describe('StructuredContentLockPlugin', () => {
         const deletionTr = afterSelectState.tr.delete(sdtInfo.pos, sdtInfo.end);
         const finalState = afterSelectState.apply(deletionTr);
         expect(sdtNodeExists(finalState.doc, 'structuredContent')).toBe(false);
+      });
+
+      it('contentLocked + Backspace at the start of the following run selects the SDT wrapper', () => {
+        const sdtRun = schema.nodes.run.create(null, schema.text('Locked content'));
+        const sdt = schema.nodes.structuredContent.create({ id: 'test-123', lockMode: 'contentLocked' }, sdtRun);
+        const followingRun = schema.nodes.run.create(null, schema.text('Adding some additional text here.'));
+        const paragraph = schema.nodes.paragraph.create(null, [sdt, followingRun]);
+        const doc = schema.nodes.doc.create(null, [paragraph]);
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+
+        let followingRunPos = null;
+        state.doc.descendants((node, pos) => {
+          if (node.type.name === 'run' && node.textContent.startsWith('Adding')) {
+            followingRunPos = pos;
+            return false;
+          }
+          return true;
+        });
+        expect(followingRunPos).not.toBeNull();
+
+        const caretBeforeAdding = followingRunPos + 1;
+        placeCaretAt(state, caretBeforeAdding);
+
+        handleBackspace(editor);
+
+        const selection = editor.state.selection;
+        expect(selection).toBeInstanceOf(NodeSelection);
+        expect(selection.from).toBe(sdtInfo.pos);
+        expect(selection.to).toBe(sdtInfo.end);
       });
     });
 

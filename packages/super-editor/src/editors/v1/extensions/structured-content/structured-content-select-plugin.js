@@ -1,6 +1,7 @@
 import { Plugin } from 'prosemirror-state';
 
 import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
+import { SELECT_INLINE_SDT_BEFORE_RUN_START_META } from '@core/commands/selectInlineSdtBeforeRunStart.js';
 
 const INLINE_LEAF_TEXT = '\ufffc';
 
@@ -88,6 +89,8 @@ export function createStructuredContentSelectPlugin(editor) {
       if (transactions.some((tr) => tr.docChanged)) return null;
 
       if (!selection.empty) {
+        if (transactions.some((tr) => tr.getMeta(SELECT_INLINE_SDT_BEFORE_RUN_START_META))) return null;
+
         let selectedSdt = null;
         newState.doc.descendants((node, pos) => {
           if (node.type.name !== 'structuredContent') return true;

@@ -80,6 +80,74 @@ const DOC = {
   ],
 };
 
+const RTL_DOC = {
+  type: 'doc',
+  content: [
+    {
+      type: 'paragraph',
+      content: [{ type: 'run', content: [{ type: 'text', text: 'This is some text before the table' }] }],
+    },
+    {
+      type: 'table',
+      attrs: {
+        tableProperties: { rightToLeft: true },
+        grid: [{ col: 1500 }, { col: 1500 }, { col: 1500 }],
+      },
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              attrs: { colspan: 1, rowspan: 1, colwidth: [150] },
+              content: [{ type: 'paragraph', content: [{ type: 'run', content: [{ type: 'text', text: 'Here' }] }] }],
+            },
+            {
+              type: 'tableCell',
+              attrs: { colspan: 1, rowspan: 1, colwidth: [150] },
+              content: [{ type: 'paragraph', content: [{ type: 'run', content: [{ type: 'text', text: 'Is' }] }] }],
+            },
+            {
+              type: 'tableCell',
+              attrs: { colspan: 1, rowspan: 1, colwidth: [150] },
+              content: [{ type: 'paragraph', content: [{ type: 'run', content: [{ type: 'text', text: 'a' }] }] }],
+            },
+          ],
+        },
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              attrs: { colspan: 1, rowspan: 1, colwidth: [150] },
+              content: [{ type: 'paragraph', content: [{ type: 'run', content: [{ type: 'text', text: 'table' }] }] }],
+            },
+            {
+              type: 'tableCell',
+              attrs: { colspan: 1, rowspan: 1, colwidth: [150] },
+              content: [{ type: 'paragraph', content: [{ type: 'run', content: [{ type: 'text', text: 'for' }] }] }],
+            },
+            {
+              type: 'tableCell',
+              attrs: { colspan: 1, rowspan: 1, colwidth: [150] },
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [{ type: 'run', content: [{ type: 'text', text: 'Testing' }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'paragraph',
+      content: [{ type: 'run', content: [{ type: 'text', text: 'This is more text after the table' }] }],
+    },
+  ],
+};
+
 const DOC_WITH_PROTECTED_TRAILING_PARAGRAPH = {
   type: 'doc',
   content: [
@@ -389,6 +457,77 @@ describe('tableBoundaryNavigation', () => {
       const nextSelection = getTableBoundaryExitSelection(state, -1);
       expect(nextSelection).not.toBeNull();
       expect(nextSelection.from).toBe(beforeEnd);
+    });
+  });
+
+  describe('RTL table boundary behavior', () => {
+    let rtlEditor;
+    let rtlDoc;
+    let beforePosRtl;
+    let herePosRtl;
+    let testingPosRtl;
+    let afterPosRtl;
+
+    beforeEach(() => {
+      ({ editor: rtlEditor } = initTestEditor({ loadFromSchema: true, content: RTL_DOC }));
+      rtlDoc = rtlEditor.state.doc;
+      beforePosRtl = findTextPos(rtlDoc, 'This is some text before the table');
+      herePosRtl = findTextPos(rtlDoc, 'Here');
+      testingPosRtl = findTextPos(rtlDoc, 'Testing');
+      afterPosRtl = findTextPos(rtlDoc, 'This is more text after the table');
+    });
+
+    it('moves right from the start of the first logical cell to the paragraph before the table', () => {
+      const state = rtlEditor.state.apply(rtlEditor.state.tr.setSelection(TextSelection.create(rtlDoc, herePosRtl)));
+
+      const nextSelection = getTableBoundaryExitSelection(state, 1);
+      expect(nextSelection).not.toBeNull();
+      expect(nextSelection.from).toBe(beforePosRtl + 'This is some text before the table'.length);
+    });
+
+    it('moves left from the end of the last logical cell to the paragraph after the table', () => {
+      const endOfTesting = testingPosRtl + 'Testing'.length;
+      const state = rtlEditor.state.apply(rtlEditor.state.tr.setSelection(TextSelection.create(rtlDoc, endOfTesting)));
+
+      const nextSelection = getTableBoundaryExitSelection(state, -1);
+      expect(nextSelection).not.toBeNull();
+      expect(nextSelection.from).toBe(afterPosRtl);
+    });
+
+    it('moves right from the end of the paragraph before the table into the last logical cell', () => {
+      const endOfBefore = beforePosRtl + 'This is some text before the table'.length;
+      const state = rtlEditor.state.apply(rtlEditor.state.tr.setSelection(TextSelection.create(rtlDoc, endOfBefore)));
+
+      const nextSelection = getAdjacentTableEntrySelection(state, 1);
+      expect(nextSelection).not.toBeNull();
+      expect(nextSelection.from).toBe(testingPosRtl + 'Testing'.length);
+    });
+
+    it('moves left from the start of the paragraph after the table into the first logical cell', () => {
+      const state = rtlEditor.state.apply(rtlEditor.state.tr.setSelection(TextSelection.create(rtlDoc, afterPosRtl)));
+
+      const nextSelection = getAdjacentTableEntrySelection(state, -1);
+      expect(nextSelection).not.toBeNull();
+      expect(nextSelection.from).toBe(herePosRtl);
+    });
+
+    it('does not exit table on Shift+ArrowRight from RTL edge cell when no adjacent cell exists', () => {
+      rtlEditor.view.dispatch(rtlEditor.state.tr.setSelection(TextSelection.create(rtlDoc, herePosRtl)));
+      const before = rtlEditor.state.selection.from;
+
+      const plugin = createTableBoundaryNavigationPlugin();
+      const handled = plugin.props.handleKeyDown(rtlEditor.view, {
+        key: 'ArrowRight',
+        defaultPrevented: false,
+        shiftKey: true,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+      });
+
+      expect(handled).toBe(false);
+      expect(rtlEditor.state.selection.from).toBe(before);
     });
   });
 });

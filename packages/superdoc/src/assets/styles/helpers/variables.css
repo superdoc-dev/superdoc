@@ -119,6 +119,10 @@
   --sd-ui-menu-item-hover-bg: var(--sd-ui-hover-bg);
   --sd-ui-menu-item-active-bg: var(--sd-ui-active-bg);
   --sd-ui-menu-item-active-text: var(--sd-ui-action);
+  /* SD-2747: context menu's slash-filter search header + empty-state styling */
+  --sd-ui-menu-header-bg: #fafafa;
+  --sd-ui-menu-text-muted: #888;
+  --sd-ui-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* UI: tools */
   --sd-ui-tools-gap: 6px;
@@ -181,7 +185,6 @@
   --sd-tracked-changes-insert-background: var(--sd-track-insert-bg, #399c7222);
   --sd-tracked-changes-insert-border: var(--sd-track-insert-border, #00853d);
   --sd-tracked-changes-insert-border-width: 1px;
-  --sd-tracked-changes-insert-focused-border-width: 2px;
   --sd-tracked-changes-insert-text: currentColor;
   --sd-tracked-changes-insert-decoration-line: none;
   --sd-tracked-changes-insert-decoration-thickness: 1px;
@@ -189,7 +192,6 @@
   --sd-tracked-changes-delete-background: var(--sd-track-delete-bg, #cb0e4722);
   --sd-tracked-changes-delete-border: var(--sd-track-delete-border, #cb0e47);
   --sd-tracked-changes-delete-border-width: 1px;
-  --sd-tracked-changes-delete-focused-border-width: 2px;
   --sd-tracked-changes-delete-text: currentColor;
   --sd-tracked-changes-delete-decoration-thickness: 2px;
   --sd-tracked-changes-format-border: var(--sd-track-format-border, gold);
@@ -199,8 +201,10 @@
 
   /* Styles: content controls (SDT) — blue accent, intentionally standalone */
   --sd-content-controls-block-border: #629be7;
+  --sd-content-controls-block-hover-border: transparent;
   --sd-content-controls-block-hover-bg: var(--sd-ui-hover-bg);
   --sd-content-controls-inline-border: #629be7;
+  --sd-content-controls-inline-hover-border: transparent;
   --sd-content-controls-inline-hover-bg: var(--sd-ui-hover-bg);
   --sd-content-controls-label-border: #629be7;
   --sd-content-controls-label-bg: #629be7ee;
@@ -288,6 +292,8 @@
   /* Styles: layout — cascades from semantic tier */
   --sd-layout-page-bg: var(--sd-ui-bg);
   --sd-layout-page-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+  --sd-formatting-mark-color: var(--sd-color-blue-500);
+  --sd-formatting-paragraph-mark-gap: 0.2em;
 
   /* Proofing: underline colors and metrics */
   --sd-proofing-spelling-color: #e53e3e;

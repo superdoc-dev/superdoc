@@ -59,7 +59,7 @@ function initSuperDocFromJSON() {
     documentMode: 'editing',
 
     /* LOADING JSON */
-    //https://docs.superdoc.dev/core/supereditor/configuration#param-options-content
+    //https://docs.superdoc.dev/advanced/supereditor/configuration#param-options-content
     mode: 'docx',
     jsonOverride: demoJSON,
 

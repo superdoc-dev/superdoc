@@ -39,7 +39,7 @@ import type {
 } from './executor-registry.types.js';
 import { getStepExecutor } from './executor-registry.js';
 import { planError } from './errors.js';
-import { ALIGNMENT_TO_JUSTIFICATION } from './paragraphs-wrappers.js';
+import { mapAlignmentToJustificationForParagraph } from './paragraphs-wrappers.js';
 import { closeHistory } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
 import { checkRevision, getRevision } from './revision-tracker.js';
@@ -53,6 +53,7 @@ import { mapBlockNodeType } from '../helpers/node-address-resolver.js';
 import { resolveWithinScope, scopeByRange } from '../helpers/adapter-utils.js';
 import { normalizeReplacementText } from './replacement-normalizer.js';
 import { getWordChanges } from './word-diff.js';
+import { calculateResolvedParagraphProperties } from '../../extensions/paragraph/resolvedPropertiesCache.js';
 import { Fragment, Slice } from 'prosemirror-model';
 import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
 import type { Transaction } from 'prosemirror-state';
@@ -69,24 +70,73 @@ import { getFormattingStateAtPos } from '../../core/helpers/getMarksFromSelectio
  * corresponding ProseMirror document position.  Needed because inline
  * node boundaries (run open/close) create gaps in the position space
  * that `textBetween` hides.
+ *
+ * Must mirror `textBetweenWithTabs`'s character accounting exactly — the diff
+ * loop above computes prefix/suffix offsets against that string, then asks
+ * this function to translate them back into PM positions. Any disagreement
+ * (e.g. an atom that contributed a char on one side but not the other) maps
+ * the edit to the wrong place. We count:
+ *   - text nodes by char length (the obvious case),
+ *   - `tab` nodes as 1 char (textBetweenWithTabs emits '\t'),
+ *   - inline leaves declaring `leafText` by `leafText(node).length`
+ *     (e.g. noBreakHyphen → '‑', length 1).
+ * Everything else contributes 0 — matching the executor's call site, which
+ * passes `leafFallback=''` so unknown leaves don't widen `originalText`.
+ *
+ * Atoms cannot be sliced mid-glyph, so when an offset lands strictly past an
+ * atom's first char we resolve to the position immediately after the atom.
  */
-function charOffsetToDocPos(doc: ProseMirrorNode, rangeFrom: number, rangeTo: number, charOffset: number): number {
+export function charOffsetToDocPos(
+  doc: ProseMirrorNode,
+  rangeFrom: number,
+  rangeTo: number,
+  charOffset: number,
+): number {
   let count = 0;
   let foundPos = -1;
 
+  const resolveAtom = (pos: number, nodeSize: number, len: number) => {
+    if (count + len < charOffset) return false;
+    foundPos = charOffset === count ? pos : pos + nodeSize;
+    return true;
+  };
+
   doc.nodesBetween(rangeFrom, rangeTo, (node, pos) => {
     if (foundPos >= 0) return false;
-    if (!node.isText) return true; // descend into non-text nodes
 
-    const textStart = Math.max(pos, rangeFrom);
-    const textEnd = Math.min(pos + node.nodeSize, rangeTo);
-    const textLen = textEnd - textStart;
-
-    if (count + textLen >= charOffset) {
-      foundPos = textStart + (charOffset - count);
+    if (node.isText) {
+      const textStart = Math.max(pos, rangeFrom);
+      const textEnd = Math.min(pos + node.nodeSize, rangeTo);
+      const textLen = textEnd - textStart;
+      if (count + textLen >= charOffset) {
+        foundPos = textStart + (charOffset - count);
+      }
+      count += textLen;
+      return false;
     }
-    count += textLen;
-    return false;
+
+    // tab nodes are non-leaf (content: 'inline*') but textBetweenWithTabs
+    // surfaces them as '\t', so they consume one offset slot here too.
+    if (node.type?.name === 'tab') {
+      resolveAtom(pos, node.nodeSize, 1);
+      count += 1;
+      return false;
+    }
+
+    // Inline leaves with a `leafText` spec contribute their visible text.
+    if (node.isLeaf && node.isInline) {
+      const leafTextFn = (node.type?.spec as { leafText?: (n: ProseMirrorNode) => string } | undefined)?.leafText;
+      if (typeof leafTextFn === 'function') {
+        const leafText = leafTextFn(node);
+        if (typeof leafText === 'string' && leafText.length > 0) {
+          resolveAtom(pos, node.nodeSize, leafText.length);
+          count += leafText.length;
+        }
+      }
+      return false;
+    }
+
+    return true; // descend into non-text, non-leaf nodes
   });
 
   return foundPos >= 0 ? foundPos : rangeTo;
@@ -1018,16 +1068,19 @@ export function executeTextDelete(
   return { changed: true };
 }
 
-// ALIGNMENT_TO_JUSTIFICATION imported from paragraphs-wrappers.js
-
 /**
  * Applies alignment to the paragraph node(s) that contain the given range.
  * Uses the same mechanism as paragraphsSetAlignmentWrapper: updates
  * paragraphProperties.justification via tr.setNodeMarkup.
  */
-function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, alignment: string): boolean {
-  const justification = ALIGNMENT_TO_JUSTIFICATION[alignment as keyof typeof ALIGNMENT_TO_JUSTIFICATION];
-  if (!justification) return false;
+function applyAlignmentToRange(
+  editor: Editor,
+  tr: Transaction,
+  absFrom: number,
+  absTo: number,
+  alignment: string,
+): boolean {
+  if (!alignment) return false;
 
   let changed = false;
   const doc = tr.doc;
@@ -1037,6 +1090,9 @@ function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, 
     if (!node.isTextblock) return;
 
     const existing = (node.attrs as Record<string, unknown>).paragraphProperties as Record<string, unknown> | undefined;
+    const paragraphPos = typeof tr.doc.resolve === 'function' ? tr.doc.resolve(pos) : null;
+    const resolved = calculateResolvedParagraphProperties(editor, node, paragraphPos as any);
+    const justification = mapAlignmentToJustificationForParagraph(alignment as any, resolved?.rightToLeft === true);
     const currentJustification = existing?.justification;
 
     if (currentJustification === justification) return;
@@ -1096,7 +1152,7 @@ export function executeStyleApply(
   }
 
   if (step.args.alignment) {
-    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+    changed = applyAlignmentToRange(editor, tr, absFrom, absTo, step.args.alignment) || changed;
   }
 
   return { changed };
@@ -1256,7 +1312,7 @@ export function executeSpanStyleApply(
   }
 
   if (step.args.alignment) {
-    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+    changed = applyAlignmentToRange(editor, tr, absFrom, absTo, step.args.alignment) || changed;
   }
 
   return { changed };

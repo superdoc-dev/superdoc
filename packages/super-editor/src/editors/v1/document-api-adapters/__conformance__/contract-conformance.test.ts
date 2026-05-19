@@ -71,6 +71,7 @@ import {
   tablesUnmergeCellsWrapper,
   tablesSplitCellWrapper,
   tablesSetCellPropertiesWrapper,
+  tablesSetCellTextWrapper,
   tablesSortWrapper,
   tablesSetStyleWrapper,
   tablesClearStyleWrapper,
@@ -87,6 +88,7 @@ import {
   tablesApplyStyleWrapper,
   tablesSetBordersWrapper,
   tablesSetTableOptionsWrapper,
+  tablesApplyPresetWrapper,
 } from '../plan-engine/tables-wrappers.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
 import {
@@ -150,8 +152,11 @@ import {
   listsCreateWrapper,
   listsAttachWrapper,
   listsDetachWrapper,
+  listsDeleteWrapper,
   listsJoinWrapper,
   listsSeparateWrapper,
+  listsMergeWrapper,
+  listsSplitWrapper,
   listsSetLevelWrapper,
   listsSetValueWrapper,
   listsContinuePreviousWrapper,
@@ -191,6 +196,16 @@ import {
   bookmarksRenameWrapper,
   bookmarksRemoveWrapper,
 } from '../plan-engine/bookmark-wrappers.js';
+import {
+  customXmlPartsCreateWrapper,
+  customXmlPartsPatchWrapper,
+  customXmlPartsRemoveWrapper,
+} from '../plan-engine/custom-xml-wrappers.js';
+import {
+  metadataAttachWrapper,
+  metadataUpdateWrapper,
+  metadataRemoveWrapper,
+} from '../plan-engine/anchored-metadata-wrappers.js';
 
 import {
   footnotesInsertWrapper,
@@ -328,9 +343,14 @@ vi.mock('prosemirror-model', async (importOriginal) => {
 const refResolverMocks = vi.hoisted(() => ({
   // Bookmark
   findAllBookmarks: vi.fn(() => []),
+  findAllBookmarkMarkersInDocument: vi.fn(() => []),
+  findAllBookmarksInDocument: vi.fn(() => []),
   resolveBookmarkTarget: vi.fn(),
   extractBookmarkInfo: vi.fn(),
   buildBookmarkDiscoveryItem: vi.fn(),
+  buildBookmarkAddress: vi.fn((name: string, story?: unknown) =>
+    story ? { kind: 'entity', entityType: 'bookmark', name, story } : { kind: 'entity', entityType: 'bookmark', name },
+  ),
   // Link
   findAllLinks: vi.fn(() => []),
   resolveLinkTarget: vi.fn(),
@@ -392,9 +412,12 @@ const refResolverMocks = vi.hoisted(() => ({
 
 vi.mock('../helpers/bookmark-resolver.js', () => ({
   findAllBookmarks: refResolverMocks.findAllBookmarks,
+  findAllBookmarkMarkersInDocument: refResolverMocks.findAllBookmarkMarkersInDocument,
+  findAllBookmarksInDocument: refResolverMocks.findAllBookmarksInDocument,
   resolveBookmarkTarget: refResolverMocks.resolveBookmarkTarget,
   extractBookmarkInfo: refResolverMocks.extractBookmarkInfo,
   buildBookmarkDiscoveryItem: refResolverMocks.buildBookmarkDiscoveryItem,
+  buildBookmarkAddress: refResolverMocks.buildBookmarkAddress,
 }));
 
 vi.mock('../helpers/footnote-resolver.js', () => ({
@@ -614,6 +637,7 @@ function makeTextEditor(
     addMark: vi.fn(),
     removeMark: vi.fn(),
     replaceWith: vi.fn(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn(),
     setMeta: vi.fn(),
     mapping: { map: (pos: number) => pos },
@@ -1281,6 +1305,7 @@ function makeTableEditor(
     delete: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: {
@@ -1579,6 +1604,7 @@ const IMPLEMENTED_TABLE_OPS: ReadonlySet<OperationId> = new Set([
   'tables.unmergeCells',
   'tables.splitCell',
   'tables.setCellProperties',
+  'tables.setCellText',
   'tables.convertFromText',
   'tables.split',
   'tables.convertToText',
@@ -1598,6 +1624,7 @@ const IMPLEMENTED_TABLE_OPS: ReadonlySet<OperationId> = new Set([
   'tables.applyStyle',
   'tables.setBorders',
   'tables.setTableOptions',
+  'tables.applyPreset',
   'tables.getStyles',
   'tables.setDefaultStyle',
   'tables.clearDefaultStyle',
@@ -1623,15 +1650,26 @@ const NON_RECEIPT_MUTATION_OPS: ReadonlySet<OperationId> = new Set([
 ] as OperationId[]);
 
 /**
- * Content-control operations whose handlers always return `true` because they
- * build and dispatch their own ProseMirror transaction directly (via
- * `editor.view!.dispatch(tr)`) rather than delegating to an editor command whose
- * boolean result propagates to the domain-command executor.
+ * Content-control operations excluded from the structured-failure conformance
+ * check because they have no synthetic-failure path that
+ * `makeNoOpSdtEditor` can simulate.
  *
- * Because the handler always returns `true`, the `domain.command` executor marks
- * the step effect as `'changed'` and `executeSdtMutation` returns success.
- * There is no code path that produces the `NO_OP` structured failure for these
- * operations, so they are excluded from the failureCase conformance check.
+ * The originals (wrap, unwrap, copy, move, insertBefore, insertAfter, group
+ * wrap/ungroup, repeatingSection insertItem/cloneItem/deleteItem) build and
+ * dispatch their own PM transaction directly via `editor.view!.dispatch(tr)`
+ * rather than delegating to an editor command whose boolean result propagates
+ * back through the executor. The SD-3123 additions (patch, setLockMode,
+ * setType, setBinding, clearBinding, patchRawProperties, text.setMultiline,
+ * the date family, the checkbox family, the choiceList family, and
+ * repeatingSection.setAllowInsertDelete) no longer route through
+ * `editor.commands.updateStructuredContentById`; the synthetic
+ * `updateStructuredContentById = vi.fn(() => false)` mock that previously
+ * drove the failure case has no effect on the AttrStep / inner-range write
+ * path.
+ *
+ * In both groups, the operations can still fail in production (missing target,
+ * lock violation, schema invalidation in PM dispatch). They just don't have a
+ * clean synthetic failure mode reachable from the mock editor.
  */
 const CC_DIRECT_DISPATCH_OPS: ReadonlySet<OperationId> = new Set([
   'contentControls.wrap',
@@ -1646,6 +1684,28 @@ const CC_DIRECT_DISPATCH_OPS: ReadonlySet<OperationId> = new Set([
   'contentControls.repeatingSection.insertItemAfter',
   'contentControls.repeatingSection.cloneItem',
   'contentControls.repeatingSection.deleteItem',
+  // SD-3123: synthetic noop-mock failure (updateStructuredContentById=false)
+  // no longer applies — these now write via tr.setNodeAttribute (metadata)
+  // or tr.replaceWith on the SDT inner range (content).
+  'contentControls.patch',
+  'contentControls.patchRawProperties',
+  'contentControls.setLockMode',
+  'contentControls.setType',
+  'contentControls.setBinding',
+  'contentControls.clearBinding',
+  'contentControls.text.setMultiline',
+  'contentControls.date.setValue',
+  'contentControls.date.clearValue',
+  'contentControls.date.setDisplayFormat',
+  'contentControls.date.setDisplayLocale',
+  'contentControls.date.setStorageFormat',
+  'contentControls.date.setCalendar',
+  'contentControls.checkbox.setState',
+  'contentControls.checkbox.toggle',
+  'contentControls.checkbox.setSymbolPair',
+  'contentControls.choiceList.setItems',
+  'contentControls.choiceList.setSelected',
+  'contentControls.repeatingSection.setAllowInsertDelete',
 ] as OperationId[]);
 
 const HAS_STRUCTURED_FAILURE_RESULT = (operationId: OperationId): boolean =>
@@ -2352,6 +2412,7 @@ function makeTocEditor(commandOverrides: Record<string, unknown> = {}): Editor {
     insert: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
@@ -2424,6 +2485,7 @@ function makeImageEditor(): Editor {
     insert: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
@@ -2498,6 +2560,7 @@ function makeMultiBlockImageEditor(): Editor {
     insert: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
@@ -2660,6 +2723,7 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent 
     addMark: vi.fn().mockReturnThis(),
     removeMark: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
@@ -2754,6 +2818,7 @@ function makeSdtEditorWithRepeatingSectionItems(): Editor {
     addMark: vi.fn().mockReturnThis(),
     removeMark: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
@@ -2873,6 +2938,7 @@ function makeCaptionImageEditor(
     insert: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
@@ -2938,6 +3004,7 @@ function makeRefEditor(
     addMark: vi.fn().mockReturnThis(),
     removeMark: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
@@ -3041,6 +3108,55 @@ function makeRefEditor(
   } as unknown as Editor;
 }
 
+const METADATA_TARGET = {
+  kind: 'selection' as const,
+  start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+  end: { kind: 'text' as const, blockId: 'p1', offset: 5 },
+};
+
+function makeMetadataEditor(): Editor {
+  const editor = makeRefEditor({
+    schemaNodes: {
+      structuredContent: {
+        create: vi.fn((attrs?: Record<string, unknown>) =>
+          createNode('structuredContent', [], {
+            attrs,
+            isInline: true,
+            isBlock: false,
+            inlineContent: true,
+            nodeSize: 2,
+          }),
+        ),
+      },
+    },
+    converter: { convertedXml: {} },
+  });
+
+  const doc = editor.state.doc as ProseMirrorNode & {
+    textBetween: (from: number, to: number) => string;
+    slice: () => { content: ProseMirrorNode[] };
+    resolve: (pos: number) => {
+      parent: ProseMirrorNode;
+      depth: number;
+      parentOffset: number;
+      before: () => number;
+      after: () => number;
+    };
+  };
+  const paragraph = (doc as unknown as { _children: ProseMirrorNode[] })._children[0]!;
+  doc.textBetween = (from: number, to: number) => 'Hello'.slice(Math.max(0, from - 1), Math.max(0, to - 1));
+  doc.slice = () => ({ content: [] });
+  doc.resolve = (pos: number) => ({
+    parent: paragraph,
+    depth: 1,
+    parentOffset: Math.max(0, pos - 1),
+    before: () => 0,
+    after: () => paragraph.nodeSize,
+  });
+  (editor.state.tr as unknown as { doc: typeof doc }).doc = doc;
+  return editor;
+}
+
 /** Resolved mock for node-based resolvers (bookmarks, footnotes, cross-refs, etc.) */
 function mockResolvedNode(pos: number, nodeId: string, typeName: string, attrs: Record<string, unknown> = {}) {
   return {
@@ -3059,6 +3175,10 @@ function mockResolvedNode(pos: number, nodeId: string, typeName: string, attrs: 
     occurrenceIndex: 0,
     nestingDepth: 0,
   };
+}
+
+function seedConformanceBookmark(name = 'bm1'): void {
+  refResolverMocks.findAllBookmarksInDocument.mockReturnValue([{ name, bookmarkId: name, storyKey: 'body' }]);
 }
 
 /** Spies on executeDomainCommand to return an applied receipt, then calls `fn`, then restores. */
@@ -3107,6 +3227,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
+      seedConformanceBookmark('bm1');
       refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
         mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
       );
@@ -3127,6 +3248,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
+      seedConformanceBookmark('bm1');
       refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
         mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
       );
@@ -4023,6 +4145,143 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
       );
     },
   },
+
+  // ---- Custom XML Parts ----
+  'customXml.parts.create': {
+    throwCase: () =>
+      customXmlPartsCreateWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { content: '<a xmlns="urn:a"/>' },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () =>
+      customXmlPartsCreateWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { content: '<a xmlns="urn:a"/>' },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () =>
+      customXmlPartsCreateWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        // Malformed XML — adapter rejects with INVALID_INPUT.
+        { content: '<not-closed' },
+        { changeMode: 'direct' },
+      ),
+  },
+  'customXml.parts.patch': {
+    throwCase: () =>
+      customXmlPartsPatchWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { target: { partName: 'customXml/item1.xml' }, content: '<a xmlns="urn:a"/>' },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const editor = makeRefEditor({ converter: { convertedXml: {} } });
+      // Seed a part so the patch resolves.
+      customXmlPartsCreateWrapper(editor, { content: '<a xmlns="urn:a"/>' }, { changeMode: 'direct' });
+      return customXmlPartsPatchWrapper(
+        editor,
+        { target: { partName: 'customXml/item1.xml' }, content: '<a xmlns="urn:a">v2</a>' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () =>
+      customXmlPartsPatchWrapper(
+        // Empty convertedXml — target can't resolve.
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { target: { partName: 'customXml/item999.xml' }, content: '<a xmlns="urn:a"/>' },
+        { changeMode: 'direct' },
+      ),
+  },
+  'customXml.parts.remove': {
+    throwCase: () =>
+      customXmlPartsRemoveWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { target: { partName: 'customXml/item1.xml' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const editor = makeRefEditor({ converter: { convertedXml: {} } });
+      // Seed a part so the remove resolves.
+      customXmlPartsCreateWrapper(editor, { content: '<a xmlns="urn:a"/>' }, { changeMode: 'direct' });
+      return customXmlPartsRemoveWrapper(
+        editor,
+        { target: { partName: 'customXml/item1.xml' } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () =>
+      customXmlPartsRemoveWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { target: { partName: 'customXml/item999.xml' } },
+        { changeMode: 'direct' },
+      ),
+  },
+
+  // ---- Anchored metadata ----
+  'metadata.attach': {
+    throwCase: () =>
+      metadataAttachWrapper(
+        makeMetadataEditor(),
+        { target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () =>
+      metadataAttachWrapper(
+        makeMetadataEditor(),
+        { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      const editor = makeMetadataEditor();
+      metadataAttachWrapper(
+        editor,
+        { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+        { changeMode: 'direct' },
+      );
+      return metadataAttachWrapper(
+        editor,
+        { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Beta' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'metadata.update': {
+    throwCase: () =>
+      metadataUpdateWrapper(
+        makeMetadataEditor(),
+        { id: 'meta-1', payload: { label: 'Beta' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const editor = makeMetadataEditor();
+      metadataAttachWrapper(
+        editor,
+        { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+        { changeMode: 'direct' },
+      );
+      return metadataUpdateWrapper(editor, { id: 'meta-1', payload: { label: 'Beta' } }, { changeMode: 'direct' });
+    },
+    failureCase: () =>
+      metadataUpdateWrapper(
+        makeMetadataEditor(),
+        { id: 'missing', payload: { label: 'Beta' } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'metadata.remove': {
+    throwCase: () => metadataRemoveWrapper(makeMetadataEditor(), { id: 'meta-1' }, { changeMode: 'tracked' }),
+    applyCase: () => {
+      const editor = makeMetadataEditor();
+      metadataAttachWrapper(
+        editor,
+        { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+        { changeMode: 'direct' },
+      );
+      return metadataRemoveWrapper(editor, { id: 'meta-1' }, { changeMode: 'direct' });
+    },
+    failureCase: () => metadataRemoveWrapper(makeMetadataEditor(), { id: 'missing' }, { changeMode: 'direct' }),
+  },
 };
 
 const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
@@ -4895,6 +5154,28 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return listsDetachWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
     },
   },
+  'lists.delete': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsDeleteWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const noopReceipt = { steps: [{ effect: 'noop' }], revision: 'r0' };
+      const execSpy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(noopReceipt as any);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsDeleteWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
+      execSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsDeleteWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
+    },
+  },
   'lists.join': {
     throwCase: () => {
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
@@ -4979,6 +5260,110 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsSeparateWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
+      firstInSeqSpy.mockRestore();
+      abstractSpy.mockRestore();
+      seqSpy.mockRestore();
+      createNumSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.merge': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsMergeWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, direction: 'withNext' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue(null);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsMergeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        direction: 'withNext',
+      });
+      adjacentSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
+        numId: 2,
+        sequence: [
+          {
+            address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' },
+            candidate: {
+              nodeId: 'li-2',
+              nodeType: 'listItem',
+              pos: 4,
+              end: 8,
+              node: {
+                attrs: { paragraphProperties: { numberingProperties: { numId: 2, ilvl: 0 } } },
+                nodeSize: 4,
+              } as any,
+            },
+            numId: 2,
+            level: 0,
+          } as any,
+        ],
+      });
+      const sequenceSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([
+        {
+          address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+          candidate: {
+            nodeId: 'li-1',
+            nodeType: 'listItem',
+            pos: 0,
+            end: 4,
+            node: {
+              attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } },
+              nodeSize: 4,
+            } as any,
+          },
+          numId: 1,
+          level: 0,
+        } as any,
+      ]);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsMergeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        direction: 'withNext',
+      });
+      adjacentSpy.mockRestore();
+      sequenceSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.split': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSplitWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSplitWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
+      firstInSeqSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
+      const createNumSpy = vi
+        .spyOn(ListHelpers, 'createNumDefinition')
+        .mockReturnValue({ numId: 99, numDef: {} } as any);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSplitWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        restartNumbering: false, // skip the second mutation in the conformance harness
       });
       firstInSeqSpy.mockRestore();
       abstractSpy.mockRestore();
@@ -6257,6 +6642,20 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
+  'tables.setCellText': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetCellTextWrapper(editor, { nodeId: 'missing', text: 'hi' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesSetCellTextWrapper(editor, { nodeId: 'cell-1', text: 'hi' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetCellTextWrapper(editor, { nodeId: 'cell-1', text: 'hi' }, { changeMode: 'direct' });
+    },
+  },
   'tables.convertFromText': {
     throwCase: () => {
       const editor = makeTableEditor();
@@ -6625,6 +7024,20 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
         { changeMode: 'direct' },
       );
+    },
+  },
+  'tables.applyPreset': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesApplyPresetWrapper(editor, { nodeId: 'missing', preset: 'grid' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesApplyPresetWrapper(editor, { nodeId: 'table-1', preset: 'grid' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesApplyPresetWrapper(editor, { nodeId: 'table-1', preset: 'grid' }, { changeMode: 'direct' });
     },
   },
   'tables.setDefaultStyle': {
@@ -8929,6 +9342,14 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
   },
+  'lists.delete': () => {
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    return listsDeleteWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
   'lists.join': () => {
     const canJoinSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanJoin').mockReturnValue({
       canJoin: true,
@@ -8956,6 +9377,66 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSeparateWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    firstInSeqSpy.mockRestore();
+    abstractSpy.mockRestore();
+    seqSpy.mockRestore();
+    return result;
+  },
+  'lists.merge': () => {
+    const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
+      numId: 2,
+      sequence: [
+        {
+          address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' },
+          candidate: {
+            nodeId: 'li-2',
+            nodeType: 'listItem',
+            pos: 4,
+            end: 8,
+            node: {
+              attrs: { paragraphProperties: { numberingProperties: { numId: 2, ilvl: 0 } } },
+              nodeSize: 4,
+            } as any,
+          },
+          numId: 2,
+          level: 0,
+        } as any,
+      ],
+    });
+    const sequenceSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([
+      {
+        address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        candidate: {
+          nodeId: 'li-1',
+          nodeType: 'listItem',
+          pos: 0,
+          end: 4,
+          node: { attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } }, nodeSize: 4 } as any,
+        },
+        numId: 1,
+        level: 0,
+      } as any,
+    ]);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsMergeWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, direction: 'withNext' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    adjacentSpy.mockRestore();
+    sequenceSpy.mockRestore();
+    return result;
+  },
+  'lists.split': () => {
+    const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSplitWrapper(
       editor,
       { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
       { changeMode: 'direct', dryRun: true },
@@ -9479,6 +9960,17 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
+  'tables.setCellText': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesSetCellTextWrapper(
+      editor,
+      { nodeId: 'cell-1', text: 'hi' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
   'tables.convertFromText': () => {
     const editor = makeTableEditor();
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
@@ -9674,6 +10166,17 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const result = tablesSetTableOptionsWrapper(
       editor,
       { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.applyPreset': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesApplyPresetWrapper(
+      editor,
+      { nodeId: 'table-1', preset: 'grid' },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -10433,6 +10936,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     }
   },
   'bookmarks.rename': () => {
+    seedConformanceBookmark('bm1');
     refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
       mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
     );
@@ -10443,6 +10947,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     );
   },
   'bookmarks.remove': () => {
+    seedConformanceBookmark('bm1');
     refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
       mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
     );
@@ -10901,6 +11406,62 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
   },
+
+  // ---- Custom XML Parts ----
+  'customXml.parts.create': () =>
+    customXmlPartsCreateWrapper(
+      makeRefEditor({ converter: { convertedXml: {} } }),
+      { content: '<a xmlns="urn:a"/>' },
+      { changeMode: 'direct', dryRun: true },
+    ),
+  'customXml.parts.patch': () => {
+    const editor = makeRefEditor({ converter: { convertedXml: {} } });
+    customXmlPartsCreateWrapper(editor, { content: '<a xmlns="urn:a"/>' }, { changeMode: 'direct' });
+    return customXmlPartsPatchWrapper(
+      editor,
+      { target: { partName: 'customXml/item1.xml' }, content: '<a xmlns="urn:a">v2</a>' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'customXml.parts.remove': () => {
+    const editor = makeRefEditor({ converter: { convertedXml: {} } });
+    customXmlPartsCreateWrapper(editor, { content: '<a xmlns="urn:a"/>' }, { changeMode: 'direct' });
+    return customXmlPartsRemoveWrapper(
+      editor,
+      { target: { partName: 'customXml/item1.xml' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Anchored metadata ----
+  'metadata.attach': () =>
+    metadataAttachWrapper(
+      makeMetadataEditor(),
+      { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+      { changeMode: 'direct', dryRun: true },
+    ),
+  'metadata.update': () => {
+    const editor = makeMetadataEditor();
+    metadataAttachWrapper(
+      editor,
+      { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+      { changeMode: 'direct' },
+    );
+    return metadataUpdateWrapper(
+      editor,
+      { id: 'meta-1', payload: { label: 'Beta' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'metadata.remove': () => {
+    const editor = makeMetadataEditor();
+    metadataAttachWrapper(
+      editor,
+      { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+      { changeMode: 'direct' },
+    );
+    return metadataRemoveWrapper(editor, { id: 'meta-1' }, { changeMode: 'direct', dryRun: true });
+  },
 };
 
 beforeAll(() => {
@@ -10929,6 +11490,11 @@ const resetMocks = () => {
   }
   // Restore list-returning defaults
   refResolverMocks.findAllBookmarks.mockImplementation(() => []);
+  refResolverMocks.findAllBookmarkMarkersInDocument.mockImplementation(() => []);
+  refResolverMocks.findAllBookmarksInDocument.mockImplementation(() => []);
+  refResolverMocks.buildBookmarkAddress.mockImplementation((name: string, story?: unknown) =>
+    story ? { kind: 'entity', entityType: 'bookmark', name, story } : { kind: 'entity', entityType: 'bookmark', name },
+  );
   refResolverMocks.findAllLinks.mockImplementation(() => []);
   refResolverMocks.findAllFootnotes.mockImplementation(() => []);
   refResolverMocks.findAllCrossRefs.mockImplementation(() => []);
@@ -11251,6 +11817,7 @@ describe('document-api adapter conformance', () => {
       'tables.unmergeCells',
       'tables.splitCell',
       'tables.setCellProperties',
+      'tables.setCellText',
       'tables.sort',
       'tables.setStyle',
       'tables.clearStyle',
@@ -11267,6 +11834,7 @@ describe('document-api adapter conformance', () => {
       'tables.applyStyle',
       'tables.setBorders',
       'tables.setTableOptions',
+      'tables.applyPreset',
       'tables.insertCell',
       'tables.deleteCell',
       'tables.setDefaultStyle',
@@ -11710,6 +12278,7 @@ describe('document-api adapter conformance', () => {
         insert: vi.fn().mockReturnThis(),
         setNodeMarkup: vi.fn().mockReturnThis(),
         replaceWith: vi.fn().mockReturnThis(),
+        setNodeAttribute: vi.fn().mockReturnThis(),
         setMeta: vi.fn().mockReturnThis(),
         mapping: { map: (pos: number) => pos },
         docChanged: true,

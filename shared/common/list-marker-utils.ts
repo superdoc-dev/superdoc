@@ -199,7 +199,14 @@ const resolveExplicitStandardTextStartPx = (
   }
 
   if (explicitTextStartPx > 0) {
-    return getMinimumReadableTextStartPx(markerContentEndPx, gutterWidthPx);
+    // Marker overflows the hanging-indent text-start (e.g. "mm)" wider than
+    // its level's hanging in a multi-letter alphabetic list). Word's
+    // behavior: the suffix tab advances to the next default tab stop (every
+    // 0.5"), NOT to a fixed small gutter. The minimum-readable gutter remains
+    // as a safety floor when marker happens to land right on a tab stop.
+    const nextTabStopPx = getNextDefaultTabStopPx(markerContentEndPx);
+    const minReadablePx = getMinimumReadableTextStartPx(markerContentEndPx, gutterWidthPx);
+    return Math.max(nextTabStopPx, minReadablePx);
   }
 
   return undefined;
@@ -427,6 +434,25 @@ export function isMinimalWordLayout(value: unknown): value is MinimalWordLayout 
  * Used for marker modes whose rendering contract differs from the shared geometry
  * helper, such as right/center-justified markers and firstLineIndentMode paragraphs.
  */
+export type MarkerIndent = {
+  anchorIndentPx: number;
+  firstLinePx: number;
+  hangingPx: number;
+};
+
+export function resolveMarkerIndent(
+  indent: { left?: number; right?: number; firstLine?: number; hanging?: number } | undefined,
+  isRtl: boolean,
+): MarkerIndent {
+  const left = indent?.left ?? 0;
+  const right = indent?.right ?? 0;
+  return {
+    anchorIndentPx: isRtl ? right : left,
+    firstLinePx: isRtl ? -(indent?.firstLine ?? 0) : (indent?.firstLine ?? 0),
+    hangingPx: isRtl ? -(indent?.hanging ?? 0) : (indent?.hanging ?? 0),
+  };
+}
+
 export function computeTabWidth(
   currentPos: number,
   justification: string,

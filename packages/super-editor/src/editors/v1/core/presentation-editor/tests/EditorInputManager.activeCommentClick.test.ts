@@ -144,7 +144,12 @@ describe('EditorInputManager - single-thread comment highlight clicks', () => {
     };
 
     mockCallbacks = {
-      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({ x: clientX, y: clientY })),
+      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({
+        x: clientX,
+        y: clientY,
+        pageIndex: 0,
+        pageLocalY: clientY,
+      })),
       scheduleSelectionUpdate: vi.fn(),
       updateSelectionDebugHud: vi.fn(),
     };

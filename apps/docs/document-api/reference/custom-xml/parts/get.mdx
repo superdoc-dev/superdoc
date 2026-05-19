@@ -1,0 +1,125 @@
+---
+title: customXml.parts.get
+sidebarTitle: customXml.parts.get
+description: Get a single Custom XML Data Storage Part by itemID or package part name, including its full content. v1 partName targeting is limited to Word-style customXml/itemN.xml paths.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Get a single Custom XML Data Storage Part by itemID or package part name, including its full content. v1 partName targeting is limited to Word-style customXml/itemN.xml paths.
+
+- Operation ID: `customXml.parts.get`
+- API member path: `editor.doc.customXml.parts.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CustomXmlPartInfo with id, partName, namespaces, schemaRefs, and content; or null if not found.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object \\| object | yes | One of: object, object |
+
+### Example request
+
+```json
+{
+  "target": {
+    "id": "id-001"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "partName": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "partName"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "type": "object"
+    },
+    {
+      "type": "null"
+    }
+  ]
+}
+```
+</Accordion>

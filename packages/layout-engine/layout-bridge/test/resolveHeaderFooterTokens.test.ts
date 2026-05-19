@@ -224,6 +224,126 @@ describe('resolveHeaderFooterTokens', () => {
     expect(block.runs[0].text).toBe('1'); // Should fallback to 1
   });
 
+  // SD-1332: Word fixtures put PAGE fields inside table cells in the footer.
+  // The resolver previously walked only top-level paragraph blocks, so a
+  // pageNumber token nested in a TableCell.paragraph (or .blocks) was never
+  // substituted and the footer rendered without the digit.
+  describe('SD-1332: tokens nested in table cells', () => {
+    it('substitutes pageNumber token in a TableCell.paragraph', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'table',
+          id: 'tbl-1',
+          rows: [
+            {
+              cells: [
+                {
+                  id: 'cell-1',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'cell-para-1',
+                    runs: [{ text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun],
+                  } as ParagraphBlock,
+                },
+              ],
+            },
+          ],
+        } as unknown as FlowBlock,
+      ];
+
+      resolveHeaderFooterTokens(blocks, 7, 10);
+
+      const para = (blocks[0] as { rows: { cells: { paragraph: ParagraphBlock }[] }[] }).rows[0].cells[0].paragraph;
+      expect(para.runs[0].text).toBe('7');
+      expect((para.runs[0] as TextRun).token).toBe('pageNumber');
+    });
+
+    it('substitutes tokens in TableCell.blocks (multi-block cells)', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'table',
+          id: 'tbl-2',
+          rows: [
+            {
+              cells: [
+                {
+                  id: 'cell-2',
+                  blocks: [
+                    {
+                      kind: 'paragraph',
+                      id: 'inner-1',
+                      runs: [
+                        { text: 'Page ', fontFamily: 'Arial', fontSize: 12 },
+                        { text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun,
+                        { text: ' of ', fontFamily: 'Arial', fontSize: 12 },
+                        { text: '0', token: 'totalPageCount', fontFamily: 'Arial', fontSize: 12 } as TextRun,
+                      ],
+                    } as ParagraphBlock,
+                  ],
+                },
+              ],
+            },
+          ],
+        } as unknown as FlowBlock,
+      ];
+
+      resolveHeaderFooterTokens(blocks, 4, 9);
+
+      const para = (blocks[0] as { rows: { cells: { blocks: ParagraphBlock[] }[] }[] }).rows[0].cells[0].blocks[0];
+      expect(para.runs[1].text).toBe('4');
+      expect(para.runs[3].text).toBe('9');
+    });
+
+    it('recurses into a table nested inside a cell (table-in-cell)', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'table',
+          id: 'tbl-outer',
+          rows: [
+            {
+              cells: [
+                {
+                  id: 'cell-outer',
+                  blocks: [
+                    {
+                      kind: 'table',
+                      id: 'tbl-inner',
+                      rows: [
+                        {
+                          cells: [
+                            {
+                              id: 'cell-inner',
+                              paragraph: {
+                                kind: 'paragraph',
+                                id: 'inner-para',
+                                runs: [
+                                  { text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun,
+                                ],
+                              } as ParagraphBlock,
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        } as unknown as FlowBlock,
+      ];
+
+      resolveHeaderFooterTokens(blocks, 2, 5);
+
+      const innerPara = (
+        blocks[0] as {
+          rows: { cells: { blocks: { rows: { cells: { paragraph: ParagraphBlock }[] }[] }[] }[] }[];
+        }
+      ).rows[0].cells[0].blocks[0].rows[0].cells[0].paragraph;
+      expect(innerPara.runs[0].text).toBe('2');
+    });
+  });
+
   it('should skip non-paragraph blocks', () => {
     const blocks: FlowBlock[] = [
       {

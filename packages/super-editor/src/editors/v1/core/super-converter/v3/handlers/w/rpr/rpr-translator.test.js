@@ -83,4 +83,23 @@ describe('w:rPr translator (attribute aggregator)', () => {
       },
     });
   });
+
+  it('exports run-level rtl via w:rtl child', () => {
+    const result = translator.decode({
+      node: {
+        attrs: {
+          runProperties: {
+            rtl: true,
+          },
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      name: 'w:rPr',
+      type: 'element',
+      attributes: {},
+      elements: [{ name: 'w:rtl', attributes: {} }],
+    });
+  });
 });

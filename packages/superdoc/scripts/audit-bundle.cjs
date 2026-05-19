@@ -117,3 +117,54 @@ if (sizeFailed) {
   console.error('[audit-bundle] Size budget exceeded — investigate before merging.');
   process.exit(1);
 }
+
+// `superdoc/ui` is the browser-only UI controller. Importing it must not
+// drag in the editor's main barrel (which carries Vue components, SuperDoc
+// app shell, etc.). The signal is a side-effect import of the rolldown
+// chunk that holds the `superdoc` entry — historically `chunks/src-*.es.js`.
+//
+// SD-2803: the dedicated `@superdoc/super-editor/ui` entry removed this
+// dependency. Guard against regression by checking the emitted bundles.
+// SD-3183: extended the same check to the path-as-contract facade artifact
+// at `dist/public/ui.es.js`. Phase 4 will eventually flip
+// `package.json#exports./ui` to this facade; we cannot let the curated
+// surface regress the bundle shape that made SD-2803 possible.
+function auditUiBundleShape(bundlePath, sourcePointer, ticket) {
+  if (!fs.existsSync(bundlePath)) return;
+  const relativePath = path.relative(distRoot, bundlePath);
+  const uiSource = fs.readFileSync(bundlePath, 'utf8');
+  const importRegex = /import\s+(?:[^"']*\s+from\s+)?["']([^"']+)["']/g;
+  const violations = [];
+  let match;
+  while ((match = importRegex.exec(uiSource)) !== null) {
+    const importPath = match[1];
+    // Forbidden chunks: the main superdoc app entry (Vue components,
+    // SuperDoc.vue), and any chunk whose source maps to the super-editor
+    // root barrel rather than its `src/ui` sub-tree.
+    if (/\/chunks\/(src|superdoc|super-editor|main|index)-[A-Za-z0-9_-]+\.es\.js$/.test(importPath)) {
+      violations.push(importPath);
+    }
+  }
+  if (violations.length > 0) {
+    console.error(
+      `[audit-bundle] ✗ ${relativePath} side-effect-imports forbidden chunks (regression of SD-2803${ticket ? ` / ${ticket}` : ''}):`,
+    );
+    for (const v of violations) console.error(`    ${v}`);
+    console.error(
+      `    Re-export source must route through \`@superdoc/super-editor/ui\`,`,
+    );
+    console.error(`    not the package root barrel. See ${sourcePointer}.`);
+    process.exit(1);
+  }
+  console.log(`[audit-bundle] ✓ ${relativePath} does not pull in the editor main barrel`);
+}
+
+auditUiBundleShape(
+  path.join(distRoot, 'ui.es.js'),
+  'packages/superdoc/src/ui.js',
+);
+auditUiBundleShape(
+  path.join(distRoot, 'public', 'ui.es.js'),
+  'packages/superdoc/src/public/ui.ts',
+  'SD-3183',
+);

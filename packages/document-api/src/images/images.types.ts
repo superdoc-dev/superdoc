@@ -15,7 +15,7 @@ import type {
 
 /** Stable address for an image node in the document. */
 export interface ImageAddress {
-  /** Always 'inline' — ProseMirror node kind (all images are PM inline nodes). */
+  /** Always 'inline': ProseMirror node kind (all images are PM inline nodes). */
   kind: 'inline';
   nodeType: 'image';
   nodeId: string;

@@ -28,7 +28,7 @@ export type TrackChangesAcceptAllInput = Record<string, never>;
 export type TrackChangesRejectAllInput = Record<string, never>;
 
 // ---------------------------------------------------------------------------
-// trackChanges.decide — consolidated accept/reject operation
+// trackChanges.decide: consolidated accept/reject operation
 // ---------------------------------------------------------------------------
 
 export type ReviewDecideInput =
@@ -91,7 +91,7 @@ export function executeTrackChangesGet(adapter: TrackChangesAdapter, input: Trac
  * Executes the consolidated `trackChanges.decide` operation by routing to the
  * appropriate adapter method based on the discriminated input.
  *
- * Accepting/rejecting changes is a resolution action, not a content mutation —
+ * Accepting/rejecting changes is a resolution action, not a content mutation -
  * changeMode and dryRun are not applicable, so this accepts
  * {@link RevisionGuardOptions} rather than `MutationOptions`.
  */
@@ -100,7 +100,7 @@ export function executeTrackChangesDecide(
   rawInput: ReviewDecideInput,
   options?: RevisionGuardOptions,
 ): Receipt {
-  // Dynamic invoke callers may pass arbitrary values — validate before narrowing.
+  // Dynamic invoke callers may pass arbitrary values: validate before narrowing.
   const raw = rawInput as unknown;
 
   if (typeof raw !== 'object' || raw == null) {

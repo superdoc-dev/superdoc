@@ -1,14 +1,13 @@
 import { translator as wDelTranslator } from '@converter/v3/handlers/w/del';
 import { translator as wInsTranslator } from '@converter/v3/handlers/w/ins';
-
-const isTrackChangeElement = (node) => node?.name === 'w:del' || node?.name === 'w:ins';
+import { isTranslatedTrackChangeElement } from './trackChangeElements.js';
 
 const unwrapTrackChangeNode = (node) => {
   if (!node) {
     return null;
   }
 
-  if (isTrackChangeElement(node)) {
+  if (isTranslatedTrackChangeElement(node)) {
     return node;
   }
 

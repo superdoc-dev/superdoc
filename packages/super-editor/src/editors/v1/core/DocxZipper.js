@@ -11,7 +11,7 @@ import { reconcileDocumentRelationships, MANAGED_DOCUMENT_PARTS } from './opc/re
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
 
 /** Map file extensions to correct MIME sub-types where they differ. */
-const MIME_TYPE_FOR_EXT = { tif: 'tiff', jpg: 'jpeg' };
+const MIME_TYPE_FOR_EXT = { tif: 'tiff', jpg: 'jpeg', svg: 'svg+xml' };
 const CUSTOM_XML_ITEM_PROPS_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.customXmlProperties+xml';
 
 /** OOXML content types for embedded font file extensions. */
@@ -348,6 +348,26 @@ class DocxZipper {
       const filename = partName.slice(1); // strip leading /
       return !hasFile(filename);
     });
+
+    // Also prune Custom XML props Override entries whose part was deleted
+    // (tombstoned via updatedDocs[path] = null, e.g. by `customXml.parts.remove`).
+    // Without this, [Content_Types].xml retains an Override pointing at a
+    // missing part, which is spec-malformed.
+    //
+    // Identify by ContentType, not by filename — OOXML does not require
+    // the props part to be named itemPropsN.xml. Foreign producers can
+    // use arbitrary names, linked via customXml/_rels/itemN.xml.rels.
+    const CUSTOM_XML_PROPS_CT = 'application/vnd.openxmlformats-officedocument.customXmlProperties+xml';
+    if (types?.elements?.length) {
+      for (const el of types.elements) {
+        if (el?.name !== 'Override') continue;
+        if (el?.attributes?.ContentType !== CUSTOM_XML_PROPS_CT) continue;
+        const partName = el?.attributes?.PartName;
+        if (typeof partName !== 'string' || !partName.startsWith('/')) continue;
+        const filename = partName.slice(1); // strip leading /
+        if (!hasFile(filename)) staleOverridePartNames.push(partName);
+      }
+    }
 
     const beginningString = '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">';
     let updatedContentTypesXml = contentTypesXml.replace(beginningString, `${beginningString}${typesString}`);

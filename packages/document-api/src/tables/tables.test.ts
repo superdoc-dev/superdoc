@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test';
 import {
+  executeRowLocatorOp,
   executeTablesApplyStyle,
   executeTablesSetBorders,
   executeTablesSetTableOptions,
@@ -303,5 +304,82 @@ describe('executeTablesSetTableOptions validation', () => {
         cellSpacingPt: 2,
       } as any),
     ).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SD-2540 — review fixes (validator regressions)
+// ---------------------------------------------------------------------------
+
+describe('row-locator append-at-end shorthand (allowAppendShorthand flag)', () => {
+  it('accepts {nodeId} alone when allowAppendShorthand: true', () => {
+    expect(() =>
+      executeRowLocatorOp('tables.insertRow', MOCK_ADAPTER, { nodeId } as any, undefined, {
+        allowAppendShorthand: true,
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts table-level target alone when allowAppendShorthand: true', () => {
+    expect(() =>
+      executeRowLocatorOp(
+        'tables.insertRow',
+        MOCK_ADAPTER,
+        { target: { kind: 'block', nodeType: 'table', nodeId } } as any,
+        undefined,
+        { allowAppendShorthand: true },
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects {nodeId} alone when allowAppendShorthand is omitted (default strict)', () => {
+    expect(() => executeRowLocatorOp('tables.deleteRow', MOCK_ADAPTER, { nodeId } as any)).toThrow(
+      DocumentApiValidationError,
+    );
+  });
+
+  it('rejects {nodeId} + position without rowIndex even with allowAppendShorthand', () => {
+    expect(() =>
+      executeRowLocatorOp('tables.insertRow', MOCK_ADAPTER, { nodeId, position: 'above' } as any, undefined, {
+        allowAppendShorthand: true,
+      }),
+    ).toThrow(DocumentApiValidationError);
+  });
+});
+
+describe('setBorders color validator: loose hex forms', () => {
+  const baseInput = (color: string) => ({
+    nodeId,
+    mode: 'applyTo',
+    applyTo: 'all',
+    border: { lineStyle: 'single', lineWeightPt: 1, color },
+  });
+
+  it('accepts canonical 6-digit hex without #', () => {
+    expect(() => executeTablesSetBorders('tables.setBorders', MOCK_ADAPTER, baseInput('000000') as any)).not.toThrow();
+  });
+
+  it('accepts #-prefixed 6-digit hex', () => {
+    expect(() => executeTablesSetBorders('tables.setBorders', MOCK_ADAPTER, baseInput('#000000') as any)).not.toThrow();
+  });
+
+  it('accepts 3-digit shorthand without #', () => {
+    expect(() => executeTablesSetBorders('tables.setBorders', MOCK_ADAPTER, baseInput('abc') as any)).not.toThrow();
+  });
+
+  it('accepts #-prefixed 3-digit shorthand', () => {
+    expect(() => executeTablesSetBorders('tables.setBorders', MOCK_ADAPTER, baseInput('#abc') as any)).not.toThrow();
+  });
+
+  it('still rejects invalid hex strings', () => {
+    expect(() => executeTablesSetBorders('tables.setBorders', MOCK_ADAPTER, baseInput('xyzzzz') as any)).toThrow(
+      DocumentApiValidationError,
+    );
+  });
+
+  it('still rejects 4-digit non-hex', () => {
+    expect(() => executeTablesSetBorders('tables.setBorders', MOCK_ADAPTER, baseInput('abcd') as any)).toThrow(
+      DocumentApiValidationError,
+    );
   });
 });

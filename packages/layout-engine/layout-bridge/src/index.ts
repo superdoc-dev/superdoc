@@ -74,7 +74,8 @@ export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './increm
 export { computeDisplayPageNumber } from '@superdoc/layout-engine';
 export type { DisplayPageInfo, HeaderFooterConstraints } from '@superdoc/layout-engine';
 export { remeasureParagraph } from './remeasure';
-export { measureCharacterX, sliceRunsForLine } from './text-measurement';
+export { measureCharacterX } from './text-measurement';
+export { sliceRunsForLine } from '@superdoc/contracts';
 export { clickToPositionDom, findPageElement } from './dom-mapping';
 export { isListItem, getWordLayoutConfig, calculateTextStartIndent, extractParagraphIndent } from './list-indent-utils';
 export type { TextIndentCalculationParams } from './list-indent-utils';
@@ -160,6 +161,24 @@ export {
   getRunNumberProp,
   getRunBooleanProp,
 } from './paragraph-hash-utils';
+
+// Editor-neutral hit-test substrate (prep-001).
+//
+// Additive only — `pmStart`/`pmEnd` and the existing `clickToPosition` /
+// `selectionToRects` entry points remain available for v1 callers. The
+// neutral entry points project the same producer state onto an
+// editor-neutral shape so future surfaces can address rendered output
+// without consulting ProseMirror positions.
+export type {
+  LayoutHit,
+  LayoutHitDiagnostic,
+  LayoutFragmentOpaqueRange,
+  LayoutFragmentSubrange,
+  LayoutRangeMapping,
+  LayoutRect,
+  PmOpaqueRange,
+} from './neutral-hit.js';
+export { hitTestNeutral, mapRangeToFragmentsNeutral } from './neutral-hit.js';
 
 // Position-hit types and helpers (re-exported from position-hit.ts)
 export type {

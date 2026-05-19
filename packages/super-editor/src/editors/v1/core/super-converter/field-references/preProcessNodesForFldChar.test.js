@@ -303,6 +303,367 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
+  it('processes known fields that end inside nested non-tracked wrappers', () => {
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'HYPERLINK "http://example.com"' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:sdt',
+            elements: [
+              {
+                name: 'w:sdtContent',
+                elements: [
+                  { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+                  { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual([
+      {
+        name: 'w:hyperlink',
+        type: 'element',
+        attributes: { 'r:id': 'rIdabc12345' },
+        elements: [
+          {
+            name: 'w:p',
+            elements: [
+              {
+                name: 'w:sdt',
+                elements: [
+                  {
+                    name: 'w:sdtContent',
+                    elements: [
+                      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('preserves a tracked-deletion-wrapped field split across paragraphs without throwing', () => {
+    const expectedNodes = [
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:del',
+            attributes: { 'w:id': '1', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:instrText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: ' HYPERLINK \\l "Bookmark" ' }],
+                  },
+                ],
+              },
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:delText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'deleted link text' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:del',
+            attributes: { 'w:id': '2', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:delText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'deleted text after field end' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const nodes = structuredClone(expectedNodes);
+
+    let result;
+    expect(() => {
+      result = preProcessNodesForFldChar(nodes, mockDocx);
+    }).not.toThrow();
+    expect(result.processedNodes).toEqual(expectedNodes);
+    expect(result.unpairedBegin).toBeNull();
+    expect(result.unpairedEnd).toBeNull();
+  });
+
+  // SD-2973: when a HYPERLINK field is wrapped in a constructive tracked
+  // change (w:ins / w:moveTo) and crosses paragraphs, SD-2858's preserveRaw
+  // path used to drop the link interpretation entirely — the inserted text
+  // rendered with insertion styling but no clickable link, while Word shows
+  // both treatments. The fix keeps the raw <w:p> structure intact (so the
+  // tracked-change wrappers round-trip) but wraps the visible text run
+  // (between separate and end fldChars) in <w:hyperlink> in-place so the
+  // downstream importer applies the link mark.
+  it('wraps the visible run in w:hyperlink when an inserted HYPERLINK is split across paragraphs', () => {
+    const docx = {
+      'word/_rels/document.xml.rels': {
+        elements: [{ name: 'Relationships', elements: [] }],
+      },
+    };
+    const nodes = [
+      {
+        name: 'w:p',
+        elements: [
+          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Before: ' }] }] },
+          {
+            name: 'w:ins',
+            attributes: { 'w:id': '1', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:instrText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: ' HYPERLINK "http://example.com" ' }],
+                  },
+                ],
+              },
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:t',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'inserted link text' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:ins',
+            attributes: { 'w:id': '2', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:t',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'inserted text after field end' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const result = preProcessNodesForFldChar(nodes, docx);
+
+    // Two paragraphs preserved (the structural raw-preservation guarantee
+    // from SD-2858 still holds — we are not collapsing the tree).
+    expect(result.processedNodes).toHaveLength(2);
+    expect(result.processedNodes[0].name).toBe('w:p');
+    expect(result.processedNodes[1].name).toBe('w:p');
+
+    // Walk the first paragraph; it must contain a w:hyperlink wrapping the
+    // visible text run "inserted link text". The hyperlink sits inside the
+    // existing <w:ins> wrapper so insertion track-change styling layers on
+    // top of the link styling — matching Word's rendering.
+    const findFirst = (node, predicate) => {
+      if (!node) return null;
+      if (predicate(node)) return node;
+      for (const child of node.elements || []) {
+        const hit = findFirst(child, predicate);
+        if (hit) return hit;
+      }
+      return null;
+    };
+
+    const hyperlink = findFirst(result.processedNodes[0], (n) => n.name === 'w:hyperlink');
+    expect(hyperlink).toBeTruthy();
+    expect(hyperlink.attributes?.['r:id']).toMatch(/^rId/);
+
+    const visibleText = findFirst(hyperlink, (n) => n.elements?.some((c) => c?.type === 'text'));
+    expect(visibleText?.elements?.[0]?.text).toBe('inserted link text');
+
+    // Relationship must have been added pointing at the URL extracted from
+    // the field's instrText.
+    const relationships = docx['word/_rels/document.xml.rels'].elements.find((el) => el.name === 'Relationships');
+    const newRel = relationships.elements.find((el) => el.name === 'Relationship');
+    expect(newRel?.attributes?.Target).toBe('http://example.com');
+    expect(newRel?.attributes?.Type).toBe(
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+    );
+  });
+
+  it('preserves raw field nodes when an active field ends inside a tracked deletion wrapper', () => {
+    const expectedNodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'HYPERLINK "http://example.com"' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:del',
+            attributes: { 'w:id': '1', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:delText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'deleted text after field end' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const nodes = structuredClone(expectedNodes);
+    const docx = {
+      'word/_rels/document.xml.rels': {
+        elements: [{ name: 'Relationships', elements: [] }],
+      },
+    };
+    const { processedNodes, unpairedBegin, unpairedEnd } = preProcessNodesForFldChar(nodes, docx);
+
+    expect(processedNodes).toEqual(expectedNodes);
+    expect(unpairedBegin).toBeNull();
+    expect(unpairedEnd).toBeNull();
+    expect(docx['word/_rels/document.xml.rels'].elements[0].elements).toEqual([]);
+  });
+
+  it('preserves raw field nodes when an active field ends inside a tracked move wrapper', () => {
+    const expectedNodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'HYPERLINK "http://example.com"' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:moveFrom',
+            attributes: { 'w:id': '1', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:t',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'moved text after field end' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const nodes = structuredClone(expectedNodes);
+    const docx = {
+      'word/_rels/document.xml.rels': {
+        elements: [{ name: 'Relationships', elements: [] }],
+      },
+    };
+    const { processedNodes, unpairedBegin, unpairedEnd } = preProcessNodesForFldChar(nodes, docx);
+
+    expect(processedNodes).toEqual(expectedNodes);
+    expect(unpairedBegin).toBeNull();
+    expect(unpairedEnd).toBeNull();
+    expect(docx['word/_rels/document.xml.rels'].elements[0].elements).toEqual([]);
+  });
+
+  it('preserves raw child nodes when an unpaired end bubbles through a non-collecting wrapper', () => {
+    const expectedNodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'CUSTOMFIELD foo' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'value' }] }] },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:sdt',
+            elements: [
+              {
+                name: 'w:sdtContent',
+                elements: [{ name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] }],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const nodes = structuredClone(expectedNodes);
+    const { processedNodes, unpairedBegin, unpairedEnd } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual(expectedNodes);
+    expect(unpairedBegin).toBeNull();
+    expect(unpairedEnd).toBeNull();
+  });
+
   it('should handle unpaired begin', () => {
     const nodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },

@@ -1,5 +1,9 @@
 /* eslint-env node */
 const path = require('path');
+const {
+  createCommitAnalyzer,
+  createReleaseNotesGenerator,
+} = require('../../scripts/semantic-release/strict-breaking-parser.cjs');
 
 /*
  * Commit filter: SDK depends on CLI, document-api, and all engine packages.
@@ -13,7 +17,6 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'packages/superdoc',
   'packages/super-editor',
   'packages/layout-engine',
-  'packages/ai',
   'packages/word-layout',
   'packages/preset-geometry',
   'shared',
@@ -28,20 +31,20 @@ const branches = [
   { name: 'main', prerelease: 'next', channel: 'next' },
 ];
 
-const isPrerelease = branches.some(
-  (b) => typeof b === 'object' && b.name === branch && b.prerelease,
-);
+const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
+
+// stable -> main syncs (real merges) re-attribute prereleases to PRs already shipped on @latest.
+// Gate per-PR/issue success comments off on prereleases to avoid duplicate "shipped" comments.
+const shouldCommentOnRelease = !isPrerelease;
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
-const notesPlugin = isPrerelease
-  ? '@semantic-release/release-notes-generator'
-  : ['semantic-release-ai-notes', { style: 'concise' }];
+const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
 
 const config = {
   branches,
   tagFormat: 'sdk-v${version}',
   plugins: [
-    '@semantic-release/commit-analyzer',
+    createCommitAnalyzer(),
     notesPlugin,
     // Version bump only — actual publishing is handled by exec
     ['@semantic-release/npm', { npmPublish: false }],
@@ -66,15 +69,11 @@ const config = {
 
 // In CI (main/stable), PyPI is handled by the workflow via OIDC — keep --npm-only.
 // For local stable releases, sdk-release-publish.mjs uploads to PyPI via twine.
-const execPlugin = config.plugins.find(
-  (p) => Array.isArray(p) && p[0] === '@semantic-release/exec',
-);
+const execPlugin = config.plugins.find((p) => Array.isArray(p) && p[0] === '@semantic-release/exec');
 if (isCiRelease || isPrerelease) {
-  execPlugin[1].publishCmd =
-    'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"} --npm-only';
+  execPlugin[1].publishCmd = 'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"} --npm-only';
 } else {
-  execPlugin[1].publishCmd =
-    'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"}';
+  execPlugin[1].publishCmd = 'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"}';
 }
 
 if (!isPrerelease) {
@@ -107,7 +106,7 @@ config.plugins.push([
   'semantic-release-linear-app',
   {
     teamKeys: ['SD'],
-    addComment: true,
+    addComment: shouldCommentOnRelease,
     packageName: 'superdoc-sdk',
     commentTemplate: 'shipped in {package} {releaseLink} {channel}',
   },
@@ -118,6 +117,7 @@ config.plugins.push([
   {
     successComment:
       ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc-sdk** v${nextRelease.version}',
+    successCommentCondition: shouldCommentOnRelease ? undefined : false,
   },
 ]);
 

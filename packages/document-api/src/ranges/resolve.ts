@@ -1,5 +1,5 @@
 /**
- * `ranges.resolve` operation — deterministic range construction from
+ * `ranges.resolve` operation: deterministic range construction from
  * explicit document anchors.
  *
  * Validates input shape, then delegates to the RangeResolverAdapter

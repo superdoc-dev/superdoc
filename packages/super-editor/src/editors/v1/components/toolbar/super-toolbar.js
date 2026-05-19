@@ -20,6 +20,8 @@ import { useToolbarItem } from '@components/toolbar/use-toolbar-item';
 import { calculateResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { parseSizeUnit } from '@core/utilities';
 import { findElementBySelector, getParagraphFontFamilyFromProperties } from './helpers/general.js';
+import { markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
+import { insertTableOfContentsAtSelection } from '@extensions/table-of-contents/table-of-contents-insertion.js';
 
 /**
  * @typedef {function(CommandItem): void} CommandCallback
@@ -46,6 +48,7 @@ import { findElementBySelector, getParagraphFontFamilyFromProperties } from './h
  * @property {string} [aiApiKey=null] - API key for AI integration
  * @property {string} [aiEndpoint=null] - Endpoint for AI integration
  * @property {ToolbarItem[]} [customButtons=[]] - Custom buttons to add to the toolbar
+ * @property {boolean} [showFormattingMarksButton=false] - Show the formatting marks (pilcrow) button in the toolbar. Distinct from `layoutEngineOptions.showFormattingMarks`, which controls whether the marks render in the document.
  */
 
 /**
@@ -133,6 +136,7 @@ import { findElementBySelector, getParagraphFontFamilyFromProperties } from './h
  * @typedef {Object} CommandItem
  * @property {ToolbarItem} item - The toolbar item
  * @property {*} [argument] - The argument to pass to the command
+ * @property {*} [option] - The selected nested option for option-style commands
  */
 
 /**
@@ -178,6 +182,7 @@ export class SuperToolbar extends EventEmitter {
     aiApiKey: null,
     aiEndpoint: null,
     customButtons: [],
+    showFormattingMarksButton: false,
   };
 
   /**
@@ -383,7 +388,17 @@ export class SuperToolbar extends EventEmitter {
    * @returns {ToolbarItem|undefined} The toolbar item with the specified name or undefined if not found
    */
   getToolbarItemByName(name) {
-    return this.toolbarItems.find((item) => item.name.value === name);
+    return this.#getAllToolbarItems().find((item) => item.name.value === name);
+  }
+
+  /**
+   * Visible bar + overflow menu items (same object refs; responsive layout moves
+   * controls like tableOfContents between the two arrays).
+   * @private
+   * @returns {ToolbarItem[]}
+   */
+  #getAllToolbarItems() {
+    return [...this.toolbarItems, ...this.overflowItems];
   }
 
   /**
@@ -630,6 +645,24 @@ export class SuperToolbar extends EventEmitter {
         if (commandState?.value != null) item.activate({ styleId: commandState.value });
         else item.label.value = this.config.texts?.formatText || 'Format text';
       },
+      list: () => {
+        if (commandState?.active) {
+          item.activate();
+          item.selectedValue.value = markerTextToBulletStyle(commandState.value);
+        } else {
+          item.deactivate();
+          item.selectedValue.value = null;
+        }
+      },
+      numberedlist: () => {
+        if (commandState?.active) {
+          item.activate();
+          item.selectedValue.value = commandState.value;
+        } else {
+          item.deactivate();
+          item.selectedValue.value = null;
+        }
+      },
       default: () => {
         if (commandState?.active) item.activate();
         else item.deactivate();
@@ -680,6 +713,9 @@ export class SuperToolbar extends EventEmitter {
 
     if (!this.activeEditor || currentMode === 'viewing') {
       this.#deactivateAll();
+      this.#getAllToolbarItems().forEach((item) => {
+        if (item.allowWithoutEditor?.value) this.#applyHeadlessState(item);
+      });
       return;
     }
 
@@ -689,7 +725,11 @@ export class SuperToolbar extends EventEmitter {
       return;
     }
 
-    this.toolbarItems.forEach((item) => {
+    // Overflow items still appear in the overflow popup and need their
+    // active-state highlight (e.g., bold pressed, direction matched) to
+    // reflect the current selection. Iterating only `toolbarItems` left
+    // them frozen in their last-rendered state.
+    this.#getAllToolbarItems().forEach((item) => {
       item.resetDisabled();
       this.#applyHeadlessState(item);
     });
@@ -723,7 +763,7 @@ export class SuperToolbar extends EventEmitter {
    */
   #deactivateAll() {
     this.activeEditor = null;
-    this.toolbarItems.forEach((item) => {
+    this.#getAllToolbarItems().forEach((item) => {
       const { allowWithoutEditor } = item;
       if (allowWithoutEditor.value) return;
       item.setDisabled(true);
@@ -817,7 +857,9 @@ export class SuperToolbar extends EventEmitter {
       }
     }
 
-    if (this.activeEditor && this.activeEditor.commands && command in this.activeEditor.commands) {
+    if (command === 'insertTableOfContents' && this.activeEditor) {
+      insertTableOfContentsAtSelection(this.activeEditor);
+    } else if (this.activeEditor && this.activeEditor.commands && command in this.activeEditor.commands) {
       this.activeEditor.commands[command](argument);
     }
 

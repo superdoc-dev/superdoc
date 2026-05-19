@@ -686,4 +686,115 @@ describe('legacy-handle-table-cell-node', () => {
     expect(blockNode.type).toBe('customBlock');
     expect(blockNode.content?.[0]).toEqual(bookmarkStart);
   });
+
+  // SuperDoc exposes two views of cell margins by design:
+  //   1) attrs.tableCellProperties.cellMargins — raw OOXML-shaped, preserves
+  //      the source key family (marginStart/marginEnd OR marginLeft/marginRight).
+  //   2) attrs.cellMargins — LTR-default physical-only {top, bottom, left, right},
+  //      consumed by pm-adapter/painter, mirrored at paint time for RTL.
+  // These tests lock that contract so a future change can't quietly collapse
+  // the dual view (e.g. by promoting attrs.cellMargins to a polymorphic shape).
+  describe('cellMargins dual-view contract', () => {
+    it('logical-only w:tcMar: source shape preserved on tableCellProperties.cellMargins; attrs.cellMargins is physical', () => {
+      const cellNode = {
+        name: 'w:tc',
+        elements: [
+          {
+            name: 'w:tcPr',
+            elements: [
+              {
+                name: 'w:tcMar',
+                elements: [
+                  { name: 'w:top', attributes: { 'w:w': '120', 'w:type': 'dxa' } },
+                  { name: 'w:start', attributes: { 'w:w': '480', 'w:type': 'dxa' } },
+                  { name: 'w:bottom', attributes: { 'w:w': '120', 'w:type': 'dxa' } },
+                  { name: 'w:end', attributes: { 'w:w': '60', 'w:type': 'dxa' } },
+                ],
+              },
+            ],
+          },
+          { name: 'w:p' },
+        ],
+      };
+      const row = { name: 'w:tr', elements: [cellNode] };
+      const table = { name: 'w:tbl', elements: [row] };
+
+      const out = handleTableCellNode({
+        params: { docx: {}, nodeListHandler: { handler: vi.fn(() => []) }, path: [], editor: createEditorStub() },
+        node: cellNode,
+        table,
+        row,
+        columnIndex: 0,
+        columnWidth: null,
+        allColumnWidths: [],
+        _referencedStyles: null,
+      });
+
+      // View 1: raw OOXML shape preserved.
+      const tcProps = out.attrs.tableCellProperties.cellMargins;
+      expect(tcProps).toMatchObject({
+        marginTop: { value: 120, type: 'dxa' },
+        marginStart: { value: 480, type: 'dxa' },
+        marginBottom: { value: 120, type: 'dxa' },
+        marginEnd: { value: 60, type: 'dxa' },
+      });
+      expect(tcProps.marginLeft).toBeUndefined();
+      expect(tcProps.marginRight).toBeUndefined();
+
+      // View 2: LTR-default physical projection only. start→left, end→right.
+      // No logical aliases on attrs.cellMargins (would re-introduce the
+      // dual-shape divergence SD-3134 removed).
+      expect(Object.keys(out.attrs.cellMargins).sort()).toEqual(['bottom', 'left', 'right', 'top']);
+      expect(out.attrs.cellMargins.marginStart).toBeUndefined();
+      expect(out.attrs.cellMargins.marginEnd).toBeUndefined();
+    });
+
+    it('physical-only w:tcMar: source shape preserved; attrs.cellMargins is physical', () => {
+      const cellNode = {
+        name: 'w:tc',
+        elements: [
+          {
+            name: 'w:tcPr',
+            elements: [
+              {
+                name: 'w:tcMar',
+                elements: [
+                  { name: 'w:top', attributes: { 'w:w': '120', 'w:type': 'dxa' } },
+                  { name: 'w:left', attributes: { 'w:w': '480', 'w:type': 'dxa' } },
+                  { name: 'w:bottom', attributes: { 'w:w': '120', 'w:type': 'dxa' } },
+                  { name: 'w:right', attributes: { 'w:w': '60', 'w:type': 'dxa' } },
+                ],
+              },
+            ],
+          },
+          { name: 'w:p' },
+        ],
+      };
+      const row = { name: 'w:tr', elements: [cellNode] };
+      const table = { name: 'w:tbl', elements: [row] };
+
+      const out = handleTableCellNode({
+        params: { docx: {}, nodeListHandler: { handler: vi.fn(() => []) }, path: [], editor: createEditorStub() },
+        node: cellNode,
+        table,
+        row,
+        columnIndex: 0,
+        columnWidth: null,
+        allColumnWidths: [],
+        _referencedStyles: null,
+      });
+
+      const tcProps = out.attrs.tableCellProperties.cellMargins;
+      expect(tcProps).toMatchObject({
+        marginTop: { value: 120, type: 'dxa' },
+        marginLeft: { value: 480, type: 'dxa' },
+        marginBottom: { value: 120, type: 'dxa' },
+        marginRight: { value: 60, type: 'dxa' },
+      });
+      expect(tcProps.marginStart).toBeUndefined();
+      expect(tcProps.marginEnd).toBeUndefined();
+
+      expect(Object.keys(out.attrs.cellMargins).sort()).toEqual(['bottom', 'left', 'right', 'top']);
+    });
+  });
 });

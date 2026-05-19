@@ -15,7 +15,7 @@ export interface ImageSize {
 /** Wrap type for OOXML image placement. */
 export type ImageWrapType = 'Inline' | 'None' | 'Square' | 'Tight' | 'Through' | 'TopAndBottom';
 
-/** Wrap side — controls which side(s) text flows around the image. */
+/** Wrap side: controls which side(s) text flows around the image. */
 export type ImageWrapSide = 'bothSides' | 'left' | 'right' | 'largest';
 
 export interface ImageWrapAttrs {

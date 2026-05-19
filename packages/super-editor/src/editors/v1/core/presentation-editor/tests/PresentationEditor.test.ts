@@ -4,6 +4,7 @@ import { PresentationEditor } from '../PresentationEditor.js';
 import type { Editor as EditorInstance } from '../../Editor.js';
 import { Editor } from '../../Editor.js';
 import { HeaderFooterEditorManager, HeaderFooterLayoutAdapter } from '../../header-footer/HeaderFooterRegistry.js';
+import { buildMultiSectionIdentifier } from '@superdoc/layout-bridge';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
   mock: {
@@ -150,6 +151,7 @@ const {
       getMountedPageIndices: vi.fn(() => []),
       onScroll: vi.fn(),
       setScrollContainer: vi.fn(),
+      setShowFormattingMarks: vi.fn(),
       setProviders: vi.fn(),
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),
@@ -182,11 +184,43 @@ const {
       getActiveEditorHost: vi.fn(() => null),
       destroy: vi.fn(),
     })),
-    mockResolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
+    // SD-2836: rebuildRegions now iterates resolvedLayout.pages, so the mock
+    // must synthesize a ResolvedPage per source Layout page to keep header/footer
+    // region tests from going empty.
+    mockResolveLayout: vi.fn(
+      ({ layout }: { layout: { pages: Array<Record<string, unknown>>; pageSize: { w: number; h: number } } }) => ({
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: (layout?.pages ?? []).map((p, i) => ({
+          id: `page-${i}`,
+          index: i,
+          number: (p.number as number) ?? i + 1,
+          width: ((p.size as { w?: number } | undefined)?.w ?? layout.pageSize?.w) as number,
+          height: ((p.size as { h?: number } | undefined)?.h ?? layout.pageSize?.h) as number,
+          items: [],
+          margins: p.margins,
+          sectionRefs: p.sectionRefs,
+          sectionIndex: p.sectionIndex,
+          numberText: p.numberText,
+          footnoteReserved: p.footnoteReserved,
+          vAlign: p.vAlign,
+          baseMargins: p.baseMargins,
+          orientation: p.orientation,
+          columns: p.columns,
+          columnRegions: p.columnRegions,
+        })),
+      }),
+    ),
     mockFlowBlockCacheInstances,
     MockFlowBlockCache,
   };
 });
+
+const bookmarkResolverMocks = vi.hoisted(() => ({
+  findAllBookmarksInDocument: vi.fn(() => []),
+  resolveBookmarkTarget: vi.fn(),
+}));
 
 // Mock PositionHitResolver
 vi.mock('../input/PositionHitResolver.js', () => ({
@@ -345,6 +379,15 @@ vi.mock('../../story-editor-factory.js', () => ({
   createStoryEditor: mockCreateStoryEditor,
 }));
 
+vi.mock('../../../document-api-adapters/helpers/bookmark-resolver.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../document-api-adapters/helpers/bookmark-resolver.js')>();
+  return {
+    ...actual,
+    findAllBookmarksInDocument: bookmarkResolverMocks.findAllBookmarksInDocument,
+    resolveBookmarkTarget: bookmarkResolverMocks.resolveBookmarkTarget,
+  };
+});
+
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
@@ -373,6 +416,9 @@ describe('PresentationEditor', () => {
     createdSectionEditors.length = 0;
     createdStoryEditors.length = 0;
     mockFlowBlockCacheInstances.length = 0;
+    bookmarkResolverMocks.findAllBookmarksInDocument.mockReset();
+    bookmarkResolverMocks.findAllBookmarksInDocument.mockImplementation(() => []);
+    bookmarkResolverMocks.resolveBookmarkTarget.mockReset();
 
     // Reset static instances
     (PresentationEditor as typeof PresentationEditor & { instances: Map<string, unknown> }).instances = new Map();
@@ -385,6 +431,37 @@ describe('PresentationEditor', () => {
     if (container.parentNode) {
       document.body.removeChild(container);
     }
+  });
+
+  describe('unified history defaults', () => {
+    it('enables the coordinator by default', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'unified-history-default-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.historyCoordinator).not.toBeNull();
+    });
+
+    it('allows callers to disable the coordinator explicitly', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'unified-history-disabled-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        experimental: {
+          unifiedHistory: false,
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.historyCoordinator).toBeNull();
+    });
   });
 
   describe('scrollToPosition', () => {
@@ -831,6 +908,41 @@ describe('PresentationEditor', () => {
       };
       expect(layoutOptions.flowMode).toBe('paginated');
       expect(layoutOptions.alternateHeaders).toBe(false);
+    });
+
+    it('derives alternateHeaders from word/settings.xml when pageStyles is stale or missing', async () => {
+      mockEditorConverterStore.current.pageStyles = { alternateHeaders: false };
+      mockEditorConverterStore.current.convertedXml = {
+        ...(mockEditorConverterStore.current.convertedXml ?? {}),
+        'word/settings.xml': {
+          type: 'element',
+          name: 'document',
+          elements: [
+            {
+              type: 'element',
+              name: 'w:settings',
+              elements: [{ type: 'element', name: 'w:evenAndOddHeaders' }],
+            },
+          ],
+        },
+      };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'alt-headers-settings-doc',
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        alternateHeaders?: boolean;
+      };
+      expect(layoutOptions.alternateHeaders).toBe(true);
+      const sectionIdCall = (buildMultiSectionIdentifier as unknown as Mock).mock.calls.at(-1) as
+        | [unknown, { alternateHeaders?: boolean }]
+        | undefined;
+      expect(sectionIdCall?.[1]?.alternateHeaders).toBe(true);
     });
 
     it('coerces falsy but non-boolean pageStyles.alternateHeaders values to false', async () => {
@@ -2179,7 +2291,7 @@ describe('PresentationEditor', () => {
               fragments: [],
               margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
               sectionRefs: {
-                headerRefs: { default: 'rId-header-default' },
+                headerRefs: { odd: 'rId-header-default' },
                 footerRefs: { default: 'rId-footer-default' },
               },
             },
@@ -2229,21 +2341,53 @@ describe('PresentationEditor', () => {
         toJSON: () => ({}),
       } as DOMRect);
 
-      // Clear mock to track fresh calls
-      mockClickToPosition.mockClear();
-      mockResolvePointerPositionHit.mockClear();
+      // SD-2749: PointerNormalization uses elementsFromPoint to detect the
+      // .superdoc-page under the cursor; happy-dom doesn't compute layout, so
+      // simulate a page element under the click point.
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const fakePage = document.createElement('div');
+      fakePage.classList.add('superdoc-page');
+      fakePage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(fakePage);
+      vi.spyOn(fakePage, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 612,
+        height: 792,
+        right: 612,
+        bottom: 792,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+      const originalElementsFromPoint = (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
+      (document as unknown as { elementsFromPoint: (x: number, y: number) => Element[] }).elementsFromPoint = () => [
+        fakePage,
+      ];
 
-      const clickEvent = new MouseEvent('pointerdown', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 100,
-        button: 0,
-      });
+      try {
+        // Clear mock to track fresh calls
+        mockClickToPosition.mockClear();
+        mockResolvePointerPositionHit.mockClear();
 
-      viewport.dispatchEvent(clickEvent);
+        const clickEvent = new MouseEvent('pointerdown', {
+          bubbles: true,
+          clientX: 100,
+          clientY: 100,
+          button: 0,
+        });
 
-      // Verify resolvePointerPositionHit was called (normal flow)
-      expect(mockResolvePointerPositionHit).toHaveBeenCalled();
+        viewport.dispatchEvent(clickEvent);
+
+        // Verify resolvePointerPositionHit was called (normal flow)
+        expect(mockResolvePointerPositionHit).toHaveBeenCalled();
+      } finally {
+        if (originalElementsFromPoint === undefined) {
+          delete (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
+        } else {
+          (document as unknown as { elementsFromPoint: unknown }).elementsFromPoint = originalElementsFromPoint;
+        }
+      }
     });
 
     it('should handle case where editor view DOM is not available when layout is not ready', () => {
@@ -2677,6 +2821,311 @@ describe('PresentationEditor', () => {
 
       expect(blockedSpy).toHaveBeenCalledWith(expect.objectContaining({ reason: 'missingRegion' }));
     });
+
+    it('returns false without emitting an error when an unqualified bookmark is not found', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+      const errorSpy = vi.fn();
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+      editor.on('error', errorSpy);
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'missing-bm',
+      });
+
+      expect(didNavigate).toBe(false);
+      expect(bookmarkResolverMocks.findAllBookmarksInDocument).toHaveBeenCalled();
+      expect(bookmarkResolverMocks.resolveBookmarkTarget).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('exits active header mode before navigating to a body bookmark', async () => {
+      const layoutResult = buildLayoutResult();
+      layoutResult.layout.pages[0].fragments = [
+        {
+          kind: 'para',
+          blockId: 'body-p1',
+          pmStart: 0,
+          pmEnd: 20,
+          y: 120,
+        },
+      ];
+      mockIncrementalLayout.mockResolvedValueOnce(layoutResult);
+      bookmarkResolverMocks.findAllBookmarksInDocument.mockReturnValueOnce([
+        { name: 'body-bm', bookmarkId: '7', storyKey: 'body' },
+      ]);
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 8,
+        name: 'body-bm',
+        bookmarkId: '7',
+        endPos: 9,
+        node: { attrs: { name: 'body-bm', id: '7' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const headerEditor = editor.getActiveEditor();
+      const bodyEditor = (Editor as unknown as MockedEditor).mock.results[0].value;
+      bodyEditor.commands = {
+        ...(bodyEditor.commands ?? {}),
+        setTextSelection: vi.fn(),
+      };
+      expect(headerEditor).not.toBe(bodyEditor);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'body-bm',
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(editor.getActiveEditor()).toBe(bodyEditor);
+      expect(headerEditor.commands.setTextSelection).not.toHaveBeenCalledWith({ from: 8, to: 8 });
+      expect(bodyEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 8, to: 8 });
+    });
+
+    it('activates the matching header surface before navigating to a document-wide bookmark', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+      bookmarkResolverMocks.findAllBookmarksInDocument.mockReturnValueOnce([
+        { name: 'hdr-bm', bookmarkId: '5', storyKey: 'hf:part:rId-header-default' },
+      ]);
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 7,
+        name: 'hdr-bm',
+        bookmarkId: '5',
+        endPos: 10,
+        node: { attrs: { name: 'hdr-bm', id: '5' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'hdr-bm',
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const sessionEditor = editor.getActiveEditor();
+      expect(sessionEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 7, to: 7 });
+      expect(sessionEditor.view.focus).toHaveBeenCalled();
+    });
+
+    it('navigates successfully for an explicit headerFooterSlot bookmark target', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 9,
+        name: 'slot-bm',
+        bookmarkId: '6',
+        endPos: 12,
+        node: { attrs: { name: 'slot-bm', id: '6' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'slot-bm',
+        story: {
+          kind: 'story',
+          storyType: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-0' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const sessionEditor = editor.getActiveEditor();
+      expect(sessionEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 9, to: 9 });
+      expect(sessionEditor.view.focus).toHaveBeenCalled();
+    });
+
+    it('normalizes odd-page default header regions for explicit headerFooterSlot bookmark targets', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 612, h: 792 },
+          pages: [
+            {
+              number: 1,
+              numberText: '1',
+              size: { w: 612, h: 792 },
+              fragments: [],
+              margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
+              sectionRefs: {
+                headerRefs: { default: 'rId-header-default' },
+                footerRefs: { default: 'rId-footer-default' },
+              },
+            },
+          ],
+        },
+        measures: [],
+        headers: [
+          {
+            kind: 'header',
+            type: 'odd',
+            layout: {
+              height: 36,
+              pages: [{ number: 1, fragments: [] }],
+            },
+            blocks: [],
+            measures: [],
+          },
+        ],
+        footers: [
+          {
+            kind: 'footer',
+            type: 'default',
+            layout: {
+              height: 36,
+              pages: [{ number: 1, fragments: [] }],
+            },
+            blocks: [],
+            measures: [],
+          },
+        ],
+      });
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 11,
+        name: 'slot-odd-bm',
+        bookmarkId: '7',
+        endPos: 14,
+        node: { attrs: { name: 'slot-odd-bm', id: '7' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'slot-odd-bm',
+        story: {
+          kind: 'story',
+          storyType: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-0' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const sessionEditor = editor.getActiveEditor();
+      expect(sessionEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 11, to: 11 });
+      expect(sessionEditor.view.focus).toHaveBeenCalled();
+    });
   });
 
   describe('footnote interactions', () => {
@@ -2942,6 +3391,55 @@ describe('PresentationEditor', () => {
       });
       expect(sessionEditor?.view.focus).toHaveBeenCalled();
       expect(renderedChange.scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it('routes bookmark navigation to the active note session editor', async () => {
+      const { sessionEditor } = await activateFootnoteSession();
+
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 4,
+        name: 'bm-note-1',
+        bookmarkId: '1',
+        endPos: 8,
+        node: { attrs: { name: 'bm-note-1', id: '1' } },
+      });
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'bm-note-1',
+        story: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(sessionEditor?.commands.setTextSelection).toHaveBeenLastCalledWith({ from: 4, to: 4 });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
+    });
+
+    it('activates an inactive endnote story before routing bookmark navigation', async () => {
+      await prepareEndnoteEditor();
+
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 6,
+        name: 'bm-endnote-1',
+        bookmarkId: '2',
+        endPos: 9,
+        node: { attrs: { name: 'bm-endnote-1', id: '2' } },
+      });
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'bm-endnote-1',
+        story: { kind: 'story', storyType: 'endnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThanOrEqual(1));
+
+      const sessionEditor = createdStoryEditors.at(-1)?.editor;
+      expect(sessionEditor?.commands.setTextSelection).toHaveBeenLastCalledWith({ from: 6, to: 6 });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
     });
   });
 
@@ -4417,6 +4915,7 @@ describe('PresentationEditor', () => {
         // Mark page 0 as mounted for the drag anchor.
         const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
         const page0 = document.createElement('div');
+        page0.classList.add('superdoc-page');
         page0.setAttribute('data-page-index', '0');
         pagesHost.appendChild(page0);
 
@@ -4433,55 +4932,84 @@ describe('PresentationEditor', () => {
           toJSON: () => ({}),
         } as DOMRect);
 
-        // pointerdown: page 0 (mounted), pointermove: page 1 (unmounted), pointerup finalize: page 1
-        mockClickToPosition.mockReset();
-        mockClickToPosition
-          .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0 })
-          .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1 })
-          .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1 });
-        mockResolvePointerPositionHit.mockReset();
-        mockResolvePointerPositionHit
-          .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0, blockId: '', column: 0, lineIndex: -1 })
-          .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 })
-          .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 });
+        // SD-2749: PointerNormalization uses elementsFromPoint to detect the
+        // .superdoc-page under the cursor; happy-dom doesn't compute layout, so
+        // simulate the page element under each click point.
+        vi.spyOn(page0, 'getBoundingClientRect').mockReturnValue({
+          left: 0,
+          top: 0,
+          width: 612,
+          height: 792,
+          right: 612,
+          bottom: 792,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect);
+        const originalElementsFromPoint = (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
+        (document as unknown as { elementsFromPoint: (x: number, y: number) => Element[] }).elementsFromPoint = () => [
+          page0,
+        ];
 
-        viewport.dispatchEvent(
-          new MouseEvent('pointerdown', {
-            bubbles: true,
-            clientX: 120,
-            clientY: 200,
-            button: 0,
-          }),
-        );
+        try {
+          // pointerdown: page 0 (mounted), pointermove: page 1 (unmounted), pointerup finalize: page 1
+          mockClickToPosition.mockReset();
+          mockClickToPosition
+            .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0 })
+            .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1 })
+            .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1 });
+          mockResolvePointerPositionHit.mockReset();
+          mockResolvePointerPositionHit
+            .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0, blockId: '', column: 0, lineIndex: -1 })
+            .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 })
+            .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 });
 
-        viewport.dispatchEvent(
-          new MouseEvent('pointermove', {
-            bubbles: true,
-            clientX: 120,
-            clientY: 900,
-            buttons: 1,
-          }),
-        );
+          viewport.dispatchEvent(
+            new MouseEvent('pointerdown', {
+              bubbles: true,
+              clientX: 120,
+              clientY: 200,
+              button: 0,
+            }),
+          );
 
-        const lastPinsBeforePointerUp = setPins.mock.calls[setPins.mock.calls.length - 1]?.[0] as number[] | undefined;
-        expect(lastPinsBeforePointerUp).toEqual([0, 1, 2]);
+          viewport.dispatchEvent(
+            new MouseEvent('pointermove', {
+              bubbles: true,
+              clientX: 120,
+              clientY: 900,
+              buttons: 1,
+            }),
+          );
 
-        // Simulate virtualization mounting the endpoint page before pointerup finalization.
-        const page1 = document.createElement('div');
-        page1.setAttribute('data-page-index', '1');
-        pagesHost.appendChild(page1);
+          const lastPinsBeforePointerUp = setPins.mock.calls[setPins.mock.calls.length - 1]?.[0] as
+            | number[]
+            | undefined;
+          expect(lastPinsBeforePointerUp).toEqual([0, 1, 2]);
 
-        viewport.dispatchEvent(
-          new MouseEvent('pointerup', {
-            bubbles: true,
-            clientX: 120,
-            clientY: 900,
-            button: 0,
-          }),
-        );
+          // Simulate virtualization mounting the endpoint page before pointerup finalization.
+          const page1 = document.createElement('div');
+          page1.setAttribute('data-page-index', '1');
+          pagesHost.appendChild(page1);
 
-        // pointerup should attempt a DOM-refined finalize after using geometry fallback.
-        expect(mockResolvePointerPositionHit).toHaveBeenCalledTimes(3);
+          viewport.dispatchEvent(
+            new MouseEvent('pointerup', {
+              bubbles: true,
+              clientX: 120,
+              clientY: 900,
+              button: 0,
+            }),
+          );
+
+          // pointerup should attempt a DOM-refined finalize after using geometry fallback.
+          expect(mockResolvePointerPositionHit).toHaveBeenCalledTimes(3);
+        } finally {
+          if (originalElementsFromPoint === undefined) {
+            delete (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
+          } else {
+            (document as unknown as { elementsFromPoint: unknown }).elementsFromPoint = originalElementsFromPoint;
+          }
+        }
       });
     });
 
@@ -4732,7 +5260,7 @@ describe('PresentationEditor', () => {
         expect(mockHitTest).not.toHaveBeenCalled();
       });
 
-      it('should update cursor position during drag', () => {
+      it('should compute drag preview during drag without mutating selection', () => {
         const dragEvent = createDragEvent('dragover', {
           clientX: 100,
           clientY: 100,
@@ -4743,9 +5271,9 @@ describe('PresentationEditor', () => {
         viewport.dispatchEvent(dragEvent);
 
         expect(mockHitTest).toHaveBeenCalledWith(100, 100);
-        expect(mockActiveEditor.state.tr.setSelection).toHaveBeenCalled();
-        expect(mockActiveEditor.state.tr.setMeta).toHaveBeenCalledWith('addToHistory', false);
-        expect(mockActiveEditor.view.dispatch).toHaveBeenCalled();
+        expect(mockActiveEditor.state.tr.setSelection).not.toHaveBeenCalled();
+        expect(mockActiveEditor.state.tr.setMeta).not.toHaveBeenCalled();
+        expect(mockActiveEditor.view.dispatch).not.toHaveBeenCalled();
       });
 
       it('should handle null hit gracefully', () => {

@@ -434,8 +434,16 @@ describe('computeDirtyRegions', () => {
 
     describe('other paragraph attribute changes', () => {
       it('detects direction change', () => {
-        const prev = [paragraphWithAttrs('p1', 'Hello', { direction: 'ltr' })];
-        const next = [paragraphWithAttrs('p1', 'Hello', { direction: 'rtl' })];
+        const prev = [
+          paragraphWithAttrs('p1', 'Hello', {
+            directionContext: { inlineDirection: 'ltr', writingMode: 'horizontal-tb' },
+          }),
+        ];
+        const next = [
+          paragraphWithAttrs('p1', 'Hello', {
+            directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' },
+          }),
+        ];
         const result = computeDirtyRegions(prev, next);
         expect(result.firstDirtyIndex).toBe(0);
       });
@@ -492,7 +500,7 @@ describe('computeDirtyRegions', () => {
             { val: 'end' as const, pos: 8640, leader: 'dot' as const },
           ],
           keepNext: true,
-          direction: 'ltr' as const,
+          directionContext: { inlineDirection: 'ltr' as const, writingMode: 'horizontal-tb' as const },
         };
         const prev = [paragraphWithAttrs('p1', 'Hello', complexAttrs)];
         const next = [paragraphWithAttrs('p1', 'Hello', complexAttrs)];

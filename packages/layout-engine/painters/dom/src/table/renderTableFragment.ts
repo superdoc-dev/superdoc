@@ -8,6 +8,7 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
+import { getTableVisualDirection } from '@superdoc/contracts';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext } from '../renderer.js';
@@ -173,8 +174,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   // RTL table: w:bidiVisual (ECMA-376 §17.4.1) — cells displayed right-to-left,
   // table-level properties (borders, margins, indent) are mirrored.
-  const tableProperties = block.attrs?.tableProperties as Record<string, unknown> | undefined;
-  const isRtl = tableProperties?.rightToLeft === true;
+  const isRtl = getTableVisualDirection(block.attrs) === 'rtl';
   // Note: We don't use createTableBorderOverlay because we implement single-owner
   // border model where cells handle all borders (including outer table borders)
   // to prevent double borders when rendering with absolutely-positioned divs.
@@ -183,6 +183,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   container.classList.add(CLASS_NAMES.fragment);
   applyStyles(container, fragmentStyles);
   applyFragmentFrame(container, fragment);
+  if (fragment.pmStart != null) {
+    container.dataset.pmStart = String(fragment.pmStart);
+  }
+  if (fragment.pmEnd != null) {
+    container.dataset.pmEnd = String(fragment.pmEnd);
+  }
   container.style.height = `${fragment.height}px`;
   applySdtDataset(container, block.attrs?.sdt);
   applyContainerSdtDataset?.(container, block.attrs?.containerSdt);
@@ -300,6 +306,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         min: boundary.minWidth,
         r: boundary.resizable ? 1 : 0,
       })),
+      rtl: isRtl,
       // Add segments for each column boundary (segments where resize handle should appear)
       segments: boundarySegments.map((segs, colIndex) =>
         segs.map((seg) => ({
@@ -331,7 +338,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   }
 
   const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
-  if (borderCollapse === 'separate' && block.attrs?.cellSpacing && tableBorders) {
+  if (borderCollapse === 'separate' && tableBorders) {
     applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
     applyBorder(container, 'Right', borderValueToSpec(isRtl ? tableBorders.left : tableBorders.right));
     applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));

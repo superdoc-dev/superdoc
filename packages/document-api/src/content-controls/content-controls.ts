@@ -1,5 +1,5 @@
 /**
- * Content Controls API — interface, adapter, and execute functions.
+ * Content Controls API: interface, adapter, and execute functions.
  *
  * Each public method delegates to an `execute*` function that validates input
  * before calling the adapter. The adapter is implemented by the engine layer
@@ -216,7 +216,7 @@ export interface ContentControlsApi {
 }
 
 // ---------------------------------------------------------------------------
-// Adapter interface — implemented by the engine layer
+// Adapter interface: implemented by the engine layer
 // ---------------------------------------------------------------------------
 
 export type ContentControlsAdapter = ContentControlsApi;
@@ -337,7 +337,7 @@ function validateSymbol(value: unknown, field: string, operationName: string): v
 }
 
 // ---------------------------------------------------------------------------
-// Execute functions — validation + delegation
+// Execute functions: validation + delegation
 // ---------------------------------------------------------------------------
 
 export function executeContentControlsList(
@@ -720,7 +720,7 @@ export function executeContentControlsNormalizeTagPayload(
   return adapter.normalizeTagPayload(input, options);
 }
 
-// Typed controls — Text
+// Typed controls: Text
 export function executeContentControlsTextSetMultiline(
   adapter: ContentControlsAdapter,
   input: ContentControlsTextSetMultilineInput,
@@ -758,7 +758,7 @@ export function executeContentControlsTextClearValue(
   return adapter.text.clearValue(input, options);
 }
 
-// Typed controls — Date
+// Typed controls: Date
 export function executeContentControlsDateSetValue(
   adapter: ContentControlsAdapter,
   input: ContentControlsDateSetValueInput,
@@ -829,7 +829,7 @@ export function executeContentControlsDateSetCalendar(
   return adapter.date.setCalendar(input, options);
 }
 
-// Typed controls — Checkbox
+// Typed controls: Checkbox
 export function executeContentControlsCheckboxGetState(
   adapter: ContentControlsAdapter,
   input: ContentControlsCheckboxGetStateInput,
@@ -872,7 +872,7 @@ export function executeContentControlsCheckboxSetSymbolPair(
   return adapter.checkbox.setSymbolPair(input, options);
 }
 
-// Typed controls — Choice List
+// Typed controls: Choice List
 export function executeContentControlsChoiceListGetItems(
   adapter: ContentControlsAdapter,
   input: ContentControlsChoiceListGetItemsInput,
@@ -926,7 +926,7 @@ export function executeContentControlsChoiceListSetSelected(
   return adapter.choiceList.setSelected(input, options);
 }
 
-// Typed controls — Repeating Section
+// Typed controls: Repeating Section
 export function executeContentControlsRepeatingSectionListItems(
   adapter: ContentControlsAdapter,
   input: ContentControlsRepeatingSectionListItemsInput,
@@ -991,7 +991,7 @@ export function executeContentControlsRepeatingSectionSetAllowInsertDelete(
   return adapter.repeatingSection.setAllowInsertDelete(input, options);
 }
 
-// Typed controls — Group
+// Typed controls: Group
 export function executeContentControlsGroupWrap(
   adapter: ContentControlsAdapter,
   input: ContentControlsGroupWrapInput,
@@ -1037,7 +1037,7 @@ export function executeCreateContentControl(
   if (input.at !== undefined && input.target !== undefined) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
-      `create.contentControl: "at" and "target" are mutually exclusive — provide one or neither.`,
+      `create.contentControl: "at" and "target" are mutually exclusive: provide one or neither.`,
       { field: 'at' },
     );
   }

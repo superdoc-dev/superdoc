@@ -1,0 +1,152 @@
+---
+title: 'Document control'
+sidebarTitle: 'Document'
+description: 'Switch between editing and suggesting. Export to DOCX. Replace the open file.'
+---
+
+`useSuperDocDocument()` exposes `{ ready, mode }`. `ui.document.setMode('suggesting')` flips the editor into Suggest mode. `ui.document.export({ exportType: ['docx'] })` returns a downloadable DOCX. `ui.document.replaceFile(file)` swaps the open document.
+
+## Edit and Suggest mode
+
+Suggest mode records every edit as a tracked change. Edit mode applies edits directly. Toggle from your toolbar.
+
+```tsx
+import { useSuperDocDocument, useSuperDocUI } from 'superdoc/ui/react';
+
+export function ModeToggle() {
+  const ui = useSuperDocUI();
+  const document = useSuperDocDocument();
+  const mode = document.mode ?? 'editing';
+
+  return (
+    <>
+      <button
+        className={mode === 'editing' ? 'active' : ''}
+        onClick={() => ui?.document.setMode('editing')}
+      >
+        Edit
+      </button>
+      <button
+        className={mode === 'suggesting' ? 'active' : ''}
+        onClick={() => ui?.document.setMode('suggesting')}
+      >
+        Suggest
+      </button>
+    </>
+  );
+}
+```
+
+Modes: `'editing'`, `'suggesting'`, `'viewing'`. The controller mirrors the host's `documentMode`, so external mode changes flow back into the hook.
+
+## Export to DOCX
+
+```tsx
+import { useSuperDocUI } from 'superdoc/ui/react';
+
+export function ExportButton() {
+  const ui = useSuperDocUI();
+
+  const onClick = async () => {
+    if (!ui) return;
+    try {
+      await ui.document.export({
+        exportType: ['docx'],
+        commentsType: 'external',
+        triggerDownload: true,
+      });
+    } catch (err) {
+      console.error('export failed', err);
+    }
+  };
+
+  return <button onClick={onClick} disabled={!ui}>Export</button>;
+}
+```
+
+Options:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `exportType` | `string[]` | `['docx']` for Word format. |
+| `commentsType` | `'internal' \| 'external'` | `'external'` exports comments as Word comments; `'internal'` keeps them in private metadata. |
+| `triggerDownload` | `boolean` | When true, the browser saves the file. When false, you get the blob back. |
+
+Export rejects if the host can't produce the format. Wrap your toolbar button in try/catch and surface the error inline.
+
+## Replace the open file
+
+For round-trip testing or document switchers.
+
+```tsx
+import { useRef, useState } from 'react';
+import { useSuperDocUI } from 'superdoc/ui/react';
+
+export function ImportButton() {
+  const ui = useSuperDocUI();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!ui || !file) return;
+    setBusy(true);
+    try {
+      await ui.document.replaceFile(file);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <input ref={inputRef} type="file" accept=".docx" hidden onChange={onPick} />
+      <button onClick={() => inputRef.current?.click()} disabled={!ui || busy}>
+        {busy ? 'Importing...' : 'Import'}
+      </button>
+    </>
+  );
+}
+```
+
+`replaceFile` runs the engine's import path and then re-emits `commentsLoaded` so your comments sidebar refreshes automatically (relevant when `modules.comments: false`).
+
+## What the hook returns
+
+| Field | Type | Meaning |
+|---|---|---|
+| `ready` | `boolean` | The editor has reported ready. |
+| `mode` | `'editing' \| 'suggesting' \| 'viewing' \| null` | Mirrors `superdoc.config.documentMode`. |
+| `dirty` | `boolean` | True when the document has unsaved changes. |
+
+`useSuperDocDocument` re-renders only when `ready`, `mode`, or `dirty` flips. A typing-only edit triggers it once (when `dirty` flips false → true) and not again until `dirty` clears.
+
+## Unsaved-changes indicator
+
+```tsx
+import { useSuperDocDocument, useSuperDocUI } from 'superdoc/ui/react';
+
+export function ExportButton() {
+  const ui = useSuperDocUI();
+  const { dirty } = useSuperDocDocument();
+
+  const onClick = async () => {
+    await ui?.document.export({ exportType: ['docx'], triggerDownload: true });
+  };
+
+  return (
+    <button onClick={onClick} disabled={!ui}>
+      Export{dirty ? ' •' : ''}
+    </button>
+  );
+}
+```
+
+`dirty` flips to `true` on any editor transaction that mutates the document. Selection-only transactions leave it alone. `ui.document.export(...)` clears it on success; a rejected export keeps it set so the user can retry. `ui.document.replaceFile(...)` clears it too. Undo-to-clean is intentionally not tracked: hitting undo until the document matches its on-open state still reads as dirty. Apps that want Word/GDocs "no unsaved changes" semantics layer their own edit-count diff on top.
+
+## Trade-offs
+
+- `setMode` forwards to the host. SSR / non-browser stubs that omit the setter fall back to a no-op.
+- `export` is async and rejects on host errors. Unhandled rejections are noisy; always wrap.
+- `replaceFile` rebuilds the document model. Selection, scroll position, and undo history reset.

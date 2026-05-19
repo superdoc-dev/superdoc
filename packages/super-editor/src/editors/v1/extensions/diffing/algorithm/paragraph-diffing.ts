@@ -145,8 +145,16 @@ export function shouldProcessEqualAsModification(
  *
  * The content signature covers both text and inline nodes (images, etc.),
  * so image-only paragraphs with different images are not falsely paired.
+ *
+ * Identity is gated on structural context (depth) first. Cross-depth pairing
+ * via paraId or content-signature alone produces false identity when DOCX
+ * importers renumber paraIds across structural changes, e.g. a table-cell
+ * paragraph and a body paragraph sharing a paraId or both being empty.
  */
 export function paragraphComparator(oldParagraph: ParagraphNodeInfo, newParagraph: ParagraphNodeInfo): boolean {
+  if (oldParagraph?.depth !== newParagraph?.depth) {
+    return false;
+  }
   const oldId = oldParagraph?.node?.attrs?.paraId;
   const newId = newParagraph?.node?.attrs?.paraId;
   if (oldId && newId && oldId === newId) {
@@ -223,6 +231,9 @@ export function buildModifiedParagraphDiff(
  * Decides whether a delete/insert pair should be reinterpreted as a modification to minimize noisy diff output.
  */
 export function canTreatAsModification(oldParagraph: ParagraphNodeInfo, newParagraph: ParagraphNodeInfo): boolean {
+  if (oldParagraph?.depth !== newParagraph?.depth) {
+    return false;
+  }
   if (paragraphComparator(oldParagraph, newParagraph)) {
     return true;
   }

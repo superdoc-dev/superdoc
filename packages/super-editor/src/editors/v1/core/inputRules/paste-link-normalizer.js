@@ -97,7 +97,7 @@ export function handlePlainTextUrlPaste(editor, view, plainText, detected) {
   tr = tr.addMark(from, to, linkMarkType.create({ href: detected.href, rId }));
 
   if (underlineMarkType) {
-    tr = tr.addMark(from, to, underlineMarkType.create());
+    tr = tr.addMark(from, to, underlineMarkType.create({ autoAdded: true }));
   }
 
   view.dispatch(tr.scrollIntoView());

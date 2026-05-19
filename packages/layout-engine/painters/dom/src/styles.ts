@@ -295,20 +295,101 @@ const TRACK_CHANGE_STYLES = `
 }
 
 .superdoc-layout .track-insert-dec.highlighted.track-change-focused {
-  border-style: solid;
-  border-width: var(--sd-tracked-changes-insert-focused-border-width, 2px);
+  border-left: none;
+  border-right: none;
+  border-top-style: solid;
+  border-bottom-style: solid;
   background-color: var(--sd-tracked-changes-insert-background-focused, #399c7244);
 }
 
 .superdoc-layout .track-delete-dec.highlighted.track-change-focused {
-  border-style: solid;
-  border-width: var(--sd-tracked-changes-delete-focused-border-width, 2px);
+  border-left: none;
+  border-right: none;
+  border-top-style: solid;
+  border-bottom-style: solid;
   background-color: var(--sd-tracked-changes-delete-background-focused, #cb0e4744);
 }
 
 .superdoc-layout .track-format-dec.highlighted.track-change-focused {
-  border-bottom-width: 3px;
   background-color: var(--sd-tracked-changes-format-background-focused, #ffd70033);
+}
+`;
+
+const FORMATTING_MARKS_STYLES = `
+.superdoc-formatting-space-mark,
+.superdoc-marker-suffix-space {
+  position: relative;
+}
+
+.superdoc-formatting-space-mark {
+  white-space: pre;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-tab {
+  position: relative;
+  visibility: visible !important;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-tab::after {
+  content: "→";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--sd-formatting-mark-color, var(--sd-ui-action, currentColor));
+  font-size: 0.75em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks [dir="rtl"] .superdoc-tab::after {
+  content: "←";
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-space-mark::after,
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-marker-suffix-space::after {
+  content: "·";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--sd-formatting-mark-color, var(--sd-ui-action, currentColor));
+  font-size: 0.75em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.superdoc-formatting-paragraph-mark {
+  display: none;
+  position: absolute;
+  top: 0;
+  transform: translateX(var(--sd-formatting-paragraph-mark-gap, 0.2em));
+  color: var(--sd-formatting-mark-color, var(--sd-ui-action, currentColor));
+  pointer-events: none;
+  user-select: none;
+  white-space: pre;
+  z-index: 2;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-paragraph-mark {
+  display: inline;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks [dir="rtl"] .superdoc-formatting-paragraph-mark {
+  transform: translateX(calc(-100% - var(--sd-formatting-paragraph-mark-gap, 0.2em)));
+}
+
+@media print {
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-tab::after,
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-space-mark::after,
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-marker-suffix-space::after {
+    content: "";
+    display: none;
+  }
+
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-paragraph-mark {
+    display: none;
+  }
 }
 `;
 
@@ -425,13 +506,13 @@ const SDT_CONTAINER_STYLES = `
 
 .superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 /* Group hover (JavaScript-coordinated via PresentationEditor) */
 .superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 .superdoc-structured-content-block.ProseMirror-selectednode {
@@ -517,13 +598,15 @@ const SDT_CONTAINER_STYLES = `
   border: 1px solid transparent;
   position: relative;
   display: inline;
+  font-size: initial;
+  line-height: normal;
   z-index: 10;
 }
 
 /* Hover effect for inline structured content */
 .superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover {
   background-color: var(--sd-content-controls-inline-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-inline-hover-border, transparent);
 }
 
 .superdoc-structured-content-inline.ProseMirror-selectednode {
@@ -559,13 +642,38 @@ const SDT_CONTAINER_STYLES = `
   display: none;
 }
 
+/* Hidden appearance per ECMA-376 (w15:appearance val="hidden"). SDT
+ * exists in the document for anchoring but is visually transparent: no
+ * padding, no border, no hover background, no selected outline. The
+ * alias label is not emitted into the DOM at all (see renderer.ts), so
+ * there is nothing to hide from copy-paste or screen readers. */
+.superdoc-structured-content-inline[data-appearance='hidden'] {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+}
+.superdoc-structured-content-inline[data-appearance='hidden']:hover {
+  background-color: transparent;
+  border: none;
+}
+.superdoc-structured-content-inline[data-appearance='hidden'].ProseMirror-selectednode {
+  border-color: transparent;
+  background-color: transparent;
+}
+
 /* Hover highlight for SDT containers.
  * Hover adds background highlight and z-index boost.
  * Block SDTs use .sdt-group-hover class (event delegation for multi-fragment coordination).
  * Inline SDTs use :hover (single element, no coordination needed).
- * Hover is suppressed when the node is selected (SD-1584). */
+ * Hover is suppressed when the node is selected (SD-1584).
+ *
+ * Inline SDTs with appearance=hidden are excluded via the same :not()
+ * that handles selection. Both predicates live in one :not(a, b) so the
+ * selector keeps (0,4,0) specificity. A second chained :not() would push
+ * it to (0,5,0) and beat the viewing-mode suppression rule below, which
+ * also sits at (0,4,0). */
 .superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode),
-.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode) {
+.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode, [data-appearance='hidden']) {
   background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
   z-index: 9999999;
 }
@@ -736,6 +844,7 @@ menclose::after {
 let printStylesInjected = false;
 let linkStylesInjected = false;
 let trackChangeStylesInjected = false;
+let formattingMarksStylesInjected = false;
 let sdtContainerStylesInjected = false;
 let fieldAnnotationStylesInjected = false;
 let imageSelectionStylesInjected = false;
@@ -766,6 +875,15 @@ export const ensureTrackChangeStyles = (doc: Document | null | undefined) => {
   styleEl.textContent = TRACK_CHANGE_STYLES;
   doc.head?.appendChild(styleEl);
   trackChangeStylesInjected = true;
+};
+
+export const ensureFormattingMarksStyles = (doc: Document | null | undefined) => {
+  if (formattingMarksStylesInjected || !doc) return;
+  const styleEl = doc.createElement('style');
+  styleEl.setAttribute('data-superdoc-formatting-marks-styles', 'true');
+  styleEl.textContent = FORMATTING_MARKS_STYLES;
+  doc.head?.appendChild(styleEl);
+  formattingMarksStylesInjected = true;
 };
 
 export const ensureSdtContainerStyles = (doc: Document | null | undefined) => {

@@ -13,6 +13,12 @@ import vue from '@vitejs/plugin-vue'
 import { version } from './package.json';
 import sourceResolve from '../../vite.sourceResolve';
 
+// SD-2864: derive the dts include list from the canonical type-surface
+// config so vite, ensure-types, audit, and the tsconfig parity check
+// share one source of truth for relocations.
+const cjsRequire = createRequire(import.meta.url);
+const typeSurface = cjsRequire('./scripts/type-surface.config.cjs');
+
 // WORKAROUND: rolldown doesn't support trailing-slash imports (e.g. 'punycode/')
 // which Node.js treats as "resolve the package entry point". node-stdlib-browser's
 // url polyfill uses `import from 'punycode/'` and rolldown tries to open the
@@ -85,6 +91,11 @@ export const getAliases = (_isDev) => {
     { find: '@superdoc/super-editor/headless-toolbar/react', replacement: path.resolve(__dirname, '../super-editor/src/headless-toolbar/react.ts') },
     { find: '@superdoc/super-editor/headless-toolbar/vue', replacement: path.resolve(__dirname, '../super-editor/src/headless-toolbar/vue.ts') },
     { find: '@superdoc/super-editor/presentation-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
+    // The longer `/ui/react` alias must come before `/ui` so the
+    // prefix match resolves it first; otherwise `/ui` would swallow
+    // `/ui/react` and the React entry would resolve to the controller.
+    { find: '@superdoc/super-editor/ui/react', replacement: path.resolve(__dirname, '../super-editor/src/ui/react/index.ts') },
+    { find: '@superdoc/super-editor/ui', replacement: path.resolve(__dirname, '../super-editor/src/ui/index.ts') },
     { find: '@superdoc/super-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
 
     // Map @superdoc/<name> to ./src/<name> for internal paths
@@ -108,7 +119,17 @@ export default defineConfig(({ mode, command }) => {
   const plugins = [
     vue(),
     !skipDts && dts({
-      include: ['src/**/*', '../super-editor/src/**/*'],
+      // Foundational sources (superdoc, super-editor, document-api) are
+      // always included; relocation patterns come from the canonical
+      // type-surface config (SD-2864). Each `relocations` entry pairs the
+      // ensure-types rewriter rule with the vite include patterns so the
+      // two cannot drift.
+      include: [
+        'src/**/*',
+        '../super-editor/src/**/*',
+        '../document-api/src/**/*',
+        ...typeSurface.relocations.flatMap((r) => r.viteIncludes),
+      ],
       outDir: 'dist',
       // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source
       // tree, but we do not use this build as the authoritative type-check gate.
@@ -180,6 +201,13 @@ export default defineConfig(({ mode, command }) => {
           'src/headless-toolbar.js',
           'src/headless-toolbar-react.js',
           'src/headless-toolbar-vue.js',
+          'src/ui.js',
+          // Same pattern as the other public re-export barrels above:
+          // `ui-react.js` is a thin pass-through to
+          // `@superdoc/super-editor/ui/react`. The provider / hook
+          // implementations are tested in the super-editor package
+          // (`src/ui/react/*.test.tsx`).
+          'src/ui-react.js',
           // Pure JSDoc typedef files (body is `export {}`, no runtime code)
           'src/core/types/**',
           '**/types.js',
@@ -202,11 +230,53 @@ export default defineConfig(({ mode, command }) => {
           'headless-toolbar': 'src/headless-toolbar.js',
           'headless-toolbar-react': 'src/headless-toolbar-react.js',
           'headless-toolbar-vue': 'src/headless-toolbar-vue.js',
+          'ui': 'src/ui.js',
+          'ui-react': 'src/ui-react.js',
           'super-editor': 'src/super-editor.js',
           'types': 'src/types.ts',
           'super-editor/docx-zipper': '@core/DocxZipper',
           'super-editor/converter': '@core/super-converter/SuperConverter',
           'super-editor/file-zipper': '@core/super-converter/zipper.js',
+          // SD-3178 (Phase 3 of SD-3175): explicit public facade entries.
+          // Build emits the artifacts alongside the existing entries so the
+          // facade declarations are available for postbuild verification.
+          // AIDEV-NOTE: `package.json#exports` is intentionally not yet
+          // updated to point at these entries. Phase 4 (a separate child
+          // of SD-3175) owns the contract switch. Adding `./public` or
+          // `./public/...` entries here without that ticket ships new
+          // public subpaths under the radar.
+          'public': 'src/public/index.ts',
+          // SD-3179: legacy headless-toolbar facade entry. Classified as
+          // legacy public compatibility surface in
+          // `docs/architecture/package-boundaries.md` Decision 4. New
+          // custom UI integrations should use the `superdoc/ui` /
+          // `superdoc/ui/react` entries instead.
+          'public/legacy/headless-toolbar': 'src/public/legacy/headless-toolbar.ts',
+          // SD-3207: legacy headless-toolbar framework helpers. Paired
+          // with the root above; same legacy classification. Each entry
+          // re-exports `useHeadlessToolbar` only.
+          'public/legacy/headless-toolbar-react': 'src/public/legacy/headless-toolbar-react.ts',
+          'public/legacy/headless-toolbar-vue': 'src/public/legacy/headless-toolbar-vue.ts',
+          // SD-3180: legacy leaf facade entries mirroring the existing
+          // single-export legacy subpaths. Same classification as
+          // headless-toolbar above.
+          'public/legacy/converter': 'src/public/legacy/converter.ts',
+          'public/legacy/docx-zipper': 'src/public/legacy/docx-zipper.ts',
+          'public/legacy/file-zipper': 'src/public/legacy/file-zipper.ts',
+          // SD-3182: first supported-surface facade entry. The
+          // `superdoc/ui/react` subpath is the strategic React binding
+          // surface. SD-3147 classification: 12 public + 1 legacy/public-compat.
+          'public/ui-react': 'src/public/ui-react.ts',
+          // SD-3183: ui controller facade. 70 symbols (49 public + 21
+          // legacy/public-compat per SD-3147). Re-export source MUST stay
+          // `@superdoc/super-editor/ui` (narrow), not the root barrel —
+          // `audit-bundle.cjs` enforces shape on `dist/public/ui.es.js`.
+          'public/ui': 'src/public/ui.ts',
+          // SD-3184: types facade — type-only entry. 116 names, all
+          // `export type { ... }`. The existing `./types` subpath has
+          // split types.import/types.require declarations, so this
+          // facade adds a `public/types.d.cts` shim via ensure-types.cjs.
+          'public/types': 'src/public/types.ts',
         },
         external: [
           'yjs',
@@ -216,6 +286,7 @@ export default defineConfig(({ mode, command }) => {
           'pdfjs-dist/legacy/build/pdf.mjs',
           'pdfjs-dist/web/pdf_viewer.mjs',
           'react',
+          'react/jsx-runtime',
           'vue',
         ],
         output: [

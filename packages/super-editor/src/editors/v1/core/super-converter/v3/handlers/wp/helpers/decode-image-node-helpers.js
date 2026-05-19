@@ -8,6 +8,7 @@ import { readImageDimensionsFromDataUri } from '@converter/image-dimensions.js';
 const DECORATIVE_EXT_URI = '{C183D7F6-B498-43B3-948B-1728B52AA6E4}';
 const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/decorative';
 const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+const IMAGE_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 
 /**
  * Resolve the hyperlink relationship rId for an image, if applicable.
@@ -217,12 +218,16 @@ export const translateImageNode = (params) => {
   }
 
   if (imageId) {
-    const docx = params.converter?.convertedXml || {};
-    const rels = docx['word/_rels/document.xml.rels'];
-    const relsTag = rels?.elements?.find((el) => el.name === 'Relationships');
-    const hasRelation = relsTag?.elements.find((el) => el.attributes.Id === imageId);
     const path = src?.split('word/')[1];
-    if (!hasRelation) {
+    const relationships = params.isHeaderFooter ? params.existingRelationships : getDocumentRelationships(params);
+    const existingRelation = findImageRelationship(relationships, {
+      id: imageId,
+      target: path,
+    });
+
+    if (existingRelation) {
+      imageId = existingRelation.attributes.Id;
+    } else {
       addImageRelationshipForId(params, imageId, path);
     }
   } else if (params.node.type === 'image' && !imageId) {
@@ -500,11 +505,26 @@ function addImageRelationshipForId(params, id, imagePath) {
     name: 'Relationship',
     attributes: {
       Id: id,
-      Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+      Type: IMAGE_REL_TYPE,
       Target: imagePath,
     },
   };
   params.relationships.push(newRel);
+}
+
+function getDocumentRelationships(params) {
+  const docx = params.converter?.convertedXml || {};
+  const rels = docx['word/_rels/document.xml.rels'];
+  return rels?.elements?.find((el) => el.name === 'Relationships')?.elements ?? [];
+}
+
+function findImageRelationship(relationships = [], { id, target }) {
+  return relationships.find((rel) => {
+    if (rel?.attributes?.Type !== IMAGE_REL_TYPE) return false;
+    if (id) return rel.attributes.Id === id;
+    if (target) return rel.attributes.Target === target;
+    return false;
+  });
 }
 
 /**

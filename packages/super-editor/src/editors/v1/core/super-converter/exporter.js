@@ -5,6 +5,7 @@ import { translateChildNodes } from './v2/exporter/helpers/index.js';
 import { translator as wBrNodeTranslator } from './v3/handlers/w/br/br-translator.js';
 import { translator as wHighlightTranslator } from './v3/handlers/w/highlight/highlight-translator.js';
 import { translator as wTabNodeTranslator } from './v3/handlers/w/tab/tab-translator.js';
+import { translator as wNoBreakHyphenNodeTranslator } from './v3/handlers/w/noBreakHyphen/no-break-hyphen-translator.js';
 import { translator as wPNodeTranslator } from './v3/handlers/w/p/p-translator.js';
 import { translator as wRNodeTranslator } from './v3/handlers/w/r/r-translator.js';
 import { translator as wTcNodeTranslator } from './v3/handlers/w/tc/tc-translator';
@@ -105,6 +106,44 @@ export const ensureSectionLayoutDefaults = (sectPr, converter) => {
   return sectPr;
 };
 
+/**
+ * Walk an XML JSON tree in place and normalize every `<w:pgMar>` element's
+ * numeric attributes to integer twips.
+ *
+ * ECMA-376 §17.6.11 requires `ST_TwipsMeasure` values to be non-negative whole
+ * numbers when expressed as raw twips, but some authoring pipelines emit
+ * float-valued twips like `w:top="168.160400390625"` that strict consumers
+ * reject. SuperDoc preserves those floats verbatim on the paragraph-level
+ * sectPr passthrough path. This pass is the single normalization point —
+ * applied once at the export root — so we produce schema-valid output
+ * regardless of which path the pgMar values reached the tree through
+ * (body sectPr → `pageMargins` → `inchesToTwips`, or paragraph-level
+ * passthrough sectPr that preserved source attrs).
+ *
+ * Idempotent. Mutates the tree in place; returns nothing. SD-2912.
+ *
+ * @param {{ name?: string, attributes?: Record<string, unknown>, elements?: Array<unknown> } | null | undefined} node
+ * @returns {void}
+ */
+export const normalizePgMarTwipsInTree = (node) => {
+  if (!node || typeof node !== 'object') return;
+  if (node.name === 'w:pgMar' && node.attributes && typeof node.attributes === 'object') {
+    for (const key of Object.keys(node.attributes)) {
+      const value = node.attributes[key];
+      if (value == null) continue;
+      const serialized = String(value).trim();
+      if (!serialized) continue;
+      const num = Number(serialized);
+      if (Number.isFinite(num) && !/^-?\d+$/.test(serialized)) {
+        node.attributes[key] = String(Math.round(num));
+      }
+    }
+  }
+  if (Array.isArray(node.elements)) {
+    for (const child of node.elements) normalizePgMarTwipsInTree(child);
+  }
+};
+
 export const isLineBreakOnlyRun = (node) => {
   if (!node) return false;
   if (node.type === 'lineBreak' || node.type === 'hardBreak') return true;
@@ -178,6 +217,7 @@ export function exportSchemaToJson(params) {
     bookmarkEnd: wBookmarkEndTranslator,
     fieldAnnotation: wSdtNodeTranslator,
     tab: wTabNodeTranslator,
+    noBreakHyphen: wNoBreakHyphenNodeTranslator,
     image: [wDrawingNodeTranslator, pictTranslator],
     hardBreak: wBrNodeTranslator,
     commentRangeStart: wCommentRangeStartTranslator,
@@ -400,6 +440,12 @@ function translateDocumentNode(params) {
     attributes,
   };
 
+  // SD-2912: normalize every <w:pgMar> in the final tree to integer twips,
+  // catching both the body sectPr path (already integer-correct via
+  // inchesToTwips) and the paragraph-level passthrough sectPr path that
+  // preserves source attrs verbatim.
+  normalizePgMarTwipsInTree(node);
+
   return [node, params];
 }
 
@@ -566,6 +612,9 @@ function translateMark(mark) {
       break;
     case 'highlight': {
       const highlightValue = attrs.color ?? attrs.highlight ?? null;
+      if (String(highlightValue).trim().toLowerCase() === 'transparent' && !attrs.ooxmlHighlightClear) {
+        return {};
+      }
       const translated = wHighlightTranslator.decode({ node: { attrs: { highlight: highlightValue } } });
       return translated || {};
     }

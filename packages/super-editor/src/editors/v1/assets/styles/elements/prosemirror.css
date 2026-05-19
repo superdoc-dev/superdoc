@@ -432,11 +432,15 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
   margin-top: -5px;
 }
 
+/* AIDEV-NOTE: SD-3045. `!important` so the transient search highlight wins
+ * over any inline `style.backgroundColor` painted from a source-doc highlight
+ * mark on the same span. See packages/superdoc/src/assets/styles/elements/superdoc.css
+ * for the full rationale. */
 .sd-editor-scoped .ProseMirror-search-match {
-  background-color: #ffff0054;
+  background-color: #ffff0054 !important;
 }
 .sd-editor-scoped .ProseMirror-active-search-match {
-  background-color: #ff6a0054;
+  background-color: #ff6a0054 !important;
 }
 .sd-editor-scoped .ProseMirror span.sd-custom-selection::selection {
   background: transparent;

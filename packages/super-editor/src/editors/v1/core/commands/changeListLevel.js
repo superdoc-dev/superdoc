@@ -117,8 +117,10 @@ export function updateNumberingProperties(newNumberingProperties, paragraphNode,
     numberingProperties: newNumberingProperties ? { ...newNumberingProperties } : null,
   };
 
-  if (paragraphNode.attrs.paragraphProperties?.styleId === 'ListParagraph') {
-    // Word's default list paragraph style
+  // Only strip the default ListParagraph styleId when removing list formatting.
+  // Keeping it on style swaps preserves the style's contextualSpacing, which Word
+  // relies on to collapse the inter-paragraph gap between consecutive list items.
+  if (!newNumberingProperties && paragraphNode.attrs.paragraphProperties?.styleId === 'ListParagraph') {
     newProperties.styleId = null;
   }
 

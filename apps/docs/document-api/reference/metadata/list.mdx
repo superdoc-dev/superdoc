@@ -1,0 +1,98 @@
+---
+title: metadata.list
+sidebarTitle: metadata.list
+description: "List anchored-metadata entries in the document, optionally filtered by consumer namespace and/or a `within` selection (returns only entries whose anchor overlaps `within`)."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+List anchored-metadata entries in the document, optionally filtered by consumer namespace and/or a `within` selection (returns only entries whose anchor overlaps `within`).
+
+- Operation ID: `metadata.list`
+- API member path: `editor.doc.metadata.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an AnchoredMetadataListResult with summary entries (no payload); fetch payload via get.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | integer | no |  |
+| `namespace` | string | no |  |
+| `offset` | integer | no |  |
+| `within` | SelectionTarget | no | SelectionTarget |
+| `within.end` | SelectionPoint | no | SelectionPoint |
+| `within.kind` | `"selection"` | no | Constant: `"selection"` |
+| `within.start` | SelectionPoint | no | SelectionPoint |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "offset": 0
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "namespace": {
+      "type": "string"
+    },
+    "offset": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "within": {
+      "$ref": "#/$defs/SelectionTarget"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

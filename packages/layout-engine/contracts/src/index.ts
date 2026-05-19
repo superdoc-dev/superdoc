@@ -4,8 +4,33 @@ export { computeTabStops, layoutWithTabs, calculateTabWidth } from './engines/ta
 // Re-export TabStop for external consumers
 export type { TabStop };
 
+// Direction context types (orthogonal axes for RTL/BIDI).
+// See `direction-context.ts` for the spec rationale and axis semantics.
+export type {
+  BaseDirection,
+  WritingMode,
+  SectionDirectionContext,
+  TableDirectionContext,
+  CellDirectionContext,
+  ParagraphDirectionContext,
+  RunBidiContext,
+  RunScriptContext,
+} from './direction-context.js';
+export { getParagraphInlineDirection, getTableVisualDirection } from './direction-context.js';
+import type {
+  ParagraphDirectionContext,
+  RunBidiContext,
+  RunScriptContext,
+  TableDirectionContext,
+} from './direction-context.js';
+
 // Export table contracts
-export { OOXML_PCT_DIVISOR, type TableWidthAttr, type TableColumnSpec } from './engines/tables.js';
+export {
+  OOXML_PCT_DIVISOR,
+  resolveTableWidthAttr,
+  type TableWidthAttr,
+  type TableColumnSpec,
+} from './engines/tables.js';
 
 export { effectiveTableCellSpacing } from './table-cell-spacing.js';
 
@@ -53,6 +78,27 @@ export {
 } from './vertical-text.js';
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
+
+// Editor-neutral layout identity primitives (prep-001).
+// Additive only — `pmStart`/`pmEnd` and PM-shaped fields remain available
+// alongside these on every fragment/run.
+export {
+  LAYOUT_BOUNDARY_SCHEMA,
+  bodyStoryLocator,
+  namedStoryLocator,
+  computeLayoutFragmentId,
+  buildLayoutSourceIdentity,
+  buildLayoutSourceIdentityForFragment,
+} from './layout-identity.js';
+export type {
+  LayoutBlockRef,
+  LayoutFragmentId,
+  LayoutPartialRowIdentity,
+  LayoutSourceIdentity,
+  LayoutStoryKind,
+  LayoutStoryLocator,
+} from './layout-identity.js';
+import type { LayoutSourceIdentity } from './layout-identity.js';
 export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
 export type { NormalizedColumnLayout } from './column-layout.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
@@ -96,6 +142,18 @@ export type FieldAnnotationMetadata = {
 
 export type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
 
+/**
+ * Visual chrome / labelling behavior of an SDT, mirroring
+ * `<w15:appearance w15:val="…">` (ECMA-376 §17.5.2.6 / OOXML 2010+).
+ *
+ *   - `'boundingBox'` (default): visible chrome around the SDT content.
+ *   - `'tags'`: tags-only mode (start/end markers).
+ *   - `'hidden'`: no chrome at all; the SDT exists in the document but is
+ *     visually transparent. The alias label MUST NOT leak into the rendered
+ *     DOM textContent (a11y / copy-paste behavior).
+ */
+export type StructuredContentAppearance = 'boundingBox' | 'tags' | 'hidden';
+
 export type StructuredContentMetadata = {
   type: 'structuredContent';
   scope: 'inline' | 'block';
@@ -103,6 +161,8 @@ export type StructuredContentMetadata = {
   tag?: string | null;
   alias?: string | null;
   lockMode?: StructuredContentLockMode;
+  /** Appearance from the SDT's `<w15:appearance>` element, when present. */
+  appearance?: StructuredContentAppearance;
   sdtPr?: unknown;
 };
 
@@ -143,6 +203,43 @@ export const CONTRACTS_VERSION = '1.0.0';
 
 /** Unique identifier for a block in the document. Format: `${pos}-${type}`. */
 export type BlockId = string;
+
+/**
+ * Optional DOCX source evidence carried through the render pipeline.
+ *
+ * Phase 3 keeps this deliberately optional and payload-shaped so existing
+ * layout snapshots remain valid while source-linked intelligence consumers can
+ * preserve exact DOCX/source-tree anchors where available.
+ */
+export type SourceAnchor = {
+  sourceNodeId?: string;
+  occurrenceId?: string;
+  rawFactIds?: string[];
+  schemaQNames?: Array<{
+    qName: string;
+    namespaceUri?: string;
+    prefix?: string;
+    localName?: string;
+    ownerElementQName?: string;
+  }>;
+  featureKey?: string;
+  conceptKey?: string;
+  sourceRef?: {
+    partUri: string;
+    xpathLikePath: string;
+    rawFactId?: string;
+    occurrenceId?: string;
+  };
+  anchorConfidence?: 'high' | 'medium' | 'low';
+  pmNodeId?: string;
+  pmRange?: {
+    from: number;
+    to: number;
+  };
+  flowBlockId?: string;
+  layoutFragmentId?: string;
+  paintItemId?: string;
+};
 
 /** Tab leader type for filling space before tab stops. */
 export type LeaderType = 'dot' | 'heavy' | 'hyphen' | 'middleDot' | 'underscore';
@@ -259,6 +356,19 @@ export type TextRun = RunMarks & {
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;
+  /**
+   * Run-level bidi signals preserved from the source DOCX (run rtl flag,
+   * embedding/override directions). Direction-only - script formatting lives
+   * on `script`. Populated by pm-adapter from raw run properties; not yet
+   * rendered (Wave 1c consumes embedding/override).
+   */
+  bidi?: RunBidiContext;
+  /**
+   * Run-level script context preserved from the source DOCX (complex-script
+   * flag, per-script language metadata). Wave 1b uses `complexScript` to gate
+   * the formatting-stack selection (Latin variants vs CS variants).
+   */
+  script?: RunScriptContext;
 };
 
 export type TabRun = RunMarks & {
@@ -491,6 +601,7 @@ export type ParagraphBlock = {
   id: BlockId;
   runs: Run[];
   attrs?: ParagraphAttrs;
+  sourceAnchor?: SourceAnchor;
 };
 
 /** Border style (subset of OOXML ST_Border). */
@@ -549,10 +660,28 @@ export type TableCellAttrs = {
   tableCellProperties?: Record<string, unknown>;
 };
 
+export type TablePropertiesAttrs = {
+  rightToLeft?: boolean;
+  [key: string]: unknown;
+};
+
 export type TableAttrs = {
   borders?: TableBorders;
   borderCollapse?: 'collapse' | 'separate';
   cellSpacing?: CellSpacing;
+  tableProperties?: TablePropertiesAttrs;
+  /**
+   * Resolved table direction context (SD-3138). Populated by pm-adapter from
+   * cascade-resolved table properties via `resolveTableDirection`. Consumers
+   * should call `getTableVisualDirection(attrs)` instead of reading
+   * `tableProperties.rightToLeft` directly — the helper prefers this field
+   * and falls back to the legacy raw read for compatibility.
+   *
+   * Per ECMA-376 §17.4.1, `w:bidiVisual` affects cell ordering and
+   * table-visual properties only; it does NOT propagate to cell paragraphs
+   * as inline direction.
+   */
+  tableDirectionContext?: TableDirectionContext;
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
   [key: string]: unknown;
@@ -567,6 +696,7 @@ export type TableCell = {
   rowSpan?: number;
   colSpan?: number;
   attrs?: TableCellAttrs;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type TableRowProperties = {
@@ -587,6 +717,7 @@ export type TableRow = {
   id: BlockId;
   cells: TableCell[];
   attrs?: TableRowAttrs;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type TableBlock = {
@@ -600,6 +731,7 @@ export type TableBlock = {
   anchor?: TableAnchor;
   /** Text wrapping for floating tables (from w:tblpPr distances). */
   wrap?: TableWrap;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type BoxSpacing = {
@@ -654,6 +786,7 @@ export type ImageBlock = {
   flipV?: boolean; // Vertical flip
   /** Image hyperlink from OOXML a:hlinkClick. When set, clicking the image opens the URL. */
   hyperlink?: ImageHyperlink;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup' | 'chart';
@@ -745,6 +878,22 @@ export type TextPart = {
   isLineBreak?: boolean;
   /** Indicates this line break follows an empty paragraph (creates extra spacing). */
   isEmptyParagraph?: boolean;
+  /**
+   * SD-2804: ECMA-376 §20.4.2.38 lets a textbox hold full body-level
+   * content, including paragraphs whose runs carry inline w:drawing
+   * images. When the importer encounters such a drawing it appends a
+   * part with `kind: 'image'` carrying the raw media path; pm-adapter's
+   * hydrateImageBlocks resolves it to a data URI alongside ImageRuns so
+   * binary (Y.js) and string (zip) media files share the same path
+   * candidates and Uint8Array decoding.
+   */
+  kind?: 'image';
+  src?: string;
+  extension?: string;
+  rId?: string;
+  width?: number;
+  height?: number;
+  alt?: string;
 };
 
 /** Text content configuration for shapes. */
@@ -843,6 +992,7 @@ export type DrawingBlockBase = {
   drawingContentId?: string;
   drawingContent?: DrawingContentSnapshot;
   attrs?: Record<string, unknown>;
+  sourceAnchor?: SourceAnchor;
 };
 
 /**
@@ -1418,8 +1568,17 @@ export type ParagraphAttrs = {
   trackedChangesEnabled?: boolean;
   /** Marks an empty paragraph that only exists to carry section properties. */
   sectPrMarker?: boolean;
-  direction?: 'ltr' | 'rtl';
-  rtl?: boolean;
+  /**
+   * Resolved direction context for the paragraph (inline direction + writing mode).
+   * Single source of truth for paragraph direction-aware rendering decisions.
+   *
+   * Read via `getParagraphInlineDirection(attrs)` rather than inspecting this
+   * field directly so the helper can normalize `null` vs `undefined` and fall
+   * back to `paragraphProperties.rightToLeft` for PM-node / editor paths.
+   *
+   * See `@superdoc/contracts/direction-context` for axis semantics.
+   */
+  directionContext?: ParagraphDirectionContext;
   isTocEntry?: boolean;
   tocInstruction?: string;
   /** Floating alignment for positioned paragraphs (from w:framePr/@w:xAlign). */
@@ -1457,12 +1616,14 @@ export type ListMarker = {
   lvlText?: string;
   customFormat?: string;
   align?: 'left' | 'center' | 'right';
+  sourceAnchor?: SourceAnchor;
 };
 
 export type ListItem = {
   id: BlockId;
   marker: ListMarker;
   paragraph: ParagraphBlock;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type ListBlock = {
@@ -1470,6 +1631,7 @@ export type ListBlock = {
   id: BlockId;
   listType: 'bullet' | 'number';
   items: ListItem[];
+  sourceAnchor?: SourceAnchor;
 };
 
 export type FlowBlock =
@@ -1523,6 +1685,8 @@ export type Line = {
   naturalWidth?: number;
   /** Number of spaces in the line (pre-computed for efficiency in justify calculations). */
   spaceCount?: number;
+  /** True when this line used author-defined OOXML tab stops, not synthesized default stops. */
+  hasExplicitTabStops?: boolean;
   segments?: LineSegment[];
   leaders?: LeaderDecoration[];
   bars?: BarDecoration[];
@@ -1534,6 +1698,8 @@ export type LineSegment = {
   toChar: number;
   width: number;
   x?: number;
+  /** End x for an immediately preceding tab when it differs from this segment's paint x. */
+  precedingTabEndX?: number;
 };
 
 export type LeaderDecoration = {
@@ -1791,6 +1957,16 @@ export type ParaFragment = {
   lines?: Line[];
   pmStart?: number;
   pmEnd?: number;
+  sourceAnchor?: SourceAnchor;
+  /**
+   * Optional editor-neutral identity for this fragment.
+   *
+   * Additive (prep-001). PM-facing `pmStart`/`pmEnd` and `blockId` remain
+   * authoritative for v1 consumers; this field exists so downstream surfaces
+   * can address rendered output without requiring `pmStart`/`pmEnd`. See
+   * `layout-identity.ts`.
+   */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type TableColumnBoundary = {
@@ -1838,6 +2014,8 @@ export type PartialRowInfo = {
 export type TableFragment = {
   kind: 'table';
   blockId: BlockId;
+  /** Flow column that owns this fragment, distinct from visual x when overflow crosses margins. */
+  columnIndex?: number;
   fromRow: number;
   toRow: number;
   x: number;
@@ -1854,6 +2032,9 @@ export type TableFragment = {
   /** Per-fragment column widths, rescaled when table is clamped to section width.
    *  When set, the renderer uses these instead of measure.columnWidths. */
   columnWidths?: number[];
+  sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type ImageFragment = {
@@ -1869,6 +2050,9 @@ export type ImageFragment = {
   pmStart?: number;
   pmEnd?: number;
   metadata?: ImageFragmentMetadata;
+  sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type DrawingFragment = {
@@ -1887,6 +2071,9 @@ export type DrawingFragment = {
   drawingContentId?: string;
   pmStart?: number;
   pmEnd?: number;
+  sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type ListItemFragment = {
@@ -1901,6 +2088,9 @@ export type ListItemFragment = {
   markerWidth: number;
   continuesFromPrev?: boolean;
   continuesOnNext?: boolean;
+  sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type Fragment = ParaFragment | ImageFragment | DrawingFragment | ListItemFragment | TableFragment;
@@ -2004,5 +2194,9 @@ export type {
   ResolvedHeaderFooterLayout,
 } from './resolved-layout.js';
 export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from './resolved-layout.js';
+
+// Pure transformations on inline-run shapes (used by pm-adapter, layout-bridge,
+// and painter-dom). Located in contracts to avoid reverse stage dependencies.
+export { expandRunsForInlineNewlines, sliceRunsForLine } from './run-helpers.js';
 
 export * as Engines from './engines/index.js';

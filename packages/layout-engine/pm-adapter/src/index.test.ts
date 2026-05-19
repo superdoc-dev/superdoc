@@ -1269,6 +1269,72 @@ describe('toFlowBlocks', () => {
         [first, second, third].forEach((b) => expect(b?.type).toBe('continuous'));
       });
     });
+
+    describe('end-tagged section membership for non-paragraph nodes (SD-2646, ECMA-376 §17.6.17)', () => {
+      it('emits the next section break BEFORE a table that sits between two sectPr-marker paragraphs', () => {
+        // IT-945 shape: table lives between the paragraph that ends section A
+        // and the paragraph that ends section B. Per §17.6.17 the table
+        // belongs to section B, so the sectionBreak introducing B's columns
+        // must precede the table in the flow stream.
+        const pmDoc: PMNode = {
+          type: 'doc',
+          attrs: { bodySectPr: createTestBodySectPr() },
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'This is my first section' }] },
+            {
+              type: 'paragraph',
+              attrs: {
+                paragraphProperties: {
+                  sectPr: {
+                    elements: [
+                      { name: 'w:type', attributes: { 'w:val': 'nextPage' } },
+                      { name: 'w:cols', attributes: { 'w:num': '1', 'w:space': '720' } },
+                    ],
+                  },
+                },
+              },
+              content: [],
+            },
+            {
+              type: 'table',
+              attrs: {},
+              content: [
+                {
+                  type: 'tableRow',
+                  content: [
+                    { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A' }] }] },
+                    { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'B' }] }] },
+                  ],
+                },
+              ],
+            },
+            {
+              type: 'paragraph',
+              attrs: {
+                paragraphProperties: {
+                  sectPr: {
+                    elements: [
+                      { name: 'w:type', attributes: { 'w:val': 'continuous' } },
+                      { name: 'w:cols', attributes: { 'w:num': '2', 'w:space': '720' } },
+                    ],
+                  },
+                },
+              },
+              content: [],
+            },
+            { type: 'paragraph', content: [{ type: 'text', text: 'This is my third section' }] },
+          ],
+        } as never;
+
+        const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
+
+        const tableIndex = blocks.findIndex((b) => b.kind === 'table');
+        const twoColBreakIndex = blocks.findIndex((b) => b.kind === 'sectionBreak' && b.columns?.count === 2);
+        expect(tableIndex).toBeGreaterThan(-1);
+        expect(twoColBreakIndex).toBeGreaterThan(-1);
+        expect(twoColBreakIndex).toBeLessThan(tableIndex);
+      });
+    });
   });
 
   describe('block id prefixing', () => {
@@ -2111,6 +2177,12 @@ describe('toFlowBlocks', () => {
 
       expect(sectionBreaks).toHaveLength(1);
       expect(sectionBreaks[0].type).toBe('nextPage');
+      // `typeIsExplicit` is only set on attrs when `<w:type>` was authored.
+      // The body sectPr in this fixture has no `<w:type>`, so the flag is
+      // omitted (undefined). The column-balancing gate treats absence as
+      // "defaulted" and skips balancing for default-nextPage body sections
+      // (sd-1655 behavior).
+      expect(sectionBreaks[0].attrs?.typeIsExplicit).toBeUndefined();
     });
 
     it('emits section breaks even when w:type element is missing (defaults to nextPage)', () => {
@@ -2157,6 +2229,14 @@ describe('toFlowBlocks', () => {
       expect(sectionBreaks).toHaveLength(2);
       expect(sectionBreaks[0].type).toBe('nextPage');
       expect(sectionBreaks[1].type).toBe('nextPage');
+      // Section 1's sectPr writes `<w:type w:val="nextPage"/>` explicitly
+      // so the flag is set true. Section 2's body sectPr omits `<w:type>`
+      // so the flag is omitted. The column-balance gate uses this to tell
+      // explicit-nextPage (author intent: don't balance) from defaulted
+      // nextPage (could still balance if the doc has explicit continuous
+      // somewhere or is multi-page).
+      expect(sectionBreaks[0].attrs?.typeIsExplicit).toBe(true);
+      expect(sectionBreaks[1].attrs?.typeIsExplicit).toBeUndefined();
     });
 
     it('keeps final paragraph section break even without type when no body sectPr', () => {
@@ -3108,10 +3188,9 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBe('rtl');
-      expect(paragraph.attrs?.rtl).toBe(true);
-      expect(paragraph.attrs?.indent?.left).toBe(24);
-      expect(paragraph.attrs?.indent?.right).toBe(12);
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBe('rtl');
+      expect(paragraph.attrs?.indent?.left).toBe(12);
+      expect(paragraph.attrs?.indent?.right).toBe(24);
     });
 
     it('does not mark paragraphs as RTL when w:bidi is explicitly false', () => {
@@ -3135,8 +3214,68 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBe('ltr');
-      expect(paragraph.attrs?.rtl).toBe(false);
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBe('ltr');
+    });
+
+    it('does NOT inherit paragraph inline direction from body sectPr w:bidi (§17.6.1)', () => {
+      // Per ECMA-376 §17.6.1, section bidi affects section chrome only and does
+      // not propagate to paragraph layout. Paragraph direction must come from
+      // paragraph w:bidi (or its style cascade including docDefaults), not section.
+      const pmDoc = {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            elements: [{ type: 'element', name: 'w:bidi', attributes: {} }],
+          },
+        },
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {},
+            },
+            content: [{ type: 'text', text: 'Latin paragraph in RTL section' }],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+      expect(blocks).toHaveLength(1);
+      const paragraph = blocks[0];
+      expect(paragraph.kind).toBe('paragraph');
+      // Paragraph inline direction stays undefined; the browser applies UBA via
+      // the missing dir attribute. Section pageDirection is preserved separately.
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBeUndefined();
+    });
+
+    it('section bidi=0 also does not affect paragraph inline direction', () => {
+      const pmDoc = {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            elements: [{ type: 'element', name: 'w:bidi', attributes: { 'w:val': '0' } }],
+          },
+        },
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {},
+            },
+            content: [{ type: 'text', text: 'Paragraph in LTR section' }],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+      expect(blocks).toHaveLength(1);
+      const paragraph = blocks[0];
+      expect(paragraph.kind).toBe('paragraph');
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBeUndefined();
     });
 
     it('handles multiple page breaks', () => {
@@ -4481,8 +4620,7 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(blocks[0].attrs?.alignment).toBeUndefined();
     });
 
@@ -4511,14 +4649,13 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
       });
     });
 
-    it('preserves explicit left alignment on RTL paragraphs', () => {
+    it('maps explicit left alignment to right on RTL paragraphs', () => {
       const pmDoc = {
         type: 'doc',
         content: [
@@ -4544,8 +4681,38 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
+      expect(blocks[0].attrs).toMatchObject({
+        alignment: 'right',
+      });
+    });
+
+    it('maps explicit right alignment to left on RTL paragraphs', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {
+                rightToLeft: true,
+                justification: 'right',
+              },
+            },
+            content: [
+              {
+                type: 'text',
+                text: 'مرحبا بالعالم',
+              },
+            ],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'left',
       });
@@ -4589,6 +4756,29 @@ describe('toFlowBlocks', () => {
 
       expect(blocksStart[0].attrs?.alignment).toBe('right');
       expect(blocksEnd[0].attrs?.alignment).toBe('left');
+    });
+
+    // SD-3093: justify-family values must collapse to 'justify' without flipping
+    // in RTL. Regression guard against accidentally extending the mirror logic.
+    it('maps both/distribute/numTab/thaiDistribute to justify on RTL paragraphs', () => {
+      const makeDoc = (jc: string) => ({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: { rightToLeft: true, justification: jc },
+            },
+            content: [{ type: 'text', text: 'مرحبا' }],
+          },
+        ],
+      });
+
+      for (const jc of ['both', 'distribute', 'numTab', 'thaiDistribute']) {
+        const { blocks } = toFlowBlocks(makeDoc(jc));
+        expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
+        expect(blocks[0].attrs).toMatchObject({ alignment: 'justify' });
+      }
     });
   });
 

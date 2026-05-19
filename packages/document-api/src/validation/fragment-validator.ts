@@ -1,5 +1,5 @@
 /**
- * Fragment validation — validates structural content before materialization.
+ * Fragment validation: validates structural content before materialization.
  *
  * Handles BOTH SDM/1 shapes (kind-discriminated) and legacy shapes (type-discriminated).
  * SDM/1 validation uses SDErrorCode vocabulary (INVALID_PAYLOAD, DUPLICATE_ID, etc.).
@@ -61,7 +61,7 @@ export function validateSDFragment(fragment: unknown): asserts fragment is SDFra
 }
 
 /**
- * Backward-compatible entry point — validates both legacy and SDM/1 shapes.
+ * Backward-compatible entry point: validates both legacy and SDM/1 shapes.
  *
  * Routes to SDM/1 or legacy validation based on the presence of `kind` vs `type`.
  */
@@ -78,19 +78,19 @@ export function validateDocumentFragment(fragment: unknown): asserts fragment is
   // Detect shape by checking the first node's discriminant
   const first = nodes[0];
   if (isRecord(first) && typeof (first as Record<string, unknown>).kind === 'string') {
-    // SDM/1 path — delegate to full SDM/1 validator
+    // SDM/1 path: delegate to full SDM/1 validator
     validateSDFragment(fragment);
     return;
   }
 
-  // Legacy path — validate type-discriminated shapes
+  // Legacy path: validate type-discriminated shapes
   for (const node of nodes) {
     validateLegacyTopLevelNode(node);
   }
 }
 
 // ---------------------------------------------------------------------------
-// SDM/1 validation — content nodes
+// SDM/1 validation: content nodes
 // ---------------------------------------------------------------------------
 
 function normalizeToNodeArray(fragment: unknown, errorCode: string): unknown[] {
@@ -426,7 +426,7 @@ function validateImagePayload(rec: Record<string, unknown>): void {
 }
 
 // ---------------------------------------------------------------------------
-// SDT / CustomXml — Rule 7
+// SDT / CustomXml: Rule 7
 // ---------------------------------------------------------------------------
 
 function validateSdtPayload(rec: Record<string, unknown>, kind: string, seenIds: Set<string>): void {
@@ -456,7 +456,7 @@ function validateSdtPayload(rec: Record<string, unknown>, kind: string, seenIds:
 }
 
 // ---------------------------------------------------------------------------
-// TOC — Rules 10, 11, 12
+// TOC: Rules 10, 11, 12
 // ---------------------------------------------------------------------------
 
 function validateTocPayload(rec: Record<string, unknown>): void {
@@ -468,7 +468,7 @@ function validateTocPayload(rec: Record<string, unknown>): void {
     ? (payload.displayConfig as Record<string, unknown>)
     : undefined;
 
-  // Rule 10: sourceConfig.outlineLevels — ranges 1..9, from <= to
+  // Rule 10: sourceConfig.outlineLevels: ranges 1..9, from <= to
   if (sourceConfig && isRecord(sourceConfig.outlineLevels)) {
     const range = sourceConfig.outlineLevels as Record<string, unknown>;
     const from = range.from;
@@ -493,7 +493,7 @@ function validateTocPayload(rec: Record<string, unknown>): void {
     }
   }
 
-  // Rule 10b: sourceConfig.tcFieldLevels — same range constraints
+  // Rule 10b: sourceConfig.tcFieldLevels: same range constraints
   if (sourceConfig && isRecord(sourceConfig.tcFieldLevels)) {
     const range = sourceConfig.tcFieldLevels as Record<string, unknown>;
     const from = range.from;
@@ -538,7 +538,7 @@ function validateTocPayload(rec: Record<string, unknown>): void {
 }
 
 // ---------------------------------------------------------------------------
-// SectionBreak — shape check (Rule 15 contextual check is adapter-level)
+// SectionBreak: shape check (Rule 15 contextual check is adapter-level)
 // ---------------------------------------------------------------------------
 
 function validateSectionBreakPayload(rec: Record<string, unknown>): void {
@@ -558,7 +558,7 @@ function validateSectionBreakPayload(rec: Record<string, unknown>): void {
 }
 
 // ---------------------------------------------------------------------------
-// Inline validation — Rules 4, 8
+// Inline validation: Rules 4, 8
 // ---------------------------------------------------------------------------
 
 function validateInlinesArray(inlines: unknown, parentKind: string, seenIds: Set<string>): void {

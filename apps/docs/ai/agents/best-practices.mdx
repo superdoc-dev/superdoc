@@ -1,7 +1,7 @@
 ---
 title: Best practices
 sidebarTitle: Best practices
-description: Get better results from LLM document editing — prompting, tool call patterns, and workflow tips
+description: "Get better results from LLM document editing: prompting, tool call patterns, and workflow tips"
 keywords: "llm best practices, ai document editing, prompt engineering, superdoc tools, tool calling, document automation"
 ---
 
@@ -9,7 +9,7 @@ These patterns help your LLM agent produce reliable, efficient document edits.
 
 ## Use the bundled system prompt
 
-`getSystemPrompt()` returns a tested prompt that teaches the model how to use SuperDoc tools — targeting, workflow order, and multi-action tools. Load it once and pass it as the system message.
+`getSystemPrompt()` returns a tested prompt that teaches the model how to use SuperDoc tools: targeting, workflow order, and multi-action tools. Load it once and pass it as the system message.
 
 ```typescript
 import { getSystemPrompt } from '@superdoc-dev/sdk';
@@ -32,15 +32,15 @@ You edit `.docx` files using SuperDoc intent tools. Be efficient and minimize to
 
 ## Workflow
 
-1. **Read** — Use `superdoc_get_content` to understand the document.
-2. **Search** — Use `superdoc_search` to find stable handles or block addresses.
-3. **Edit** — Use the focused tool that matches the job:
+1. **Read**: Use `superdoc_get_content` to understand the document.
+2. **Search**: Use `superdoc_search` to find stable handles or block addresses.
+3. **Edit**: Use the focused tool that matches the job:
    - `superdoc_edit` for insert, replace, delete, undo, redo
    - `superdoc_format` for inline or paragraph formatting
    - `superdoc_create` for paragraphs and headings
    - `superdoc_comment` for comment threads
    - `superdoc_track_changes` for review decisions
-4. **Batch only when useful** — Use `superdoc_mutations` for preview/apply or atomic multi-step edits.
+4. **Batch only when useful**: Use `superdoc_mutations` for preview/apply or atomic multi-step edits.
 
 ## Rules
 
@@ -55,9 +55,9 @@ You edit `.docx` files using SuperDoc intent tools. Be efficient and minimize to
 
 A typical edit takes 3-5 tool calls:
 
-1. `superdoc_get_content` — understand what's in the document
-2. `superdoc_search` — find the exact location (returns stable handles/addresses)
-3. Edit tool (`superdoc_edit`, `superdoc_format`, etc.) — apply the change using targets from search
+1. `superdoc_get_content`: understand what's in the document
+2. `superdoc_search`: find the exact location (returns stable handles/addresses)
+3. Edit tool (`superdoc_edit`, `superdoc_format`, etc.): apply the change using targets from search
 
 This matters because handles from search results point to the exact right location. If the model guesses a block address instead of searching for it, edits land in the wrong place.
 
@@ -65,7 +65,7 @@ This matters because handles from search results point to the exact right locati
 
 Instruct the LLM to plan all edits before calling tools. A well-structured prompt like "Find the termination clause and rewrite it to allow 30-day notice" should take 3-5 calls, not 15.
 
-Batch multiple changes only when atomic execution is genuinely helpful — use `superdoc_mutations` for that.
+Batch multiple changes only when atomic execution is genuinely helpful: use `superdoc_mutations` for that.
 
 ## Prefer markdown insert for multi-block creation
 
@@ -79,9 +79,9 @@ When you need to create multiple headings and paragraphs in one operation, use `
 }
 ```
 
-After inserting, apply formatting in a single `superdoc_mutations` batch using `format.apply` steps — one step per block or range. This reduces a workflow that might otherwise take 40+ calls down to 4: read, search, insert, format.
+After inserting, apply formatting in a single `superdoc_mutations` batch using `format.apply` steps: one step per block or range. This reduces a workflow that might otherwise take 40+ calls down to 4: read, search, insert, format.
 
-## Use focused tools — `superdoc_mutations` is an escape hatch
+## Use focused tools: `superdoc_mutations` is an escape hatch
 
 For straightforward edits, use the focused intent tools (`superdoc_edit`, `superdoc_format`, `superdoc_create`, `superdoc_list`, `superdoc_comment`). They validate arguments, give clear errors, and are easier for models to call correctly.
 
@@ -92,14 +92,14 @@ Reach for `superdoc_mutations` only when you need:
 
 ## Feed errors back
 
-`dispatchSuperDocTool` returns structured errors. Pass them back as tool results — most models self-correct on the next turn.
+`dispatchSuperDocTool` returns structured errors. Pass them back as tool results: most models self-correct on the next turn.
 
 ```typescript
 try {
   const result = await dispatchSuperDocTool(doc, toolCall.function.name, JSON.parse(toolCall.function.arguments));
   messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result) });
 } catch (err: any) {
-  // Return the error as a tool result — the model will see it and adjust
+  // Return the error as a tool result: the model will see it and adjust
   messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ error: err.message }) });
 }
 ```
@@ -110,9 +110,9 @@ Don't hardcode formatting values. Read them from the document's existing content
 
 **Body text:** Read `fontFamily`, `fontSize`, and `color` from non-empty paragraphs with `alignment: "justify"` or `alignment: "left"`. Set `bold: false` for body paragraphs.
 
-Many DOCX documents report `underline: true` on all blocks due to style inheritance. This is a DOCX artifact — not intentional formatting. Do not carry it forward when inserting new paragraphs.
+Many DOCX documents report `underline: true` on all blocks due to style inheritance. This is a DOCX artifact: not intentional formatting. Do not carry it forward when inserting new paragraphs.
 
-**Headings:** Read from existing heading blocks in the document. Scale `fontSize` up relative to body text. Headings are typically bold and sometimes centered — confirm against what's already in the document rather than assuming.
+**Headings:** Read from existing heading blocks in the document. Scale `fontSize` up relative to body text. Headings are typically bold and sometimes centered: confirm against what's already in the document rather than assuming.
 
 ```typescript
 // Get content first, find a representative body paragraph
@@ -173,7 +173,7 @@ These prompts have been tested against the SuperDoc tool set. Use them as inspir
 - "Apply yellow highlight to every sentence that contains an indemnification obligation."
 - "Replace all references to 'Contractor' with 'Service Provider' and make each replacement italic with tracked changes enabled."
 - "Underline every sentence that references payment terms or late fees."
-- "Insert CONFIDENTIAL — DO NOT DISTRIBUTE at the very top of the document and make it bold, red, 14pt."
+- "Insert CONFIDENTIAL: DO NOT DISTRIBUTE at the very top of the document and make it bold, red, 14pt."
 - "Scan the document for inconsistent capitalization of defined terms and fix them with tracked changes enabled."
 
 ### Formatting and structure
@@ -200,7 +200,7 @@ These prompts have been tested against the SuperDoc tool set. Use them as inspir
 
 ## Related
 
-- [LLM tools](/ai/agents/llm-tools) — tool catalog and SDK functions
-- [How to use](/ai/agents/integrations) — step-by-step integration guide
-- [Debugging](/ai/agents/debugging) — troubleshoot tool call failures
-- [Document API](/document-api/overview) — the operation set behind the tools
+- [LLM tools](/ai/agents/llm-tools): tool catalog and SDK functions
+- [How to use](/ai/agents/integrations): step-by-step integration guide
+- [Debugging](/ai/agents/debugging): troubleshoot tool call failures
+- [Document API](/document-api/overview): the operation set behind the tools

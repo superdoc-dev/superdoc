@@ -13,6 +13,8 @@ import {
   buildAnnotationPmSelector,
   SDT_BLOCK_WITH_ID_SELECTOR,
   DRAGGABLE_SELECTOR,
+  encodeLayoutStoryDataset,
+  decodeLayoutStoryDataset,
 } from './index.js';
 
 describe('@superdoc/dom-contract', () => {
@@ -28,6 +30,7 @@ describe('@superdoc/dom-contract', () => {
       SDT_GROUP_HOVER: 'sdt-group-hover',
       IMAGE_FRAGMENT: 'superdoc-image-fragment',
       INLINE_IMAGE: 'superdoc-inline-image',
+      LIST_MARKER: 'superdoc-list-marker',
       INLINE_IMAGE_CLIP_WRAPPER: 'superdoc-inline-image-clip-wrapper',
       ANNOTATION: 'annotation',
       ANNOTATION_CONTENT: 'annotation-content',
@@ -49,6 +52,10 @@ describe('@superdoc/dom-contract', () => {
       DISPLAY_LABEL: 'data-display-label',
       VARIANT: 'data-variant',
       TYPE: 'data-type',
+      LAYOUT_BOUNDARY_SCHEMA: 'data-layout-boundary-schema',
+      LAYOUT_FRAGMENT_ID: 'data-layout-fragment-id',
+      LAYOUT_STORY: 'data-layout-story',
+      LAYOUT_BLOCK_REF: 'data-layout-block-ref',
     });
 
     expect(DATASET_KEYS).toEqual({
@@ -64,7 +71,23 @@ describe('@superdoc/dom-contract', () => {
       DISPLAY_LABEL: 'displayLabel',
       VARIANT: 'variant',
       TYPE: 'type',
+      LAYOUT_BOUNDARY_SCHEMA: 'layoutBoundarySchema',
+      LAYOUT_FRAGMENT_ID: 'layoutFragmentId',
+      LAYOUT_STORY: 'layoutStory',
+      LAYOUT_BLOCK_REF: 'layoutBlockRef',
     });
+  });
+
+  it('encodes and decodes the editor-neutral story locator dataset', () => {
+    expect(encodeLayoutStoryDataset({ kind: 'body' })).toBe('body');
+    expect(encodeLayoutStoryDataset({ kind: 'header', id: 'rId4' })).toBe('header:rId4');
+    expect(encodeLayoutStoryDataset({ kind: 'footer' })).toBe('footer');
+
+    expect(decodeLayoutStoryDataset('body')).toEqual({ kind: 'body' });
+    expect(decodeLayoutStoryDataset('header:rId4')).toEqual({ kind: 'header', id: 'rId4' });
+    expect(decodeLayoutStoryDataset('footnote:1')).toEqual({ kind: 'footnote', id: '1' });
+    expect(decodeLayoutStoryDataset(undefined)).toEqual({ kind: 'unknown' });
+    expect(decodeLayoutStoryDataset('garbage:xyz')).toEqual({ kind: 'unknown' });
   });
 
   it('builds the full image selector for a rendered pm-start value', () => {

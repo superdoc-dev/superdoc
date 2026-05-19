@@ -193,12 +193,31 @@ Docs: https://docs.superdoc.dev/document-engine/overview
 | Import DOCX | Pass URL, File, or Blob to `document` option |
 | Export DOCX | `const blob = await superdoc.export({ isFinalDoc: true })` |
 | Track changes | Set `documentMode: 'suggesting'` or use SDK with `defaultChangeMode: 'tracked'` |
-| Add comments | Use Document API: `editor.doc.comments.create({ target, content: 'text' })` |
+| Add comments (programmatic) | Use Document API: `editor.doc.comments.create({ target, text: 'comment body' })` |
 | Find and replace | Use Document API: `editor.doc.query.match(...)` then `editor.doc.replace(...)` |
-| Format text | Use Document API: `editor.doc.format.bold(...)`, `.italic(...)`, etc. |
+| Format text (programmatic) | Use Document API: `editor.doc.format.bold(...)`, `.italic(...)`, etc. |
 | Real-time collab | Configure `modules.collaboration` with a Yjs provider |
-| Custom toolbar | Use `modules.toolbar.customButtons` array |
+| Custom built-in toolbar | Use `modules.toolbar.customButtons` array |
+| **Build custom React UI** | Use `superdoc/ui/react`. See "Custom UI" below. |
 | Listen to events | `superdoc.on('ready', ({ superdoc }) => { ... })` |
+
+### Custom UI (React)
+
+Wrap your app in `<SuperDocUIProvider>`, mount the editor with `onReady` calling `useSetSuperDoc()`, then drive your toolbar / sidebar / right-click menu through the `superdoc/ui/react` hooks. The controller provides typed slices for selection, comments, tracked changes, document mode, and a `commands.register({...})` surface for custom actions with keyboard shortcuts and right-click contributions.
+
+```javascript
+import { SuperDocUIProvider, useSuperDocUI, useSuperDocCommand, useSuperDocSelection } from 'superdoc/ui/react';
+
+function BoldButton() {
+  const ui = useSuperDocUI();
+  const bold = useSuperDocCommand('bold');
+  return <button disabled={bold.disabled} onClick={() => ui?.commands.get('bold')?.execute()}>B</button>;
+}
+```
+
+Reach for the controller when building custom UI. Reach for the Document API (`editor.doc.*`) for programmatic mutations from outside the UI (AI agents, server flows, scripts). The two layers compose: `editor` is reachable from inside command `execute` callbacks via `({ editor })`.
+
+Full reference: https://docs.superdoc.dev/editor/custom-ui/overview. Worked example: https://github.com/superdoc-dev/superdoc/tree/main/demos/custom-ui.
 
 ### Programmatic access (Document API)
 
@@ -213,7 +232,7 @@ superdoc.on('editorCreate', ({ editor }) => {
   editor.doc.replace({ target: result.items[0].target, text: 'Globex' });
 
   // Add a comment
-  editor.doc.comments.create({ target: result.items[0].target, content: 'Updated name' });
+  editor.doc.comments.create({ target: result.items[0].target, text: 'Updated name' });
 });
 ```
 

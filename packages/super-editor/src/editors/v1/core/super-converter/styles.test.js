@@ -435,13 +435,23 @@ describe('decodeRPrFromMarks', () => {
       { type: 'strike', attrs: { value: true } },
     ];
     const rPr = decodeRPrFromMarks(marks);
+    // SD-2912: `boldCs`/`italicCs` are independent OOXML properties and are no longer
+    // auto-propagated from the latin bold/italic marks. They round-trip via the run's
+    // stored runProperties when the source rPr actually contained them.
     expect(rPr).toEqual({ bold: true, italic: true, strike: true });
   });
 
   it('should decode textStyle marks for color and fontSize', () => {
     const marks = [{ type: 'textStyle', attrs: { color: '#FF0000', fontSize: '12pt' } }];
     const rPr = decodeRPrFromMarks(marks);
-    expect(rPr).toEqual({ color: { val: 'FF0000' }, fontSize: 24 });
+    expect(rPr).toEqual({ color: { val: 'FF0000' }, fontSize: 24, fontSizeCs: 24 });
+  });
+
+  it('keeps fontSize and fontSizeCs in sync when decoding textStyle fontSize', () => {
+    const marks = [{ type: 'textStyle', attrs: { fontSize: '36pt' } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr.fontSize).toBe(72);
+    expect(rPr.fontSizeCs).toBe(72);
   });
 
   it('should decode underline marks', () => {
@@ -480,10 +490,45 @@ describe('decodeRPrFromMarks', () => {
     const rPr = decodeRPrFromMarks(marks);
     expect(rPr).toEqual({ styleId: 'Hyperlink' });
   });
+
+  // SD-2912: redundant default emissions on round-trip.
+  // OOXML default for bCs/iCs is OFF and for w:highlight is "none" — emitting them
+  // explicitly is byte noise that wasn't in the source. Word treats absence and explicit
+  // off as identical, but the export should not introduce elements that weren't there.
+
+  it('does not propagate boldCs when the bold mark is off (SD-2912)', () => {
+    const marks = [{ type: 'bold', attrs: { value: false } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr.bold).toBe(false);
+    expect(rPr.boldCs).toBeUndefined();
+  });
+
+  it('does not propagate italicCs when the italic mark is off (SD-2912)', () => {
+    const marks = [{ type: 'italic', attrs: { value: false } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr.italic).toBe(false);
+    expect(rPr.italicCs).toBeUndefined();
+  });
+
+  it('does not emit highlight when the highlight mark is transparent (SD-2912)', () => {
+    const marks = [{ type: 'highlight', attrs: { color: 'transparent' } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr.highlight).toBeUndefined();
+  });
+
+  it('preserves imported explicit highlight none clears (SD-2912)', () => {
+    const marks = [{ type: 'highlight', attrs: { color: 'transparent', ooxmlHighlightClear: true } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr.highlight).toEqual({ 'w:val': 'none' });
+  });
 });
 
 describe('marks encoding/decoding round-trip', () => {
   it('should correctly round-trip basic properties', () => {
+    // SD-2912: `boldCs`/`italicCs` are not represented as PM marks (they are independent
+    // OOXML properties tracked on the run's stored runProperties). The encode/decode mark
+    // round-trip therefore lossily drops them at the mark layer; preservation through a
+    // full DOCX round-trip happens via the run-properties passthrough path.
     const initialRPr = {
       bold: true,
       italic: true,
@@ -491,6 +536,7 @@ describe('marks encoding/decoding round-trip', () => {
       underline: { 'w:val': 'single', 'w:color': 'auto' },
       color: { val: 'FF0000' },
       fontSize: 28,
+      fontSizeCs: 28,
       letterSpacing: 20,
     };
 
@@ -524,6 +570,18 @@ describe('marks encoding/decoding round-trip', () => {
     const marks2 = encodeMarksFromRPr(rPrShading, {});
     const finalRPr2 = decodeRPrFromMarks(marks2);
     expect(finalRPr2).toEqual({ highlight: { 'w:val': '#FFA500' } });
+  });
+
+  it('distinguishes explicit highlight none from transparent shading on round-trip', () => {
+    const explicitClearMarks = encodeMarksFromRPr({ highlight: { 'w:val': 'none' } }, {});
+    expect(explicitClearMarks).toEqual([
+      { type: 'highlight', attrs: { color: 'transparent', ooxmlHighlightClear: true } },
+    ]);
+    expect(decodeRPrFromMarks(explicitClearMarks)).toEqual({ highlight: { 'w:val': 'none' } });
+
+    const transparentShadingMarks = encodeMarksFromRPr({ shading: { val: 'clear', fill: 'auto' } }, {});
+    expect(transparentShadingMarks).toEqual([{ type: 'highlight', attrs: { color: 'transparent' } }]);
+    expect(decodeRPrFromMarks(transparentShadingMarks)).toEqual({});
   });
 
   it('should show asymmetry in textTransform/caps round-trip', () => {

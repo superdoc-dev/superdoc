@@ -1,0 +1,97 @@
+---
+title: metadata.get
+sidebarTitle: metadata.get
+description: Get a single anchored-metadata entry by id, including its JSON payload.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Get a single anchored-metadata entry by id, including its JSON payload.
+
+- Operation ID: `metadata.get`
+- API member path: `editor.doc.metadata.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an AnchoredMetadataInfo with id, namespace, partName, and payload; or null if not found.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "id": "id-001"
+}
+```
+
+## Output fields
+
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "type": "object"
+    },
+    {
+      "type": "null"
+    }
+  ]
+}
+```
+</Accordion>

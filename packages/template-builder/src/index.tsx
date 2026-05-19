@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
-import type { SuperDoc } from 'superdoc'; // requires superdoc >=1.24.2 for correct types
+import type { SuperDoc, ProseMirrorJSON } from 'superdoc'; // requires superdoc >=1.24.2 for correct types
 import type * as Types from './types';
 import { FieldMenu, FieldList } from './defaults';
 import {
@@ -103,7 +103,10 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
     const trigger = menu.trigger || '{{';
 
     const availableFields = fieldsRef.current.available || [];
-    const toolbarSettings = useMemo(() => resolveToolbar(toolbar), [toolbar]);
+    // Serialize so structurally-equal toolbar objects compare as equal across
+    // renders — otherwise a fresh inline `toolbar={{...}}` literal would
+    // recreate the SuperDoc instance every parent render.
+    const toolbarSettings = useMemo(() => resolveToolbar(toolbar), [JSON.stringify(toolbar)]);
     const stableTelemetry = useMemo(
       () => ({
         enabled: telemetry?.enabled ?? true,
@@ -183,7 +186,14 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         const success = (
           mode === 'inline'
             ? editor.commands.insertStructuredContentInline?.({ attrs, text: field.defaultValue || field.alias })
-            : editor.commands.insertStructuredContentBlock?.({ attrs, text: field.defaultValue || field.alias })
+            : field.presetContent?.json || field.presetContent?.html
+              ? editor.commands.insertStructuredContentBlock?.({
+                  attrs,
+                  ...(field.presetContent.html ? { html: field.presetContent.html } : {}),
+                  ...(field.presetContent.json ? { json: field.presetContent.json as ProseMirrorJSON } : {}),
+                })
+              : // Block insert ignores `text` at runtime; drop it to match the real type.
+                editor.commands.insertStructuredContentBlock?.({ attrs })
         ) as boolean | undefined;
 
         if (success) {
@@ -211,7 +221,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         if (!superdocRef.current?.activeEditor) return false;
 
         const editor = superdocRef.current.activeEditor;
-        const success = editor.commands.updateStructuredContentById?.(id, {
+        const success = editor.commands.updateStructuredContentById?.(String(id), {
           attrs: updates,
         }) as boolean | undefined;
 
@@ -258,7 +268,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
         let commandResult = false;
         try {
-          commandResult = (editor.commands.deleteStructuredContentById?.(id) as boolean | undefined) ?? false;
+          commandResult = (editor.commands.deleteStructuredContentById?.(String(id)) as boolean | undefined) ?? false;
         } catch (err) {
           console.warn('[TemplateBuilder] Failed to delete structured content:', id, err);
           commandResult = false;
@@ -276,7 +286,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
 
           if (remainingFieldsInGroup.length === 1) {
             const lastField = remainingFieldsInGroup[0];
-            editor.commands.updateStructuredContentById?.(lastField.id, {
+            editor.commands.updateStructuredContentById?.(String(lastField.id), {
               attrs: { tag: undefined },
             });
             documentFields = getTemplateFieldsFromEditor(editor);
@@ -531,6 +541,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
               alias: createdField.label,
               metadata: createdField.metadata,
               defaultValue: createdField.defaultValue,
+              presetContent: createdField.presetContent,
               fieldType: createdField.fieldType,
               lockMode: createdField.lockMode,
             });
@@ -543,6 +554,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           alias: field.label,
           metadata: field.metadata,
           defaultValue: field.defaultValue,
+          presetContent: field.presetContent,
           fieldType: field.fieldType,
           lockMode: field.lockMode,
         });
@@ -586,7 +598,11 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         const success =
           mode === 'inline'
             ? editor.commands.insertStructuredContentInline?.({ attrs, text: field.alias })
-            : editor.commands.insertStructuredContentBlock?.({ attrs, text: field.alias });
+            : // Block insert ignores `text` at runtime (the visible content comes
+              // from `html`, `json`, or the active selection). Previously this call
+              // also passed `text: field.alias` but it was a no-op silently allowed
+              // by `any`-typed commands. Drop the field to match the real type.
+              editor.commands.insertStructuredContentBlock?.({ attrs });
 
         if (success) {
           if (!field.group) {

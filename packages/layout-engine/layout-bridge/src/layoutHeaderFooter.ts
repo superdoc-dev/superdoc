@@ -1,4 +1,4 @@
-import type { FlowBlock, HeaderFooterLayout, Measure } from '@superdoc/contracts';
+import type { FlowBlock, HeaderFooterLayout, Measure, ParagraphBlock, TableBlock } from '@superdoc/contracts';
 import { layoutHeaderFooter, type HeaderFooterConstraints } from '@superdoc/layout-engine';
 import { MeasureCache } from './cache';
 import { resolveHeaderFooterTokens, cloneHeaderFooterBlocks } from './resolveHeaderFooterTokens';
@@ -111,12 +111,34 @@ export function getBucketRepresentative(bucket: DigitBucket): number {
  * @param blocks - FlowBlocks to check for tokens
  * @returns True if any block contains pageNumber or totalPageCount tokens
  */
+function paragraphHasPageToken(para: ParagraphBlock): boolean {
+  for (const run of para.runs) {
+    if ('token' in run && (run.token === 'pageNumber' || run.token === 'totalPageCount')) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function hasPageTokens(blocks: FlowBlock[]): boolean {
   for (const block of blocks) {
-    if (block.kind !== 'paragraph') continue;
-    for (const run of block.runs) {
-      if ('token' in run && (run.token === 'pageNumber' || run.token === 'totalPageCount')) {
-        return true;
+    if (block.kind === 'paragraph') {
+      if (paragraphHasPageToken(block as ParagraphBlock)) return true;
+    } else if (block.kind === 'table') {
+      // SD-1332: PAGE fields can live inside table cells in headers/footers
+      // (Word's typical layout). Skipping tables here would take the
+      // "no tokens" fast path and reuse a single layout for every page,
+      // so the digit would never substitute per page.
+      const table = block as TableBlock;
+      for (const row of table.rows ?? []) {
+        for (const cell of row.cells ?? []) {
+          const cellBlocks: FlowBlock[] = cell.blocks
+            ? (cell.blocks as FlowBlock[])
+            : cell.paragraph
+              ? [cell.paragraph]
+              : [];
+          if (hasPageTokens(cellBlocks)) return true;
+        }
       }
     }
   }

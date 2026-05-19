@@ -1,0 +1,97 @@
+---
+title: metadata.resolve
+sidebarTitle: metadata.resolve
+description: Find where an anchored-metadata entry is anchored in the document. Returns the SelectionTarget covering the anchor content.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Find where an anchored-metadata entry is anchored in the document. Returns the SelectionTarget covering the anchor content.
+
+- Operation ID: `metadata.resolve`
+- API member path: `editor.doc.metadata.resolve(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an AnchoredMetadataResolveInfo with id and target SelectionTarget; or null if the anchor is no longer present.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "id": "id-001"
+}
+```
+
+## Output fields
+
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "type": "object"
+    },
+    {
+      "type": "null"
+    }
+  ]
+}
+```
+</Accordion>

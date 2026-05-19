@@ -1,5 +1,5 @@
 /**
- * Canonical operation definitions — single source of truth for keys, metadata, and paths.
+ * Canonical operation definitions: single source of truth for keys, metadata, and paths.
  *
  * Every operation in the Document API is defined exactly once here.
  * All downstream artifacts (COMMAND_CATALOG, OPERATION_MEMBER_PATH_MAP,
@@ -8,20 +8,20 @@
  *
  * ## Adding a new operation
  *
- * 1. **Here** (`operation-definitions.ts`) — add an entry to `OPERATION_DEFINITIONS`
+ * 1. **Here** (`operation-definitions.ts`): add an entry to `OPERATION_DEFINITIONS`
  *    with `memberPath`, `description`, `expectedResult`, `metadata`, `referenceDocPath`, and `referenceGroup`.
- * 2. **`operation-registry.ts`** — add a type entry (`input`, `options`, `output`).
+ * 2. **`operation-registry.ts`**: add a type entry (`input`, `options`, `output`).
  *    The bidirectional `Assert` checks will error until this is done.
- * 3. **`invoke.ts`** (`buildDispatchTable`) — add a one-line dispatch entry calling
+ * 3. **`invoke.ts`** (`buildDispatchTable`): add a one-line dispatch entry calling
  *    the API method. `TypedDispatchTable` will error until this is done.
- * 4. **Implement** — the API method on `DocumentApi` + its adapter.
+ * 4. **Implement**: the API method on `DocumentApi` + its adapter.
  *
  * That's 4 touch points. The catalog, maps, and reference docs are derived
  * automatically. If you forget step 1 or 2, compile-time assertions fail.
  * If you forget step 3, the `TypedDispatchTable` mapped type errors.
  *
  * Import DAG: this file imports only from `metadata-types.ts` and
- * `../types/receipt.js` — no contract-internal circular deps.
+ * `../types/receipt.js`: no contract-internal circular deps.
  */
 
 import type { ReceiptFailureCode } from '../types/receipt.js';
@@ -63,9 +63,12 @@ export type ReferenceGroupKey =
   | 'citations'
   | 'authorities'
   | 'ranges'
+  | 'selection'
   | 'diff'
   | 'protection'
-  | 'permissionRanges';
+  | 'permissionRanges'
+  | 'customXml'
+  | 'metadata';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -87,7 +90,7 @@ export interface OperationDefinitionEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Intent group metadata — tool-level names and descriptions
+// Intent group metadata: tool-level names and descriptions
 // ---------------------------------------------------------------------------
 
 export interface IntentGroupMeta {
@@ -147,13 +150,13 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
     toolName: 'superdoc_edit',
     description:
       'The primary tool for inserting content into documents. ' +
-      'ALWAYS use action "insert" with type "markdown" to create headings, paragraphs, or any block content — this is faster and creates proper document structure in one call. Do NOT use superdoc_create for headings or paragraphs. ' +
+      'ALWAYS use action "insert" with type "markdown" to create headings, paragraphs, or any block content: this is faster and creates proper document structure in one call. Do NOT use superdoc_create for headings or paragraphs. ' +
       'The markdown parser creates headings from # markers (# = Heading1, ## = Heading2), bold from **text**, italic from *text*, and numbered/bullet lists. ' +
       'Position markdown inserts with "target" (a BlockNodeAddress like {kind:"block", nodeType, nodeId}) and "placement" (before, after, insideStart, insideEnd). Without a target, content appends at the end of the document. ' +
       'IMPORTANT: After a markdown insert, analyze the document context (what kind of document, how titles and body text are styled) and follow up with ONE superdoc_mutations call to format inserted blocks so they look like they belong. ' +
       'Each format.apply step accepts "inline" (fontFamily, fontSize, bold, underline, color), "alignment", and "scope" in the same step. ' +
       'Use scope: "block" so formatting covers the entire paragraph. ' +
-      'Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values — use what the blocks show. ' +
+      'Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values: use what the blocks show. ' +
       'Also supports replace, delete, and undo/redo. For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. ' +
       'A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
       'For multi-step redlines or whole-clause rewrites, prefer superdoc_mutations with where:{by:"block", nodeType, nodeId} from superdoc_get_content action "blocks" includeText:true rather than relying on text selectors. ' +
@@ -183,7 +186,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   create: {
     toolName: 'superdoc_create',
     description:
-      'IMPORTANT: For headings and paragraphs, use superdoc_edit with type "markdown" instead — it is faster, creates proper styles, and handles positioning via target + placement. ' +
+      'IMPORTANT: For headings and paragraphs, use superdoc_edit with type "markdown" instead: it is faster, creates proper styles, and handles positioning via target + placement. ' +
       'Only use superdoc_create for tables or when markdown cannot express the content. ' +
       'Creates a single paragraph, heading, or table. Returns nodeId and ref for the created block. ' +
       'After creating, the returned ref is valid for ONE immediate superdoc_format call. For subsequent operations, re-fetch blocks with superdoc_get_content to get fresh refs (refs expire after any mutation). ' +
@@ -245,19 +248,123 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       },
     ],
   },
-  table: { toolName: 'superdoc_table', description: 'Table structure and cell operations' },
+  table: {
+    toolName: 'superdoc_table',
+    description:
+      'Create and modify table structure, content, and styling. Find table/row/cell nodeIds via superdoc_get_content({action:"blocks"}) or superdoc_search.\n' +
+      '\n' +
+      'ACTIONS:\n' +
+      '• Structure: delete, insert_row, delete_row, insert_column, delete_column, merge_cells, unmerge_cells.\n' +
+      '• Cell content: set_cell_text (text). set_cell (vAlign / wrap / fit / preferred width).\n' +
+      '• Row / column: set_row (height + rule), set_row_options (repeat-header, allow-break), set_column (widthPt).\n' +
+      '• Table styling: set_borders, set_shading, set_style_options (headerRow / bandedRows / firstColumn / lastColumn / lastRow / bandedColumns), set_layout (autofit / alignment / direction / preferredWidth), set_options (default cell margins + cell spacing).\n' +
+      '\n' +
+      'LOCATORS (the shapes ops accept):\n' +
+      '• insert_row append shorthand: { nodeId: "<tableId>" } with no rowIndex/position appends at the end. Three other forms: target a row + position, table + rowIndex + position, or any of the above with count:N for multiple.\n' +
+      '• insert_column shorthand: position:"first"|"last" with no columnIndex. Otherwise columnIndex + position:"left"|"right".\n' +
+      '• merge_cells: table target + start:{rowIndex, columnIndex} + end:{rowIndex, columnIndex}.\n' +
+      '• set_cell_text: table target + rowIndex + columnIndex (preferred) OR cell target.\n' +
+      '• set_cell: cell target only. Does NOT accept table+rowIndex+columnIndex.\n' +
+      '• set_borders / set_shading: table OR cell target. NOT a row target.\n' +
+      '\n' +
+      'COLOR FORMAT:\n' +
+      'Hex strings accept #RRGGBB, RRGGBB, #RGB, or 3-digit RGB; also "auto"; also null to clear (where supported). Stored canonically as uppercase RRGGBB. Always pass a concrete color when one is implied. Never call set_borders with `auto` for a "make it look [X]" ask.\n' +
+      '\n' +
+      'STYLING (TWO MODES):\n' +
+      '\n' +
+      'A. STRUCTURAL CHANGE → re-apply the existing styling.\n' +
+      "   Triggers: insert_row / insert_column / delete_row / delete_column / merge_cells / unmerge_cells. (NOT set_cell_text or set_cell: those don't disturb borders/shading.)\n" +
+      '   Recipe: read the current borders/shading/cnf flags via superdoc_get_content({action:"blocks"}) before the change, then re-apply the SAME values after with set_borders + set_shading + set_style_options. The goal is consistency, not a redesign.\n' +
+      '   Skip on a freshly created table. A new table starts un-styled.\n' +
+      '\n' +
+      'B. STYLE-CHANGE REQUEST ("make it look [X]" / "style the whole table") → apply the FULL set with concrete colors.\n' +
+      '   Touch every axis: borders, shading, text alignment, font color/weight, cnf flags, spacing. A single set_borders call without shading and font tweaks always looks half-finished. That\'s the #1 cause of "no visual change" complaints.\n' +
+      '   Color palette: discover the document\'s palette by reading superdoc_get_content({action:"blocks"}) and reusing the colors on existing tables/headings. When no palette is obvious, default to corporate blue "1F3864" or dark grey "444444" for accents and "F2F2F2" / "E7E6E6" for banding.\n' +
+      '   Recipe (call ALL of these):\n' +
+      '     1. set_borders applyTo:"all" with an explicit color and weight.\n' +
+      '     2. set_shading on the header row cells with the accent color. Add banding on alternate body rows if appropriate.\n' +
+      '     3. set_style_options { headerRow: true, bandedRows?: true } so cnf regions are recognized.\n' +
+      '     4. Cell-text alignment via superdoc_format action:"set_alignment". Center the header, left-align body, right-align numeric columns. Paragraph-level: target the paragraph inside each cell.\n' +
+      '     5. Font color + weight via superdoc_format action:"inline". Header gets a contrasting color (white on dark fill, accent on light fill) plus bold:true.\n' +
+      '     6. set_options if the user asks for tighter or looser spacing.\n' +
+      '   Steps 4–5 cross to superdoc_format. Use superdoc_mutations to batch many format.apply steps in one call.\n' +
+      '\n' +
+      'AFTER set_cell_text, match the new cell to its siblings:\n' +
+      'set_cell_text writes plain text with the document\'s default font/size/color and no weight. Always follow up with one superdoc_format inline call copying fontFamily/fontSize/color/bold from a sibling cell (or any non-empty body paragraph if the table is fresh and has no sibling content). If sibling cells show a bold-prefix pattern like "Label: value", replicate it on the new cell via superdoc_search + superdoc_format inline (or one superdoc_mutations batch with format.apply steps).\n' +
+      '\n' +
+      'LIST-TO-TABLE:\n' +
+      '(1) superdoc_create action:"table" with the desired rows/columns. (2) Populate cells with set_cell_text using rowIndex/columnIndex (one call per cell). (3) DELETE THE WHOLE LIST in one call: superdoc_list({action:"delete", target:{kind:"block", nodeType:"listItem", nodeId:"<any-item-id>"}}). The op walks the contiguous list and removes all items.\n' +
+      'Wrong paths for list deletion (all leave bullets/empty paragraphs behind): text.delete, superdoc_edit action:"delete" on text refs, lists.detach, lists.convertToText.',
+    // One canonical example per non-obvious shape. Other actions follow the
+    // same {action, nodeId, ...args} pattern documented in the prose above.
+    inputExamples: [
+      // Append a row at the end (no rowIndex/position needed).
+      { action: 'insert_row', nodeId: '<tableNodeId>' },
+      // Insert a column at the end (use 'first' / 'last' to skip columnIndex).
+      { action: 'insert_column', nodeId: '<tableNodeId>', position: 'last' },
+      // Merge a rectangular range.
+      {
+        action: 'merge_cells',
+        nodeId: '<tableNodeId>',
+        start: { rowIndex: 0, columnIndex: 0 },
+        end: { rowIndex: 1, columnIndex: 1 },
+      },
+      // Fill a cell with text using table+row+col coordinates.
+      { action: 'set_cell_text', nodeId: '<tableNodeId>', rowIndex: 0, columnIndex: 0, text: 'Q1 Revenue' },
+      // Set row height (rule: atLeast | exact | auto).
+      { action: 'set_row', nodeId: '<tableNodeId>', rowIndex: 0, heightPt: 24, rule: 'atLeast' },
+      // Border with a hex color (accepts #RRGGBB, RRGGBB, #RGB, RGB, or 'auto').
+      {
+        action: 'set_borders',
+        nodeId: '<tableNodeId>',
+        mode: 'applyTo',
+        applyTo: 'all',
+        border: { lineStyle: 'single', lineWeightPt: 1, color: '#000000' },
+      },
+      // Shade a single cell (use color: null to clear, or apply to a table nodeId for whole-table fill).
+      {
+        action: 'set_shading',
+        target: { kind: 'block', nodeType: 'tableCell', nodeId: '<cellNodeId>' },
+        color: '#E3F2FD',
+      },
+      // Toggle one or more cnf flags in a single call.
+      {
+        action: 'set_style_options',
+        nodeId: '<tableNodeId>',
+        styleOptions: { headerRow: true, bandedRows: true },
+      },
+    ],
+  },
   list: {
     toolName: 'superdoc_list',
     description:
       'Create and manipulate bullet and numbered lists. ' +
-      'To create a list: first create all paragraphs at the SAME location using superdoc_create (chain each using the previous nodeId as the "at" target). ' +
-      'Then call action "create" with mode:"fromParagraphs", a preset ("disc" for bullet, "decimal" for numbered), and a range target: {from:{kind:"block", nodeType:"paragraph", nodeId:"<first>"}, to:{kind:"block", nodeType:"paragraph", nodeId:"<last>"}}. ' +
-      'The range converts ALL paragraphs between from and to into list items. Make sure no other content exists between them. ' +
-      'Action "set_type" converts between bullet and ordered (target any item in the list, kind:"ordered" or "bullet"). ' +
-      'Action "insert" adds a new item before/after a target list item. ' +
-      'Actions "indent" and "outdent" change nesting level; "set_level" jumps to a specific level (0-8). ' +
-      'Action "detach" converts a list item back to a plain paragraph. ' +
-      'Do NOT target paragraphs with indent/outdent/set_type; these actions require a listItem target.',
+      'Most actions require a list-item target: {kind:"block", nodeType:"listItem", nodeId:"<id>"}. ' +
+      'Exceptions: "create" and "attach" operate on paragraph targets (they turn paragraphs into list items). ' +
+      'Find nodeIds via superdoc_get_content({action:"blocks"}): pick listItem blocks for most actions, paragraph blocks for create/attach.\n' +
+      '\n' +
+      'CREATE & CONVERT:\n' +
+      '• "create": make a NEW list from paragraphs. Two modes: ' +
+      'mode:"empty" with at:{kind:"block", nodeType:"paragraph", nodeId} converts a single paragraph; ' +
+      'mode:"fromParagraphs" with target:{from:{...paragraph block address}, to:{...paragraph block address}} converts a range: ALL paragraphs between from and to become items, so make sure no other content sits between them. ' +
+      'Pass a preset ("disc"|"circle"|"square"|"dash" for bullets; "decimal"|"decimalParenthesis"|"lowerLetter"|"upperLetter"|"lowerRoman"|"upperRoman" for ordered) or a custom style. ' +
+      'Use "create" to start a fresh list: NOT to extend an existing one (use "attach" for that).\n' +
+      '• "attach": add paragraphs to an EXISTING list, inheriting its numbering definition. Pass target:{paragraph block address} (or {from, to} range of paragraphs) + attachTo:{kind:"block", nodeType:"listItem", nodeId:"<any item in destination list>"} + optional level:0..8. Use this to extend a list or as the second half of a merge workflow (see "join" below).\n' +
+      '• "set_type": convert an existing list between ordered and bullet. Pass target:{listItem} + kind:"ordered" or "bullet". Adjacent compatible sequences are merged automatically to preserve continuous numbering.\n' +
+      '• "detach": convert a list item back to a plain paragraph. Pass target:{listItem}.\n' +
+      '\n' +
+      'ITEMS & NESTING:\n' +
+      '• "insert": add a new list item adjacent to an existing item in the same list. Pass target:{listItem} + position:"before"|"after" + optional text. Use this (NOT superdoc_create) to add items to an existing list.\n' +
+      '• "indent" / "outdent": bump the target item\'s nesting level by one (0-8 range). Pass target:{listItem}.\n' +
+      '• "set_level": jump the target item to an explicit level. Pass target:{listItem} + level:0..8.\n' +
+      '\n' +
+      'NUMBERING (ordered lists):\n' +
+      '• "set_value": restart numbering at the target. Pass target:{listItem} + value:<number> (e.g. value:1 to start over) or value:null to clear a previous override. Mid-sequence targets are atomically split off into their own sequence.\n' +
+      '• "continue_previous": make the target\'s sequence continue numbering from the nearest compatible previous sequence (same abstract definition). Pass target:{listItem of the sequence you want to renumber}. Fails with NO_COMPATIBLE_PREVIOUS or INCOMPATIBLE_DEFINITIONS if no matching prior sequence exists.\n' +
+      '\n' +
+      'SEQUENCE SHAPE (merge / split):\n' +
+      '• "merge": merge the target\'s sequence with an adjacent one into one continuous list. Pass target:{listItem} + direction:"withPrevious" or "withNext". Absorbed items adopt the absorbing sequence\'s numbering definition, and empty paragraphs between the two sequences are removed so numbering flows continuously.\n' +
+      '• "split": split the target\'s sequence at the target item into two independent lists. The target and everything after become a new sequence that restarts numbering at 1. Pass target:{listItem}; add restartNumbering:false to keep the count continuing instead of restarting.',
     inputExamples: [
       {
         action: 'create',
@@ -276,6 +383,14 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
         text: 'New list item',
       },
       { action: 'indent', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
+      {
+        action: 'merge',
+        target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' },
+        direction: 'withPrevious',
+      },
+      { action: 'split', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
+      { action: 'set_value', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' }, value: 1 },
+      { action: 'continue_previous', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
     ],
   },
   comment: {
@@ -598,7 +713,7 @@ export const OPERATION_DEFINITIONS = {
   find: {
     memberPath: 'find',
     description:
-      'Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead.',
+      'Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results: for mutation targeting, use query.match instead.',
     expectedResult:
       'Returns an SDFindResult envelope ({ total, limit, offset, items }). Each item is an SDNodeResult ({ node, address }).',
     requiresDocumentContext: true,
@@ -700,7 +815,7 @@ export const OPERATION_DEFINITIONS = {
   extract: {
     memberPath: 'extract',
     description:
-      'Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement().',
+      'Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes: each with an ID compatible with scrollToElement().',
     expectedResult:
       'Returns an ExtractResult with blocks (nodeId, type, text, headingLevel), comments (entityId, text, anchoredText, blockId, status, author), tracked changes (entityId, type, excerpt, author, date), and revision.',
     requiresDocumentContext: true,
@@ -1665,7 +1780,7 @@ export const OPERATION_DEFINITIONS = {
   'lists.create': {
     memberPath: 'lists.create',
     description:
-      'Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence.',
+      'Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence.',
     expectedResult: 'Returns a ListsCreateResult with the new listId and the first item address.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1694,6 +1809,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/attach.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'attach',
   },
   'lists.detach': {
     memberPath: 'lists.detach',
@@ -1711,6 +1828,27 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'lists',
     intentGroup: 'list',
     intentAction: 'detach',
+  },
+  'lists.delete': {
+    memberPath: 'lists.delete',
+    description:
+      "Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. " +
+      'Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. ' +
+      'Use this for "remove the list" / "delete this list" intents and for the cleanup step of a list-to-table conversion.',
+    expectedResult:
+      'Returns a ListsDeleteResult with `deletedCount` (number of items removed). Reports failure (INVALID_TARGET) if the target is not a list item.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/delete.mdx',
+    referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'delete',
   },
   'lists.indent': {
     memberPath: 'lists.indent',
@@ -1794,6 +1932,42 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'lists/separate.mdx',
     referenceGroup: 'lists',
   },
+  'lists.merge': {
+    memberPath: 'lists.merge',
+    description:
+      'Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check: absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent.',
+    expectedResult: 'Returns a ListsMergeResult with the merged listId, absorbedCount, and removedEmptyBlocks count.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_ADJACENT_SEQUENCE', 'NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/merge.mdx',
+    referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'merge',
+  },
+  'lists.split': {
+    memberPath: 'lists.split',
+    description:
+      'Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count).',
+    expectedResult: 'Returns a ListsSplitResult with the new listId, numId, and the restart value applied (or null).',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/split.mdx',
+    referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'split',
+  },
   'lists.setLevel': {
     memberPath: 'lists.setLevel',
     description: 'Set the absolute nesting level (0..8) of a list item.',
@@ -1826,6 +2000,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/set-value.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'set_value',
   },
   'lists.continuePrevious': {
     memberPath: 'lists.continuePrevious',
@@ -1841,6 +2017,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/continue-previous.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'continue_previous',
   },
   'lists.canContinuePrevious': {
     memberPath: 'lists.canContinuePrevious',
@@ -1885,7 +2063,7 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'lists',
   },
 
-  // SD-1973 — List formatting and templates
+  // SD-1973: List formatting and templates
   'lists.applyTemplate': {
     memberPath: 'lists.applyTemplate',
     description:
@@ -2079,7 +2257,7 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'lists',
   },
 
-  // SD-2025 — User-facing list style operations
+  // SD-2025: User-facing list style operations
   'lists.getStyle': {
     memberPath: 'lists.getStyle',
     description:
@@ -2129,7 +2307,7 @@ export const OPERATION_DEFINITIONS = {
   'lists.setLevelNumberStyle': {
     memberPath: 'lists.setLevelNumberStyle',
     description:
-      'Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions.',
+      'Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet": use setLevelBullet instead. Sequence-local: clones shared definitions.',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2177,7 +2355,7 @@ export const OPERATION_DEFINITIONS = {
   'lists.setLevelLayout': {
     memberPath: 'lists.setLevelLayout',
     description:
-      'Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions.',
+      'Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates: omitted fields are left unchanged. Sequence-local: clones shared definitions.',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all values already match.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2354,6 +2532,22 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'ranges',
   },
 
+  'selection.current': {
+    memberPath: 'selection.current',
+    description:
+      "Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals.",
+    expectedResult:
+      'Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMarks`, and optionally `text` when `includeText: true`.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'INVALID_CONTEXT'],
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'selection/current.mdx',
+    referenceGroup: 'selection',
+  },
+
   'mutations.preview': {
     memberPath: 'mutations.preview',
     description: 'Dry-run a mutation plan, returning resolved targets without applying changes.',
@@ -2464,6 +2658,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/delete.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'delete',
   },
   'tables.clearContents': {
     memberPath: 'tables.clearContents',
@@ -2546,6 +2742,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-layout.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_layout',
   },
 
   // -------------------------------------------------------------------------
@@ -2554,7 +2752,8 @@ export const OPERATION_DEFINITIONS = {
 
   'tables.insertRow': {
     memberPath: 'tables.insertRow',
-    description: 'Insert a new row into the target table.',
+    description:
+      'Insert a new row into the target table. The new row is cloned from an adjacent row, so it inherits the existing cell shading, borders, alignment, and padding. No follow-up styling call is needed unless the new row should look different from the rest of the table.',
     expectedResult: 'Returns a TableMutationResult receipt confirming a row was inserted.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2566,6 +2765,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/insert-row.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'insert_row',
   },
   'tables.deleteRow': {
     memberPath: 'tables.deleteRow',
@@ -2581,6 +2782,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/delete-row.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'delete_row',
   },
   'tables.setRowHeight': {
     memberPath: 'tables.setRowHeight',
@@ -2596,6 +2799,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-row-height.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_row',
   },
   'tables.distributeRows': {
     memberPath: 'tables.distributeRows',
@@ -2626,6 +2831,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-row-options.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_row_options',
   },
 
   // -------------------------------------------------------------------------
@@ -2634,7 +2841,8 @@ export const OPERATION_DEFINITIONS = {
 
   'tables.insertColumn': {
     memberPath: 'tables.insertColumn',
-    description: 'Insert a new column into the target table.',
+    description:
+      'Insert a new column into the target table. The new column is cloned from an adjacent column, so it inherits the existing cell shading, borders, alignment, and width. No follow-up styling call is needed unless the new column should look different from the rest of the table.',
     expectedResult: 'Returns a TableMutationResult receipt confirming a column was inserted.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2646,6 +2854,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/insert-column.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'insert_column',
   },
   'tables.deleteColumn': {
     memberPath: 'tables.deleteColumn',
@@ -2661,6 +2871,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/delete-column.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'delete_column',
   },
   'tables.setColumnWidth': {
     memberPath: 'tables.setColumnWidth',
@@ -2676,6 +2888,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-column-width.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_column',
   },
   'tables.distributeColumns': {
     memberPath: 'tables.distributeColumns',
@@ -2741,6 +2955,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/merge-cells.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'merge_cells',
   },
   'tables.unmergeCells': {
     memberPath: 'tables.unmergeCells',
@@ -2756,6 +2972,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/unmerge-cells.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'unmerge_cells',
   },
   'tables.splitCell': {
     memberPath: 'tables.splitCell',
@@ -2774,7 +2992,10 @@ export const OPERATION_DEFINITIONS = {
   },
   'tables.setCellProperties': {
     memberPath: 'tables.setCellProperties',
-    description: 'Set properties on a table cell such as vertical alignment or text direction.',
+    description:
+      'Set non-text properties on a single table cell: vertical alignment, text wrapping, fit-text, or preferred width. ' +
+      'Requires a cell-level target (a tableCell block address with kind, nodeType, nodeId). Does NOT accept a table target with rowIndex/columnIndex. ' +
+      'To set the text content of a cell, use action "set_cell_text" instead.',
     expectedResult: 'Returns a TableMutationResult receipt; reports NO_OP if cell properties already match.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2786,6 +3007,30 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-cell-properties.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_cell',
+  },
+  'tables.setCellText': {
+    memberPath: 'tables.setCellText',
+    description:
+      'Replace the text content of a single table cell with plain text (one paragraph). ' +
+      'Accepts either a direct cell locator (a tableCell block address with kind, nodeType, nodeId) OR a table target with rowIndex + columnIndex. ' +
+      'Cell properties (vertical alignment, shading, borders, colspan/rowspan) are preserved. ' +
+      'Use this for filling cells with values, replacing cell text, or populating empty tables. Much simpler than walking paragraphs and runs through superdoc_edit.',
+    expectedResult:
+      'Returns a TableMutationResult receipt; reports NO_OP if the cell already contains exactly this text.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-cell-text.mdx',
+    referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_cell_text',
   },
 
   // -------------------------------------------------------------------------
@@ -2932,6 +3177,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-shading.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_shading',
   },
   'tables.clearShading': {
     memberPath: 'tables.clearShading',
@@ -3015,7 +3262,11 @@ export const OPERATION_DEFINITIONS = {
 
   'tables.applyStyle': {
     memberPath: 'tables.applyStyle',
-    description: 'Apply a table style and/or style options in one call.',
+    description:
+      'Toggle conditional-format flags (header row, banded rows/columns, first/last column, last row) on a table. ' +
+      'Pass `styleOptions` with the flags you want to set or clear (omitted flags stay unchanged). ' +
+      'For "format the first row as a header" use `styleOptions: { headerRow: true }`. ' +
+      'Optional `styleId` applies a named table style. Leave it unset unless you have a styleId from `superdoc_get_content` (no need to invent one).',
     expectedResult:
       'Returns a TableMutationResult receipt; reports NO_OP if the style and all provided options already match.',
     requiresDocumentContext: true,
@@ -3028,6 +3279,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/apply-style.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_style_options',
   },
   'tables.setBorders': {
     memberPath: 'tables.setBorders',
@@ -3043,6 +3296,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-borders.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_borders',
   },
   'tables.setTableOptions': {
     memberPath: 'tables.setTableOptions',
@@ -3058,6 +3313,25 @@ export const OPERATION_DEFINITIONS = {
       throws: T_NOT_FOUND_COMMAND,
     }),
     referenceDocPath: 'tables/set-table-options.mdx',
+    referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_options',
+  },
+  'tables.applyPreset': {
+    memberPath: 'tables.applyPreset',
+    description:
+      'Apply a named visual preset to a table. Presets: "grid" (1pt black borders all around), "minimal" (no outer borders, hairline grey row separators + thicker bottom), "striped" (banded rows on, 0.5pt grey borders), "accent" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). ' +
+      'Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table`. Agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context).',
+    expectedResult: 'Returns a TableMutationResult receipt.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/apply-preset.mdx',
     referenceGroup: 'tables',
   },
 
@@ -3317,7 +3591,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.get': {
     memberPath: 'history.get',
-    description: 'Query the current undo/redo history state of the active editor.',
+    description: 'Query the current undo/redo history state of the document.',
     expectedResult:
       'Returns a HistoryState object with undoDepth, redoDepth, canUndo, canRedo, and a list of history-unsafe operations.',
     requiresDocumentContext: true,
@@ -3330,7 +3604,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.undo': {
     memberPath: 'history.undo',
-    description: 'Undo the most recent history-safe mutation in the active editor.',
+    description: 'Undo the most recent history-safe mutation in the document.',
     expectedResult:
       'Returns a HistoryActionResult with noop flag, reason (EMPTY_UNDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
@@ -3350,7 +3624,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.redo': {
     memberPath: 'history.redo',
-    description: 'Redo the most recently undone action in the active editor.',
+    description: 'Redo the most recently undone action in the document.',
     expectedResult:
       'Returns a HistoryActionResult with noop flag, reason (EMPTY_REDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
@@ -5986,6 +6260,182 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'permission-ranges/update-principal.mdx',
     referenceGroup: 'permissionRanges',
     skipAsATool: true,
+  },
+
+  // -------------------------------------------------------------------------
+  // Custom XML Parts (ECMA-376 Part 1 §15.2.5, §15.2.6, §22.5)
+  // -------------------------------------------------------------------------
+
+  'customXml.parts.list': {
+    memberPath: 'customXml.parts.list',
+    description:
+      'List Custom XML Data Storage Parts in the document, optionally filtered by root namespace or schema reference.',
+    expectedResult: 'Returns a CustomXmlPartsListResult with summary entries (no content); fetch content via get.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'custom-xml/parts/list.mdx',
+    referenceGroup: 'customXml',
+  },
+  'customXml.parts.get': {
+    memberPath: 'customXml.parts.get',
+    description:
+      'Get a single Custom XML Data Storage Part by itemID or package part name, including its full content. ' +
+      'v1 partName targeting is limited to Word-style customXml/itemN.xml paths.',
+    expectedResult:
+      'Returns a CustomXmlPartInfo with id, partName, namespaces, schemaRefs, and content; or null if not found.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'custom-xml/parts/get.mdx',
+    referenceGroup: 'customXml',
+  },
+  'customXml.parts.create': {
+    memberPath: 'customXml.parts.create',
+    description:
+      'Add a new Custom XML Data Storage Part to the document. Generates a fresh itemID GUID and emits the Properties Part.',
+    expectedResult: 'Returns a CustomXmlPartsCreateResult with the generated id and package part names on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_INPUT'],
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'custom-xml/parts/create.mdx',
+    referenceGroup: 'customXml',
+  },
+  'customXml.parts.patch': {
+    memberPath: 'customXml.parts.patch',
+    description:
+      'Replace the content and/or schemaRefs of an existing Custom XML Data Storage Part. ' +
+      'At least one of content or schemaRefs is required. ' +
+      'v1 partName targeting is limited to Word-style customXml/itemN.xml paths.',
+    expectedResult: 'Returns a CustomXmlPartsMutationResult indicating success with the resolved target or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['TARGET_NOT_FOUND', 'INVALID_INPUT'],
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'custom-xml/parts/patch.mdx',
+    referenceGroup: 'customXml',
+  },
+  'customXml.parts.remove': {
+    memberPath: 'customXml.parts.remove',
+    description:
+      'Remove a Custom XML Data Storage Part and clean up all linked package files (item, props, rels, content-types entry). ' +
+      'v1 partName targeting is limited to Word-style customXml/itemN.xml paths.',
+    expectedResult: 'Returns a CustomXmlPartsMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['TARGET_NOT_FOUND'],
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'custom-xml/parts/remove.mdx',
+    referenceGroup: 'customXml',
+  },
+
+  // -------------------------------------------------------------------------
+  // Anchored metadata (composition over customXml.parts + contentControls)
+  // -------------------------------------------------------------------------
+
+  'metadata.attach': {
+    memberPath: 'metadata.attach',
+    description:
+      'Anchor a JSON metadata payload to a span of text. ' +
+      'Wraps the target range in a hidden inline content control whose w:tag carries a stable id, and stores the payload in a namespaced Custom XML Data Storage Part. ' +
+      'v1 supports text-range anchors only.',
+    expectedResult:
+      'Returns an AnchoredMetadataAttachResult with the assigned id and the backing Storage Part name on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_REF_INSERT, 'REVISION_MISMATCH'],
+    }),
+    referenceDocPath: 'metadata/attach.mdx',
+    referenceGroup: 'metadata',
+  },
+  'metadata.list': {
+    memberPath: 'metadata.list',
+    description:
+      'List anchored-metadata entries in the document, optionally filtered by consumer namespace and/or a `within` selection (returns only entries whose anchor overlaps `within`).',
+    expectedResult: 'Returns an AnchoredMetadataListResult with summary entries (no payload); fetch payload via get.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'metadata/list.mdx',
+    referenceGroup: 'metadata',
+  },
+  'metadata.get': {
+    memberPath: 'metadata.get',
+    description: 'Get a single anchored-metadata entry by id, including its JSON payload.',
+    expectedResult: 'Returns an AnchoredMetadataInfo with id, namespace, partName, and payload; or null if not found.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'metadata/get.mdx',
+    referenceGroup: 'metadata',
+  },
+  'metadata.update': {
+    memberPath: 'metadata.update',
+    description:
+      'Replace the JSON payload of an existing anchored-metadata entry. Replace semantics; no merge. The anchor is left untouched.',
+    expectedResult: 'Returns an AnchoredMetadataMutationResult with the entry id on success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['TARGET_NOT_FOUND', 'INVALID_INPUT'],
+      throws: [...T_REF_MUTATION, 'REVISION_MISMATCH'],
+    }),
+    referenceDocPath: 'metadata/update.mdx',
+    referenceGroup: 'metadata',
+  },
+  'metadata.remove': {
+    memberPath: 'metadata.remove',
+    description:
+      'Remove an anchored-metadata entry. Strips the anchor content-control wrapper (its content stays in the document) and deletes the payload entry from the Storage Part. In v1 these writes are sequenced, not transactional: the adapter resolves the target up-front so missing-target failures land before any state change, but a crash strictly between the two writes can leave a dangling payload. When the backing part has no remaining entries, the part itself is removed.',
+    expectedResult: 'Returns an AnchoredMetadataMutationResult with the removed entry id on success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['TARGET_NOT_FOUND'],
+      throws: [...T_REF_MUTATION_REMOVE, 'REVISION_MISMATCH'],
+    }),
+    referenceDocPath: 'metadata/remove.mdx',
+    referenceGroup: 'metadata',
+  },
+  'metadata.resolve': {
+    memberPath: 'metadata.resolve',
+    description:
+      'Find where an anchored-metadata entry is anchored in the document. Returns the SelectionTarget covering the anchor content.',
+    expectedResult:
+      'Returns an AnchoredMetadataResolveInfo with id and target SelectionTarget; or null if the anchor is no longer present.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'metadata/resolve.mdx',
+    referenceGroup: 'metadata',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

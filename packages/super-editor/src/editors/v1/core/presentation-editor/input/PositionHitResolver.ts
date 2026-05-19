@@ -7,11 +7,18 @@
  * This module does NOT perform epoch mapping or position clamping — those
  * remain at the existing call sites in PresentationEditor / EditorInputManager.
  *
+ * AIDEV-NOTE: prep-002 — this seam keeps DOM-first browser-specific pointer
+ * logic editor-owned. v1 callers see `PositionHit`; the additive
+ * {@link resolvePointerLayoutHit} entry point returns the editor-neutral
+ * `LayoutHit` for future v2 consumers. Both paths share the same DOM-first /
+ * geometry-fallback strategy so behavior stays in lock-step.
+ *
  * @module input/PositionHitResolver
  */
 
 import type { Layout, FlowBlock, Measure } from '@superdoc/contracts';
 import {
+  type LayoutHit,
   type Point,
   type PositionHit,
   type PageGeometryHelper,
@@ -19,6 +26,7 @@ import {
   clickToPositionGeometry,
 } from '@superdoc/layout-bridge';
 import { clickToPositionDom, findPageElement, readLayoutEpochFromDom } from '../../../dom-observer/index.js';
+import { resolvePointerLayoutHit as resolvePointerLayoutHitCompat } from '../../../dom-observer/LayoutHitV1Compat.js';
 
 /**
  * Full pointer-hit resolution: DOM-first with geometry fallback.
@@ -72,4 +80,33 @@ export function resolvePointerPositionHit(options: {
 
   // Pure geometry path
   return clickToPositionGeometry(layout, blocks, measures, containerPoint, { geometryHelper });
+}
+
+/**
+ * Editor-neutral pointer hit resolution (prep-002).
+ *
+ * Returns a `LayoutHit` whose `legacyPm` mirrors what
+ * {@link resolvePointerPositionHit} would have produced for the same inputs.
+ * Additive — v1 call sites continue to use `resolvePointerPositionHit`. This
+ * entry point exists so a future editor-neutral consumer can adopt the
+ * neutral substrate without forking the DOM-first orchestration that lives
+ * in this module.
+ *
+ * The DOM-first branch reuses the same `clickToPositionDom` /
+ * `findPageElement` helpers as the PM-shaped path, then enriches the
+ * resulting position into a `LayoutHit` by routing through `hitTestNeutral`
+ * with a `pageHint`. This keeps a single browser-coupled path inside the
+ * editor.
+ */
+export function resolvePointerLayoutHit(options: {
+  layout: Layout;
+  blocks: FlowBlock[];
+  measures: Measure[];
+  containerPoint: Point;
+  domContainer?: HTMLElement | null;
+  clientX?: number;
+  clientY?: number;
+  geometryHelper?: PageGeometryHelper;
+}): LayoutHit | null {
+  return resolvePointerLayoutHitCompat(options);
 }

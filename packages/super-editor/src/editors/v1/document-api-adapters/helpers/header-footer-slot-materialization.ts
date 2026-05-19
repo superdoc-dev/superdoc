@@ -12,6 +12,7 @@
 
 import type { SectionHeaderFooterKind, SectionHeaderFooterVariant } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
+import { getWordPartRelsPath } from '../../core/helpers/word-part-path.js';
 import type { SectionProjection } from './sections-resolver.js';
 import { resolveSectionProjections } from './sections-resolver.js';
 import { readTargetSectPr } from './section-projection-access.js';
@@ -23,6 +24,7 @@ import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js
 import { removePart, hasPart } from '../../core/parts/store/part-store.js';
 import { removeInvalidationHandler } from '../../core/parts/invalidation/part-invalidation-registry.js';
 import type { PartId } from '../../core/parts/types.js';
+export { normalizeVariant } from '../../core/presentation-editor/header-footer/header-footer-variant.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,29 +53,6 @@ export type EnsureExplicitHeaderFooterSlotResult = {
 };
 
 // ---------------------------------------------------------------------------
-// Variant normalization
-// ---------------------------------------------------------------------------
-
-const VALID_VARIANTS: ReadonlySet<string> = new Set(['default', 'first', 'even']);
-
-/**
- * Normalize a section type from the UI to a valid OOXML variant.
- *
- * In Word's OOXML model, odd-page headers are represented by the `default`
- * slot — there is no explicit `w:headerReference` with `w:type="odd"`.
- *
- * This is the caller's responsibility — the materialization helper rejects
- * unrecognized variants rather than silently mapping them.
- */
-export function normalizeVariant(sectionType: string): SectionHeaderFooterVariant {
-  if (sectionType === 'odd') return 'default';
-  if (!VALID_VARIANTS.has(sectionType)) {
-    throw new Error(`Unrecognized header/footer variant: "${sectionType}". Expected default, first, or even.`);
-  }
-  return sectionType as SectionHeaderFooterVariant;
-}
-
-// ---------------------------------------------------------------------------
 // Rollback cleanup
 // ---------------------------------------------------------------------------
 
@@ -86,7 +65,7 @@ function cleanupCreatedPart(editor: Editor, partPath: string): void {
   const partId = partPath as PartId;
   if (hasPart(editor, partId)) removePart(editor, partId);
   removeInvalidationHandler(partId);
-  const relsPath = `word/_rels/${partPath.split('/').pop()}.rels` as PartId;
+  const relsPath = getWordPartRelsPath(partPath) as PartId;
   if (hasPart(editor, relsPath)) removePart(editor, relsPath);
 }
 

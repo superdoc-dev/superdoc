@@ -15,6 +15,7 @@ import {
   type DropCapDescriptor,
   type DropCapRun,
   type ParagraphFrame,
+  ParagraphDirectionContext,
 } from '@superdoc/contracts';
 import type { PMNode, ParagraphFont } from '../types.js';
 import type { ResolvedRunProperties } from '@superdoc/word-layout';
@@ -23,6 +24,7 @@ import { pickNumber, twipsToPx, isFiniteNumber, ptToPx } from '../utilities.js';
 import { normalizeAlignment, normalizeParagraphSpacing } from './spacing-indent.js';
 import { normalizeOoxmlTabs } from './tabs.js';
 import { normalizeParagraphBorders, normalizeParagraphShading } from './borders.js';
+import { mirrorIndentForRtl } from './bidi.js';
 import type { ConverterContext } from '../converter-context.js';
 
 import {
@@ -34,9 +36,11 @@ import {
   type ParagraphProperties,
   type RunProperties,
 } from '@superdoc/style-engine/ooxml';
+import { resolveSectionDirection, resolveParagraphDirection } from '../direction/index.js';
 
 const DEFAULT_DECIMAL_SEPARATOR = '.';
 const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5 inch
+type ParagraphDirection = 'ltr' | 'rtl';
 
 const normalizeColor = (value?: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -62,6 +66,25 @@ export const deepClone = <T>(obj: T): T => {
   return clone as T;
 };
 
+/*
+ * Direction resolution moved to `../direction/`. The previous cascade
+ * (`resolveEffectiveParagraphDirection` + `inferDirectionFromRuns`) folded
+ * section bidi, docDefaults, and a run-content heuristic into one function.
+ *
+ * Per ECMA-376 §17.6.1, section bidi affects section chrome only and must
+ * not propagate to paragraph inline direction. Per §17.7.2, docDefaults
+ * paragraph properties already cascade through the style-engine into
+ * `resolvedParagraphProperties.rightToLeft` before this resolver runs, so
+ * a separate parameter for them is redundant. Per UAX #9, paragraph base
+ * direction without explicit w:bidi comes from the first strong character.
+ * The browser handles UAX #9 natively when `dir` is omitted; SuperDoc does
+ * not need to infer it here.
+ *
+ * The new `resolveParagraphDirection` resolver is direction-aware by
+ * construction and produces a typed `ParagraphDirectionContext` that
+ * downstream consumers read.
+ */
+
 /**
  * Convert indent from twips to pixels.
  */
@@ -84,6 +107,29 @@ const normalizeIndentTwipsToPx = (indent?: ParagraphIndent | null): ParagraphInd
   if (firstLine != null) result.firstLine = twipsToPx(firstLine);
   if (hanging != null) result.hanging = twipsToPx(hanging);
   return Object.keys(result).length > 0 ? result : undefined;
+};
+
+const resolveLogicalIndentToPhysical = (
+  indent: ParagraphIndent | undefined,
+  _direction: ParagraphDirection | undefined,
+): ParagraphIndent | undefined => {
+  if (!indent) return undefined;
+
+  const resolved: ParagraphIndent = { ...indent };
+  const source = indent as ParagraphIndent & { start?: unknown; end?: unknown };
+
+  if (source.start != null) {
+    resolved.left = source.start as number;
+  }
+
+  if (source.end != null) {
+    resolved.right = source.end as number;
+  }
+
+  delete (resolved as ParagraphIndent & { start?: unknown }).start;
+  delete (resolved as ParagraphIndent & { end?: unknown }).end;
+
+  return resolved;
 };
 
 export const normalizeFramePr = (value: ParagraphFrameProperties | undefined): ParagraphFrame | undefined => {
@@ -273,13 +319,39 @@ export const computeParagraphAttrs = (
     );
   }
 
-  const isRtl = resolvedParagraphProperties.rightToLeft === true;
+  // Direction is resolved via the typed resolver chain.
+  // Inputs:
+  //  - resolvedParagraphProperties.rightToLeft already reflects the style cascade
+  //    including docDefaults/pPrDefault/pPr/bidi (style-engine §17.7.2 cascade).
+  //  - The section context provides writing-mode inheritance per ECMA §17.3.1.41
+  //    when the paragraph omits w:textDirection. Pulled from converterContext when
+  //    available, defaulted otherwise so this function works in test contexts.
+  //
+  // The resolver intentionally does NOT consume sectionDirection or run content as
+  // fallbacks for inline direction. Per ECMA §17.6.1 section bidi affects section
+  // chrome only, and run rtl is per-run script formatting, not paragraph state.
+  //
+  // Cell direction context (paragraphs in vertical table cells) and per-paragraph
+  // sectPr variation are not yet plumbed through - SD-2777 closes that gap.
+  const sectionContext = converterContext?.sectionDirectionContext ?? resolveSectionDirection(undefined);
+  const directionContext: ParagraphDirectionContext = resolveParagraphDirection(
+    resolvedParagraphProperties,
+    sectionContext,
+  );
+  const normalizedDirection: ParagraphDirection | undefined = directionContext.inlineDirection;
+  const isRtl = normalizedDirection === 'rtl';
 
   const normalizedSpacing = normalizeParagraphSpacing(
     resolvedParagraphProperties.spacing,
     Boolean(resolvedParagraphProperties.numberingProperties),
   );
-  const normalizedIndent = normalizeIndentTwipsToPx(resolvedParagraphProperties.indent as ParagraphIndent);
+  const indentWithPhysicalSides = resolveLogicalIndentToPhysical(
+    resolvedParagraphProperties.indent as ParagraphIndent,
+    normalizedDirection,
+  );
+  const normalizedIndentBase = normalizeIndentTwipsToPx(indentWithPhysicalSides);
+  const normalizedIndent =
+    isRtl && normalizedIndentBase ? mirrorIndentForRtl(normalizedIndentBase) : normalizedIndentBase;
   const normalizedTabStops = normalizeOoxmlTabs(resolvedParagraphProperties.tabStops);
   const normalizedAlignment = normalizeAlignment(resolvedParagraphProperties.justification, isRtl);
   const normalizedBorders = normalizeParagraphBorders(resolvedParagraphProperties.borders);
@@ -287,12 +359,6 @@ export const computeParagraphAttrs = (
   const paragraphDecimalSeparator = DEFAULT_DECIMAL_SEPARATOR;
   const tabIntervalTwips = DEFAULT_TAB_INTERVAL_TWIPS;
   const normalizedFramePr = normalizeFramePr(resolvedParagraphProperties.framePr);
-  const normalizedDirection =
-    resolvedParagraphProperties.rightToLeft === true
-      ? 'rtl'
-      : resolvedParagraphProperties.rightToLeft === false
-        ? 'ltr'
-        : undefined;
   const floatAlignment = normalizedFramePr?.xAlign;
   const normalizedNumberingProperties = normalizeNumberingProperties(resolvedParagraphProperties.numberingProperties);
   const dropCapDescriptor = normalizeDropCap(resolvedParagraphProperties.framePr, para, converterContext);
@@ -322,7 +388,7 @@ export const computeParagraphAttrs = (
     keepLines: resolvedParagraphProperties.keepLines,
     floatAlignment: floatAlignment,
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
-    ...(normalizedDirection ? { direction: normalizedDirection as 'rtl' | 'ltr', rtl: isRtl } : {}),
+    directionContext,
   };
 
   if (normalizedNumberingProperties && normalizedListRendering) {

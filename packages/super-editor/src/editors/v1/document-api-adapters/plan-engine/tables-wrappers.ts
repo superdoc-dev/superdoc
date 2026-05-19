@@ -35,6 +35,7 @@ import type {
   TablesUnmergeCellsInput,
   TablesSplitCellInput,
   TablesSetCellPropertiesInput,
+  TablesSetCellTextInput,
   TablesSortInput,
   TablesSetStyleInput,
   TablesClearStyleInput,
@@ -51,6 +52,7 @@ import type {
   TablesApplyStyleInput,
   TablesSetBordersInput,
   TablesSetTableOptionsInput,
+  TablesApplyPresetInput,
 } from '@superdoc/document-api';
 
 import type { CompiledPlan } from './compiler.js';
@@ -82,6 +84,7 @@ import {
   tablesUnmergeCellsAdapter,
   tablesSplitCellAdapter,
   tablesSetCellPropertiesAdapter,
+  tablesSetCellTextAdapter,
   tablesSortAdapter,
   tablesSetStyleAdapter,
   tablesClearStyleAdapter,
@@ -98,6 +101,7 @@ import {
   tablesApplyStyleAdapter,
   tablesSetBordersAdapter,
   tablesSetTableOptionsAdapter,
+  tablesApplyPresetAdapter,
 } from '../tables-adapter.js';
 
 // ---------------------------------------------------------------------------
@@ -348,6 +352,14 @@ export function tablesSetCellPropertiesWrapper(
   return executeTableCommand(editor, 'tables.setCellProperties', tablesSetCellPropertiesAdapter, input, options);
 }
 
+export function tablesSetCellTextWrapper(
+  editor: Editor,
+  input: TablesSetCellTextInput,
+  options?: MutationOptions,
+): TableMutationResult {
+  return executeTableCommand(editor, 'tables.setCellText', tablesSetCellTextAdapter, input, options);
+}
+
 // ---------------------------------------------------------------------------
 // Data + accessibility
 // ---------------------------------------------------------------------------
@@ -506,4 +518,12 @@ export function tablesSetTableOptionsWrapper(
   options?: MutationOptions,
 ): TableMutationResult {
   return executeTableCommand(editor, 'tables.setTableOptions', tablesSetTableOptionsAdapter, input, options);
+}
+
+export function tablesApplyPresetWrapper(
+  editor: Editor,
+  input: TablesApplyPresetInput,
+  options?: MutationOptions,
+): TableMutationResult {
+  return executeTableCommand(editor, 'tables.applyPreset', tablesApplyPresetAdapter, input, options);
 }

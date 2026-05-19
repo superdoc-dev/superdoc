@@ -451,6 +451,7 @@ describe('getMarksFromSelection', () => {
 
     const result = getSelectionFormattingState(cursorState);
 
+    // SD-2912: `boldCs` is no longer auto-propagated from the bold mark.
     expect(result.inlineRunProperties).toEqual({ bold: true });
     expect(result.inlineMarks.some((mark) => mark.type.name === 'bold')).toBe(true);
     expect(result.resolvedMarks.some((mark) => mark.type.name === 'bold')).toBe(true);

@@ -86,8 +86,12 @@ function decode(params) {
   node.marks = marks.filter((m) => !trackingMarks.includes(m.type));
 
   const translatedTextNode = exportSchemaToJson({ ...params, node });
+  // ECMA-376 renames w:t → w:delText inside <w:del>. Other inline content —
+  // w:noBreakHyphen, w:tab, w:br, etc. — stays as-is; the deletion is
+  // conveyed by the <w:del> wrapper alone. Guard the rename so non-text
+  // atoms inside <w:del> don't crash.
   const textNode = translatedTextNode.elements.find((n) => n.name === 'w:t');
-  textNode.name = 'w:delText';
+  if (textNode) textNode.name = 'w:delText';
 
   return {
     name: 'w:del',

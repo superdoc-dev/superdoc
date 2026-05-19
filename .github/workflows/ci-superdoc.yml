@@ -6,18 +6,6 @@ permissions:
 on:
   pull_request:
     branches: [main, stable, 'release/**']
-    paths-ignore:
-      - 'apps/docs/**'
-      - 'apps/mcp/**'
-      - 'apps/vscode-ext/**'
-      - 'demos/**'
-      - 'examples/**'
-      - 'packages/react/**'
-      - 'packages/sdk/**'
-      - 'packages/template-builder/**'
-      - 'packages/esign/**'
-      - 'evals/**'
-      - '**/*.md'
   merge_group:
   workflow_dispatch:
 
@@ -26,7 +14,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      superdoc: ${{ steps.set.outputs.superdoc }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            superdoc:
+              - 'apps/cli/**'
+              - 'packages/superdoc/**'
+              - 'packages/super-editor/**'
+              - 'packages/layout-engine/**'
+              - 'packages/word-layout/**'
+              - 'packages/preset-geometry/**'
+              - 'packages/document-api/**'
+              - 'packages/collaboration-yjs/**'
+              - 'packages/docx-evidence-contracts/**'
+              - 'shared/**'
+              - 'tests/**'
+              - 'scripts/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'patches/**'
+              - '.nvmrc'
+              - '.prettierrc'
+              - '.prettierignore'
+              - 'tsconfig.base.json'
+              - 'tsconfig.references.json'
+              - 'vite.sourceResolve.ts'
+              - 'vitest.baseConfig.ts'
+              - 'vitest.config.mjs'
+              - 'eslint.config.mjs'
+              - '.github/workflows/ci-superdoc.yml'
+
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "superdoc=${{ steps.filter.outputs.superdoc }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "superdoc=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: detect
+    if: needs.detect.outputs.superdoc == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -40,7 +81,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.12
+          bun-version: 1.3.13
 
       - name: Install canvas system dependencies
         run: |
@@ -72,12 +113,63 @@ jobs:
       - name: Typecheck
         run: pnpm run type-check
 
-      - name: Consumer typecheck
+      - name: Public-contract checkJs (SD-2863)
+        # Gated subset of public-contract files run with `// @ts-check`. The
+        # script greps tsc output for errors in the curated file list and
+        # ignores the wider 1500+ errors from the broader super-editor source
+        # tree (those are tracked under SD-2863 follow-up tickets).
+        run: pnpm --filter superdoc run check:jsdoc
+
+      - name: Consumer typecheck (matrix)
+        # The matrix script owns the published-package validation path:
+        # it packs superdoc, installs the tarball into the standalone
+        # fixture (`pnpm install --ignore-workspace`), then runs every
+        # scenario under its declared resolution mode and strictness
+        # settings. Replaces the pre-SD-2831 bare `tsc --noEmit` step
+        # so the new pack-and-install scenarios are actually exercised
+        # in CI, not just locally.
         run: |
-          cd packages/superdoc && pnpm pack --pack-destination .
-          cd ../../tests/consumer-typecheck
-          npm install ../../packages/superdoc/superdoc-*.tgz --no-save
-          npx tsc --noEmit
+          cd tests/consumer-typecheck
+          node typecheck-matrix.mjs
+
+      - name: Deep public-type audit (report-only)
+        # Recursive walk of every type reachable from superdoc's public
+        # exports in the installed tarball. Reports inventory by tier and
+        # top files. Always exits 0 in default mode; the `--strict` flag
+        # turns it into a hard gate but is not used in CI yet because the
+        # current public surface is the accidental declaration graph, not
+        # a deliberate facade. SD-2966 will define that facade; once it
+        # lands, this step gets `--strict` added and an allowlist file is
+        # seeded against the facade-scoped findings. Until then, the step
+        # provides visibility without the maintenance burden of a giant
+        # public allowlist.
+        run: |
+          cd tests/consumer-typecheck
+          node deep-type-audit.mjs
+
+      - name: Package shape gates
+        # External package-shape linters (publint + attw) running against
+        # the packed tarball. Catches manifest issues that the in-repo
+        # consumer matrix does not see: condition ordering, masquerading
+        # ESM, missing CDN files, unpublished `source` paths.
+        run: node tests/consumer-typecheck/package-shape-gate.mjs
+
+      - name: Legacy public no-growth gates (SD-3176)
+        # No-growth snapshots for the legacy public compatibility surfaces.
+        # See tests/consumer-typecheck/snapshots/README.md for the policy.
+        # Runs after the matrix step so the packed-and-installed fixture
+        # is available for Snapshot B (resolved named exports).
+        run: |
+          node tests/consumer-typecheck/snapshot-super-editor-package-exports.mjs --check
+          node tests/consumer-typecheck/snapshot-superdoc-legacy-exports.mjs --check
+
+      - name: Root no-growth + 4-source inventory (SD-3212 PR A0)
+        # The superdoc root entry resolves through four package.json#exports
+        # sources (types.import, types.require, import, require). Each is
+        # snapshotted separately and drift-gated. Cross-source mismatches
+        # (typed-only / runtime-only / ESM vs CJS) are reported in the
+        # companion .md but are not blockers on their own.
+        run: node tests/consumer-typecheck/snapshot-superdoc-root-exports.mjs --check
 
   unit-tests:
     needs: build
@@ -108,7 +200,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.12
+          bun-version: 1.3.13
 
       - name: Install canvas system dependencies
         run: |
@@ -195,7 +287,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.12
+          bun-version: 1.3.13
 
       - name: Install dependencies
         run: pnpm install
@@ -232,12 +324,30 @@ jobs:
           flags: superdoc
 
   validate:
+    name: CI SuperDoc / validate
     if: always()
-    needs: [build, unit-tests, cli-tests, coverage]
+    needs: [detect, build, unit-tests, cli-tests, coverage]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+          if [[ "${{ needs.detect.result }}" != "success" ]]; then
+            echo "Detect job did not succeed (result: ${{ needs.detect.result }})."
             exit 1
           fi
+          if [[ "${{ needs.detect.outputs.superdoc }}" != "true" ]]; then
+            echo "SuperDoc CI skipped: no relevant paths changed."
+            exit 0
+          fi
+          for job_result in \
+            "build:${{ needs.build.result }}" \
+            "unit-tests:${{ needs.unit-tests.result }}" \
+            "cli-tests:${{ needs.cli-tests.result }}" \
+            "coverage:${{ needs.coverage.result }}"; do
+            name="${job_result%%:*}"
+            result="${job_result##*:}"
+            if [[ "$result" != "success" ]]; then
+              echo "Job '$name' was required but did not succeed (result: $result)."
+              exit 1
+            fi
+          done

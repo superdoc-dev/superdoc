@@ -192,6 +192,7 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChildren?
     addMark: vi.fn().mockReturnThis(),
     removeMark: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
@@ -289,6 +290,7 @@ function makeInlineSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChi
     addMark: vi.fn().mockReturnThis(),
     removeMark: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
@@ -401,6 +403,7 @@ function makeSdtEditorWithBlockRange(): Editor {
     addMark: vi.fn().mockReturnThis(),
     removeMark: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
@@ -531,7 +534,7 @@ describe('contentControls text clearing', () => {
     expect((editor.state.tr as any).replaceWith).toHaveBeenCalledTimes(1);
   });
 
-  it('text.clearValue clears inline SDTs without routing through updateStructuredContentById', () => {
+  it('text.clearValue clears inline SDTs by deleting the inner range, not rewriting the wrapper', () => {
     const editor = makeInlineSdtEditor();
     const adapter = createContentControlsAdapter(editor);
 
@@ -539,7 +542,11 @@ describe('contentControls text clearing', () => {
 
     expect(result.success).toBe(true);
     expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
-    expect((editor.state.tr as any).replaceWith).toHaveBeenCalledTimes(1);
+    // Empty inline clears via tr.delete on the inner content range so the SDT
+    // wrapper stays intact — the lock plugin's filterTransaction won't read it
+    // as wrapper damage on sdtLocked controls.
+    expect((editor.state.tr as any).delete).toHaveBeenCalledTimes(1);
+    expect((editor.state.tr as any).replaceWith).not.toHaveBeenCalled();
   });
 
   it('clearContent clears block SDTs that only contain non-text block content', () => {
@@ -596,7 +603,7 @@ describe('contentControls plain-text replacement no-op detection', () => {
     expect((editor.state.tr as any).replaceWith).toHaveBeenCalledTimes(1);
   });
 
-  it('replaceContent rewrites inline SDTs when matching text still carries run formatting', () => {
+  it('replaceContent rewrites inline SDTs by replacing the inner content range, not the wrapper', () => {
     const editor = makeInlineSdtEditor({}, [createRunNode('Inline SDT content', { runProperties: { bold: true } })]);
     const adapter = createContentControlsAdapter(editor);
 
@@ -606,12 +613,11 @@ describe('contentControls plain-text replacement no-op detection', () => {
     );
 
     expect(result.success).toBe(true);
-    expect(editor.commands!.updateStructuredContentById).toHaveBeenCalledWith('sdt-inline-1', {
-      text: 'Inline SDT content',
-    });
+    expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
+    expect((editor.state.tr as any).replaceWith).toHaveBeenCalledTimes(1);
   });
 
-  it('text.setValue rewrites inline text controls when matching text still carries run formatting', () => {
+  it('text.setValue rewrites inline text controls by replacing the inner content range, not the wrapper', () => {
     const editor = makeInlineSdtEditor({}, [createRunNode('Inline SDT content', { runProperties: { bold: true } })]);
     const adapter = createContentControlsAdapter(editor);
 
@@ -621,23 +627,29 @@ describe('contentControls plain-text replacement no-op detection', () => {
     );
 
     expect(result.success).toBe(true);
-    expect(editor.commands!.updateStructuredContentById).toHaveBeenCalledWith('sdt-inline-1', {
-      text: 'Inline SDT content',
-    });
+    expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
+    expect((editor.state.tr as any).replaceWith).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('contentControls.setType OOXML element transitions', () => {
-  it('calls updateStructuredContentById to persist controlType and type attrs', () => {
+  it('persists controlType and type attrs via tr.setNodeAttribute (AttrSteps, lock-safe)', () => {
     const editor = makeSdtEditor({ controlType: 'text', type: 'text' });
     const adapter = createContentControlsAdapter(editor);
 
     const result = adapter.setType({ target: SDT_TARGET, controlType: 'date' }, { changeMode: 'direct' });
 
     expect(result.success).toBe(true);
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
-    // Should be called at least once for the type element transitions + once for attrs
-    expect(updateCmd).toHaveBeenCalled();
+    // After SD-3123, metadata writes flow through tr.setNodeAttribute (AttrStep, no
+    // from/to) instead of editor.commands.updateStructuredContentById (which dispatched
+    // a full-wrapper replaceWith that the lock plugin filtered on sdtLocked controls).
+    const setAttr = (editor.state.tr as any).setNodeAttribute as ReturnType<typeof vi.fn>;
+    expect(setAttr).toHaveBeenCalled();
+    const attrKeys = setAttr.mock.calls.map((c: any[]) => c[1]);
+    expect(attrKeys).toContain('controlType');
+    expect(attrKeys).toContain('type');
+    const ctCall = setAttr.mock.calls.find((c: any[]) => c[1] === 'controlType');
+    expect(ctCall?.[2]).toBe('date');
   });
 
   it('returns NO_OP when target already has the requested type', () => {
@@ -653,7 +665,6 @@ describe('contentControls.setType OOXML element transitions', () => {
   });
 
   it('removes old type element and adds new type element in sdtPr', () => {
-    // Start with a 'text' control that has a w:text element in sdtPr
     const sdtPr = {
       name: 'w:sdtPr',
       elements: [{ name: 'w:text', type: 'element' }],
@@ -663,21 +674,36 @@ describe('contentControls.setType OOXML element transitions', () => {
 
     adapter.setType({ target: SDT_TARGET, controlType: 'date' }, { changeMode: 'direct' });
 
-    // updateStructuredContentById is called 3 times:
-    // 1) remove old w:text element from sdtPr
-    // 2) add new w:date element to sdtPr
-    // 3) update controlType/type attrs
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
-    expect(updateCmd.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // setType issues at least two AttrStep writes against sdtPr (via tr.setNodeAttribute):
+    // one removes the old w:text, another adds the new w:date. (The mock doesn't fold
+    // intermediate AttrSteps back into the node's attrs the way a real PM transaction
+    // would, so the two writes appear independently rather than composed.)
+    const setAttr = (editor.state.tr as any).setNodeAttribute as ReturnType<typeof vi.fn>;
+    const sdtPrCalls = setAttr.mock.calls.filter((c: any[]) => c[1] === 'sdtPr');
+    expect(sdtPrCalls.length).toBeGreaterThanOrEqual(2);
 
-    // Verify the final attrs update includes the new type
-    const lastCall = updateCmd.mock.calls[updateCmd.mock.calls.length - 1];
-    expect(lastCall[1].attrs.controlType).toBe('date');
-    expect(lastCall[1].attrs.type).toBe('date');
+    type SdtPrWrite = { elements?: Array<{ name: string }> };
+    const sdtPrWrites = sdtPrCalls.map((c: any[]) => c[2] as SdtPrWrite);
+    expect(sdtPrWrites.some((s) => !s.elements?.some((el) => el.name === 'w:text'))).toBe(true);
+    expect(sdtPrWrites.some((s) => s.elements?.some((el) => el.name === 'w:date'))).toBe(true);
+
+    const ctCall = setAttr.mock.calls.find((c: any[]) => c[1] === 'controlType');
+    expect(ctCall?.[2]).toBe('date');
   });
 });
 
 describe('contentControls.patchRawProperties element normalization', () => {
+  // Helper: read the final sdtPr written by tr.setNodeAttribute(...,'sdtPr',...).
+  // patchRawProperties / setType now flow through applyAttrsUpdate's AttrStep path,
+  // so the sdtPr lands on the editor's transaction instead of the legacy command.
+  const lastWrittenSdtPr = (
+    editor: Editor,
+  ): { elements?: Array<{ name: string; attributes?: Record<string, string> }> } => {
+    const setAttr = (editor.state.tr as any).setNodeAttribute as ReturnType<typeof vi.fn>;
+    const sdtPrCalls = setAttr.mock.calls.filter((c: any[]) => c[1] === 'sdtPr');
+    return sdtPrCalls[sdtPrCalls.length - 1]?.[2];
+  };
+
   it('normalizes set op elements to include name and type', () => {
     const editor = makeSdtEditor();
     const adapter = createContentControlsAdapter(editor);
@@ -696,17 +722,16 @@ describe('contentControls.patchRawProperties element normalization', () => {
       { changeMode: 'direct' },
     );
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
-    expect(updateCmd).toHaveBeenCalled();
-
-    // The sdtPr written back should contain the normalized element
-    const call = updateCmd.mock.calls[updateCmd.mock.calls.length - 1];
-    const writtenSdtPr = call[1].attrs.sdtPr;
-    const customEl = writtenSdtPr.elements.find((el: any) => el.name === 'w:custom');
+    const writtenSdtPr = lastWrittenSdtPr(editor);
+    const customEl = writtenSdtPr.elements?.find((el) => el.name === 'w:custom') as {
+      name: string;
+      type?: string;
+      attributes?: Record<string, string>;
+    };
     expect(customEl).toBeDefined();
     expect(customEl.name).toBe('w:custom');
     expect(customEl.type).toBe('element');
-    expect(customEl.attributes['w:val']).toBe('hello');
+    expect(customEl.attributes?.['w:val']).toBe('hello');
   });
 
   it('set op forces name to match patch.name even if element has a different name', () => {
@@ -727,13 +752,9 @@ describe('contentControls.patchRawProperties element normalization', () => {
       { changeMode: 'direct' },
     );
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
-    const call = updateCmd.mock.calls[updateCmd.mock.calls.length - 1];
-    const writtenSdtPr = call[1].attrs.sdtPr;
-    const el = writtenSdtPr.elements.find((e: any) => e.name === 'w:correct');
-    expect(el).toBeDefined();
-    // No element with the wrong name should exist
-    expect(writtenSdtPr.elements.find((e: any) => e.name === 'w:wrong')).toBeUndefined();
+    const writtenSdtPr = lastWrittenSdtPr(editor);
+    expect(writtenSdtPr.elements?.find((e) => e.name === 'w:correct')).toBeDefined();
+    expect(writtenSdtPr.elements?.find((e) => e.name === 'w:wrong')).toBeUndefined();
   });
 
   it('setAttr modifies attributes on an existing sdtPr element', () => {
@@ -752,11 +773,9 @@ describe('contentControls.patchRawProperties element normalization', () => {
       { changeMode: 'direct' },
     );
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
-    const call = updateCmd.mock.calls[updateCmd.mock.calls.length - 1];
-    const writtenSdtPr = call[1].attrs.sdtPr;
-    const el = writtenSdtPr.elements.find((e: any) => e.name === 'w:custom');
-    expect(el.attributes['w:val']).toBe('new');
+    const writtenSdtPr = lastWrittenSdtPr(editor);
+    const el = writtenSdtPr.elements?.find((e) => e.name === 'w:custom');
+    expect(el?.attributes?.['w:val']).toBe('new');
   });
 
   it('removeAttr removes an attribute from an existing sdtPr element', () => {
@@ -775,12 +794,10 @@ describe('contentControls.patchRawProperties element normalization', () => {
       { changeMode: 'direct' },
     );
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
-    const call = updateCmd.mock.calls[updateCmd.mock.calls.length - 1];
-    const writtenSdtPr = call[1].attrs.sdtPr;
-    const el = writtenSdtPr.elements.find((e: any) => e.name === 'w:custom');
-    expect(el.attributes['w:val']).toBeUndefined();
-    expect(el.attributes['w:other']).toBe('y');
+    const writtenSdtPr = lastWrittenSdtPr(editor);
+    const el = writtenSdtPr.elements?.find((e) => e.name === 'w:custom');
+    expect(el?.attributes?.['w:val']).toBeUndefined();
+    expect(el?.attributes?.['w:other']).toBe('y');
   });
 
   it('remove op deletes an element from sdtPr.elements', () => {
@@ -802,11 +819,135 @@ describe('contentControls.patchRawProperties element normalization', () => {
       { changeMode: 'direct' },
     );
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
-    const call = updateCmd.mock.calls[updateCmd.mock.calls.length - 1];
-    const writtenSdtPr = call[1].attrs.sdtPr;
-    expect(writtenSdtPr.elements.find((e: any) => e.name === 'w:custom')).toBeUndefined();
-    expect(writtenSdtPr.elements.find((e: any) => e.name === 'w:other')).toBeDefined();
+    const writtenSdtPr = lastWrittenSdtPr(editor);
+    expect(writtenSdtPr.elements?.find((e) => e.name === 'w:custom')).toBeUndefined();
+    expect(writtenSdtPr.elements?.find((e) => e.name === 'w:other')).toBeDefined();
+  });
+});
+
+// SD-3123 regression: per ECMA-376, sdtLocked protects the wrapper from removal
+// but content stays editable. Before this fix, operations the API allowed on
+// sdtLocked (text.setValue, replaceContent, appendContent, prependContent, and
+// setLockMode itself) still flowed through editor.commands.updateStructuredContentById
+// which dispatched tr.replaceWith spanning [pos, pos+nodeSize] — the lock plugin
+// read that as wrapper damage and silently filtered the transaction, producing
+// false-success no-ops. After the fix:
+//   - metadata writes emit AttrSteps via tr.setNodeAttribute (no from/to,
+//     explicitly skipped by the lock plugin's filterTransaction)
+//   - text-content writes emit a ReplaceStep on [pos+1, pos+nodeSize-1] which
+//     the lock plugin classifies as wouldModifyContent (allowed on sdtLocked).
+//
+// API-level guards (assertNotSdtLocked on patch, setType, setBinding, etc.)
+// are intentionally out of scope here — relaxing those is a separate behavior
+// decision tracked as a follow-up.
+describe('SD-3123: sdtLocked controls mutate through AttrSteps and content-range writes', () => {
+  // Helpers to read the resolved SDT's position out of the mock doc so the
+  // tests assert on the actual inner range rather than just "replaceWith was
+  // called". A full-wrapper replaceWith(pos, pos+nodeSize, ...) — the
+  // pre-fix shape — would otherwise pass the call-count assertion.
+  const findSdtPos = (
+    editor: Editor,
+    nodeName: 'structuredContent' | 'structuredContentBlock',
+  ): { pos: number; nodeSize: number } => {
+    let found: { pos: number; nodeSize: number } | null = null;
+    (editor.state.doc as any).descendants((node: any, pos: number) => {
+      if (node.type.name === nodeName) {
+        found = { pos, nodeSize: node.nodeSize };
+        return false;
+      }
+      return true;
+    });
+    if (!found) throw new Error(`No ${nodeName} found in mock doc`);
+    return found;
+  };
+
+  const assertInnerRange = (from: number, to: number, sdtPos: number, sdtNodeSize: number): void => {
+    expect(from).toBe(sdtPos + 1);
+    expect(to).toBe(sdtPos + sdtNodeSize - 1);
+    // Sanity: this must not equal the full wrapper bounds.
+    expect(from).not.toBe(sdtPos);
+    expect(to).not.toBe(sdtPos + sdtNodeSize);
+  };
+
+  it('setLockMode on an sdtLocked control updates lockMode via tr.setNodeAttribute', () => {
+    const editor = makeSdtEditor({ lockMode: 'sdtLocked' });
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.setLockMode({ target: SDT_TARGET, lockMode: 'unlocked' }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    const setAttr = (editor.state.tr as any).setNodeAttribute as ReturnType<typeof vi.fn>;
+    const lockCall = setAttr.mock.calls.find((c: any[]) => c[1] === 'lockMode');
+    expect(lockCall?.[2]).toBe('unlocked');
+    expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
+  });
+
+  it('text.setValue on an sdtLocked inline control replaces the inner range (pos+1, pos+nodeSize-1)', () => {
+    const editor = makeInlineSdtEditor({ lockMode: 'sdtLocked' });
+    const adapter = createContentControlsAdapter(editor);
+    const { pos, nodeSize } = findSdtPos(editor, 'structuredContent');
+
+    const result = adapter.text.setValue({ target: INLINE_SDT_TARGET, value: 'updated' }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    const replaceWith = (editor.state.tr as any).replaceWith as ReturnType<typeof vi.fn>;
+    expect(replaceWith).toHaveBeenCalledTimes(1);
+    const [from, to] = replaceWith.mock.calls[0];
+    assertInnerRange(from, to, pos, nodeSize);
+    expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
+  });
+
+  it('text.clearValue on an sdtLocked inline control deletes the inner range (pos+1, pos+nodeSize-1)', () => {
+    const editor = makeInlineSdtEditor({ lockMode: 'sdtLocked' });
+    const adapter = createContentControlsAdapter(editor);
+    const { pos, nodeSize } = findSdtPos(editor, 'structuredContent');
+
+    const result = adapter.text.clearValue({ target: INLINE_SDT_TARGET }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    const deleteFn = (editor.state.tr as any).delete as ReturnType<typeof vi.fn>;
+    expect(deleteFn).toHaveBeenCalledTimes(1);
+    const [from, to] = deleteFn.mock.calls[0];
+    assertInnerRange(from, to, pos, nodeSize);
+    expect((editor.state.tr as any).replaceWith).not.toHaveBeenCalled();
+    expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
+  });
+
+  it('replaceContent on an sdtLocked block control replaces the inner range (pos+1, pos+nodeSize-1)', () => {
+    const editor = makeSdtEditor({ lockMode: 'sdtLocked' });
+    const adapter = createContentControlsAdapter(editor);
+    const { pos, nodeSize } = findSdtPos(editor, 'structuredContentBlock');
+
+    const result = adapter.replaceContent(
+      { target: SDT_TARGET, content: 'updated block content' },
+      { changeMode: 'direct' },
+    );
+
+    expect(result.success).toBe(true);
+    const replaceWith = (editor.state.tr as any).replaceWith as ReturnType<typeof vi.fn>;
+    expect(replaceWith).toHaveBeenCalledTimes(1);
+    const [from, to] = replaceWith.mock.calls[0];
+    assertInnerRange(from, to, pos, nodeSize);
+    expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
+  });
+
+  it('clearContent on an sdtLocked block control replaces the inner range (pos+1, pos+nodeSize-1)', () => {
+    // clearContent flows through the same replaceSdtTextContent path with an
+    // empty body; on block controls the inner range is replaced with an empty
+    // paragraph. Without the SD-3123 inner-range fix this would dispatch a
+    // full-wrapper replaceWith and the lock plugin would filter it.
+    const editor = makeSdtEditor({ lockMode: 'sdtLocked' });
+    const adapter = createContentControlsAdapter(editor);
+    const { pos, nodeSize } = findSdtPos(editor, 'structuredContentBlock');
+
+    const result = adapter.clearContent({ target: SDT_TARGET }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    const replaceWith = (editor.state.tr as any).replaceWith as ReturnType<typeof vi.fn>;
+    expect(replaceWith).toHaveBeenCalledTimes(1);
+    const [from, to] = replaceWith.mock.calls[0];
+    assertInnerRange(from, to, pos, nodeSize);
+    expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
   });
 });
 
@@ -1095,6 +1236,52 @@ describe('create.contentControl default sdtPr seeding', () => {
     expect(dateEl?.elements?.some((el) => el.name === 'w:storeMappedDataAs')).toBe(true);
     expect(dateEl?.elements?.some((el) => el.name === 'w:calendar')).toBe(true);
   });
+
+  it('defaults newly-created controls without controlType to richText', () => {
+    const editor = makeSdtEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.create({ kind: 'inline' }, { changeMode: 'direct' });
+    expect(result.success).toBe(true);
+
+    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof vi.fn>;
+    const attrs = insertInline.mock.calls[0][0].attrs as Record<string, unknown>;
+    expect(attrs.controlType).toBe('richText');
+    expect(attrs.type).toBe('richText');
+    const sdtPr = attrs.sdtPr as { elements?: Array<{ name: string }> };
+    expect(sdtPr.elements?.some((el) => el.name === 'w:richText')).toBe(true);
+  });
+
+  it('seeds explicit richText controls with w:richText in sdtPr', () => {
+    const editor = makeSdtEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.create({ kind: 'inline', controlType: 'richText' }, { changeMode: 'direct' });
+    expect(result.success).toBe(true);
+
+    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof vi.fn>;
+    const attrs = insertInline.mock.calls[0][0].attrs as Record<string, unknown>;
+    expect(attrs.controlType).toBe('richText');
+    const sdtPr = attrs.sdtPr as { elements?: Array<{ name: string }> };
+    expect(sdtPr.elements?.some((el) => el.name === 'w:richText')).toBe(true);
+  });
+});
+
+describe('contentControls.wrap default classification', () => {
+  it('sets wrapper controlType to richText and seeds w:richText in sdtPr', () => {
+    const editor = makeSdtEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    adapter.wrap({ target: SDT_TARGET, kind: 'block' }, { changeMode: 'direct' });
+
+    const createFn = editor.schema.nodes.structuredContentBlock.create as ReturnType<typeof vi.fn>;
+    expect(createFn).toHaveBeenCalledTimes(1);
+    const [attrs] = createFn.mock.calls[0];
+    expect(attrs.controlType).toBe('richText');
+    expect(attrs.type).toBe('richText');
+    const sdtPr = attrs.sdtPr as { elements?: Array<{ name: string }> };
+    expect(sdtPr.elements?.some((el) => el.name === 'w:richText')).toBe(true);
+  });
 });
 
 describe('contentControls.setType default sdtPr seeding', () => {
@@ -1112,16 +1299,19 @@ describe('contentControls.setType default sdtPr seeding', () => {
     const result = adapter.setType({ target: SDT_TARGET, controlType: 'checkbox' }, { changeMode: 'direct' });
     expect(result.success).toBe(true);
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
-    const checkboxWrite = updateCmd.mock.calls.find((call) =>
-      Boolean(call[1]?.attrs?.sdtPr?.elements?.find((el: { name: string }) => el.name === 'w14:checkbox')),
+    // After SD-3123, sdtPr writes flow via tr.setNodeAttribute. Find the sdtPr write
+    // that introduced the w14:checkbox element.
+    const setAttr = (editor.state.tr as any).setNodeAttribute as ReturnType<typeof vi.fn>;
+    const sdtPrCalls = setAttr.mock.calls.filter((c: any[]) => c[1] === 'sdtPr');
+    const checkboxWrite = sdtPrCalls.find((c: any[]) =>
+      Boolean(c[2]?.elements?.find((el: { name: string }) => el.name === 'w14:checkbox')),
     );
     expect(checkboxWrite).toBeDefined();
-    const checkbox = checkboxWrite?.[1]?.attrs?.sdtPr?.elements?.find(
-      (el: { name: string; elements?: Array<{ name: string }> }) => el.name === 'w14:checkbox',
+    const checkbox = (checkboxWrite?.[2]?.elements as Array<{ name: string; elements?: Array<{ name: string }> }>).find(
+      (el) => el.name === 'w14:checkbox',
     );
-    expect(checkbox?.elements?.some((el: { name: string }) => el.name === 'w14:checked')).toBe(true);
-    expect(checkbox?.elements?.some((el: { name: string }) => el.name === 'w14:checkedState')).toBe(true);
-    expect(checkbox?.elements?.some((el: { name: string }) => el.name === 'w14:uncheckedState')).toBe(true);
+    expect(checkbox?.elements?.some((el) => el.name === 'w14:checked')).toBe(true);
+    expect(checkbox?.elements?.some((el) => el.name === 'w14:checkedState')).toBe(true);
+    expect(checkbox?.elements?.some((el) => el.name === 'w14:uncheckedState')).toBe(true);
   });
 });

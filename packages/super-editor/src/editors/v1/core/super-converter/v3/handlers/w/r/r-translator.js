@@ -32,6 +32,32 @@ const hasXmlNodeNamed = (node, targetName) => {
   return node.elements.some((child) => hasXmlNodeNamed(child, targetName));
 };
 
+const COMPLEX_SCRIPT_CODEPOINT_RANGES = [
+  [0x0590, 0x08ff],
+  [0x0900, 0x109f],
+  [0x1780, 0x18af],
+  [0x1cd0, 0x1cff],
+  [0xa800, 0xa8ff],
+  [0xaa60, 0xaa7f],
+];
+
+const textHasComplexScript = (text) => {
+  for (const char of text) {
+    const codePoint = char.codePointAt(0);
+    if (COMPLEX_SCRIPT_CODEPOINT_RANGES.some(([start, end]) => codePoint >= start && codePoint <= end)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const hasComplexScriptText = (node) => {
+  if (!node || typeof node !== 'object') return false;
+  if (typeof node.text === 'string' && textHasComplexScript(node.text)) return true;
+  if (!Array.isArray(node.content)) return false;
+  return node.content.some((child) => hasComplexScriptText(child));
+};
+
 const getRunPropertiesNode = (runNode) => {
   if (!runNode) return null;
   if (!Array.isArray(runNode.elements)) runNode.elements = [];
@@ -315,7 +341,13 @@ const decode = (params, decodedAttrs = {}) => {
   const runTrackFormatMark = findTrackFormatMark(runNodeForExport.marks);
 
   const runAttrs = runNodeForExport.attrs || {};
-  const runProperties = runAttrs.runProperties || {};
+  const rawRunProperties = runAttrs.runProperties || {};
+  // Backward compatibility: older payloads used iCs instead of italicCs for w:iCs.
+  // Normalize to a local copy to avoid mutating node attrs during export.
+  const runProperties =
+    rawRunProperties?.italicCs == null && rawRunProperties?.iCs != null
+      ? { ...rawRunProperties, italicCs: rawRunProperties.iCs }
+      : rawRunProperties;
   const inlineKeys = runAttrs.runPropertiesInlineKeys;
   const styleKeys = runAttrs.runPropertiesStyleKeys;
   const overrideKeys = runAttrs.runPropertiesOverrideKeys;
@@ -326,6 +358,12 @@ const decode = (params, decodedAttrs = {}) => {
   // so those documents still round-trip formatting (accepts larger document.xml vs strict allow-list only).
   const candidateKeys =
     inlineKeys != null ? [...new Set([...(inlineKeys || []), ...(overrideKeys || [])])] : Object.keys(runProperties);
+  if (candidateKeys.includes('iCs') && !candidateKeys.includes('italicCs')) {
+    candidateKeys.push('italicCs');
+  }
+  // AIDEV-NOTE: Do NOT force-push 'rtl' into candidateKeys here. Per ECMA Annex I,
+  // run rtl participates in the style cascade - flattening it inline on every export
+  // breaks style-inherited rtl (e.g. <w:rStyle w:val="RtlChar"/> with rtl in the style).
 
   const shouldExport = (key) =>
     key in (runProperties || {}) &&
@@ -336,6 +374,14 @@ const decode = (params, decodedAttrs = {}) => {
 
   const runPropertiesToExport =
     exportKeys.length > 0 ? Object.fromEntries(exportKeys.map((k) => [k, runProperties[k]])) : {};
+  if (hasComplexScriptText(runNodeForExport)) {
+    if ('bold' in runPropertiesToExport && !('boldCs' in runPropertiesToExport)) {
+      runPropertiesToExport.boldCs = runPropertiesToExport.bold;
+    }
+    if ('italic' in runPropertiesToExport && !('italicCs' in runPropertiesToExport)) {
+      runPropertiesToExport.italicCs = runPropertiesToExport.italic;
+    }
+  }
 
   // Decode child nodes within the run
   const exportParams = {

@@ -26,11 +26,12 @@ import { Text } from './text/index.js';
 import { Run } from './run/index.js';
 import { Paragraph } from './paragraph/index.js';
 import { Heading } from './heading/index.js';
-import { CommentRangeStart, CommentRangeEnd, CommentReference, CommentsMark } from './comment/index.js';
+import { CommentRangeStart, CommentRangeEnd, CommentReference, CommentsMark, CommentsPlugin } from './comment/index.js';
 import { FootnoteReference } from './footnote/index.js';
 import { EndnoteReference } from './endnote/index.js';
 import { TabNode } from './tab/index.js';
 import { LineBreak, HardBreak } from './line-break/index.js';
+import { NoBreakHyphenNode } from './no-break-hyphen/index.js';
 import { Table } from './table/index.js';
 import { TableHeader } from './table-header/index.js';
 import { TableRow } from './table-row/index.js';
@@ -71,11 +72,10 @@ import { Underline } from './underline/index.js';
 import { Highlight } from './highlight/index.js';
 import { Strike } from './strike/index.js';
 import { Link } from './link/index.js';
-import { TrackInsert, TrackDelete, TrackFormat, TrackChanges } from './track-changes/index.js';
+import { TrackInsert, TrackDelete, TrackFormat, TrackChanges, trackChangesHelpers } from './track-changes/index.js';
 import { TextTransform } from './text-transform/index.js';
 
 // Plugins
-import { CommentsPlugin } from './comment/index.js';
 import { Placeholder } from './placeholder/index.js';
 import { PopoverPlugin } from './popover-plugin/index.js';
 import { LinkedStyles } from './linked-styles/linked-styles.js';
@@ -85,13 +85,13 @@ import { CustomSelection } from './custom-selection/index.js';
 import { PermissionRanges } from './permission-ranges/index.js';
 import { Protection } from './protection/index.js';
 import { VerticalNavigation } from './vertical-navigation/index.js';
+import { MixedBidiBackspace } from './mixed-bidi-backspace/index.js';
 
 // Permissions
 import { PermStart, PermStartBlock } from './perm-start/index.js';
 import { PermEnd, PermEndBlock } from './perm-end/index.js';
 
 // Helpers
-import { trackChangesHelpers } from './track-changes/index.js';
 import { Diffing } from './diffing/index.js';
 
 const getRichTextExtensions = () => {
@@ -132,6 +132,7 @@ const getRichTextExtensions = () => {
     Image,
     NodeResizer,
     CustomSelection,
+    MixedBidiBackspace,
     MathInline,
     MathBlock,
     PassthroughInline,
@@ -164,6 +165,7 @@ const getStarterExtensions = () => {
     ContextMenu,
     Strike,
     TabNode,
+    NoBreakHyphenNode,
     TableOfContents,
     TocPageNumber,
     DocumentIndex,
@@ -232,6 +234,7 @@ const getStarterExtensions = () => {
     PermissionRanges,
     Protection,
     VerticalNavigation,
+    MixedBidiBackspace,
     MathInline,
     MathBlock,
     PassthroughInline,
@@ -253,6 +256,7 @@ export {
   FootnoteReference,
   EndnoteReference,
   TabNode,
+  NoBreakHyphenNode,
   LineBreak,
   HardBreak,
   Bold,
@@ -320,6 +324,7 @@ export {
   PassthroughBlock,
   PermissionRanges,
   Protection,
+  MixedBidiBackspace,
   CrossReference,
   SequenceField,
   DocumentStatField,

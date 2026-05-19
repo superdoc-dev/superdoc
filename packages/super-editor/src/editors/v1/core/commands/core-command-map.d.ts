@@ -61,8 +61,11 @@ type CoreCommandNames =
   | 'backspaceSkipEmptyRun'
   | 'backspaceNextToRun'
   | 'backspaceAcrossRuns'
+  | 'backspaceAtomBefore'
+  | 'deleteBlockSdtAtTextBlockStart'
   | 'deleteSkipEmptyRun'
   | 'deleteNextToRun'
+  | 'deleteAtomAfter'
   | 'skipTab';
 
 export type CoreCommandSignatures = {

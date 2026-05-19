@@ -215,6 +215,78 @@ describe('image upload helpers integration', () => {
     relSpy.mockRestore();
   });
 
+  it('registers header/footer uploads with parent media and creates a part-local relationship', async () => {
+    const id = {};
+    const parentEditor = {
+      options: {},
+      storage: { image: { media: {} } },
+      converter: {
+        documentGuid: 'doc-guid',
+        documentModified: false,
+        convertedXml: {
+          'word/_rels/document.xml.rels': {
+            elements: [
+              {
+                name: 'Relationships',
+                elements: [
+                  {
+                    name: 'Relationship',
+                    attributes: {
+                      Id: 'rIdHeader1',
+                      Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header',
+                      Target: 'header1.xml',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    };
+    editor.options.mode = 'docx';
+    editor.options.isHeaderOrFooter = true;
+    editor.options.headerFooterRefId = 'rIdHeader1';
+    editor.options.lastSelection = editor.state.selection;
+    editor.options.parentEditor = parentEditor;
+    editor.options.handleImageUpload = vi.fn().mockResolvedValue('data:image/png;base64,HEADER');
+    editor.storage.image.media = {};
+
+    const relSpy = vi.spyOn(relsMutationModule, 'findOrCreateRelationship');
+
+    replaceSelectionWithImagePlaceholder({
+      view: editor.view,
+      editorOptions: editor.options,
+      id,
+    });
+
+    await uploadAndInsertImage({
+      editor,
+      view: editor.view,
+      file: createTestFile('header-logo.png'),
+      size: { width: 300, height: 120 },
+      id,
+    });
+
+    const imageNode = editor.state.doc.firstChild.firstChild;
+    expect(imageNode.attrs.src).toBe('word/media/header-logo.png');
+    expect(imageNode.attrs.rId).toBe('rId1');
+    expect(editor.storage.image.media['word/media/header-logo.png']).toBe('data:image/png;base64,HEADER');
+    expect(parentEditor.storage.image.media['word/media/header-logo.png']).toBe('data:image/png;base64,HEADER');
+    expect(relSpy).toHaveBeenCalledWith(parentEditor, 'startImageUpload:addHeaderFooterImageRelationship', {
+      target: 'media/header-logo.png',
+      type: 'image',
+      partId: 'word/_rels/header1.xml.rels',
+    });
+    expect(parentEditor.converter.convertedXml['word/_rels/header1.xml.rels'].elements[0].attributes).toMatchObject({
+      Id: 'rId1',
+      Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+      Target: 'media/header-logo.png',
+    });
+
+    relSpy.mockRestore();
+  });
+
   it('sanitizes filenames with special whitespace and avoids collisions', async () => {
     const weirdName = 'Screenshot_2025-09-22 at 3.45.41\u202fPM.png';
     const uploadStub = vi.fn().mockResolvedValue('data:image/png;base64,DDD');

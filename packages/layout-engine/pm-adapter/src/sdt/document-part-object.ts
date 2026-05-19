@@ -15,13 +15,9 @@ import { processTocChildren } from './toc.js';
  * Processes TOC children for Table of Contents galleries.
  * For other gallery types (page numbers, etc.), processes child paragraphs normally.
  *
- * If a preceding paragraph carried a `w:sectPr` whose next section starts at
- * this SDT, emit the pending section break BEFORE processing children so the
- * SDT's paragraphs render on the new page (see SD-2557). `findParagraphsWithSectPr`
- * doesn't recurse into `documentPartObject`, so its child paragraphs don't bump
- * `currentParagraphIndex` — and without this call, the deferred break would only
- * fire on the next body paragraph AFTER the SDT, leaving e.g. a TOC on the
- * prior page with the cover content.
+ * If a section transition occurs inside this SDT, child paragraph processing
+ * emits the pending break before the paragraph that starts the next section and
+ * advances `currentParagraphIndex` in step with `findParagraphsWithSectPr`.
  *
  * @param node - Document part object node to process
  * @param context - Shared handler context
@@ -93,6 +89,32 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
           recordBlockKind?.(block.kind);
         }
         if (sectionState) sectionState.currentParagraphIndex++;
+      } else if (child.type === 'tableOfContents' && Array.isArray(child.content)) {
+        // A nested tableOfContents node (e.g. from a "Custom Table of Contents" SDT where
+        // the TOC field codes were preprocessed into an sd:tableOfContents element).
+        // Word stores the TOC field codes on the child node, not the wrapper SDT - prefer
+        // the child's instruction so per-TOC options aren't lost (mirrors the recursion
+        // inside processTocChildren in toc.ts).
+        const metadata = {
+          docPartGallery: docPartGallery ?? '',
+          docPartObjectId,
+          tocInstruction: getNodeInstruction(child) ?? tocInstruction,
+          sdtMetadata: docPartSdtMetadata,
+        };
+        const tocContext = {
+          nextBlockId,
+          positions,
+          bookmarks,
+          hyperlinkConfig,
+          enableComments,
+          trackedChangesConfig,
+          themeColors,
+          converters,
+          converterContext,
+          sectionState,
+        };
+        const output = { blocks, recordBlockKind };
+        processTocChildren(child.content, metadata, tocContext, output);
       }
     }
   }

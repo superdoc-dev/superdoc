@@ -4,6 +4,18 @@
  * @module ParagraphCommands
  */
 
+export type BulletStyle = 'disc' | 'circle' | 'square';
+
+export type OrderedListStyle =
+  | 'decimal'
+  | 'decimal-paren'
+  | 'upper-roman'
+  | 'lower-roman'
+  | 'upper-alpha'
+  | 'upper-alpha-paren'
+  | 'lower-alpha'
+  | 'lower-alpha-paren';
+
 export interface ParagraphCommands {
   // ============================================
   // LIST COMMANDS
@@ -14,6 +26,12 @@ export interface ParagraphCommands {
 
   /** Toggle bullet list formatting on the current selection */
   toggleBulletList: () => boolean;
+
+  /** Toggle a bullet list with a specific style ('disc' | 'circle' | 'square') */
+  toggleBulletListStyle: (style: BulletStyle) => boolean;
+
+  /** Toggle an ordered list with a specific numbering style */
+  toggleOrderedListStyle: (style: OrderedListStyle) => boolean;
 
   /** Restart numbering for the current list item */
   restartNumbering: () => boolean;
@@ -58,6 +76,20 @@ export interface ParagraphCommands {
 
   /** Reset line height to default */
   unsetLineHeight: () => boolean;
+
+  // ============================================
+  // PARAGRAPH DIRECTION COMMANDS
+  // ============================================
+
+  /**
+   * Set paragraph direction (LTR/RTL) on every paragraph in the current selection.
+   * When `alignmentPolicy` is `"matchDirection"`, an explicit `justification` of
+   * `"left"` ↔ `"right"` is mirrored to follow the new direction.
+   */
+  setParagraphDirection: (input: { direction: 'ltr' | 'rtl'; alignmentPolicy?: 'matchDirection' }) => boolean;
+
+  /** Clear an explicit paragraph direction override (revert to auto-resolved). */
+  clearParagraphDirection: () => boolean;
 }
 
 declare module '../../core/types/ChainedCommands.js' {

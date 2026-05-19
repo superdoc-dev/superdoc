@@ -4,6 +4,7 @@ import { processUploadedImage } from './processUploadedImage.js';
 import { buildMediaPath, ensureUniqueFileName } from './fileNameUtils.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
 import { findOrCreateRelationship } from '@core/parts/adapters/relationships-mutation.js';
+import { resolveHeaderFooterRelsPartIdFromRefId } from '@core/parts/adapters/header-footer-sync.js';
 
 const fileTooLarge = (file) => {
   let fileSizeMb = Number((file.size / (1024 * 1024)).toFixed(4));
@@ -65,6 +66,34 @@ export const generateUniqueDocPrId = (editor) => {
   return candidate;
 };
 
+function getImageMediaStores(editor) {
+  const own = editor?.storage?.image?.media;
+  const parent = editor?.options?.parentEditor?.storage?.image?.media;
+  const stores = [];
+  if (own) stores.push(own);
+  if (parent && parent !== own) stores.push(parent);
+  return stores;
+}
+
+function getExistingImageFileNames(editor) {
+  const names = new Set();
+  for (const media of getImageMediaStores(editor)) {
+    Object.keys(media).forEach((key) => names.add(key.split('/').pop()));
+  }
+  return names;
+}
+
+function registerImageMedia(editor, mediaPath, url) {
+  const stores = getImageMediaStores(editor);
+  if (!stores.length) {
+    editor.storage.image.media = { [mediaPath]: url };
+    return;
+  }
+  for (const media of stores) {
+    media[mediaPath] = url;
+  }
+}
+
 export async function uploadAndInsertImage({ editor, view, file, size, id }) {
   const imageUploadHandler =
     typeof editor.options.handleImageUpload === 'function'
@@ -74,7 +103,7 @@ export async function uploadAndInsertImage({ editor, view, file, size, id }) {
   const placeholderId = id;
 
   try {
-    const existingFileNames = new Set(Object.keys(editor.storage.image.media ?? {}).map((key) => key.split('/').pop()));
+    const existingFileNames = getExistingImageFileNames(editor);
 
     const uniqueFileName = ensureUniqueFileName(file.name, existingFileNames);
     const normalizedFile =
@@ -112,7 +141,7 @@ export async function uploadAndInsertImage({ editor, view, file, size, id }) {
       rId,
     });
 
-    editor.storage.image.media = Object.assign(editor.storage.image.media, { [mediaPath]: url });
+    registerImageMedia(editor, mediaPath, url);
 
     // If we are in collaboration, we need to share the image with other clients
     if (editor.options.ydoc && typeof editor.commands.addImageToCollaboration === 'function') {
@@ -136,6 +165,21 @@ export async function uploadAndInsertImage({ editor, view, file, size, id }) {
 }
 
 export function addImageRelationship({ editor, path }) {
+  if (editor.options.isHeaderOrFooter) {
+    const parentEditor = editor.options.parentEditor;
+    const headerFooterRefId = editor.options.headerFooterRefId;
+    if (!parentEditor || !headerFooterRefId) return null;
+
+    const relsPartId = resolveHeaderFooterRelsPartIdFromRefId(parentEditor, headerFooterRefId);
+    if (!relsPartId) return null;
+
+    return findOrCreateRelationship(parentEditor, 'startImageUpload:addHeaderFooterImageRelationship', {
+      target: path,
+      type: 'image',
+      partId: relsPartId,
+    });
+  }
+
   return findOrCreateRelationship(editor, 'startImageUpload:addImageRelationship', {
     target: path,
     type: 'image',

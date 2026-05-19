@@ -4,7 +4,15 @@ sidebarTitle: SuperDoc Yjs
 keywords: "superdoc collaboration server, yjs server, self-hosted, websocket"
 ---
 
-The official collaboration package for self-hosted deployments. Purpose-built for SuperDoc with a builder API.
+A minimal Yjs WebSocket server we ship as a reference implementation for prototypes and local development.
+
+<Warning>
+Use this package for prototypes and local development. It does not include production auth, persistence, scaling, or observability.
+
+For production self-hosted collaboration, [compare the available Yjs servers](/guides/collaboration/self-hosted-overview). YHub is worth a look if you need attribution or revision history.
+
+SuperDoc only needs a Yjs document and provider: pass `{ ydoc, provider }` to `modules.collaboration`.
+</Warning>
 
 ## Installation
 
@@ -320,11 +328,7 @@ DATABASE_URL=postgres://user:pass@localhost/db
 
 ```typescript
 fastify.get('/health', (request, reply) => {
-  reply.send({
-    status: 'healthy',
-    documents: collaboration.getActiveDocumentCount(),
-    connections: collaboration.getConnectionCount()
-  });
+  reply.send({ status: 'healthy' });
 });
 ```
 
@@ -360,19 +364,19 @@ fastify.get('/health', (request, reply) => {
 
 <CardGroup cols={2}>
   <Card
-    title="Production Example"
+    title="SuperDoc Yjs example"
     icon="github"
-    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/collaboration/production"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/providers/superdoc-yjs"
   >
-    Complete working example
+    Complete working example with a Yjs server
   </Card>
 
   <Card
-    title="Fastify Example"
+    title="Node SDK backend"
     icon="github"
-    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/collaboration/fastify-server"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/backends/node-sdk"
   >
-    Fastify server setup
+    Server-side document operations alongside the realtime layer
   </Card>
 </CardGroup>
 
@@ -382,7 +386,7 @@ fastify.get('/health', (request, reply) => {
   <Card
     title="Configuration"
     icon="settings"
-    href="/modules/collaboration/configuration"
+    href="/editor/collaboration/configuration"
   >
     Client-side options, events, and hooks
   </Card>

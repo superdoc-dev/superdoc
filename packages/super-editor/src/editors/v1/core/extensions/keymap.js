@@ -37,10 +37,13 @@ export const handleBackspace = (editor) => {
       tr.setMeta('inputType', 'deleteContentBackward');
       return false;
     },
+    () => commands.deleteBlockSdtAtTextBlockStart(),
     () => commands.backspaceEmptyRunParagraph(),
     () => commands.backspaceSkipEmptyRun(),
+    () => commands.backspaceAtomBefore(),
     () => commands.backspaceNextToRun(),
     () => commands.backspaceAcrossRuns(),
+    () => commands.mixedBidiBackspace?.() ?? false,
     () => commands.deleteSelection(),
     () => commands.removeNumberingProperties(),
     () => commands.joinBackward(),
@@ -54,7 +57,9 @@ export const handleDelete = (editor) => {
   dispatchHistoryBoundary(view);
 
   return editor.commands.first(({ commands }) => [
+    () => commands.deleteBlockSdtAtTextBlockStart(),
     () => commands.deleteSkipEmptyRun(),
+    () => commands.deleteAtomAfter(),
     () => commands.deleteNextToRun(),
     () => commands.deleteSelection(),
     () => commands.joinForward(),

@@ -426,6 +426,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     onCommentsLoaded: () => null,
     onCommentClicked: () => null,
     onCommentLocationsUpdate: () => null,
+    onPointerDown: () => null,
+    onPointerUp: () => null,
+    onRightClick: () => null,
     onDocumentLocked: () => null,
     onFirstRender: () => null,
     onCollaborationReady: () => null,
@@ -602,7 +605,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     // Skip for sub-editors that are not primary document editors
-    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter || this.options.isChildEditor) {
       return;
     }
 
@@ -763,6 +766,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
   }
 
   /**
@@ -1161,6 +1167,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
 
     if (!shouldMountRenderer) {
       this.#emitCreateAsync();
@@ -1237,6 +1246,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('commentClick', this.options.onCommentClicked!);
     this.on('locked', this.options.onDocumentLocked!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
 
     if (!shouldMountRenderer) {
       this.#emitCreateAsync();
@@ -2531,7 +2543,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
    *       the cursor is inside a table cell, in which case the cell width is returned.
    */
   getMaxContentSize(): { width?: number; height?: number } {
-    if (!this.converter) return {};
+    const localPageStyles = this.converter?.pageStyles;
+    const parentPageStyles = this.options.parentEditor?.converter?.pageStyles;
+    const localPageSize = localPageStyles?.pageSize;
+    const pageStyles =
+      localPageSize?.width && localPageSize?.height ? localPageStyles : (parentPageStyles ?? localPageStyles);
+    if (!pageStyles) return {};
 
     // When the cursor is inside a table cell, constrain width to the cell's content
     // width so images inserted into a cell are never wider than that cell.
@@ -2557,7 +2574,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       return {};
     }
 
-    const { pageSize = {}, pageMargins = {} } = this.converter.pageStyles ?? {};
+    const { pageSize = {}, pageMargins = {} } = pageStyles;
     const { width, height } = pageSize;
 
     if (!width || !height) return {};
@@ -2691,6 +2708,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
+    // appendTransaction plugins (e.g. numberingPlugin) may produce transactions that
+    // change the doc even when the original transaction does not. We resolve the
+    // effective doc-carrying tr after applyTransaction so the 'update' event is
+    // emitted with `docChanged` / `mapping` that consumers (notably
+    // PresentationEditor.handleUpdate) actually need.
+    let effectiveTransaction: Transaction = transaction;
     const forceTrackChanges = transactionToApply.getMeta('forceTrackChanges') === true;
     try {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
@@ -2711,8 +2734,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
           })
         : transactionToApply;
 
-      const { state: appliedState } = prevState.applyTransaction(transactionToApply);
+      const { state: appliedState, transactions: appliedTransactions } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
+      // Pick whichever applied tr carries the doc delta — when the input tr is empty an
+      // appendTransaction plugin (e.g. numberingPlugin) may have produced the real change,
+      // and downstream listeners read `transaction.docChanged`/`mapping` off this tr.
+      effectiveTransaction = appliedTransactions.find((t) => t.docChanged) ?? transactionToApply;
     } catch (error) {
       if (forceTrackChanges) throw error;
       // just in case
@@ -2760,8 +2787,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    if (transactionToApply.docChanged) {
-      // Track document modifications and promote to GUID if needed
+    if (effectiveTransaction.docChanged) {
+      // Track document modifications and promote to GUID if needed.
+      // Only count user-initiated (original) transactions as document modifications.
       if (transaction.docChanged && this.converter) {
         if (!this.converter.documentGuid) {
           this.converter.promoteToGuid();
@@ -2772,7 +2800,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       this.emit('update', {
         editor: this,
-        transaction: transactionToApply,
+        transaction: effectiveTransaction,
       });
     }
   }
@@ -3225,7 +3253,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
-      const numbering = this.converter.schemaToXml(numberingData.elements[0]);
+      const numbering = numberingData?.elements?.[0] ? this.converter.schemaToXml(numberingData.elements[0]) : null;
 
       const appXmlData = this.converter.convertedXml['docProps/app.xml'];
       const appXml = appXmlData?.elements?.[0] ? this.converter.schemaToXml(appXmlData.elements[0]) : null;
@@ -3239,7 +3267,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         'word/document.xml': String(documentXml),
         'docProps/custom.xml': String(customXml),
         'word/_rels/document.xml.rels': String(rels),
-        'word/numbering.xml': String(numbering),
+        ...(numbering ? { 'word/numbering.xml': String(numbering) } : {}),
         'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
         ...(appXml ? { 'docProps/app.xml': String(appXml) } : {}),
@@ -3305,6 +3333,24 @@ export class Editor extends EventEmitter<EditorEventMap> {
         const partData = this.converter.convertedXml[path] as { elements?: unknown[] } | undefined;
         if (partData?.elements?.[0]) {
           updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+
+      // Emit ZIP tombstones for custom XML parts that were removed via the
+      // Document API but originated in the imported DOCX. Without this,
+      // the exporter would copy the original zip entry through, and the
+      // removed part would reappear on the next import.
+      // AIDEV-NOTE: `removedCustomXmlPaths` is set by `removeCustomXmlPart`
+      // (super-converter/custom-xml-parts.js) on the converter instance.
+      // Typed via cast rather than on SuperConverter.d.ts because adding
+      // an explicit field there triggers weak-type errors against
+      // ConverterWithDocumentSettings / ConverterLike structural types in
+      // sibling files that don't reference this field.
+      const removedCustomXmlPaths = (this.converter as unknown as { removedCustomXmlPaths?: Set<string> })
+        .removedCustomXmlPaths;
+      if (removedCustomXmlPaths instanceof Set) {
+        for (const path of removedCustomXmlPaths) {
+          updatedDocs[path] = null;
         }
       }
 
@@ -3869,6 +3915,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
     if (!this.options.ydoc) {
       this.#initComments();
     }
+
+    // AIDEV-NOTE: In collaboration mode, parts are seeded into Y.Doc directly
+    // (not through `mutateParts`), so no `partChanged` fires on this client.
+    // Remote tabs refresh via the consumer → `mutateParts` → `partChanged` path,
+    // but the importer relies on this signal to rebuild header/footer state
+    // bound to the previous document (SD-2643).
+    this.emit('documentReplaced', { editor: this });
   }
 
   /**

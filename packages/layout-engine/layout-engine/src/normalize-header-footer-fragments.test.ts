@@ -20,13 +20,14 @@ function makeDummyMeasure(): Measure {
 
 const PAGE_HEIGHT = 1056;
 const MARGIN_BOTTOM = 72;
+const FOOTER_DISTANCE = 36;
 
 const fullConstraints = {
   pageHeight: PAGE_HEIGHT,
-  margins: { left: 72, right: 72, top: 72, bottom: MARGIN_BOTTOM, header: 36 },
+  margins: { left: 72, right: 72, top: 72, bottom: MARGIN_BOTTOM, header: 36, footer: FOOTER_DISTANCE },
 };
 
-const FOOTER_BAND_ORIGIN = PAGE_HEIGHT - MARGIN_BOTTOM; // 984
+const FOOTER_BAND_ORIGIN = PAGE_HEIGHT - FOOTER_DISTANCE; // 1020
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -46,7 +47,7 @@ describe('normalizeFragmentsForRegion (footer page-relative only)', () => {
 
       normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'footer', fullConstraints);
 
-      // physicalY = 0, bandOrigin = 984
+      // physicalY = 0, bandOrigin = 1020
       expect(fragment.y).toBe(0 - FOOTER_BAND_ORIGIN);
     });
 
@@ -63,7 +64,7 @@ describe('normalizeFragmentsForRegion (footer page-relative only)', () => {
 
       normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'footer', fullConstraints);
 
-      // physicalY = 1056 - 50 = 1006, bandOrigin = 984
+      // physicalY = 1056 - 50 = 1006, bandOrigin = 1020
       expect(fragment.y).toBe(PAGE_HEIGHT - imgHeight - FOOTER_BAND_ORIGIN);
     });
 
@@ -80,7 +81,7 @@ describe('normalizeFragmentsForRegion (footer page-relative only)', () => {
 
       normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'footer', fullConstraints);
 
-      // physicalY = (1056 - 40) / 2 = 508, bandOrigin = 984
+      // physicalY = (1056 - 40) / 2 = 508, bandOrigin = 1020
       expect(fragment.y).toBe((PAGE_HEIGHT - imgHeight) / 2 - FOOTER_BAND_ORIGIN);
     });
 
@@ -96,7 +97,7 @@ describe('normalizeFragmentsForRegion (footer page-relative only)', () => {
 
       normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'footer', fullConstraints);
 
-      // physicalY = 20, bandOrigin = 984
+      // physicalY = 20, bandOrigin = 1020
       expect(fragment.y).toBe(20 - FOOTER_BAND_ORIGIN);
     });
 
@@ -122,6 +123,28 @@ describe('normalizeFragmentsForRegion (footer page-relative only)', () => {
       normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'footer', fullConstraints);
 
       expect(fragment.y).toBe(PAGE_HEIGHT - 50 - FOOTER_BAND_ORIGIN);
+    });
+
+    it('falls back to bottom margin when footer distance is missing', () => {
+      const imgHeight = 40;
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'img-bottom',
+        src: 'test.png',
+        anchor: { isAnchored: true, vRelativeFrom: 'page', alignV: 'bottom', offsetV: 0 },
+      };
+      const fragment = makeAnchoredImageFragment('img-bottom', 0, imgHeight);
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      const withoutFooter = {
+        pageHeight: PAGE_HEIGHT,
+        margins: { left: 72, right: 72, top: 72, bottom: MARGIN_BOTTOM, header: 36 },
+      };
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'footer', withoutFooter);
+
+      const fallbackOrigin = PAGE_HEIGHT - MARGIN_BOTTOM;
+      expect(fragment.y).toBe(PAGE_HEIGHT - imgHeight - fallbackOrigin);
     });
   });
 

@@ -33,7 +33,13 @@ import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
-import { SuperEditor, AIWriter, PresentationEditor, getTrackedChangeIndex } from '@superdoc/super-editor';
+import {
+  SuperEditor,
+  AIWriter,
+  PresentationEditor,
+  getTrackedChangeIndex,
+  TrackChangesBasePluginKey,
+} from '@superdoc/super-editor';
 import { ySyncPluginKey } from 'y-prosemirror';
 import HtmlViewer from './components/HtmlViewer/HtmlViewer.vue';
 import useComment from './components/CommentsLayer/use-comment';
@@ -45,6 +51,7 @@ import { getVisibleThreadAnchorClientY } from './helpers/comment-focus.js';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
 import { usePasswordPrompt } from './composables/use-password-prompt.js';
 import { useFindReplace } from './composables/use-find-replace.js';
+import { collectTouchedTrackedChangeIds } from './helpers/collect-touched-tracked-change-ids.js';
 import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 
 const PdfViewer = defineAsyncComponent(() => import('./components/PdfViewer/PdfViewer.vue'));
@@ -116,6 +123,7 @@ const {
   showAddComment,
   handleEditorLocationsUpdate,
   handleTrackedChangeUpdate,
+  refreshTrackedChangeCommentsByIds,
   syncTrackedChangePositionsWithDocument,
   syncTrackedChangeComments,
   addComment,
@@ -258,18 +266,31 @@ const flushQueuedTrackedChangeCommentResync = () => {
   queuedTrackedChangeCommentResync = null;
   if (!pendingResync?.editor) return;
 
-  syncTrackedChangeComments({
+  if (pendingResync.fullResync) {
+    syncTrackedChangeComments({
+      superdoc: proxy.$superdoc,
+      editor: pendingResync.editor,
+      broadcastChanges: pendingResync.broadcastChanges,
+    });
+    return;
+  }
+
+  refreshTrackedChangeCommentsByIds({
     superdoc: proxy.$superdoc,
     editor: pendingResync.editor,
+    changeIds: Array.from(pendingResync.changeIds ?? []),
     broadcastChanges: pendingResync.broadcastChanges,
   });
 };
 
-const queueTrackedChangeCommentResync = ({ editor, broadcastChanges = true } = {}) => {
-  if (!editor) return;
+const queueTrackedChangeCommentResync = ({ editor, changeIds = null, broadcastChanges = true } = {}) => {
+  if (!editor || (changeIds && !changeIds.size)) return;
 
+  const existingChangeIds = queuedTrackedChangeCommentResync?.changeIds ?? new Set();
   queuedTrackedChangeCommentResync = {
     editor,
+    fullResync: !changeIds || Boolean(queuedTrackedChangeCommentResync?.fullResync),
+    changeIds: changeIds ? new Set([...existingChangeIds, ...changeIds]) : existingChangeIds,
     broadcastChanges: Boolean(queuedTrackedChangeCommentResync?.broadcastChanges) || Boolean(broadcastChanges),
   };
 
@@ -737,6 +758,7 @@ const editorOptions = (doc) => {
       highlightOpacity: commentsModuleConfig.value?.highlightOpacity,
     },
     trackedChanges: proxy.$superdoc.config.modules?.trackChanges,
+    experimental: proxy.$superdoc.config.experimental,
     editorCtor: useLayoutEngine ? PresentationEditor : undefined,
     onBeforeCreate: onEditorBeforeCreate,
     onCreate: onEditorCreate,
@@ -1158,6 +1180,10 @@ const shouldResyncTrackedChangeThreads = (transaction, ySyncMeta = transaction?.
   return isLocalHistoryUndoRedo || isLocalCollabUndoRedo || isCollaborationReplayTransaction(transaction, ySyncMeta);
 };
 
+const collectTouchedChangeIds = (transaction) => {
+  return collectTouchedTrackedChangeIds(transaction, { trackChangesPluginKey: TrackChangesBasePluginKey });
+};
+
 const onEditorTransaction = (payload = {}) => {
   const { editor, transaction } = payload;
   const ySyncMeta = transaction?.getMeta?.(ySyncPluginKey);
@@ -1172,6 +1198,11 @@ const onEditorTransaction = (payload = {}) => {
       // Remote replay should rebuild only local sidebar state. The authoritative
       // collaboration comment update is already shared through the comments ydoc.
       broadcastChanges: !isPeerCollaborationReplayTransaction(transaction, ySyncMeta),
+    });
+  } else {
+    queueTrackedChangeCommentResync({
+      editor,
+      changeIds: collectTouchedChangeIds(transaction),
     });
   }
 
@@ -1218,17 +1249,15 @@ onMounted(() => {
   if (config && !config.readOnly) {
     document.addEventListener('mousedown', handleDocumentMouseDown);
   }
-  document.addEventListener('keydown', handleFindShortcut, true);
+  document.addEventListener('keydown', handleDocumentShortcut, true);
 });
 
-/**
- * Handle Cmd+F / Ctrl+F to open find/replace instead of browser find.
- * Use a document-level capture listener because the dev shell and
- * presentation-mode bridge do not always leave keyboard focus on a node
- * that bubbles through the .superdoc root.
- */
 function isFindShortcutEvent(e) {
   return (e.metaKey || e.ctrlKey) && !e.altKey && e.key?.toLowerCase?.() === 'f';
+}
+
+function isFormattingMarksShortcutEvent(e) {
+  return (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && (e.code === 'Digit8' || e.key === '8' || e.key === '*');
 }
 
 function isFocusInsideSuperDoc() {
@@ -1260,15 +1289,37 @@ function handleFindShortcut(e) {
   findReplace.open();
 }
 
+function handleFormattingMarksShortcut(e) {
+  if (!isFormattingMarksShortcutEvent(e)) return;
+  if (!isFocusInsideSuperDoc()) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  proxy.$superdoc.toggleFormattingMarks?.();
+}
+
+/**
+ * Handle document-level shortcuts before browser or shell handlers.
+ * Use a capture listener because the dev shell and presentation-mode bridge
+ * do not always leave keyboard focus on a node that bubbles through the root.
+ */
+function handleDocumentShortcut(e) {
+  handleFindShortcut(e);
+  if (e.defaultPrevented) return;
+  handleFormattingMarksShortcut(e);
+}
+
 function handleContainerKeydown(e) {
   handleFindShortcut(e);
+  if (e.defaultPrevented) return;
+  handleFormattingMarksShortcut(e);
 }
 
 onBeforeUnmount(() => {
   passwordPrompt.destroy();
   findReplace.destroy();
   document.removeEventListener('mousedown', handleDocumentMouseDown);
-  document.removeEventListener('keydown', handleFindShortcut, true);
+  document.removeEventListener('keydown', handleDocumentShortcut, true);
   if (selectionUpdateRafId != null) {
     cancelAnimationFrame(selectionUpdateRafId);
     selectionUpdateRafId = null;

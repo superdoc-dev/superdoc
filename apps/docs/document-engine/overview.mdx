@@ -1,39 +1,62 @@
 ---
 title: Document Engine
 sidebarTitle: Overview
-description: Programmatic document editing — in the browser, from the terminal, or through SDKs
+description: The programmatic layer for reading, editing, and saving .docx files.
 keywords: "document engine, document api, sdk, cli, headless docx, document automation"
 ---
 
-Document Engine gives you four ways to read and edit `.docx` files without a visible editor:
+Document Engine is SuperDoc's programmatic layer for `.docx` files. Use it when code needs to read, search, edit, format, comment, redline, or save a Word document.
+
+It powers browser editor workflows through `editor.doc.*`, backend automation through the SDKs, and shell workflows through the CLI.
+
+<Note>
+**Building with AI?** Start with [Use SuperDoc with AI](/getting-started/ai). AI integrations use the same document operations, but the setup path depends on whether you're using MCP, SDK tool definitions, or a visible editor.
+</Note>
+
+## Surfaces
+
+Three surfaces, same operations underneath.
 
 | Surface | Best for | Runtime |
-| --- | --- | --- |
-| [Document API](/document-api/overview) | In-browser editing via `editor.doc.*` | Browser |
-| [SDKs](/document-engine/sdks) | Backend automation with typed methods | Node / Python |
-| [CLI](/document-engine/cli) | Scripts and CI pipelines | Any shell |
-| [MCP Server](/document-engine/mcp) | AI agents (Claude Code, Cursor, custom) | Local subprocess |
-
-All four sit on the same underlying document capabilities. The browser, SDK, and CLI expose individual operations directly; MCP exposes grouped intent tools such as `superdoc_search`, `superdoc_get_content`, and `superdoc_edit`.
+|---|---|---|
+| [Document API](/document-api/overview) | Programmatic edits against an open editor | Browser |
+| [SDKs](/document-engine/sdks) | Node / Python backend automation | Server |
+| [CLI](/document-engine/cli) | Shell scripts and CI pipelines | Any shell |
 
 ## How it works
 
-```mermaid actions={false}
-flowchart TD
-    API["Document API<br/><em>source of truth </em>"]
-    API --> CLI["CLI<br/>terminal interface"]
-    API --> MCP["MCP Server<br/>AI agent interface"]
-    API --> SDK["Node SDK / Python SDK<br/>typed wrappers over CLI"]
-```
+The Document API is the operation contract. It defines every document action SuperDoc supports (search, replace, insert, format, comments, tracked changes, lists, tables) as a typed input/output pair.
 
-The Document API defines the canonical operations. The CLI and MCP server wrap them for different consumers. The SDKs manage the CLI process and expose typed methods.
+- The **browser editor** exposes those operations as `editor.doc.*`.
+- The **SDKs** manage a CLI process and expose the same operations as typed Node and Python methods.
+- The **CLI** runs in persistent sessions: open a document, run operations, save and close. Each operation takes arguments and emits JSON output.
+
+All three call the same underlying engine. A redline written by your backend, a CI script, and a browser editor produce the same result on the same `.docx` file.
 
 ## Which surface should I use?
 
-| Your setup | Surface | Why |
-| --- | --- | --- |
-| Web app with a visible editor | [Document API](/document-api/overview) | Direct access via `editor.doc.*` — no network round-trips |
-| AI agent (Claude Code, Cursor, Windsurf, custom) | [MCP Server](/document-engine/mcp) | Sessions keep the editor alive across tool calls |
-| Backend automation (Node.js / Python) | [SDKs](/document-engine/sdks) | Typed methods, session management, error handling built in |
-| Shell scripts or CI pipelines | [CLI](/document-engine/cli) | Stateless one-shot commands — no process to manage |
-| Serverless (Lambda, Vercel, Workers) | [CLI](/document-engine/cli) or [SDKs](/document-engine/sdks) | Open the file, run the operation, return the result |
+| Your setup | Start here |
+|---|---|
+| Web app with a visible editor | [Document API](/document-api/overview) |
+| Custom UI around a visible editor | [Custom UI](/editor/custom-ui/overview) + [Document API](/document-api/overview) |
+| Backend automation (Node / Python) | [SDKs](/document-engine/sdks) |
+| Shell scripts or CI | [CLI](/document-engine/cli) |
+| Serverless function (Lambda, Vercel, Workers) | [SDKs](/document-engine/sdks) or [CLI](/document-engine/cli) |
+| Claude Code, Cursor, Windsurf, or model tools | [Use SuperDoc with AI](/getting-started/ai) |
+
+## Where to next
+
+<CardGroup cols={2}>
+  <Card title="Document API" icon="code" href="/document-api/overview">
+    The operation contract. Every method the editor and SDKs share.
+  </Card>
+  <Card title="SDKs" icon="box" href="/document-engine/sdks">
+    Node and Python typed methods for backend automation
+  </Card>
+  <Card title="CLI" icon="terminal" href="/document-engine/cli">
+    Scriptable DOCX operations from the shell
+  </Card>
+  <Card title="Diffing" icon="git-compare" href="/document-engine/diffing">
+    Compare two DOCX files. Produce a redlined third document.
+  </Card>
+</CardGroup>

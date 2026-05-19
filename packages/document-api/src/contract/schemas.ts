@@ -3,6 +3,7 @@ import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId 
 import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
 import { SELECTION_EDGE_NODE_TYPES } from '../types/address.js';
 import { INLINE_PROPERTY_REGISTRY, buildInlineRunPatchSchema } from '../format/inline-run-patch.js';
+import { TABLE_COLOR_PATTERN_SOURCE } from '../tables/color-formats.js';
 import { INLINE_DIRECTIVES } from '../types/style-policy.types.js';
 import {
   PARAGRAPH_ALIGNMENTS,
@@ -161,7 +162,7 @@ const deletableBlockNodeTypeValues = DELETABLE_BLOCK_NODE_TYPES;
 const inlineNodeTypeValues = INLINE_NODE_TYPES;
 
 // ---------------------------------------------------------------------------
-// Shared $defs — canonical schema definitions referenced via ref()
+// Shared $defs: canonical schema definitions referenced via ref()
 // ---------------------------------------------------------------------------
 
 const knownTargetKindValues = [
@@ -231,6 +232,7 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     {
       kind: { const: 'text' },
       segments: { type: 'array', items: ref('TextSegment'), minItems: 1 },
+      story: ref('StoryLocator'),
     },
     ['kind', 'segments'],
   ),
@@ -980,8 +982,6 @@ const sdSelectorSchema: JsonSchema = {
   oneOf: [sdTextSelectorSchema, sdNodeSelectorSchema],
 };
 
-// sdAddressSchema removed — replaced by blockNodeAddressSchema, nodeAddressSchema, textAddressSchema
-
 const sdReadOptionsSchema = objectSchema({
   includeResolved: { type: 'boolean' },
   includeProvenance: { type: 'boolean' },
@@ -1633,7 +1633,10 @@ const capabilitiesOutputSchema = objectSchema(
 );
 
 const strictEmptyObjectSchema = objectSchema({});
-const tableBorderColorPattern = '^([0-9A-Fa-f]{6}|auto)$';
+// Single source of truth at ../tables/color-formats. Aliased locally so the
+// rest of the schemas file reads naturally; the runtime validator imports
+// the same constant — pattern can never drift.
+const tableBorderColorPattern = TABLE_COLOR_PATTERN_SOURCE;
 
 const tableBorderSpecSchema = objectSchema(
   {
@@ -1814,7 +1817,7 @@ const tableMutationSuccessSchema: JsonSchema = objectSchema(
   ['success'],
 );
 
-/** Stricter variant for create.table — the table address is required on success. */
+/** Stricter variant for create.table: the table address is required on success. */
 const createTableSuccessSchema: JsonSchema = objectSchema(
   {
     success: { const: true },
@@ -2520,10 +2523,12 @@ function buildContentControlSchemas(): Record<ContentControlOperationId, Operati
 // ---------------------------------------------------------------------------
 
 // --- Shared patterns ---
-const refListQuerySchema = objectSchema({
+const refListQueryProperties = {
   limit: { type: 'integer', minimum: 1 },
   offset: { type: 'integer', minimum: 0 },
-});
+} satisfies Record<string, JsonSchema>;
+
+const refListQuerySchema = objectSchema(refListQueryProperties);
 
 const discoveryOutputSchema: JsonSchema = { type: 'object' };
 
@@ -2567,11 +2572,58 @@ function refConfigSchemas(): { output: JsonSchema; success: JsonSchema; failure:
 
 // --- Bookmark schemas ---
 const bookmarkAddressSchema: JsonSchema = objectSchema(
-  { kind: { const: 'entity' }, entityType: { const: 'bookmark' }, name: { type: 'string' } },
+  {
+    kind: { const: 'entity' },
+    entityType: { const: 'bookmark' },
+    name: { type: 'string' },
+    story: ref('StoryLocator'),
+  },
   ['kind', 'entityType', 'name'],
 );
 
 const bookmarkMutation = refMutationSchemas({ bookmark: bookmarkAddressSchema }, ['bookmark']);
+
+// --- Custom XML part schemas ---
+const customXmlPartTargetSchema: JsonSchema = {
+  oneOf: [
+    // Empty strings are runtime-rejected (target validator requires
+    // non-zero length); reflect that in the contract so generated SDKs
+    // and tool callers see the same constraint.
+    objectSchema({ id: { type: 'string', minLength: 1 } }, ['id']),
+    objectSchema({ partName: { type: 'string', minLength: 1 } }, ['partName']),
+  ],
+};
+
+const customXmlPartMutation = refMutationSchemas(
+  {
+    target: customXmlPartTargetSchema,
+    // Optional: surfaced when patch resolves or mints an itemID. See
+    // CustomXmlPartsMutationSuccess JSDoc for the patch-foreign-part case.
+    id: { type: 'string', minLength: 1 },
+  },
+  ['target'],
+);
+
+const customXmlPartCreateMutation = refMutationSchemas(
+  {
+    id: { type: 'string' },
+    partName: { type: 'string' },
+    propsPartName: { type: 'string' },
+  },
+  ['id', 'partName', 'propsPartName'],
+);
+
+// --- Anchored-metadata schemas (metadata.*) ---
+const anchoredMetadataAttachMutation = refMutationSchemas(
+  {
+    id: { type: 'string', minLength: 1 },
+    namespace: { type: 'string', minLength: 1 },
+    partName: { type: 'string', minLength: 1 },
+  },
+  ['id', 'namespace', 'partName'],
+);
+
+const anchoredMetadataMutation = refMutationSchemas({ id: { type: 'string', minLength: 1 } }, ['id']);
 
 // --- Footnote schemas ---
 const footnoteAddressSchema: JsonSchema = objectSchema(
@@ -2962,13 +3014,38 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           type: 'array',
           items: objectSchema(
             {
-              nodeId: { type: 'string', description: 'Stable block ID — pass to scrollToElement() for navigation.' },
+              nodeId: { type: 'string', description: 'Stable block ID: pass to scrollToElement() for navigation.' },
               type: {
                 type: 'string',
                 description: 'Block type: paragraph, heading, listItem, image, tableOfContents.',
               },
               text: { type: 'string', description: 'Full plain text content of the block.' },
-              headingLevel: { type: 'integer', description: 'Heading level (1–6). Only present for headings.' },
+              textSpans: {
+                type: 'array',
+                description:
+                  'Block text broken into runs with tracked-change marks preserved per run. Present only when the block contains at least one tracked change. Concatenating span text yields `text`.',
+                items: objectSchema(
+                  {
+                    text: { type: 'string', description: 'Raw text of the run.' },
+                    trackedChanges: {
+                      type: 'array',
+                      description: 'Tracked-change marks applied to this run.',
+                      items: objectSchema(
+                        {
+                          entityId: {
+                            type: 'string',
+                            description: 'Tracked change entity ID matching an entry in trackedChanges[].',
+                          },
+                          type: { type: 'string', enum: ['insert', 'delete', 'format'] },
+                        },
+                        ['entityId', 'type'],
+                      ),
+                    },
+                  },
+                  ['text'],
+                ),
+              },
+              headingLevel: { type: 'integer', description: 'Heading level (1-6). Only present for headings.' },
               tableContext: objectSchema(
                 {
                   tableOrdinal: {
@@ -3007,7 +3084,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             {
               entityId: {
                 type: 'string',
-                description: 'Comment entity ID — pass to scrollToElement() for navigation.',
+                description: 'Comment entity ID: pass to scrollToElement() for navigation.',
               },
               text: { type: 'string', description: 'Comment body text.' },
               anchoredText: { type: 'string', description: 'The document text the comment is anchored to.' },
@@ -3024,10 +3101,32 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             {
               entityId: {
                 type: 'string',
-                description: 'Tracked change entity ID — pass to scrollToElement() for navigation.',
+                description: 'Tracked change entity ID. Pass to scrollToElement() for navigation.',
               },
-              type: { type: 'string', enum: ['insert', 'delete', 'format'] },
-              excerpt: { type: 'string', description: 'Short text excerpt of the changed content.' },
+              type: {
+                type: 'string',
+                enum: ['insert', 'delete', 'format'],
+                description:
+                  "Aggregate type at the entity level. In paired replacement mode, a delete+insert pair shares one entity and this collapses to 'insert'; per-half type lives on block.textSpans[].trackedChanges[].",
+              },
+              blockIds: {
+                type: 'array',
+                description: 'Block IDs whose textSpans carry this change.',
+                items: { type: 'string' },
+              },
+              wordRevisionIds: objectSchema(
+                {
+                  insert: { type: 'string', description: 'Original OOXML w:id from a w:ins mark.' },
+                  delete: { type: 'string', description: 'Original OOXML w:id from a w:del mark.' },
+                  format: { type: 'string', description: 'Original OOXML w:id from a w:rPrChange mark.' },
+                },
+                [],
+              ),
+              excerpt: {
+                type: 'string',
+                description:
+                  'Short text excerpt of the changed content. Omitted for paired replacements; read block.textSpans for the per-half text.',
+              },
               author: { type: 'string', description: 'Change author name.' },
               date: { type: 'string', description: 'Change date (ISO string).' },
             },
@@ -3527,7 +3626,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: paragraphMutationFailureSchemaFor('format.paragraph.clearDirection'),
   },
   'styles.apply': (() => {
-    // Derived from PROPERTY_REGISTRY — no hardcoded property lists
+    // Derived from PROPERTY_REGISTRY: no hardcoded property lists
     const runInputSchema = objectSchema(
       {
         target: objectSchema({ scope: { const: 'docDefaults' }, channel: { const: 'run' } }, ['scope', 'channel']),
@@ -3619,7 +3718,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       text: {
         type: 'string',
         description:
-          'Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item — do NOT use newlines to put multiple items in one paragraph.',
+          'Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item: do NOT use newlines to put multiple items in one paragraph.',
       },
     }),
     output: createParagraphResultSchemaFor('create.paragraph'),
@@ -3974,7 +4073,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         mode: {
           enum: ['empty', 'fromParagraphs'],
           description:
-            "Required. 'fromParagraphs' converts existing paragraphs into list items — each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'.",
+            "Required. 'fromParagraphs' converts existing paragraphs into list items: each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'.",
         },
         at: {
           ...ref('BlockAddress'),
@@ -4112,6 +4211,28 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: objectSchema({ success: { const: true }, paragraph: ref('ParagraphAddress') }, ['success', 'paragraph']),
     failure: listsFailureSchemaFor('lists.detach'),
   },
+  'lists.delete': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, deletedCount: { type: 'integer', minimum: 0 } }, [
+          'success',
+          'deletedCount',
+        ]),
+        listsFailureSchemaFor('lists.delete'),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, deletedCount: { type: 'integer', minimum: 0 } }, [
+      'success',
+      'deletedCount',
+    ]),
+    failure: listsFailureSchemaFor('lists.delete'),
+  },
   'lists.indent': {
     input: objectSchema(
       {
@@ -4192,6 +4313,72 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       'numId',
     ]),
     failure: listsFailureSchemaFor('lists.separate'),
+  },
+  'lists.merge': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        direction: { enum: ['withPrevious', 'withNext'] },
+      },
+      ['target', 'direction'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema(
+          {
+            success: { const: true },
+            listId: { type: 'string' },
+            absorbedCount: { type: 'integer' },
+            removedEmptyBlocks: { type: 'integer' },
+          },
+          ['success', 'listId', 'absorbedCount', 'removedEmptyBlocks'],
+        ),
+        listsFailureSchemaFor('lists.merge'),
+      ],
+    },
+    success: objectSchema(
+      {
+        success: { const: true },
+        listId: { type: 'string' },
+        absorbedCount: { type: 'integer' },
+        removedEmptyBlocks: { type: 'integer' },
+      },
+      ['success', 'listId', 'absorbedCount', 'removedEmptyBlocks'],
+    ),
+    failure: listsFailureSchemaFor('lists.merge'),
+  },
+  'lists.split': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        restartNumbering: { type: 'boolean' },
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema(
+          {
+            success: { const: true },
+            listId: { type: 'string' },
+            numId: { type: 'integer' },
+            restartedAt: { type: ['integer', 'null'] },
+          },
+          ['success', 'listId', 'numId', 'restartedAt'],
+        ),
+        listsFailureSchemaFor('lists.split'),
+      ],
+    },
+    success: objectSchema(
+      {
+        success: { const: true },
+        listId: { type: 'string' },
+        numId: { type: 'integer' },
+        restartedAt: { type: ['integer', 'null'] },
+      },
+      ['success', 'listId', 'numId', 'restartedAt'],
+    ),
+    failure: listsFailureSchemaFor('lists.split'),
   },
   'lists.setLevel': {
     input: objectSchema(
@@ -4276,7 +4463,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: listsFailureSchemaFor('lists.convertToText'),
   },
 
-  // SD-1973 — List formatting and templates
+  // SD-1973: List formatting and templates
   'lists.applyTemplate': {
     input: objectSchema(
       {
@@ -4515,7 +4702,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: listsFailureSchemaFor('lists.clearLevelOverrides'),
   },
 
-  // SD-2025 — User-facing list style operations
+  // SD-2025: User-facing list style operations
   'lists.getStyle': (() => {
     const listLevelTemplateSchema = objectSchema(
       {
@@ -4678,8 +4865,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         text: { type: 'string', description: 'Comment text content.' },
         target: {
-          ...textAddressSchema,
-          description: "Text range to anchor the comment: {kind:'text', blockId:'...', range:{start:N, end:N}}.",
+          oneOf: [textAddressSchema, textTargetSchema],
+          description:
+            "Text range to anchor the comment. Accepts either a single-block TextAddress {kind:'text', blockId, range} or a multi-segment TextTarget {kind:'text', segments:[{blockId, range}, ...]} for selections that span blocks.",
         },
         parentCommentId: {
           type: 'string',
@@ -4698,7 +4886,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         commentId: { type: 'string' },
         text: { type: 'string', description: 'Updated comment text.' },
         target: textAddressSchema,
-        status: { enum: ['resolved'], description: "Set comment status. Use 'resolved' to mark as resolved." },
+        status: {
+          enum: ['resolved', 'active'],
+          description:
+            "Set comment status. Use 'resolved' to resolve a comment, or 'active' to reopen a previously resolved comment (lifecycle inverse).",
+        },
         isInternal: {
           type: 'boolean',
           description: 'When true, marks the comment as internal (hidden from external collaborators).',
@@ -4830,14 +5022,14 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         ['matchKind', 'address', 'blocks'],
       );
 
-      // query.match meta schema — effectiveResolved is required.
+      // query.match meta schema: effectiveResolved is required.
       const queryMatchMetaSchema = objectSchema({ effectiveResolved: { type: 'boolean' } }, ['effectiveResolved']);
 
       return discoveryResultSchema({ oneOf: [textMatchItemSchema, nodeMatchItemSchema] }, queryMatchMetaSchema);
     })(),
   },
   // ---------------------------------------------------------------------------
-  // Mutation step schema — discriminated union by `op`
+  // Mutation step schema: discriminated union by `op`
   // ---------------------------------------------------------------------------
 
   ...(() => {
@@ -5169,6 +5361,26 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         output: resolveRangeOutputSchema,
       },
 
+      'selection.current': {
+        input: objectSchema(
+          {
+            includeText: { type: 'boolean' },
+          },
+          [],
+        ),
+        output: objectSchema(
+          {
+            empty: { type: 'boolean' },
+            target: { oneOf: [textTargetSchema, { type: 'null' }] },
+            activeMarks: arraySchema({ type: 'string' }),
+            activeCommentIds: arraySchema({ type: 'string' }),
+            activeChangeIds: arraySchema({ type: 'string' }),
+            text: { type: 'string' },
+          },
+          ['empty', 'target', 'activeMarks', 'activeCommentIds', 'activeChangeIds'],
+        ),
+      },
+
       'mutations.preview': {
         input: mutationsInputSchema,
         output: objectSchema(
@@ -5329,13 +5541,51 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
   // --- tables: row structure ---
   'tables.insertRow': {
-    input: rowOperationInputSchema(
-      {
-        position: { enum: ['above', 'below'] },
-        count: { type: 'integer', minimum: 1 },
-      },
-      ['position'],
-    ),
+    input: {
+      // 1–3: scoped variants (table or row target with explicit position).
+      // 4: table-level target only (no rowIndex/position) — appends at end.
+      oneOf: [
+        objectSchema(
+          {
+            target: tableRowAddressSchema,
+            position: { enum: ['above', 'below'] },
+            count: { type: 'integer', minimum: 1 },
+          },
+          ['target', 'position'],
+        ),
+        objectSchema(
+          {
+            target: tableAddressSchema,
+            rowIndex: { type: 'integer', minimum: 0 },
+            position: { enum: ['above', 'below'] },
+            count: { type: 'integer', minimum: 1 },
+          },
+          ['target', 'rowIndex', 'position'],
+        ),
+        objectSchema(
+          {
+            nodeId: { type: 'string' },
+            rowIndex: { type: 'integer', minimum: 0 },
+            position: { enum: ['above', 'below'] },
+            count: { type: 'integer', minimum: 1 },
+          },
+          ['nodeId', 'rowIndex', 'position'],
+        ),
+        // Append-at-end shorthand: table-level target with no rowIndex/position.
+        {
+          ...objectSchema(
+            {
+              target: tableAddressSchema,
+              nodeId: { type: 'string' },
+              count: { type: 'integer', minimum: 1 },
+            },
+            [],
+          ),
+          oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+          not: { anyOf: [{ required: ['rowIndex'] }, { required: ['position'] }] },
+        },
+      ],
+    },
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
@@ -5377,15 +5627,19 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   // --- tables: column structure ---
   'tables.insertColumn': {
     input: {
+      // `position` is always required; `columnIndex` is optional.
+      // - `first` / `last`: shorthand, columnIndex ignored.
+      // - `left` / `right` with columnIndex: insert relative to that column.
+      // - `left` / `right` WITHOUT columnIndex: behaves like `first` / `last`.
       ...objectSchema(
         {
           target: tableAddressSchema,
           nodeId: { type: 'string' },
           columnIndex: { type: 'integer', minimum: 0 },
-          position: { enum: ['left', 'right'] },
+          position: { enum: ['left', 'right', 'first', 'last'] },
           count: { type: 'integer', minimum: 1 },
         },
-        ['columnIndex', 'position'],
+        ['position'],
       ),
       oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
     },
@@ -5521,6 +5775,49 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
   },
+  'tables.setCellText': {
+    input: {
+      // Direct cell locator OR table-scoped (target/nodeId + rowIndex + columnIndex).
+      // `text` is always required.
+      oneOf: [
+        objectSchema(
+          {
+            target: tableCellAddressSchema,
+            text: { type: 'string' },
+          },
+          ['target', 'text'],
+        ),
+        objectSchema(
+          {
+            nodeId: { type: 'string' },
+            text: { type: 'string' },
+          },
+          ['nodeId', 'text'],
+        ),
+        objectSchema(
+          {
+            target: tableAddressSchema,
+            rowIndex: { type: 'integer', minimum: 0 },
+            columnIndex: { type: 'integer', minimum: 0 },
+            text: { type: 'string' },
+          },
+          ['target', 'rowIndex', 'columnIndex', 'text'],
+        ),
+        objectSchema(
+          {
+            nodeId: { type: 'string' },
+            rowIndex: { type: 'integer', minimum: 0 },
+            columnIndex: { type: 'integer', minimum: 0 },
+            text: { type: 'string' },
+          },
+          ['nodeId', 'rowIndex', 'columnIndex', 'text'],
+        ),
+      ],
+    },
+    output: tableMutationResultSchema,
+    success: tableMutationSuccessSchema,
+    failure: tableMutationFailureSchema,
+  },
 
   // --- tables: data + accessibility ---
   'tables.sort': {
@@ -5614,7 +5911,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           edge: { enum: ['top', 'bottom', 'left', 'right', 'insideH', 'insideV', 'diagonalDown', 'diagonalUp'] },
           lineStyle: { type: 'string' },
           lineWeightPt: { type: 'number', exclusiveMinimum: 0 },
-          color: { type: 'string', pattern: '^([0-9A-Fa-f]{6}|auto)$' },
+          color: { type: 'string', pattern: tableBorderColorPattern },
         },
         ['edge', 'lineStyle', 'lineWeightPt', 'color'],
       ),
@@ -5662,7 +5959,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         {
           target: tableOrCellAddressSchema,
           nodeId: { type: 'string' },
-          color: { type: 'string', pattern: '^([0-9A-Fa-f]{6}|auto)$' },
+          color: {
+            oneOf: [{ type: 'string', pattern: tableBorderColorPattern }, { type: 'null' }],
+          },
         },
         ['color'],
       ),
@@ -5822,6 +6121,23 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         ),
         cellSpacingPt: { oneOf: [{ type: 'number', minimum: 0 }, { type: 'null' }] },
       }),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
+    output: tableMutationResultSchema,
+    success: tableMutationSuccessSchema,
+    failure: tableMutationFailureSchema,
+  },
+  'tables.applyPreset': {
+    input: {
+      ...objectSchema(
+        {
+          target: tableAddressSchema,
+          nodeId: { type: 'string' },
+          preset: { enum: ['grid', 'minimal', 'striped', 'accent'] },
+          accentColor: { type: 'string', pattern: tableBorderColorPattern },
+        },
+        ['preset'],
+      ),
       oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
     },
     output: tableMutationResultSchema,
@@ -6204,7 +6520,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
   // --- images ---
 
-  // Shared image location schema — discriminated union on `kind`.
+  // Shared image location schema: discriminated union on `kind`.
   // Used by create.image (at) and images.move (to).
 
   'create.image': {
@@ -6848,14 +7164,17 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
 
   // =========================================================================
-  // Content Controls (SD-2070) — schemas
+  // Content Controls (SD-2070): schemas
   // =========================================================================
   ...buildContentControlSchemas(),
   // -------------------------------------------------------------------------
   // Bookmarks
   // -------------------------------------------------------------------------
   'bookmarks.list': {
-    input: refListQuerySchema,
+    input: objectSchema({
+      ...refListQueryProperties,
+      in: storyLocatorSchema,
+    }),
     output: discoveryOutputSchema,
   },
   'bookmarks.get': {
@@ -7351,6 +7670,88 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: { type: 'object' },
     failure: { type: 'object' },
   },
+
+  // --- customXml.parts.* ---
+  'customXml.parts.list': {
+    input: objectSchema({
+      ...refListQueryProperties,
+      rootNamespace: { type: 'string' },
+      schemaRef: { type: 'string' },
+    }),
+    output: discoveryOutputSchema,
+  },
+  'customXml.parts.get': {
+    input: objectSchema({ target: customXmlPartTargetSchema }, ['target']),
+    output: { oneOf: [{ type: 'object' }, { type: 'null' }] },
+  },
+  'customXml.parts.create': {
+    input: objectSchema(
+      {
+        content: { type: 'string', minLength: 1 },
+        schemaRefs: { type: 'array', items: { type: 'string', minLength: 1 } },
+      },
+      ['content'],
+    ),
+    ...customXmlPartCreateMutation,
+  },
+  'customXml.parts.patch': {
+    // `target` is required; `content` and `schemaRefs` are both optional
+    // but at least one MUST be present. Encoded via JSON Schema's `anyOf`.
+    input: {
+      type: 'object',
+      properties: {
+        target: customXmlPartTargetSchema,
+        content: { type: 'string', minLength: 1 },
+        schemaRefs: { type: 'array', items: { type: 'string', minLength: 1 } },
+      },
+      required: ['target'],
+      anyOf: [{ required: ['content'] }, { required: ['schemaRefs'] }],
+      additionalProperties: false,
+    },
+    ...customXmlPartMutation,
+  },
+  'customXml.parts.remove': {
+    input: objectSchema({ target: customXmlPartTargetSchema }, ['target']),
+    ...customXmlPartMutation,
+  },
+
+  // --- metadata.* (anchored metadata) ---
+  'metadata.attach': {
+    input: objectSchema(
+      {
+        target: selectionTargetSchema,
+        namespace: { type: 'string', minLength: 1 },
+        payload: {},
+        id: { type: 'string', minLength: 1 },
+      },
+      ['target', 'namespace', 'payload'],
+    ),
+    ...anchoredMetadataAttachMutation,
+  },
+  'metadata.list': {
+    input: objectSchema({
+      ...refListQueryProperties,
+      namespace: { type: 'string' },
+      within: selectionTargetSchema,
+    }),
+    output: discoveryOutputSchema,
+  },
+  'metadata.get': {
+    input: objectSchema({ id: { type: 'string', minLength: 1 } }, ['id']),
+    output: { oneOf: [{ type: 'object' }, { type: 'null' }] },
+  },
+  'metadata.update': {
+    input: objectSchema({ id: { type: 'string', minLength: 1 }, payload: {} }, ['id', 'payload']),
+    ...anchoredMetadataMutation,
+  },
+  'metadata.remove': {
+    input: objectSchema({ id: { type: 'string', minLength: 1 } }, ['id']),
+    ...anchoredMetadataMutation,
+  },
+  'metadata.resolve': {
+    input: objectSchema({ id: { type: 'string', minLength: 1 } }, ['id']),
+    output: { oneOf: [{ type: 'object' }, { type: 'null' }] },
+  },
 };
 
 /**
@@ -7363,7 +7764,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
  * @throws {Error} If any operation is missing a schema or an unknown operation is found.
  */
 export function buildInternalContractSchemas(): InternalContractSchemas {
-  // Cast is safe — the runtime loops below verify completeness against OPERATION_IDS.
+  // Cast is safe: the runtime loops below verify completeness against OPERATION_IDS.
   const operations = { ...operationSchemas } as unknown as Record<OperationId, OperationSchemaSet>;
 
   for (const operationId of OPERATION_IDS) {

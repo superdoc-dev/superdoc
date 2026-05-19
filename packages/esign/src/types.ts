@@ -56,8 +56,8 @@ export interface SubmitConfig {
   component?: React.ComponentType<SubmitButtonProps>;
 }
 
-export interface PdfModuleConfig {
-  pdfLib: any;
+export interface PdfModuleConfig extends Record<string, unknown> {
+  pdfLib: object;
   workerSrc?: string;
   setWorker?: boolean;
   textLayer?: boolean;

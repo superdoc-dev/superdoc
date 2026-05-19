@@ -11,6 +11,12 @@ import type {
   ParagraphMeasure,
   ParagraphBlock,
 } from '@superdoc/contracts';
+import {
+  OOXML_PCT_DIVISOR,
+  rescaleColumnWidths,
+  resolveTableWidthAttr,
+  getTableVisualDirection,
+} from '@superdoc/contracts';
 import type { PageState } from './paginator.js';
 import { computeFragmentPmRange, extractBlockPmRange } from './layout-utils.js';
 import { describeCellRenderBlocks, createCellSliceCursor, computeFullCellContentHeight } from './table-cell-slice.js';
@@ -122,11 +128,42 @@ function applyTableIndent(x: number, width: number, indent: number, columnWidth:
     };
   }
 
+  if (width > columnWidth) {
+    return {
+      x: shiftedX,
+      width,
+    };
+  }
+
   const maxWidthWithinColumn = Math.max(0, columnWidth - indent);
   return {
     x: shiftedX,
     width: Math.min(width, maxWidthWithinColumn),
   };
+}
+
+export function resolveRenderedTableWidth(
+  columnWidth: number,
+  measuredWidth: number,
+  attrs: TableBlock['attrs'],
+): number {
+  const safeMeasuredWidth =
+    Number.isFinite(measuredWidth) && measuredWidth > 0 ? measuredWidth : Math.max(0, columnWidth);
+  const configuredWidth = resolveTableWidthAttr(attrs?.tableWidth);
+  if (!configuredWidth) {
+    return safeMeasuredWidth;
+  }
+
+  if (configuredWidth.type === 'pct') {
+    return Math.max(0, Math.round(columnWidth * (configuredWidth.width / OOXML_PCT_DIVISOR)));
+  }
+
+  // Explicit px/pixel/dxa widths are already applied during measurement in
+  // measuring/dom's resolveTableWidth() + measureTableBlock() pipeline. We keep
+  // measuredWidth authoritative here so layout uses the fully measured table
+  // total, including any border/cell-spacing effects, while only percentage
+  // widths are recomputed against the current section width.
+  return safeMeasuredWidth;
 }
 
 /**
@@ -142,23 +179,31 @@ function applyTableIndent(x: number, width: number, indent: number, columnWidth:
  * @param attrs - Table attributes
  * @returns Resolved x and width for the table fragment
  */
-function resolveTableFrame(
+export function resolveTableFrame(
   baseX: number,
   columnWidth: number,
   tableWidth: number,
   attrs: TableBlock['attrs'],
 ): { x: number; width: number } {
-  const width = Math.min(columnWidth, tableWidth);
-  const justification = typeof attrs?.justification === 'string' ? attrs.justification : undefined;
-
-  if (justification === 'center') {
-    return { x: baseX + Math.max(0, (columnWidth - width) / 2), width };
-  }
-  if (justification === 'right' || justification === 'end') {
-    return { x: baseX + Math.max(0, columnWidth - width), width };
-  }
-
+  const width = resolveRenderedTableWidth(columnWidth, tableWidth, attrs);
+  const explicitJustification = typeof attrs?.justification === 'string' ? attrs.justification : undefined;
+  const isRtlTable = getTableVisualDirection(attrs) === 'rtl';
+  const effectiveJustification = explicitJustification ?? (isRtlTable ? 'end' : undefined);
   const tableIndent = getTableIndentWidth(attrs);
+
+  if (effectiveJustification === 'center') {
+    return { x: baseX + (columnWidth - width) / 2, width };
+  }
+  if (effectiveJustification === 'right' || effectiveJustification === 'end') {
+    const rightAlignedX = baseX + (columnWidth - width);
+    // In bidiVisual tables with no explicit jc, Word keeps right alignment
+    // and applies tblInd from the right edge.
+    if (explicitJustification == null && isRtlTable && tableIndent !== 0) {
+      return { x: rightAlignedX - tableIndent, width };
+    }
+    return { x: rightAlignedX, width };
+  }
+
   return applyTableIndent(baseX, width, tableIndent, columnWidth);
 }
 
@@ -172,9 +217,6 @@ function resolveTableFrame(
  *
  * @returns Rescaled column widths if clamping occurred, undefined otherwise.
  */
-// Canonical implementation lives in @superdoc/contracts; imported for local use.
-import { rescaleColumnWidths } from '@superdoc/contracts';
-
 const COLUMN_MIN_WIDTH_PX = 25;
 const COLUMN_MAX_WIDTH_PX = 200;
 const ROW_MIN_HEIGHT_PX = 10;
@@ -1211,7 +1253,7 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
   const height = Math.min(context.measure.totalHeight, state.contentBottom - state.cursorY);
 
   const baseX = context.columnX(state.columnIndex);
-  const baseWidth = Math.min(context.columnWidth, context.measure.totalWidth || context.columnWidth);
+  const baseWidth = Math.max(0, context.measure.totalWidth || context.columnWidth);
   const { x, width } = resolveTableFrame(baseX, context.columnWidth, baseWidth, context.block.attrs);
   const columnWidths = rescaleColumnWidths(context.measure.columnWidths, context.measure.totalWidth, width);
 
@@ -1227,6 +1269,7 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
   const fragment: TableFragment = {
     kind: 'table',
     blockId: context.block.id,
+    columnIndex: state.columnIndex,
     fromRow: 0,
     toRow: context.block.rows.length,
     x,
@@ -1235,6 +1278,7 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
     height,
     metadata,
     columnWidths,
+    sourceAnchor: context.block.sourceAnchor,
   };
   applyTableFragmentPmRange(fragment, context.block, context.measure);
   state.page.fragments.push(fragment);
@@ -1369,7 +1413,7 @@ export function layoutTableBlock({
     const height = Math.min(measure.totalHeight, state.contentBottom - state.cursorY);
 
     const baseX = columnX(state.columnIndex);
-    const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
+    const baseWidth = Math.max(0, measure.totalWidth || columnWidth);
     const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
     const columnWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
 
@@ -1378,6 +1422,7 @@ export function layoutTableBlock({
     const fragment: TableFragment = {
       kind: 'table',
       blockId: block.id,
+      columnIndex: state.columnIndex,
       fromRow: 0,
       toRow: 0,
       x,
@@ -1386,6 +1431,7 @@ export function layoutTableBlock({
       height,
       metadata,
       columnWidths,
+      sourceAnchor: block.sourceAnchor,
     };
     applyTableFragmentPmRange(fragment, block, measure);
     state.page.fragments.push(fragment);
@@ -1524,13 +1570,14 @@ export function layoutTableBlock({
       // Don't create empty fragments with just padding
       if (fragmentHeight > 0 && madeProgress) {
         const baseX = columnX(state.columnIndex);
-        const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
+        const baseWidth = Math.max(0, measure.totalWidth || columnWidth);
         const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
         const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
 
         const fragment: TableFragment = {
           kind: 'table',
           blockId: block.id,
+          columnIndex: state.columnIndex,
           fromRow: rowIndex,
           toRow: rowIndex + 1,
           x,
@@ -1551,6 +1598,7 @@ export function layoutTableBlock({
             continuationPartialRow,
           ),
           columnWidths: scaledWidths,
+          sourceAnchor: block.sourceAnchor,
         };
 
         applyTableFragmentPmRange(fragment, block, measure);
@@ -1639,13 +1687,14 @@ export function layoutTableBlock({
       );
 
       const baseX = columnX(state.columnIndex);
-      const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
+      const baseWidth = Math.max(0, measure.totalWidth || columnWidth);
       const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
       const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
 
       const fragment: TableFragment = {
         kind: 'table',
         blockId: block.id,
+        columnIndex: state.columnIndex,
         fromRow: bodyStartRow,
         toRow: forcedEndRow,
         x,
@@ -1666,6 +1715,7 @@ export function layoutTableBlock({
           forcedPartialRow,
         ),
         columnWidths: scaledWidths,
+        sourceAnchor: block.sourceAnchor,
       };
 
       applyTableFragmentPmRange(fragment, block, measure);
@@ -1689,13 +1739,14 @@ export function layoutTableBlock({
     );
 
     const baseX = columnX(state.columnIndex);
-    const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
+    const baseWidth = Math.max(0, measure.totalWidth || columnWidth);
     const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
     const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
 
     const fragment: TableFragment = {
       kind: 'table',
       blockId: block.id,
+      columnIndex: state.columnIndex,
       fromRow: bodyStartRow,
       toRow: endRow,
       x,
@@ -1716,6 +1767,7 @@ export function layoutTableBlock({
         partialRow,
       ),
       columnWidths: scaledWidths,
+      sourceAnchor: block.sourceAnchor,
     };
 
     applyTableFragmentPmRange(fragment, block, measure);
@@ -1769,6 +1821,7 @@ export function createAnchoredTableFragment(
     width: measure.totalWidth ?? 0,
     height: measure.totalHeight ?? 0,
     metadata,
+    sourceAnchor: block.sourceAnchor,
   };
   applyTableFragmentPmRange(fragment, block, measure);
   return fragment;

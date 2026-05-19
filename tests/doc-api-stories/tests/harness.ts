@@ -68,7 +68,11 @@ export function corpusDoc(relativePath: string): string {
 }
 
 export function unwrap<T>(payload: any): T {
-  return payload?.result ?? payload?.undefined ?? payload;
+  if (payload && typeof payload === 'object') {
+    if ('result' in payload) return payload.result;
+    if ('undefined' in payload) return payload.undefined;
+  }
+  return payload;
 }
 
 export interface StoryContext {

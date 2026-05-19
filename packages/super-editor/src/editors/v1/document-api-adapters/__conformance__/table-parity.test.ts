@@ -10,6 +10,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import { eighthPointsToPixels } from '../../core/super-converter/helpers.js';
 import {
   tablesSetLayoutAdapter,
   tablesSetStyleAdapter,
@@ -21,6 +22,8 @@ import {
   tablesSetBorderAdapter,
   tablesSetTableOptionsAdapter,
   tablesGetPropertiesAdapter,
+  tablesSetColumnWidthAdapter,
+  tablesSetCellPropertiesAdapter,
 } from '../tables-adapter.js';
 
 // ---------------------------------------------------------------------------
@@ -223,6 +226,17 @@ function lastWrittenAttrs(calls: Array<{ attrs: Record<string, unknown> }>): Rec
   return calls[calls.length - 1]?.attrs ?? {};
 }
 
+/**
+ * Finds the table-node mutation written during a command.
+ *
+ * Width-authoring commands may update cells before the table node itself, so
+ * these tests select the table write by the presence of nested table properties
+ * instead of relying on call ordering.
+ */
+function findTableWrite(calls: Array<{ attrs: Record<string, unknown> }>): Record<string, unknown> {
+  return calls.find((call) => 'tableProperties' in call.attrs)?.attrs ?? {};
+}
+
 // ---------------------------------------------------------------------------
 // Setter → top-level sync parity tests
 // ---------------------------------------------------------------------------
@@ -269,6 +283,30 @@ describe('table setter/getter parity', () => {
       const attrs = lastWrittenAttrs(getSetNodeMarkupCalls());
       expect((attrs.tableProperties as any).tableLayout).toBe('fixed');
       expect(attrs.tableLayout).toBe('fixed');
+    });
+
+    it('syncs tableLayout to fixed for width-authored column mutations', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps({
+        tableLayout: 'autofit',
+      });
+
+      tablesSetColumnWidthAdapter(editor, { nodeId: 'table-1', columnIndex: 0, widthPt: 120 });
+
+      const tableAttrs = findTableWrite(getSetNodeMarkupCalls());
+      expect((tableAttrs.tableProperties as any).tableLayout).toBe('fixed');
+      expect(tableAttrs.tableLayout).toBe('fixed');
+    });
+
+    it('syncs tableLayout to fixed when preferred cell width is authored', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps({
+        tableLayout: 'autofit',
+      });
+
+      tablesSetCellPropertiesAdapter(editor, { nodeId: 'cell-1', preferredWidthPt: 72 });
+
+      const tableAttrs = findTableWrite(getSetNodeMarkupCalls());
+      expect((tableAttrs.tableProperties as any).tableLayout).toBe('fixed');
+      expect(tableAttrs.tableLayout).toBe('fixed');
     });
   });
 
@@ -501,6 +539,28 @@ describe('table setter/getter parity', () => {
       // Top-level mirror should be cleared
       expect(attrs.tableCellSpacing).toBeNull();
       expect(attrs.borderCollapse).toBeNull();
+    });
+  });
+
+  describe('setBorder → mirrors pixel sizes on top-level attrs', () => {
+    it('converts eighth-point border sizes to px for rendering', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+      tablesSetBorderAdapter(editor, {
+        nodeId: 'table-1',
+        edge: 'top',
+        lineStyle: 'single',
+        lineWeightPt: 1,
+        color: '000000',
+      });
+
+      const calls = getSetNodeMarkupCalls();
+      const tableCall = calls.find(({ attrs }) => attrs.tableProperties != null) ?? lastWrittenAttrs(calls);
+      const attrs = tableCall?.attrs ?? {};
+      const tp = attrs.tableProperties as any;
+      const mirroredBorders = attrs.borders as any;
+      const expectedPx = eighthPointsToPixels(8)!; // 1pt → px
+      expect(tp?.borders?.top?.size).toBe(8);
+      expect(mirroredBorders?.top?.size).toBeCloseTo(expectedPx, 4);
     });
   });
 

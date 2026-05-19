@@ -1,6 +1,9 @@
 import {
   createDocumentModeExecute,
   createDocumentModeStateDeriver,
+  createDocumentOperationCapabilityStateDeriver,
+  createFormattingMarksExecute,
+  createFormattingMarksStateDeriver,
   createHistoryStateDeriver,
   createRulerExecute,
   createRulerStateDeriver,
@@ -10,6 +13,7 @@ import {
 import {
   createBoldStateDeriver,
   createBoldExecute,
+  createCopyFormatStateDeriver,
   createFontFamilyExecute,
   createFontFamilyStateDeriver,
   createFontSizeExecute,
@@ -28,14 +32,19 @@ import {
   createUnderlineExecute,
 } from './helpers/formatting.js';
 import {
+  createBulletListExecute,
   createIndentDecreaseExecute,
   createIndentIncreaseExecute,
   createLineHeightStateDeriver,
   createLinkedStyleStateDeriver,
   createListStateDeriver,
+  createOrderedListExecute,
+  createParagraphDirectionExecute,
+  createParagraphDirectionStateDeriver,
   createTextAlignStateDeriver,
 } from './helpers/paragraph.js';
 import { createDirectCommandExecute, createDisabledStateDeriver } from './helpers/general.js';
+import { createTableOfContentsInsertExecute } from './helpers/table-of-contents.js';
 import { createTableActionsStateDeriver } from './helpers/table.js';
 import { createTrackChangesSelectionActionStateDeriver } from './helpers/track-changes.js';
 import type { BuiltInToolbarRegistryEntry } from './internal-types.js';
@@ -119,13 +128,15 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
     },
     'bullet-list': {
       id: 'bullet-list',
-      directCommandName: 'toggleBulletList',
+      directCommandName: 'toggleBulletListStyle',
       state: createListStateDeriver('bullet'),
+      execute: createBulletListExecute(),
     },
     'numbered-list': {
       id: 'numbered-list',
-      directCommandName: 'toggleOrderedList',
+      directCommandName: 'toggleOrderedListStyle',
       state: createListStateDeriver('ordered'),
+      execute: createOrderedListExecute(),
     },
     'indent-increase': {
       id: 'indent-increase',
@@ -136,6 +147,18 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
       id: 'indent-decrease',
       state: createDisabledStateDeriver(),
       execute: createIndentDecreaseExecute(),
+    },
+    'direction-ltr': {
+      id: 'direction-ltr',
+      directCommandName: 'setParagraphDirection',
+      state: createParagraphDirectionStateDeriver('ltr'),
+      execute: createParagraphDirectionExecute('ltr'),
+    },
+    'direction-rtl': {
+      id: 'direction-rtl',
+      directCommandName: 'setParagraphDirection',
+      state: createParagraphDirectionStateDeriver('rtl'),
+      execute: createParagraphDirectionExecute('rtl'),
     },
 
     // History/document-level items
@@ -153,6 +176,11 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
       id: 'ruler',
       state: createRulerStateDeriver(),
       execute: createRulerExecute(),
+    },
+    'formatting-marks': {
+      id: 'formatting-marks',
+      state: createFormattingMarksStateDeriver(),
+      execute: createFormattingMarksExecute(),
     },
     zoom: {
       id: 'zoom',
@@ -174,7 +202,7 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
     'copy-format': {
       id: 'copy-format',
       directCommandName: 'copyFormat',
-      state: createDisabledStateDeriver(),
+      state: createCopyFormatStateDeriver(),
     },
     'track-changes-accept-selection': {
       id: 'track-changes-accept-selection',
@@ -190,6 +218,11 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
       id: 'image',
       state: createDisabledStateDeriver(),
       execute: createImageExecute(),
+    },
+    'table-of-contents-insert': {
+      id: 'table-of-contents-insert',
+      state: createDocumentOperationCapabilityStateDeriver('create.tableOfContents'),
+      execute: createTableOfContentsInsertExecute(),
     },
 
     // Table items

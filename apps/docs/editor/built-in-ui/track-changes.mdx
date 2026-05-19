@@ -1,0 +1,448 @@
+---
+title: Track changes
+sidebarTitle: Track changes
+keywords: "word track changes, document revisions, accept reject edits, docx tracked changes, review workflow, suggesting mode"
+---
+
+Word-style revision tracking. Every edit carries an author, a timestamp, and an id. Accept or reject one at a time, by selection, or in bulk. Changes round-trip through DOCX as native Word revisions: import, edit, export, nothing lost.
+
+<Tip>
+Building your own review panel in React? Skip the built-in UI and read [Custom UI › Track changes](/editor/custom-ui/track-changes) instead. It documents `useSuperDocTrackChanges` plus accept / reject / next / previous and the typed surface for accept-all / reject-all flows.
+</Tip>
+
+## Quick start
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: "#editor",
+  document: "contract.docx",
+  documentMode: "suggesting", // record new edits as tracked changes
+  user: {
+    name: "John Smith",
+    email: "john@company.com",
+  },
+  modules: {
+    trackChanges: {
+      visible: true,
+    },
+  },
+  onCommentsUpdate: (payload) => {
+    if (payload.type === "trackedChange") {
+      console.log(payload.event, payload.trackedChangeType, payload.changeId);
+    }
+  },
+});
+```
+
+<Note>
+  Tracked-edit recording follows `documentMode`. Set `documentMode: 'suggesting'` (or call `superdoc.setDocumentMode('suggesting')` later) to start recording new edits as revisions.
+</Note>
+
+## Configuration
+
+<ParamField path="modules.trackChanges.visible" type="boolean" default="false">
+  Show tracked-change markup when `documentMode` is `viewing`.
+</ParamField>
+
+<ParamField
+  path="modules.trackChanges.mode"
+  type="'review' | 'original' | 'final' | 'off'"
+>
+  Rendering mode.
+
+  <Expandable title="Values">
+    - `'review'`: show insertions and deletions inline (default for editing and suggesting).
+    - `'original'`: show the document as it was before tracked changes (default for viewing when `visible` is `false`).
+    - `'final'`: show the document with all changes applied.
+    - `'off'`: suppress tracked-change rendering entirely.
+  </Expandable>
+</ParamField>
+
+<ParamField path="modules.trackChanges.enabled" type="boolean" default="true">
+  Whether the layout engine treats tracked changes as active. Turn off to render the document without any revision UI.
+</ParamField>
+
+<ParamField
+  path="modules.trackChanges.replacements"
+  type="'paired' | 'independent'"
+  default="'paired'"
+>
+  How a tracked replacement (typing over selected text) surfaces in the API and UI. See [Revision model](#revision-model).
+
+  <Expandable title="Values">
+    - `'paired'` (default, Google Docs model): the insertion and deletion share one id and resolve together.
+    - `'independent'` (Microsoft Word / ECMA-376 §17.13.5): each side has its own id and resolves on its own.
+  </Expandable>
+</ParamField>
+
+## Viewing mode visibility
+
+Tracked-change markup is hidden by default when `documentMode` is `'viewing'`. Flip `modules.trackChanges.visible` to show it in read-only mode.
+
+```javascript
+new SuperDoc({
+  selector: "#viewer",
+  document: "contract.docx",
+  documentMode: "viewing",
+  modules: {
+    trackChanges: { visible: true },
+  },
+});
+```
+
+<Note>
+  The top-level `trackChanges` key still works as a deprecated alias for `modules.trackChanges` and prints a one-time console warning.
+</Note>
+
+## Revision model
+
+SuperDoc supports two models for how a tracked replacement (an insertion paired with a deletion, created when a user types over selected text) shows up in the API and UI. Pick the one that matches the editor your users expect.
+
+| Model | `modules.trackChanges.replacements` | Behavior |
+| --- | --- | --- |
+| **Paired** (default: Google Docs) | `'paired'` | Both halves share one id. One accept/reject resolves both. One sidebar row per replacement. |
+| **Independent** (Microsoft Word / ECMA-376 §17.13.5) | `'independent'` | Each insertion and each deletion has its own id. Accept/reject resolves one side at a time. A replacement produces two sidebar rows. |
+
+Both modes round-trip cleanly through DOCX: the OOXML always emits one `<w:ins>` / `<w:del>` per mark. The difference is how the API surfaces the revisions at runtime.
+
+### Paired (default)
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: "#editor",
+  document: yourFile,
+  // default: modules.trackChanges.replacements === 'paired'
+});
+```
+
+### Independent (Word-style)
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: "#editor",
+  document: yourFile,
+  modules: {
+    trackChanges: { replacements: "independent" },
+  },
+});
+```
+
+With `replacements: 'independent'`, `editor.doc.trackChanges.list()` returns one entry per revision and `decide({ id })` resolves exactly that one side. The other half of the replacement stays in the document, still addressable by its own id: useful when you're building a custom sidebar and want each revision as a separate row.
+
+## Document API
+
+Use the Document API to list, read, and resolve tracked changes. It's stable, typed, framework-agnostic, and works the same in the visual editor and headless mode.
+
+```javascript
+const editor = superdoc.activeEditor;
+
+// List every tracked change. In 'paired' mode a replacement is one entry;
+// in 'independent' mode it's two (one insert, one delete).
+const result = editor.doc.trackChanges.list();
+
+for (const item of result.items) {
+  console.log(item.id, item.type, item.author, item.excerpt);
+}
+
+// Fetch a single change by id.
+const change = editor.doc.trackChanges.get({ id: result.items[0].id });
+
+// Accept or reject by id.
+editor.doc.trackChanges.decide({ decision: "accept", target: { id: change.id } });
+
+// Accept or reject everything in the document.
+editor.doc.trackChanges.decide({ decision: "accept", target: { scope: "all" } });
+```
+
+Every entry returned by `list()` and `get()` has this shape:
+
+<ResponseField name="TrackChangeInfo" type="Object">
+  <Expandable title="Fields" defaultOpen>
+    <ResponseField name="id" type="string">
+      SuperDoc's internal id for the revision. Stable across calls.
+    </ResponseField>
+    <ResponseField name="address" type="Object">
+      Entity address: `{ kind: 'entity', entityType: 'trackedChange', entityId: id }`.
+    </ResponseField>
+    <ResponseField name="type" type="'insert' | 'delete' | 'format'">
+      Revision kind. In `'paired'` mode a replacement reports as `'insert'` (both halves grouped). In `'independent'` mode the insertion and deletion are separate entries.
+    </ResponseField>
+    <ResponseField name="author" type="string">
+      Display name of the reviewer.
+    </ResponseField>
+    <ResponseField name="authorEmail" type="string">
+      Email of the reviewer.
+    </ResponseField>
+    <ResponseField name="authorImage" type="string">
+      Reviewer avatar URL, when provided.
+    </ResponseField>
+    <ResponseField name="date" type="string">
+      ISO timestamp of the revision.
+    </ResponseField>
+    <ResponseField name="excerpt" type="string">
+      The affected text.
+    </ResponseField>
+    <ResponseField name="wordRevisionIds" type="Object">
+      Original Word `w:id` values from the source DOCX, keyed by `insert` / `delete` / `format`. Useful for correlating SuperDoc revisions with upstream systems.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+`list()` accepts an optional query with `limit`, `offset`, and `type` (`'insert' | 'delete' | 'format'`) for pagination and filtering. See the full reference:
+
+- [`trackChanges.list`](/document-api/reference/track-changes/list)
+- [`trackChanges.get`](/document-api/reference/track-changes/get)
+- [`trackChanges.decide`](/document-api/reference/track-changes/decide)
+
+## Toggling tracked edits
+
+Control recording via document mode:
+
+```javascript
+superdoc.setDocumentMode("suggesting"); // record new edits as tracked changes
+superdoc.setDocumentMode("editing"); // stop recording
+superdoc.setDocumentMode("viewing"); // read-only
+```
+
+## Change types
+
+| Type | Mark | Visual |
+| --- | --- | --- |
+| Insertion | `trackInsert` | Underlined in the reviewer's color |
+| Deletion | `trackDelete` | Strikethrough in the reviewer's color |
+| Format change | `trackFormat` | Records the before/after formatting on the run |
+
+Each mark carries `id`, `author`, `authorEmail`, `date`, and: for imports from Word: the original `w:id` as `sourceId` so you can round-trip revision provenance.
+
+## Events
+
+Tracked-change events are delivered through the same `onCommentsUpdate` callback as comment events. The top-level `type` field tells them apart; filter on `type === 'trackedChange'` and read the flat payload.
+
+```javascript
+onCommentsUpdate: (payload) => {
+  if (payload.type !== "trackedChange") return;
+
+  switch (payload.event) {
+    case "add":
+      // New tracked change created.
+      break;
+    case "update":
+      // Existing tracked change updated (e.g. reply added, author edited).
+      break;
+    case "change-accepted":
+      await markAccepted(payload.changeId);
+      break;
+    case "change-rejected":
+      await markRejected(payload.changeId);
+      break;
+    case "resolved":
+      // Tracked-change comment thread resolved.
+      break;
+  }
+};
+```
+
+### Payload fields
+
+<ResponseField name="payload" type="Object">
+  <Expandable title="Fields" defaultOpen>
+    <ResponseField name="type" type="'trackedChange'">
+      Always `'trackedChange'` for tracked-change events. Comment events use other values.
+    </ResponseField>
+    <ResponseField name="event" type="string">
+      Event kind: `'add'`, `'update'`, `'deleted'`, `'resolved'`, `'selected'`, `'change-accepted'`, or `'change-rejected'`.
+    </ResponseField>
+    <ResponseField name="changeId" type="string">
+      The tracked-change id (matches `TrackChangeInfo.id` returned by `trackChanges.list()`).
+    </ResponseField>
+    <ResponseField name="trackedChangeType" type="'trackInsert' | 'trackDelete' | 'trackFormat' | 'both'">
+      The mark type. `'both'` is used for a paired replacement (insertion and deletion together).
+    </ResponseField>
+    <ResponseField name="trackedChangeText" type="string">
+      The inserted or affected text.
+    </ResponseField>
+    <ResponseField name="deletedText" type="string | null">
+      The deleted text, for deletions and replacements.
+    </ResponseField>
+    <ResponseField name="trackedChangeDisplayType" type="string">
+      A human-facing summary derived from the change (e.g. `'hyperlinkAdded'`, `'formatChanged'`).
+    </ResponseField>
+    <ResponseField name="author" type="string">
+      Display name.
+    </ResponseField>
+    <ResponseField name="authorEmail" type="string">
+      Email.
+    </ResponseField>
+    <ResponseField name="authorImage" type="string">
+      Avatar URL, when provided.
+    </ResponseField>
+    <ResponseField name="date" type="string">
+      ISO timestamp.
+    </ResponseField>
+    <ResponseField name="documentId" type="string">
+      Source document id.
+    </ResponseField>
+    <ResponseField name="importedAuthor" type="Object | null">
+      Original author info from the imported DOCX, when available: `{ name }`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Note>
+  Events fire once per user action, not once per mark. A tracked replacement in paired mode emits one event with `trackedChangeType: 'both'`. To enumerate the current set of revisions, use `editor.doc.trackChanges.list()`: not the event stream.
+</Note>
+
+## Permissions
+
+Accept and reject permissions are governed by the same `permissionResolver` used for comments. Return `false` from the resolver to block an action.
+
+```javascript
+modules: {
+  comments: {
+    permissionResolver: ({ permission, trackedChange, currentUser, defaultDecision }) => {
+      if (
+        permission === "REJECT_OTHER" &&
+        trackedChange?.attrs?.authorEmail !== currentUser?.email
+      ) {
+        return false;
+      }
+      return defaultDecision;
+    },
+  },
+}
+```
+
+Tracked-change permission types:
+
+| Permission | Description |
+| --- | --- |
+| `RESOLVE_OWN` | Accept your own tracked changes |
+| `RESOLVE_OTHER` | Accept other users' tracked changes |
+| `REJECT_OWN` | Reject your own tracked changes |
+| `REJECT_OTHER` | Reject other users' tracked changes |
+
+See [Comments → Permission resolver](/editor/built-in-ui/comments#permission-resolver) for the full list of permission types and resolver behavior.
+
+## Word import/export
+
+Tracked changes round-trip through DOCX as native Word revisions. Import it. Edit it. Export it. Nothing lost.
+
+```javascript
+// Export with revisions preserved. Word opens the file and shows the
+// insertions and deletions under Review.
+const blob = await superdoc.export();
+
+// Accept all first, then export a clean copy.
+superdoc.activeEditor.doc.trackChanges.decide({
+  decision: "accept",
+  target: { scope: "all" },
+});
+const cleanBlob = await superdoc.export();
+```
+
+Imported Word revisions preserve their original `w:id` values as `wordRevisionIds` on each `TrackChangeInfo` entry, so you can correlate SuperDoc revisions with the source document or an external review system.
+
+<Note>
+  Round-trip support today covers inserted run content (`<w:ins>`), deleted run content (`<w:del>`), and run-level format changes (`<w:rPrChange>`). Paragraph-level property changes, tracked table row and cell edits, and tracked moves are on the roadmap: they import as accepted content today.
+</Note>
+
+## Legacy editor commands
+
+<Warning>
+  **Deprecated**. Use the [Document API](#document-api) (`editor.doc.trackChanges.list()`, `editor.doc.trackChanges.decide(...)`) instead. The commands below remain available but will be removed in a future release.
+</Warning>
+
+These legacy commands live on `superdoc.activeEditor.commands` and predate the Document API. They're still used by the built-in toolbar and a handful of keyboard shortcuts.
+
+### Enable and toggle
+
+```javascript
+superdoc.activeEditor.commands.enableTrackChanges();
+superdoc.activeEditor.commands.disableTrackChanges();
+superdoc.activeEditor.commands.toggleTrackChanges();
+```
+
+### Accept
+
+```javascript
+superdoc.activeEditor.commands.acceptTrackedChangeBySelection();
+superdoc.activeEditor.commands.acceptTrackedChangeById("change-123");
+superdoc.activeEditor.commands.acceptTrackedChangesBetween(10, 50);
+superdoc.activeEditor.commands.acceptAllTrackedChanges();
+superdoc.activeEditor.commands.acceptTrackedChangeFromToolbar();
+```
+
+### Reject
+
+```javascript
+superdoc.activeEditor.commands.rejectTrackedChangeOnSelection();
+superdoc.activeEditor.commands.rejectTrackedChangeById("change-123");
+superdoc.activeEditor.commands.rejectTrackedChangesBetween(10, 50);
+superdoc.activeEditor.commands.rejectAllTrackedChanges();
+superdoc.activeEditor.commands.rejectTrackedChangeFromToolbar();
+```
+
+### Insert a tracked change programmatically
+
+```javascript
+superdoc.activeEditor.commands.insertTrackedChange({
+  from: 10,
+  to: 25,
+  text: "replacement text",
+  comment: "AI suggestion: improved wording",
+});
+```
+
+<ParamField path="options" type="Object" required>
+  <Expandable title="Options">
+    <ParamField path="from" type="number" required>
+      Start of the range.
+    </ParamField>
+    <ParamField path="to" type="number" required>
+      End of the range. When `from === to`, the change is a pure insertion.
+    </ParamField>
+    <ParamField path="text" type="string">
+      Replacement text. Omit or leave empty for a pure deletion.
+    </ParamField>
+    <ParamField path="id" type="string">
+      Explicit id for the change. Defaults to a generated UUID.
+    </ParamField>
+    <ParamField path="user" type="Object">
+      Author override (`{ name, email, image? }`). Defaults to the editor's `user` option.
+    </ParamField>
+    <ParamField path="comment" type="string">
+      Optional comment to attach.
+    </ParamField>
+    <ParamField path="addToHistory" type="boolean" default="true">
+      Record the transaction in the undo stack.
+    </ParamField>
+    <ParamField path="emitCommentEvent" type="boolean" default="true">
+      Emit a `trackedChange` event through `onCommentsUpdate`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### View modes
+
+Temporarily render the document without applying revisions: useful for previewing the accepted or original state:
+
+```javascript
+// Show the document as it was before tracked changes.
+superdoc.activeEditor.commands.enableTrackChangesShowOriginal();
+superdoc.activeEditor.commands.disableTrackChangesShowOriginal();
+superdoc.activeEditor.commands.toggleTrackChangesShowOriginal();
+
+// Show the document with all changes accepted.
+superdoc.activeEditor.commands.enableTrackChangesShowFinal();
+superdoc.activeEditor.commands.toggleTrackChangesShowFinal();
+```
+
+## Full example
+
+<Card
+  title="Track Changes Example"
+  icon="git-compare"
+  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/built-in-ui/track-changes"
+>
+  Runnable example: mode switching, accept and reject, comments sidebar, DOCX import and export.
+</Card>

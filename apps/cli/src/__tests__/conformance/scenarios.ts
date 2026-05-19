@@ -3023,7 +3023,7 @@ export const SUCCESS_SCENARIOS = {
   ]),
   'doc.tables.clearBorder': tableMutationScenario('tables.clearBorder', ['--edge', 'top']),
   'doc.tables.applyBorderPreset': tableMutationScenario('tables.applyBorderPreset', ['--preset', 'all']),
-  'doc.tables.setShading': tableMutationScenario('tables.setShading', ['--color', 'FF0000']),
+  'doc.tables.setShading': tableMutationScenario('tables.setShading', ['--color-json', '"FF0000"']),
   'doc.tables.clearShading': tableMutationScenario('tables.clearShading', []),
   'doc.tables.setTablePadding': tableMutationScenario('tables.setTablePadding', [
     '--top-pt',

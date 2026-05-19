@@ -1,39 +1,33 @@
-import { undoDepth, redoDepth } from 'prosemirror-history';
-import { yUndoPluginKey } from 'y-prosemirror';
 import type { HistoryAdapter, HistoryState, HistoryActionResult, OperationId } from '@superdoc/document-api';
 import { OPERATION_IDS, COMMAND_CATALOG } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
 import { DocumentApiAdapterError } from './errors.js';
+import { readEditorHistorySnapshot, type DocumentHistoryState } from '../core/presentation-editor/history/index.js';
 
-function isCollabHistory(editor: Editor): boolean {
-  return Boolean(editor.options.collaborationProvider && editor.options.ydoc);
-}
+/**
+ * Minimal PresentationEditor surface the history adapter needs.
+ *
+ * The root document API is assembled from the body editor. When that editor
+ * belongs to a PresentationEditor, history must route through the presentation
+ * layer so body/header/footer/note undo stays aligned with the visible UI.
+ */
+type RootPresentationHistoryOwner = {
+  editor: Editor;
+  getHistoryState: () => DocumentHistoryState;
+  undo: () => boolean;
+  redo: () => boolean;
+};
 
-function getUndoDepth(editor: Editor): number {
-  if (!editor.state) return 0;
-  try {
-    if (isCollabHistory(editor)) {
-      const undoManager = yUndoPluginKey.getState(editor.state)?.undoManager;
-      return undoManager?.undoStack?.length ?? 0;
-    }
-    return undoDepth(editor.state);
-  } catch {
-    return 0;
-  }
-}
-
-function getRedoDepth(editor: Editor): number {
-  if (!editor.state) return 0;
-  try {
-    if (isCollabHistory(editor)) {
-      const undoManager = yUndoPluginKey.getState(editor.state)?.undoManager;
-      return undoManager?.redoStack?.length ?? 0;
-    }
-    return redoDepth(editor.state);
-  } catch {
-    return 0;
-  }
+function getRootPresentationHistoryOwner(editor: Editor): RootPresentationHistoryOwner | null {
+  const withPresentation = editor as Editor & {
+    presentationEditor?: RootPresentationHistoryOwner | null;
+    _presentationEditor?: RootPresentationHistoryOwner | null;
+  };
+  const presentationEditor = withPresentation.presentationEditor ?? withPresentation._presentationEditor ?? null;
+  if (!presentationEditor) return null;
+  if (presentationEditor.editor !== editor) return null;
+  return presentationEditor;
 }
 
 /** Cached list of history-unsafe operation IDs, computed once from the catalog. */
@@ -41,11 +35,42 @@ const HISTORY_UNSAFE_OPS: readonly OperationId[] = OPERATION_IDS.filter(
   (id) => COMMAND_CATALOG[id].historyUnsafe === true,
 );
 
+/**
+ * Read the current undo/redo depths for this adapter target.
+ *
+ * Root editor adapters proxy through PresentationEditor so the document API
+ * exposes the same history state the visible UI does. Sub-editor adapters stay
+ * intentionally surface-scoped.
+ */
+function readHistoryDepths(editor: Editor): { undoDepth: number; redoDepth: number } {
+  const presentationOwner = getRootPresentationHistoryOwner(editor);
+  if (presentationOwner) {
+    const state = presentationOwner.getHistoryState();
+    return { undoDepth: state.undoDepth, redoDepth: state.redoDepth };
+  }
+  return readEditorHistorySnapshot(editor);
+}
+
+function runHistoryCommand(editor: Editor, action: 'undo' | 'redo'): boolean {
+  const presentationOwner = getRootPresentationHistoryOwner(editor);
+  if (presentationOwner) {
+    return action === 'undo' ? presentationOwner.undo() : presentationOwner.redo();
+  }
+
+  const command = editor.commands?.[action];
+  if (typeof command !== 'function') {
+    throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', `history.${action} command is not available.`, {
+      reason: 'missing_command',
+    });
+  }
+
+  return Boolean(command());
+}
+
 export function createHistoryAdapter(editor: Editor): HistoryAdapter {
   return {
     get(): HistoryState {
-      const ud = getUndoDepth(editor);
-      const rd = getRedoDepth(editor);
+      const { undoDepth: ud, redoDepth: rd } = readHistoryDepths(editor);
       return {
         undoDepth: ud,
         redoDepth: rd,
@@ -56,17 +81,12 @@ export function createHistoryAdapter(editor: Editor): HistoryAdapter {
     },
 
     undo(): HistoryActionResult {
-      if (typeof editor.commands?.undo !== 'function') {
-        throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'history.undo command is not available.', {
-          reason: 'missing_command',
-        });
-      }
       const revBefore = getRevision(editor);
-      const depth = getUndoDepth(editor);
+      const depth = readHistoryDepths(editor).undoDepth;
       if (depth === 0) {
         return { noop: true, reason: 'EMPTY_UNDO_STACK', revision: { before: revBefore, after: revBefore } };
       }
-      const success = Boolean(editor.commands.undo());
+      const success = runHistoryCommand(editor, 'undo');
       const revAfter = getRevision(editor);
       return {
         noop: !success,
@@ -76,17 +96,12 @@ export function createHistoryAdapter(editor: Editor): HistoryAdapter {
     },
 
     redo(): HistoryActionResult {
-      if (typeof editor.commands?.redo !== 'function') {
-        throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'history.redo command is not available.', {
-          reason: 'missing_command',
-        });
-      }
       const revBefore = getRevision(editor);
-      const depth = getRedoDepth(editor);
+      const depth = readHistoryDepths(editor).redoDepth;
       if (depth === 0) {
         return { noop: true, reason: 'EMPTY_REDO_STACK', revision: { before: revBefore, after: revBefore } };
       }
-      const success = Boolean(editor.commands.redo());
+      const success = runHistoryCommand(editor, 'redo');
       const revAfter = getRevision(editor);
       return {
         noop: !success,

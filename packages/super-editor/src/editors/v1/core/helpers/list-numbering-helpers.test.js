@@ -21,7 +21,7 @@ vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({
 import { getStyleTagFromStyleId } from '@core/super-converter/v2/importer/listImporter.js';
 
 // Import the function we want to test
-const { getListDefinitionDetails, createNewList, ListHelpers } = listHelpers;
+const { getListDefinitionDetails, createNewList, ListHelpers, markerTextToBulletStyle } = listHelpers;
 
 // Global parts runtime setup — needed because helpers now route through mutatePart
 beforeEach(() => {
@@ -1562,5 +1562,69 @@ describe('createNewList', () => {
       expect(ol.attrs.paragraphProperties).toEqual({ numberingProperties: { numId: 1, ilvl: 0 } });
       expect(ol.textContent).toBe('abc 123');
     });
+  });
+});
+
+describe('markerTextToBulletStyle', () => {
+  it.each([
+    ['•', 'disc'],
+    ['◦', 'circle'],
+    ['▪', 'square'],
+  ])('maps marker char %s to %s', (markerText, expected) => {
+    expect(markerTextToBulletStyle(markerText)).toBe(expected);
+  });
+
+  it.each([[null], [undefined], [''], ['o'], ['\uF0B7'], ['\uF0A7'], ['x'], ['·'], ['●'], ['1.'], ['•1']])(
+    'returns null for unrecognized marker %p',
+    (markerText) => {
+      expect(markerTextToBulletStyle(markerText)).toBeNull();
+    },
+  );
+});
+
+describe('numberingInfoToOrderedStyle', () => {
+  const { numberingInfoToOrderedStyle } = listHelpers;
+
+  // The mapper checks `numberingType` (numFmt) plus the LAST character of markerText
+  // to disambiguate suffix variants (e.g. "1." vs "1)").
+  it.each([
+    ['decimal', '1.', 'decimal'],
+    ['decimal', '1)', 'decimal-paren'],
+    ['decimal', '23.', 'decimal'],
+    ['decimal', '99)', 'decimal-paren'],
+    ['upperRoman', 'I.', 'upper-roman'],
+    ['upperRoman', 'XIV.', 'upper-roman'],
+    ['lowerRoman', 'i.', 'lower-roman'],
+    ['lowerRoman', 'iv.', 'lower-roman'],
+    ['upperLetter', 'A.', 'upper-alpha'],
+    ['upperLetter', 'C.', 'upper-alpha'],
+    ['upperLetter', 'A)', 'upper-alpha-paren'],
+    ['upperLetter', 'Z)', 'upper-alpha-paren'],
+    ['lowerLetter', 'a.', 'lower-alpha'],
+    ['lowerLetter', 'a)', 'lower-alpha-paren'],
+    ['lowerLetter', 'z)', 'lower-alpha-paren'],
+  ])('maps (%s, %s) to %s', (numberingType, markerText, expected) => {
+    expect(numberingInfoToOrderedStyle(numberingType, markerText)).toBe(expected);
+  });
+
+  it.each([
+    ['upperRoman', 'I)', 'upperRoman with ")" suffix not in map'],
+    ['lowerRoman', 'i)', 'lowerRoman with ")" suffix not in map'],
+    ['decimalZero', '01.', 'decimalZero numFmt not in map'],
+    ['ordinal', '1st', 'ordinal numFmt not in map'],
+    ['decimal', 'Step 1:', 'unrecognized suffix ":"'],
+    ['decimal', '1', 'no suffix at all'],
+    ['', '1.', 'empty numberingType'],
+  ])('returns null for unrecognized combo (%s, %s) (%s)', (numberingType, markerText) => {
+    expect(numberingInfoToOrderedStyle(numberingType, markerText)).toBeNull();
+  });
+
+  it.each([
+    [null, '1.'],
+    ['decimal', null],
+    [undefined, undefined],
+    [null, null],
+  ])('returns null for nullish inputs (%s, %s)', (numberingType, markerText) => {
+    expect(numberingInfoToOrderedStyle(numberingType, markerText)).toBeNull();
   });
 });

@@ -376,6 +376,137 @@ describe('createToolbarRegistry', () => {
     });
   });
 
+  it('derives mirrored text-align for RTL paragraph with explicit right justification', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['text-align']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {
+              resolve: vi.fn(() => '$resolved-pos'),
+            },
+            selection: {
+              $from: {
+                depth: 1,
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {
+                          paragraphProperties: {
+                            rightToLeft: true,
+                            justification: 'right',
+                          },
+                        },
+                      }
+                    : null,
+                ),
+                before: vi.fn(() => 5),
+                start: vi.fn(() => 6),
+              },
+            },
+          },
+          converter: null,
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: 'left',
+    });
+  });
+
+  it('derives mirrored text-align for RTL paragraph with explicit left justification', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['text-align']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {
+              resolve: vi.fn(() => '$resolved-pos'),
+            },
+            selection: {
+              $from: {
+                depth: 1,
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {
+                          paragraphProperties: {
+                            rightToLeft: true,
+                            justification: 'left',
+                          },
+                        },
+                      }
+                    : null,
+                ),
+                before: vi.fn(() => 5),
+                start: vi.fn(() => 6),
+              },
+            },
+          },
+          converter: null,
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: 'right',
+    });
+  });
+
+  it('defaults text-align to right for RTL paragraph when justification is missing', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['text-align']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {
+              resolve: vi.fn(() => '$resolved-pos'),
+            },
+            selection: {
+              $from: {
+                depth: 1,
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {
+                          paragraphProperties: {
+                            rightToLeft: true,
+                          },
+                        },
+                      }
+                    : null,
+                ),
+                before: vi.fn(() => 5),
+                start: vi.fn(() => 6),
+              },
+            },
+          },
+          converter: null,
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: 'right',
+    });
+  });
+
   it('derives line-height value from paragraph spacing', () => {
     const registry = createToolbarRegistry();
     const state = registry['line-height']?.state({
@@ -542,6 +673,57 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: true,
       disabled: false,
+      value: null,
+    });
+  });
+
+  it.each([
+    ['•', '•'],
+    ['◦', '◦'],
+    ['▪', '▪'],
+  ])('exposes raw markerText %s as bullet-list value when paragraph is active', (markerText, expected) => {
+    const registry = createToolbarRegistry();
+    const state = registry['bullet-list']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {
+              resolve: vi.fn(() => '$resolved-pos'),
+            },
+            selection: {
+              $from: {
+                depth: 1,
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {
+                          listRendering: {
+                            numberingType: 'bullet',
+                            markerText,
+                          },
+                          paragraphProperties: {
+                            numberingProperties: { numId: 1 },
+                          },
+                        },
+                      }
+                    : null,
+                ),
+                before: vi.fn(() => 5),
+                start: vi.fn(() => 6),
+              },
+            },
+          },
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: expected,
     });
   });
 
@@ -565,6 +747,7 @@ describe('createToolbarRegistry', () => {
                         attrs: {
                           listRendering: {
                             numberingType: 'decimal',
+                            markerText: '1.',
                           },
                           paragraphProperties: {
                             numberingProperties: {
@@ -588,6 +771,7 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: true,
       disabled: false,
+      value: 'decimal',
     });
   });
 
@@ -646,6 +830,26 @@ describe('createToolbarRegistry', () => {
         config: {
           rulers: true,
         },
+      },
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+    });
+  });
+
+  it('activates formatting marks state when formatting marks are enabled in superdoc config', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['formatting-marks']?.state({
+      context: null,
+      superdoc: {
+        config: {
+          layoutEngineOptions: {
+            showFormattingMarks: true,
+          },
+        },
+        toggleFormattingMarks: vi.fn(),
       },
     });
 
@@ -797,6 +1001,50 @@ describe('createToolbarRegistry', () => {
     });
   });
 
+  it('derives copy-format active state from stored format painter style', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['copy-format']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          storage: {
+            formatCommands: {
+              storedStyle: [{ type: { name: 'bold' }, attrs: {} }],
+            },
+          },
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+    });
+  });
+
+  it('keeps copy-format inactive when no stored format painter style exists', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['copy-format']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          storage: {
+            formatCommands: {
+              storedStyle: null,
+            },
+          },
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: false,
+    });
+  });
+
   it('keeps table-insert disabled state tied to editability', () => {
     const registry = createToolbarRegistry();
     const state = registry['table-insert']?.state({
@@ -810,6 +1058,56 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: false,
       disabled: true,
+    });
+  });
+
+  it('keeps table-of-contents-insert disabled when create.tableOfContents is unavailable', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['table-of-contents-insert']?.state({
+      context: {
+        ...createContext(),
+        target: {
+          commands: {},
+          doc: {
+            capabilities: () => ({
+              operations: {
+                'create.tableOfContents': { available: false },
+              },
+            }),
+          },
+        },
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: true,
+    });
+  });
+
+  it('enables table-of-contents-insert when create.tableOfContents is available', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['table-of-contents-insert']?.state({
+      context: {
+        ...createContext(),
+        target: {
+          commands: {},
+          doc: {
+            capabilities: () => ({
+              operations: {
+                'create.tableOfContents': { available: true },
+              },
+            }),
+          },
+        },
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: false,
     });
   });
 
@@ -874,6 +1172,278 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: false,
       disabled: true,
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PR-2873 (SD-2527) — full coverage of bullet + ordered style derivation
+  //
+  // The existing 'activates bullet-list' / 'activates numbered-list' tests
+  // above only cover one bullet case (null markerText) and one ordered case
+  // (decimal). These new tests exercise every PR-supported combination of
+  // numFmt + marker suffix that flows through createListStateDeriver.
+  // -------------------------------------------------------------------------
+  const makeListContext = (listRendering: { numberingType: string; markerText?: string | null }) => ({
+    ...createContext(),
+    editor: {
+      state: {
+        doc: { resolve: vi.fn(() => '$resolved-pos') },
+        selection: {
+          $from: {
+            depth: 1,
+            node: vi.fn((depth) =>
+              depth === 1
+                ? {
+                    type: { name: 'paragraph' },
+                    attrs: {
+                      listRendering,
+                      paragraphProperties: { numberingProperties: { numId: 1 } },
+                    },
+                  }
+                : null,
+            ),
+            before: vi.fn(() => 5),
+            start: vi.fn(() => 6),
+          },
+        },
+      },
+    } as any,
+  });
+
+  describe('bullet-list state value (PR-2873)', () => {
+    // The headless deriver currently returns the raw markerText for bullets
+    // (vs ordered which returns a normalized style key). External consumers
+    // need to know this asymmetry — these tests document it.
+    it.each([['•'], ['◦'], ['▪']])('returns markerText "%s" verbatim when bullet is active', (markerText) => {
+      const registry = createToolbarRegistry();
+      const state = registry['bullet-list']?.state({
+        context: makeListContext({ numberingType: 'bullet', markerText }),
+        superdoc: {},
+      });
+      expect(state).toEqual({ active: true, disabled: false, value: markerText });
+    });
+
+    it('returns markerText for legacy Symbol-font middle dot (·) — not normalized', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['bullet-list']?.state({
+        context: makeListContext({ numberingType: 'bullet', markerText: '·' }),
+        superdoc: {},
+      });
+      // Legacy Symbol-font bullet is not in BULLET_STYLE_CHARS but the deriver
+      // surfaces the raw glyph anyway; the dropdown UI does the recognition.
+      expect(state).toEqual({ active: true, disabled: false, value: '·' });
+    });
+
+    it('returns null when current paragraph is ordered, not bullet', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['bullet-list']?.state({
+        context: makeListContext({ numberingType: 'decimal', markerText: '1.' }),
+        superdoc: {},
+      });
+      expect(state).toEqual({ active: false, disabled: false, value: null });
+    });
+  });
+
+  describe('numbered-list state value (PR-2873)', () => {
+    it.each([
+      ['decimal', '1.', 'decimal'],
+      ['decimal', '1)', 'decimal-paren'],
+      ['decimal', '23.', 'decimal'],
+      ['upperRoman', 'I.', 'upper-roman'],
+      ['upperRoman', 'XIV.', 'upper-roman'],
+      ['lowerRoman', 'i.', 'lower-roman'],
+      ['upperLetter', 'A.', 'upper-alpha'],
+      ['upperLetter', 'A)', 'upper-alpha-paren'],
+      ['upperLetter', 'Z)', 'upper-alpha-paren'],
+      ['lowerLetter', 'a.', 'lower-alpha'],
+      ['lowerLetter', 'a)', 'lower-alpha-paren'],
+      ['lowerLetter', 'z)', 'lower-alpha-paren'],
+    ])('maps (%s, %s) to value=%s', (numberingType, markerText, expected) => {
+      const registry = createToolbarRegistry();
+      const state = registry['numbered-list']?.state({
+        context: makeListContext({ numberingType, markerText }),
+        superdoc: {},
+      });
+      expect(state).toEqual({ active: true, disabled: false, value: expected });
+    });
+
+    it.each([
+      ['decimalZero', '01.', 'decimalZero numFmt is not in the lookup'],
+      ['decimal', 'Step 1:', 'unrecognized suffix ":"'],
+    ])('returns value=null for unsupported combo (%s, %s) — %s', (numberingType, markerText) => {
+      const registry = createToolbarRegistry();
+      const state = registry['numbered-list']?.state({
+        context: makeListContext({ numberingType, markerText }),
+        superdoc: {},
+      });
+      // active is true (it IS an ordered list) but value is null because the
+      // PR doesn't recognize this combo — the dropdown won't highlight any option.
+      expect(state).toEqual({ active: true, disabled: false, value: null });
+    });
+
+    it('returns null when current paragraph is bullet, not ordered', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['numbered-list']?.state({
+        context: makeListContext({ numberingType: 'bullet', markerText: '•' }),
+        superdoc: {},
+      });
+      expect(state).toEqual({ active: false, disabled: false, value: null });
+    });
+  });
+
+  // SD-2810/PR #3226: the headless direction-ltr / direction-rtl ids must encode
+  // their direction in the closure (not in a payload). Public payload type is
+  // `never` because the runtime ignores any payload arg. These tests pin that
+  // contract: no-payload invocation maps to the expected setParagraphDirection
+  // call with alignmentPolicy='matchDirection'.
+  describe('direction-ltr / direction-rtl execute contract', () => {
+    const createExecuteContext = (commandSpy: ReturnType<typeof vi.fn>): ToolbarContext => ({
+      target: {
+        commands: {
+          setParagraphDirection: commandSpy,
+        },
+      },
+      surface: 'body',
+      isEditable: true,
+      selectionEmpty: false,
+      editor: {
+        commands: {
+          setParagraphDirection: commandSpy,
+        },
+      } as any,
+    });
+
+    it("controller.execute('direction-ltr') calls setParagraphDirection({direction:'ltr', alignmentPolicy:'matchDirection'})", () => {
+      const commandSpy = vi.fn(() => true);
+      const registry = createToolbarRegistry();
+      const result = registry['direction-ltr']?.execute?.({
+        context: createExecuteContext(commandSpy),
+        superdoc: {},
+      });
+
+      expect(result).toBe(true);
+      expect(commandSpy).toHaveBeenCalledExactlyOnceWith({
+        direction: 'ltr',
+        alignmentPolicy: 'matchDirection',
+      });
+    });
+
+    it("controller.execute('direction-rtl') calls setParagraphDirection({direction:'rtl', alignmentPolicy:'matchDirection'})", () => {
+      const commandSpy = vi.fn(() => true);
+      const registry = createToolbarRegistry();
+      const result = registry['direction-rtl']?.execute?.({
+        context: createExecuteContext(commandSpy),
+        superdoc: {},
+      });
+
+      expect(result).toBe(true);
+      expect(commandSpy).toHaveBeenCalledExactlyOnceWith({
+        direction: 'rtl',
+        alignmentPolicy: 'matchDirection',
+      });
+    });
+
+    it('execute ignores any payload arg (direction comes from the command id)', () => {
+      const commandSpy = vi.fn(() => true);
+      const registry = createToolbarRegistry();
+      // The headless ToolbarPayloadMap declares both direction ids as `never`,
+      // so callers can't pass a payload through the typed surface. This test
+      // pins the runtime side of that contract: even if someone bypasses TS
+      // and passes a payload, it's ignored.
+      const result = registry['direction-ltr']?.execute?.({
+        context: createExecuteContext(commandSpy),
+        superdoc: {},
+        payload: { direction: 'rtl', alignmentPolicy: undefined } as never,
+      });
+
+      expect(result).toBe(true);
+      // Still called with LTR, not the contradictory payload.
+      expect(commandSpy).toHaveBeenCalledExactlyOnceWith({
+        direction: 'ltr',
+        alignmentPolicy: 'matchDirection',
+      });
+    });
+
+    it('returns false when editor command is unavailable', () => {
+      const registry = createToolbarRegistry();
+      const result = registry['direction-ltr']?.execute?.({
+        context: {
+          ...createContext(),
+          editor: { commands: {} } as any,
+        },
+        superdoc: {},
+      });
+
+      expect(result).toBe(false);
+    });
+  });
+
+  // PR #3226: state-deriver tests for direction-ltr/direction-rtl. The deriver
+  // reads paragraphProperties.rightToLeft via getCurrentResolvedParagraphProperties
+  // and returns `{ active: current === closureDirection, disabled, value: current }`.
+  describe('direction-ltr / direction-rtl state deriver', () => {
+    const makeDirectionContext = (rightToLeft: boolean | undefined): ToolbarContext => ({
+      ...createContext(),
+      editor: {
+        // Leaving `converter` undefined makes calculateResolvedParagraphProperties
+        // return node.attrs.paragraphProperties directly, no cascade.
+        state: {
+          doc: { resolve: vi.fn(() => '$resolved-pos') },
+          selection: {
+            $from: {
+              depth: 1,
+              node: vi.fn((depth) =>
+                depth === 1
+                  ? {
+                      type: { name: 'paragraph' },
+                      attrs: {
+                        paragraphProperties: rightToLeft === undefined ? {} : { rightToLeft },
+                      },
+                    }
+                  : null,
+              ),
+              before: vi.fn(() => 5),
+              start: vi.fn(() => 6),
+            },
+          },
+        },
+      } as any,
+    });
+
+    it('direction-rtl is active when paragraph resolves RTL', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-rtl']?.state({ context: makeDirectionContext(true), superdoc: {} });
+
+      expect(state).toEqual({ active: true, disabled: false, value: 'rtl' });
+    });
+
+    it('direction-rtl is inactive when paragraph resolves LTR', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-rtl']?.state({ context: makeDirectionContext(false), superdoc: {} });
+
+      expect(state).toEqual({ active: false, disabled: false, value: 'ltr' });
+    });
+
+    it('direction-rtl is inactive when paragraph has no explicit direction', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-rtl']?.state({ context: makeDirectionContext(undefined), superdoc: {} });
+
+      // Falsy rightToLeft -> current = 'ltr', so direction-rtl is inactive.
+      expect(state).toEqual({ active: false, disabled: false, value: 'ltr' });
+    });
+
+    it('direction-ltr is active when paragraph resolves LTR', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-ltr']?.state({ context: makeDirectionContext(false), superdoc: {} });
+
+      expect(state).toEqual({ active: true, disabled: false, value: 'ltr' });
+    });
+
+    it('direction-ltr is inactive when paragraph resolves RTL', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-ltr']?.state({ context: makeDirectionContext(true), superdoc: {} });
+
+      expect(state).toEqual({ active: false, disabled: false, value: 'rtl' });
     });
   });
 });

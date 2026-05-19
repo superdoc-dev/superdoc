@@ -4,6 +4,7 @@ import type {
   Measure,
   ResolvedHeaderFooterLayout,
   ResolvedHeaderFooterPage,
+  LayoutStoryLocator,
 } from '@superdoc/contracts';
 import { buildBlockMap, resolveFragmentItem } from './resolveLayout.js';
 
@@ -18,6 +19,7 @@ export function resolveHeaderFooterLayout(
   layout: HeaderFooterLayout,
   blocks: FlowBlock[],
   measures: Measure[],
+  story?: LayoutStoryLocator,
 ): ResolvedHeaderFooterLayout {
   const pages: ResolvedHeaderFooterPage[] = layout.pages.map((page) => {
     const pageBlocks = page.blocks ?? blocks;
@@ -29,7 +31,7 @@ export function resolveHeaderFooterLayout(
       number: page.number,
       numberText: page.numberText,
       items: page.fragments.map((fragment, fragmentIndex) =>
-        resolveFragmentItem(fragment, fragmentIndex, page.number - 1, blockMap, blockVersionCache),
+        resolveFragmentItem(fragment, fragmentIndex, page.number - 1, blockMap, blockVersionCache, story),
       ),
     };
   });

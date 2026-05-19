@@ -5,7 +5,7 @@
  */
 
 import type {
-  BorderStyle,
+  BorderSpec,
   BoxSpacing,
   CellBorders,
   CellSpacing,
@@ -21,6 +21,7 @@ import type {
   TableBlock,
   TableAnchor,
   TableWrap,
+  SourceAnchor,
 } from '@superdoc/contracts';
 import type {
   PMNode,
@@ -36,9 +37,11 @@ import type {
 } from '../types.js';
 import {
   extractTableBorders,
+  extractCellBorders,
   extractCellPadding,
   convertBorderSpec,
   normalizeShadingColor,
+  borderSizeToPx,
 } from '../attributes/index.js';
 import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
@@ -56,6 +59,7 @@ import {
   type TableInfo,
 } from '@superdoc/style-engine/ooxml';
 import { resolveThemeColorValue } from '../marks/theme-color.js';
+import { resolveTableDirection, resolveSectionDirection } from '../direction/index.js';
 
 /**
  * Normalizes tableCellSpacing from PM node to CellSpacing object format.
@@ -75,34 +79,11 @@ function normalizeCellSpacing(raw: number | { value?: number; type?: string } | 
   return { value, type };
 }
 
-function normalizeLegacyBorderStyle(value: string | undefined): BorderStyle {
-  switch ((value ?? '').trim().toLowerCase()) {
-    case 'none':
-    case 'nil':
-      return 'none';
-    case 'double':
-      return 'double';
-    case 'dashed':
-      return 'dashed';
-    case 'dotted':
-    case 'dot':
-      return 'dotted';
-    case 'thick':
-      return 'thick';
-    case 'triple':
-      return 'triple';
-    case 'dotdash':
-      return 'dotDash';
-    case 'dotdotdash':
-      return 'dotDotDash';
-    case 'wave':
-      return 'wave';
-    case 'doublewave':
-      return 'doubleWave';
-    case 'single':
-    default:
-      return 'single';
-  }
+function sourceAnchorFromNode(node: PMNode): SourceAnchor | undefined {
+  const sourceAnchor = (node.attrs as Record<string, unknown> | undefined)?.sourceAnchor;
+  return sourceAnchor && typeof sourceAnchor === 'object' && !Array.isArray(sourceAnchor)
+    ? (sourceAnchor as SourceAnchor)
+    : undefined;
 }
 
 type TableParserDependencies = {
@@ -147,6 +128,55 @@ const isTableCellNode = (node: PMNode): boolean =>
   node.type === 'table_cell' ||
   node.type === 'tableHeader' ||
   node.type === 'table_header';
+
+const isTableSkipPlaceholderCell = (node: PMNode): boolean => {
+  const placeholder = node.attrs?.__placeholder;
+  return placeholder === 'gridBefore' || placeholder === 'gridAfter';
+};
+
+// Legacy persisted-cell borders sometimes use lowercase or alias forms
+// (`dot`, `dotdash`, `doublewave`) instead of the canonical camelCase
+// BorderStyle enum. convertBorderSpec passes `val` through unchanged, so
+// the legacy fallback path normalizes here before handoff.
+function normalizeLegacyBorderStyle(value: string | undefined): string {
+  switch ((value ?? '').trim().toLowerCase()) {
+    case 'none':
+    case 'nil':
+      return 'none';
+    case 'double':
+      return 'double';
+    case 'dashed':
+      return 'dashed';
+    case 'dotted':
+    case 'dot':
+      return 'dotted';
+    case 'thick':
+      return 'thick';
+    case 'triple':
+      return 'triple';
+    case 'dotdash':
+      return 'dotDash';
+    case 'dotdotdash':
+      return 'dotDotDash';
+    case 'wave':
+      return 'wave';
+    case 'doublewave':
+      return 'doubleWave';
+    case 'single':
+    default:
+      return 'single';
+  }
+}
+
+const convertResolvedCellBorder = (value: unknown): BorderSpec | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+
+  const border = value as Record<string, unknown>;
+  const size = typeof border.size === 'number' ? borderSizeToPx(border.size) : undefined;
+  const normalized = size != null ? { ...border, size } : border;
+
+  return convertBorderSpec(normalized);
+};
 
 type NormalizedRowHeight =
   | {
@@ -334,6 +364,65 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     });
   };
 
+  // SDT wrappers (documentPartObject, structuredContentBlock) can nest
+  // arbitrarily deep around the visible paragraph/table content.
+  const flattenSdtWrappersIntoCell = (
+    wrapperNode: PMNode,
+    inheritedSdtMetadata: ReturnType<typeof resolveNodeSdtMetadata> | undefined,
+  ): void => {
+    if (!Array.isArray(wrapperNode.content)) return;
+    for (const nestedNode of wrapperNode.content) {
+      if (nestedNode.type === 'paragraph') {
+        if (!paragraphToFlowBlocks) continue;
+        const paragraphBlocks = paragraphToFlowBlocks({
+          para: nestedNode,
+          nextBlockId: context.nextBlockId,
+          positions: context.positions,
+          storyKey: context.storyKey,
+          trackedChangesConfig: context.trackedChangesConfig,
+          bookmarks: context.bookmarks,
+          hyperlinkConfig: context.hyperlinkConfig,
+          themeColors: context.themeColors,
+          converterContext: cellConverterContext,
+          converters: context.converters,
+          enableComments: context.enableComments,
+        });
+        appendParagraphBlocks(paragraphBlocks, inheritedSdtMetadata);
+        continue;
+      }
+      if (nestedNode.type === 'table' && tableNodeToBlock) {
+        const tableBlock = tableNodeToBlock(nestedNode, {
+          nextBlockId: context.nextBlockId,
+          positions: context.positions,
+          storyKey: context.storyKey,
+          trackedChangesConfig: context.trackedChangesConfig,
+          bookmarks: context.bookmarks,
+          hyperlinkConfig: context.hyperlinkConfig,
+          themeColors: context.themeColors,
+          converterContext: context.converterContext,
+          converters: context.converters,
+          enableComments: context.enableComments,
+        });
+        if (tableBlock && tableBlock.kind === 'table') {
+          if (inheritedSdtMetadata) {
+            applySdtMetadataToTableBlock(tableBlock, inheritedSdtMetadata);
+          }
+          blocks.push(tableBlock);
+        }
+        continue;
+      }
+      if (nestedNode.type === 'documentPartObject') {
+        flattenSdtWrappersIntoCell(nestedNode, inheritedSdtMetadata);
+        continue;
+      }
+      if (nestedNode.type === 'structuredContentBlock') {
+        const innerMetadata = inheritedSdtMetadata ?? resolveNodeSdtMetadata(nestedNode, 'structuredContentBlock');
+        flattenSdtWrappersIntoCell(nestedNode, innerMetadata);
+        continue;
+      }
+    }
+  };
+
   for (const childNode of cellNode.content) {
     if (childNode.type === 'paragraph') {
       if (!paragraphToFlowBlocks) continue;
@@ -356,45 +445,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
 
     if (childNode.type === 'structuredContentBlock' && Array.isArray(childNode.content)) {
       const structuredContentMetadata = resolveNodeSdtMetadata(childNode, 'structuredContentBlock');
-      for (const nestedNode of childNode.content) {
-        if (nestedNode.type === 'paragraph') {
-          if (!paragraphToFlowBlocks) continue;
-          const paragraphBlocks = paragraphToFlowBlocks({
-            para: nestedNode,
-            nextBlockId: context.nextBlockId,
-            positions: context.positions,
-            storyKey: context.storyKey,
-            trackedChangesConfig: context.trackedChangesConfig,
-            bookmarks: context.bookmarks,
-            hyperlinkConfig: context.hyperlinkConfig,
-            themeColors: context.themeColors,
-            converterContext: cellConverterContext,
-            converters: context.converters,
-            enableComments: context.enableComments,
-          });
-          appendParagraphBlocks(paragraphBlocks, structuredContentMetadata);
-          continue;
-        }
-        if (nestedNode.type === 'table' && tableNodeToBlock) {
-          const tableBlock = tableNodeToBlock(nestedNode, {
-            nextBlockId: context.nextBlockId,
-            positions: context.positions,
-            storyKey: context.storyKey,
-            trackedChangesConfig: context.trackedChangesConfig,
-            bookmarks: context.bookmarks,
-            hyperlinkConfig: context.hyperlinkConfig,
-            themeColors: context.themeColors,
-            converterContext: context.converterContext,
-            converters: context.converters,
-            enableComments: context.enableComments,
-          });
-          if (tableBlock && tableBlock.kind === 'table') {
-            applySdtMetadataToTableBlock(tableBlock, structuredContentMetadata);
-            blocks.push(tableBlock);
-          }
-          continue;
-        }
-      }
+      flattenSdtWrappersIntoCell(childNode, structuredContentMetadata);
       continue;
     }
 
@@ -414,6 +465,13 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       if (tableBlock && tableBlock.kind === 'table') {
         blocks.push(tableBlock);
       }
+      continue;
+    }
+
+    // SD-2516: documentPartObject is a transparent wrapper; flatten its
+    // (possibly nested) paragraph/table leaves into the cell.
+    if (childNode.type === 'documentPartObject' && Array.isArray(childNode.content)) {
+      flattenSdtWrappersIntoCell(childNode, undefined);
       continue;
     }
 
@@ -498,10 +556,22 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // Inline tableCellProperties.borders are already folded into resolvedTcProps
   // by resolveTableCellProperties (inline wins over style cascade).
   if (resolvedTcProps?.borders && typeof resolvedTcProps.borders === 'object') {
+    const resolvedBordersData = resolvedTcProps.borders as Record<string, unknown>;
     const resolvedBorders: CellBorders = {};
     for (const side of ['top', 'right', 'bottom', 'left'] as const) {
-      const spec = convertBorderSpec((resolvedTcProps.borders as Record<string, unknown>)[side]);
+      const spec = convertResolvedCellBorder(resolvedBordersData[side]);
       if (spec) resolvedBorders[side] = spec;
+    }
+    // Logical start/end fallback (LTR-default). The painter's
+    // swapCellBordersLR is the single source of the RTL visual mirror
+    // for cell borders (§17.4.33/12). Pre-swapping here would double-mirror.
+    if (resolvedBorders.left == null) {
+      const spec = convertResolvedCellBorder(resolvedBordersData.start);
+      if (spec) resolvedBorders.left = spec;
+    }
+    if (resolvedBorders.right == null) {
+      const spec = convertResolvedCellBorder(resolvedBordersData.end);
+      if (spec) resolvedBorders.right = spec;
     }
     if (Object.keys(resolvedBorders).length > 0) {
       cellAttrs.borders = resolvedBorders;
@@ -517,15 +587,19 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // resolves those from the table style cascade).
   if (!cellAttrs.borders && cellNode.attrs?.borders && typeof cellNode.attrs.borders === 'object') {
     const legacy = cellNode.attrs.borders as Record<string, { size?: number; color?: string; val?: string }>;
-    const fallback: CellBorders = {};
-    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+    const filteredLegacyBorders: Record<string, unknown> = {};
+    for (const side of ['top', 'right', 'bottom', 'left', 'start', 'end'] as const) {
       const b = legacy[side];
       if (b && b.val && typeof b.size === 'number' && b.size > 0) {
-        const color = b.color ? (b.color.startsWith('#') ? b.color : `#${b.color}`) : '#000000';
-        fallback[side] = { style: normalizeLegacyBorderStyle(b.val), width: b.size, color };
+        // Legacy persisted docs may store lowercase or alias forms (`dot`,
+        // `dotdash`, `doublewave`) instead of the camelCase BorderStyle enum.
+        // Normalize before handing to extractCellBorders so convertBorderSpec
+        // doesn't pass a non-canonical string through to the painter.
+        filteredLegacyBorders[side] = { ...b, val: normalizeLegacyBorderStyle(b.val) };
       }
     }
-    if (Object.keys(fallback).length > 0) {
+    const fallback = extractCellBorders({ borders: filteredLegacyBorders });
+    if (fallback) {
       cellAttrs.borders = fallback;
     }
   }
@@ -570,6 +644,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     rowSpan: rowSpan ?? undefined,
     colSpan: colSpan ?? undefined,
     attrs: Object.keys(cellAttrs).length > 0 ? cellAttrs : undefined,
+    sourceAnchor: sourceAnchorFromNode(cellNode),
   };
 };
 
@@ -617,6 +692,10 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
     | Record<string, unknown>
     | undefined;
   rowNode.content.forEach((cellNode, cellIndex) => {
+    if (isTableCellNode(cellNode) && isTableSkipPlaceholderCell(cellNode)) {
+      return;
+    }
+
     const parsedCell = parseTableCell({
       cellNode,
       rowIndex,
@@ -655,6 +734,7 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
     id: context.nextBlockId(`row-${rowIndex}`),
     cells,
     attrs,
+    sourceAnchor: sourceAnchorFromNode(rowNode),
   };
 };
 
@@ -862,26 +942,35 @@ export function tableNodeToBlock(
   if (rows.length === 0) return null;
 
   const tableAttrs: Record<string, unknown> = {};
-  const getBorderSource = (): Record<string, unknown> | undefined => {
+
+  const getBorderSource = (): { borders: Record<string, unknown>; unit: 'px' | 'eighthPoints' } | undefined => {
     if (
       node.attrs?.borders &&
       typeof node.attrs.borders === 'object' &&
       node.attrs.borders !== null &&
       Object.keys(node.attrs.borders as Record<string, unknown>).length > 0
     ) {
-      return node.attrs.borders as Record<string, unknown>;
+      return {
+        borders: node.attrs.borders as Record<string, unknown>,
+        unit: 'px',
+      };
     }
     if (
       hydratedTableStyle?.borders &&
       typeof hydratedTableStyle.borders === 'object' &&
       hydratedTableStyle.borders !== null
     ) {
-      return hydratedTableStyle.borders as Record<string, unknown>;
+      return {
+        borders: hydratedTableStyle.borders as Record<string, unknown>,
+        unit: 'eighthPoints',
+      };
     }
-    return undefined;
   };
+
   const borderSource = getBorderSource();
-  const tableBorders: TableBorders | undefined = extractTableBorders(borderSource);
+  const tableBorders: TableBorders | undefined = borderSource
+    ? extractTableBorders(borderSource.borders, { unit: borderSource.unit })
+    : undefined;
   if (tableBorders) tableAttrs.borders = tableBorders;
 
   if (node.attrs?.borderCollapse) {
@@ -912,16 +1001,19 @@ export function tableNodeToBlock(
 
   if (node.attrs?.tableIndent && typeof node.attrs.tableIndent === 'object') {
     tableAttrs.tableIndent = { ...node.attrs.tableIndent };
+  } else if (hydratedTableStyle?.tableIndent) {
+    tableAttrs.tableIndent = { ...hydratedTableStyle.tableIndent };
   }
 
   if (defaultCellPadding && typeof defaultCellPadding === 'object') {
     tableAttrs.defaultCellPadding = { ...defaultCellPadding };
   }
 
-  // Pass tableLayout through (extracted by tblLayout-translator.js)
   const tableLayout = node.attrs?.tableLayout;
   if (tableLayout) {
     tableAttrs.tableLayout = tableLayout;
+  } else if (hydratedTableStyle?.tableLayout) {
+    tableAttrs.tableLayout = hydratedTableStyle.tableLayout;
   }
 
   // Preserve tableProperties for floating table detection and other OOXML metadata
@@ -929,6 +1021,27 @@ export function tableNodeToBlock(
   if (tableProperties && typeof tableProperties === 'object') {
     tableAttrs.tableProperties = tableProperties as Record<string, unknown>;
   }
+
+  // SD-3171 Word-parity: `w:bidiVisual` visually flips cell order ONLY when
+  // set inline on the table itself. Word does not visually flip when the only
+  // source of `bidiVisual` is a style (verified empirically: a table style
+  // carrying `w:bidiVisual` produces TableDirection=wdTableDirectionLtr and
+  // renders cells in logical order in Word). The model-level cascade still
+  // happens via style-engine; we just don't feed style-derived bidiVisual into
+  // the painter's visual-direction signal.
+  //
+  // Normalize the rightToLeft / bidiVisual aliases on the inline layer
+  // (importer normalizes w:bidiVisual to `rightToLeft`; aliases stay possible
+  // when style-engine emits raw OOXML keys). `??` treats null/undefined as
+  // missing but preserves an explicit `false`, so an inline
+  // `<w:bidiVisual w:val="0"/>` is honored.
+  const inlineProps = rawTableProperties as { rightToLeft?: boolean; bidiVisual?: boolean } | undefined;
+  const inlineVisual = inlineProps?.rightToLeft ?? inlineProps?.bidiVisual;
+  const effectiveForDirection = {
+    rightToLeft: inlineVisual,
+  };
+  const sectionContext = converterContext?.sectionDirectionContext ?? resolveSectionDirection(undefined);
+  tableAttrs.tableDirectionContext = resolveTableDirection(effectiveForDirection, sectionContext);
 
   let columnWidths: number[] | undefined = undefined;
 
@@ -1017,6 +1130,7 @@ export function tableNodeToBlock(
     columnWidths,
     ...(anchor ? { anchor } : {}),
     ...(wrap ? { wrap } : {}),
+    sourceAnchor: sourceAnchorFromNode(node),
   };
 
   return tableBlock;

@@ -16,7 +16,9 @@ import type {
   SdtMetadata,
   DrawingBlock,
   TrackedChangeMeta,
+  SourceAnchor,
 } from '@superdoc/contracts';
+import { expandRunsForInlineNewlines } from '@superdoc/contracts';
 import type {
   PMNode,
   PMMark,
@@ -51,6 +53,7 @@ import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.j
 import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
 import { bookmarkEndNodeToRun } from './inline-converters/bookmark-end.js';
 import { tabNodeToRun } from './inline-converters/tab.js';
+import { noBreakHyphenNodeToRun } from './inline-converters/no-break-hyphen.js';
 import { tokenNodeToRun } from './inline-converters/generic-token.js';
 import { imageNodeToRun } from './inline-converters/image.js';
 import { crossReferenceNodeToRun } from './inline-converters/cross-reference.js';
@@ -73,6 +76,24 @@ import {
 } from './shapes.js';
 import { chartNodeToDrawingBlock } from './chart.js';
 import { tableNodeToBlock } from './table.js';
+
+function resolveSectionDirectionFromSectPr(sectPr: unknown): 'ltr' | 'rtl' | undefined {
+  if (!sectPr || typeof sectPr !== 'object') return undefined;
+  const elements = (sectPr as { elements?: Array<{ name?: string; attributes?: Record<string, unknown> }> }).elements;
+  if (!Array.isArray(elements)) return undefined;
+  const bidi = elements.find((element) => element?.name === 'w:bidi');
+  if (!bidi) return undefined;
+  const val = bidi.attributes?.['w:val'] ?? bidi.attributes?.val;
+  if (val === '0' || val === 0 || val === false || val === 'false' || val === 'off') return 'ltr';
+  return 'rtl';
+}
+
+function sourceAnchorFromNode(node: PMNode): SourceAnchor | undefined {
+  const sourceAnchor = (node.attrs as Record<string, unknown> | undefined)?.sourceAnchor;
+  return sourceAnchor && typeof sourceAnchor === 'object' && !Array.isArray(sourceAnchor)
+    ? (sourceAnchor as SourceAnchor)
+    : undefined;
+}
 
 // ============================================================================
 // Helper functions for inline image detection and conversion
@@ -149,6 +170,20 @@ export const commentsCompatible = (a: TextRun, b: TextRun): boolean => {
 };
 
 /**
+ * SD-3098: Two adjacent text runs can only merge when their RunBidiContext matches.
+ * A `<w:rtl/>` run merged with a plain run would lose the rtl flag (and with it the
+ * DomPainter `dir="rtl"` + RLM injection paint-time fix). The merge result keeps the
+ * first run's fields, so we must reject the merge when bidi differs.
+ */
+const bidiCompatible = (a: TextRun, b: TextRun): boolean => {
+  const aBidi = a.bidi;
+  const bBidi = b.bidi;
+  if (!aBidi && !bBidi) return true;
+  if (!aBidi || !bBidi) return false;
+  return aBidi.rtl === bBidi.rtl && aBidi.embedding === bBidi.embedding && aBidi.override === bBidi.override;
+};
+
+/**
  * Merges adjacent text runs with continuous PM positions and compatible styling.
  * Optimization to reduce run fragmentation after PM operations.
  *
@@ -190,7 +225,8 @@ export function mergeAdjacentRuns(runs: Run[]): Run[] {
       (current.letterSpacing ?? 0) === (next.letterSpacing ?? 0) &&
       trackedChangesCompatible(current, next) &&
       dataAttrsCompatible(current, next) &&
-      commentsCompatible(current, next);
+      commentsCompatible(current, next) &&
+      bidiCompatible(current, next);
 
     if (canMerge) {
       // Merge next into current
@@ -211,43 +247,6 @@ export function mergeAdjacentRuns(runs: Run[]): Run[] {
   // Push the last run
   merged.push(current);
   return merged;
-}
-
-/**
- * Expands text runs that contain inline newlines into multiple runs.
- *
- * @param {Run[]} runs - The runs to expand
- * @returns {Run[]} The expanded runs
- */
-export function expandRunsForInlineNewlines(runs: Run[]): Run[] {
-  const result: Run[] = [];
-  for (const run of runs) {
-    const textRun = run as TextRun;
-    if ('text' in run && typeof textRun.text === 'string' && textRun.text.includes('\n')) {
-      const segments = textRun.text.split('\n');
-      let cursor = textRun.pmStart ?? 0;
-      segments.forEach((segment, idx) => {
-        if (segment.length > 0) {
-          result.push({ ...textRun, text: segment, pmStart: cursor, pmEnd: cursor + segment.length });
-          cursor += segment.length;
-        }
-        if (idx !== segments.length - 1) {
-          result.push({
-            kind: 'break',
-            breakType: 'line',
-            pmStart: cursor,
-            pmEnd: cursor + 1,
-            sdt: textRun.sdt,
-            trackedChange: textRun.trackedChange,
-          });
-          cursor += 1;
-        }
-      });
-    } else {
-      result.push(run);
-    }
-  }
-  return result;
 }
 
 /**
@@ -583,6 +582,7 @@ export function paragraphToFlowBlocks({
 
   const blocks: FlowBlock[] = [];
   const paraAttrs = (para.attrs ?? {}) as Record<string, unknown>;
+  const sourceAnchor = sourceAnchorFromNode(para);
   const rawParagraphProps =
     typeof paraAttrs.paragraphProperties === 'object' && paraAttrs.paragraphProperties !== null
       ? (paraAttrs.paragraphProperties as Record<string, unknown>)
@@ -644,6 +644,7 @@ export function paragraphToFlowBlocks({
       id: baseBlockId,
       runs: [emptyRun],
       attrs: emptyParagraphAttrs,
+      sourceAnchor,
     });
     if (!trackedChangesConfig) {
       return blocks;
@@ -747,6 +748,7 @@ export function paragraphToFlowBlocks({
       id: nextId(),
       runs,
       attrs: deepClone(paragraphAttrs),
+      sourceAnchor,
     });
     partIndex += 1;
   };
@@ -757,6 +759,7 @@ export function paragraphToFlowBlocks({
     activeSdt?: SdtMetadata,
     activeRunProperties?: RunProperties,
     activeHidden = false,
+    activeInlineRunProperties?: RunProperties,
   ) => {
     if (activeHidden && node.type !== 'run') {
       suppressedByVanish = true;
@@ -778,6 +781,7 @@ export function paragraphToFlowBlocks({
       themeColors,
       enableComments,
       runProperties: activeRunProperties,
+      inlineRunProperties: activeInlineRunProperties,
       paragraphProperties: resolvedParagraphProperties,
       converterContext,
       visitNode,
@@ -878,6 +882,7 @@ export function paragraphToFlowBlocks({
         },
       ],
       attrs: deepClone(paragraphAttrs),
+      sourceAnchor,
     });
   }
 
@@ -994,6 +999,9 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   tab: {
     inlineConverter: tabNodeToRun,
   },
+  noBreakHyphen: {
+    inlineConverter: noBreakHyphenNodeToRun,
+  },
   image: {
     inlineConverter: imageNodeToRun,
     blockConverter: handleImageNode,
@@ -1105,6 +1113,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       blocks.push(sectionBreak);
       recordBlockKind?.(sectionBreak.kind);
       sectionState!.currentSectionIndex++;
+      converterContext.sectionDirection = resolveSectionDirectionFromSectPr(nextSection.sectPr);
     }
   }
 

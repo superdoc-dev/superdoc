@@ -24,27 +24,6 @@ export type PropertyObject = ParagraphProperties | RunProperties | TableCellProp
  * @param propertiesArray - Ordered list of property objects to combine (low -> high priority).
  * @param options - Configuration for full overrides and special handling.
  * @returns Combined property object.
- *
- * @example
- * ```typescript
- * import { combineProperties } from '@superdoc/style-engine/cascade';
- *
- * const result = combineProperties([
- *   { fontSize: 22, bold: true },           // from style
- *   { fontSize: 24, italic: true },         // from inline (wins for fontSize)
- * ]);
- * // result: { fontSize: 24, bold: true, italic: true }
- *
- * // With full override for color (replaces entire object, not merge):
- * const result2 = combineProperties(
- *   [
- *     { color: { val: 'FF0000', theme: 'accent1' } },
- *     { color: { val: '00FF00' } },
- *   ],
- *   { fullOverrideProps: ['color'] }
- * );
- * // result2: { color: { val: '00FF00' } } - NOT merged
- * ```
  */
 export function combineProperties<T extends PropertyObject>(
   propertiesArray: T[],
@@ -125,20 +104,51 @@ function isObject(item: unknown): item is PropertyObject {
  * @param propertiesArray - Ordered list of run property objects.
  * @returns Combined run property object.
  */
+// SD-2894: `<w:rFonts>` exposes four independent script slots (ascii / hAnsi / eastAsia / cs).
+// Each slot can be filled either by a concrete font name (`w:ascii="Calibri"`) or a theme
+// reference (`w:asciiTheme="majorBidi"`). When a higher-priority style supplies one form for a
+// slot, the other form from lower-priority sources is no longer applicable and must be
+// dropped — otherwise the merged run carries both, and Word resolves the concrete name as an
+// override that defeats per-script theme resolution (Latin body text mapped to `majorBidi`
+// then renders as Calibri Light instead of Times New Roman for Hebrew/Arab).
+//
+// Pair `<slot>` with `<slot>Theme`, except for the cs slot whose theme attribute is the
+// lowercase `cstheme` (OOXML inconsistency, not a typo).
+// Exported so super-editor's calculateInlineRunPropertiesPlugin can consume the same
+// list instead of duplicating it (SD-2894 follow-up).
+export const FONT_SLOT_THEME_PAIRS: Array<[keyof RunFontFamilyProperties, keyof RunFontFamilyProperties]> = [
+  ['ascii', 'asciiTheme'],
+  ['hAnsi', 'hAnsiTheme'],
+  ['eastAsia', 'eastAsiaTheme'],
+  ['cs', 'cstheme'],
+];
+
+function dropConflictingFontSlots(
+  target: RunFontFamilyProperties,
+  source: RunFontFamilyProperties,
+): RunFontFamilyProperties {
+  const result = { ...target };
+  for (const [concreteKey, themeKey] of FONT_SLOT_THEME_PAIRS) {
+    if (source[themeKey] != null) {
+      delete result[concreteKey];
+      delete result[themeKey];
+    } else if (source[concreteKey] != null) {
+      delete result[themeKey];
+    }
+  }
+  return result;
+}
+
 export function combineRunProperties(propertiesArray: RunProperties[]): RunProperties {
   return combineProperties(propertiesArray, {
     fullOverrideProps: ['color'],
     specialHandling: {
       fontFamily: (target: Record<string, unknown>, source: Record<string, unknown>): unknown => {
         const fontFamilySource = { ...(source.fontFamily as object) } as RunFontFamilyProperties;
-        const fontFamilyTarget = { ...(target.fontFamily as object) } as RunFontFamilyProperties;
-        if (fontFamilySource.asciiTheme != null) {
-          delete fontFamilyTarget.ascii;
-          delete fontFamilyTarget.asciiTheme;
-        }
-        if (fontFamilySource.ascii != null) {
-          delete fontFamilyTarget.asciiTheme;
-        }
+        const fontFamilyTarget = dropConflictingFontSlots(
+          (target.fontFamily as RunFontFamilyProperties) ?? {},
+          fontFamilySource,
+        );
         return { ...(fontFamilyTarget as object), ...(fontFamilySource as object) };
       },
     },

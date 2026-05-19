@@ -694,5 +694,50 @@ describe('Search transparent nodes', () => {
         editor.destroy();
       }
     });
+
+    it('should exclude trackDelete and include trackInsert in visible search model', () => {
+      const editor = createDocxTestEditor();
+
+      try {
+        const { doc, paragraph, run } = editor.schema.nodes;
+        const trackDeleteMark = editor.schema.marks.trackDelete?.create?.({ id: 'del-1' });
+        const trackInsertMark = editor.schema.marks.trackInsert?.create?.({ id: 'ins-1' });
+
+        if (!trackDeleteMark || !trackInsertMark) {
+          expect(true).toBe(true);
+          return;
+        }
+
+        const testDoc = doc.create(null, [
+          paragraph.create(null, [
+            run.create(null, [editor.schema.text('before')]),
+            run.create(null, [editor.schema.text('DELETE', [trackDeleteMark])]),
+            run.create(null, [editor.schema.text('after ')]),
+            run.create(null, [editor.schema.text('ADD', [trackInsertMark])]),
+          ]),
+        ]);
+
+        const baseState = EditorState.create({
+          schema: editor.schema,
+          doc: testDoc,
+          plugins: editor.state.plugins,
+        });
+        editor.setState(baseState);
+
+        const rawDeleteMatches = editor.commands.search('DELETE');
+        expect(rawDeleteMatches).toHaveLength(1);
+
+        const visibleDeleteMatches = editor.commands.search('DELETE', { searchModel: 'visible' });
+        expect(visibleDeleteMatches).toHaveLength(0);
+
+        const visibleInsertMatches = editor.commands.search('ADD', { searchModel: 'visible' });
+        expect(visibleInsertMatches).toHaveLength(1);
+
+        const collapsedMatches = editor.commands.search('beforeafter', { searchModel: 'visible' });
+        expect(collapsedMatches).toHaveLength(0);
+      } finally {
+        editor.destroy();
+      }
+    });
   });
 });

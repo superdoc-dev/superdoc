@@ -506,7 +506,7 @@ describe('StructuredContentLockPlugin', () => {
         expect(sdtNodeExists(finalState.doc, 'structuredContent')).toBe(false);
       });
 
-      it('contentLocked + Backspace at the start of the following run selects the SDT wrapper', () => {
+      it('contentLocked + Backspace at the start of the following run selects, then deletes the SDT wrapper', () => {
         const sdtRun = schema.nodes.run.create(null, schema.text('Locked content'));
         const sdt = schema.nodes.structuredContent.create({ id: 'test-123', lockMode: 'contentLocked' }, sdtRun);
         const followingRun = schema.nodes.run.create(null, schema.text('Adding some additional text here.'));
@@ -534,6 +534,10 @@ describe('StructuredContentLockPlugin', () => {
         expect(selection).toBeInstanceOf(NodeSelection);
         expect(selection.from).toBe(sdtInfo.pos);
         expect(selection.to).toBe(sdtInfo.end);
+
+        handleBackspace(editor);
+
+        expect(sdtNodeExists(editor.state.doc, 'structuredContent')).toBe(false);
       });
     });
 

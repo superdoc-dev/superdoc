@@ -687,28 +687,16 @@ const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
 
 /**
  * DOM-based document painter that renders layout fragments to HTML elements.
- * Manages page rendering, virtualization, headers/footers, and incremental updates.
+ * Manages page-level orchestration, virtualization, headers/footers, snapshots,
+ * providers, and incremental updates.
  *
  * @class DomPainter
  *
  * @remarks
- * The DomPainter is responsible for:
- * - Rendering layout fragments (paragraphs, lists, images, tables, drawings) to DOM elements
- * - Managing page-level DOM structure and styling
- * - Providing virtualization for large documents (vertical mode only)
- * - Handling headers and footers via PageDecorationProvider
- * - Incremental re-rendering when only specific blocks change
- * - Hyperlink rendering with security sanitization and accessibility
- *
- * @example
- * ```typescript
- * const painter = new DomPainter(blocks, measures, {
- *   layoutMode: 'vertical',
- *   pageStyles: { width: '8.5in', height: '11in' }
- * });
- * painter.mount(document.getElementById('editor-container'));
- * painter.render(layout);
- * ```
+ * Keep feature and content rendering in focused modules under `src/` (for
+ * example `paragraph/`, `table/`, `images/`, `drawings/`, `runs/`, `sdt/`,
+ * `notes/`, or `textbox/`). `renderer.ts` should dispatch to those modules
+ * instead of growing feature-specific rendering paths.
  */
 export class DomPainter {
   private readonly options: PainterOptions;

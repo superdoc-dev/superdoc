@@ -16,7 +16,7 @@ ProseMirror Doc → pm-adapter → FlowBlock[] → layout-engine → Layout[] �
 | `pm-adapter/` | PM document → FlowBlocks conversion | `src/internal.ts` |
 | `layout-engine/` | Pagination algorithms | `src/index.ts` |
 | `layout-bridge/` | Layout orchestration & bridge utilities | `src/incrementalLayout.ts` |
-| `painters/dom/` | DOM rendering | `src/renderer.ts` |
+| `painters/dom/` | DOM rendering | `AGENTS.md`, `src/renderer.ts` |
 | `style-engine/` | OOXML style resolution | `src/index.ts` |
 | `geometry-utils/` | Math utilities for layout | `src/index.ts` |
 
@@ -97,9 +97,17 @@ setActiveComment(commentId) → increments layoutVersion → clears pageIndexToS
 Maps block IDs to entries for change detection. Only changed pages re-render.
 See `blockIdToEntry` in `painters/dom/src/renderer.ts`.
 
+## DomPainter Organization (`painters/dom/AGENTS.md`)
+
+`painters/dom/src/renderer.ts` is the page-level orchestration layer. Keep
+feature and content rendering in concern-specific modules under
+`painters/dom/src/` (`paragraph/`, `runs/`, `table/`, `images/`, `drawings/`,
+`sdt/`, `notes/`, `textbox/`, `ruler/`, `features/`, or `utils/`). Read
+`painters/dom/AGENTS.md` before adding renderer code.
+
 ## DomPainter Feature Modules (`painters/dom/src/features/`)
 
-Rendering logic for specific OOXML features is extracted into **feature modules** under `painters/dom/src/features/<feature-name>/`. This keeps `renderer.ts` focused on orchestration while feature-specific logic lives in discoverable, self-contained modules.
+Rendering logic for specific OOXML features belongs in **feature modules** under `painters/dom/src/features/<feature-name>/` or the matching concern directory. This keeps `renderer.ts` focused on orchestration while feature-specific logic lives in discoverable, self-contained modules.
 
 ### How to find where an OOXML element renders
 
@@ -134,7 +142,8 @@ Rendering logic for specific OOXML features is extracted into **feature modules*
 
 ## Entry Points
 
-- `painters/dom/src/renderer.ts` - Main DOM rendering orchestrator (large file — feature logic is being extracted to `features/`)
+- `painters/dom/AGENTS.md` - DOM painter organization and contribution rules
+- `painters/dom/src/renderer.ts` - Main DOM rendering orchestrator
 - `painters/dom/src/features/feature-registry.ts` - OOXML element → feature module lookup
 - `painters/dom/src/styles.ts` - CSS class definitions
 - `layout-bridge/src/incrementalLayout.ts` - Layout orchestration (called by PresentationEditor)

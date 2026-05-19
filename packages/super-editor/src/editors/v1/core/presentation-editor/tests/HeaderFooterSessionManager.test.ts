@@ -22,6 +22,8 @@ import type {
   ParaFragment,
   ResolvedLayout,
   ResolvedPage,
+  TableFragment,
+  DrawingFragment,
 } from '@superdoc/contracts';
 import { buildMultiSectionIdentifier, type HeaderFooterLayoutResult } from '@superdoc/layout-bridge';
 import {
@@ -777,6 +779,106 @@ describe('HeaderFooterSessionManager', () => {
       expect(payload!.fragments[0]!.y).toBe(0);
       expect(payload!.items).toBeDefined();
       expect(payload!.items![0]).toMatchObject({ blockId: 'p1', x: 72, y: 0 });
+    });
+
+    it('does not shift normal rId footer fragments for negative minY from page-relative behindDoc drawings', () => {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 1),
+      };
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 'footer-table',
+        fromRow: 0,
+        toRow: 1,
+        x: 72,
+        y: 0,
+        width: 468,
+        height: 24,
+      };
+      const behindDocFragment: DrawingFragment = {
+        kind: 'drawing',
+        blockId: 'footer-bg',
+        drawingKind: 'vectorShape',
+        x: 0,
+        y: -36,
+        width: 612,
+        height: 120,
+        isAnchored: true,
+        behindDoc: true,
+        zIndex: 0,
+        geometry: { width: 612, height: 120 },
+        scale: 1,
+        sourceAnchor: { vRelativeFrom: 'page' },
+      } as DrawingFragment;
+      const footerResult: HeaderFooterLayoutResult = {
+        kind: 'footer',
+        type: 'default',
+        layout: {
+          height: 48,
+          minY: -36,
+          pages: [{ number: 1, fragments: [tableFragment, behindDocFragment] }],
+        },
+        blocks: [
+          { kind: 'table', id: 'footer-table', rows: [{ id: 'row-1', cells: [] }] },
+          {
+            kind: 'drawing',
+            id: 'footer-bg',
+            drawingKind: 'vectorShape',
+            anchor: { isAnchored: true, vRelativeFrom: 'page', behindDoc: true },
+            geometry: { width: 612, height: 120 },
+          },
+        ] as FlowBlock[],
+        measures: [
+          { kind: 'table', rowHeights: [24], columnWidths: [468], cells: [], rows: [] },
+          { kind: 'drawing', width: 612, height: 120 },
+        ] as unknown as Measure[],
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: createMainEditorStub(),
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.headerFooterIdentifier = {
+        headerIds: { default: null, first: null, even: null, odd: null },
+        footerIds: { default: 'rId-footer-default', first: null, even: null, odd: null },
+        titlePg: false,
+        alternateHeaders: false,
+      };
+      manager.footerLayoutsByRId.set('rId-footer-default', footerResult);
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 } } as never],
+      } as unknown as Layout;
+      const provider = manager.createDecorationProvider('footer', layout as unknown as ResolvedLayout);
+      const payload = provider!(1, layout.pages[0]!.margins, layout.pages[0] as unknown as ResolvedPage);
+
+      expect(payload).not.toBeNull();
+      expect(payload!.minY).toBe(-36);
+      expect(payload!.fragments).toHaveLength(2);
+      expect(payload!.fragments[0]).toMatchObject({ kind: 'table', blockId: 'footer-table', y: 0 });
+      expect(payload!.fragments[1]).toMatchObject({ kind: 'drawing', blockId: 'footer-bg', y: -36, behindDoc: true });
+      expect(payload!.items).toHaveLength(2);
+      expect(payload!.items![0]).toMatchObject({ fragmentKind: 'table', blockId: 'footer-table', y: 0 });
+      expect(payload!.items![1]).toMatchObject({ fragmentKind: 'drawing', blockId: 'footer-bg', y: -36 });
     });
 
     it('uses section titlePg state when selecting decoration-provider variants', () => {

@@ -394,21 +394,43 @@ function shiftResolvedPaintItemY(item: ResolvedPaintItem, yOffset: number): Reso
   };
 }
 
-function normalizeDecorationFragments(fragments: Fragment[], layoutMinY: number): Fragment[] {
-  if (layoutMinY >= 0) {
+function isExplicitBehindDocMediaFragment(fragment: Fragment): boolean {
+  return (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.behindDoc === true;
+}
+
+function getDecorationNormalizationMinY(fragments: Fragment[], layoutMinY: number): number {
+  if (!Number.isFinite(layoutMinY) || layoutMinY >= 0) {
+    return 0;
+  }
+
+  let minY = Infinity;
+  for (const fragment of fragments) {
+    if (isExplicitBehindDocMediaFragment(fragment)) {
+      continue;
+    }
+    if (Number.isFinite(fragment.y)) {
+      minY = Math.min(minY, fragment.y);
+    }
+  }
+
+  return minY < 0 ? minY : 0;
+}
+
+function normalizeDecorationFragments(fragments: Fragment[], normalizationMinY: number): Fragment[] {
+  if (normalizationMinY >= 0) {
     return fragments;
   }
 
-  const yOffset = -layoutMinY;
+  const yOffset = -normalizationMinY;
   return fragments.map((fragment) => ({ ...fragment, y: fragment.y + yOffset }));
 }
 
-function normalizeDecorationItems(items: ResolvedPaintItem[], layoutMinY: number): ResolvedPaintItem[] {
-  if (layoutMinY >= 0) {
+function normalizeDecorationItems(items: ResolvedPaintItem[], normalizationMinY: number): ResolvedPaintItem[] {
+  if (normalizationMinY >= 0) {
     return items;
   }
 
-  const yOffset = -layoutMinY;
+  const yOffset = -normalizationMinY;
   return items.map((item) => shiftResolvedPaintItemY(item, yOffset));
 }
 
@@ -2446,8 +2468,9 @@ export class HeaderFooterSessionManager {
             const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
 
             const layoutMinY = rIdLayout.layout.minY ?? 0;
-            const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
-            const normalizedItems = normalizeDecorationItems(alignedItems, layoutMinY);
+            const normalizationMinY = getDecorationNormalizationMinY(fragments, layoutMinY);
+            const normalizedFragments = normalizeDecorationFragments(fragments, normalizationMinY);
+            const normalizedItems = normalizeDecorationItems(alignedItems, normalizationMinY);
             const isActiveHeaderFooter = this.#isActiveDecoration(kind, sectionRId, pageNumber);
 
             return {
@@ -2512,8 +2535,9 @@ export class HeaderFooterSessionManager {
       const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
 
       const layoutMinY = variant.layout.minY ?? 0;
-      const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
-      const normalizedItems = normalizeDecorationItems(alignedVariantItems, layoutMinY);
+      const normalizationMinY = getDecorationNormalizationMinY(fragments, layoutMinY);
+      const normalizedFragments = normalizeDecorationFragments(fragments, normalizationMinY);
+      const normalizedItems = normalizeDecorationItems(alignedVariantItems, normalizationMinY);
       const isActiveHeaderFooter = this.#isActiveDecoration(kind, finalHeaderId, pageNumber);
 
       return {

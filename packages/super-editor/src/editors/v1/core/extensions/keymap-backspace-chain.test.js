@@ -37,6 +37,7 @@ describe('handleBackspace chain ordering', () => {
     const commands = {
       undoInputRule: make('undoInputRule'),
       deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
+      selectInlineSdtBeforeRunStart: make('selectInlineSdtBeforeRunStart'),
       backspaceEmptyRunParagraph: make('backspaceEmptyRunParagraph'),
       backspaceSkipEmptyRun: make('backspaceSkipEmptyRun'),
       backspaceAtomBefore: make('backspaceAtomBefore'),
@@ -73,6 +74,7 @@ describe('handleBackspace chain ordering', () => {
       'undoInputRule',
       // step 2 sets inputType meta and returns false (no command call)
       'deleteBlockSdtAtTextBlockStart',
+      'selectInlineSdtBeforeRunStart',
       'backspaceEmptyRunParagraph',
       'backspaceSkipEmptyRun',
       'backspaceAtomBefore',
@@ -102,6 +104,7 @@ describe('handleBackspace chain ordering', () => {
     // walk (undoInputRule at 0, meta-setter at 1, then SDT at 2).
     expect(callLog[0]).toBe('undoInputRule');
     expect(callLog[1]).toBe('deleteBlockSdtAtTextBlockStart');
+    expect(callLog[2]).toBe('selectInlineSdtBeforeRunStart');
   });
 
   it('places mixedBidiBackspace after backspaceAcrossRuns and before deleteSelection', () => {
@@ -109,10 +112,13 @@ describe('handleBackspace chain ordering', () => {
     handleBackspace(editor);
 
     const acrossRunsIndex = callLog.indexOf('backspaceAcrossRuns');
+    const inlineSdtIndex = callLog.indexOf('selectInlineSdtBeforeRunStart');
     const mixedIndex = callLog.indexOf('mixedBidiBackspace');
     const deleteSelectionIndex = callLog.indexOf('deleteSelection');
 
+    expect(inlineSdtIndex).toBeGreaterThanOrEqual(0);
     expect(acrossRunsIndex).toBeGreaterThanOrEqual(0);
+    expect(acrossRunsIndex).toBeGreaterThan(inlineSdtIndex);
     expect(mixedIndex).toBeGreaterThan(acrossRunsIndex);
     expect(deleteSelectionIndex).toBeGreaterThan(mixedIndex);
   });

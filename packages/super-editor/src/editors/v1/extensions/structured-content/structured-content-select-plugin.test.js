@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { SELECT_INLINE_SDT_BEFORE_RUN_START_META } from '@core/commands/selectInlineSdtBeforeRunStart.js';
 
 function findNode(doc, nodeType) {
   let result = null;
@@ -65,6 +66,28 @@ describe('StructuredContentSelectPlugin', () => {
     expect(editor.state.selection.empty).toBe(true);
     expect(editor.state.selection.from).toBe(contentFrom + 1);
     expect(editor.state.selection.to).toBe(contentFrom + 1);
+  });
+
+  it('keeps Backspace-created inline SDT node selections when the meta escape is set', () => {
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);
+    applyDoc(schema.nodes.doc.create(null, [paragraph]));
+
+    const sdt = findNode(editor.state.doc, 'structuredContent');
+    expect(sdt).not.toBeNull();
+
+    const afterSdt = sdt.pos + sdt.node.nodeSize;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, afterSdt)));
+
+    editor.view.dispatch(
+      editor.state.tr
+        .setMeta(SELECT_INLINE_SDT_BEFORE_RUN_START_META, true)
+        .setSelection(NodeSelection.create(editor.state.doc, sdt.pos)),
+    );
+
+    expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+    expect(editor.state.selection.from).toBe(sdt.pos);
+    expect(editor.state.selection.to).toBe(sdt.pos + sdt.node.nodeSize);
   });
 
   it('does not auto-select inline SDT content in viewing mode', () => {

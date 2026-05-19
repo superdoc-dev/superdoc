@@ -1,6 +1,7 @@
 /**
- * Maps display alignment (UI-facing physical left/right/center/justify) to
- * stored OOXML paragraph justification, honoring RTL paragraph direction.
+ * Maps visual alignment (UI-facing physical left/right/center/justify) to the
+ * stored OOXML paragraph justification value Microsoft Word expects for the
+ * paragraph direction.
  *
  * @param {'left' | 'center' | 'right' | 'justify'} alignment
  * @param {boolean} isRtl
@@ -15,8 +16,8 @@ export function mapDisplayAlignmentToStoredJustification(alignment, isRtl) {
 }
 
 /**
- * Maps stored OOXML paragraph justification to display alignment, honoring
- * RTL paragraph direction. When justification is absent, returns the
+ * Maps stored OOXML paragraph justification to visual alignment, honoring
+ * Word's RTL interpretation. When justification is absent, returns the
  * visual default by direction.
  *
  * @param {string | null | undefined} justification

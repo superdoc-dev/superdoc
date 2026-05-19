@@ -7,6 +7,7 @@ How to verify your changes before pushing.
 | What to verify | Command | Speed | CI Gate |
 |---|---|---|---|
 | Logic works? | `pnpm test` | ~30s | Hard |
+| Document API smoke? | `pnpm test:document-api-smoke` | ~1 min | Hard |
 | Editing works? | `pnpm test:behavior` | ~3 min | Hard |
 | Layout regressed? | `pnpm test:layout` | ~10 min | Manual |
 | Visual pixel diff? | `pnpm test:visual` | ~5 min | Manual |
@@ -22,6 +23,28 @@ pnpm --filter <pkg> test  # specific package
 ```
 
 Tests are co-located with source code as `feature.test.ts` next to `feature.ts`. Framework: Vitest.
+
+## Document API Smoke
+
+SuperDoc keeps only low-detail Document API guardrails in this repo:
+
+```bash
+pnpm test:document-api-smoke
+```
+
+That smoke suite checks representative namespace/method presence and a
+small SDK open/read/mutate/save/reopen workflow.
+
+Additional conformance coverage may exist outside this repo in a separate
+checkout.
+
+If you maintain a separate conformance checkout, run it from there:
+
+```bash
+cd /path/to/conformance-repo
+SUPERDOC_REPO=/path/to/superdoc3 pnpm run test:document-api-conformance:report
+SUPERDOC_REPO=/path/to/superdoc3 pnpm run test:document-api-conformance
+```
 
 ## Behavior Tests
 
@@ -110,9 +133,9 @@ The command automatically:
 Upload a `.docx` file to the shared test corpus (used by layout, visual, and behavior tests):
 
 ```bash
-pnpm corpus:upload ~/Downloads/my-file.docx
-# Prompts for: Linear issue ID, short description
-# → uploads as rendering/sd-1741-paragraph-between-borders.docx
+pnpm corpus:upload ./path/to/my-file.docx
+# Prompts for: issue ID or short description
+# -> uploads as rendering/paragraph-between-borders.docx
 ```
 
 After uploading, pull it locally with `pnpm corpus:pull` so it's available for all test suites.

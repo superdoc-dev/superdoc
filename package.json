@@ -14,6 +14,7 @@
     "test:superdoc": "vitest run --root ./packages/superdoc",
     "pretest:doc-api-stories": "pnpm run generate:all",
     "test:doc-api-stories": "pnpm --silent --filter @superdoc-testing/doc-api-stories test",
+    "test:document-api-smoke": "pnpm --silent --filter @superdoc-testing/document-api-smoke test",
     "test:cov": "node scripts/test-cov.mjs",
     "pretest:behavior": "node scripts/free-port.mjs 9990",
     "test:behavior": "pnpm --filter @superdoc-testing/behavior test",
@@ -178,8 +179,5 @@
       "readable-stream@3.6.2": "patches/readable-stream@3.6.2.patch",
       "openapi-types@12.1.3": "patches/openapi-types@12.1.3.patch"
     }
-  },
-  "dependencies": {
-    "superdoc": "link:../../../packages/superdoc"
   }
 }

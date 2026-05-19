@@ -3398,10 +3398,17 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: paragraphMutationFailureSchemaFor('format.paragraph.resetDirectFormatting'),
   },
   'format.paragraph.setAlignment': {
-    input: objectSchema({ target: paragraphTargetSchema, alignment: { enum: [...PARAGRAPH_ALIGNMENTS] } }, [
-      'target',
-      'alignment',
-    ]),
+    input: objectSchema(
+      {
+        target: paragraphTargetSchema,
+        alignment: {
+          enum: [...PARAGRAPH_ALIGNMENTS],
+          description:
+            "Visual paragraph alignment. In RTL paragraphs, 'left' stores w:jc='right' and 'right' stores w:jc='left' so Word displays the requested side.",
+        },
+      },
+      ['target', 'alignment'],
+    ),
     output: paragraphMutationResultSchemaFor('format.paragraph.setAlignment'),
     success: paragraphMutationSuccessSchema,
     failure: paragraphMutationFailureSchemaFor('format.paragraph.setAlignment'),

@@ -269,6 +269,55 @@ describe('anchored metadata wrappers', () => {
     expect(metadataGetWrapper(editor, { id: 'seed' })?.payload).toEqual({ v: 1 });
   });
 
+  it('preserves TARGET_NOT_FOUND when the attach target references a missing blockId', () => {
+    // `resolveSelectionTarget` throws DocumentApiAdapterError('TARGET_NOT_FOUND', …)
+    // for an unknown blockId. The attach catch must surface that distinction;
+    // collapsing it into INVALID_TARGET breaks `metadata.attach`'s declared
+    // `possibleFailureCodes` and misleads clients that branch on the code
+    // (missing-target is retryable; bad-shape is a programming error).
+    const editor = makeEditor();
+    const result = metadataAttachWrapper(
+      editor,
+      {
+        id: 'meta-missing-block',
+        target: {
+          kind: 'selection' as const,
+          start: { kind: 'text' as const, blockId: 'does-not-exist', offset: 0 },
+          end: { kind: 'text' as const, blockId: 'does-not-exist', offset: 1 },
+        },
+        namespace: 'urn:test:metadata',
+        payload: { label: 'X' },
+      },
+      { changeMode: 'direct' },
+    );
+    expect(result.success).toBe(false);
+    expect(result.success === false && result.failure.code).toBe('TARGET_NOT_FOUND');
+  });
+
+  it('still returns INVALID_TARGET when the attach target points to a real block but an out-of-range offset', () => {
+    // The seeded block 'p1' has text "Hello" (length 5). Offset 999 is a
+    // shape error in `resolveSelectionTarget`, not a missing target; the
+    // resolver throws DocumentApiAdapterError('INVALID_TARGET', …) here,
+    // and the attach catch must keep that code.
+    const editor = makeEditor();
+    const result = metadataAttachWrapper(
+      editor,
+      {
+        id: 'meta-bad-offset',
+        target: {
+          kind: 'selection' as const,
+          start: { kind: 'text' as const, blockId: 'p1', offset: 999 },
+          end: { kind: 'text' as const, blockId: 'p1', offset: 999 },
+        },
+        namespace: 'urn:test:metadata',
+        payload: { label: 'X' },
+      },
+      { changeMode: 'direct' },
+    );
+    expect(result.success).toBe(false);
+    expect(result.success === false && result.failure.code).toBe('INVALID_TARGET');
+  });
+
   it('resolves an existing anchor tag to its text range', () => {
     const sdt = createNode('structuredContent', [createNode('text', [], { text: 'Hello' })], {
       attrs: { id: '100', tag: 'meta-1' },

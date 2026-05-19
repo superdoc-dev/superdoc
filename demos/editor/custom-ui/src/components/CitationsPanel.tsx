@@ -25,8 +25,9 @@ export function CitationsPanel() {
   // had to call `metadata.resolve` and convert SelectionTarget to
   // TextTarget by hand before calling `ui.viewport.scrollIntoView`.
   const scrollTo = async (id: string) => {
-    if (!ui) return;
-    await ui.metadata.scrollIntoView({ id, block: 'center' });
+    const metadata = ui?.metadata;
+    if (!metadata?.scrollIntoView) return;
+    await metadata.scrollIntoView({ id, block: 'center' });
   };
 
   return (

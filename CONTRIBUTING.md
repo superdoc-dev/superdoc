@@ -228,12 +228,16 @@ pnpm run format   # Run Prettier
 
 ### Adding a public API
 
-If your PR adds a new public export from `superdoc` (a new `@typedef` in `packages/superdoc/src/index.js`, a new value re-exported from a public subpath, or a new subpath in `package.json` `exports`), it must ship with a type test that exercises the new surface under strict mode.
+If your PR adds a new public export from `superdoc` (a new entry in `packages/superdoc/src/public/index.ts`, a new value re-exported from a public subpath, or a new subpath in `package.json` `exports`), it must ship with a type test that exercises the new surface under strict mode.
 
-The consumer matrix at `tests/consumer-typecheck/` is the regression net. Two automated checks enforce this on every PR:
+The canonical root contract is `packages/superdoc/src/public/index.ts` (per the SD-3175 path-as-contract umbrella, finalized in SD-3212 PR C). Several automated gates enforce consistency on every PR:
 
-- **`check-public-types.mjs`** -- the assertion list in `tests/consumer-typecheck/src/all-public-types.ts` is auto-derived from the `@typedef` block in `packages/superdoc/src/index.js`. Adding a new typedef without regenerating the list fails CI. Run `npm run check:types:write` from inside `tests/consumer-typecheck/` (or `node tests/consumer-typecheck/check-public-types.mjs --write` from the repo root) and commit the regenerated file.
-- **`typecheck-matrix.mjs`** -- every typed public subpath in the RFC inventory has at least one matrix scenario. If you add a new subpath, add a fixture under `tests/consumer-typecheck/src/` and a corresponding entry in the matrix, and update the inventory in `docs/architecture/package-boundaries.md`.
+- **`verify-public-facade-emit.cjs`** -- verifies the curated `src/public/**` facade matches the emitted `.d.ts` for symbol set, ESM/CJS parity, leak grep, and command-signature compatibility. Adding a new export updates the corresponding `expectedNames` array in this script in the same PR.
+- **`snapshot-superdoc-root-exports.mjs --check`** -- locks the root export inventory across the four `package.json#exports` sources (`types.import`, `types.require`, `import`, `require`). Drift fails CI; run with `--write` to regenerate after an intentional change.
+- **`check-root-classification-closure.mjs`** -- enforces the dependency-closure rule: no `supported-root` or `legacy-root` export may reference an `internal-candidate` type in its declared public type. New exports require an entry in `tests/consumer-typecheck/snapshots/superdoc-root-classification.json`.
+- **`typecheck-matrix.mjs`** -- every typed public subpath has at least one matrix scenario. If you add a new subpath, add a fixture under `tests/consumer-typecheck/src/` and a corresponding entry in the matrix, and update the inventory in `docs/architecture/package-boundaries.md`.
+- **`check-all-public-types-fixture.mjs`** -- derives the expected type-only root export list from `superdoc-root-classification.json` (rows with `inDts && !inEsm && !inCjs`) and fails if `src/all-public-types.ts` is missing assertions or has stale ones. Runs before the matrix to catch fixture drift early.
+- **`src/all-public-types.ts`** -- the fixture exercised by the SD-2842 matrix scenarios to catch any-collapses on customer-facing types. When you add a new type-only root export, add a corresponding `import { X } from 'superdoc';` plus `const _real_X: AssertNotAny<X> = true;` line. The `check-all-public-types-fixture.mjs` gate fails CI if you forget.
 
 The point of these gates is to keep customer TypeScript builds working. A new export that ships without a type test can collapse to `any` (or fail to resolve) for consumers without the team noticing.
 

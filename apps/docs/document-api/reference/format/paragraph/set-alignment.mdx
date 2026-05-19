@@ -1,14 +1,14 @@
 ---
 title: format.paragraph.setAlignment
 sidebarTitle: format.paragraph.setAlignment
-description: Set paragraph alignment (justification) on a paragraph-like block.
+description: Set visual paragraph alignment on a paragraph-like block. For RTL paragraphs, left/right are translated to Word-compatible stored justification values.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Set paragraph alignment (justification) on a paragraph-like block.
+Set visual paragraph alignment on a paragraph-like block. For RTL paragraphs, left/right are translated to Word-compatible stored justification values.
 
 - Operation ID: `format.paragraph.setAlignment`
 - API member path: `editor.doc.format.paragraph.setAlignment(...)`
@@ -103,6 +103,7 @@ Returns a ParagraphMutationResult; reports NO_OP if the alignment already matche
   "additionalProperties": false,
   "properties": {
     "alignment": {
+      "description": "Visual paragraph alignment. In RTL paragraphs, 'left' stores w:jc='right' and 'right' stores w:jc='left' so Word displays the requested side.",
       "enum": [
         "left",
         "center",

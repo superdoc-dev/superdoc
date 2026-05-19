@@ -463,6 +463,19 @@ export function metadataAttachWrapper(
     resolveSelectionTarget(editor, input.target);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    // Preserve the distinction the resolver makes between a missing
+    // block / node (`TARGET_NOT_FOUND`) and a malformed range
+    // (`INVALID_TARGET`). Both are in `metadata.attach`'s declared
+    // `possibleFailureCodes`, so collapsing them silently changes a
+    // documented failure mode into the wrong code and misleads clients
+    // that branch on it (missing target is retryable; bad shape is a
+    // programming error). Any other adapter error class still falls
+    // through to `INVALID_TARGET` as before.
+    if (error instanceof DocumentApiAdapterError) {
+      if (error.code === 'TARGET_NOT_FOUND' || error.code === 'INVALID_TARGET') {
+        return failure(error.code, message);
+      }
+    }
     return failure('INVALID_TARGET', message);
   }
 

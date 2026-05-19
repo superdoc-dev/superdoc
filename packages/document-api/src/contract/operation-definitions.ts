@@ -1456,7 +1456,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'format.paragraph.setAlignment': {
     memberPath: 'format.paragraph.setAlignment',
-    description: 'Set paragraph alignment (justification) on a paragraph-like block.',
+    description:
+      'Set visual paragraph alignment on a paragraph-like block. For RTL paragraphs, left/right are translated to Word-compatible stored justification values.',
     expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the alignment already matches.',
     requiresDocumentContext: true,
     metadata: mutationOperation({

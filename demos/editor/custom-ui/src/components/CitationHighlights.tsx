@@ -34,7 +34,8 @@ export function CitationHighlights() {
   const [entries, setEntries] = useState<HighlightEntry[]>([]);
 
   useEffect(() => {
-    if (!ui) {
+    const metadata = ui?.metadata;
+    if (!metadata?.getRect) {
       setEntries([]);
       return;
     }
@@ -42,7 +43,7 @@ export function CitationHighlights() {
     const remeasure = () => {
       const next: HighlightEntry[] = [];
       for (const c of citations) {
-        const result = ui.metadata.getRect({ id: c.id });
+        const result = metadata.getRect({ id: c.id });
         if (!result.success) continue;
         next.push({
           metadataId: c.id,

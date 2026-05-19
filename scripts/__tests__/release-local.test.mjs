@@ -580,6 +580,7 @@ test('release-state probes wrap fetch in bounded retry to absorb transient blips
 
 test('docs promotion is keyed to a real superdoc tag from the orchestrator run', async () => {
   const promoteWorkflow = await readRepoFile('.github/workflows/promote-stable-docs.yml');
+  const workflowRunBlock = promoteWorkflow.match(/workflow_run:[\s\S]*?workflow_dispatch:/)?.[0] ?? '';
   assert.ok(
     promoteWorkflow.includes('workflow_run:'),
     '.github/workflows/promote-stable-docs.yml: must trigger on workflow_run completion',
@@ -589,7 +590,7 @@ test('docs promotion is keyed to a real superdoc tag from the orchestrator run',
     '.github/workflows/promote-stable-docs.yml: must trigger off the stable orchestrator workflow',
   );
   assert.equal(
-    /"📦 Release CLI"|"📦 Release SDK"|"📦 Release MCP"|"📦 Release react"|"📦 Release esign"|"📦 Release template-builder"|"📦 Release vscode-ext"/.test(promoteWorkflow),
+    /"📦 Release CLI"|"📦 Release SDK"|"📦 Release MCP"|"📦 Release react"|"📦 Release esign"|"📦 Release template-builder"|"📦 Release vscode-ext"/.test(workflowRunBlock),
     false,
     '.github/workflows/promote-stable-docs.yml: must trigger only off the orchestrator, not per-package workflows',
   );
@@ -603,6 +604,12 @@ test('docs promotion is keyed to a real superdoc tag from the orchestrator run',
   assert.ok(
     promoteWorkflow.includes("github.event.workflow_run.head_branch == 'stable'"),
     '.github/workflows/promote-stable-docs.yml: must scope promotion to stable',
+  );
+  assert.ok(
+    promoteWorkflow.includes('Wait for stable release lane to drain') &&
+      promoteWorkflow.includes('gh run list') &&
+      promoteWorkflow.includes('"📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder"'),
+    '.github/workflows/promote-stable-docs.yml: must wait for the stable release lane to drain before inspecting origin/stable',
   );
   assert.ok(
     promoteWorkflow.includes("git tag --merged origin/stable --list 'v[0-9]*'") &&
@@ -620,6 +627,14 @@ test('docs promotion is keyed to a real superdoc tag from the orchestrator run',
   assert.ok(
     promoteWorkflow.includes('refs/heads/docs-stable'),
     '.github/workflows/promote-stable-docs.yml: must push to docs-stable',
+  );
+  assert.ok(
+    promoteWorkflow.includes('git log --oneline origin/stable..origin/docs-stable -- apps/docs/'),
+    '.github/workflows/promote-stable-docs.yml: must refuse to overwrite docs commits that exist only on docs-stable',
+  );
+  assert.ok(
+    promoteWorkflow.includes('git push --force-with-lease=refs/heads/docs-stable:"${expected}" origin "${target}:refs/heads/docs-stable"'),
+    '.github/workflows/promote-stable-docs.yml: must use force-with-lease when promoting the docs-stable pointer',
   );
 });
 
@@ -642,6 +657,18 @@ test('docs promotion supports manual workflow_dispatch with optional sha input',
   assert.ok(
     /Push docs-stable \(manual\)[\s\S]*if:\s*github\.event_name == 'workflow_dispatch'/.test(promoteWorkflow),
     '.github/workflows/promote-stable-docs.yml: manual push step must gate on workflow_dispatch only, not on detect.outputs',
+  );
+  assert.ok(
+    /Push docs-stable \(manual\)[\s\S]*git log --oneline "\$\{target\}"\.\.origin\/docs-stable -- apps\/docs\//.test(
+      promoteWorkflow,
+    ),
+    '.github/workflows/promote-stable-docs.yml: manual promotion must guard against overwriting docs commits unique to docs-stable',
+  );
+  assert.ok(
+    /Push docs-stable \(manual\)[\s\S]*git push --force-with-lease=refs\/heads\/docs-stable:"\$\{expected\}" origin "\$\{target\}:refs\/heads\/docs-stable"/.test(
+      promoteWorkflow,
+    ),
+    '.github/workflows/promote-stable-docs.yml: manual promotion must use force-with-lease',
   );
 });
 

@@ -4,11 +4,11 @@ import {
   mapStoredJustificationToDisplayAlignment,
 } from './paragraph-alignment.js';
 
-// SD-3094: per ECMA-376 §17.3.1.13, `w:jc="left"` is the leading edge of the
-// paragraph, not the physical left. In RTL paragraphs (`w:bidi`), leading is
-// the right side. The two helpers below own the display ↔ stored translation
-// so the editor can keep its UI in physical terms while the model stays in the
-// spec's logical terms.
+// SD-3094: Microsoft Word interprets `w:jc` through paragraph direction:
+// in an RTL paragraph (`w:bidi`), stored `left` renders on the right side and
+// stored `right` renders on the left side. The helpers below own the visual ↔
+// stored translation so API/UI callers can request visual page alignment
+// while exported DOCX keeps Word-compatible stored values.
 
 describe('mapDisplayAlignmentToStoredJustification', () => {
   describe('LTR paragraphs (isRtl=false)', () => {

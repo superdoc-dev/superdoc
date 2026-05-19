@@ -1506,7 +1506,8 @@ export const MCP_TOOL_CATALOG = {
           },
           alignment: {
             enum: ['left', 'center', 'right', 'justify'],
-            description: "Required for action 'set_alignment'.",
+            description:
+              "Visual paragraph alignment. In RTL paragraphs, 'left' stores w:jc='right' and 'right' stores w:jc='left' so Word displays the requested side. Required for action 'set_alignment'.",
           },
           left: {
             type: 'integer',

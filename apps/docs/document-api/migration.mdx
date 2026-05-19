@@ -175,7 +175,7 @@ superdoc.on('editorCreate', ({ editor }) => {
 
 ## Driving custom React UI
 
-If your migration is also moving the UI side off legacy chains, the destination is `superdoc/ui/react`. Replace `superdoc.on('editor-update', ...)` loops and `useState(superdoc.activeEditor.commands.X)` patterns with the typed hooks: `useSuperDocCommand`, `useSuperDocSelection`, `useSuperDocComments`, `useSuperDocTrackChanges`, `useSuperDocDocument`. See [Custom UI](/editor/custom-ui/overview) for the full surface and the [reference workspace on GitHub](https://github.com/superdoc-dev/superdoc/tree/main/demos/custom-ui).
+If your migration is also moving the UI side off legacy chains, the destination is `superdoc/ui/react`. Replace `superdoc.on('editor-update', ...)` loops and `useState(superdoc.activeEditor.commands.X)` patterns with the typed hooks: `useSuperDocCommand`, `useSuperDocSelection`, `useSuperDocComments`, `useSuperDocTrackChanges`, `useSuperDocDocument`. See [Custom UI](/editor/custom-ui/overview) for the full surface and the [reference workspace on GitHub](https://github.com/superdoc-dev/superdoc/tree/main/demos/editor/custom-ui).
 
 ## Full reference
 

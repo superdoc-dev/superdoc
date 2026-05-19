@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
-import { existsSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -11,8 +11,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // when running this suite locally without an explicit DEMO override.
 const demo = process.env.DEMO || 'custom-ui';
 
-// Demos are flat: demos/<name>/
-const demoPath = `../${demo}`;
+// Resolve the demo's working directory via the manifest. Old paths under
+// demos/<name>/ may now be shim READMEs; manifest sourcePath is the source
+// of truth post-SD-3217.
+const manifestPath = resolve(__dirname, '../manifest.json');
+const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Array<{
+  id: string;
+  sourcePath?: string | null;
+  sourceRepo?: string;
+}>;
+const entry = manifest.find((e) => e.id === demo);
+const sourcePath = entry?.sourceRepo === 'superdoc-dev/superdoc' ? entry?.sourcePath : null;
+if (!sourcePath) {
+  throw new Error(`DEMO="${demo}" not found in demos/manifest.json or is not a local demo`);
+}
+const repoRoot = resolve(__dirname, '../..');
+const demoPath = relative(__dirname, resolve(repoRoot, sourcePath));
 
 // Port mapping for non-Vite demos (these use their framework's default port)
 const portMap: Record<string, number> = {

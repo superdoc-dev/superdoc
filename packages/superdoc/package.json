@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.33.1",
+  "version": "1.34.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -20,8 +20,8 @@
   "exports": {
     ".": {
       "types": {
-        "import": "./dist/superdoc/src/index.d.ts",
-        "require": "./dist/superdoc/src/index.d.cts"
+        "import": "./dist/superdoc/src/public/index.d.ts",
+        "require": "./dist/superdoc/src/public/index.d.cts"
       },
       "source": "./src/index.js",
       "import": "./dist/superdoc.es.js",
@@ -84,7 +84,7 @@
     },
     "./style.css": "./dist/style.css"
   },
-  "types": "./dist/superdoc/src/index.d.ts",
+  "types": "./dist/superdoc/src/public/index.d.ts",
   "typesVersions": {
     "*": {
       "headless-toolbar": [

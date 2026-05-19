@@ -131,6 +131,58 @@ test.describe('block structured content', () => {
 
     await superdoc.snapshot('block SDT boundary attributes');
   });
+
+  test('backspace before a non-empty paragraph enters preceding block SDT without deleting paragraph text', async ({
+    superdoc,
+  }) => {
+    await superdoc.page.evaluate(() => {
+      const editor = (window as any).editor;
+      const { schema } = editor.state;
+      const paragraph = (text: string) => schema.nodes.paragraph.create(null, schema.text(text));
+      const sdt = schema.nodes.structuredContentBlock.create(
+        { id: '7101', alias: 'Delete boundary block' },
+        [paragraph('Block content')],
+        null,
+      );
+
+      editor.view.dispatch(
+        editor.state.tr.replaceWith(0, editor.state.doc.content.size, [
+          paragraph('Intro paragraph'),
+          sdt,
+          paragraph('After paragraph stays'),
+        ]),
+      );
+    });
+    await superdoc.waitForStable();
+
+    const afterStart = await superdoc.findTextPos('After paragraph stays');
+    await superdoc.setTextSelection(afterStart);
+    await superdoc.waitForStable();
+
+    await superdoc.press('Backspace');
+    await superdoc.waitForStable();
+
+    const selectionState = await superdoc.page.evaluate(() => {
+      const selection = (window as any).editor.state.selection;
+      let insideBlockSdt = false;
+      for (let depth = selection.$from.depth; depth > 0; depth -= 1) {
+        if (selection.$from.node(depth).type.name === 'structuredContentBlock') {
+          insideBlockSdt = true;
+          break;
+        }
+      }
+      return {
+        from: selection.from,
+        to: selection.to,
+        nodeType: selection.node?.type?.name ?? null,
+        insideBlockSdt,
+      };
+    });
+    expect(selectionState.nodeType).toBeNull();
+    expect(selectionState.insideBlockSdt).toBe(true);
+    await superdoc.assertTextContains('Block content');
+    await superdoc.assertTextContains('After paragraph stays');
+  });
 });
 
 // ==========================================================================

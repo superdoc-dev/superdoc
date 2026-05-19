@@ -36,6 +36,7 @@ describe('handleBackspace chain ordering', () => {
 
     const commands = {
       undoInputRule: make('undoInputRule'),
+      selectBlockSdtBeforeTextBlockStart: make('selectBlockSdtBeforeTextBlockStart'),
       deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
       backspaceEmptyRunParagraph: make('backspaceEmptyRunParagraph'),
       backspaceSkipEmptyRun: make('backspaceSkipEmptyRun'),
@@ -72,6 +73,7 @@ describe('handleBackspace chain ordering', () => {
     expect(callLog).toEqual([
       'undoInputRule',
       // step 2 sets inputType meta and returns false (no command call)
+      'selectBlockSdtBeforeTextBlockStart',
       'deleteBlockSdtAtTextBlockStart',
       'backspaceEmptyRunParagraph',
       'backspaceSkipEmptyRun',
@@ -95,13 +97,13 @@ describe('handleBackspace chain ordering', () => {
     // Meta must be set BEFORE the run-aware handlers run, otherwise track-changes
     // Backspace wrapping in trackChangesHelpers/trackedTransaction.js cannot
     // identify the tr as a Backspace.
-    const sdtIndex = callLog.indexOf('deleteBlockSdtAtTextBlockStart');
+    const sdtIndex = callLog.indexOf('selectBlockSdtBeforeTextBlockStart');
     expect(sdtIndex).toBeGreaterThanOrEqual(0);
     // Spy log only records command calls, not the meta-setter step; verify
-    // meta-setter happens at chain position 1 by reconstructing the chain
-    // walk (undoInputRule at 0, meta-setter at 1, then SDT at 2).
+    // meta-setter happens at chain position 1 by reconstructing the chain walk
+    // (undoInputRule at 0, meta-setter at 1, then SDT-boundary handling at 2).
     expect(callLog[0]).toBe('undoInputRule');
-    expect(callLog[1]).toBe('deleteBlockSdtAtTextBlockStart');
+    expect(callLog[1]).toBe('selectBlockSdtBeforeTextBlockStart');
   });
 
   it('places mixedBidiBackspace after backspaceAcrossRuns and before deleteSelection', () => {

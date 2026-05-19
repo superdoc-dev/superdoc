@@ -63,6 +63,7 @@ type CoreCommandNames =
   | 'backspaceAcrossRuns'
   | 'backspaceAtomBefore'
   | 'deleteBlockSdtAtTextBlockStart'
+  | 'selectBlockSdtBeforeTextBlockStart'
   | 'deleteSkipEmptyRun'
   | 'deleteNextToRun'
   | 'deleteAtomAfter'

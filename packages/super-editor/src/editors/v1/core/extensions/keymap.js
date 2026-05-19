@@ -37,6 +37,7 @@ export const handleBackspace = (editor) => {
       tr.setMeta('inputType', 'deleteContentBackward');
       return false;
     },
+    () => commands.selectBlockSdtBeforeTextBlockStart(),
     () => commands.deleteBlockSdtAtTextBlockStart(),
     () => commands.backspaceEmptyRunParagraph(),
     () => commands.backspaceSkipEmptyRun(),

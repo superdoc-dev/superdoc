@@ -382,6 +382,76 @@ describe('SD-3214: two-client end-to-end', () => {
     expect(afterList.items.find((c) => c.id === 'c-to-delete')).toBeUndefined();
   });
 
+  it('CLI write-side delete: agent.comments.delete propagates to Y.Array (customer "agent resolves comments" flow)', async () => {
+    // The customer's headless agent needs to mutate comments and have those
+    // mutations reach other browser collaborators. resolveComment / removeComment
+    // engine commands don't emit `commentsUpdate`, so SD-3214's bridge fix
+    // pairs with wrapper-level emits in `comments-wrappers.ts`.
+    const ydoc = new YDoc();
+    const session = await openDocument(undefined, createIo(), {
+      documentId: 'sd-3214-cli-delete',
+      ydoc,
+      collaborationProvider: createProviderStub(),
+      isNewFile: true,
+      user: { name: 'Headless Agent', email: 'agent@superdoc.dev' },
+    });
+    session.editor.doc.create.paragraph({ at: { kind: 'documentEnd' }, text: 'A clause to delete.' });
+    const matchBlock = session.editor.doc.query.match({
+      select: { type: 'text', pattern: 'delete' },
+      require: 'first',
+    }).items[0].blocks[0];
+    session.editor.doc.comments.create({
+      target: { kind: 'text', blockId: matchBlock!.blockId, range: matchBlock!.range } as never,
+      text: 'agent-authored',
+    });
+    const yArr = ydoc.getArray('comments').toJSON() as Array<Record<string, unknown>>;
+    expect(yArr.length).toBe(1);
+    const targetId = yArr[0].commentId as string;
+
+    // Agent deletes — this is the write-side that previously didn't propagate.
+    const del = session.editor.doc.comments.delete({ commentId: targetId });
+    expect(del.success).toBe(true);
+
+    // Y.Array now reflects the delete (other collaborators would observe this).
+    const afterYArr = ydoc.getArray('comments').toJSON() as Array<Record<string, unknown>>;
+    session.dispose();
+    expect(afterYArr).toHaveLength(0);
+  });
+
+  it('CLI write-side resolve: agent.comments.patch({status:resolved}) propagates resolvedTime to Y.Array', async () => {
+    const ydoc = new YDoc();
+    const session = await openDocument(undefined, createIo(), {
+      documentId: 'sd-3214-cli-resolve',
+      ydoc,
+      collaborationProvider: createProviderStub(),
+      isNewFile: true,
+      user: { name: 'Headless Agent', email: 'agent@superdoc.dev' },
+    });
+    session.editor.doc.create.paragraph({ at: { kind: 'documentEnd' }, text: 'A clause to resolve.' });
+    const matchBlock = session.editor.doc.query.match({
+      select: { type: 'text', pattern: 'resolve' },
+      require: 'first',
+    }).items[0].blocks[0];
+    session.editor.doc.comments.create({
+      target: { kind: 'text', blockId: matchBlock!.blockId, range: matchBlock!.range } as never,
+      text: 'pending review',
+    });
+    const initial = ydoc.getArray('comments').toJSON() as Array<Record<string, unknown>>;
+    const targetId = initial[0].commentId as string;
+    expect(initial[0].resolvedTime).toBeFalsy();
+
+    // Agent resolves via the public patch surface.
+    const patch = session.editor.doc.comments.patch({ commentId: targetId, status: 'resolved' });
+    expect(patch.success).toBe(true);
+
+    // Y.Array reflects the resolution.
+    const after = ydoc.getArray('comments').toJSON() as Array<Record<string, unknown>>;
+    session.dispose();
+    expect(after).toHaveLength(1);
+    expect(after[0].isDone).toBe(true);
+    expect(typeof after[0].resolvedTime).toBe('number');
+  });
+
   it('Option B — post-open browser write: a comment authored AFTER the agent connects still propagates', async () => {
     const docA = new YDoc();
     const docB = new YDoc();

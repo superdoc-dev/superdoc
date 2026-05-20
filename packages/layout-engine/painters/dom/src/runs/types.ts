@@ -1,5 +1,5 @@
 import type { ImageHyperlink, ParagraphBlock, Run, SdtMetadata, TrackedChangesMode } from '@superdoc/contracts';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 
 export type RenderedLineInfo = {
   el: HTMLElement;

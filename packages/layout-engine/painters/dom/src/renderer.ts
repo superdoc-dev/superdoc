@@ -70,6 +70,7 @@ import type { RunRenderContext } from './runs/types.js';
 import { renderImageFragment as renderImageFragmentElement } from './images/image-fragment.js';
 import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './images/hyperlink.js';
 import { applyStyles } from './utils/apply-styles.js';
+import type { FragmentRenderContext } from './fragment-context.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
 import { renderDrawingFragment as renderDrawingFragmentElement } from './drawings/renderDrawingFragment.js';
@@ -203,25 +204,6 @@ type FragmentDomState = {
 type PageDomState = {
   element: HTMLElement;
   fragments: FragmentDomState[];
-};
-
-/**
- * Rendering context passed to fragment renderers containing page metadata.
- * Provides information about the current page position and section for dynamic content like page numbers.
- *
- * @typedef {Object} FragmentRenderContext
- * @property {number} pageNumber - Current page number (1-indexed)
- * @property {number} totalPages - Total number of pages in the document
- * @property {'body'|'header'|'footer'} section - Document section being rendered
- * @property {string} [pageNumberText] - Optional formatted page number text (e.g., "Page 1 of 10")
- */
-export type FragmentRenderContext = {
-  pageNumber: number;
-  totalPages: number;
-  section: 'body' | 'header' | 'footer';
-  story?: LayoutStoryLocator;
-  pageNumberText?: string;
-  pageIndex?: number;
 };
 
 export type PaintSnapshotLineStyle = {

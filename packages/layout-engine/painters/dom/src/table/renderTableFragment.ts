@@ -11,7 +11,7 @@ import type {
 import { getTableVisualDirection } from '@superdoc/contracts';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import { renderTableRow } from './renderTableRow.js';
 import {
   applySdtContainerChrome,

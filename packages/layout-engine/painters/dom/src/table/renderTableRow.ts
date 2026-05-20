@@ -18,7 +18,7 @@ import {
   swapCellBordersLR,
 } from './border-utils.js';
 import { getTableCellGridBounds, type TableCellGridPosition } from './grid-geometry.js';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import type { SdtAncestorOptions } from '../sdt/container.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];

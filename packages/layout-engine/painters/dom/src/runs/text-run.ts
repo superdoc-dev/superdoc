@@ -1,7 +1,7 @@
 import type { FlowRunLink, Run, TextRun } from '@superdoc/contracts';
 import { normalizeBaselineShift, resolveBaseFontSizeForVerticalText } from '@superdoc/contracts';
 import { assertPmPositions } from '../pm-position-validation.js';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import { BROWSER_DEFAULT_FONT_SIZE } from '../styles.js';
 import type { RunRenderContext, TrackedChangesRenderConfig } from './types.js';
 import { applyRunDataAttributes } from './hash.js';

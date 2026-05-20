@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import { hasShapeTextContent, renderTextboxContent } from './renderTextboxContent.js';
 
 describe('renderTextboxContent', () => {

@@ -19,7 +19,8 @@ import type {
 } from '@superdoc/contracts';
 import { getCellLines, normalizeZIndex } from '@superdoc/contracts';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
-import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
+import type { RenderedLineInfo } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { renderTableImageFrame } from '../images/table-image-frame.js';
 import { buildImageHyperlinkAnchor } from '../images/hyperlink.js';

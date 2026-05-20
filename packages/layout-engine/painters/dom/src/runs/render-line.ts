@@ -375,7 +375,7 @@ export const renderLine = ({
 
 type RunRenderBranchParams = {
   line: import('@superdoc/contracts').Line;
-  context: import('../renderer.js').FragmentRenderContext;
+  context: import('../fragment-context.js').FragmentRenderContext;
   el: HTMLElement;
   styleId?: string;
   runContext: RenderLineParams['runContext'];

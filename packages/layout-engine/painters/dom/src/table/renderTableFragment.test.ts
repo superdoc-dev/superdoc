@@ -14,7 +14,7 @@ import type {
   ParagraphBlock,
   SdtMetadata,
 } from '@superdoc/contracts';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 
 /**
  * Create a minimal table block for testing

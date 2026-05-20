@@ -1,6 +1,6 @@
 import type { ImageBlock, ImageFragment, ResolvedImageItem, SdtMetadata } from '@superdoc/contracts';
 import { DOM_CLASS_NAMES } from '../constants.js';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { applyStyles } from '../utils/apply-styles.js';
 import { createBlockImageContent } from './image-block.js';

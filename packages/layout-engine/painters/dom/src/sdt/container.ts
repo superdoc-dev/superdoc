@@ -165,5 +165,20 @@ export function shouldRebuildForSdtBoundary(element: HTMLElement, boundary: SdtB
   if (startAttr === undefined || endAttr === undefined) {
     return true;
   }
-  return startAttr !== expectedStart || endAttr !== expectedEnd;
+  if (startAttr !== expectedStart || endAttr !== expectedEnd) {
+    return true;
+  }
+
+  const expectedShowLabel = boundary.showLabel ?? boundary.isStart ?? true;
+  const hasLabel =
+    element.querySelector('.superdoc-structured-content__label, .superdoc-document-section__tooltip') !== null;
+  if (hasLabel !== expectedShowLabel) {
+    return true;
+  }
+
+  const expectedPaddingBottom =
+    boundary.paddingBottomOverride != null && boundary.paddingBottomOverride > 0
+      ? `${boundary.paddingBottomOverride}px`
+      : '';
+  return element.style.paddingBottom !== expectedPaddingBottom;
 }

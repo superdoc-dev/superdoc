@@ -2863,6 +2863,59 @@ describe('renderTableCell', () => {
       expect(firstBorder.style.borderBottomWidth).toBe('2px');
     });
 
+    it('groups table-cell paragraph borders across zero-height inline media', () => {
+      const borders = {
+        top: { width: 1, style: 'solid' as const, color: '#111111' },
+        bottom: { width: 1, style: 'solid' as const, color: '#111111' },
+        between: { width: 2, style: 'dashed' as const, color: '#222222' },
+      };
+      const para1: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-between-zero-media-1',
+        runs: [{ text: 'First', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { borders },
+      };
+      const inlineImage: ImageBlock = {
+        kind: 'image',
+        id: 'cell-between-zero-media-image',
+        src: 'data:image/png;base64,AAA',
+      };
+      const para2: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-between-zero-media-2',
+        runs: [{ text: 'Second', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { borders: { ...borders } },
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        renderLine: (block) => {
+          const line = doc.createElement('div');
+          line.dataset.blockId = (block as ParagraphBlock).id;
+          return line;
+        },
+        cellMeasure: {
+          blocks: [paragraphMeasure, { kind: 'image' as const, width: 20, height: 0 }, paragraphMeasure],
+          width: 120,
+          height: 60,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: { id: 'cell-between-borders-across-zero-media', blocks: [para1, inlineImage, para2], attrs: {} },
+      });
+
+      const firstWrapper = cellElement.querySelector<HTMLElement>('[data-block-id="cell-between-zero-media-1"]')
+        ?.parentElement as HTMLElement | null;
+      const secondWrapper = cellElement.querySelector<HTMLElement>('[data-block-id="cell-between-zero-media-2"]')
+        ?.parentElement as HTMLElement | null;
+      expect(firstWrapper?.dataset.betweenBorder).toBe('true');
+      expect(secondWrapper?.dataset.suppressTopBorder).toBe('true');
+      const firstBorder = getParagraphBorderLayer(firstWrapper!);
+      expect(firstBorder.style.borderBottomStyle).toBe('dashed');
+      expect(firstBorder.style.borderBottomWidth).toBe('2px');
+    });
+
     it('breaks table-cell between-border groups when between borders differ', () => {
       const para1: ParagraphBlock = {
         kind: 'paragraph',

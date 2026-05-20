@@ -541,6 +541,14 @@ const isAnchoredMediaBlock = (
   (measure?.kind === 'image' || measure?.kind === 'drawing') &&
   block.anchor?.isAnchored === true;
 
+const isZeroHeightMediaBlock = (
+  block: ParagraphBlock | TableBlock | ImageBlock | DrawingBlock | undefined,
+  measure: Measure | undefined,
+): boolean =>
+  (block?.kind === 'image' || block?.kind === 'drawing') &&
+  (measure?.kind === 'image' || measure?.kind === 'drawing') &&
+  getMeasuredBlockHeight(measure) <= 0;
+
 const sliceSdtBoundaryForParagraph = (
   baseBoundary: SdtBoundaryOptions | undefined,
   localStartLine: number,
@@ -861,7 +869,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         const blockStartGlobal = borderContextSegmentStart;
         const blockLineCount = blockLineCounts[index] ?? 0;
         borderContextSegmentStart += blockLineCount;
-        if (isAnchoredMediaBlock(block, measure)) {
+        if (isAnchoredMediaBlock(block, measure) || isZeroHeightMediaBlock(block, measure)) {
           return [];
         }
         const y = paragraphContextY;

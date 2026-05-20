@@ -5087,6 +5087,80 @@ describe('renderTableCell', () => {
       expect(tableFragments[0]?.parentElement?.style.height).toBe('36px');
     });
 
+    it('preserves spacing between adjacent partial embedded table row slices', () => {
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-adjacent-partial-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+      };
+      const makeInnerTableBlock = (id: string, rowCount: number): TableBlock => ({
+        kind: 'table',
+        id,
+        rows: Array.from({ length: rowCount }, (_, index) => ({
+          id: `${id}-row-${index}`,
+          cells: [{ id: `${id}-cell-${index}`, blocks: [nestedParagraph] }],
+        })),
+      });
+      const makeInnerTableMeasure = (rowHeights: number[]): TableMeasure => ({
+        kind: 'table',
+        rows: rowHeights.map((height) => ({
+          height,
+          cells: [{ width: 80, height, gridColumnStart: 0, colSpan: 1, rowSpan: 1, blocks: [paragraphMeasure] }],
+        })),
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: rowHeights.reduce((sum, height) => sum + height, 0),
+      });
+      const firstInnerTable = makeInnerTableBlock('first-adjacent-partial-inner', 2);
+      const secondInnerTable = makeInnerTableBlock('second-adjacent-partial-inner', 2);
+      const firstInnerMeasure = makeInnerTableMeasure([5, 7]);
+      const secondInnerMeasure = makeInnerTableMeasure([11, 13]);
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-adjacent-partial-table',
+        rows: [
+          { id: 'nested-adjacent-row-1', cells: [{ id: 'nested-adjacent-cell-1', blocks: [firstInnerTable] }] },
+          { id: 'nested-adjacent-row-2', cells: [{ id: 'nested-adjacent-cell-2', blocks: [secondInnerTable] }] },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 12,
+            cells: [{ width: 80, height: 12, gridColumnStart: 0, colSpan: 1, rowSpan: 1, blocks: [firstInnerMeasure] }],
+          },
+          {
+            height: 24,
+            cells: [
+              { width: 80, height: 24, gridColumnStart: 0, colSpan: 1, rowSpan: 1, blocks: [secondInnerMeasure] },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 42,
+        cellSpacingPx: 2,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: { ...baseCellMeasure, blocks: [nestedMeasure], height: 20 },
+        cell: { ...baseCell, blocks: [nestedTable] },
+        fromLine: 1,
+        toLine: 3,
+      });
+
+      const tableFragments = cellElement.querySelectorAll<HTMLElement>(
+        '[data-block-id="nested-adjacent-partial-table"]',
+      );
+      expect(tableFragments).toHaveLength(2);
+      expect(tableFragments[0]?.style.height).toBe('7px');
+      expect(tableFragments[1]?.style.top).toBe('9px');
+      expect(tableFragments[1]?.style.height).toBe('11px');
+      expect(tableFragments[0]?.parentElement?.style.height).toBe('20px');
+    });
+
     it('includes separate-border outer table height for embedded table fragments', () => {
       const nestedParagraph: ParagraphBlock = {
         kind: 'paragraph',

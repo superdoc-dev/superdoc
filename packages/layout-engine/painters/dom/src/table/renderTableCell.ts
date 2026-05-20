@@ -16,7 +16,7 @@ import type {
   WrapExclusion,
   WrapTextMode,
 } from '@superdoc/contracts';
-import { getCellLines, normalizeZIndex } from '@superdoc/contracts';
+import { getCellLines, getCellSpacingPx, normalizeZIndex } from '@superdoc/contracts';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { RenderedLineInfo } from '../renderer.js';
 import type { FragmentRenderContext } from '../fragment-context.js';
@@ -260,9 +260,11 @@ function renderPartialEmbeddedTable(params: {
     return { element: null, height: 0, nextCumulativeLineCount, hasSdtContainerChrome: false };
   }
 
+  const internalSliceSpacingPx = tableMeasure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing);
   const visibleHeight = rowSlices.reduce(
     (height, rowSlice, index) =>
       height +
+      (index > 0 ? internalSliceSpacingPx : 0) +
       computeRenderedTableFragmentHeight({
         block,
         measure: tableMeasure,
@@ -336,6 +338,7 @@ function renderPartialEmbeddedTable(params: {
     tableWrapper.appendChild(tableResult.element);
     hasSdtContainerChrome ||= tableResult.hasSdtContainerChrome;
     sliceTop += sliceHeight;
+    if (index < rowSlices.length - 1) sliceTop += internalSliceSpacingPx;
   });
 
   return {

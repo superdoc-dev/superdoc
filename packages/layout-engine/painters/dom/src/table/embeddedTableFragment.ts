@@ -117,6 +117,41 @@ export function mapEmbeddedTableRowSlice(params: {
   return { fromRow, toRow, partialRow };
 }
 
+export function mapEmbeddedTableRowSlices(params: {
+  block: TableBlock;
+  measure: TableMeasure;
+  localFrom: number;
+  localTo: number;
+}): RowSliceResult[] {
+  const { block, measure, localFrom, localTo } = params;
+  const slices: RowSliceResult[] = [];
+  let segmentOffset = 0;
+
+  for (let r = 0; r < measure.rows.length; r += 1) {
+    const rowSegmentCount = getEmbeddedRowLines(measure.rows[r]).length;
+    const rowStart = segmentOffset;
+    const rowEnd = segmentOffset + rowSegmentCount;
+    segmentOffset = rowEnd;
+
+    if (rowEnd <= localFrom || rowStart >= localTo) continue;
+
+    let partialRow: PartialRowInfo | undefined;
+    if (rowSegmentCount > 1 && (rowStart < localFrom || rowEnd > localTo)) {
+      partialRow = buildPartialRowInfo({
+        blockRow: block.rows[r],
+        row: measure.rows[r],
+        rowIndex: r,
+        rowLocalFrom: Math.max(0, localFrom - rowStart),
+        rowLocalTo: Math.min(rowSegmentCount, localTo - rowStart),
+      });
+    }
+
+    slices.push({ fromRow: r, toRow: r + 1, partialRow });
+  }
+
+  return slices;
+}
+
 function buildPartialRowInfo(params: {
   blockRow: TableRow | undefined;
   row: TableMeasure['rows'][number];

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TableBlock, TableMeasure } from '@superdoc/contracts';
-import { mapEmbeddedTableRowSlice } from './embeddedTableFragment.js';
+import { mapEmbeddedTableRowSlice, mapEmbeddedTableRowSlices } from './embeddedTableFragment.js';
 
 const makeNestedTableMeasure = (rowHeights: number[]): TableMeasure => ({
   kind: 'table',
@@ -82,6 +82,66 @@ describe('mapEmbeddedTableRowSlice', () => {
         partialHeight: 23,
       },
     });
+  });
+
+  it('preserves both partial rows when a segment window clips adjacent multi-segment rows', () => {
+    const firstInnerMeasure = makeNestedTableMeasure([5, 7]);
+    const secondInnerMeasure = makeNestedTableMeasure([11, 13]);
+    const firstInnerBlock = makeNestedTableBlock('first-inner', 2);
+    const secondInnerBlock = makeNestedTableBlock('second-inner', 2);
+    const block: TableBlock = {
+      kind: 'table',
+      id: 'table',
+      rows: [
+        {
+          id: 'row-0',
+          cells: [{ id: 'cell-0', blocks: [firstInnerBlock], attrs: {} }],
+          attrs: {},
+        },
+        {
+          id: 'row-1',
+          cells: [{ id: 'cell-1', blocks: [secondInnerBlock], attrs: {} }],
+          attrs: {},
+        },
+      ],
+    };
+    const measure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        { height: 12, cells: [{ width: 40, height: 12, blocks: [firstInnerMeasure] }] },
+        { height: 24, cells: [{ width: 40, height: 24, blocks: [secondInnerMeasure] }] },
+      ],
+      columnWidths: [40],
+      totalWidth: 40,
+      totalHeight: 36,
+    };
+
+    expect(mapEmbeddedTableRowSlices({ block, measure, localFrom: 1, localTo: 3 })).toEqual([
+      {
+        fromRow: 0,
+        toRow: 1,
+        partialRow: {
+          rowIndex: 0,
+          fromLineByCell: [1],
+          toLineByCell: [2],
+          isFirstPart: false,
+          isLastPart: true,
+          partialHeight: 7,
+        },
+      },
+      {
+        fromRow: 1,
+        toRow: 2,
+        partialRow: {
+          rowIndex: 1,
+          fromLineByCell: [0],
+          toLineByCell: [1],
+          isFirstPart: true,
+          isLastPart: false,
+          partialHeight: 11,
+        },
+      },
+    ]);
   });
 
   it('returns null for an out-of-range segment window', () => {

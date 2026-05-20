@@ -39,7 +39,7 @@ import {
   computeRenderedTableFragmentHeight,
   createEmbeddedTableFragment,
   getEmbeddedTableSegmentCount,
-  mapEmbeddedTableRowSlice,
+  mapEmbeddedTableRowSlices,
 } from './embeddedTableFragment.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];
@@ -283,19 +283,23 @@ function renderPartialEmbeddedTable(params: {
   const localFrom = Math.max(0, globalFromLine - tableStartSegment);
   const localTo = Math.min(totalTableSegments, globalToLine - tableStartSegment);
 
-  const rowSlice = mapEmbeddedTableRowSlice({ block, measure: tableMeasure, localFrom, localTo });
-  if (!rowSlice) {
+  const rowSlices = mapEmbeddedTableRowSlices({ block, measure: tableMeasure, localFrom, localTo });
+  if (rowSlices.length === 0) {
     return { element: null, height: 0, nextCumulativeLineCount, hasSdtContainerChrome: false };
   }
-  const { fromRow: embeddedFromRow, toRow: embeddedToRow, partialRow: partialRowInfo } = rowSlice;
 
-  const visibleHeight = computeRenderedTableFragmentHeight({
-    block,
-    measure: tableMeasure,
-    fromRow: embeddedFromRow,
-    toRow: embeddedToRow,
-    partialRow: partialRowInfo,
-  });
+  const visibleHeight = rowSlices.reduce(
+    (height, rowSlice) =>
+      height +
+      computeRenderedTableFragmentHeight({
+        block,
+        measure: tableMeasure,
+        fromRow: rowSlice.fromRow,
+        toRow: rowSlice.toRow,
+        partialRow: rowSlice.partialRow,
+      }),
+    0,
+  );
   const effectiveSdtBoundary = sdtBoundary
     ? {
         ...sdtBoundary,
@@ -312,33 +316,58 @@ function renderPartialEmbeddedTable(params: {
   tableWrapper.style.flexShrink = '0';
   tableWrapper.style.boxSizing = 'border-box';
 
-  const tableResult = renderEmbeddedTable({
-    doc,
-    table: block,
-    measure: tableMeasure,
-    availableWidth: contentWidthPx,
-    context,
-    renderLine,
-    captureLineSnapshot,
-    renderDrawingContent,
-    applySdtDataset,
-    fromRow: embeddedFromRow,
-    toRow: embeddedToRow,
-    partialRow: partialRowInfo,
-    sdtBoundary: effectiveSdtBoundary,
-    ancestorContainerKey,
-    ancestorContainerSdt,
-    ancestorContainerKeys,
-    ancestorContainerSdts,
-    onSdtContainerChrome,
+  let sliceTop = 0;
+  let hasSdtContainerChrome = false;
+  rowSlices.forEach((rowSlice, index) => {
+    const sliceHeight = computeRenderedTableFragmentHeight({
+      block,
+      measure: tableMeasure,
+      fromRow: rowSlice.fromRow,
+      toRow: rowSlice.toRow,
+      partialRow: rowSlice.partialRow,
+    });
+    const tableResult = renderEmbeddedTable({
+      doc,
+      table: block,
+      measure: tableMeasure,
+      availableWidth: contentWidthPx,
+      context,
+      renderLine,
+      captureLineSnapshot,
+      renderDrawingContent,
+      applySdtDataset,
+      fromRow: rowSlice.fromRow,
+      toRow: rowSlice.toRow,
+      partialRow: rowSlice.partialRow,
+      sdtBoundary:
+        effectiveSdtBoundary && rowSlices.length > 1
+          ? {
+              ...effectiveSdtBoundary,
+              isStart: (effectiveSdtBoundary.isStart ?? true) && index === 0,
+              isEnd: (effectiveSdtBoundary.isEnd ?? true) && index === rowSlices.length - 1,
+              showLabel:
+                effectiveSdtBoundary.showLabel === undefined
+                  ? undefined
+                  : effectiveSdtBoundary.showLabel && index === 0,
+            }
+          : effectiveSdtBoundary,
+      ancestorContainerKey,
+      ancestorContainerSdt,
+      ancestorContainerKeys,
+      ancestorContainerSdts,
+      onSdtContainerChrome,
+    });
+    tableResult.element.style.top = `${sliceTop}px`;
+    tableWrapper.appendChild(tableResult.element);
+    hasSdtContainerChrome ||= tableResult.hasSdtContainerChrome;
+    sliceTop += sliceHeight;
   });
-  tableWrapper.appendChild(tableResult.element);
 
   return {
     element: tableWrapper,
     height: visibleHeight,
     nextCumulativeLineCount,
-    hasSdtContainerChrome: tableResult.hasSdtContainerChrome,
+    hasSdtContainerChrome,
   };
 }
 

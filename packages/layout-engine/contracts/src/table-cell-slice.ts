@@ -106,12 +106,15 @@ export function describeCellRenderBlocks(
 
   const result: CellRenderBlock[] = [];
   let globalLine = 0;
+  const visibleBlockIndexes = getVisibleCellBlockIndexes(measuredBlocks);
+  const firstVisibleBlockIndex = visibleBlockIndexes[0] ?? -1;
+  const lastVisibleBlockIndex = visibleBlockIndexes[visibleBlockIndexes.length - 1] ?? -1;
 
   for (let i = 0; i < measuredBlocks.length; i += 1) {
     const measure = measuredBlocks[i];
     const data = i < (blockDataArray?.length ?? 0) ? blockDataArray![i] : undefined;
-    const isFirstBlock = i === 0;
-    const isLastBlock = i === measuredBlocks.length - 1;
+    const isFirstBlock = i === firstVisibleBlockIndex;
+    const isLastBlock = i === lastVisibleBlockIndex;
 
     if (measure.kind === 'paragraph') {
       const paraMeasure = measure as ParagraphMeasure;
@@ -388,11 +391,15 @@ export function computeFullCellContentHeight(
   // row-height preflight from comparing measured row heights to renderer-only
   // slice heights.
   let height = 0;
+  const visibleBlockIndexes = getVisibleCellBlockIndexes(measuredBlocks);
+  const firstVisibleBlockIndex = visibleBlockIndexes[0] ?? -1;
+  const lastVisibleBlockIndex = visibleBlockIndexes[visibleBlockIndexes.length - 1] ?? -1;
+
   for (let i = 0; i < measuredBlocks.length; i += 1) {
     const measure = measuredBlocks[i];
     const data = i < (blockDataArray?.length ?? 0) ? blockDataArray![i] : undefined;
-    const isFirstBlock = i === 0;
-    const isLastBlock = i === measuredBlocks.length - 1;
+    const isFirstBlock = i === firstVisibleBlockIndex;
+    const isLastBlock = i === lastVisibleBlockIndex;
 
     if (measure.kind === 'paragraph') {
       const paraMeasure = measure as ParagraphMeasure;
@@ -450,6 +457,19 @@ function buildSingleParagraphBlock(
 function resolveSpacingAfter(spacingAfter: number | undefined, isLastBlock: boolean): number {
   if (isLastBlock) return 0;
   return typeof spacingAfter === 'number' && spacingAfter > 0 ? spacingAfter : 0;
+}
+
+function getVisibleCellBlockIndexes(measuredBlocks: TableCellMeasure['blocks']): number[] {
+  const indexes: number[] = [];
+  for (let i = 0; i < measuredBlocks.length; i += 1) {
+    if (isVisibleCellBlockMeasure(measuredBlocks[i])) indexes.push(i);
+  }
+  return indexes;
+}
+
+function isVisibleCellBlockMeasure(measure: TableCellMeasure['blocks'][number]): boolean {
+  if (measure.kind === 'paragraph' || measure.kind === 'table') return true;
+  return 'height' in measure && typeof measure.height === 'number' && measure.height > 0;
 }
 
 function isAnchoredOutOfFlow(block: unknown): boolean {

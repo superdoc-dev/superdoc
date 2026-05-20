@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ParagraphMeasure, TableBlock, TableCellMeasure, TableMeasure } from './index.js';
+import type { ParagraphMeasure, TableBlock, TableCell, TableCellMeasure, TableMeasure } from './index.js';
 import {
   computeCellSliceContentHeight,
   computeFullCellContentHeight,
@@ -30,11 +30,20 @@ describe('table cell segment mapping', () => {
     height,
   });
 
-  const makeParagraphBlock = (id: string, spacing?: { before?: number; after?: number }) => ({
+  const makeParagraphBlock = (
+    id: string,
+    spacing?: { before?: number; after?: number },
+  ): TableCell['blocks'][number] => ({
     kind: 'paragraph' as const,
     id,
     runs: [],
     attrs: spacing ? { spacing } : undefined,
+  });
+
+  const makeImageBlock = (): TableCell['blocks'][number] => ({
+    kind: 'image',
+    id: 'zero-height-image',
+    src: 'data:image/png;base64,AAA',
   });
 
   it('counts paragraph and positive-height object segments', () => {
@@ -45,6 +54,24 @@ describe('table cell segment mapping', () => {
     };
 
     expect(getCellLines(cell)).toHaveLength(6);
+  });
+
+  it('ignores zero-height object blocks for final paragraph spacing', () => {
+    const cell: TableCellMeasure = {
+      blocks: [makeParagraph(1), makeImage(0)],
+      width: 200,
+      height: 20,
+    };
+    const block: TableCell = {
+      id: 'cell-zero-height-tail',
+      blocks: [makeParagraphBlock('paragraph-after', { after: 12 }), makeImageBlock()],
+    };
+    const blocks = describeCellRenderBlocks(cell, block, { top: 0, bottom: 5 });
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].isLastBlock).toBe(true);
+    expect(blocks[0].spacingAfter).toBe(0);
+    expect(computeFullCellContentHeight(cell, block, { top: 0, bottom: 5 })).toBe(27);
   });
 
   it('falls back to legacy single-paragraph cells', () => {

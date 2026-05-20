@@ -466,6 +466,22 @@ const getMeasuredBlockHeight = (measure: Measure | undefined): number => {
   return 'height' in measure && typeof measure.height === 'number' ? measure.height : 0;
 };
 
+const getTableCellVisibleBlockIndexes = (measures: Measure[], blockCount: number): number[] => {
+  const indexes: number[] = [];
+  for (let i = 0; i < blockCount; i += 1) {
+    const measure = measures[i];
+    if (!measure) continue;
+    if (measure.kind === 'paragraph' || measure.kind === 'table') {
+      indexes.push(i);
+      continue;
+    }
+    if ('height' in measure && typeof measure.height === 'number' && measure.height > 0) {
+      indexes.push(i);
+    }
+  }
+  return indexes;
+};
+
 const isAnchoredMediaBlock = (
   block: ParagraphBlock | TableBlock | ImageBlock | DrawingBlock | undefined,
   measure: Measure | undefined,
@@ -755,8 +771,13 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     // which uses getEmbeddedRowLines() for recursive nested table expansion).
     // Non-paragraph blocks (images, drawings) occupy 1 segment each when height > 0,
     // including anchored blocks (matching getCellLines() in layout-table.ts).
+    const rawBlockCount = Math.min(blockMeasures.length, cellBlocks.length);
+    const visibleBlockIndexes = getTableCellVisibleBlockIndexes(blockMeasures as Measure[], rawBlockCount);
+    const visibleBlockIndexByOriginalIndex = new Map<number, number>(
+      visibleBlockIndexes.map((originalIndex, visibleIndex) => [originalIndex, visibleIndex]),
+    );
     const blockLineCounts: number[] = [];
-    for (let i = 0; i < Math.min(blockMeasures.length, cellBlocks.length); i++) {
+    for (let i = 0; i < rawBlockCount; i++) {
       const bm = blockMeasures[i];
       if (bm.kind === 'paragraph') {
         blockLineCounts.push((bm as ParagraphMeasure).lines?.length || 0);
@@ -784,7 +805,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     let borderContextSegmentStart = 0;
     const betweenEntryBlockIndexes: number[] = [];
     const betweenInfoByBlockIndex = computeBetweenBorderContext(
-      cellBlocks.slice(0, Math.min(blockMeasures.length, cellBlocks.length)).flatMap((block, index) => {
+      cellBlocks.slice(0, rawBlockCount).flatMap((block, index) => {
         const measure = blockMeasures[index];
         const blockStartGlobal = borderContextSegmentStart;
         const blockLineCount = blockLineCounts[index] ?? 0;
@@ -827,7 +848,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     const renderedLines: RenderedLineInfo[] = [];
 
     let cumulativeLineCount = 0; // Track cumulative line count across blocks
-    for (let i = 0; i < Math.min(blockMeasures.length, cellBlocks.length); i++) {
+    for (let i = 0; i < rawBlockCount; i++) {
       const blockMeasure = blockMeasures[i];
       const block = cellBlocks[i];
 
@@ -946,8 +967,8 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           cellEl,
           block: block as ParagraphBlock,
           paragraphMeasure: blockMeasure as ParagraphMeasure,
-          blockIndex: i,
-          blockCount: Math.min(blockMeasures.length, cellBlocks.length),
+          blockIndex: visibleBlockIndexByOriginalIndex.get(i) ?? i,
+          blockCount: visibleBlockIndexes.length,
           cumulativeLineCount,
           globalFromLine,
           globalToLine,

@@ -1466,6 +1466,60 @@ describe('renderTableCell', () => {
       expect(paraWrapper.style.marginBottom).toBe('');
     });
 
+    it('should NOT apply spacing.after when the last paragraph is followed by zero-height media', () => {
+      const lastPara: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-last-before-zero-media',
+        runs: [{ text: 'Last paragraph', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { spacing: { after: 15 } },
+      };
+      const zeroHeightImage: ImageBlock = {
+        kind: 'image',
+        id: 'zero-height-after-last',
+        src: 'data:image/png;base64,AAA',
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                {
+                  fromRun: 0,
+                  fromChar: 0,
+                  toRun: 0,
+                  toChar: 14,
+                  width: 100,
+                  ascent: 12,
+                  descent: 4,
+                  lineHeight: 20,
+                },
+              ],
+              totalHeight: 20,
+            },
+            { kind: 'image', width: 20, height: 0 },
+          ],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-last-before-zero-media',
+          blocks: [lastPara, zeroHeightImage],
+          attrs: {},
+        },
+      });
+
+      const contentElement = cellElement.firstElementChild as HTMLElement;
+      const paraWrapper = contentElement.children[0] as HTMLElement;
+      expect(contentElement.children).toHaveLength(1);
+      expect(paraWrapper.style.marginBottom).toBe('');
+    });
+
     it('should only apply margin-bottom when spacing.after > 0', () => {
       const para1: ParagraphBlock = {
         kind: 'paragraph',

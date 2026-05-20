@@ -365,6 +365,42 @@ describe('renderTableFragment', () => {
   });
 
   describe('merged-cell border ownership', () => {
+    it('renders separate outer borders when cell spacing is zero', () => {
+      const block: TableBlock = {
+        ...createTestTableBlock(),
+        attrs: {
+          borderCollapse: 'separate',
+          cellSpacing: 0,
+          borders: {
+            top: { style: 'single', width: 2, color: '#111111' },
+            right: { style: 'single', width: 2, color: '#222222' },
+            bottom: { style: 'single', width: 2, color: '#333333' },
+            left: { style: 'single', width: 2, color: '#444444' },
+          },
+        },
+      };
+      const measure = createTestTableMeasure();
+
+      const element = renderTableFragment({
+        doc,
+        fragment: createTestTableFragment(),
+        context,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
+        renderLine: () => doc.createElement('div'),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+        applyStyles: () => {},
+      });
+
+      expect(element.style.borderTopWidth).toBe('2px');
+      expect(element.style.borderRightWidth).toBe('2px');
+      expect(element.style.borderBottomWidth).toBe('2px');
+      expect(element.style.borderLeftWidth).toBe('2px');
+    });
+
     it('renders the outer right border for a merged header cell in collapsed mode', () => {
       const block: TableBlock = {
         kind: 'table',

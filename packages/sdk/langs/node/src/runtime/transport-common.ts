@@ -43,7 +43,25 @@ export interface SuperDocClientOptions {
   env?: Record<string, string | undefined>;
   startupTimeoutMs?: number;
   shutdownTimeoutMs?: number;
+  /**
+   * Upper bound (ms) on how long the host process may spend on a single
+   * `cli.invoke` request before it kills the operation and returns a
+   * `RequestTimeout` error. Propagated to the host via `--request-timeout-ms`
+   * at spawn. Raise this for documents that legitimately need more than 30s
+   * to process; the SDK widens its own JSON-RPC watchdog to match.
+   *
+   * Defaults to the host's own default (30s) when unset.
+   */
   requestTimeoutMs?: number;
+  /**
+   * JS-side watchdog (ms) the SDK waits for a host reply before giving up.
+   * Independent of {@link requestTimeoutMs} (which controls the host-side
+   * operation budget). Most callers should leave this at its default and use
+   * {@link requestTimeoutMs} as the single operation-timeout knob —
+   * `resolveWatchdogTimeout` already widens the watchdog above the host
+   * ceiling automatically. Override only when you need to detect a hung or
+   * crashed host faster than the operation budget allows.
+   */
   watchdogTimeoutMs?: number;
   maxQueueDepth?: number;
   defaultChangeMode?: ChangeMode;

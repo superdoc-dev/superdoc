@@ -73,7 +73,7 @@ describe('makeDefaultItems formatting marks button opt-in', () => {
 describe('makeDefaultItems XL overflow boundary (SD-2328)', () => {
   const XL_OVERFLOW_SAFETY_BUFFER = 20;
   const XL_CUTOFF = RESPONSIVE_BREAKPOINTS.xl + XL_OVERFLOW_SAFETY_BUFFER;
-  const XL_ITEMS = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler'];
+  const XL_ITEMS = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'tableOfContents'];
 
   it(`moves XL items into overflow at ${XL_CUTOFF - 1}px (below cutoff)`, () => {
     const { defaultItems, overflowItems } = buildItems(XL_CUTOFF - 1);

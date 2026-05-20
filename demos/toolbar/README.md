@@ -1,11 +1,14 @@
-# SuperDoc: Customizing the Toolbar
+# Archived: customizing the toolbar
 
-An example of how to add a custom button to the SuperDoc toolbar. This custom button inserts a random cat GIF into the document.
+This demo is no longer recommended and has been removed from the demo gallery.
 
-[We define the custom button in the `modules.toolbar.customButtons` option](https://github.com/superdoc-dev/superdoc/blob/main/demos/toolbar/src/main.js)
+## Why archived
 
-The button's action is to insert a custom `catNode`. [The custom node and its Prosemirror click-handler plugin are defined in the same file](https://github.com/superdoc-dev/superdoc/blob/main/demos/toolbar/src/main.js).
+This demo bundled two unrelated lessons into one workspace: configuring a custom toolbar button, and authoring a custom ProseMirror node (a "cat GIF" node). Each lesson is now covered cleanly by its own focused example.
 
-It is also possible to fully replace the toolbar with your own: [Headless Toolbar](https://docs.superdoc.dev/editor/built-in-ui/toolbar/overview#learn-more)
+## Use instead
 
-More customization options here: https://docs.superdoc.dev/editor/built-in-ui/toolbar/overview
+- [`examples/editor/custom-ui/configurable-toolbar`](../../examples/editor/custom-ui/configurable-toolbar) for the toolbar configuration lesson.
+- [`examples/advanced/extensions/custom-node`](../../examples/advanced/extensions/custom-node) for the custom-node authoring lesson.
+
+The source in this directory is kept for archival reference but is not maintained.

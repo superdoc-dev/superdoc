@@ -2,6 +2,7 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import { WebsocketProvider } from 'y-websocket';
 import { Doc as YDoc } from 'yjs';
 import { CliError } from '../errors';
+import { attachProviderDiagnostics, type ProviderDiagnostics } from './diagnostics';
 import { createLiveblocksRuntime } from './liveblocks';
 import { resolveCollaborationToken } from './resolve';
 import type {
@@ -26,10 +27,15 @@ function isSynced(provider: SyncableProvider): boolean {
   return provider.synced === true || provider.isSynced === true;
 }
 
-export function waitForProviderSync(provider: SyncableProvider, timeoutMs: number): Promise<void> {
+export function waitForProviderSync(
+  provider: SyncableProvider,
+  timeoutMs: number,
+  diagnostics?: ProviderDiagnostics,
+): Promise<void> {
   if (isSynced(provider)) return Promise.resolve();
 
   return new Promise<void>((resolve, reject) => {
+    const startedAt = Date.now();
     let settled = false;
     const cleanup: Array<() => void> = [];
 
@@ -60,9 +66,10 @@ export function waitForProviderSync(provider: SyncableProvider, timeoutMs: numbe
     }
 
     const timer = setTimeout(() => {
+      const elapsedMs = Date.now() - startedAt;
       finish(
         new CliError('COLLABORATION_SYNC_TIMEOUT', `Collaboration sync timed out after ${timeoutMs}ms.`, {
-          timeoutMs,
+          ...(diagnostics?.toTimeoutDetails(provider, timeoutMs, elapsedMs) ?? { timeoutMs }),
         }),
       );
     }, timeoutMs);
@@ -113,11 +120,21 @@ function createWebSocketRuntime(profile: WebSocketCollaborationProfile): Collabo
     }) as unknown as SyncableProvider;
   }
 
+  const diagnostics = attachProviderDiagnostics(provider, {
+    providerType: profile.providerType,
+    url: profile.url,
+    documentId: profile.documentId,
+    tokenEnvConfigured: Boolean(profile.tokenEnv),
+    authTokenResolved: Boolean(token),
+    paramsKeys: Object.keys(profile.params ?? {}),
+  });
+
   return {
     ydoc,
     provider,
-    waitForSync: () => waitForProviderSync(provider, syncTimeoutMs),
+    waitForSync: () => waitForProviderSync(provider, syncTimeoutMs, diagnostics),
     dispose() {
+      diagnostics?.detach();
       provider.disconnect?.();
       provider.destroy?.();
       ydoc.destroy();

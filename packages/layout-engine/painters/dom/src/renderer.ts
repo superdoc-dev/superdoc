@@ -54,9 +54,13 @@ import type {
   ResolvedImageItem,
   ResolvedDrawingItem,
   ResolvedListMarkerItem,
+  LayoutSourceIdentity,
+  LayoutStoryLocator,
 } from '@superdoc/contracts';
 import {
+  LAYOUT_BOUNDARY_SCHEMA,
   adjustAvailableWidthForTextIndent,
+  buildLayoutSourceIdentityForFragment,
   calculateJustifySpacing,
   computeLinePmRange,
   expandRunsForInlineNewlines,
@@ -69,6 +73,7 @@ import {
   sliceRunsForLine,
   SPACE_CHARS,
 } from '@superdoc/contracts';
+import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
@@ -356,6 +361,7 @@ export type FragmentRenderContext = {
   pageNumber: number;
   totalPages: number;
   section: 'body' | 'header' | 'footer';
+  story?: LayoutStoryLocator;
   pageNumberText?: string;
   pageIndex?: number;
 };
@@ -405,6 +411,7 @@ export type PaintSnapshotAnnotationEntity = {
   fieldId?: string;
   fieldType?: string;
   type?: string;
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type PaintSnapshotStructuredContentBlockEntity = {
@@ -413,6 +420,7 @@ export type PaintSnapshotStructuredContentBlockEntity = {
   sdtId: string;
   pmStart?: number;
   pmEnd?: number;
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type PaintSnapshotStructuredContentInlineEntity = {
@@ -421,6 +429,7 @@ export type PaintSnapshotStructuredContentInlineEntity = {
   sdtId: string;
   pmStart?: number;
   pmEnd?: number;
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type PaintSnapshotImageEntity = {
@@ -431,6 +440,7 @@ export type PaintSnapshotImageEntity = {
   pmEnd?: number;
   blockId?: string;
   sourceAnchor?: SourceAnchor;
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type PaintSnapshotEntities = {
@@ -448,6 +458,7 @@ export type PaintSnapshotLine = {
   markers?: PaintSnapshotMarkerStyle[];
   tabs?: PaintSnapshotTabStyle[];
   sourceAnchor?: SourceAnchor;
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type PaintSnapshotPage = {
@@ -536,6 +547,53 @@ function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
   return out;
 }
 
+/**
+ * Stamp the editor-neutral layout-identity dataset (prep-001).
+ *
+ * Additive only — runs alongside the legacy `data-pm-*` / `data-block-id`
+ * writes in `applyFragmentFrame` and `applyResolvedFragmentFrame`. v1
+ * consumers still read PM-shaped datasets; future editor-neutral consumers
+ * read `data-layout-fragment-id` / `data-layout-story` / `data-layout-block-ref`
+ * here.
+ */
+export function applyLayoutIdentityDataset(element: HTMLElement, identity: LayoutSourceIdentity | undefined): void {
+  if (!identity) {
+    delete element.dataset[DATASET_KEYS.LAYOUT_FRAGMENT_ID];
+    delete element.dataset[DATASET_KEYS.LAYOUT_BLOCK_REF];
+    delete element.dataset[DATASET_KEYS.LAYOUT_STORY];
+    return;
+  }
+  element.dataset[DATASET_KEYS.LAYOUT_FRAGMENT_ID] = identity.fragmentId;
+  element.dataset[DATASET_KEYS.LAYOUT_BLOCK_REF] = identity.blockRef;
+  element.dataset[DATASET_KEYS.LAYOUT_STORY] = encodeLayoutStoryDataset(identity.story);
+}
+
+const resolveOrBuildFragmentIdentity = (
+  fragment: Fragment,
+  story?: LayoutStoryLocator,
+  existing?: LayoutSourceIdentity,
+): LayoutSourceIdentity =>
+  buildLayoutSourceIdentityForFragment(
+    existing
+      ? {
+          ...fragment,
+          layoutSourceIdentity: existing,
+          sourceAnchor: fragment.sourceAnchor ?? existing.sourceAnchor,
+        }
+      : fragment,
+    story,
+  );
+
+const resolveSectionStory = (section?: 'body' | 'header' | 'footer'): LayoutStoryLocator | undefined => {
+  if (!section || section === 'body') return undefined;
+  return { kind: section };
+};
+
+const resolveDecorationStory = (kind: 'header' | 'footer', data: PageDecorationPayload): LayoutStoryLocator => {
+  const id = data.headerFooterRefId ?? data.sectionType;
+  return typeof id === 'string' && id.length > 0 ? { kind, id } : { kind };
+};
+
 export function applySourceAnchorDataset(element: HTMLElement, sourceAnchor?: SourceAnchor): void {
   if (!sourceAnchor) {
     delete element.dataset.sourceAnchor;
@@ -582,6 +640,29 @@ function readNearestSourceAnchor(element: HTMLElement | null | undefined): Sourc
   );
 }
 
+function readLayoutIdentityDataset(element: HTMLElement | null | undefined): LayoutSourceIdentity | undefined {
+  if (!element) return undefined;
+  const fragmentId = element.dataset?.[DATASET_KEYS.LAYOUT_FRAGMENT_ID];
+  const blockRef = element.dataset?.[DATASET_KEYS.LAYOUT_BLOCK_REF];
+  const story = decodeLayoutStoryDataset(element.dataset?.[DATASET_KEYS.LAYOUT_STORY]);
+  if (!fragmentId || !blockRef || story.kind === 'unknown') return undefined;
+  return compactSnapshotObject({
+    schema: LAYOUT_BOUNDARY_SCHEMA,
+    story,
+    blockRef,
+    fragmentId,
+    sourceAnchor: readNearestSourceAnchor(element),
+  }) as LayoutSourceIdentity;
+}
+
+function readNearestLayoutSourceIdentity(element: HTMLElement | null | undefined): LayoutSourceIdentity | undefined {
+  if (!element) return undefined;
+  return (
+    readLayoutIdentityDataset(element) ??
+    readLayoutIdentityDataset(element.closest(`.${CLASS_NAMES.fragment}`) as HTMLElement | null)
+  );
+}
+
 function shouldIncludeInlineImageSnapshotElement(element: HTMLElement): boolean {
   if (element.classList.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER)) {
     return true;
@@ -622,6 +703,7 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
         fieldId: element.dataset.fieldId || null,
         fieldType: element.dataset.fieldType || null,
         type: element.dataset.type || null,
+        layoutSourceIdentity: readNearestLayoutSourceIdentity(element),
       }) as PaintSnapshotAnnotationEntity,
     );
   }
@@ -641,6 +723,7 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
         sdtId,
         pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
         pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+        layoutSourceIdentity: readNearestLayoutSourceIdentity(element),
       }) as PaintSnapshotStructuredContentBlockEntity,
     );
   }
@@ -660,6 +743,7 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
         sdtId,
         pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
         pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+        layoutSourceIdentity: readNearestLayoutSourceIdentity(element),
       }) as PaintSnapshotStructuredContentInlineEntity,
     );
   }
@@ -683,6 +767,7 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
         pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
         pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
         sourceAnchor: readNearestSourceAnchor(element),
+        layoutSourceIdentity: readNearestLayoutSourceIdentity(element),
       }) as PaintSnapshotImageEntity,
     );
   }
@@ -703,6 +788,7 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
         pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
         blockId: element.getAttribute('data-sd-block-id'),
         sourceAnchor: readNearestSourceAnchor(element),
+        layoutSourceIdentity: readNearestLayoutSourceIdentity(element),
       }) as PaintSnapshotImageEntity,
     );
   }
@@ -1585,6 +1671,8 @@ export class DomPainter {
         tabs,
         sourceAnchor:
           readNearestSourceAnchor(lineEl) ?? readNearestSourceAnchor(options.wrapperEl) ?? options.sourceAnchor,
+        layoutSourceIdentity:
+          readNearestLayoutSourceIdentity(lineEl) ?? readNearestLayoutSourceIdentity(options.wrapperEl),
       }) as PaintSnapshotLine,
     );
 
@@ -1629,6 +1717,7 @@ export class DomPainter {
             markers,
             tabs,
             sourceAnchor: readNearestSourceAnchor(lineEl),
+            layoutSourceIdentity: readNearestLayoutSourceIdentity(lineEl),
           }) as PaintSnapshotLine,
         );
       }
@@ -2208,6 +2297,10 @@ export class DomPainter {
     el.dataset.layoutEpoch = String(this.layoutEpoch);
     el.dataset.pageNumber = String(page.number);
     el.dataset.pageIndex = String(pageIndex);
+    // Editor-neutral layout boundary stamp (prep-001). Lets DOM observers
+    // negotiate the additive identity contract version without reading
+    // package metadata.
+    el.dataset[DATASET_KEYS.LAYOUT_BOUNDARY_SCHEMA] = LAYOUT_BOUNDARY_SCHEMA;
 
     // Render per-page ruler if enabled (suppressed in semantic flow mode)
     if (!this.isSemanticFlow && this.options.ruler?.enabled) {
@@ -2574,6 +2667,7 @@ export class DomPainter {
       pageNumber: page.number,
       totalPages: this.totalPages,
       section: kind,
+      story: resolveDecorationStory(kind, data),
       pageNumberText: page.numberText,
       pageIndex,
     };
@@ -2927,6 +3021,9 @@ export class DomPainter {
     applyStyles(el, pageStyles(page.width, page.height, this.getEffectivePageStyles()));
     this.applySemanticPageOverrides(el);
     el.dataset.layoutEpoch = String(this.layoutEpoch);
+    // Editor-neutral layout boundary stamp (prep-001). See `renderPage` for
+    // the spread/horizontal flow that stamps the same attribute.
+    el.dataset[DATASET_KEYS.LAYOUT_BOUNDARY_SCHEMA] = LAYOUT_BOUNDARY_SCHEMA;
 
     const contextBase: FragmentRenderContext = {
       pageNumber: page.number,
@@ -3090,9 +3187,9 @@ export class DomPainter {
           : fragmentStyles;
       applyStyles(fragmentEl, styles);
       if (resolvedItem) {
-        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section);
+        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section, context.story);
       } else {
-        this.applyFragmentFrame(fragmentEl, fragment, context.section);
+        this.applyFragmentFrame(fragmentEl, fragment, context.section, context.story);
       }
 
       // Add TOC-specific styling class
@@ -3282,6 +3379,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
+            wrapperEl: fragmentEl,
             sourceAnchor: resolvedItem?.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
@@ -3507,6 +3605,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
+            wrapperEl: fragmentEl,
             sourceAnchor: resolvedItem?.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
@@ -3642,13 +3741,14 @@ export class DomPainter {
       fragmentEl.classList.add(CLASS_NAMES.fragment, `${CLASS_NAMES.fragment}-list-item`);
       applyStyles(fragmentEl, fragmentStyles);
       if (resolvedItem) {
-        this.applyResolvedListItemWrapperFrame(fragmentEl, fragment, resolvedItem, context.section);
+        this.applyResolvedListItemWrapperFrame(fragmentEl, fragment, resolvedItem, context.section, context.story);
       } else {
         fragmentEl.style.left = `${fragment.x - fragment.markerWidth}px`;
         fragmentEl.style.top = `${fragment.y}px`;
         fragmentEl.style.width = `${fragment.markerWidth + fragment.width}px`;
         fragmentEl.dataset.blockId = fragment.blockId;
         applySourceAnchorDataset(fragmentEl, fragment.sourceAnchor);
+        applyLayoutIdentityDataset(fragmentEl, resolveOrBuildFragmentIdentity(fragment, context.story));
       }
       fragmentEl.dataset.itemId = fragment.itemId;
 
@@ -3754,6 +3854,7 @@ export class DomPainter {
         this.capturePaintSnapshotLine(lineEl, context, {
           inTableFragment: false,
           inTableParagraph: false,
+          wrapperEl: fragmentEl,
           sourceAnchor: resolvedItem?.sourceAnchor,
         });
         contentEl.appendChild(lineEl);
@@ -3787,9 +3888,9 @@ export class DomPainter {
       fragmentEl.classList.add(CLASS_NAMES.fragment, DOM_CLASS_NAMES.IMAGE_FRAGMENT);
       applyStyles(fragmentEl, fragmentStyles);
       if (resolvedItem) {
-        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section);
+        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section, context.story);
       } else {
-        this.applyFragmentFrame(fragmentEl, fragment, context.section);
+        this.applyFragmentFrame(fragmentEl, fragment, context.section, context.story);
         fragmentEl.style.height = `${fragment.height}px`;
         this.applyFragmentWrapperZIndex(fragmentEl, fragment);
       }
@@ -3987,9 +4088,9 @@ export class DomPainter {
       fragmentEl.classList.add(CLASS_NAMES.fragment, 'superdoc-drawing-fragment');
       applyStyles(fragmentEl, fragmentStyles);
       if (resolvedItem) {
-        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section);
+        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section, context.story);
       } else {
-        this.applyFragmentFrame(fragmentEl, fragment, context.section);
+        this.applyFragmentFrame(fragmentEl, fragment, context.section, context.story);
         fragmentEl.style.height = `${fragment.height}px`;
         this.applyFragmentWrapperZIndex(fragmentEl, fragment);
       }
@@ -5020,7 +5121,7 @@ export class DomPainter {
       // Wrap applyFragmentFrame to capture section from context.
       // Table cell inner fragments always stay on the legacy frame path for now.
       const applyFragmentFrameWithSection = (el: HTMLElement, frag: Fragment): void => {
-        this.applyFragmentFrame(el, frag, context.section);
+        this.applyFragmentFrame(el, frag, context.section, context.story);
       };
 
       // Word justifies text inside table cells, but not the final line unless the
@@ -5105,7 +5206,7 @@ export class DomPainter {
       // Override outer wrapper positioning with resolved data when available.
       // Inner cell fragments still use legacy applyFragmentFrame via deps closure.
       if (resolvedItem) {
-        this.applyResolvedFragmentFrame(el, resolvedItem, fragment, context.section);
+        this.applyResolvedFragmentFrame(el, resolvedItem, fragment, context.section, context.story);
         // Re-apply the SDT group width override after the resolved frame, so block-SDT
         // containers can stretch table fragments to match sibling paragraph widths.
         if (sdtBoundary?.widthOverride != null) {
@@ -7016,16 +7117,17 @@ export class DomPainter {
   ): void {
     // Narrow to fragment-kind resolved items (excludes ResolvedGroupItem)
     const fragmentItem = resolvedItem?.kind === 'fragment' ? resolvedItem : undefined;
+    const story = resolveSectionStory(section);
 
     if (fragment.kind === 'list-item' && fragmentItem) {
-      this.applyResolvedListItemWrapperFrame(el, fragment, fragmentItem as ResolvedFragmentItem, section);
+      this.applyResolvedListItemWrapperFrame(el, fragment, fragmentItem as ResolvedFragmentItem, section, story);
       return;
     }
 
     if (fragmentItem) {
-      this.applyResolvedFragmentFrame(el, fragmentItem, fragment, section);
+      this.applyResolvedFragmentFrame(el, fragmentItem, fragment, section, story);
     } else {
-      this.applyFragmentFrame(el, fragment, section);
+      this.applyFragmentFrame(el, fragment, section, story);
       if (fragment.kind === 'image' || fragment.kind === 'drawing') {
         el.style.height = `${fragment.height}px`;
         this.applyFragmentWrapperZIndex(el, fragment);
@@ -7045,13 +7147,19 @@ export class DomPainter {
    *                  - 'header' or 'footer': PM position validation is skipped (these sections have separate PM coordinate spaces)
    *                  When undefined, defaults to 'body' section behavior (validation enabled).
    */
-  private applyFragmentFrame(el: HTMLElement, fragment: Fragment, section?: 'body' | 'header' | 'footer'): void {
+  private applyFragmentFrame(
+    el: HTMLElement,
+    fragment: Fragment,
+    section?: 'body' | 'header' | 'footer',
+    story?: LayoutStoryLocator,
+  ): void {
     el.style.left = `${fragment.x}px`;
     el.style.top = `${fragment.y}px`;
     el.style.width = `${fragment.width}px`;
     el.dataset.blockId = fragment.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
     applySourceAnchorDataset(el, fragment.sourceAnchor);
+    applyLayoutIdentityDataset(el, resolveOrBuildFragmentIdentity(fragment, story ?? resolveSectionStory(section)));
 
     // Footnote content is read-only: prevent cursor placement and typing (blockId prefix from FootnotesBuilder)
     if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
@@ -7202,6 +7310,7 @@ export class DomPainter {
     item: ResolvedFragmentItem | ResolvedTableItem | ResolvedImageItem | ResolvedDrawingItem,
     fragment: Fragment,
     section?: 'body' | 'header' | 'footer',
+    story?: LayoutStoryLocator,
   ): void {
     el.style.left = `${item.x}px`;
     el.style.top = `${item.y}px`;
@@ -7209,6 +7318,16 @@ export class DomPainter {
     el.dataset.blockId = item.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
     applySourceAnchorDataset(el, item.sourceAnchor);
+    applyLayoutIdentityDataset(
+      el,
+      resolveOrBuildFragmentIdentity(
+        fragment,
+        story ?? resolveSectionStory(section),
+        item.layoutSourceIdentity
+          ? { ...item.layoutSourceIdentity, sourceAnchor: item.sourceAnchor ?? item.layoutSourceIdentity.sourceAnchor }
+          : undefined,
+      ),
+    );
     this.applyFragmentWrapperZIndex(el, fragment, item.zIndex);
 
     if (item.fragmentKind === 'image' || item.fragmentKind === 'drawing' || item.fragmentKind === 'table') {
@@ -7230,8 +7349,9 @@ export class DomPainter {
     fragment: ListItemFragment,
     item: ResolvedFragmentItem,
     section?: 'body' | 'header' | 'footer',
+    story?: LayoutStoryLocator,
   ): void {
-    this.applyResolvedFragmentFrame(el, item, fragment, section);
+    this.applyResolvedFragmentFrame(el, item, fragment, section, story);
     // Default to 0 (no marker gutter expansion) when markerWidth is absent — the resolve
     // stage populates this for list items that have a measured marker (SD-2957).
     const mw = item.markerWidth ?? 0;

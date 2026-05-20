@@ -20,6 +20,7 @@ import type {
   ListBlock,
   ParagraphBlock,
   ParagraphMeasure,
+  LayoutStoryLocator,
 } from '@superdoc/contracts';
 import { resolveParagraphContent } from './resolveParagraph.js';
 import { resolveTableItem } from './resolveTable.js';
@@ -28,7 +29,12 @@ import { resolveDrawingItem } from './resolveDrawing.js';
 import type { BlockMapEntry } from './resolvedBlockLookup.js';
 import { computeSdtContainerKey } from './sdtContainerKey.js';
 import { hashParagraphBorders } from './paragraphBorderHash.js';
-import { deriveBlockVersion, fragmentSignature, sourceAnchorSignature } from './versionSignature.js';
+import {
+  deriveBlockVersion,
+  fragmentSignature,
+  resolveFragmentLayoutIdentity,
+  sourceAnchorSignature,
+} from './versionSignature.js';
 
 export type ResolveLayoutInput = {
   layout: Layout;
@@ -207,10 +213,12 @@ export function resolveFragmentItem(
   pageIndex: number,
   blockMap: Map<string, BlockMapEntry>,
   blockVersionCache: Map<string, string>,
+  story?: LayoutStoryLocator,
 ): ResolvedPaintItem {
   const sdtContainerKey = resolveFragmentSdtContainerKey(fragment, blockMap);
   const blockVer = computeBlockVersion(fragment.blockId, blockMap, blockVersionCache);
   const version = fragmentSignature(fragment, blockVer);
+  const layoutSourceIdentity = resolveFragmentLayoutIdentity(fragment, story);
 
   // Route to kind-specific resolvers for types that carry extracted block/measure data.
   switch (fragment.kind) {
@@ -218,6 +226,7 @@ export function resolveFragmentItem(
       const item = resolveTableItem(fragment as TableFragment, fragmentIndex, pageIndex, blockMap);
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
       if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
+      item.layoutSourceIdentity = layoutSourceIdentity;
       applyPaintVersions(item, version);
       return item;
     }
@@ -225,6 +234,7 @@ export function resolveFragmentItem(
       const item = resolveImageItem(fragment as ImageFragment, fragmentIndex, pageIndex, blockMap);
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
       if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
+      item.layoutSourceIdentity = layoutSourceIdentity;
       applyPaintVersions(item, version);
       return item;
     }
@@ -232,6 +242,7 @@ export function resolveFragmentItem(
       const item = resolveDrawingItem(fragment as DrawingFragment, fragmentIndex, pageIndex, blockMap);
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
       if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
+      item.layoutSourceIdentity = layoutSourceIdentity;
       applyPaintVersions(item, version);
       return item;
     }
@@ -251,6 +262,7 @@ export function resolveFragmentItem(
         blockId: fragment.blockId,
         fragmentIndex,
         content: resolveParagraphContentIfApplicable(fragment, blockMap),
+        layoutSourceIdentity,
       };
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
       if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;

@@ -614,3 +614,237 @@ button {
   margin: 4px 0;
   background: var(--border);
 }
+
+/* SD-3208 — AI citation showcase styles. */
+
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-tab {
+  flex: 1;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.sidebar-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.sidebar-tab:hover {
+  color: var(--text);
+}
+
+.citations-panel {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.citations-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 16px 8px;
+}
+
+.generate-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.generate-draft-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 13px;
+}
+.generate-draft-btn:disabled {
+  opacity: 0.5;
+}
+.generate-draft-help {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.references-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.reference-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+.reference-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.reference-source-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.reference-source-type {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--bg-muted);
+}
+.reference-source-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.reference-deeplink {
+  color: var(--accent);
+  text-decoration: none;
+}
+.reference-deeplink:hover {
+  text-decoration: underline;
+}
+.reference-citations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+.reference-citation {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.reference-citation:last-child {
+  border-bottom: none;
+}
+.reference-citation-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.reference-citation-id {
+  font-family: 'SF Mono', Menlo, monospace;
+  color: var(--text);
+  font-weight: 600;
+}
+.reference-citation-locator {
+  color: var(--text-muted);
+}
+.reference-citation-confidence {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.reference-citation-actions {
+  display: flex;
+  gap: 6px;
+}
+.reference-citation-actions button {
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+}
+.reference-citation-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.citation-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+}
+.citation-editor .composer-input {
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+/* Highlight overlay for cited spans in the body. Pointer-events
+   disabled so the user can still select / interact with the painted
+   text underneath. */
+.citation-highlights {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.citation-highlight {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-bottom: 2px solid var(--accent);
+  pointer-events: none;
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+}
+
+/* Hover popover — light themed to match the rest of the demo's
+   surfaces (context menu, selection popover). Shows excerpt
+   prominently so the lawyer can verify without clicking through. */
+.citation-popover {
+  background: var(--bg);
+  color: var(--text);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  max-width: 320px;
+  box-shadow: var(--shadow);
+  z-index: 30;
+}
+.citation-popover-source {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.citation-popover-locator {
+  color: var(--text-muted);
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.citation-popover-excerpt {
+  font-style: italic;
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+.citation-popover-meta {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.citation-popover-provider {
+  text-transform: lowercase;
+}
+
+.composer-error {
+  font-size: 12px;
+  color: var(--danger);
+  padding: 4px 0;
+}

@@ -125,6 +125,12 @@
     "apps/docs/document-api/reference/cross-refs/list.mdx",
     "apps/docs/document-api/reference/cross-refs/rebuild.mdx",
     "apps/docs/document-api/reference/cross-refs/remove.mdx",
+    "apps/docs/document-api/reference/custom-xml/index.mdx",
+    "apps/docs/document-api/reference/custom-xml/parts/create.mdx",
+    "apps/docs/document-api/reference/custom-xml/parts/get.mdx",
+    "apps/docs/document-api/reference/custom-xml/parts/list.mdx",
+    "apps/docs/document-api/reference/custom-xml/parts/patch.mdx",
+    "apps/docs/document-api/reference/custom-xml/parts/remove.mdx",
     "apps/docs/document-api/reference/delete.mdx",
     "apps/docs/document-api/reference/diff/apply.mdx",
     "apps/docs/document-api/reference/diff/capture.mdx",
@@ -321,6 +327,13 @@
     "apps/docs/document-api/reference/lists/set-value.mdx",
     "apps/docs/document-api/reference/lists/split.mdx",
     "apps/docs/document-api/reference/markdown-to-fragment.mdx",
+    "apps/docs/document-api/reference/metadata/attach.mdx",
+    "apps/docs/document-api/reference/metadata/get.mdx",
+    "apps/docs/document-api/reference/metadata/index.mdx",
+    "apps/docs/document-api/reference/metadata/list.mdx",
+    "apps/docs/document-api/reference/metadata/remove.mdx",
+    "apps/docs/document-api/reference/metadata/resolve.mdx",
+    "apps/docs/document-api/reference/metadata/update.mdx",
     "apps/docs/document-api/reference/mutations/apply.mdx",
     "apps/docs/document-api/reference/mutations/index.mdx",
     "apps/docs/document-api/reference/mutations/preview.mdx",
@@ -1034,8 +1047,35 @@
       ],
       "pagePath": "apps/docs/document-api/reference/permission-ranges/index.mdx",
       "title": "Permission Ranges"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "customXml",
+      "operationIds": [
+        "customXml.parts.list",
+        "customXml.parts.get",
+        "customXml.parts.create",
+        "customXml.parts.patch",
+        "customXml.parts.remove"
+      ],
+      "pagePath": "apps/docs/document-api/reference/custom-xml/index.mdx",
+      "title": "Custom XML"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "metadata",
+      "operationIds": [
+        "metadata.attach",
+        "metadata.list",
+        "metadata.get",
+        "metadata.update",
+        "metadata.remove",
+        "metadata.resolve"
+      ],
+      "pagePath": "apps/docs/document-api/reference/metadata/index.mdx",
+      "title": "Anchored Metadata"
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "7f5b6fd6bc20fd3fa19d21530275655158eefbbd59b111ff0107fe76e1dd9a1b"
+  "sourceHash": "266b6bb8fa042ebd94c3da6e11652471f49c40a061960f3df9055cf64c4bcbbe"
 }

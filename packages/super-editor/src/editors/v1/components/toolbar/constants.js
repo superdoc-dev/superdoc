@@ -81,6 +81,7 @@ export const HEADLESS_ITEM_MAP = {
   numberedlist: 'numbered-list',
   table: 'table-insert',
   image: 'image',
+  tableOfContents: 'table-of-contents-insert',
   color: 'text-color',
   highlight: 'highlight-color',
   textAlign: 'text-align',

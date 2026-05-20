@@ -36,4 +36,14 @@ if (args.length === 0) {
   if (sdkScriptsExitCode !== 0) {
     process.exit(sdkScriptsExitCode);
   }
+
+  const documentApiSmokeExitCode = run(pnpmCommand, [
+    '--silent',
+    '--filter',
+    '@superdoc-testing/document-api-smoke',
+    'test',
+  ]);
+  if (documentApiSmokeExitCode !== 0) {
+    process.exit(documentApiSmokeExitCode);
+  }
 }

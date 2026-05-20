@@ -27,3 +27,13 @@ export {
   resolvePositionWithinFragmentDom,
   resolveTextBoundaryWithinFragmentDom,
 } from './DomPointerMapping.js';
+export {
+  type RenderedElementIdentity,
+  findElementByLayoutFragmentId,
+  findNearestRenderedElementIdentity,
+  layoutHitToPositionHit,
+  mapFragmentIdsToLayoutFragments,
+  mapPmRangeToLayoutFragments,
+  readRenderedElementIdentity,
+  resolvePointerLayoutHit,
+} from './LayoutHitV1Compat.js';

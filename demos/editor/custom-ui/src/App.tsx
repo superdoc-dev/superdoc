@@ -7,6 +7,9 @@ import { SelectionPopover } from './components/SelectionPopover';
 import { ContextMenu } from './components/ContextMenu';
 import { ContextMenuRegistrations } from './components/ContextMenuRegistrations';
 import { useDecidedChanges } from './components/useDecidedChanges';
+import { CitationsPanel } from './components/CitationsPanel';
+import { CitationHighlights } from './components/CitationHighlights';
+import { CitationPopover } from './components/CitationPopover';
 
 export function App() {
   return (
@@ -29,6 +32,12 @@ function AppInner() {
   // the simplest path; a real product might dispatch through a state
   // store, but the example keeps the wiring obvious.
   const [composeOpen, setComposeOpen] = useState(false);
+  // Sidebar tab selection. Activity is the default; Sources is the
+  // citation/RAG panel built on editor.doc.metadata.* (SD-3208). No
+  // creation flow lives in the selection popover — citations arrive
+  // via "Generate draft with sources," which is how Harvey-class
+  // legal-AI products surface citations.
+  const [activeTab, setActiveTab] = useState<'activity' | 'sources'>('activity');
   // Shared decided-changes store. Both ActivitySidebar (per-card
   // accept/reject buttons) and the right-click context menu route
   // through `decided.decideChange` so the Resolved audit row shows
@@ -47,36 +56,50 @@ function AppInner() {
   return (
     <div className="app">
       <header className="app-header">
-          <h1>Contract Review Workspace</h1>
-          <span className="subtitle">Memorandum · review pending</span>
-        </header>
+        <h1>Contract Review Workspace</h1>
+        <span className="subtitle">Memorandum · review pending</span>
+      </header>
 
-        <div className="app-body">
-          <section className="editor-area">
-            <div className="toolbar-shell">
-              <Toolbar onComposeComment={openComposer} />
+      <div className="app-body">
+        <section className="editor-area">
+          <div className="toolbar-shell">
+            <Toolbar onComposeComment={openComposer} />
+          </div>
+          <div className="editor-shell">
+            <div className="editor-canvas">
+              <EditorMount />
             </div>
-            <div className="editor-shell">
-              <div className="editor-canvas">
-                <EditorMount />
-              </div>
-            </div>
-            <SelectionPopover onComposeComment={openComposer} />
-            <ContextMenu />
-            <ContextMenuRegistrations decided={decided} onComposeComment={openComposer} />
-          </section>
+          </div>
+          <SelectionPopover onComposeComment={openComposer} />
+          <ContextMenu />
+          <ContextMenuRegistrations decided={decided} onComposeComment={openComposer} />
+          <CitationHighlights />
+          <CitationPopover />
+        </section>
 
-          <aside className="sidebar">
-            <div className="sidebar-header">Activity</div>
-            <div className="sidebar-panel">
-              <ActivitySidebar
-                composeOpen={composeOpen}
-                onCloseComposer={closeComposer}
-                decided={decided}
-              />
-            </div>
-          </aside>
-        </div>
+        <aside className="sidebar">
+          <div className="sidebar-tabs">
+            <button
+              className={`sidebar-tab ${activeTab === 'activity' ? 'active' : ''}`}
+              onClick={() => setActiveTab('activity')}
+            >
+              Activity
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'sources' ? 'active' : ''}`}
+              onClick={() => setActiveTab('sources')}
+            >
+              Sources
+            </button>
+          </div>
+          <div className="sidebar-panel">
+            {activeTab === 'activity' && (
+              <ActivitySidebar composeOpen={composeOpen} onCloseComposer={closeComposer} decided={decided} />
+            )}
+            {activeTab === 'sources' && <CitationsPanel />}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

@@ -2,11 +2,11 @@
  * SuperDoc public facade: ui entry.
  *
  * SD-3183 under SD-3178 (Phase 3 of SD-3175). Largest supported-surface
- * facade entry. Mirrors the 70-name surface today reachable via the
- * `superdoc/ui` subpath: 3 runtime values + 67 types.
+ * facade entry. Mirrors the 71-name surface today reachable via the
+ * `superdoc/ui` subpath: 3 runtime values + 68 types.
  *
- * Classification per SD-3147: 49 public + 21 legacy/public-compat. All
- * 70 re-exported through the facade — tier distinction is documentation
+ * Classification per SD-3147: 50 public + 21 legacy/public-compat. All
+ * 71 re-exported through the facade — tier distinction is documentation
  * posture, not facade inclusion.
  *
  * Strategy: re-export through the narrow `@superdoc/super-editor/ui`
@@ -68,6 +68,7 @@ export type {
   DynamicCommandHandle,
   EntityAddress,
   EqualityFn,
+  MetadataHandle,
   Receipt,
   ScrollIntoViewInput,
   ScrollIntoViewOutput,

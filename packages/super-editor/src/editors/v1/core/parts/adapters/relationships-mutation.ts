@@ -11,8 +11,11 @@
  */
 
 import type { Editor } from '../../Editor.js';
+import type { PartId } from '../types.js';
 import { mutatePart } from '../mutation/mutate-part.js';
+import { hasPart } from '../store/part-store.js';
 import { RELATIONSHIP_TYPES } from '../../super-converter/docx-helpers/docx-constants.js';
+import { createRelationshipsPart, getRelationshipsRoot } from '../../helpers/rels-part-helpers.js';
 
 const RELS_PART_ID = 'word/_rels/document.xml.rels' as const;
 
@@ -27,11 +30,13 @@ interface RelElement {
 }
 
 interface RelsXml {
-  elements?: Array<{ name: string; elements?: RelElement[] }>;
+  type?: string;
+  name?: string;
+  elements?: Array<{ type?: string; name: string; attributes?: Record<string, string>; elements?: RelElement[] }>;
 }
 
 function getRelationshipsTag(part: RelsXml): { name: string; elements: RelElement[] } | undefined {
-  const tag = part?.elements?.find((el) => el.name === 'Relationships');
+  const tag = getRelationshipsRoot(part);
   if (tag && !tag.elements) tag.elements = [];
   return tag as { name: string; elements: RelElement[] } | undefined;
 }
@@ -52,6 +57,32 @@ function getMaxIdInt(elements: RelElement[]): number {
   return max;
 }
 
+function createRelationshipElement(id: string, mappedType: string, target: string, isExternal: boolean): RelElement {
+  const rel: RelElement = {
+    type: 'element',
+    name: 'Relationship',
+    attributes: {
+      Id: id,
+      Type: mappedType,
+      Target: target,
+    },
+  };
+
+  if (isExternal) {
+    rel.attributes.TargetMode = 'External';
+  }
+
+  return rel;
+}
+
+function findExistingRelationship(elements: RelElement[], target: string, normalized: string, mappedType: string) {
+  return elements.find(
+    (rel) =>
+      (rel.attributes?.Target === normalized || rel.attributes?.Target === target) &&
+      rel.attributes?.Type === mappedType,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -59,6 +90,7 @@ function getMaxIdInt(elements: RelElement[]): number {
 export interface FindOrCreateOptions {
   target: string;
   type: string;
+  partId?: PartId;
   dryRun?: boolean;
   expectedRevision?: string;
 }
@@ -69,7 +101,7 @@ export interface FindOrCreateOptions {
  * Returns the rId string, or null on failure.
  */
 export function findOrCreateRelationship(editor: Editor, source: string, options: FindOrCreateOptions): string | null {
-  const { target, type, dryRun, expectedRevision } = options;
+  const { target, type, partId = RELS_PART_ID, dryRun, expectedRevision } = options;
 
   if (!target || typeof target !== 'string') return null;
   if (!type || typeof type !== 'string') return null;
@@ -83,9 +115,24 @@ export function findOrCreateRelationship(editor: Editor, source: string, options
   const normalized = normalizeTarget(target);
   const isExternal = type === 'hyperlink';
 
+  if (!hasPart(editor, partId)) {
+    const newId = 'rId1';
+    const targetValue = isExternal ? target : normalized;
+    mutatePart({
+      editor,
+      partId,
+      operation: 'create',
+      source,
+      dryRun,
+      expectedRevision,
+      initial: createRelationshipsPart([createRelationshipElement(newId, mappedType, targetValue, isExternal)]),
+    });
+    return newId;
+  }
+
   const result = mutatePart<RelsXml, string | null>({
     editor,
-    partId: RELS_PART_ID,
+    partId,
     operation: 'mutate',
     source,
     dryRun,
@@ -95,35 +142,14 @@ export function findOrCreateRelationship(editor: Editor, source: string, options
       if (!tag) return null;
 
       // Reuse-by-target: if relationship already exists, return its rId
-      const existing = tag.elements.find(
-        (rel) => rel.attributes?.Target === normalized && rel.attributes?.Type === mappedType,
-      );
+      const existing = findExistingRelationship(tag.elements, target, normalized, mappedType);
       if (existing) return existing.attributes.Id;
-
-      // Also check for the un-normalized target (backward compat)
-      const existingRaw = tag.elements.find(
-        (rel) => rel.attributes?.Target === target && rel.attributes?.Type === mappedType,
-      );
-      if (existingRaw) return existingRaw.attributes.Id;
 
       // Allocate new rId
       const newIdInt = getMaxIdInt(tag.elements) + 1;
       const newId = `rId${newIdInt}`;
 
-      const newRel: RelElement = {
-        type: 'element',
-        name: 'Relationship',
-        attributes: {
-          Id: newId,
-          Type: mappedType,
-          Target: isExternal ? target : normalized,
-        },
-      };
-
-      if (isExternal) {
-        newRel.attributes.TargetMode = 'External';
-      }
-
+      const newRel = createRelationshipElement(newId, mappedType, isExternal ? target : normalized, isExternal);
       tag.elements.push(newRel);
       return newId;
     },

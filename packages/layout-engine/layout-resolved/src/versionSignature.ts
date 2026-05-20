@@ -1,4 +1,5 @@
 import {
+  buildLayoutSourceIdentityForFragment,
   getParagraphInlineDirection,
   type DrawingBlock,
   type FieldAnnotationRun,
@@ -7,6 +8,8 @@ import {
   type ImageBlock,
   type ImageDrawing,
   type ImageRun,
+  type LayoutSourceIdentity,
+  type LayoutStoryLocator,
   type ParagraphAttrs,
   type ParagraphBlock,
   type SdtMetadata,
@@ -176,6 +179,19 @@ const stableSerializeEvidenceValue = (value: unknown): string => {
  */
 export const sourceAnchorSignature = (sourceAnchor: SourceAnchor | undefined): string =>
   sourceAnchor ? stableSerializeEvidenceValue(sourceAnchor) : '';
+
+/**
+ * Resolve the editor-neutral identity for a fragment (prep-001).
+ *
+ * Prefers `fragment.layoutSourceIdentity` when present; otherwise constructs
+ * one from the producer's existing fields (`blockId`, `kind`, fragment-local
+ * line/row indices, optional `sourceAnchor`). Pure helper — does not mutate
+ * the fragment, and remains safe to call for v1 layouts that never populate
+ * `layoutSourceIdentity` upstream.
+ */
+export const resolveFragmentLayoutIdentity = (fragment: Fragment, story?: LayoutStoryLocator): LayoutSourceIdentity => {
+  return buildLayoutSourceIdentityForFragment(fragment, story);
+};
 
 // ---------------------------------------------------------------------------
 // deriveBlockVersion

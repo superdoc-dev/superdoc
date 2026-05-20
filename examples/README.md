@@ -99,6 +99,7 @@ Put operation-level examples here even when the browser editor hosts the example
 | Example | Pattern |
 |---------|---------|
 | [content-controls/tagged-inline-text](./document-api/content-controls/tagged-inline-text) | The smallest content-control workflow: wrap a word, find by tag, update value. |
+| [metadata-anchors](./document-api/metadata-anchors) | The smallest metadata-anchor workflow: attach a JSON payload to a span, then list, get, resolve, and remove it. |
 
 ## Document Engine
 

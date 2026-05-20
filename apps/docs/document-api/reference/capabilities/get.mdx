@@ -835,6 +835,31 @@ _No fields._
 | `operations.crossRefs.remove.dryRun` | boolean | yes |  |
 | `operations.crossRefs.remove.reasons` | enum[] | no |  |
 | `operations.crossRefs.remove.tracked` | boolean | yes |  |
+| `operations.customXml.parts.create` | object | yes |  |
+| `operations.customXml.parts.create.available` | boolean | yes |  |
+| `operations.customXml.parts.create.dryRun` | boolean | yes |  |
+| `operations.customXml.parts.create.reasons` | enum[] | no |  |
+| `operations.customXml.parts.create.tracked` | boolean | yes |  |
+| `operations.customXml.parts.get` | object | yes |  |
+| `operations.customXml.parts.get.available` | boolean | yes |  |
+| `operations.customXml.parts.get.dryRun` | boolean | yes |  |
+| `operations.customXml.parts.get.reasons` | enum[] | no |  |
+| `operations.customXml.parts.get.tracked` | boolean | yes |  |
+| `operations.customXml.parts.list` | object | yes |  |
+| `operations.customXml.parts.list.available` | boolean | yes |  |
+| `operations.customXml.parts.list.dryRun` | boolean | yes |  |
+| `operations.customXml.parts.list.reasons` | enum[] | no |  |
+| `operations.customXml.parts.list.tracked` | boolean | yes |  |
+| `operations.customXml.parts.patch` | object | yes |  |
+| `operations.customXml.parts.patch.available` | boolean | yes |  |
+| `operations.customXml.parts.patch.dryRun` | boolean | yes |  |
+| `operations.customXml.parts.patch.reasons` | enum[] | no |  |
+| `operations.customXml.parts.patch.tracked` | boolean | yes |  |
+| `operations.customXml.parts.remove` | object | yes |  |
+| `operations.customXml.parts.remove.available` | boolean | yes |  |
+| `operations.customXml.parts.remove.dryRun` | boolean | yes |  |
+| `operations.customXml.parts.remove.reasons` | enum[] | no |  |
+| `operations.customXml.parts.remove.tracked` | boolean | yes |  |
 | `operations.delete` | object | yes |  |
 | `operations.delete.available` | boolean | yes |  |
 | `operations.delete.dryRun` | boolean | yes |  |
@@ -1755,6 +1780,36 @@ _No fields._
 | `operations.markdownToFragment.dryRun` | boolean | yes |  |
 | `operations.markdownToFragment.reasons` | enum[] | no |  |
 | `operations.markdownToFragment.tracked` | boolean | yes |  |
+| `operations.metadata.attach` | object | yes |  |
+| `operations.metadata.attach.available` | boolean | yes |  |
+| `operations.metadata.attach.dryRun` | boolean | yes |  |
+| `operations.metadata.attach.reasons` | enum[] | no |  |
+| `operations.metadata.attach.tracked` | boolean | yes |  |
+| `operations.metadata.get` | object | yes |  |
+| `operations.metadata.get.available` | boolean | yes |  |
+| `operations.metadata.get.dryRun` | boolean | yes |  |
+| `operations.metadata.get.reasons` | enum[] | no |  |
+| `operations.metadata.get.tracked` | boolean | yes |  |
+| `operations.metadata.list` | object | yes |  |
+| `operations.metadata.list.available` | boolean | yes |  |
+| `operations.metadata.list.dryRun` | boolean | yes |  |
+| `operations.metadata.list.reasons` | enum[] | no |  |
+| `operations.metadata.list.tracked` | boolean | yes |  |
+| `operations.metadata.remove` | object | yes |  |
+| `operations.metadata.remove.available` | boolean | yes |  |
+| `operations.metadata.remove.dryRun` | boolean | yes |  |
+| `operations.metadata.remove.reasons` | enum[] | no |  |
+| `operations.metadata.remove.tracked` | boolean | yes |  |
+| `operations.metadata.resolve` | object | yes |  |
+| `operations.metadata.resolve.available` | boolean | yes |  |
+| `operations.metadata.resolve.dryRun` | boolean | yes |  |
+| `operations.metadata.resolve.reasons` | enum[] | no |  |
+| `operations.metadata.resolve.tracked` | boolean | yes |  |
+| `operations.metadata.update` | object | yes |  |
+| `operations.metadata.update.available` | boolean | yes |  |
+| `operations.metadata.update.dryRun` | boolean | yes |  |
+| `operations.metadata.update.reasons` | enum[] | no |  |
+| `operations.metadata.update.tracked` | boolean | yes |  |
 | `operations.mutations.apply` | object | yes |  |
 | `operations.mutations.apply.available` | boolean | yes |  |
 | `operations.mutations.apply.dryRun` | boolean | yes |  |
@@ -3086,6 +3141,31 @@ _No fields._
       "dryRun": true,
       "tracked": false
     },
+    "customXml.parts.create": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "customXml.parts.get": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
+    "customXml.parts.list": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
+    "customXml.parts.patch": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "customXml.parts.remove": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
     "delete": {
       "available": true,
       "dryRun": true,
@@ -4004,6 +4084,36 @@ _No fields._
     "markdownToFragment": {
       "available": true,
       "dryRun": false,
+      "tracked": false
+    },
+    "metadata.attach": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "metadata.get": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
+    "metadata.list": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
+    "metadata.remove": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "metadata.resolve": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
+    "metadata.update": {
+      "available": true,
+      "dryRun": true,
       "tracked": false
     },
     "mutations.apply": {
@@ -10075,6 +10185,181 @@ _No fields._
           "type": "object"
         },
         "crossRefs.remove": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "customXml.parts.create": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "customXml.parts.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "customXml.parts.list": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "customXml.parts.patch": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "customXml.parts.remove": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -16549,6 +16834,216 @@ _No fields._
           ],
           "type": "object"
         },
+        "metadata.attach": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "metadata.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "metadata.list": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "metadata.remove": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "metadata.resolve": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "metadata.update": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "mutations.apply": {
           "additionalProperties": false,
           "properties": {
@@ -20267,7 +20762,18 @@ _No fields._
         "permissionRanges.get",
         "permissionRanges.create",
         "permissionRanges.remove",
-        "permissionRanges.updatePrincipal"
+        "permissionRanges.updatePrincipal",
+        "customXml.parts.list",
+        "customXml.parts.get",
+        "customXml.parts.create",
+        "customXml.parts.patch",
+        "customXml.parts.remove",
+        "metadata.attach",
+        "metadata.list",
+        "metadata.get",
+        "metadata.update",
+        "metadata.remove",
+        "metadata.resolve"
       ],
       "type": "object"
     },

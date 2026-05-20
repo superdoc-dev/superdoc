@@ -59,3 +59,9 @@ describe('superdoc/ui public barrel (SD-3157)', () => {
     expect(BARREL_TEXT).toMatch(/type\s+ContentControlsHandle\b/);
   });
 });
+
+describe('superdoc/ui public barrel (SD-3204)', () => {
+  it('re-exports MetadataHandle', () => {
+    expect(BARREL_TEXT).toMatch(/type\s+MetadataHandle\b/);
+  });
+});

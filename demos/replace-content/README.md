@@ -1,26 +1,15 @@
-# Replace Content Example
+# Archived: replace content
 
-A React example demonstrating how to replace document content with HTML or JSON using SuperDoc.
+This demo is no longer recommended and has been removed from the demo gallery.
 
-## Features
+## Why archived
 
-- Load DOCX documents
-- Replace entire document or selection with custom content  
-- Switch between HTML and JSON input formats
-- Side panel with content replacement controls
+This demo replaced document content via the pre-Document-API editor commands. The supported path is the `editor.doc.*` Document API, which gives you typed inputs, dry-run previews, and the same operation IDs across browser, Node SDK, and CLI.
 
-## Usage
+## Use instead
 
-1. Load a document using "Load Document" button
-2. Open the side panel using the tab on the right
-3. Choose replacement scope (Document or Selection)
-4. Select content type (HTML or JSON)
-5. Enter your content in the textarea
-6. Click "Replace content" to apply changes
+- `editor.doc.text.rewrite`, `editor.doc.insert`, `editor.doc.delete`, `editor.doc.replace` for content mutations.
+- [`examples/document-api/content-controls/tagged-inline-text`](../../examples/document-api/content-controls/tagged-inline-text) and [`examples/document-api/metadata-anchors`](../../examples/document-api/metadata-anchors) for primitive-led Document API examples.
+- [Document API overview](https://docs.superdoc.dev/document-api/overview).
 
-## Running
-
-```bash
-npm install
-npm run dev
-```
+The source in this directory is kept for archival reference but is not maintained.

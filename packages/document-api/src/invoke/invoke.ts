@@ -537,5 +537,13 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'customXml.parts.create': (input, options) => api.customXml.parts.create(input, options),
     'customXml.parts.patch': (input, options) => api.customXml.parts.patch(input, options),
     'customXml.parts.remove': (input, options) => api.customXml.parts.remove(input, options),
+
+    // --- metadata.* (anchored metadata) ---
+    'metadata.attach': (input, options) => api.metadata.attach(input, options),
+    'metadata.list': (input) => api.metadata.list(input),
+    'metadata.get': (input) => api.metadata.get(input),
+    'metadata.update': (input, options) => api.metadata.update(input, options),
+    'metadata.remove': (input, options) => api.metadata.remove(input, options),
+    'metadata.resolve': (input) => api.metadata.resolve(input),
   };
 }

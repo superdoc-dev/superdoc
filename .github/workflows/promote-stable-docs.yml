@@ -1,10 +1,11 @@
 # Advances docs-stable to the current stable HEAD (or a chosen SHA).
 #
 # Auto path (workflow_run): release-stable.yml is the orchestrator that
-# releases superdoc on stable, so we trigger off its completion and gate on
-# whether a real v* tag appeared between the triggering run's head_sha and
-# origin/stable. Tools-only runs (CLI/SDK/MCP without a superdoc release)
-# leave docs-stable unchanged - no new v* tag, no push.
+# releases superdoc on stable, so we trigger off its completion, wait for the
+# shared stable release lane to settle, and gate on whether a real v* tag
+# appeared between the triggering run's head_sha and origin/stable. Tools-only
+# runs (CLI/SDK/MCP without a superdoc release) leave docs-stable unchanged -
+# no new v* tag, no push.
 #
 # We accept conclusion: failure as well as success because the orchestrator
 # runs chains independently. A tools-chain failure that follows a successful
@@ -60,6 +61,43 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.generate_token.outputs.token }}
 
+      - name: Wait for stable release lane to drain
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          deadline=$((SECONDS + 1800))
+          while true; do
+            active_runs=$(gh run list \
+              --repo "$REPO" \
+              --branch stable \
+              --limit 100 \
+              --json databaseId,name,status,url \
+              --jq '[.[] | select((.name == "📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder") and .status != "completed")] | length')
+
+            if [ "$active_runs" -eq 0 ]; then
+              echo "Stable release lane is idle."
+              break
+            fi
+
+            if [ "${SECONDS}" -ge "${deadline}" ]; then
+              echo "Timed out waiting for stable release lane to drain."
+              gh run list \
+                --repo "$REPO" \
+                --branch stable \
+                --limit 100 \
+                --json databaseId,name,status,url \
+                --jq '.[] | select((.name == "📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder") and .status != "completed") | "\(.databaseId)\t\(.name)\t\(.status)\t\(.url)"'
+              exit 1
+            fi
+
+            echo "Waiting for ${active_runs} stable release run(s) to finish..."
+            sleep 30
+          done
+
       # Auto path: gate on a real SuperDoc release between the triggering
       # run's head_sha and origin/stable. A no-op semantic-release run must
       # not advance docs-stable.
@@ -108,19 +146,32 @@ jobs:
 
       - name: Push docs-stable (auto)
         if: github.event_name == 'workflow_run' && steps.detect.outputs.released == 'true'
-        run: git push origin "refs/remotes/origin/stable:refs/heads/docs-stable"
+        run: |
+          set -euo pipefail
+          git fetch origin stable docs-stable --tags --force
+
+          docs_only_commits=$(git log --oneline origin/stable..origin/docs-stable -- apps/docs/ || true)
+          if [ -n "${docs_only_commits}" ]; then
+            echo "docs-stable has docs changes that are not on stable; refusing to overwrite:"
+            echo "${docs_only_commits}"
+            exit 1
+          fi
+
+          target=$(git rev-parse origin/stable)
+          expected=$(git rev-parse origin/docs-stable)
+          echo "Promoting ${target} to docs-stable with lease ${expected}."
+          git push --force-with-lease=refs/heads/docs-stable:"${expected}" origin "${target}:refs/heads/docs-stable"
 
       # Manual path: trust the operator. Promote either the requested SHA
-      # or the current origin/stable head. The push is rejected by GitHub
-      # if it isn't a fast-forward, so this stays safe even on operator
-      # error - no `--force`.
+      # or the current origin/stable head, while still using a lease so we
+      # never overwrite a concurrently updated docs-stable branch.
       - name: Push docs-stable (manual)
         if: github.event_name == 'workflow_dispatch'
         env:
           REQUESTED_SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
-          git fetch origin stable --tags --force
+          git fetch origin stable docs-stable --tags --force
 
           if [ -n "${REQUESTED_SHA}" ]; then
             target="${REQUESTED_SHA}"
@@ -128,5 +179,13 @@ jobs:
             target=$(git rev-parse origin/stable)
           fi
 
-          echo "Promoting ${target} to docs-stable."
-          git push origin "${target}:refs/heads/docs-stable"
+          docs_only_commits=$(git log --oneline "${target}"..origin/docs-stable -- apps/docs/ || true)
+          if [ -n "${docs_only_commits}" ]; then
+            echo "docs-stable has docs changes that are not on ${target}; refusing to overwrite:"
+            echo "${docs_only_commits}"
+            exit 1
+          fi
+
+          expected=$(git rev-parse origin/docs-stable)
+          echo "Promoting ${target} to docs-stable with lease ${expected}."
+          git push --force-with-lease=refs/heads/docs-stable:"${expected}" origin "${target}:refs/heads/docs-stable"

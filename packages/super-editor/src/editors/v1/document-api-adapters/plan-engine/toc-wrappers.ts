@@ -780,14 +780,30 @@ export function tocRemoveWrapper(editor: Editor, input: TocRemoveInput, options?
 // create.tableOfContents
 // ---------------------------------------------------------------------------
 
-export function createTableOfContentsWrapper(
+/** Payload for inserting a TOC block (shared by document API and toolbar). */
+export type PreparedTableOfContentsInsert = {
+  pos: number;
+  instruction: string;
+  sdBlockId: string;
+  content: unknown[];
+  sources: TocSource[];
+  rightAlignPageNumbers?: boolean;
+};
+
+/**
+ * Resolves insertion position and materializes TOC content/instruction.
+ * Callers that run inside `editor.commands.*` must apply the insert on the
+ * **same** command transaction (see `insertTableOfContents`) —
+ * never call `editor.commands.insertTableOfContentsAt` from here, or nested
+ * dispatches can throw "Applying a mismatched transaction".
+ */
+export function prepareTableOfContentsInsertion(
   editor: Editor,
   input: CreateTableOfContentsInput,
   options?: MutationOptions,
-): CreateTableOfContentsResult {
+): PreparedTableOfContentsInsert {
   rejectTrackedMode('create.tableOfContents', options);
 
-  // Resolve insertion position
   const at = input.at ?? { kind: 'documentEnd' as const };
   let pos: number;
   if (at.kind === 'documentStart') {
@@ -798,16 +814,37 @@ export function createTableOfContentsWrapper(
     pos = resolveCreateAnchor(editor, at.target, at.kind).pos;
   }
 
-  // Build instruction from config patch or use defaults
   const config = input.config ? applyTocPatchTyped(DEFAULT_TOC_CONFIG, input.config) : DEFAULT_TOC_CONFIG;
   const instruction = serializeTocInstruction(config);
   const { content, sources } = materializeTocContent(
     editor.state.doc,
     withRightAlign(config, input.config?.rightAlignPageNumbers),
     editor,
+    {
+      pageMap: getPageMap(editor) ?? undefined,
+    },
   );
 
   const sdBlockId = uuidv4();
+
+  return {
+    pos,
+    instruction,
+    sdBlockId,
+    content,
+    sources,
+    ...(input.config?.rightAlignPageNumbers !== undefined
+      ? { rightAlignPageNumbers: input.config.rightAlignPageNumbers }
+      : {}),
+  };
+}
+
+export function createTableOfContentsWrapper(
+  editor: Editor,
+  input: CreateTableOfContentsInput,
+  options?: MutationOptions,
+): CreateTableOfContentsResult {
+  const prepared = prepareTableOfContentsInsertion(editor, input, options);
 
   if (options?.dryRun) {
     return { success: true, toc: buildTocAddress('(dry-run)') };
@@ -820,12 +857,12 @@ export function createTableOfContentsWrapper(
           editor,
           command,
           {
-            pos,
-            instruction,
-            sdBlockId,
-            content,
-            ...(input.config?.rightAlignPageNumbers !== undefined
-              ? { rightAlignPageNumbers: input.config.rightAlignPageNumbers }
+            pos: prepared.pos,
+            instruction: prepared.instruction,
+            sdBlockId: prepared.sdBlockId,
+            content: prepared.content,
+            ...(prepared.rightAlignPageNumbers !== undefined
+              ? { rightAlignPageNumbers: prepared.rightAlignPageNumbers }
               : {}),
           },
           options?.expectedRevision,
@@ -840,13 +877,13 @@ export function createTableOfContentsWrapper(
             const defaultContent = [
               paragraphType.create({}, editor.state.schema.text('Update table of contents to populate entries.')),
             ];
-            const materializedContent = normalizeTocContent(content, editor) ?? defaultContent;
+            const materializedContent = normalizeTocContent(prepared.content, editor) ?? defaultContent;
             const tocNode = tocType.create(
               {
-                instruction,
-                sdBlockId,
-                ...(input.config?.rightAlignPageNumbers !== undefined
-                  ? { rightAlignPageNumbers: input.config.rightAlignPageNumbers }
+                instruction: prepared.instruction,
+                sdBlockId: prepared.sdBlockId,
+                ...(prepared.rightAlignPageNumbers !== undefined
+                  ? { rightAlignPageNumbers: prepared.rightAlignPageNumbers }
                   : {}),
               },
               materializedContent,
@@ -854,7 +891,7 @@ export function createTableOfContentsWrapper(
 
             try {
               const { tr } = editor.state;
-              tr.insert(pos, tocNode);
+              tr.insert(prepared.pos, tocNode);
               dispatchEditorTransaction(editor, tr);
               return true;
             } catch (error) {
@@ -875,9 +912,9 @@ export function createTableOfContentsWrapper(
     };
   }
 
-  syncTocBookmarks(editor, sources);
+  syncTocBookmarks(editor, prepared.sources);
 
   // Re-resolve and return the public TOC id exposed by toc.list/toc.get.
-  const postMutationId = resolvePostMutationTocId(editor.state.doc, sdBlockId);
+  const postMutationId = resolvePostMutationTocId(editor.state.doc, prepared.sdBlockId);
   return { success: true, toc: buildTocAddress(postMutationId) };
 }

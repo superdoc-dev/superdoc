@@ -26,6 +26,7 @@ export {
   type DynamicCommandHandle,
   type EntityAddress,
   type EqualityFn,
+  type MetadataHandle,
   type Receipt,
   type ScrollIntoViewInput,
   type ScrollIntoViewOutput,

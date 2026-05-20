@@ -11,6 +11,7 @@ export const toolbarTexts = {
   search: 'Search',
   link: 'Link',
   image: 'Image',
+  tableOfContents: 'Table of contents',
   table: 'Insert table',
   tableActions: 'Table options',
   addRowBefore: 'Insert row above',

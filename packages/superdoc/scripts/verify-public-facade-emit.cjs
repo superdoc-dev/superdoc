@@ -9,10 +9,14 @@
  *
  *   1. The expected symbol set is exported from each declaration file.
  *   2. The ESM and CJS declarations agree on the exported names.
- *   3. (Root entry only) The command signature surface survives the
- *      facade emit. This is the SD-2965 regression vector: specific
- *      command signatures getting dropped or failing to flow through the
- *      facade. `EditorCommands` is `CoreCommands & ExtensionCommands &
+ *   3. (Root entry only) **Legacy command-signature compatibility check.**
+ *      `editor.commands.*` and `EditorCommands` are deprecated per
+ *      `Editor.ts` `@deprecated` tags and `AGENTS.md` — the supported
+ *      programmatic surface is the Document API (`editor.doc.*`). They
+ *      remain typed and exported under legacy/public-compat so existing
+ *      TS consumers keep compiling. This probe protects against silent
+ *      augmentation-drop regressions on that legacy surface (SD-2965):
+ *      `EditorCommands` is `CoreCommands & ExtensionCommands &
  *      AllCommandSignatures & Record<string, AnyCommand>`, so the
  *      trailing `Record<string, AnyCommand>` makes any indexer lookup
  *      resolve even when the specific signatures are missing. The probe
@@ -20,6 +24,8 @@
  *      `insertComment`) is `boolean`, not the `AnyCommand` fallback's
  *      `unknown`. Two commands from two signature sources (formatting +
  *      comments) catch partial drops a single-command probe would miss.
+ *      The probe is a backward-compat regression detector, not a
+ *      supported-API guarantee.
  *   4. The emitted declarations contain no private workspace specifiers
  *      (`@superdoc/*`), no package-manager internals (`.pnpm/`), and no
  *      absolute local paths into the repo or `node_modules`.
@@ -71,13 +77,223 @@ try {
 // this gate. Link the PR to SD-3175 (path-as-contract umbrella) for
 // reviewer sign-off when growth is intentional.
 const FACADE_ENTRIES = [
+  // SD-3212: root facade re-curated from the classification artifact.
+  // expectedNames intentionally mirrors
+  // tests/consumer-typecheck/snapshots/superdoc-root-classification.json.
+  // The root entry keeps supported public API, legacy public compatibility,
+  // and internal-candidate compat names typed until a major-version cleanup.
+  // The command-signature probe continues to run on this entry: it is a
+  // *legacy command-signature compatibility check* (catches SD-2965-style
+  // augmentation drops on the deprecated surface) rather than a guarantee
+  // about supported API.
   {
     name: 'root (./index)',
     esm: path.join(PUBLIC_DIST, 'index.d.ts'),
     cjs: path.join(PUBLIC_DIST, 'index.d.cts'),
-    expectedNames: ['Config', 'Editor', 'EditorCommands', 'SuperDoc'],
+    expectedNames: [
+      'AIWriter',
+      'AnnotatorHelpers',
+      'assertNodeType',
+      'AwarenessState',
+      'BinaryData',
+      'BlankDOCX',
+      'BlockNavigationAddress',
+      'BlocksListResult',
+      'BookmarkAddress',
+      'BookmarkInfo',
+      'BoundingRect',
+      'buildTheme',
+      'CanObject',
+      'ChainableCommandObject',
+      'ChainedCommand',
+      'CollaborationConfig',
+      'CollaborationProvider',
+      'Command',
+      'CommandProps',
+      'Comment',
+      'CommentAddress',
+      'CommentConfig',
+      'CommentElement',
+      'CommentLocationsPayload',
+      'CommentsPayload',
+      'CommentsPluginKey',
+      'CommentsType',
+      'compareVersions',
+      'Config',
+      'ContextMenu',
+      'ContextMenuConfig',
+      'ContextMenuContext',
+      'ContextMenuItem',
+      'ContextMenuSection',
+      'CoreCommandMap',
+      'createTheme',
+      'createZip',
+      'defineMark',
+      'defineNode',
+      'DirectSurfaceRequest',
+      'DocRange',
+      'DocumentApi',
+      'DocumentMode',
+      'DocumentProtectionState',
+      'DOCX',
+      'DocxFileEntry',
+      'DocxZipper',
+      'Editor',
+      'EditorCommands',
+      'EditorEventMap',
+      'EditorExtension',
+      'EditorLifecycleState',
+      'EditorOptions',
+      'EditorState',
+      'EditorSurface',
+      'EditorTransactionEvent',
+      'EditorUpdateEvent',
+      'EditorView',
+      'EntityAddress',
+      'ExportDocxParams',
+      'ExportFormat',
+      'ExportOptions',
+      'ExportParams',
+      'ExportType',
+      'ExtensionCommandMap',
+      'Extensions',
+      'ExternalPopoverRenderContext',
+      'ExternalSurfaceRenderContext',
+      'fieldAnnotationHelpers',
+      'FieldValue',
+      'FindReplaceConfig',
+      'FindReplaceContext',
+      'FindReplaceHandle',
+      'FindReplaceRenderContext',
+      'FindReplaceResolution',
+      'FlowBlock',
+      'FlowMode',
+      'FontConfig',
+      'FontsResolvedPayload',
+      'getActiveFormatting',
+      'getAllowedImageDimensions',
+      'getFileObject',
+      'getMarksFromSelection',
+      'getRichTextExtensions',
+      'getSchemaIntrospection',
+      'getStarterExtensions',
+      'HTML',
+      'ImageDeselectedEvent',
+      'ImageSelectedEvent',
+      'IntentSurfaceRequest',
+      'isMarkType',
+      'isNodeType',
+      'Layout',
+      'LayoutEngineOptions',
+      'LayoutError',
+      'LayoutFragment',
+      'LayoutMetrics',
+      'LayoutMode',
+      'LayoutPage',
+      'LayoutState',
+      'LayoutUpdatePayload',
+      'LinkPopoverContext',
+      'LinkPopoverResolution',
+      'LinkPopoverResolver',
+      'ListDefinitionsPayload',
+      'Measure',
+      'Modules',
+      'NavigableAddress',
+      'OpenOptions',
+      'PageMargins',
+      'PageSize',
+      'PageStyles',
+      'PaginationPayload',
+      'PaintSnapshot',
+      'PartChangedEvent',
+      'PartId',
+      'PartSectionId',
+      'PasswordPromptAttemptResult',
+      'PasswordPromptConfig',
+      'PasswordPromptContext',
+      'PasswordPromptHandle',
+      'PasswordPromptRenderContext',
+      'PasswordPromptResolution',
+      'PDF',
+      'PermissionParams',
+      'PositionHit',
+      'PresenceOptions',
+      'PresentationEditor',
+      'PresentationEditorOptions',
+      'ProofingCapabilities',
+      'ProofingCheckRequest',
+      'ProofingCheckResult',
+      'ProofingConfig',
+      'ProofingError',
+      'ProofingIssue',
+      'ProofingIssueKind',
+      'ProofingProvider',
+      'ProofingSegment',
+      'ProofingSegmentMetadata',
+      'ProofingStatus',
+      'ProseMirrorJSON',
+      'ProtectionChangeSource',
+      'RangeRect',
+      'registeredHandlers',
+      'RemoteCursorsRenderPayload',
+      'RemoteCursorState',
+      'RemoteUserInfo',
+      'ResolvedFindReplaceTexts',
+      'ResolvedPasswordPromptTexts',
+      'ResolveRangeOutput',
+      'SaveOptions',
+      'Schema',
+      'ScrollIntoViewInput',
+      'ScrollIntoViewOutput',
+      'SearchMatch',
+      'SectionHelpers',
+      'SectionMetadata',
+      'SelectionApi',
+      'SelectionCommandContext',
+      'SelectionCurrentInput',
+      'SelectionHandle',
+      'SelectionInfo',
+      'SlashMenu',
+      'StoryLocator',
+      'SuperConverter',
+      'SuperDoc',
+      'SuperDocLayoutEngineOptions',
+      'SuperDocTelemetryConfig',
+      'SuperEditor',
+      'superEditorHelpers',
+      'SuperInput',
+      'SuperToolbar',
+      'SurfaceComponentProps',
+      'SurfaceFloatingPlacement',
+      'SurfaceHandle',
+      'SurfaceMode',
+      'SurfaceOutcome',
+      'SurfaceRequest',
+      'SurfaceResolution',
+      'SurfaceResolver',
+      'SurfacesModuleConfig',
+      'TelemetryEvent',
+      'TextAddress',
+      'TextSegment',
+      'TextTarget',
+      'Toolbar',
+      'TrackChangesBasePluginKey',
+      'trackChangesHelpers',
+      'TrackChangesModuleConfig',
+      'TrackedChangeAddress',
+      'TrackedChangesMode',
+      'TrackedChangesOverrides',
+      'Transaction',
+      'UnsupportedContentItem',
+      'UpgradeToCollaborationOptions',
+      'User',
+      'ViewingVisibilityConfig',
+      'ViewLayout',
+      'ViewOptions',
+      'VirtualizationOptions',
+    ],
     runsCommandSignatureProbe: true,
-    ticket: 'SD-3178',
+    ticket: 'SD-3212',
   },
   {
     name: 'legacy/headless-toolbar',
@@ -103,6 +319,25 @@ const FACADE_ENTRIES = [
     ],
     runsCommandSignatureProbe: false,
     ticket: 'SD-3179',
+  },
+  // SD-3207: legacy headless-toolbar framework helpers. Each entry
+  // re-exports `useHeadlessToolbar` only. Same classification as the
+  // root `legacy/headless-toolbar` entry above.
+  {
+    name: 'legacy/headless-toolbar-react',
+    esm: path.join(PUBLIC_DIST, 'legacy', 'headless-toolbar-react.d.ts'),
+    cjs: path.join(PUBLIC_DIST, 'legacy', 'headless-toolbar-react.d.cts'),
+    expectedNames: ['useHeadlessToolbar'],
+    runsCommandSignatureProbe: false,
+    ticket: 'SD-3207',
+  },
+  {
+    name: 'legacy/headless-toolbar-vue',
+    esm: path.join(PUBLIC_DIST, 'legacy', 'headless-toolbar-vue.d.ts'),
+    cjs: path.join(PUBLIC_DIST, 'legacy', 'headless-toolbar-vue.d.cts'),
+    expectedNames: ['useHeadlessToolbar'],
+    runsCommandSignatureProbe: false,
+    ticket: 'SD-3207',
   },
   // SD-3180: legacy leaf entries. These match the existing single-types
   // pattern of the live `superdoc/converter` / `superdoc/docx-zipper` /
@@ -204,6 +439,7 @@ const FACADE_ENTRIES = [
       'DynamicCommandHandle',
       'EntityAddress',
       'EqualityFn',
+      'MetadataHandle',
       'Receipt',
       'ScrollIntoViewInput',
       'ScrollIntoViewOutput',
@@ -523,9 +759,10 @@ function checkCommandSignatureProbe(entry) {
       ...program.getDeclarationDiagnostics(),
     ];
     if (diagnostics.length === 0) return true;
-    console.error(`[verify-public-facade-emit] ${entry.name}: command signature probe failed.`);
+    console.error(`[verify-public-facade-emit] ${entry.name}: legacy command-signature compatibility check failed.`);
     console.error('  A command (setBold or insertComment) does not return `boolean` through the facade.');
     console.error('  This is the SD-2965 regression vector: specific command signatures were dropped or failed to flow through the facade, and EditorCommands fell back to the `AnyCommand` indexer.');
+    console.error('  Note: `editor.commands.*` is deprecated (use `editor.doc.*`). This check guards backward compatibility of the legacy typed surface; it is not a supported-API guarantee.');
     for (const d of diagnostics) {
       const msg = typeof d.messageText === 'string'
         ? d.messageText

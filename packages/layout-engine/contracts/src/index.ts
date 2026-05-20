@@ -78,6 +78,27 @@ export {
 } from './vertical-text.js';
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
+
+// Editor-neutral layout identity primitives (prep-001).
+// Additive only — `pmStart`/`pmEnd` and PM-shaped fields remain available
+// alongside these on every fragment/run.
+export {
+  LAYOUT_BOUNDARY_SCHEMA,
+  bodyStoryLocator,
+  namedStoryLocator,
+  computeLayoutFragmentId,
+  buildLayoutSourceIdentity,
+  buildLayoutSourceIdentityForFragment,
+} from './layout-identity.js';
+export type {
+  LayoutBlockRef,
+  LayoutFragmentId,
+  LayoutPartialRowIdentity,
+  LayoutSourceIdentity,
+  LayoutStoryKind,
+  LayoutStoryLocator,
+} from './layout-identity.js';
+import type { LayoutSourceIdentity } from './layout-identity.js';
 export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
 export type { NormalizedColumnLayout } from './column-layout.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
@@ -1937,6 +1958,15 @@ export type ParaFragment = {
   pmStart?: number;
   pmEnd?: number;
   sourceAnchor?: SourceAnchor;
+  /**
+   * Optional editor-neutral identity for this fragment.
+   *
+   * Additive (prep-001). PM-facing `pmStart`/`pmEnd` and `blockId` remain
+   * authoritative for v1 consumers; this field exists so downstream surfaces
+   * can address rendered output without requiring `pmStart`/`pmEnd`. See
+   * `layout-identity.ts`.
+   */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type TableColumnBoundary = {
@@ -2003,6 +2033,8 @@ export type TableFragment = {
    *  When set, the renderer uses these instead of measure.columnWidths. */
   columnWidths?: number[];
   sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type ImageFragment = {
@@ -2019,6 +2051,8 @@ export type ImageFragment = {
   pmEnd?: number;
   metadata?: ImageFragmentMetadata;
   sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type DrawingFragment = {
@@ -2038,6 +2072,8 @@ export type DrawingFragment = {
   pmStart?: number;
   pmEnd?: number;
   sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type ListItemFragment = {
@@ -2053,6 +2089,8 @@ export type ListItemFragment = {
   continuesFromPrev?: boolean;
   continuesOnNext?: boolean;
   sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type Fragment = ParaFragment | ImageFragment | DrawingFragment | ListItemFragment | TableFragment;

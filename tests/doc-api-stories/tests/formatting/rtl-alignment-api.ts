@@ -26,9 +26,9 @@ function makeSessionId(label: string): string {
 }
 
 // SD-3094 / SD-3093: When a paragraph is RTL (w:bidi), the doc-api
-// `format.paragraph.setAlignment` takes a *display* alignment (what the user
-// sees) and must write the spec-correct *stored* w:jc value per ECMA-376
-// §17.3.1.13 (left = leading edge, right = trailing edge).
+// `format.paragraph.setAlignment` takes a visual page alignment (what the user
+// sees). Microsoft Word interprets stored w:jc through w:bidi, so visual left
+// must be exported as w:jc="right" and visual right as w:jc="left".
 describe('document-api story: rtl paragraph alignment write', () => {
   const { client, outPath } = useStoryHarness('formatting/rtl-alignment-api', {
     preserveResults: true,
@@ -77,7 +77,7 @@ describe('document-api story: rtl paragraph alignment write', () => {
     return savePath;
   }
 
-  it('setAlignment(left) on RTL paragraph exports w:jc=right (mirrored to trailing-edge stored value)', async () => {
+  it('setAlignment(left) on RTL paragraph exports w:jc=right (Word-compatible visual-left storage)', async () => {
     const sessionId = makeSessionId('rtl-align-left');
     const paragraphText = 'RTL paragraph align-left case';
 
@@ -102,7 +102,7 @@ describe('document-api story: rtl paragraph alignment write', () => {
     expect(countMatches(paragraphs[0], /<w:jc\b[^>]*w:val="left"[^>]*\/>/g)).toBe(0);
   });
 
-  it('setAlignment(right) on RTL paragraph exports w:jc=left (mirrored to leading-edge stored value)', async () => {
+  it('setAlignment(right) on RTL paragraph exports w:jc=left (Word-compatible visual-right storage)', async () => {
     const sessionId = makeSessionId('rtl-align-right');
     const paragraphText = 'RTL paragraph align-right case';
 

@@ -20,8 +20,9 @@ import {
   type JsonRpcRequest,
 } from './protocol';
 
-const HOST_HELP = `Usage:\n  superdoc host --stdio\n`;
+const HOST_HELP = `Usage:\n  superdoc host --stdio [--request-timeout-ms <ms>]\n`;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_FLAG = '--request-timeout-ms';
 
 type HostServerOptions = {
   io: Pick<CliIO, 'stdout' | 'now'>;
@@ -30,11 +31,20 @@ type HostServerOptions = {
   sessionPool?: SessionPool;
 };
 
-function parseHostCommandTokens(tokens: string[]): { stdio: boolean; help: boolean } {
+type ParsedHostCommand = {
+  stdio: boolean;
+  help: boolean;
+  requestTimeoutMs?: number;
+};
+
+export function parseHostCommandTokens(tokens: string[]): ParsedHostCommand {
   let stdio = false;
   let help = false;
+  let requestTimeoutMs: number | undefined;
 
-  for (const token of tokens) {
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+
     if (token === '--stdio') {
       stdio = true;
       continue;
@@ -45,10 +55,32 @@ function parseHostCommandTokens(tokens: string[]): { stdio: boolean; help: boole
       continue;
     }
 
+    if (token === REQUEST_TIMEOUT_FLAG || token.startsWith(`${REQUEST_TIMEOUT_FLAG}=`)) {
+      const value = token === REQUEST_TIMEOUT_FLAG ? tokens[++i] : token.slice(REQUEST_TIMEOUT_FLAG.length + 1);
+      if (value == null || value === '') {
+        throw new CliError(
+          'INVALID_ARGUMENT',
+          `host: ${REQUEST_TIMEOUT_FLAG} requires a positive finite number of milliseconds.`,
+        );
+      }
+      // Accept any positive finite number — `setTimeout` happily takes floats,
+      // and the SDK's `requestTimeoutMs` option is typed `number` so any value
+      // that was valid as a JS timer pre-fix must remain valid here.
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new CliError(
+          'INVALID_ARGUMENT',
+          `host: ${REQUEST_TIMEOUT_FLAG} requires a positive finite number of milliseconds (got ${JSON.stringify(value)}).`,
+        );
+      }
+      requestTimeoutMs = parsed;
+      continue;
+    }
+
     throw new CliError('INVALID_ARGUMENT', `host: unknown option ${token}`);
   }
 
-  return { stdio, help };
+  return { stdio, help, requestTimeoutMs };
 }
 
 type SettledOutcome<T> =
@@ -316,7 +348,7 @@ export async function runHostStdio(tokens: string[], io: CliIO): Promise<number>
     throw new CliError('INVALID_ARGUMENT', 'host: only --stdio is supported in v1.');
   }
 
-  const server = new HostServer({ io });
+  const server = new HostServer({ io, requestTimeoutMs: parsed.requestTimeoutMs });
   const rl = createInterface({
     input: process.stdin,
     crlfDelay: Number.POSITIVE_INFINITY,

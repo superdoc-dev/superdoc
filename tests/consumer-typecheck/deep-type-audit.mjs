@@ -44,8 +44,11 @@ const doWrite = args.has('--write');
 // stale entries, compiler diagnostics, private specifier leaks). Without
 // it, the audit runs in inventory/reporting mode and always exits 0
 // unless the script itself errors. Strict mode is intentionally NOT used
-// in CI yet: it only becomes meaningful once SD-2966 defines the public
-// facade and the allowlist is re-seeded against that smaller surface.
+// in CI yet. The facade landed in SD-3212 PR C, but the audit still walks
+// every entry in `package.json#exports`, including the broad legacy
+// `./super-editor` surface. Until the audit is scoped to the curated
+// facade entries (SD-3213 follow-up), strict-on-everything would gate
+// on ~1.8k findings dominated by legacy reach.
 const doStrict = args.has('--strict');
 // Legacy alias: previous versions exposed `--report-only` as the way to
 // opt out of failing CI. The default is now report-only, so this flag
@@ -470,9 +473,10 @@ function classifyOwner(f) {
   if (f.file.includes('trackChangesHelpers') || f.file.includes('fieldAnnotationHelpers')) return 'tier-3-helpers';
   if (f.file.endsWith('core/types/index.d.ts')) return 'tier-4-public-contract';
   // SuperConverter + DocxZipper expose `[key: string]: any` and
-  // `constructor(...args: any[])`. SD-2966's done-when criteria explicitly
-  // call these out as accidentally-public; group with tier-4 so the
-  // facade work owns the fix.
+  // `constructor(...args: any[])`. Both are classified as `legacy-root`
+  // in superdoc-root-classification.json (Decision 1 of
+  // package-boundaries.md); group with tier-4 so the public-contract
+  // drain work owns the fix.
   if (f.file.endsWith('SuperConverter.d.ts') || f.file.endsWith('DocxZipper.d.ts')) return 'tier-4-public-contract';
   return 'tier-5-other';
 }
@@ -559,8 +563,8 @@ if (haveAllowlist) {
 } else {
   console.log(``);
   console.log(`[audit] No allowlist present (deep-type-audit.allowlist.json).`);
-  console.log(`[audit] This is expected pre-SD-2966: the audit is inventory-only until the public facade is defined.`);
-  console.log(`[audit] Once SD-2966 lands, run \`node deep-type-audit.mjs --write\` to seed an allowlist scoped to the facade.`);
+  console.log(`[audit] Inventory-only mode. The facade landed in SD-3212 PR C, but the audit still walks broad legacy surfaces (e.g. ./super-editor),`);
+  console.log(`[audit] so a strict allowlist isn't seeded yet. Tracked under SD-3213 follow-up: scope to curated facade entries, then make strict.`);
 }
 
 if (!doStrict) {

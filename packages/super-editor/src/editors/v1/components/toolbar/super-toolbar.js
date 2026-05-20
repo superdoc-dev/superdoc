@@ -21,6 +21,7 @@ import { calculateResolvedParagraphProperties } from '@extensions/paragraph/reso
 import { parseSizeUnit } from '@core/utilities';
 import { findElementBySelector, getParagraphFontFamilyFromProperties } from './helpers/general.js';
 import { markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
+import { insertTableOfContentsAtSelection } from '@extensions/table-of-contents/table-of-contents-insertion.js';
 
 /**
  * @typedef {function(CommandItem): void} CommandCallback
@@ -387,7 +388,17 @@ export class SuperToolbar extends EventEmitter {
    * @returns {ToolbarItem|undefined} The toolbar item with the specified name or undefined if not found
    */
   getToolbarItemByName(name) {
-    return this.toolbarItems.find((item) => item.name.value === name);
+    return this.#getAllToolbarItems().find((item) => item.name.value === name);
+  }
+
+  /**
+   * Visible bar + overflow menu items (same object refs; responsive layout moves
+   * controls like tableOfContents between the two arrays).
+   * @private
+   * @returns {ToolbarItem[]}
+   */
+  #getAllToolbarItems() {
+    return [...this.toolbarItems, ...this.overflowItems];
   }
 
   /**
@@ -702,7 +713,7 @@ export class SuperToolbar extends EventEmitter {
 
     if (!this.activeEditor || currentMode === 'viewing') {
       this.#deactivateAll();
-      this.toolbarItems.forEach((item) => {
+      this.#getAllToolbarItems().forEach((item) => {
         if (item.allowWithoutEditor?.value) this.#applyHeadlessState(item);
       });
       return;
@@ -718,7 +729,7 @@ export class SuperToolbar extends EventEmitter {
     // active-state highlight (e.g., bold pressed, direction matched) to
     // reflect the current selection. Iterating only `toolbarItems` left
     // them frozen in their last-rendered state.
-    [...this.toolbarItems, ...this.overflowItems].forEach((item) => {
+    this.#getAllToolbarItems().forEach((item) => {
       item.resetDisabled();
       this.#applyHeadlessState(item);
     });
@@ -752,7 +763,7 @@ export class SuperToolbar extends EventEmitter {
    */
   #deactivateAll() {
     this.activeEditor = null;
-    this.toolbarItems.forEach((item) => {
+    this.#getAllToolbarItems().forEach((item) => {
       const { allowWithoutEditor } = item;
       if (allowWithoutEditor.value) return;
       item.setDisabled(true);
@@ -846,7 +857,9 @@ export class SuperToolbar extends EventEmitter {
       }
     }
 
-    if (this.activeEditor && this.activeEditor.commands && command in this.activeEditor.commands) {
+    if (command === 'insertTableOfContents' && this.activeEditor) {
+      insertTableOfContentsAtSelection(this.activeEditor);
+    } else if (this.activeEditor && this.activeEditor.commands && command in this.activeEditor.commands) {
       this.activeEditor.commands[command](argument);
     }
 

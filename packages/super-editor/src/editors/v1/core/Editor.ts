@@ -2543,7 +2543,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
    *       the cursor is inside a table cell, in which case the cell width is returned.
    */
   getMaxContentSize(): { width?: number; height?: number } {
-    if (!this.converter) return {};
+    const localPageStyles = this.converter?.pageStyles;
+    const parentPageStyles = this.options.parentEditor?.converter?.pageStyles;
+    const localPageSize = localPageStyles?.pageSize;
+    const pageStyles =
+      localPageSize?.width && localPageSize?.height ? localPageStyles : (parentPageStyles ?? localPageStyles);
+    if (!pageStyles) return {};
 
     // When the cursor is inside a table cell, constrain width to the cell's content
     // width so images inserted into a cell are never wider than that cell.
@@ -2569,7 +2574,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       return {};
     }
 
-    const { pageSize = {}, pageMargins = {} } = this.converter.pageStyles ?? {};
+    const { pageSize = {}, pageMargins = {} } = pageStyles;
     const { width, height } = pageSize;
 
     if (!width || !height) return {};

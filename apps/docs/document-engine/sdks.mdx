@@ -728,6 +728,17 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.permissionRanges.create` | `permission-ranges create` | Create a permission range exception region in the document. Inserts matched permStart/permEnd markers at the target. |
 | `doc.permissionRanges.remove` | `permission-ranges remove` | Remove a permission range by ID. Removes whichever markers exist for the given ID (start, end, or both). |
 | `doc.permissionRanges.updatePrincipal` | `permission-ranges update-principal` | Change which principal is allowed to edit a permission range. Updates the principal fields on the start marker. |
+| `doc.customXml.parts.list` | `custom-xml parts list` | List Custom XML Data Storage Parts in the document, optionally filtered by root namespace or schema reference. |
+| `doc.customXml.parts.get` | `custom-xml parts get` | Get a single Custom XML Data Storage Part by itemID or package part name, including its full content. v1 partName targeting is limited to Word-style customXml/itemN.xml paths. |
+| `doc.customXml.parts.create` | `custom-xml parts create` | Add a new Custom XML Data Storage Part to the document. Generates a fresh itemID GUID and emits the Properties Part. |
+| `doc.customXml.parts.patch` | `custom-xml parts patch` | Replace the content and/or schemaRefs of an existing Custom XML Data Storage Part. At least one of content or schemaRefs is required. v1 partName targeting is limited to Word-style customXml/itemN.xml paths. |
+| `doc.customXml.parts.remove` | `custom-xml parts remove` | Remove a Custom XML Data Storage Part and clean up all linked package files (item, props, rels, content-types entry). v1 partName targeting is limited to Word-style customXml/itemN.xml paths. |
+| `doc.metadata.attach` | `metadata attach` | Anchor a JSON metadata payload to a span of text. Wraps the target range in a hidden inline content control whose w:tag carries a stable id, and stores the payload in a namespaced Custom XML Data Storage Part. v1 supports text-range anchors only. |
+| `doc.metadata.list` | `metadata list` | List anchored-metadata entries in the document, optionally filtered by consumer namespace and/or a `within` selection (returns only entries whose anchor overlaps `within`). |
+| `doc.metadata.get` | `metadata get` | Get a single anchored-metadata entry by id, including its JSON payload. |
+| `doc.metadata.update` | `metadata update` | Replace the JSON payload of an existing anchored-metadata entry. Replace semantics; no merge. The anchor is left untouched. |
+| `doc.metadata.remove` | `metadata remove` | Remove an anchored-metadata entry. Strips the anchor content-control wrapper (its content stays in the document) and deletes the payload entry from the Storage Part. In v1 these writes are sequenced, not transactional: the adapter resolves the target up-front so missing-target failures land before any state change, but a crash strictly between the two writes can leave a dangling payload. When the backing part has no remaining entries, the part itself is removed. |
+| `doc.metadata.resolve` | `metadata resolve` | Find where an anchored-metadata entry is anchored in the document. Returns the SelectionTarget covering the anchor content. |
 | `doc.insertTab` | `insert tab` | Insert a real Word tab node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
 | `doc.insertLineBreak` | `insert line-break` | Insert a real Word line-break node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
 
@@ -783,7 +794,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.styles.paragraph.setStyle` | `styles paragraph set-style` | Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct run formatting while preserving character-style references. |
 | `doc.styles.paragraph.clearStyle` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
 | `doc.format.paragraph.resetDirectFormatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
-| `doc.format.paragraph.setAlignment` | `format paragraph set-alignment` | Set paragraph alignment (justification) on a paragraph-like block. |
+| `doc.format.paragraph.setAlignment` | `format paragraph set-alignment` | Set visual paragraph alignment on a paragraph-like block. For RTL paragraphs, left/right are translated to Word-compatible stored justification values. |
 | `doc.format.paragraph.clearAlignment` | `format paragraph clear-alignment` | Remove direct paragraph alignment, reverting to style-defined or default alignment. |
 | `doc.format.paragraph.setIndentation` | `format paragraph set-indentation` | Set paragraph indentation properties (left, right, firstLine, hanging) in twips. |
 | `doc.format.paragraph.clearIndentation` | `format paragraph clear-indentation` | Remove all direct paragraph indentation. |
@@ -1195,6 +1206,17 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.permission_ranges.create` | `permission-ranges create` | Create a permission range exception region in the document. Inserts matched permStart/permEnd markers at the target. |
 | `doc.permission_ranges.remove` | `permission-ranges remove` | Remove a permission range by ID. Removes whichever markers exist for the given ID (start, end, or both). |
 | `doc.permission_ranges.update_principal` | `permission-ranges update-principal` | Change which principal is allowed to edit a permission range. Updates the principal fields on the start marker. |
+| `doc.custom_xml.parts.list` | `custom-xml parts list` | List Custom XML Data Storage Parts in the document, optionally filtered by root namespace or schema reference. |
+| `doc.custom_xml.parts.get` | `custom-xml parts get` | Get a single Custom XML Data Storage Part by itemID or package part name, including its full content. v1 partName targeting is limited to Word-style customXml/itemN.xml paths. |
+| `doc.custom_xml.parts.create` | `custom-xml parts create` | Add a new Custom XML Data Storage Part to the document. Generates a fresh itemID GUID and emits the Properties Part. |
+| `doc.custom_xml.parts.patch` | `custom-xml parts patch` | Replace the content and/or schemaRefs of an existing Custom XML Data Storage Part. At least one of content or schemaRefs is required. v1 partName targeting is limited to Word-style customXml/itemN.xml paths. |
+| `doc.custom_xml.parts.remove` | `custom-xml parts remove` | Remove a Custom XML Data Storage Part and clean up all linked package files (item, props, rels, content-types entry). v1 partName targeting is limited to Word-style customXml/itemN.xml paths. |
+| `doc.metadata.attach` | `metadata attach` | Anchor a JSON metadata payload to a span of text. Wraps the target range in a hidden inline content control whose w:tag carries a stable id, and stores the payload in a namespaced Custom XML Data Storage Part. v1 supports text-range anchors only. |
+| `doc.metadata.list` | `metadata list` | List anchored-metadata entries in the document, optionally filtered by consumer namespace and/or a `within` selection (returns only entries whose anchor overlaps `within`). |
+| `doc.metadata.get` | `metadata get` | Get a single anchored-metadata entry by id, including its JSON payload. |
+| `doc.metadata.update` | `metadata update` | Replace the JSON payload of an existing anchored-metadata entry. Replace semantics; no merge. The anchor is left untouched. |
+| `doc.metadata.remove` | `metadata remove` | Remove an anchored-metadata entry. Strips the anchor content-control wrapper (its content stays in the document) and deletes the payload entry from the Storage Part. In v1 these writes are sequenced, not transactional: the adapter resolves the target up-front so missing-target failures land before any state change, but a crash strictly between the two writes can leave a dangling payload. When the backing part has no remaining entries, the part itself is removed. |
+| `doc.metadata.resolve` | `metadata resolve` | Find where an anchored-metadata entry is anchored in the document. Returns the SelectionTarget covering the anchor content. |
 | `doc.insert_tab` | `insert tab` | Insert a real Word tab node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
 | `doc.insert_line_break` | `insert line-break` | Insert a real Word line-break node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
 
@@ -1250,7 +1272,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.styles.paragraph.set_style` | `styles paragraph set-style` | Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct run formatting while preserving character-style references. |
 | `doc.styles.paragraph.clear_style` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
 | `doc.format.paragraph.reset_direct_formatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
-| `doc.format.paragraph.set_alignment` | `format paragraph set-alignment` | Set paragraph alignment (justification) on a paragraph-like block. |
+| `doc.format.paragraph.set_alignment` | `format paragraph set-alignment` | Set visual paragraph alignment on a paragraph-like block. For RTL paragraphs, left/right are translated to Word-compatible stored justification values. |
 | `doc.format.paragraph.clear_alignment` | `format paragraph clear-alignment` | Remove direct paragraph alignment, reverting to style-defined or default alignment. |
 | `doc.format.paragraph.set_indentation` | `format paragraph set-indentation` | Set paragraph indentation properties (left, right, firstLine, hanging) in twips. |
 | `doc.format.paragraph.clear_indentation` | `format paragraph clear-indentation` | Remove all direct paragraph indentation. |

@@ -127,6 +127,9 @@ export type {
   ContentControlsHandle,
   ContentControlsSlice,
 
+  // Anchored metadata (SD-3204)
+  MetadataHandle,
+
   // Viewport
   ContentControlViewportAddress,
   ViewportContext,

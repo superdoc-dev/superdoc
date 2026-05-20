@@ -275,6 +275,20 @@ import type {
 } from '../customXml/customXml.types.js';
 
 import type {
+  AnchoredMetadataAttachInput,
+  AnchoredMetadataAttachResult,
+  AnchoredMetadataListInput,
+  AnchoredMetadataListResult,
+  AnchoredMetadataGetInput,
+  AnchoredMetadataInfo,
+  AnchoredMetadataUpdateInput,
+  AnchoredMetadataRemoveInput,
+  AnchoredMetadataResolveInput,
+  AnchoredMetadataMutationResult,
+  AnchoredMetadataResolveInfo,
+} from '../metadata/anchored-metadata.types.js';
+
+import type {
   FootnoteListInput,
   FootnotesListResult,
   FootnoteGetInput,
@@ -1582,6 +1596,38 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     input: CustomXmlPartsRemoveInput;
     options: MutationOptions;
     output: CustomXmlPartsMutationResult;
+  };
+
+  // --- metadata.* (anchored metadata) ---
+  'metadata.attach': {
+    input: AnchoredMetadataAttachInput;
+    options: MutationOptions;
+    output: AnchoredMetadataAttachResult;
+  };
+  'metadata.list': {
+    input: AnchoredMetadataListInput | undefined;
+    options: never;
+    output: AnchoredMetadataListResult;
+  };
+  'metadata.get': {
+    input: AnchoredMetadataGetInput;
+    options: never;
+    output: AnchoredMetadataInfo | null;
+  };
+  'metadata.update': {
+    input: AnchoredMetadataUpdateInput;
+    options: MutationOptions;
+    output: AnchoredMetadataMutationResult;
+  };
+  'metadata.remove': {
+    input: AnchoredMetadataRemoveInput;
+    options: MutationOptions;
+    output: AnchoredMetadataMutationResult;
+  };
+  'metadata.resolve': {
+    input: AnchoredMetadataResolveInput;
+    options: never;
+    output: AnchoredMetadataResolveInfo | null;
   };
 }
 

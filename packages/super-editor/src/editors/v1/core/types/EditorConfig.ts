@@ -432,6 +432,9 @@ export interface EditorOptions {
   /** Concrete header/footer surface kind for child editors */
   headerFooterType?: 'header' | 'footer';
 
+  /** OOXML relationship id for this header/footer part (e.g. `rId7`). */
+  headerFooterRefId?: string;
+
   /** Optional pagination metadata */
   lastSelection?: unknown | null;
 

@@ -146,6 +146,17 @@ const cjsDeclarationShims = [
     source: path.join(distRoot, 'superdoc/src/public/legacy/headless-toolbar.d.ts'),
     target: './headless-toolbar.js',
   },
+  // SD-3207: legacy headless-toolbar framework helpers.
+  {
+    file: path.join(distRoot, 'superdoc/src/public/legacy/headless-toolbar-react.d.cts'),
+    source: path.join(distRoot, 'superdoc/src/public/legacy/headless-toolbar-react.d.ts'),
+    target: './headless-toolbar-react.js',
+  },
+  {
+    file: path.join(distRoot, 'superdoc/src/public/legacy/headless-toolbar-vue.d.cts'),
+    source: path.join(distRoot, 'superdoc/src/public/legacy/headless-toolbar-vue.d.ts'),
+    target: './headless-toolbar-vue.js',
+  },
   // SD-3184: types facade — type-only entry. The existing `./types`
   // subpath has split types.import/types.require declarations, so the
   // facade needs a real .d.cts shim. `typeOnly: true` forces the shim
@@ -239,39 +250,46 @@ if (!hasSuperDocExport) {
   process.exit(1);
 }
 
-// @superdoc/common is a private workspace package, so consumers can't
-// resolve a bare `from '@superdoc/common'` import. The main entry
-// (superdoc/src/index.d.ts) imports runtime values from it — DOCX/PDF/
-// HTML constants, getFileObject, compareVersions, BlankDOCX (the last
-// from a Vite `?url` import that vite-plugin-dts can't type). Strip
-// that import statement and inline ambient declarations for those
-// values. Type-only imports of @superdoc/common from other dist files
-// are handled separately by the RELOCATION_RULES rewriter below, which
+// @superdoc/common is a private workspace package, so consumers can't resolve
+// bare or deep `@superdoc/common` imports from emitted declarations. The root
+// entry and the path-as-contract public facade both expose a small set of
+// runtime values from common (DOCX/PDF/HTML constants, getFileObject,
+// compareVersions, BlankDOCX). Strip those imports and inline declarations for
+// the exported names. Type-only imports of @superdoc/common from other dist
+// files are handled separately by the RELOCATION_RULES rewriter below, which
 // maps bare @superdoc/common to dist/shared/common/comments-types.d.ts.
-const hadWorkspaceImport = content.includes('@superdoc/common');
-if (hadWorkspaceImport) {
-  // Replace the @superdoc/common import with inline declarations
-  content = content.replace(
-    /import\s*\{[^}]*\}\s*from\s*['"]@superdoc\/common['"];?\s*\n?/g,
-    '',
-  );
+function inlineCommonRuntimeDeclarations(filePath) {
+  let fileContent = fs.readFileSync(filePath, 'utf8');
+  if (!fileContent.includes('@superdoc/common')) return false;
 
-  // BlankDOCX comes from a Vite ?url import (resolves to a string at runtime)
-  // Declare it since vite-plugin-dts can't generate types for ?url imports
-  const inlineDeclarations = [
-    '/** Document MIME type constants */',
-    "declare const DOCX: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';",
-    "declare const PDF: 'application/pdf';",
-    "declare const HTML: 'text/html';",
-    'declare function getFileObject(fileUrl: string, name: string, type: string): Promise<File>;',
-    'declare function compareVersions(version1: string, version2: string): -1 | 0 | 1;',
-    '/** URL to the blank DOCX template */',
-    'declare const BlankDOCX: string;',
-  ].join('\n');
+  fileContent = fileContent
+    .replace(/import\s*\{[^}]*\}\s*from\s*['"]@superdoc\/common['"];?\s*\n?/g, '')
+    .replace(/import\s*\{[^}]*\}\s*from\s*['"]@superdoc\/common\/document-types['"];?\s*\n?/g, '')
+    .replace(/import\s*\{[^}]*\}\s*from\s*['"]@superdoc\/common\/helpers\/get-file-object['"];?\s*\n?/g, '')
+    .replace(/import\s*\{[^}]*\}\s*from\s*['"]@superdoc\/common\/helpers\/compare-superdoc-versions['"];?\s*\n?/g, '');
 
-  content = inlineDeclarations + '\n' + content;
-  fs.writeFileSync(indexPath, content);
-  console.log('[ensure-types] ✓ Inlined @superdoc/common types');
+  const hasExportedBlankDocxDeclaration = /\bexport\s+declare\s+const\s+BlankDOCX\b/.test(fileContent);
+  const declarations = [
+    fileContent.includes('DOCX') && "declare const DOCX: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';",
+    fileContent.includes('PDF') && "declare const PDF: 'application/pdf';",
+    fileContent.includes('HTML') && "declare const HTML: 'text/html';",
+    fileContent.includes('getFileObject') && 'declare function getFileObject(fileUrl: string, name: string, type: string): Promise<File>;',
+    fileContent.includes('compareVersions') && 'declare function compareVersions(version1: string, version2: string): -1 | 0 | 1;',
+    fileContent.includes('BlankDOCX') && !hasExportedBlankDocxDeclaration && '/** URL to the blank DOCX template */',
+    fileContent.includes('BlankDOCX') && !hasExportedBlankDocxDeclaration && 'declare const BlankDOCX: string;',
+  ].filter(Boolean);
+
+  fs.writeFileSync(filePath, `${declarations.join('\n')}\n${fileContent}`);
+  return true;
+}
+
+const commonInlineTargets = [
+  path.join(distRoot, 'superdoc/src/index.d.ts'),
+  path.join(distRoot, 'superdoc/src/public/index.d.ts'),
+];
+const inlinedCommonTargets = commonInlineTargets.filter((target) => fs.existsSync(target) && inlineCommonRuntimeDeclarations(target));
+if (inlinedCommonTargets.length) {
+  console.log(`[ensure-types] ✓ Inlined @superdoc/common runtime declarations in ${inlinedCommonTargets.length} entry point(s)`);
 }
 
 // ---------------------------------------------------------------------------

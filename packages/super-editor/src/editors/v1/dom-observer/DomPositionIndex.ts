@@ -2,6 +2,17 @@ import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { sortedIndexBy } from 'lodash';
 import { debugLog, getSelectionDebugConfig } from '../core/presentation-editor/selection/SelectionDebug.js';
 
+// AIDEV-NOTE: compat-fallback - this index is the v1 PM-shape path. It reads
+// `data-pm-start`/`data-pm-end` directly because v1 selection painting and
+// header/footer interaction still address rendered elements through PM
+// positions. The parallel neutral identity (`data-layout-fragment-id` /
+// `data-layout-block-ref` / `data-layout-story`) is stamped by DomPainter
+// (prep-001); editor-side consumers that want it should go through
+// `LayoutHitV1Compat.findElementByLayoutFragmentId` /
+// `readRenderedElementIdentity`. Retire this PM-keyed index once a future
+// neutral consumer takes ownership of selection geometry; until then the
+// PM keys remain load-bearing.
+
 /**
  * Represents a single entry in the DOM position index.
  *

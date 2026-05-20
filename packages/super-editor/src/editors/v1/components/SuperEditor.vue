@@ -1346,7 +1346,7 @@ onBeforeUnmount(() => {
       <!-- Image resize overlay for interactive image resizing -->
       <ImageResizeOverlay
         v-if="editorReady && activeEditor"
-        :editor="activeEditor"
+        :editor="contextMenuEditor"
         :visible="imageResizeState.visible"
         :imageElement="imageResizeState.imageElement"
       />

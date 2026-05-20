@@ -257,6 +257,7 @@ import {
   bookmarksRemoveWrapper,
 } from './plan-engine/bookmark-wrappers.js';
 import { createCustomXmlPartsAdapter } from './plan-engine/custom-xml-wrappers.js';
+import { createAnchoredMetadataAdapter } from './plan-engine/anchored-metadata-wrappers.js';
 import {
   protectionGetAdapter,
   protectionSetEditingRestrictionAdapter,
@@ -649,6 +650,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     customXml: {
       parts: createCustomXmlPartsAdapter(editor),
     },
+    metadata: createAnchoredMetadataAdapter(editor),
     footnotes: {
       list: (query) => footnotesListWrapper(editor, query),
       get: (input) => footnotesGetWrapper(editor, input),

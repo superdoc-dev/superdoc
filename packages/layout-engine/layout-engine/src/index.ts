@@ -29,7 +29,7 @@ import type {
   FlowMode,
   NormalizedColumnLayout,
 } from '@superdoc/contracts';
-import { normalizeColumnLayout, getFragmentZIndex } from '@superdoc/contracts';
+import { buildLayoutSourceIdentityForFragment, normalizeColumnLayout, getFragmentZIndex } from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
 import {
@@ -3278,6 +3278,16 @@ export function layoutHeaderFooter(
   // container-to-page offset via effectiveOffset subtraction.
   if (kind === 'footer' && constraints.pageHeight != null) {
     normalizeFragmentsForRegion(layout.pages, blocks, measures, kind, constraints);
+  }
+
+  const story = kind ? { kind } : undefined;
+  if (story) {
+    for (const page of layout.pages) {
+      page.fragments = page.fragments.map((fragment) => ({
+        ...fragment,
+        layoutSourceIdentity: buildLayoutSourceIdentityForFragment(fragment, story),
+      }));
+    }
   }
 
   // Compute bounds using an index map to avoid building multiple Maps

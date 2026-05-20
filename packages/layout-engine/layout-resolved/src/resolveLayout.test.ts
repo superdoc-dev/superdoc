@@ -106,6 +106,31 @@ describe('resolveLayout', () => {
     expect(a).toEqual(b);
   });
 
+  it('derives neutral layout identity for resolved fragments even when input fragments do not precompute it', () => {
+    const layout: Layout = {
+      pageSize: { w: 800, h: 1000 },
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 72, y: 0, width: 468 }],
+        },
+      ],
+    };
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'p1', runs: [{ text: 'visible', fontFamily: 'Arial', fontSize: 12 }] } as any,
+    ];
+    const measures: Measure[] = [
+      { kind: 'paragraph', lines: [{ lineHeight: 20 }, { lineHeight: 20 }], totalHeight: 40 } as any,
+    ];
+
+    const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+    const item = result.pages[0].items[0];
+
+    expect(item?.kind).toBe('fragment');
+    expect(item?.layoutSourceIdentity?.blockRef).toBe('p1');
+    expect(item?.layoutSourceIdentity?.fragmentId).toContain('para:0:2');
+  });
+
   it('includes precomputed block versions for every supplied block', () => {
     const layout: Layout = {
       pageSize: { w: 612, h: 792 },

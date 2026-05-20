@@ -4,6 +4,7 @@ packages:
   - tests/visual
   - tests/behavior
   - tests/doc-api-stories
+  - tests/document-api-smoke
   - apps/*
   - apps/cli/platforms/*
   - packages/**/*
@@ -15,6 +16,8 @@ packages:
   - examples/*/*/*/*/*
   - demos/*
   - demos/*/*
+  - demos/*/*/*
+  - demos/*/*/*/*
   - evals
 
 catalog:

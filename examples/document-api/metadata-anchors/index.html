@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc: metadata anchors</title>
+  </head>
+  <body>
+    <div class="app">
+      <section class="editor-area">
+        <div id="editor"></div>
+      </section>
+      <aside class="sidebar">
+        <section class="panel">
+          <h2>Metadata anchors</h2>
+          <p class="hint">
+            A metadata anchor is a hidden inline content control with a stable id, paired with a JSON payload in a
+            custom XML part. The lesson is the four operations underneath: <code>attach</code>, <code>list</code>,
+            <code>get</code>, <code>resolve</code>, <code>remove</code>.
+          </p>
+          <div class="actions">
+            <button class="btn primary" id="attach" type="button">Attach</button>
+            <button class="btn" id="list" type="button">List</button>
+            <button class="btn" id="get" type="button">Get</button>
+            <button class="btn" id="resolve" type="button">Resolve</button>
+            <button class="btn danger" id="remove" type="button">Remove</button>
+          </div>
+        </section>
+        <section class="panel">
+          <h3>Last operation</h3>
+          <pre class="result" id="result">(none)</pre>
+        </section>
+        <p class="status" id="status">Loading</p>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

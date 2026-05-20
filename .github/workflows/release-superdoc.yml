@@ -137,9 +137,10 @@ jobs:
           node typecheck-matrix.mjs
 
       - name: Deep public-type audit (report-only)
-        # Inventory pass: same as PR CI. Not strict yet (no facade yet
-        # per SD-2966); ships only the regression report. Once SD-2966
-        # lands, swap in `--strict`.
+        # Inventory pass: same as PR CI. Not strict yet. The facade landed
+        # in SD-3212 PR C, but the audit still walks broad legacy surfaces
+        # like `./super-editor`. Tracked under SD-3213 follow-up: scope to
+        # curated facade entries, then swap in `--strict`.
         run: |
           cd tests/consumer-typecheck
           node deep-type-audit.mjs
@@ -149,11 +150,15 @@ jobs:
         # the packed tarball. Same step as PR CI.
         run: node tests/consumer-typecheck/package-shape-gate.mjs
 
-      - name: Legacy public no-growth gates (SD-3176)
+      - name: Public surface no-growth snapshots (SD-3176, SD-3212)
         # Same gate as PR CI. Catches releases that bypass PR CI.
-        run: |
-          node tests/consumer-typecheck/snapshot-super-editor-package-exports.mjs --check
-          node tests/consumer-typecheck/snapshot-superdoc-legacy-exports.mjs --check
+        # Runs the unified entry point for all three snapshot families
+        # (super-editor-package, legacy, root).
+        run: node tests/consumer-typecheck/snapshot.mjs --all --check
+
+      - name: Root classification closure gate (SD-3212 PR A1b)
+        # Same gate as PR CI. Catches releases that bypass PR CI.
+        run: node tests/consumer-typecheck/check-root-classification-closure.mjs
 
       # PR preview: publish with pr-<number> dist-tag
       - name: Publish PR preview

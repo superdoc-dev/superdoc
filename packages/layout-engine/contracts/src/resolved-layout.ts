@@ -18,6 +18,7 @@ import type {
   TableBlock,
   TableMeasure,
 } from './index.js';
+import type { LayoutSourceIdentity } from './layout-identity.js';
 
 /** A fully resolved layout ready for the next-generation paint pipeline. */
 export type ResolvedLayout = {
@@ -162,6 +163,12 @@ export type ResolvedFragmentItem = {
   measure?: ParagraphMeasure | ListMeasure;
   /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
   sourceAnchor?: SourceAnchor;
+  /**
+   * Optional editor-neutral identity (prep-001). Mirrors the field on the
+   * underlying `Fragment`; carried through resolve so the painter can stamp
+   * neutral `data-layout-*` datasets without re-deriving from PM positions.
+   */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 /** Resolved paragraph content for non-table paragraph/list-item fragments. */
@@ -295,6 +302,12 @@ export type ResolvedTableItem = {
   paintCacheVersion?: string;
   /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
   sourceAnchor?: SourceAnchor;
+  /**
+   * Optional editor-neutral identity (prep-001). Mirrors the field on the
+   * underlying `Fragment`; carried through resolve so the painter can stamp
+   * neutral `data-layout-*` datasets without re-deriving from PM positions.
+   */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 /**
@@ -350,6 +363,12 @@ export type ResolvedImageItem = {
   paintCacheVersion?: string;
   /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
   sourceAnchor?: SourceAnchor;
+  /**
+   * Optional editor-neutral identity (prep-001). Mirrors the field on the
+   * underlying `Fragment`; carried through resolve so the painter can stamp
+   * neutral `data-layout-*` datasets without re-deriving from PM positions.
+   */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 /**
@@ -403,6 +422,12 @@ export type ResolvedDrawingItem = {
   paintCacheVersion?: string;
   /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
   sourceAnchor?: SourceAnchor;
+  /**
+   * Optional editor-neutral identity (prep-001). Mirrors the field on the
+   * underlying `Fragment`; carried through resolve so the painter can stamp
+   * neutral `data-layout-*` datasets without re-deriving from PM positions.
+   */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 /** Type guard: checks whether a resolved paint item is a ResolvedTableItem. */

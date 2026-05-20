@@ -15,6 +15,8 @@ import {
   isHeaderFooterPartId,
   SOURCE_HEADER_FOOTER_LOCAL,
 } from './header-footer-part-descriptor.js';
+import { getRelationshipsRoot } from '../../helpers/rels-part-helpers.js';
+import { getWordPartRelsPath, normalizeWordPartPath } from '../../helpers/word-part-path.js';
 
 // ---------------------------------------------------------------------------
 // Converter shape
@@ -44,6 +46,7 @@ interface ExportToXmlJsonOpts {
   comments?: unknown[];
   commentDefinitions?: unknown[];
   isFinalDoc?: boolean;
+  existingRelationships?: unknown[];
 }
 
 interface XmlJsonDoc {
@@ -71,6 +74,18 @@ interface XmlElement {
 const HEADER_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
 const FOOTER_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
 
+function normalizeHeaderFooterPartPath(target = ''): PartId {
+  return normalizeWordPartPath(target) as PartId;
+}
+
+function getHeaderFooterRelsPartId(partId: PartId): PartId {
+  return getWordPartRelsPath(partId) as PartId;
+}
+
+function getRelationshipElements(part: unknown): unknown[] {
+  return getRelationshipsRoot(part as XmlElement)?.elements ?? [];
+}
+
 /**
  * Resolve a header/footer relationship ID (e.g., 'rId7') to its OOXML part path
  * (e.g., 'word/header1.xml').
@@ -91,10 +106,15 @@ export function resolvePartIdFromRefId(editor: Editor, headerFooterRefId: string
     const target = el.attributes?.Target;
     if (!target) continue;
 
-    return `word/${target}` as PartId;
+    return normalizeHeaderFooterPartPath(target);
   }
 
   return null;
+}
+
+export function resolveHeaderFooterRelsPartIdFromRefId(editor: Editor, headerFooterRefId: string): PartId | null {
+  const partId = resolvePartIdFromRefId(editor, headerFooterRefId);
+  return partId ? getHeaderFooterRelsPartId(partId) : null;
 }
 
 /** @deprecated Use `resolvePartIdFromRefId` — alias kept for backward compatibility. */
@@ -172,6 +192,8 @@ export function exportSubEditorToPart(
 
   // Ensure descriptor is registered for this dynamic part
   ensureHeaderFooterDescriptor(partId, headerFooterRefId);
+  const relsPartId = getHeaderFooterRelsPartId(partId);
+  const existingRelationships = getRelationshipElements(converter.convertedXml?.[relsPartId]);
 
   // Get current PM JSON from the sub-editor
   const pmJson =
@@ -191,6 +213,7 @@ export function exportSubEditorToPart(
       isHeaderFooter: true,
       comments: [],
       commentDefinitions: [],
+      existingRelationships,
     });
     bodyContent = result?.elements?.[0]?.elements ?? [];
   } catch (err) {
@@ -273,7 +296,7 @@ export function registerExistingHeaderFooterDescriptors(editor: Editor): void {
     const id = el.attributes?.Id;
     if (!target || !id) continue;
 
-    const partId = `word/${target}` as PartId;
+    const partId = normalizeHeaderFooterPartPath(target);
     if (isHeaderFooterPartId(partId)) {
       ensureHeaderFooterDescriptor(partId, id);
     }

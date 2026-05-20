@@ -1,0 +1,336 @@
+---
+title: customXml.parts.patch
+sidebarTitle: customXml.parts.patch
+description: Replace the content and/or schemaRefs of an existing Custom XML Data Storage Part. At least one of content or schemaRefs is required. v1 partName targeting is limited to Word-style customXml/itemN.xml paths.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Replace the content and/or schemaRefs of an existing Custom XML Data Storage Part. At least one of content or schemaRefs is required. v1 partName targeting is limited to Word-style customXml/itemN.xml paths.
+
+- Operation ID: `customXml.parts.patch`
+- API member path: `editor.doc.customXml.parts.patch(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CustomXmlPartsMutationResult indicating success with the resolved target or a failure.
+
+## Input fields
+
+### Variant 1 (required: content)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content` | string | yes |  |
+| `target` | object \\| object | yes | One of: object, object |
+
+### Variant 2 (required: schemaRefs)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `schemaRefs` | string[] | yes |  |
+| `target` | object \\| object | yes | One of: object, object |
+
+### Example request
+
+```json
+{
+  "content": "example",
+  "target": {
+    "id": "id-001"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | no |  |
+| `success` | `true` | yes | Constant: `true` |
+| `target` | object \\| object | yes | One of: object, object |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "id": "id-001",
+  "success": true,
+  "target": {
+    "id": "id-001"
+  }
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `TARGET_NOT_FOUND`
+- `INVALID_INPUT`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": [
+        "content"
+      ]
+    },
+    {
+      "required": [
+        "schemaRefs"
+      ]
+    }
+  ],
+  "properties": {
+    "content": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schemaRefs": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "target": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "partName": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "partName"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "success": {
+          "const": true
+        },
+        "target": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "partName": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "partName"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "required": [
+        "success",
+        "target"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "success": {
+      "const": true
+    },
+    "target": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "partName": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "partName"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "success",
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

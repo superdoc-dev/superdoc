@@ -574,6 +574,10 @@ const STRING_EXAMPLES: Record<string, string> = {
   decision: 'accept',
   scope: 'all',
   code: 'INVALID_TARGET',
+  // metadata.* expects a JSON payload (any JSON-serializable value) and a
+  // namespace string (URI/URN used as the backing <refs xmlns="..."> root).
+  payload: { source: 'Alpha Corp v. SEC' },
+  namespace: 'urn:customer:metadata:1',
 };
 
 const INTEGER_EXAMPLES: Record<string, number> = {

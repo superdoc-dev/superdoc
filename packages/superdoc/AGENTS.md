@@ -238,6 +238,28 @@ superdoc.on('editorCreate', ({ editor }) => {
 
 For backend or AI agent workflows, use the [SDK](https://docs.superdoc.dev/document-engine/sdks), [CLI](https://docs.superdoc.dev/document-engine/cli), or [MCP server](https://docs.superdoc.dev/document-engine/ai-agents/mcp-server) instead of browser editor access.
 
+## Contributing to the public surface
+
+If you're adding, removing, or moving a name on the `superdoc` root entry, the source of truth is `packages/superdoc/src/public/index.ts`. It is organized in three tiers per SD-3212:
+
+1. **Supported root** — documented public API; first-class root surface. Clean re-exports.
+2. **Legacy root** — typed for backward compatibility; not the recommended path. Per-name `@deprecated` JSDoc only where a real replacement exists (e.g. `editor.commands.*` → `editor.doc.*` Document API). Section-level framing carries "legacy compat" intent when no replacement exists.
+3. **Internal candidate** — accidental implementation leak. Kept typed under compat re-export with `@internal` so a future major can remove it. Only exists at root because at least one supported/legacy export reaches it transitively.
+
+When changing the surface, every PR must also update:
+
+- `tests/consumer-typecheck/snapshots/superdoc-root-classification.json` (bucket + rationale per name).
+- `tests/consumer-typecheck/snapshots/superdoc-root-exports.json` (the 4-source no-growth lock).
+- `packages/superdoc/scripts/verify-public-facade-emit.cjs` `FACADE_ENTRIES['root (./index)'].expectedNames`.
+
+Three CI gates enforce consistency and will fail the build if any of these drift:
+
+- `verify-public-facade-emit.cjs` — symbol set, ESM/CJS parity, leak grep.
+- `snapshot.mjs --family root --check` — 4-source no-growth lock for the root entry. CI calls `snapshot.mjs --all --check`, which also runs `legacy` and `super-editor-package`.
+- `check-root-classification-closure.mjs` — no supported/legacy export references an internal-candidate type (dependency-closure rule).
+
+For overrides on the closure gate (rare; only DOM globals / upstream / generic utility types), add an entry to `OVERRIDES` in `check-root-classification-closure.mjs` with a reason string ≥ 20 chars.
+
 ## Knowledge corrections
 
 If your training data mentions SuperDoc, note these updates:

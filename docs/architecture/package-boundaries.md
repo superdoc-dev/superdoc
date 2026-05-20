@@ -197,6 +197,26 @@ The relocation pattern is what `superdoc` currently uses for several internal-bu
 
 We keep them exported, stop advertising them, and point new use at the migration target. SD-2953 added `types` fields and matrix fixtures so strict-mode consumers no longer hit TS7016; the export-coverage audit (`check-export-coverage.cjs`) now enforces that every `package.json` exports entry carries types, an asset classification, or a documented runtime-only allowlist entry. SD-3179 lands the source-side facade for `./headless-toolbar` under `packages/superdoc/src/public/legacy/` and extends SD-3176's no-growth snapshot list to cover `./headless-toolbar`, `./headless-toolbar/react`, and `./headless-toolbar/vue` so these subpaths cannot expand silently.
 
+### Decision 5. Document API is the supported programmatic surface; editor commands and ProseMirror internals are legacy compatibility.
+
+**Context.** Two coexisting paths for programmatic interaction with the editor exist in the codebase today:
+
+- `editor.doc.*` — the Document API (`packages/document-api/`). Contract-first: `OPERATION_DEFINITIONS` → operation registry → typed dispatch table → adapters. 300+ operations spanning reads (`get`, `find`, `query.match`, `extract`, etc.) and mutations (`insert`, `replace`, `delete`, `format.*`, `comments.*`, `tables.*`, `blocks.*`, etc.). Compile-time parity checks tie all four layers together.
+- `editor.commands.*` — the older command system on the editor instance. Typed by `CoreCommandMap`, `ExtensionCommandMap`, `EditorCommands`, `CoreCommands`, `ExtensionCommands`, `CommandProps`, `Command`, `ChainedCommand`, `ChainableCommandObject`, `CanCommand`, `CanObject`.
+
+`packages/superdoc/AGENTS.md` already documents the policy: "For reading and mutating documents programmatically, use the Document API (`editor.doc`). Direct access to ProseMirror internals (`editor.state`, `editor.view`) and editor commands (`editor.commands`) is deprecated and will be removed." Source-side, `editor.commands`, `editor.chain`, `editor.can`, `editor.state`, `editor.view`, `editor.schema`, and `editor.dispatch` all carry `@deprecated` JSDoc tags in `packages/super-editor/src/editors/v1/core/Editor.ts` (lines 268, 275, 1344, 1411, 1597, 1605, 2813) pointing at the Document API as the replacement.
+
+**Decision.**
+
+- **Supported public surface for document reads and mutations.** `editor.doc.*` (the Document API). `DocumentApi` plus the supporting selection / address / range / bookmark / block / protection types are first-class in the `superdoc` root facade. New programmatic document features land as Document API operations.
+- **Legacy public compatibility surface.** `editor.commands.*` and its 11 typing infrastructure types remain exported from the facade so existing TypeScript consumers keep compiling. The re-export at the facade carries `@deprecated` JSDoc. SD-3147's classification is corrected to label these as `legacy/public-compat`, not `public`.
+- **Legacy ProseMirror internals.** `editor.state`, `editor.view`, `editor.schema`, `editor.dispatch`, and direct ProseMirror types (`EditorState`, `Transaction`, `Schema`, `EditorView`, etc.) follow the same posture: typed, exported, deprecated, not advertised.
+- **Out of scope for this decision.** SuperDoc-level config and lifecycle methods (the `SuperDoc` constructor, `Config`, instance lifecycle like `setMode`, `getDocument`, `destroy`) are unrelated. They are not document-mutation API and remain `public`.
+
+**Coverage caveat.** This decision aligns the messaging — Document API is the supported programmatic surface, editor commands are legacy compat — but does **not** assert that today's Document API operations cover every legacy editor command 1:1. A direct comparison of the typed `editor.commands.*` surface against the Document API's 300+ operations finds real gaps: field annotations, document section management commands, search-session UI state, AI marks, diff/comparison helpers, and format-clearing helpers all exist as runtime commands without a 1:1 Document API analogue today. Some of those belong on a future UI/navigation API surface rather than Document API; some are real Document API operation gaps. A separate audit ticket enumerates the typed + runtime command surface against the Document API's `OPERATION_DEFINITIONS`, classifies each gap (Document API covered / UI-navigation API needed / internal editor primitive / legacy compatibility only / missing Document API operation), and produces child tickets for the actual gaps. That audit must complete before any deprecation escalation or removal of `editor.commands.*`.
+
+**Status.** SD-3185 promotes the Document API types into the root facade and adds `@deprecated` tags at the legacy re-exports. The facade verifier's command-signature probe is reframed as a legacy compatibility regression check, not a supported-API guarantee. No removals — `EditorCommands` and PM internals stay exported; removal blocks on the coverage audit (separate ticket) and then a deprecation cycle on a future major.
+
 ## Deliverables
 
 This RFC is "done" when the following are produced and reviewed:

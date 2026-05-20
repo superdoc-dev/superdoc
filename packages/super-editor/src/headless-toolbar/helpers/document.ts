@@ -60,6 +60,42 @@ export const getCurrentRedoDepth = (context: ToolbarContext | null) => {
   }
 };
 
+/**
+ * Disable a toolbar control when a document-api operation is unavailable
+ * (missing extension commands, tracked-mode restrictions, etc.).
+ */
+export const createDocumentOperationCapabilityStateDeriver =
+  (operationId: string) =>
+  ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {
+    if (isCommandDisabled(context)) {
+      return {
+        active: false,
+        disabled: true,
+      };
+    }
+
+    const doc = context?.target?.doc;
+    if (typeof doc?.capabilities !== 'function') {
+      return {
+        active: false,
+        disabled: true,
+      };
+    }
+
+    try {
+      const available = Boolean(doc.capabilities().operations[operationId]?.available);
+      return {
+        active: false,
+        disabled: !available,
+      };
+    } catch {
+      return {
+        active: false,
+        disabled: true,
+      };
+    }
+  };
+
 export const createHistoryStateDeriver =
   (kind: 'undo' | 'redo') =>
   ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {

@@ -59,16 +59,11 @@ jobs:
           - contract-templates
           - custom-ui
           - docx-from-html
-          - docxtemplater
-          - fields
+          - fields-source
           - grading-papers
           # - html-editor  # broken: imports unpublished superdoc/super-editor/style.css subpath
           - linked-sections
-          - loading-from-json
           - nextjs-ssr
-          # - replace-content  # broken: runtime nextSibling error in SuperDoc
-          - text-selection
-          - toolbar
     steps:
       - name: Restore workspace
         uses: actions/cache/restore@v4

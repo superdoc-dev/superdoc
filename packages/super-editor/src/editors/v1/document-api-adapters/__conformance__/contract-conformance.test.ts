@@ -201,6 +201,11 @@ import {
   customXmlPartsPatchWrapper,
   customXmlPartsRemoveWrapper,
 } from '../plan-engine/custom-xml-wrappers.js';
+import {
+  metadataAttachWrapper,
+  metadataUpdateWrapper,
+  metadataRemoveWrapper,
+} from '../plan-engine/anchored-metadata-wrappers.js';
 
 import {
   footnotesInsertWrapper,
@@ -3103,6 +3108,55 @@ function makeRefEditor(
   } as unknown as Editor;
 }
 
+const METADATA_TARGET = {
+  kind: 'selection' as const,
+  start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+  end: { kind: 'text' as const, blockId: 'p1', offset: 5 },
+};
+
+function makeMetadataEditor(): Editor {
+  const editor = makeRefEditor({
+    schemaNodes: {
+      structuredContent: {
+        create: vi.fn((attrs?: Record<string, unknown>) =>
+          createNode('structuredContent', [], {
+            attrs,
+            isInline: true,
+            isBlock: false,
+            inlineContent: true,
+            nodeSize: 2,
+          }),
+        ),
+      },
+    },
+    converter: { convertedXml: {} },
+  });
+
+  const doc = editor.state.doc as ProseMirrorNode & {
+    textBetween: (from: number, to: number) => string;
+    slice: () => { content: ProseMirrorNode[] };
+    resolve: (pos: number) => {
+      parent: ProseMirrorNode;
+      depth: number;
+      parentOffset: number;
+      before: () => number;
+      after: () => number;
+    };
+  };
+  const paragraph = (doc as unknown as { _children: ProseMirrorNode[] })._children[0]!;
+  doc.textBetween = (from: number, to: number) => 'Hello'.slice(Math.max(0, from - 1), Math.max(0, to - 1));
+  doc.slice = () => ({ content: [] });
+  doc.resolve = (pos: number) => ({
+    parent: paragraph,
+    depth: 1,
+    parentOffset: Math.max(0, pos - 1),
+    before: () => 0,
+    after: () => paragraph.nodeSize,
+  });
+  (editor.state.tr as unknown as { doc: typeof doc }).doc = doc;
+  return editor;
+}
+
 /** Resolved mock for node-based resolvers (bookmarks, footnotes, cross-refs, etc.) */
 function mockResolvedNode(pos: number, nodeId: string, typeName: string, attrs: Record<string, unknown> = {}) {
   return {
@@ -4124,11 +4178,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
     applyCase: () => {
       const editor = makeRefEditor({ converter: { convertedXml: {} } });
       // Seed a part so the patch resolves.
-      customXmlPartsCreateWrapper(
-        editor,
-        { content: '<a xmlns="urn:a"/>' },
-        { changeMode: 'direct' },
-      );
+      customXmlPartsCreateWrapper(editor, { content: '<a xmlns="urn:a"/>' }, { changeMode: 'direct' });
       return customXmlPartsPatchWrapper(
         editor,
         { target: { partName: 'customXml/item1.xml' }, content: '<a xmlns="urn:a">v2</a>' },
@@ -4153,11 +4203,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
     applyCase: () => {
       const editor = makeRefEditor({ converter: { convertedXml: {} } });
       // Seed a part so the remove resolves.
-      customXmlPartsCreateWrapper(
-        editor,
-        { content: '<a xmlns="urn:a"/>' },
-        { changeMode: 'direct' },
-      );
+      customXmlPartsCreateWrapper(editor, { content: '<a xmlns="urn:a"/>' }, { changeMode: 'direct' });
       return customXmlPartsRemoveWrapper(
         editor,
         { target: { partName: 'customXml/item1.xml' } },
@@ -4170,6 +4216,71 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { target: { partName: 'customXml/item999.xml' } },
         { changeMode: 'direct' },
       ),
+  },
+
+  // ---- Anchored metadata ----
+  'metadata.attach': {
+    throwCase: () =>
+      metadataAttachWrapper(
+        makeMetadataEditor(),
+        { target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () =>
+      metadataAttachWrapper(
+        makeMetadataEditor(),
+        { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      const editor = makeMetadataEditor();
+      metadataAttachWrapper(
+        editor,
+        { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+        { changeMode: 'direct' },
+      );
+      return metadataAttachWrapper(
+        editor,
+        { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Beta' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'metadata.update': {
+    throwCase: () =>
+      metadataUpdateWrapper(
+        makeMetadataEditor(),
+        { id: 'meta-1', payload: { label: 'Beta' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const editor = makeMetadataEditor();
+      metadataAttachWrapper(
+        editor,
+        { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+        { changeMode: 'direct' },
+      );
+      return metadataUpdateWrapper(editor, { id: 'meta-1', payload: { label: 'Beta' } }, { changeMode: 'direct' });
+    },
+    failureCase: () =>
+      metadataUpdateWrapper(
+        makeMetadataEditor(),
+        { id: 'missing', payload: { label: 'Beta' } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'metadata.remove': {
+    throwCase: () => metadataRemoveWrapper(makeMetadataEditor(), { id: 'meta-1' }, { changeMode: 'tracked' }),
+    applyCase: () => {
+      const editor = makeMetadataEditor();
+      metadataAttachWrapper(
+        editor,
+        { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+        { changeMode: 'direct' },
+      );
+      return metadataRemoveWrapper(editor, { id: 'meta-1' }, { changeMode: 'direct' });
+    },
+    failureCase: () => metadataRemoveWrapper(makeMetadataEditor(), { id: 'missing' }, { changeMode: 'direct' }),
   },
 };
 
@@ -11320,6 +11431,36 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { target: { partName: 'customXml/item1.xml' } },
       { changeMode: 'direct', dryRun: true },
     );
+  },
+
+  // ---- Anchored metadata ----
+  'metadata.attach': () =>
+    metadataAttachWrapper(
+      makeMetadataEditor(),
+      { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+      { changeMode: 'direct', dryRun: true },
+    ),
+  'metadata.update': () => {
+    const editor = makeMetadataEditor();
+    metadataAttachWrapper(
+      editor,
+      { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+      { changeMode: 'direct' },
+    );
+    return metadataUpdateWrapper(
+      editor,
+      { id: 'meta-1', payload: { label: 'Beta' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'metadata.remove': () => {
+    const editor = makeMetadataEditor();
+    metadataAttachWrapper(
+      editor,
+      { id: 'meta-1', target: METADATA_TARGET, namespace: 'urn:test:metadata', payload: { label: 'Alpha' } },
+      { changeMode: 'direct' },
+    );
+    return metadataRemoveWrapper(editor, { id: 'meta-1' }, { changeMode: 'direct', dryRun: true });
   },
 };
 

@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.33.1",
+  "version": "1.34.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -20,8 +20,8 @@
   "exports": {
     ".": {
       "types": {
-        "import": "./dist/superdoc/src/index.d.ts",
-        "require": "./dist/superdoc/src/index.d.cts"
+        "import": "./dist/superdoc/src/public/index.d.ts",
+        "require": "./dist/superdoc/src/public/index.d.cts"
       },
       "source": "./src/index.js",
       "import": "./dist/superdoc.es.js",
@@ -29,19 +29,19 @@
     },
     "./types": {
       "types": {
-        "import": "./dist/super-editor/src/types.d.ts",
-        "require": "./dist/super-editor/src/types.d.cts"
+        "import": "./dist/superdoc/src/public/types.d.ts",
+        "require": "./dist/superdoc/src/public/types.d.cts"
       },
       "source": "./src/types.ts",
       "import": "./dist/types.es.js",
       "require": "./dist/types.cjs"
     },
     "./converter": {
-      "types": "./dist/super-editor/src/editors/v1/core/super-converter/SuperConverter.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/converter.d.ts",
       "import": "./dist/super-editor/converter.es.js"
     },
     "./docx-zipper": {
-      "types": "./dist/super-editor/src/editors/v1/core/DocxZipper.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/docx-zipper.d.ts",
       "import": "./dist/super-editor/docx-zipper.es.js"
     },
     "./super-editor": {
@@ -54,68 +54,68 @@
       "require": "./dist/super-editor.cjs"
     },
     "./headless-toolbar": {
-      "types": "./dist/superdoc/src/headless-toolbar.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/headless-toolbar.d.ts",
       "source": "./src/headless-toolbar.js",
       "import": "./dist/headless-toolbar.es.js"
     },
     "./ui": {
-      "types": "./dist/superdoc/src/ui.d.ts",
+      "types": "./dist/superdoc/src/public/ui.d.ts",
       "source": "./src/ui.js",
       "import": "./dist/ui.es.js"
     },
     "./ui/react": {
-      "types": "./dist/superdoc/src/ui-react.d.ts",
+      "types": "./dist/superdoc/src/public/ui-react.d.ts",
       "source": "./src/ui-react.js",
       "import": "./dist/ui-react.es.js"
     },
     "./headless-toolbar/react": {
-      "types": "./dist/superdoc/src/headless-toolbar-react.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/headless-toolbar-react.d.ts",
       "source": "./src/headless-toolbar-react.js",
       "import": "./dist/headless-toolbar-react.es.js"
     },
     "./headless-toolbar/vue": {
-      "types": "./dist/superdoc/src/headless-toolbar-vue.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/headless-toolbar-vue.d.ts",
       "source": "./src/headless-toolbar-vue.js",
       "import": "./dist/headless-toolbar-vue.es.js"
     },
     "./file-zipper": {
-      "types": "./dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/file-zipper.d.ts",
       "import": "./dist/super-editor/file-zipper.es.js"
     },
     "./style.css": "./dist/style.css"
   },
-  "types": "./dist/superdoc/src/index.d.ts",
+  "types": "./dist/superdoc/src/public/index.d.ts",
   "typesVersions": {
     "*": {
       "headless-toolbar": [
-        "./dist/superdoc/src/headless-toolbar.d.ts"
+        "./dist/superdoc/src/public/legacy/headless-toolbar.d.ts"
       ],
       "ui": [
-        "./dist/superdoc/src/ui.d.ts"
+        "./dist/superdoc/src/public/ui.d.ts"
       ],
       "ui/react": [
-        "./dist/superdoc/src/ui-react.d.ts"
+        "./dist/superdoc/src/public/ui-react.d.ts"
       ],
       "headless-toolbar/react": [
-        "./dist/superdoc/src/headless-toolbar-react.d.ts"
+        "./dist/superdoc/src/public/legacy/headless-toolbar-react.d.ts"
       ],
       "headless-toolbar/vue": [
-        "./dist/superdoc/src/headless-toolbar-vue.d.ts"
+        "./dist/superdoc/src/public/legacy/headless-toolbar-vue.d.ts"
       ],
       "super-editor": [
         "./dist/superdoc/src/super-editor.d.ts"
       ],
       "types": [
-        "./dist/super-editor/src/types.d.ts"
+        "./dist/superdoc/src/public/types.d.ts"
       ],
       "converter": [
-        "./dist/super-editor/src/editors/v1/core/super-converter/SuperConverter.d.ts"
+        "./dist/superdoc/src/public/legacy/converter.d.ts"
       ],
       "docx-zipper": [
-        "./dist/super-editor/src/editors/v1/core/DocxZipper.d.ts"
+        "./dist/superdoc/src/public/legacy/docx-zipper.d.ts"
       ],
       "file-zipper": [
-        "./dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts"
+        "./dist/superdoc/src/public/legacy/file-zipper.d.ts"
       ]
     }
   },

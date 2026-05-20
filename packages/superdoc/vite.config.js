@@ -252,6 +252,11 @@ export default defineConfig(({ mode, command }) => {
           // custom UI integrations should use the `superdoc/ui` /
           // `superdoc/ui/react` entries instead.
           'public/legacy/headless-toolbar': 'src/public/legacy/headless-toolbar.ts',
+          // SD-3207: legacy headless-toolbar framework helpers. Paired
+          // with the root above; same legacy classification. Each entry
+          // re-exports `useHeadlessToolbar` only.
+          'public/legacy/headless-toolbar-react': 'src/public/legacy/headless-toolbar-react.ts',
+          'public/legacy/headless-toolbar-vue': 'src/public/legacy/headless-toolbar-vue.ts',
           // SD-3180: legacy leaf facade entries mirroring the existing
           // single-export legacy subpaths. Same classification as
           // headless-toolbar above.

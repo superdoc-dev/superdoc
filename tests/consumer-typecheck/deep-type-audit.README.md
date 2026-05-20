@@ -7,36 +7,41 @@ declarations.
 Tracked under SD-2977 as part of the "drain to fully compliant" umbrella
 SD-2976.
 
-## Status: report-only inventory (gate deferred until SD-2966)
+## Status: report-only inventory (gate deferred until audit is scoped to the facade)
 
 Today this audit runs in **inventory mode**: it walks the public surface,
 prints a tiered breakdown of findings, and always exits 0. It does NOT
 gate CI yet.
 
-The gate behavior (failing CI on new findings) is intentionally deferred.
-The current public surface is the *accidental declaration graph*: 1700+
-findings reachable through Pinia stores, EventEmitter generics, Vue SFC
-component types, and other code that was never deliberately committed as
-public API. Locking in an allowlist of that surface would be measuring
-the wrong thing and would risk legitimizing internals as public API.
+The facade landed in SD-3212 PR C (`packages/superdoc/src/public/index.ts`
+is now the root contract, with `src/public/legacy/*` for legacy subpaths).
+But the audit still walks every entry in `package.json#exports`, including
+the broad legacy `./super-editor` raw export. Excluding it drops findings
+from ~1,835 to ~1,510; the remainder is dominated by curated root exports
+(SuperDoc, Editor, PresentationEditor, SuperToolbar) pulling deep
+implementation types (Pinia stores, EventEmitter, editor/toolbar config).
 
-SD-2966 defines the deliberate facade. Once it lands:
+Gating on either number would recreate the prior allowlist problem
+(see "Why no allowlist file is checked in (yet)" below).
 
-1. Re-run this audit; the allowlist is much smaller (expected ~200-400
-   entries against the facade, not 1700+ against the accidental graph).
-2. Seed the allowlist via `node deep-type-audit.mjs --write`.
-3. Add `--strict` to the CI invocation to make this a real gate.
+The remaining work, tracked under SD-3213 follow-up:
 
-Until then, the audit's value is the inventory: visible CI signal of how
-much accidental surface is leaking, useful as evidence that SD-2966 is
-worth doing.
+1. Drain the residual `tier-4-public-contract` finding
+   (`SuperConverter[key: string]: any`) via SD-3235. SD-3213c reduced the
+   bucket from 16 findings to 1 by fully typing DocxZipper and partially
+   typing SuperConverter's constructor + named statics.
+2. Improve audit attribution per entry/bucket so findings can be
+   distinguished as "supported-root leak" vs "legacy compat reach".
+3. Scope the audit to curated facade entries (everything routing through
+   `src/public/**` except `./super-editor`), then make it strict.
 
 ## What "fully compliant" means (final state)
 
 The umbrella's success definition:
 
-- deep audit allowlist reaches **0 owned findings against the deliberate
-  public facade defined by SD-2966**
+- deep audit allowlist reaches **0 owned findings against the curated
+  public facade** (`src/public/**`, scoped to exclude broad legacy raw
+  exports like `./super-editor`)
 - the public facade is intentionally defined, not inherited from
   accidental barrel reachability
 - anything outside the facade is internal and is not part of the
@@ -49,8 +54,9 @@ The umbrella's success definition:
 
 Two compliance classes, both required:
 
-- **Type-quality compliance**: every reachable type *in the facade* is
-  real, not `any`. This audit (in `--strict` mode, post-facade) enforces it.
+- **Type-quality compliance**: every reachable type *in the curated
+  facade* is real, not `any`. This audit (in `--strict` mode, scoped to
+  facade entries) will enforce it.
 - **Package-shape compliance**: manifest, exports, conditions, CDN
   fields are honest. SD-2978 (Packaging Honesty) owns this side.
 
@@ -88,12 +94,13 @@ entries. That was reverted because:
 
 - A 17K-line public artifact creates noise in every PR diff
 - It would commit the team to typing internals (Pinia stores, EventEmitter,
-  Vue SFC types) that should be hidden via SD-2966's facade, not typed
+  Vue SFC types) that should be hidden behind the curated facade, not typed
 - It risks legitimizing accidental public surface as the type contract
 
-The allowlist re-emerges after SD-2966 lands, scoped to the facade. Each
-entry has a stable key (`kind|file|symbolPath|snippet`) so reformatting and
-line shifts won't churn it.
+The allowlist re-emerges once the audit is scoped to the curated facade
+entries (SD-3213 follow-up). Each entry has a stable key
+(`kind|file|symbolPath|snippet`) so reformatting and line shifts won't
+churn it.
 
 ## Commands
 
@@ -107,11 +114,12 @@ node tests/consumer-typecheck/deep-type-audit.mjs --pack
 
 # Strict mode: fails on findings if no allowlist exists, or on
 # new/stale entries if an allowlist exists. NOT used in CI today;
-# becomes the gate after SD-2966 defines the facade.
+# becomes the gate once the audit is scoped to the curated facade
+# entries (SD-3213 follow-up).
 node tests/consumer-typecheck/deep-type-audit.mjs --strict
 
 # Seed or regenerate deep-type-audit.allowlist.json from current findings
-# (intended for use after SD-2966 to baseline against the facade)
+# (intended for use once the audit is scoped to the curated facade)
 node tests/consumer-typecheck/deep-type-audit.mjs --write
 ```
 
@@ -154,9 +162,20 @@ default `auto-seeded from inventory` rationale.
 - **tier-3-helpers** (~61 entries): `trackChangesHelpers` and
   `fieldAnnotationHelpers`. JS files exported via the `helpers` namespace
   with no JSDoc. Best fix is probably JS to TS conversion.
-- **tier-4-public-contract** (~2 entries): the curated `core/types/index.ts`
-  file. These are surgical fixes (`transaction: any` should import
-  `Transaction` from `prosemirror-state`, etc).
+- **tier-4-public-contract**: currently **1 residual finding**
+  (`SuperConverter.d.ts`'s `[key: string]: any` catchall). Historically
+  included two classes of finding: (1) the hand-written shim files
+  `SuperConverter.d.ts` and `DocxZipper.d.ts`
+  (`constructor(...args: any[])`, `[key: string]: any`) — partially
+  drained in SD-3213c (DocxZipper fully typed; SuperConverter constructor
+  + named statics typed); (2) curated entries in `core/types/index.ts`
+  like `transaction: any` that should import `Transaction` from
+  `prosemirror-state`. The residual `SuperConverter[key: string]: any`
+  cannot be removed without converting `SuperConverter.js` to TypeScript
+  (or formalizing a public/internal contract split) because internal
+  callers across `Editor.ts`, `PresentationEditor.ts`,
+  `HeaderFooterRegistry.ts`, and list-level helpers read dozens of
+  instance members through it. Tracked as a follow-up to SD-3213.
 - **tier-5-other**: catchall for anything that doesn't match the patterns
   above.
 
@@ -165,11 +184,27 @@ default `auto-seeded from inventory` rationale.
 - `typecheck-matrix.mjs`: runs `tsc --noEmit` under N consumer tsconfigs.
   Catches *resolution* errors and *missing exports*. Doesn't see member-level
   `any`.
-- `check-public-types.mjs`: verifies every public `@typedef` has an
-  assertion fixture. Asserts top-level type aliases aren't `any`. Doesn't
-  see member-level `any`.
+- `snapshot.mjs --family root --check`: locks the root export inventory
+  across the four `package.json#exports` sources independently (types.import,
+  types.require, import, require). Each source has its own baseline (type
+  sources currently 200 names, runtime sources 41) and drift on any of the
+  four fails the gate. Cross-source mismatches (typed-only, runtime-only,
+  ESM vs CJS) are reported in the companion `.md` as evidence, not blockers.
+  CI calls the unified `snapshot.mjs --all --check` which runs this family
+  plus the `legacy` and `super-editor-package` families.
+- `verify-public-facade-emit.cjs`: verifies the curated `src/public/**`
+  facade matches the emitted `.d.ts` (symbol set, ESM/CJS parity, leak
+  grep, command-signature probe).
+- `check-root-classification-closure.mjs`: dependency-closure rule — no
+  supported-root or legacy-root export references an internal-candidate
+  type in its public declared type.
 - **deep-type-audit.mjs (this)**: recursive walk; catches what the others
-  cannot. Together the three gates form the public-type contract guarantee.
+  cannot.
+
+(`check-public-types.mjs` was retired in SD-3213a after the root facade
+flip — the canonical root contract is now `packages/superdoc/src/public/index.ts`
+plus the snapshot/facade-verifier gates above, not the legacy JSDoc
+typedef block in `packages/superdoc/src/index.js`.)
 
 ## CI wiring
 

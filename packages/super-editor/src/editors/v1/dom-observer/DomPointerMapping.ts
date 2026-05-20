@@ -7,6 +7,12 @@
  * browser's actual rendering and correctly handles PM position gaps that occur
  * after document edits (e.g. paragraph joins).
  *
+ * AIDEV-NOTE: compat-fallback - DOM-first browser-coupled pointer logic stays
+ * editor-owned (prep-002). This module reads `data-pm-*` directly because v1
+ * still consumes PM positions. The editor-neutral neighbour for future v2
+ * consumers is `LayoutHitV1Compat.resolvePointerLayoutHit`, which reuses the
+ * same DOM-first / geometry-fallback strategy but returns a `LayoutHit`.
+ *
  * @module dom-observer/DomPointerMapping
  */
 

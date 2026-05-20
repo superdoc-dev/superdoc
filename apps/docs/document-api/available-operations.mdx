@@ -13,6 +13,7 @@ Use the tables below to see what operations are available and where each one is 
 
 | Namespace | Canonical ops | Aliases | Total surface | Reference |
 | --- | --- | --- | --- | --- |
+| Anchored Metadata | 6 | 0 | 6 | [Reference](/document-api/reference/metadata/index) |
 | Blocks | 3 | 0 | 3 | [Reference](/document-api/reference/blocks/index) |
 | Bookmarks | 5 | 0 | 5 | [Reference](/document-api/reference/bookmarks/index) |
 | Capabilities | 1 | 0 | 1 | [Reference](/document-api/reference/capabilities/index) |
@@ -23,6 +24,7 @@ Use the tables below to see what operations are available and where each one is 
 | Core | 14 | 0 | 14 | [Reference](/document-api/reference/core/index) |
 | Create | 6 | 0 | 6 | [Reference](/document-api/reference/create/index) |
 | Cross-References | 5 | 0 | 5 | [Reference](/document-api/reference/cross-refs/index) |
+| Custom XML | 5 | 0 | 5 | [Reference](/document-api/reference/custom-xml/index) |
 | Diff | 3 | 0 | 3 | [Reference](/document-api/reference/diff/index) |
 | Fields | 5 | 0 | 5 | [Reference](/document-api/reference/fields/index) |
 | Footnotes | 6 | 0 | 6 | [Reference](/document-api/reference/footnotes/index) |
@@ -50,6 +52,12 @@ Use the tables below to see what operations are available and where each one is 
 
 | Editor method | Operation |
 | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.metadata.attach(...)</code></span> | [`metadata.attach`](/document-api/reference/metadata/attach) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.metadata.list(...)</code></span> | [`metadata.list`](/document-api/reference/metadata/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.metadata.get(...)</code></span> | [`metadata.get`](/document-api/reference/metadata/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.metadata.update(...)</code></span> | [`metadata.update`](/document-api/reference/metadata/update) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.metadata.remove(...)</code></span> | [`metadata.remove`](/document-api/reference/metadata/remove) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.metadata.resolve(...)</code></span> | [`metadata.resolve`](/document-api/reference/metadata/resolve) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.blocks.list(...)</code></span> | [`blocks.list`](/document-api/reference/blocks/list) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.blocks.delete(...)</code></span> | [`blocks.delete`](/document-api/reference/blocks/delete) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.blocks.deleteRange(...)</code></span> | [`blocks.deleteRange`](/document-api/reference/blocks/delete-range) |
@@ -165,6 +173,11 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.crossRefs.insert(...)</code></span> | [`crossRefs.insert`](/document-api/reference/cross-refs/insert) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.crossRefs.rebuild(...)</code></span> | [`crossRefs.rebuild`](/document-api/reference/cross-refs/rebuild) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.crossRefs.remove(...)</code></span> | [`crossRefs.remove`](/document-api/reference/cross-refs/remove) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.customXml.parts.list(...)</code></span> | [`customXml.parts.list`](/document-api/reference/custom-xml/parts/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.customXml.parts.get(...)</code></span> | [`customXml.parts.get`](/document-api/reference/custom-xml/parts/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.customXml.parts.create(...)</code></span> | [`customXml.parts.create`](/document-api/reference/custom-xml/parts/create) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.customXml.parts.patch(...)</code></span> | [`customXml.parts.patch`](/document-api/reference/custom-xml/parts/patch) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.customXml.parts.remove(...)</code></span> | [`customXml.parts.remove`](/document-api/reference/custom-xml/parts/remove) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.diff.capture(...)</code></span> | [`diff.capture`](/document-api/reference/diff/capture) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.diff.compare(...)</code></span> | [`diff.compare`](/document-api/reference/diff/compare) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.diff.apply(...)</code></span> | [`diff.apply`](/document-api/reference/diff/apply) |

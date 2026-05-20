@@ -122,6 +122,22 @@ export interface SuperDocEditorLike {
       list?(query?: unknown): unknown;
     };
     /**
+     * Anchored-metadata member on the Document API. Used by
+     * `ui.metadata.*` to look up an entry's resolved range from its
+     * id, and to verify (via `get`) that the id actually maps to a
+     * stored payload before delegating to the SDT-keyed geometry
+     * path — a w:tag on its own can come from a Word-authored
+     * content control with no metadata payload, so the payload side
+     * has to agree. Structurally typed loose for the same
+     * stub-friendly reason as `comments` / `trackChanges` /
+     * `contentControls`; the controller asserts the concrete shapes
+     * after calling.
+     */
+    metadata?: {
+      get?(input: { id: string }): unknown | null;
+      resolve?(input: { id: string }): unknown | null;
+    };
+    /**
      * Insert content at a positional target. Surfaces the typed
      * doc-API signature so custom commands can call
      * `editor.doc.insert(...)` without a structural cast. The control
@@ -465,6 +481,60 @@ export interface ContentControlsHandle {
   getRect(input: { id: string }): ViewportRectResult;
 }
 
+/**
+ * Anchored-metadata domain handle exposed on `ui.metadata`. Sugar over
+ * the metadata-id → content-control-id → painter geometry bridge that
+ * custom UI would otherwise compose by hand: callers carry only the
+ * metadata id (the value they passed to `editor.doc.metadata.attach`)
+ * and never see the SDT node id underneath.
+ *
+ * Read / scroll only — there are no mutation methods in v1. All
+ * mutations (`attach` / `update` / `remove`) stay on
+ * `editor.doc.metadata.*`; this handle is a UI surface, not a parallel
+ * mutation contract.
+ *
+ * No `namespace` parameter: `editor.doc.metadata.attach` enforces
+ * globally unique ids within a document (collisions fail with
+ * `INVALID_INPUT`), so the id is sufficient to identify an entry.
+ * No `getRects` either — `getRect`'s success variant already exposes
+ * the per-line `rects[]` array; a second method with the same return
+ * shape would just add API noise.
+ */
+export interface MetadataHandle {
+  /**
+   * Painter rect for the anchor identified by metadata `id`. Internally
+   * resolves metadata-id → SDT node-id via the cached content-controls
+   * slice and delegates to {@link ContentControlsHandle.getRect}, so
+   * the success shape and failure reasons match the rest of the
+   * `ui.*.getRect` family exactly.
+   *
+   * Failure mapping:
+   *   - empty id → `'invalid-target'`
+   *   - unknown id in current document → `'unresolved'`
+   *   - SDT exists but not painted (virtualized / pre-paint) → the
+   *     reason from `contentControls.getRect` (typically
+   *     `'not-mounted'` or `'not-ready'`) is propagated as-is.
+   */
+  getRect(input: { id: string }): ViewportRectResult;
+  /**
+   * Scroll the viewport to the anchored span identified by metadata
+   * `id`. Internally calls `editor.doc.metadata.resolve` to get a
+   * `SelectionTarget`, converts it to a `TextTarget` (the shape
+   * `ui.viewport.scrollIntoView` accepts), and forwards
+   * `block`/`behavior` unchanged. Returns the same
+   * `ScrollIntoViewOutput` shape as `ui.viewport.scrollIntoView`;
+   * unknown ids, `nodeEdge` endpoints, and other shapes that can't be
+   * cleanly represented as a `TextTarget` resolve to
+   * `{ success: false }` rather than silently scrolling to an
+   * approximation.
+   */
+  scrollIntoView(input: {
+    id: string;
+    block?: import('@superdoc/document-api').ScrollIntoViewInput['block'];
+    behavior?: import('@superdoc/document-api').ScrollIntoViewInput['behavior'];
+  }): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
+}
+
 export interface CommentsSlice {
   /** Total count from the list result (before pagination, if any). */
   total: number;
@@ -576,6 +646,16 @@ export interface SuperDocUI {
    * is the mutation contract.
    */
   contentControls: ContentControlsHandle;
+
+  /**
+   * Anchored-metadata domain — read + scroll surface keyed on the
+   * metadata id (= the value passed to `editor.doc.metadata.attach`).
+   * Hides the metadata-id → SDT-node-id bridge so custom UI doesn't
+   * have to compose `useSuperDocContentControls` + a tag → nodeId map
+   * + `ui.contentControls.getRect` itself. v1 has no mutation methods
+   * — `editor.doc.metadata.*` is the mutation contract.
+   */
+  metadata: MetadataHandle;
 
   /**
    * Selection domain — single subscription + read surface for
@@ -1644,9 +1724,7 @@ export type ContentControlViewportAddress = {
  * Document API's `EntityAddress` (comment / tracked change) with the
  * UI-local content-control address.
  */
-export type ViewportEntityAddress =
-  | import('@superdoc/document-api').EntityAddress
-  | ContentControlViewportAddress;
+export type ViewportEntityAddress = import('@superdoc/document-api').EntityAddress | ContentControlViewportAddress;
 
 export interface ViewportGetRectInput {
   /**

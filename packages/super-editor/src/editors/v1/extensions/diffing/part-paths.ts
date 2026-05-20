@@ -1,3 +1,5 @@
+import { getWordPartRelsPath } from '../../core/helpers/word-part-path.js';
+
 const DOCUMENT_RELS_PATH = 'word/_rels/document.xml.rels';
 
 export function toRelsPathForPart(partPath: string): string | null {
@@ -5,12 +7,9 @@ export function toRelsPathForPart(partPath: string): string | null {
     return null;
   }
 
-  const lastSlash = partPath.lastIndexOf('/');
-  if (lastSlash < 0 || lastSlash === partPath.length - 1) {
+  if (!partPath.includes('/') || partPath.endsWith('/')) {
     return null;
   }
 
-  const directory = partPath.slice(0, lastSlash);
-  const fileName = partPath.slice(lastSlash + 1);
-  return `${directory}/_rels/${fileName}.rels`;
+  return getWordPartRelsPath(partPath);
 }

@@ -404,6 +404,19 @@ export const makeDefaultItems = ({
     },
   });
 
+  const tableOfContents = useToolbarItem({
+    type: 'button',
+    name: 'tableOfContents',
+    command: 'insertTableOfContents',
+    icon: toolbarIcons.tableOfContents,
+    active: false,
+    tooltip: toolbarTexts.tableOfContents,
+    disabled: false,
+    attributes: {
+      ariaLabel: 'Table of contents',
+    },
+  });
+
   // table
   const tableItem = useToolbarItem({
     type: 'dropdown',
@@ -1063,7 +1076,14 @@ export const makeDefaultItems = ({
   const stickyItemsWidth = 120;
   const toolbarPadding = 32;
 
-  const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'formattingMarks'];
+  const itemsToHideXL = [
+    'linkedStyles',
+    'clearFormatting',
+    'copyFormat',
+    'ruler',
+    'formattingMarks',
+    'tableOfContents',
+  ];
   const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo'];
   const shouldUseLgCompactStyles = availableWidth <= RESPONSIVE_BREAKPOINTS.lg;
   const shouldIncludeFormattingMarks = superToolbar.config?.showFormattingMarksButton === true;
@@ -1102,6 +1122,7 @@ export const makeDefaultItems = ({
     separator,
     link,
     image,
+    tableOfContents,
     tableItem,
     tableActionsItem,
     separator,

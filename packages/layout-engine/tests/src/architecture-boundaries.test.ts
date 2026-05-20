@@ -285,6 +285,34 @@ describe('architecture boundaries', () => {
     });
   });
 
+  describe('Guard G: prep-001 layout boundary does not depend on v2 runtime packages', () => {
+    // Editor-neutral substrate added by `prep-001-layout-boundary-and-identity.md`.
+    // It must not silently pick up a dependency on any v2 runtime package — if a
+    // future Phase 3 plan needs to ship a v2 type through this boundary, that
+    // belongs in the v2 layer, not in the shared layout-engine packages.
+    const FORBIDDEN_V2_PACKAGES = [
+      '@superdoc/super-editor-v2',
+      '@superdoc/document-api-v2',
+      '@superdoc/document-api-v2-adapter',
+    ];
+    const PREP_001_RUNTIME_DIRS = [
+      'contracts/src',
+      'dom-contract/src',
+      'layout-bridge/src',
+      'layout-resolved/src',
+      'painters/dom/src',
+    ];
+
+    for (const dir of PREP_001_RUNTIME_DIRS) {
+      for (const pkg of FORBIDDEN_V2_PACKAGES) {
+        it(`${dir} does not import ${pkg}`, () => {
+          const srcDir = path.join(LAYOUT_ENGINE_ROOT, dir);
+          expectNoViolations(findImportViolations(srcDir, pkg));
+        });
+      }
+    }
+  });
+
   describe('Guard F: painter-dom render path does not coalesce resolved fields with the legacy fragment back-pointer (SD-2957)', () => {
     // Lines exempt because the LHS reads from a different stage entirely (e.g.
     // ImageBlock.width is the OOXML natural width, fragment.width is the

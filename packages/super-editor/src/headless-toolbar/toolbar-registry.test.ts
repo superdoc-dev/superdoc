@@ -1001,6 +1001,50 @@ describe('createToolbarRegistry', () => {
     });
   });
 
+  it('derives copy-format active state from stored format painter style', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['copy-format']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          storage: {
+            formatCommands: {
+              storedStyle: [{ type: { name: 'bold' }, attrs: {} }],
+            },
+          },
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+    });
+  });
+
+  it('keeps copy-format inactive when no stored format painter style exists', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['copy-format']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          storage: {
+            formatCommands: {
+              storedStyle: null,
+            },
+          },
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: false,
+    });
+  });
+
   it('keeps table-insert disabled state tied to editability', () => {
     const registry = createToolbarRegistry();
     const state = registry['table-insert']?.state({
@@ -1014,6 +1058,56 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: false,
       disabled: true,
+    });
+  });
+
+  it('keeps table-of-contents-insert disabled when create.tableOfContents is unavailable', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['table-of-contents-insert']?.state({
+      context: {
+        ...createContext(),
+        target: {
+          commands: {},
+          doc: {
+            capabilities: () => ({
+              operations: {
+                'create.tableOfContents': { available: false },
+              },
+            }),
+          },
+        },
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: true,
+    });
+  });
+
+  it('enables table-of-contents-insert when create.tableOfContents is available', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['table-of-contents-insert']?.state({
+      context: {
+        ...createContext(),
+        target: {
+          commands: {},
+          doc: {
+            capabilities: () => ({
+              operations: {
+                'create.tableOfContents': { available: true },
+              },
+            }),
+          },
+        },
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: false,
     });
   });
 

@@ -1,4 +1,4 @@
-import type { DrawingBlock, SdtMetadata } from '@superdoc/contracts';
+import type { DrawingBlock } from '@superdoc/contracts';
 import { renderDrawingFrame, type RenderDrawingContentForPlacement } from './drawingFrame.js';
 
 export type RenderTableDrawingFrameParams = {
@@ -12,7 +12,6 @@ export type RenderTableDrawingFrameParams = {
   zIndex?: number;
   flexShrink?: string;
   renderDrawingContent?: RenderDrawingContentForPlacement;
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
 };
 
 export const renderTableDrawingFrame = ({
@@ -26,7 +25,6 @@ export const renderTableDrawingFrame = ({
   zIndex,
   flexShrink,
   renderDrawingContent,
-  applySdtDataset,
 }: RenderTableDrawingFrameParams): HTMLElement => {
   return renderDrawingFrame({
     doc,
@@ -39,7 +37,6 @@ export const renderTableDrawingFrame = ({
         : { mode: 'flowing-table-cell', flexShrink },
     className: 'superdoc-table-drawing',
     renderDrawingContent,
-    applySdtDataset,
   });
 };
 

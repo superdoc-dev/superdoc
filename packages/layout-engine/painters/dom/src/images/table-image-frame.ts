@@ -1,5 +1,6 @@
-import type { ImageBlock, ImageFragmentMetadata, ImageMeasure, SdtMetadata } from '@superdoc/contracts';
+import type { ImageBlock, ImageFragmentMetadata, ImageMeasure } from '@superdoc/contracts';
 import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
+import { applySdtDataset } from '../sdt/dataset.js';
 import { createBlockImageContent } from './image-block.js';
 import type { BuildImageHyperlinkAnchor } from './types.js';
 
@@ -19,7 +20,6 @@ export type RenderTableImageFrameParams = {
   placement: TableImagePlacement;
   contentMaxWidth: number;
   contentMaxHeight: number;
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   buildImageHyperlinkAnchor: BuildImageHyperlinkAnchor;
 };
 
@@ -59,7 +59,6 @@ export const renderTableImageFrame = ({
   placement,
   contentMaxWidth,
   contentMaxHeight,
-  applySdtDataset,
   buildImageHyperlinkAnchor,
 }: RenderTableImageFrameParams): HTMLElement => {
   const wrapper = doc.createElement('div');

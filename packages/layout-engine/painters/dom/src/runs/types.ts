@@ -33,12 +33,7 @@ export type RunRenderContext = {
     hyperlink: ImageHyperlink | undefined,
     display: string,
   ) => HTMLElement;
-  resolveTrackedChangesConfig: (block: ParagraphBlock) => TrackedChangesRenderConfig;
-  applyTrackedChangeDecorations: (elem: HTMLElement, run: Run, config: TrackedChangesRenderConfig) => void;
-  resolveRunSdtId: (run: Run) => { sdtId: string; sdt: SdtMetadata } | null;
   createInlineSdtWrapper: (sdt: SdtMetadata) => HTMLElement;
-  syncInlineSdtWrapperTypography: (wrapper: HTMLElement, runForSizing?: Run) => void;
-  expandSdtWrapperPmRange: (wrapper: HTMLElement, pmStart?: number | null, pmEnd?: number | null) => void;
 };
 
 export type RenderLineParams = {

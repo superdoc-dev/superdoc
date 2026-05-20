@@ -1,6 +1,7 @@
-import type { ImageBlock, ImageFragment, ResolvedImageItem, SdtMetadata } from '@superdoc/contracts';
+import type { ImageBlock, ImageFragment, ResolvedImageItem } from '@superdoc/contracts';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext } from '../fragment-context.js';
+import { applyContainerSdtDataset, applySdtDataset } from '../sdt/dataset.js';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { applyStyles } from '../utils/apply-styles.js';
 import { createBlockImageContent } from './image-block.js';
@@ -19,8 +20,6 @@ type RenderImageFragmentOptions = {
   ) => void;
   applyFragmentFrame: (el: HTMLElement, fragment: ImageFragment, section?: 'body' | 'header' | 'footer') => void;
   applyFragmentWrapperZIndex: (el: HTMLElement, fragment: ImageFragment) => void;
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  applyContainerSdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   buildImageHyperlinkAnchor: BuildImageHyperlinkAnchor;
   createErrorPlaceholder: (blockId: string, error: unknown) => HTMLElement;
 };
@@ -77,8 +76,6 @@ export const renderImageFragment = ({
   applyResolvedFragmentFrame,
   applyFragmentFrame,
   applyFragmentWrapperZIndex,
-  applySdtDataset,
-  applyContainerSdtDataset,
   buildImageHyperlinkAnchor,
   createErrorPlaceholder,
 }: RenderImageFragmentOptions): HTMLElement => {

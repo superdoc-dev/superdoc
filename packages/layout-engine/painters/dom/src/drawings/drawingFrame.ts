@@ -1,4 +1,5 @@
 import type { DrawingBlock, SdtMetadata } from '@superdoc/contracts';
+import { applySdtDataset } from '../sdt/dataset.js';
 import { createDrawingPlaceholder } from './placeholder.js';
 
 export type RenderDrawingContentForPlacement = (
@@ -18,7 +19,6 @@ export type RenderDrawingFrameParams = {
   placement: DrawingFramePlacement;
   className: string;
   renderDrawingContent?: RenderDrawingContentForPlacement;
-  applySdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
 };
 
 export const renderDrawingFrame = ({
@@ -29,7 +29,6 @@ export const renderDrawingFrame = ({
   placement,
   className,
   renderDrawingContent,
-  applySdtDataset,
 }: RenderDrawingFrameParams): HTMLElement => {
   const wrapper = doc.createElement('div');
   wrapper.style.position = placement.mode === 'anchored-table-cell' ? 'absolute' : 'relative';
@@ -51,7 +50,7 @@ export const renderDrawingFrame = ({
       wrapper.style.flexShrink = placement.flexShrink;
     }
   }
-  applySdtDataset?.(wrapper, block.attrs?.sdt as SdtMetadata | undefined);
+  applySdtDataset(wrapper, block.attrs?.sdt as SdtMetadata | undefined);
 
   const inner = doc.createElement('div');
   inner.classList.add(className);

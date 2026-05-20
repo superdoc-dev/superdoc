@@ -6,7 +6,6 @@ import type {
   ImageFragment,
   ImageHyperlink,
   Line,
-  LineSegment,
   PageMargins,
   ParaFragment,
   ParagraphBlock,
@@ -50,13 +49,8 @@ import { tableFragmentKey } from './table/fragmentKey.js';
 import { getTableSnapshotFlags } from './table/snapshot.js';
 import { computeSdtBoundaries } from './sdt/boundaries.js';
 import { shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './sdt/container.js';
-import { applyContainerSdtDataset, applySdtDataset } from './sdt/dataset.js';
-import {
-  createInlineSdtWrapper,
-  expandSdtWrapperPmRange,
-  resolveRunSdtId,
-  syncInlineSdtWrapperTypography,
-} from './sdt/inline.js';
+import { applySdtDataset } from './sdt/dataset.js';
+import { createInlineSdtWrapper } from './sdt/inline.js';
 import {
   collectSdtSnapshotEntitiesFromDomRoot,
   type PaintSnapshotStructuredContentBlockEntity,
@@ -71,7 +65,6 @@ import { renderImageFragment as renderImageFragmentElement } from './images/imag
 import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './images/hyperlink.js';
 import { applyStyles } from './utils/apply-styles.js';
 import type { FragmentRenderContext } from './fragment-context.js';
-import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
 import { renderDrawingFragment as renderDrawingFragmentElement } from './drawings/renderDrawingFragment.js';
 import { isWordArtTextboxWatermarkBlock } from './textbox/wordArtWatermark.js';
@@ -2551,8 +2544,6 @@ export class DomPainter {
       applyFragmentFrame: (el, imageFragment, section) =>
         this.applyFragmentFrame(el, imageFragment, section, context.story),
       applyFragmentWrapperZIndex: this.applyFragmentWrapperZIndex.bind(this),
-      applySdtDataset,
-      applyContainerSdtDataset,
       buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
       createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
     });
@@ -2649,12 +2640,7 @@ export class DomPainter {
       buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(
         this,
       ) as RunRenderContext['buildImageHyperlinkAnchor'],
-      resolveTrackedChangesConfig,
-      applyTrackedChangeDecorations,
-      resolveRunSdtId,
       createInlineSdtWrapper: (sdt) => createInlineSdtWrapper(sdt, runContext),
-      syncInlineSdtWrapperTypography,
-      expandSdtWrapperPmRange,
     };
     return runContext;
   }

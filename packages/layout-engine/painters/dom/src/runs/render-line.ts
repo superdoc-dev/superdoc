@@ -18,7 +18,10 @@ import { appendFormattingParagraphMark } from './formatting-marks.js';
 import { textRunMergeSignature } from './hash.js';
 import { isBreakRun, isFieldAnnotationRun, isImageRun, isLineBreakRun, isMathRun, renderRun } from './render-run.js';
 import { renderInlineTabRun, renderPositionedTabRun } from './tab-run.js';
-import type { RenderLineParams } from './types.js';
+import { expandSdtWrapperPmRange, resolveRunSdtId, syncInlineSdtWrapperTypography } from '../sdt/inline.js';
+import { applyStyles } from '../utils/apply-styles.js';
+import { resolveTrackedChangesConfig } from './tracked-changes.js';
+import type { RenderLineParams, TrackedChangesRenderConfig } from './types.js';
 
 /**
  * Type guard narrowing to the shared word layout contract type.
@@ -27,14 +30,6 @@ import type { RenderLineParams } from './types.js';
 function isMinimalWordLayout(value: unknown): value is MinimalWordLayout {
   return isMinimalWordLayoutShared(value);
 }
-
-const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
-  Object.entries(styles).forEach(([key, value]) => {
-    if (value != null && value !== '' && key in el.style) {
-      (el.style as unknown as Record<string, string>)[key] = String(value);
-    }
-  });
-};
 
 const countSpaces = (text: string): number => {
   let count = 0;
@@ -184,7 +179,7 @@ export const renderLine = ({
   if (lineRange.pmEnd != null) {
     el.dataset.pmEnd = String(lineRange.pmEnd);
   }
-  const trackedConfig = runContext.resolveTrackedChangesConfig(block);
+  const trackedConfig = resolveTrackedChangesConfig(block);
 
   // Preserve PM positions for DOM caret mapping on empty lines.
   if (runsForLine.length === 0) {
@@ -379,7 +374,7 @@ type RunRenderBranchParams = {
   el: HTMLElement;
   styleId?: string;
   runContext: RenderLineParams['runContext'];
-  trackedConfig: ReturnType<RenderLineParams['runContext']['resolveTrackedChangesConfig']>;
+  trackedConfig: TrackedChangesRenderConfig;
 };
 
 const renderExplicitlyPositionedRuns = ({
@@ -478,7 +473,7 @@ const renderExplicitlyPositionedRuns = ({
    * when the run has inline structuredContent metadata.
    */
   const appendToLineGeo = (elem: HTMLElement, runForSdt: Run, elemLeftPx: number, elemWidthPx: number) => {
-    const resolved = runContext.resolveRunSdtId(runForSdt);
+    const resolved = resolveRunSdtId(runForSdt);
     const thisRunSdtId = resolved?.sdtId ?? null;
 
     if (thisRunSdtId !== geoSdtId) {
@@ -496,10 +491,10 @@ const renderExplicitlyPositionedRuns = ({
         geoSdtWrapper.style.top = '0px';
         geoSdtWrapper.style.height = `${line.lineHeight}px`;
       }
-      runContext.syncInlineSdtWrapperTypography(geoSdtWrapper, runForSdt);
+      syncInlineSdtWrapperTypography(geoSdtWrapper, runForSdt);
       elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
       geoSdtMaxRight = Math.max(geoSdtMaxRight, elemLeftPx + elemWidthPx);
-      runContext.expandSdtWrapperPmRange(geoSdtWrapper, (runForSdt as TextRun).pmStart, (runForSdt as TextRun).pmEnd);
+      expandSdtWrapperPmRange(geoSdtWrapper, (runForSdt as TextRun).pmStart, (runForSdt as TextRun).pmEnd);
       geoSdtWrapper.appendChild(elem);
     } else {
       el.appendChild(elem);
@@ -696,7 +691,7 @@ const renderInlineRuns = ({
 
   runsForLine.forEach((run) => {
     // Check if this run has inline structuredContent SDT
-    const resolved = runContext.resolveRunSdtId(run);
+    const resolved = resolveRunSdtId(run);
     const runSdtId = resolved?.sdtId ?? null;
 
     // If SDT context changed, close the current wrapper
@@ -719,12 +714,12 @@ const renderInlineRuns = ({
       if (resolved) {
         if (!currentInlineSdtWrapper) {
           currentInlineSdtWrapper = runContext.createInlineSdtWrapper(resolved.sdt);
-          runContext.syncInlineSdtWrapperTypography(currentInlineSdtWrapper, run);
+          syncInlineSdtWrapperTypography(currentInlineSdtWrapper, run);
           currentInlineSdtId = runSdtId;
         }
         // Typography is set when wrapper is created from the first run.
         // Follow-up (SD-2744): define a deterministic mixed-typography rule.
-        runContext.expandSdtWrapperPmRange(currentInlineSdtWrapper, run.pmStart, run.pmEnd);
+        expandSdtWrapperPmRange(currentInlineSdtWrapper, run.pmStart, run.pmEnd);
         currentInlineSdtWrapper.appendChild(elem);
       } else {
         el.appendChild(elem);

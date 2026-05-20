@@ -29,7 +29,6 @@ import {
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
-import { applySdtDataset } from '../sdt/dataset.js';
 import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
@@ -913,7 +912,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           placement: { mode: 'flowing' },
           contentMaxWidth: contentWidthPx,
           contentMaxHeight: contentHeightPx,
-          applySdtDataset,
           buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
         });
         content.appendChild(imageWrapper);
@@ -952,7 +950,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           position: 'relative',
           flexShrink: '0',
           renderDrawingContent: renderTableCellDrawingContent,
-          applySdtDataset,
         });
         content.appendChild(drawingWrapper);
         flowCursorY += blockMeasure.height;
@@ -1048,7 +1045,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           placement: { mode: 'anchored', left, top, zIndex },
           contentMaxWidth: contentWidthPx,
           contentMaxHeight: contentHeightPx,
-          applySdtDataset,
           buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
         });
         content.appendChild(imageWrapper);
@@ -1063,7 +1059,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           top,
           zIndex,
           renderDrawingContent: renderTableCellDrawingContent,
-          applySdtDataset,
         });
         content.appendChild(drawingWrapper);
       }

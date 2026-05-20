@@ -46,6 +46,14 @@ describe('table cell segment mapping', () => {
     src: 'data:image/png;base64,AAA',
   });
 
+  const makeAnchoredImageBlock = (): TableCell['blocks'][number] => ({
+    kind: 'image',
+    id: 'anchored-image',
+    src: 'data:image/png;base64,AAA',
+    anchor: { isAnchored: true },
+    wrap: { type: 'None' },
+  });
+
   it('counts paragraph and positive-height object segments', () => {
     const cell: TableCellMeasure = {
       blocks: [makeParagraph(2), makeImage(50), makeImage(0), makeParagraph(3)],
@@ -69,6 +77,24 @@ describe('table cell segment mapping', () => {
     const blocks = describeCellRenderBlocks(cell, block, { top: 0, bottom: 5 });
 
     expect(blocks).toHaveLength(1);
+    expect(blocks[0].isLastBlock).toBe(true);
+    expect(blocks[0].spacingAfter).toBe(0);
+    expect(computeFullCellContentHeight(cell, block, { top: 0, bottom: 5 })).toBe(27);
+  });
+
+  it('ignores anchored out-of-flow object blocks for final paragraph spacing', () => {
+    const cell: TableCellMeasure = {
+      blocks: [makeParagraph(1), makeImage(20)],
+      width: 200,
+      height: 20,
+    };
+    const block: TableCell = {
+      id: 'cell-anchored-tail',
+      blocks: [makeParagraphBlock(12), makeAnchoredImageBlock()],
+    };
+    const blocks = describeCellRenderBlocks(cell, block, { top: 0, bottom: 5 });
+
+    expect(blocks).toHaveLength(2);
     expect(blocks[0].isLastBlock).toBe(true);
     expect(blocks[0].spacingAfter).toBe(0);
     expect(computeFullCellContentHeight(cell, block, { top: 0, bottom: 5 })).toBe(27);

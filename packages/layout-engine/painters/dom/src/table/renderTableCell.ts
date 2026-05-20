@@ -466,13 +466,21 @@ const getMeasuredBlockHeight = (measure: Measure | undefined): number => {
   return 'height' in measure && typeof measure.height === 'number' ? measure.height : 0;
 };
 
-const getTableCellVisibleBlockIndexes = (measures: Measure[], blockCount: number): number[] => {
+const getTableCellVisibleBlockIndexes = (
+  measures: Measure[],
+  blocks: Array<ParagraphBlock | TableBlock | ImageBlock | DrawingBlock>,
+  blockCount: number,
+): number[] => {
   const indexes: number[] = [];
   for (let i = 0; i < blockCount; i += 1) {
     const measure = measures[i];
+    const block = blocks[i];
     if (!measure) continue;
     if (measure.kind === 'paragraph' || measure.kind === 'table') {
       indexes.push(i);
+      continue;
+    }
+    if (isAnchoredMediaBlock(block, measure)) {
       continue;
     }
     if ('height' in measure && typeof measure.height === 'number' && measure.height > 0) {
@@ -772,7 +780,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     // Non-paragraph blocks (images, drawings) occupy 1 segment each when height > 0,
     // including anchored blocks (matching getCellLines() in layout-table.ts).
     const rawBlockCount = Math.min(blockMeasures.length, cellBlocks.length);
-    const visibleBlockIndexes = getTableCellVisibleBlockIndexes(blockMeasures as Measure[], rawBlockCount);
+    const visibleBlockIndexes = getTableCellVisibleBlockIndexes(blockMeasures as Measure[], cellBlocks, rawBlockCount);
     const visibleBlockIndexByOriginalIndex = new Map<number, number>(
       visibleBlockIndexes.map((originalIndex, visibleIndex) => [originalIndex, visibleIndex]),
     );

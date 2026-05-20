@@ -106,7 +106,7 @@ export function describeCellRenderBlocks(
 
   const result: CellRenderBlock[] = [];
   let globalLine = 0;
-  const visibleBlockIndexes = getVisibleCellBlockIndexes(measuredBlocks);
+  const visibleBlockIndexes = getVisibleCellBlockIndexes(measuredBlocks, blockDataArray);
   const firstVisibleBlockIndex = visibleBlockIndexes[0] ?? -1;
   const lastVisibleBlockIndex = visibleBlockIndexes[visibleBlockIndexes.length - 1] ?? -1;
 
@@ -391,7 +391,7 @@ export function computeFullCellContentHeight(
   // row-height preflight from comparing measured row heights to renderer-only
   // slice heights.
   let height = 0;
-  const visibleBlockIndexes = getVisibleCellBlockIndexes(measuredBlocks);
+  const visibleBlockIndexes = getVisibleCellBlockIndexes(measuredBlocks, blockDataArray);
   const firstVisibleBlockIndex = visibleBlockIndexes[0] ?? -1;
   const lastVisibleBlockIndex = visibleBlockIndexes[visibleBlockIndexes.length - 1] ?? -1;
 
@@ -460,17 +460,22 @@ function resolveSpacingAfter(spacingAfter: number | undefined, isLastBlock: bool
 }
 
 type TableCellMeasureBlock = NonNullable<TableCellMeasure['blocks']>[number];
+type TableCellBlock = NonNullable<TableCell['blocks']>[number];
 
-function getVisibleCellBlockIndexes(measuredBlocks: TableCellMeasureBlock[]): number[] {
+function getVisibleCellBlockIndexes(
+  measuredBlocks: TableCellMeasureBlock[],
+  blockDataArray: TableCell['blocks'] | undefined,
+): number[] {
   const indexes: number[] = [];
   for (let i = 0; i < measuredBlocks.length; i += 1) {
-    if (isVisibleCellBlockMeasure(measuredBlocks[i])) indexes.push(i);
+    if (isVisibleCellBlockMeasure(measuredBlocks[i], blockDataArray?.[i])) indexes.push(i);
   }
   return indexes;
 }
 
-function isVisibleCellBlockMeasure(measure: TableCellMeasureBlock): boolean {
+function isVisibleCellBlockMeasure(measure: TableCellMeasureBlock, data: TableCellBlock | undefined): boolean {
   if (measure.kind === 'paragraph' || measure.kind === 'table') return true;
+  if (isAnchoredOutOfFlow(data)) return false;
   return 'height' in measure && typeof measure.height === 'number' && measure.height > 0;
 }
 

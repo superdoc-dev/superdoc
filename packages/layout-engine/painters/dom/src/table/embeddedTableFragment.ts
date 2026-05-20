@@ -136,7 +136,8 @@ export function mapEmbeddedTableRowSlices(params: {
     if (rowEnd <= localFrom || rowStart >= localTo) continue;
 
     let partialRow: PartialRowInfo | undefined;
-    if (rowSegmentCount > 1 && (rowStart < localFrom || rowEnd > localTo)) {
+    const isPartial = rowSegmentCount > 1 && (rowStart < localFrom || rowEnd > localTo);
+    if (isPartial) {
       partialRow = buildPartialRowInfo({
         blockRow: block.rows[r],
         row: measure.rows[r],
@@ -146,7 +147,12 @@ export function mapEmbeddedTableRowSlices(params: {
       });
     }
 
-    slices.push({ fromRow: r, toRow: r + 1, partialRow });
+    const previous = slices[slices.length - 1];
+    if (!isPartial && previous && !previous.partialRow && previous.toRow === r) {
+      previous.toRow = r + 1;
+    } else {
+      slices.push({ fromRow: r, toRow: r + 1, partialRow });
+    }
   }
 
   return slices;

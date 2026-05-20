@@ -144,6 +144,24 @@ describe('mapEmbeddedTableRowSlice', () => {
     ]);
   });
 
+  it('coalesces adjacent full rows into one fragment slice', () => {
+    const block = makeNestedTableBlock('table', 2);
+    const measure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        { height: 10, cells: [{ width: 40, height: 10, blocks: [] }] },
+        { height: 12, cells: [{ width: 40, height: 12, blocks: [] }] },
+      ],
+      columnWidths: [40],
+      totalWidth: 40,
+      totalHeight: 22,
+    };
+
+    expect(mapEmbeddedTableRowSlices({ block, measure, localFrom: 0, localTo: 2 })).toEqual([
+      { fromRow: 0, toRow: 2, partialRow: undefined },
+    ]);
+  });
+
   it('returns null for an out-of-range segment window', () => {
     const block = makeNestedTableBlock('table', 1);
     const measure: TableMeasure = {

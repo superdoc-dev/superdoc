@@ -4996,6 +4996,52 @@ describe('renderTableCell', () => {
       expect(tableEl?.parentElement?.style.height).toBe('24px');
     });
 
+    it('coalesces full embedded table row ranges into one table fragment', () => {
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-multi-row-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-multi-row-spacing-table',
+        rows: [
+          { id: 'nested-row-1', cells: [{ id: 'nested-cell-1', blocks: [nestedParagraph] }] },
+          { id: 'nested-row-2', cells: [{ id: 'nested-cell-2', blocks: [nestedParagraph] }] },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 10,
+            cells: [{ width: 80, height: 10, gridColumnStart: 0, colSpan: 1, rowSpan: 1, blocks: [paragraphMeasure] }],
+          },
+          {
+            height: 20,
+            cells: [{ width: 80, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 1, blocks: [paragraphMeasure] }],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 36,
+        cellSpacingPx: 2,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: { ...baseCellMeasure, blocks: [nestedMeasure], height: 36 },
+        cell: { ...baseCell, blocks: [nestedTable] },
+      });
+
+      const tableFragments = cellElement.querySelectorAll<HTMLElement>(
+        '[data-block-id="nested-multi-row-spacing-table"]',
+      );
+      expect(tableFragments).toHaveLength(1);
+      expect(tableFragments[0]?.style.height).toBe('36px');
+      expect(tableFragments[0]?.parentElement?.style.height).toBe('36px');
+    });
+
     it('includes separate-border outer table height for embedded table fragments', () => {
       const nestedParagraph: ParagraphBlock = {
         kind: 'paragraph',

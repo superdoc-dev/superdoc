@@ -165,13 +165,14 @@ default `auto-seeded from inventory` rationale.
 - `typecheck-matrix.mjs`: runs `tsc --noEmit` under N consumer tsconfigs.
   Catches *resolution* errors and *missing exports*. Doesn't see member-level
   `any`.
-- `snapshot-superdoc-root-exports.mjs --check`: locks the root export
-  inventory across the four `package.json#exports` sources independently
-  (types.import, types.require, import, require). Each source has its
-  own baseline — type sources currently 200 names, runtime sources 41 —
-  and drift on any of the four fails the gate. Cross-source mismatches
-  (typed-only, runtime-only, ESM vs CJS) are reported in the companion
-  `.md` as evidence, not blockers.
+- `snapshot.mjs --family root --check`: locks the root export inventory
+  across the four `package.json#exports` sources independently (types.import,
+  types.require, import, require). Each source has its own baseline (type
+  sources currently 200 names, runtime sources 41) and drift on any of the
+  four fails the gate. Cross-source mismatches (typed-only, runtime-only,
+  ESM vs CJS) are reported in the companion `.md` as evidence, not blockers.
+  CI calls the unified `snapshot.mjs --all --check` which runs this family
+  plus the `legacy` and `super-editor-package` families.
 - `verify-public-facade-emit.cjs`: verifies the curated `src/public/**`
   facade matches the emitted `.d.ts` (symbol set, ESM/CJS parity, leak
   grep, command-signature probe).

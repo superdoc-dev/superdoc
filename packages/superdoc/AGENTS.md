@@ -255,7 +255,7 @@ When changing the surface, every PR must also update:
 Three CI gates enforce consistency and will fail the build if any of these drift:
 
 - `verify-public-facade-emit.cjs` — symbol set, ESM/CJS parity, leak grep.
-- `snapshot-superdoc-root-exports.mjs --check` — 4-source no-growth lock.
+- `snapshot.mjs --family root --check` — 4-source no-growth lock for the root entry. CI calls `snapshot.mjs --all --check`, which also runs `legacy` and `super-editor-package`.
 - `check-root-classification-closure.mjs` — no supported/legacy export references an internal-candidate type (dependency-closure rule).
 
 For overrides on the closure gate (rare; only DOM globals / upstream / generic utility types), add an entry to `OVERRIDES` in `check-root-classification-closure.mjs` with a reason string ≥ 20 chars.

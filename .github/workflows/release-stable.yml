@@ -127,13 +127,10 @@ jobs:
       - name: Package shape gates
         run: node tests/consumer-typecheck/package-shape-gate.mjs
 
-      - name: Legacy public no-growth gates (SD-3176)
-        run: |
-          node tests/consumer-typecheck/snapshot-super-editor-package-exports.mjs --check
-          node tests/consumer-typecheck/snapshot-superdoc-legacy-exports.mjs --check
-
-      - name: Root no-growth + 4-source inventory (SD-3212 PR A0)
-        run: node tests/consumer-typecheck/snapshot-superdoc-root-exports.mjs --check
+      - name: Public surface no-growth snapshots (SD-3176, SD-3212)
+        # Unified entry point for all three snapshot families
+        # (super-editor-package, legacy, root). Same gate as PR CI.
+        run: node tests/consumer-typecheck/snapshot.mjs --all --check
 
       - name: Root classification closure gate (SD-3212 PR A1b)
         run: node tests/consumer-typecheck/check-root-classification-closure.mjs

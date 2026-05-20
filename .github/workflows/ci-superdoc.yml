@@ -154,22 +154,17 @@ jobs:
         # ESM, missing CDN files, unpublished `source` paths.
         run: node tests/consumer-typecheck/package-shape-gate.mjs
 
-      - name: Legacy public no-growth gates (SD-3176)
-        # No-growth snapshots for the legacy public compatibility surfaces.
-        # See tests/consumer-typecheck/snapshots/README.md for the policy.
-        # Runs after the matrix step so the packed-and-installed fixture
-        # is available for Snapshot B (resolved named exports).
-        run: |
-          node tests/consumer-typecheck/snapshot-super-editor-package-exports.mjs --check
-          node tests/consumer-typecheck/snapshot-superdoc-legacy-exports.mjs --check
-
-      - name: Root no-growth + 4-source inventory (SD-3212 PR A0)
-        # The superdoc root entry resolves through four package.json#exports
-        # sources (types.import, types.require, import, require). Each is
-        # snapshotted separately and drift-gated. Cross-source mismatches
-        # (typed-only / runtime-only / ESM vs CJS) are reported in the
-        # companion .md but are not blockers on their own.
-        run: node tests/consumer-typecheck/snapshot-superdoc-root-exports.mjs --check
+      - name: Public surface no-growth snapshots (SD-3176, SD-3212)
+        # Unified entry point for the three snapshot families:
+        #   - super-editor-package: @superdoc/super-editor package.json#exports keys
+        #   - legacy: resolved exports for superdoc/* legacy subpaths
+        #   - root: 4-source inventory (types.import, types.require, import,
+        #     require) for the superdoc root entry. Cross-source mismatches
+        #     are reported in the companion .md but are not blockers on their
+        #     own.
+        # Runs after the matrix step so the packed-and-installed fixture is
+        # available. See tests/consumer-typecheck/snapshots/README.md.
+        run: node tests/consumer-typecheck/snapshot.mjs --all --check
 
       - name: Root classification closure gate (SD-3212 PR A1b)
         # Asserts the dependency-closure rule from the A1 classification:

@@ -459,7 +459,9 @@ function resolveSpacingAfter(spacingAfter: number | undefined, isLastBlock: bool
   return typeof spacingAfter === 'number' && spacingAfter > 0 ? spacingAfter : 0;
 }
 
-function getVisibleCellBlockIndexes(measuredBlocks: TableCellMeasure['blocks']): number[] {
+type TableCellMeasureBlock = NonNullable<TableCellMeasure['blocks']>[number];
+
+function getVisibleCellBlockIndexes(measuredBlocks: TableCellMeasureBlock[]): number[] {
   const indexes: number[] = [];
   for (let i = 0; i < measuredBlocks.length; i += 1) {
     if (isVisibleCellBlockMeasure(measuredBlocks[i])) indexes.push(i);
@@ -467,7 +469,7 @@ function getVisibleCellBlockIndexes(measuredBlocks: TableCellMeasure['blocks']):
   return indexes;
 }
 
-function isVisibleCellBlockMeasure(measure: TableCellMeasure['blocks'][number]): boolean {
+function isVisibleCellBlockMeasure(measure: TableCellMeasureBlock): boolean {
   if (measure.kind === 'paragraph' || measure.kind === 'table') return true;
   return 'height' in measure && typeof measure.height === 'number' && measure.height > 0;
 }

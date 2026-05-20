@@ -174,10 +174,6 @@ type TableRowRenderDependencies = {
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  /** Ancestor SDT container key for suppressing duplicate container styling in cells */
-  ancestorContainerKey?: string | null;
-  /** Ancestor SDT metadata for suppressing duplicate id-less container styling in cells */
-  ancestorContainerSdt?: SdtMetadata | null;
   /** Ancestor SDT keys for suppressing duplicate container styling in cells */
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   /** Ancestor SDT metadata chain for suppressing duplicate id-less container styling in cells */
@@ -263,8 +259,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     captureLineSnapshot,
     renderDrawingContent,
     applySdtDataset,
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
@@ -439,8 +433,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       renderDrawingContent,
       context,
       applySdtDataset,
-      ancestorContainerKey,
-      ancestorContainerSdt,
       ancestorContainerKeys,
       ancestorContainerSdts,
       onSdtContainerChrome,

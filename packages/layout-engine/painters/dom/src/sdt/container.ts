@@ -24,8 +24,6 @@ export type SdtBoundaryOptions = {
 };
 
 export type SdtAncestorOptions = {
-  ancestorContainerKey?: string | null;
-  ancestorContainerSdt?: SdtMetadata | null;
   ancestorContainerKeys?: readonly (string | null | undefined)[];
   ancestorContainerSdts?: readonly (SdtMetadata | null | undefined)[];
 };
@@ -82,12 +80,12 @@ export function shouldRenderSdtContainerChrome(
   if (!metadata) return false;
 
   const containerKey = getSdtContainerKey(sdt, containerSdt);
-  const ancestorKeys = [options?.ancestorContainerKey, ...(options?.ancestorContainerKeys ?? [])];
+  const ancestorKeys = options?.ancestorContainerKeys ?? [];
   if (containerKey && ancestorKeys.includes(containerKey)) {
     return false;
   }
 
-  const ancestorSdts = [options?.ancestorContainerSdt, ...(options?.ancestorContainerSdts ?? [])];
+  const ancestorSdts = options?.ancestorContainerSdts ?? [];
   if (ancestorSdts.includes(metadata)) {
     return false;
   }

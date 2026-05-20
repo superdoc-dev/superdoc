@@ -349,7 +349,7 @@ describe('renderTableFragment', () => {
       measure,
       cellSpacingPx: 0,
       effectiveColumnWidths: measure.columnWidths,
-      ancestorContainerKey: 'structuredContent:outer-sdt',
+      ancestorContainerKeys: ['structuredContent:outer-sdt'],
       renderLine: () => doc.createElement('div'),
       applyFragmentFrame: () => {},
       applySdtDataset: () => {},

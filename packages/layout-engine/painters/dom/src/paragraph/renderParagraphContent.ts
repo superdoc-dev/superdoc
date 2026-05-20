@@ -83,8 +83,6 @@ export type RenderParagraphContentParams = {
   betweenInfo?: BetweenBorderInfo;
   sdtBoundary?: SdtBoundaryOptions;
   spacingPolicy?: ParagraphSpacingPolicy;
-  ancestorContainerKey?: string | null;
-  ancestorContainerSdt?: SdtMetadata | null;
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   onSdtContainerChrome?: () => void;
@@ -124,8 +122,6 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
     betweenInfo,
     sdtBoundary,
     spacingPolicy,
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
@@ -149,8 +145,6 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
   applyContainerSdtDataset?.(frameEl, block.attrs?.containerSdt);
 
   const applySdtChrome = shouldRenderSdtContainerChrome(block.attrs?.sdt, block.attrs?.containerSdt, {
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
   });

@@ -4799,7 +4799,7 @@ describe('renderTableCell', () => {
         ...createBaseDeps(),
         cellMeasure,
         cell,
-        ancestorContainerKey: 'structuredContent:table-sdt',
+        ancestorContainerKeys: ['structuredContent:table-sdt'],
       });
 
       expect(cellElement.style.overflow).toBe('hidden');
@@ -4852,7 +4852,7 @@ describe('renderTableCell', () => {
           blocks: [para],
           attrs: {},
         },
-        ancestorContainerSdt: sharedSdt,
+        ancestorContainerSdts: [sharedSdt],
       });
 
       expect(cellElement.style.overflow).toBe('hidden');
@@ -5346,8 +5346,8 @@ describe('renderTableCell', () => {
           blocks: [nestedTable],
           attrs: {},
         },
-        ancestorContainerKey: 'structuredContent:ancestor-table-sdt',
-        ancestorContainerSdt: sharedSdt,
+        ancestorContainerKeys: ['structuredContent:ancestor-table-sdt'],
+        ancestorContainerSdts: [sharedSdt],
       });
 
       const tableElement = cellElement.querySelector('[data-block-id="nested-ancestor-sdt-table"]') as HTMLElement;
@@ -5439,8 +5439,8 @@ describe('renderTableCell', () => {
           blocks: [nestedTable],
           attrs: {},
         },
-        ancestorContainerKey: 'structuredContent:outer-table-sdt',
-        ancestorContainerSdt: sharedSdt,
+        ancestorContainerKeys: ['structuredContent:outer-table-sdt'],
+        ancestorContainerSdts: [sharedSdt],
       });
 
       expect(cellElement.querySelector('.superdoc-structured-content-block')).toBeFalsy();
@@ -5537,8 +5537,8 @@ describe('renderTableCell', () => {
           blocks: [nestedTable],
           attrs: {},
         },
-        ancestorContainerKey: 'structuredContent:outer-table-sdt',
-        ancestorContainerSdt: ancestorSdt,
+        ancestorContainerKeys: ['structuredContent:outer-table-sdt'],
+        ancestorContainerSdts: [ancestorSdt],
       });
 
       expect(cellElement.style.overflow).toBe('visible');
@@ -5629,8 +5629,8 @@ describe('renderTableCell', () => {
           blocks: [nestedTable],
           attrs: {},
         },
-        ancestorContainerKey: 'structuredContent:outer-table-sdt',
-        ancestorContainerSdt: ancestorSdt,
+        ancestorContainerKeys: ['structuredContent:outer-table-sdt'],
+        ancestorContainerSdts: [ancestorSdt],
       });
 
       const labels = cellElement.querySelectorAll<HTMLElement>('.superdoc-structured-content__label');

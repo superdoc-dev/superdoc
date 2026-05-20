@@ -48,10 +48,6 @@ export type TableRenderDependencies = {
   effectiveColumnWidths: number[];
   /** Optional SDT boundary overrides for container styling */
   sdtBoundary?: SdtBoundaryOptions;
-  /** Ancestor SDT key used to suppress duplicate container chrome in nested tables */
-  ancestorContainerKey?: string | null;
-  /** Ancestor SDT metadata used to suppress duplicate id-less container chrome in nested tables */
-  ancestorContainerSdt?: SdtMetadata | null;
   /** Ancestor SDT keys used to suppress duplicate container chrome in nested tables */
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   /** Ancestor SDT metadata chain used to suppress duplicate id-less container chrome in nested tables */
@@ -160,8 +156,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     effectiveColumnWidths,
     context,
     sdtBoundary,
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
@@ -226,8 +220,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   // Apply SDT container styling (document sections, structured content blocks)
   if (
     applySdtContainerChrome(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary, {
-      ancestorContainerKey,
-      ancestorContainerSdt,
       ancestorContainerKeys,
       ancestorContainerSdts,
     })
@@ -238,14 +230,11 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const tableContainerKey = getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
   const nextAncestorContainerKeys = [
     ...(ancestorContainerKeys ?? []),
-    ancestorContainerKey,
     hasExplicitSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt) ? tableContainerKey : null,
   ].filter((key): key is string => Boolean(key));
-  const nextAncestorContainerSdts = [...(ancestorContainerSdts ?? []), ancestorContainerSdt, tableContainerSdt].filter(
+  const nextAncestorContainerSdts = [...(ancestorContainerSdts ?? []), tableContainerSdt].filter(
     (sdt): sdt is SdtMetadata => Boolean(sdt),
   );
-  const nextAncestorContainerKey = nextAncestorContainerKeys[nextAncestorContainerKeys.length - 1] ?? null;
-  const nextAncestorContainerSdt = nextAncestorContainerSdts[nextAncestorContainerSdts.length - 1] ?? null;
 
   // Add table-specific class for resize overlay targeting and click mapping
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
@@ -430,8 +419,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         captureLineSnapshot,
         renderDrawingContent,
         applySdtDataset,
-        ancestorContainerKey: nextAncestorContainerKey,
-        ancestorContainerSdt: nextAncestorContainerSdt,
         ancestorContainerKeys: nextAncestorContainerKeys,
         ancestorContainerSdts: nextAncestorContainerSdts,
         onSdtContainerChrome,
@@ -599,8 +586,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       captureLineSnapshot,
       renderDrawingContent,
       applySdtDataset,
-      ancestorContainerKey: nextAncestorContainerKey,
-      ancestorContainerSdt: nextAncestorContainerSdt,
       ancestorContainerKeys: nextAncestorContainerKeys,
       ancestorContainerSdts: nextAncestorContainerSdts,
       onSdtContainerChrome,

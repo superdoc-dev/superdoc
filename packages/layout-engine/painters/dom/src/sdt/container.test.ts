@@ -117,14 +117,14 @@ describe('SDT container chrome', () => {
 
     expect(
       shouldRenderSdtContainerChrome(childSdt, null, {
-        ancestorContainerKey: getSdtContainerKey(ancestorSdt),
+        ancestorContainerKeys: [getSdtContainerKey(ancestorSdt)],
       }),
     ).toBe(false);
 
     const doc = document.implementation.createHTMLDocument('sdt-container');
     const el = doc.createElement('div');
     applySdtContainerChrome(doc, el, childSdt, null, undefined, {
-      ancestorContainerKey: getSdtContainerKey(ancestorSdt),
+      ancestorContainerKeys: [getSdtContainerKey(ancestorSdt)],
     });
     expect(el.classList.contains('superdoc-structured-content-block')).toBe(false);
   });
@@ -143,7 +143,7 @@ describe('SDT container chrome', () => {
 
     expect(
       shouldRenderSdtContainerChrome(childSdt, ancestorSdt, {
-        ancestorContainerSdt: ancestorSdt,
+        ancestorContainerSdts: [ancestorSdt],
       }),
     ).toBe(true);
   });
@@ -157,7 +157,7 @@ describe('SDT container chrome', () => {
 
     expect(
       shouldRenderSdtContainerChrome(null, sharedSdt, {
-        ancestorContainerSdt: sharedSdt,
+        ancestorContainerSdts: [sharedSdt],
       }),
     ).toBe(false);
   });

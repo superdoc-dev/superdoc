@@ -100,10 +100,6 @@ type EmbeddedTableRenderParams = {
   continuesOnNext?: boolean;
   /** Optional SDT boundary overrides for container styling */
   sdtBoundary?: SdtBoundaryOptions;
-  /** Ancestor SDT key used to suppress duplicate container chrome in nested tables */
-  ancestorContainerKey?: string | null;
-  /** Ancestor SDT metadata used to suppress duplicate id-less container chrome in nested tables */
-  ancestorContainerSdt?: SdtMetadata | null;
   /** Ancestor SDT keys used to suppress duplicate container chrome in nested tables */
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   /** Ancestor SDT metadata chain used to suppress duplicate id-less container chrome in nested tables */
@@ -159,8 +155,6 @@ const renderEmbeddedTable = (
     continuesFromPrev,
     continuesOnNext,
     sdtBoundary,
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
@@ -200,8 +194,6 @@ const renderEmbeddedTable = (
     applySdtDataset,
     applyStyles,
     sdtBoundary,
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome: () => {
@@ -234,8 +226,6 @@ function renderPartialEmbeddedTable(params: {
   renderDrawingContent?: EmbeddedTableRenderParams['renderDrawingContent'];
   applySdtDataset: EmbeddedTableRenderParams['applySdtDataset'];
   sdtBoundary?: SdtBoundaryOptions;
-  ancestorContainerKey?: string | null;
-  ancestorContainerSdt?: SdtMetadata | null;
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   onSdtContainerChrome?: () => void;
@@ -254,8 +244,6 @@ function renderPartialEmbeddedTable(params: {
     renderDrawingContent,
     applySdtDataset,
     sdtBoundary,
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
@@ -349,8 +337,6 @@ function renderPartialEmbeddedTable(params: {
                   : effectiveSdtBoundary.showLabel && index === 0,
             }
           : effectiveSdtBoundary,
-      ancestorContainerKey,
-      ancestorContainerSdt,
       ancestorContainerKeys,
       ancestorContainerSdts,
       onSdtContainerChrome,
@@ -420,10 +406,6 @@ type TableCellRenderDependencies = {
   context: FragmentRenderContext;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  /** Ancestor SDT container key for suppressing duplicate container styling in cells */
-  ancestorContainerKey?: string | null;
-  /** Ancestor SDT metadata for suppressing duplicate id-less container styling in cells */
-  ancestorContainerSdt?: SdtMetadata | null;
   /** Ancestor SDT keys for suppressing duplicate container styling in cells */
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   /** Ancestor SDT metadata chain for suppressing duplicate id-less container styling in cells */
@@ -469,8 +451,6 @@ type TableCellParagraphRenderParams = {
   context: FragmentRenderContext;
   renderLine: TableCellRenderDependencies['renderLine'];
   applySdtDataset: TableCellRenderDependencies['applySdtDataset'];
-  ancestorContainerKey?: string | null;
-  ancestorContainerSdt?: SdtMetadata | null;
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   onSdtContainerChrome?: () => void;
@@ -567,8 +547,6 @@ const renderTableCellParagraphBlock = ({
   context,
   renderLine,
   applySdtDataset,
-  ancestorContainerKey,
-  ancestorContainerSdt,
   ancestorContainerKeys,
   ancestorContainerSdts,
   onSdtContainerChrome,
@@ -612,8 +590,6 @@ const renderTableCellParagraphBlock = ({
     sdtBoundary: sliceSdtBoundaryForParagraph(sdtBoundary, localStartLine, localEndLine, blockLineCount),
     continuesFromPrev: localStartLine > 0,
     continuesOnNext: localEndLine < blockLineCount,
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome: () => {
@@ -704,8 +680,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     renderDrawingContent,
     context,
     applySdtDataset,
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
@@ -910,8 +884,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           renderDrawingContent,
           applySdtDataset,
           sdtBoundary: sdtBoundaries[i],
-          ancestorContainerKey,
-          ancestorContainerSdt,
           ancestorContainerKeys,
           ancestorContainerSdts,
           onSdtContainerChrome,
@@ -1023,8 +995,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           context,
           renderLine,
           applySdtDataset,
-          ancestorContainerKey,
-          ancestorContainerSdt,
           ancestorContainerKeys,
           ancestorContainerSdts,
           onSdtContainerChrome,

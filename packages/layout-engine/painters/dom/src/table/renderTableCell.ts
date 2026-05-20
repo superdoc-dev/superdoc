@@ -110,6 +110,10 @@ type EmbeddedTableRenderParams = {
   toRow?: number;
   /** Partial row info for mid-row splits within the embedded table */
   partialRow?: PartialRowInfo;
+  /** Whether this embedded fragment continues a prior embedded table slice */
+  continuesFromPrev?: boolean;
+  /** Whether this embedded fragment continues in a later embedded table slice */
+  continuesOnNext?: boolean;
   /** Optional SDT boundary overrides for container styling */
   sdtBoundary?: SdtBoundaryOptions;
   /** Ancestor SDT key used to suppress duplicate container chrome in nested tables */
@@ -168,6 +172,8 @@ const renderEmbeddedTable = (
     fromRow: paramFromRow,
     toRow: paramToRow,
     partialRow: paramPartialRow,
+    continuesFromPrev,
+    continuesOnNext,
     sdtBoundary,
     ancestorContainerKey,
     ancestorContainerSdt,
@@ -183,6 +189,8 @@ const renderEmbeddedTable = (
     fromRow: paramFromRow,
     toRow: paramToRow,
     partialRow: paramPartialRow,
+    continuesFromPrev,
+    continuesOnNext,
   });
 
   const applyFragmentFrame = (el: HTMLElement, frag: Fragment): void => {
@@ -289,7 +297,7 @@ function renderPartialEmbeddedTable(params: {
   }
 
   const visibleHeight = rowSlices.reduce(
-    (height, rowSlice) =>
+    (height, rowSlice, index) =>
       height +
       computeRenderedTableFragmentHeight({
         block,
@@ -297,6 +305,8 @@ function renderPartialEmbeddedTable(params: {
         fromRow: rowSlice.fromRow,
         toRow: rowSlice.toRow,
         partialRow: rowSlice.partialRow,
+        continuesFromPrev: localFrom > 0 || index > 0,
+        continuesOnNext: localTo < totalTableSegments || index < rowSlices.length - 1,
       }),
     0,
   );
@@ -325,6 +335,8 @@ function renderPartialEmbeddedTable(params: {
       fromRow: rowSlice.fromRow,
       toRow: rowSlice.toRow,
       partialRow: rowSlice.partialRow,
+      continuesFromPrev: localFrom > 0 || index > 0,
+      continuesOnNext: localTo < totalTableSegments || index < rowSlices.length - 1,
     });
     const tableResult = renderEmbeddedTable({
       doc,
@@ -339,6 +351,8 @@ function renderPartialEmbeddedTable(params: {
       fromRow: rowSlice.fromRow,
       toRow: rowSlice.toRow,
       partialRow: rowSlice.partialRow,
+      continuesFromPrev: localFrom > 0 || index > 0,
+      continuesOnNext: localTo < totalTableSegments || index < rowSlices.length - 1,
       sdtBoundary:
         effectiveSdtBoundary && rowSlices.length > 1
           ? {

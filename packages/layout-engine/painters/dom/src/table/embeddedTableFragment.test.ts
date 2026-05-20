@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { TableBlock, TableMeasure } from '@superdoc/contracts';
-import { mapEmbeddedTableRowSlice, mapEmbeddedTableRowSlices } from './embeddedTableFragment.js';
+import {
+  createEmbeddedTableFragment,
+  mapEmbeddedTableRowSlice,
+  mapEmbeddedTableRowSlices,
+} from './embeddedTableFragment.js';
 
 const makeNestedTableMeasure = (rowHeights: number[]): TableMeasure => ({
   kind: 'table',
@@ -160,6 +164,37 @@ describe('mapEmbeddedTableRowSlice', () => {
     expect(mapEmbeddedTableRowSlices({ block, measure, localFrom: 0, localTo: 2 })).toEqual([
       { fromRow: 0, toRow: 2, partialRow: undefined },
     ]);
+  });
+
+  it('marks and sizes continuation slices without duplicated outer vertical chrome', () => {
+    const block: TableBlock = {
+      ...makeNestedTableBlock('table', 2),
+      attrs: { borderCollapse: 'separate' },
+    };
+    const measure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        { height: 10, cells: [{ width: 40, height: 10, blocks: [] }] },
+        { height: 12, cells: [{ width: 40, height: 12, blocks: [] }] },
+      ],
+      columnWidths: [40],
+      totalWidth: 40,
+      totalHeight: 32,
+      cellSpacingPx: 2,
+      tableBorderWidths: { top: 3, right: 0, bottom: 5, left: 0 },
+    };
+
+    const { fragment } = createEmbeddedTableFragment({
+      block,
+      measure,
+      availableWidth: 40,
+      fromRow: 0,
+      toRow: 1,
+      continuesOnNext: true,
+    });
+
+    expect(fragment.continuesOnNext).toBe(true);
+    expect(fragment.height).toBe(15);
   });
 
   it('returns null for an out-of-range segment window', () => {

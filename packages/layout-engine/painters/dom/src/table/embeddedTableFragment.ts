@@ -30,12 +30,23 @@ export function computeRenderedTableFragmentHeight(params: {
   toRow: number;
   partialRow?: PartialRowInfo;
   repeatHeaderCount?: number;
+  continuesFromPrev?: boolean;
+  continuesOnNext?: boolean;
 }): number {
-  const { block, measure, fromRow, toRow, partialRow, repeatHeaderCount = 0 } = params;
+  const {
+    block,
+    measure,
+    fromRow,
+    toRow,
+    partialRow,
+    repeatHeaderCount = 0,
+    continuesFromPrev,
+    continuesOnNext,
+  } = params;
   const cellSpacingPx = measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing);
   const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
 
-  return computeTableFragmentHeight({
+  let height = computeTableFragmentHeight({
     measure,
     fromRow,
     toRow,
@@ -44,6 +55,18 @@ export function computeRenderedTableFragmentHeight(params: {
     partialRow,
     cellSpacingPx,
   });
+
+  if (cellSpacingPx > 0) {
+    if (continuesFromPrev) height -= cellSpacingPx;
+    if (continuesOnNext) height -= cellSpacingPx;
+  }
+
+  if (borderCollapse === 'separate' && measure.tableBorderWidths) {
+    if (continuesFromPrev) height -= measure.tableBorderWidths.top;
+    if (continuesOnNext) height -= measure.tableBorderWidths.bottom;
+  }
+
+  return Math.max(0, height);
 }
 
 export function createEmbeddedTableFragment(params: {
@@ -53,11 +76,30 @@ export function createEmbeddedTableFragment(params: {
   fromRow?: number;
   toRow?: number;
   partialRow?: PartialRowInfo;
+  continuesFromPrev?: boolean;
+  continuesOnNext?: boolean;
 }) {
-  const { block, measure, availableWidth, fromRow = 0, toRow = block.rows.length, partialRow } = params;
+  const {
+    block,
+    measure,
+    availableWidth,
+    fromRow = 0,
+    toRow = block.rows.length,
+    partialRow,
+    continuesFromPrev,
+    continuesOnNext,
+  } = params;
   const columnWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, availableWidth);
   const fragmentWidth = columnWidths ? availableWidth : measure.totalWidth;
-  const height = computeRenderedTableFragmentHeight({ block, measure, fromRow, toRow, partialRow });
+  const height = computeRenderedTableFragmentHeight({
+    block,
+    measure,
+    fromRow,
+    toRow,
+    partialRow,
+    continuesFromPrev,
+    continuesOnNext,
+  });
 
   return {
     fragment: {
@@ -71,6 +113,8 @@ export function createEmbeddedTableFragment(params: {
       height,
       columnWidths,
       partialRow,
+      ...(continuesFromPrev ? { continuesFromPrev } : {}),
+      ...(continuesOnNext ? { continuesOnNext } : {}),
     },
     effectiveColumnWidths: columnWidths ?? measure.columnWidths,
     cellSpacingPx: measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing),

@@ -401,6 +401,41 @@ describe('renderTableFragment', () => {
       expect(element.style.borderLeftWidth).toBe('2px');
     });
 
+    it('suppresses vertical separate outer borders on continuation edges', () => {
+      const block: TableBlock = {
+        ...createTestTableBlock(),
+        attrs: {
+          borderCollapse: 'separate',
+          borders: {
+            top: { style: 'single', width: 2, color: '#111111' },
+            right: { style: 'single', width: 2, color: '#222222' },
+            bottom: { style: 'single', width: 2, color: '#333333' },
+            left: { style: 'single', width: 2, color: '#444444' },
+          },
+        },
+      };
+      const measure = createTestTableMeasure();
+
+      const element = renderTableFragment({
+        doc,
+        fragment: { ...createTestTableFragment(), continuesFromPrev: true, continuesOnNext: true },
+        context,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
+        renderLine: () => doc.createElement('div'),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+        applyStyles: () => {},
+      });
+
+      expect(element.style.borderTopWidth).toBe('');
+      expect(element.style.borderRightWidth).toBe('2px');
+      expect(element.style.borderBottomWidth).toBe('');
+      expect(element.style.borderLeftWidth).toBe('2px');
+    });
+
     it('renders the outer right border for a merged header cell in collapsed mode', () => {
       const block: TableBlock = {
         kind: 'table',

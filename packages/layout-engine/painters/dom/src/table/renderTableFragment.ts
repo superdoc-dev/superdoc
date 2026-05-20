@@ -251,6 +251,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
 
   // Cell spacing pre-computed by the resolver; no cross-stage import needed.
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
+  const drawsSeparateTop = borderCollapse !== 'separate' || fragment.continuesFromPrev !== true;
+  const drawsSeparateBottom = borderCollapse !== 'separate' || fragment.continuesOnNext !== true;
 
   // Add metadata for interactive table resizing
   if (fragment.metadata?.columnBoundaries) {
@@ -293,7 +296,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     // For each rendered row, determine which grid columns have cell boundaries
     // A boundary exists at column X if there's a cell that ENDS at column X (gridColumnStart + colSpan = X)
     // rowY includes outer spacing (before first row, between rows, after last) so segment positions match rendered cells
-    let rowY = cellSpacingPx;
+    let rowY = drawsSeparateTop ? cellSpacingPx : 0;
     for (let i = 0; i < renderedRows.length; i++) {
       const { rowIndex, height } = renderedRows[i];
       const rowMeasure = measure.rows[rowIndex];
@@ -338,7 +341,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         }
       }
 
-      rowY += height + cellSpacingPx;
+      rowY += height + (i === renderedRows.length - 1 && !drawsSeparateBottom ? 0 : cellSpacingPx);
     }
 
     const metadata: Record<string, unknown> = {
@@ -380,11 +383,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     container.setAttribute('data-sd-block-id', block.id);
   }
 
-  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
   if (borderCollapse === 'separate' && tableBorders) {
-    applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
+    if (drawsSeparateTop) applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
     applyBorder(container, 'Right', borderValueToSpec(isRtl ? tableBorders.left : tableBorders.right));
-    applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));
+    if (drawsSeparateBottom) applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));
     applyBorder(container, 'Left', borderValueToSpec(isRtl ? tableBorders.right : tableBorders.left));
   }
 
@@ -401,7 +403,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   });
 
   // First row starts after space before table content (space between table border and first row)
-  let y = cellSpacingPx;
+  let y = drawsSeparateTop ? cellSpacingPx : 0;
 
   // If this is a continuation fragment with repeated headers, render headers first.
   // NOTE: This header-then-body iteration must stay in sync with the metadata
@@ -439,7 +441,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         cellSpacingPx,
       });
       // Add row height + spacing after every row (including last) for outer spacing after last row
-      y += rowMeasure.height + cellSpacingPx;
+      const hasBodyRows = fragment.fromRow < fragment.toRow;
+      y +=
+        rowMeasure.height +
+        (r === fragment.repeatHeaderCount - 1 && !hasBodyRows && !drawsSeparateBottom ? 0 : cellSpacingPx);
     }
   }
 
@@ -608,7 +613,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       cellSpacingPx,
     });
     // Add row height + spacing after every row (including last) for outer spacing after last row
-    y += actualRowHeight + cellSpacingPx;
+    y += actualRowHeight + (isLastRenderedBodyRow && !drawsSeparateBottom ? 0 : cellSpacingPx);
   }
 
   return container;

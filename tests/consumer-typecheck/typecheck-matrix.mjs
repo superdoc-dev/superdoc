@@ -518,6 +518,29 @@ const scenarios = [
     files: ['src/internal-fields-stripped.ts'],
     mustPass: true,
   },
+  // SD-3213f: SuperDoc's internal Pinia stores must not appear on the
+  // public TypeScript surface. The fixture pins both the negative
+  // assertions (stores are TS errors for consumers) and the positive
+  // host-factory assertions (createHeadlessToolbar / createSuperDocUI
+  // still accept a real SuperDoc instance after the hide).
+  {
+    name: 'bundler / superdoc stores private (SD-3213f)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/superdoc-stores-private.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / superdoc stores private (SD-3213f)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/superdoc-stores-private.ts'],
+    mustPass: true,
+  },
   // SD-2867 phase B: SuperDoc.canPerformPermission forwards `comment` and
   // `trackedChange` to isAllowed() unchanged, so the public contract must
   // accept the wide payloads the editor's permission helper produces

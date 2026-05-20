@@ -136,14 +136,11 @@ jobs:
           cd tests/consumer-typecheck
           node typecheck-matrix.mjs
 
-      - name: Deep public-type audit (report-only)
-        # Inventory pass: same as PR CI. Not strict yet. The facade landed
-        # in SD-3212 PR C, but the audit still walks broad legacy surfaces
-        # like `./super-editor`. Tracked under SD-3213 follow-up: scope to
-        # curated facade entries, then swap in `--strict`.
-        run: |
-          cd tests/consumer-typecheck
-          node deep-type-audit.mjs
+      - name: Deep public-type audit (supported-root strict, SD-3213e)
+        # Same gate as PR CI. One invocation prints the broad inventory
+        # AND runs the supported-root strict gate against the committed
+        # allowlist. Catches releases that bypass PR CI.
+        run: node tests/consumer-typecheck/deep-type-audit.mjs --strict-supported-root
 
       - name: Package shape gates
         # External package-shape linters (publint + attw) running against

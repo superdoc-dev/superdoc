@@ -102,25 +102,136 @@ entries (SD-3213 follow-up). Each entry has a stable key
 (`kind|file|symbolPath|snippet`) so reformatting and line shifts won't
 churn it.
 
+## Attribution (SD-3213d)
+
+Each report now prints three breakdowns alongside the historical tier
+and top-files tables, and writes a machine-readable JSON to
+`tmp/deep-type-audit-attribution.json` (gitignored). The point is to
+distinguish supported-root leaks from legacy compat reach from raw
+`./super-editor` noise, so PR 3 can scope a strict gate to the curated
+facade subset without guessing.
+
+The tables in a typical run look like:
+
+```
+[audit] By export entry (reachedFrom; one finding can count under several):
+   1237  .
+    728  ./super-editor
+     79  ./ui/react
+     70  ./headless-toolbar
+     56  ./types
+     ...
+
+[audit] By root bucket (only for findings reached from root '.'):
+    950  supported-root
+    190  legacy-root
+     97  internal-candidate
+
+[audit] Curated facade entries vs raw ./super-editor reach:
+   1089  reached only from curated facade entries
+    324  reached only from ./super-editor
+    404  reached from both
+```
+
+How to read these:
+
+- **By entry** sums to more than the distinct-finding total because one
+  finding can be reachable from several public entries. The same row in
+  the deduped findings table contributes a count to each entry in its
+  `reachedFrom` set.
+- **By root bucket** counts only findings whose `reachedFrom` includes
+  the root entry `.`, attributed via the top-level symbol in
+  `symbolPath` (e.g. `SuperDoc.provider.on(event)` → `SuperDoc` →
+  bucket from `snapshots/superdoc-root-classification.json`). If the
+  top-level parser fails or the symbol isn't in the classification, the
+  finding is counted as `unknown-root-export` so the parse failure rate
+  is visible.
+- **Curated facade vs raw** partitions every distinct finding into one
+  of three buckets (sums to the distinct total). "Curated facade
+  entries" means every public entry except `./super-editor` — i.e. the
+  set of entries routing through `src/public/**`. PR 3's strict scope
+  will live somewhere in this partition.
+
+The JSON artifact mirrors the text breakdown and also lists every
+finding with its `reachedFrom` and `rootBuckets` sets, so downstream
+tooling (e.g. PR 3's strict-scope selector) does not need to re-run the
+walker.
+
+## Supported-root strict gate (SD-3213e)
+
+The first real public-contract no-new-any gate. Filters findings to the
+subset whose `rootBuckets` includes `supported-root` (i.e. reached from
+root entry `.` via an export that the SD-3212 classification labels as
+supported public API) and compares them against a committed allowlist.
+
+- Allowlist file: `tests/consumer-typecheck/deep-type-audit.supported-root-allowlist.json`.
+- **The allowlist is current known debt, not accepted API quality.**
+  Drain PRs reduce it; the gate fails on stale entries to force the
+  reduction to be recorded.
+- Excludes `legacy-root`, `internal-candidate`, and raw `./super-editor`
+  reach. Each has its own drain story (legacy = compat, internal-candidate
+  = should be hidden, raw = redesign) and would obscure the
+  supported-root signal if mixed in.
+- CI invokes one command (`--strict-supported-root`) that prints the
+  broad inventory AND runs the gate. No second workflow step.
+- Top offender files + symbols are printed on every run so drain PRs
+  know where to start.
+
+```bash
+# CI invocation: broad report + supported-root strict gate, one process.
+node tests/consumer-typecheck/deep-type-audit.mjs --strict-supported-root
+
+# Seed or regenerate the supported-root allowlist (after a drain or
+# when seeding for the first time).
+node tests/consumer-typecheck/deep-type-audit.mjs --pack --write --strict-supported-root
+```
+
+## Gate map (which gate owns what)
+
+Multiple gates run against the public surface; each owns a distinct
+failure class. Before adding a new gate, check whether one of these
+already covers the concern.
+
+| Gate | Owns |
+|---|---|
+| `typecheck-matrix.mjs` | Consumer `tsc --noEmit` across module modes (Bundler / Node16 / NodeNext). Catches **resolution errors and missing exports**. |
+| `deep-type-audit.mjs` | Recursive `any` detection on every type reachable from public exports. Owns the **supported-root strict gate** (`--strict-supported-root`). |
+| `package-shape-gate.mjs` | `publint` + `attw --pack`. Catches **manifest issues**: condition ordering, masquerading ESM, missing CDN files, unpublished `source` paths. |
+| `snapshot.mjs` | Drift detection on three export inventories (super-editor package keys, legacy subpath resolved exports, root 4-source inventory). Catches **silent surface growth**. |
+| `check-root-classification-closure.mjs` | Dependency-closure rule: no `supported-root` or `legacy-root` export references an `internal-candidate` type in its declared public type. |
+| `verify-public-facade-emit.cjs` | Curated `src/public/**` facade ↔ emitted `.d.ts` parity (symbol set, ESM/CJS parity, leak grep, command signatures). Runs at postbuild. |
+| `audit-declarations.cjs` | Private workspace specifier leaks (`@superdoc/*`) and declaration-emit hygiene. Runs at postbuild. |
+
+Each gate runs once. PRs should extend an existing gate before adding
+a new one — see SD-3213e (PR which added the supported-root mode to
+the existing `deep-type-audit.mjs` rather than introducing a new
+script).
+
 ## Commands
 
 ```bash
 # Default: report-only inventory. Prints findings, always exits 0
-# (unless the script itself errors). Used by CI today.
+# (unless the script itself errors).
 node tests/consumer-typecheck/deep-type-audit.mjs
 
 # Pack + install superdoc into the fixture, then run inventory
 node tests/consumer-typecheck/deep-type-audit.mjs --pack
 
-# Strict mode: fails on findings if no allowlist exists, or on
-# new/stale entries if an allowlist exists. NOT used in CI today;
-# becomes the gate once the audit is scoped to the curated facade
-# entries (SD-3213 follow-up).
+# Supported-root strict gate (CI). Prints broad inventory AND fails on
+# new/stale entries in the supported-root allowlist.
+node tests/consumer-typecheck/deep-type-audit.mjs --strict-supported-root
+
+# Broad strict mode: fails on findings against the broad allowlist.
+# Not used in CI yet — the broad allowlist would be ~1.8k entries
+# dominated by legacy reach. Reserved for future work.
 node tests/consumer-typecheck/deep-type-audit.mjs --strict
 
-# Seed or regenerate deep-type-audit.allowlist.json from current findings
-# (intended for use once the audit is scoped to the curated facade)
+# Seed or regenerate the broad allowlist.
 node tests/consumer-typecheck/deep-type-audit.mjs --write
+
+# Seed or regenerate the supported-root allowlist (run after a drain
+# PR to shrink the baseline).
+node tests/consumer-typecheck/deep-type-audit.mjs --pack --write --strict-supported-root
 ```
 
 ## Updating the allowlist

@@ -967,6 +967,57 @@ describe('createToolbarRegistry', () => {
     );
   });
 
+  // SD-3213f: the tracked-change enricher prefers the narrow
+  // `superdoc.getComment(id)` method when present, falling back to
+  // `commentsStore.getComment(id)` for custom host stubs that pre-date
+  // the narrow method. Pin precedence so a future refactor cannot flip
+  // it silently. (The legacy branch above already covers the
+  // commentsStore path in isolation.)
+  it('prefers superdoc.getComment over commentsStore.getComment when both are present', () => {
+    collectTrackedChangesMock.mockReturnValueOnce([{ id: 'tc-narrow', attrs: {} }]);
+    isTrackedChangeActionAllowedMock.mockReturnValueOnce(true);
+
+    const narrowGetComment = vi.fn(() => ({ id: 'tc-narrow', body: 'narrow-body' }));
+    const legacyGetComment = vi.fn(() => ({
+      getValues: () => ({ id: 'tc-narrow', body: 'legacy-body' }),
+    }));
+
+    const registry = createToolbarRegistry();
+    registry['track-changes-accept-selection']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {},
+            selection: {
+              from: 1,
+              to: 3,
+            },
+          },
+        } as any,
+      },
+      superdoc: {
+        getComment: narrowGetComment,
+        commentsStore: {
+          getComment: legacyGetComment,
+        },
+      },
+    });
+
+    expect(narrowGetComment).toHaveBeenCalledWith('tc-narrow');
+    expect(legacyGetComment).not.toHaveBeenCalled();
+    expect(isTrackedChangeActionAllowedMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trackedChanges: [
+          expect.objectContaining({
+            id: 'tc-narrow',
+            comment: { id: 'tc-narrow', body: 'narrow-body' },
+          }),
+        ],
+      }),
+    );
+  });
+
   it('derives document-mode value from superdoc config', () => {
     const registry = createToolbarRegistry();
     const state = registry['document-mode']?.state({

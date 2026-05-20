@@ -132,19 +132,16 @@ jobs:
           cd tests/consumer-typecheck
           node typecheck-matrix.mjs
 
-      - name: Deep public-type audit (report-only)
-        # Recursive walk of every type reachable from superdoc's public
-        # exports in the installed tarball. Reports inventory by tier and
-        # top files. Always exits 0 in default mode; the `--strict` flag
-        # turns it into a hard gate but is not used in CI yet. The facade
-        # landed in SD-3212 PR C, but the audit still walks broad legacy
-        # surfaces like `./super-editor`, so strict-on-everything would
-        # gate on ~1.8k findings dominated by legacy reach. Tracked under
-        # SD-3213 follow-up: scope to curated facade entries, then make
-        # strict.
-        run: |
-          cd tests/consumer-typecheck
-          node deep-type-audit.mjs
+      - name: Deep public-type audit (supported-root strict, SD-3213e)
+        # Single invocation does both: (1) prints the broad inventory
+        # (tier counts, top files, entry/root-bucket attribution) for
+        # visibility, and (2) gates on the supported-root subset against
+        # `deep-type-audit.supported-root-allowlist.json`. Fails on any
+        # new `any` finding reachable from root `.` via an export
+        # classified as `supported-root`, AND on stale entries (a drain
+        # landed but the allowlist wasn't shrunk). The broad audit
+        # remains report-only because it includes legacy/raw reach.
+        run: node tests/consumer-typecheck/deep-type-audit.mjs --strict-supported-root
 
       - name: Package shape gates
         # External package-shape linters (publint + attw) running against

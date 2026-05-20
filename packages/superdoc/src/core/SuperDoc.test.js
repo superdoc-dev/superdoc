@@ -407,6 +407,170 @@ describe('SuperDoc core', () => {
     await expect(instance.scrollToElement('element-1')).resolves.toBe(false);
   });
 
+  // SD-3213f: narrow public methods that replaced the raw-store reach
+  // for headless-toolbar host routing and tracked-change enrichment.
+  // These methods are the public replacement for `superdoc.superdocStore.
+  // documents[].getPresentationEditor()` and `superdoc.commentsStore.
+  // getComment(id)` access that consumers used pre-hide. They must work
+  // correctly (returning matched values, null on miss, null on invalid
+  // input) and must not throw when the underlying stores are missing
+  // their methods.
+  describe('SD-3213f narrow host methods', () => {
+    describe('getPresentationEditorForDocument', () => {
+      it('returns the presentation editor for the matching documentId', async () => {
+        const { superdocStore } = createAppHarness();
+        const presentationEditor = { id: 'pe-1' };
+        const bodyEditor = { options: { documentId: 'doc-1' } };
+        superdocStore.documents = [
+          {
+            getEditor: vi.fn(() => bodyEditor),
+            getPresentationEditor: vi.fn(() => presentationEditor),
+          },
+        ];
+
+        const instance = new SuperDoc({
+          selector: '#host',
+          document: 'https://example.com/doc.docx',
+          documents: [],
+          modules: { comments: {}, toolbar: {} },
+          onException: vi.fn(),
+        });
+        await flushMicrotasks();
+
+        expect(instance.getPresentationEditorForDocument('doc-1')).toBe(presentationEditor);
+      });
+
+      it('returns null when no document matches the id', async () => {
+        const { superdocStore } = createAppHarness();
+        superdocStore.documents = [
+          {
+            getEditor: vi.fn(() => ({ options: { documentId: 'doc-1' } })),
+            getPresentationEditor: vi.fn(() => ({ id: 'pe-1' })),
+          },
+        ];
+
+        const instance = new SuperDoc({
+          selector: '#host',
+          document: 'https://example.com/doc.docx',
+          documents: [],
+          modules: { comments: {}, toolbar: {} },
+          onException: vi.fn(),
+        });
+        await flushMicrotasks();
+
+        expect(instance.getPresentationEditorForDocument('doc-other')).toBeNull();
+      });
+
+      it('returns null when the matched document has no presentation editor', async () => {
+        const { superdocStore } = createAppHarness();
+        superdocStore.documents = [
+          {
+            getEditor: vi.fn(() => ({ options: { documentId: 'doc-1' } })),
+            getPresentationEditor: vi.fn(() => null),
+          },
+        ];
+
+        const instance = new SuperDoc({
+          selector: '#host',
+          document: 'https://example.com/doc.docx',
+          documents: [],
+          modules: { comments: {}, toolbar: {} },
+          onException: vi.fn(),
+        });
+        await flushMicrotasks();
+
+        expect(instance.getPresentationEditorForDocument('doc-1')).toBeNull();
+      });
+
+      it('returns null for empty or non-string documentId', async () => {
+        createAppHarness();
+        const instance = new SuperDoc({
+          selector: '#host',
+          document: 'https://example.com/doc.docx',
+          documents: [],
+          modules: { comments: {}, toolbar: {} },
+          onException: vi.fn(),
+        });
+        await flushMicrotasks();
+
+        expect(instance.getPresentationEditorForDocument('')).toBeNull();
+        expect(instance.getPresentationEditorForDocument(undefined)).toBeNull();
+        expect(instance.getPresentationEditorForDocument(null)).toBeNull();
+        expect(instance.getPresentationEditorForDocument(123)).toBeNull();
+      });
+    });
+
+    describe('getComment', () => {
+      it('delegates to commentsStore.getComment and returns the result', async () => {
+        const { commentsStore } = createAppHarness();
+        const storedComment = { id: 'c-1', body: 'hello' };
+        commentsStore.getComment = vi.fn(() => storedComment);
+
+        const instance = new SuperDoc({
+          selector: '#host',
+          document: 'https://example.com/doc.docx',
+          documents: [],
+          modules: { comments: {}, toolbar: {} },
+          onException: vi.fn(),
+        });
+        await flushMicrotasks();
+
+        expect(instance.getComment('c-1')).toBe(storedComment);
+        expect(commentsStore.getComment).toHaveBeenCalledWith('c-1');
+      });
+
+      it('returns null when commentsStore returns no comment for the id', async () => {
+        const { commentsStore } = createAppHarness();
+        commentsStore.getComment = vi.fn(() => null);
+
+        const instance = new SuperDoc({
+          selector: '#host',
+          document: 'https://example.com/doc.docx',
+          documents: [],
+          modules: { comments: {}, toolbar: {} },
+          onException: vi.fn(),
+        });
+        await flushMicrotasks();
+
+        expect(instance.getComment('c-missing')).toBeNull();
+      });
+
+      it('returns null when commentsStore.getComment is missing', async () => {
+        const { commentsStore } = createAppHarness();
+        // Simulate a store mock that hasn't defined getComment.
+        commentsStore.getComment = undefined;
+
+        const instance = new SuperDoc({
+          selector: '#host',
+          document: 'https://example.com/doc.docx',
+          documents: [],
+          modules: { comments: {}, toolbar: {} },
+          onException: vi.fn(),
+        });
+        await flushMicrotasks();
+
+        expect(instance.getComment('c-1')).toBeNull();
+      });
+
+      it('returns null for empty or non-string commentId', async () => {
+        createAppHarness();
+        const instance = new SuperDoc({
+          selector: '#host',
+          document: 'https://example.com/doc.docx',
+          documents: [],
+          modules: { comments: {}, toolbar: {} },
+          onException: vi.fn(),
+        });
+        await flushMicrotasks();
+
+        expect(instance.getComment('')).toBeNull();
+        expect(instance.getComment(undefined)).toBeNull();
+        expect(instance.getComment(null)).toBeNull();
+        expect(instance.getComment(123)).toBeNull();
+      });
+    });
+  });
+
   it('warns when both document object and documents list provided', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     createAppHarness();

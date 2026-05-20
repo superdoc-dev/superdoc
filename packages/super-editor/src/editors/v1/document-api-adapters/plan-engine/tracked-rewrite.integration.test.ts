@@ -310,4 +310,70 @@ describe('doc.replace multi-paragraph integration', () => {
     expect(insertedTexts).toEqual(expect.arrayContaining(['Alpha']));
     expect(deletedTexts.join('')).toContain('hello world');
   });
+
+  // SD-3044: when the word-diff produces multiple groups with EQUAL tokens
+  // between them, inserted text used to anchor on the previous result op's
+  // end instead of the EQUAL token's end, piling all granular insertions on
+  // the first deletion site.
+  it('SD-3044: tracked rewrite with shared suffix anchors inserts correctly', () => {
+    editor = makeEditor(['[insert] of [insert], [insert] ("Investor")']);
+    const receipt = editor.doc.replace(
+      {
+        ref: getFirstMatchRef(editor, '[insert] of [insert], [insert] ("Investor")'),
+        text: 'John James Smith of [insert address], [insert] ("Investor")',
+      },
+      { changeMode: 'tracked' },
+    );
+
+    expect(receipt.success).toBe(true);
+
+    // Accepted view: drop trackDelete marks, keep everything else.
+    const acceptedParts: string[] = [];
+    editor.state.doc.descendants((node: any) => {
+      if (!node.isText || !node.text) return;
+      const isDeleted = node.marks.some((mark: any) => mark.type.name === TrackDeleteMarkName);
+      if (!isDeleted) acceptedParts.push(node.text);
+    });
+
+    expect(acceptedParts.join('')).toBe('John James Smith of [insert address], [insert] ("Investor")');
+
+    // Specifically guard against the buggy strings reported in the ticket.
+    const accepted = acceptedParts.join('');
+    expect(accepted).not.toContain('JohnJames');
+    expect(accepted).not.toContain('Smith  address');
+  });
+
+  it('SD-3044: tracked rewrite of long block preserves spacing across multiple equal anchors', () => {
+    editor = makeEditor([
+      '[insert] Pty Limited a company incorporated in Australia having its registered office at [insert] (ACN [insert])("Company")',
+    ]);
+    const target =
+      'Working Title Group Limited a company incorporated in New Zealand having its registered office at 29 Park Hill Road, Birkenhead, Auckland, 0626, NZ (NZBN 9429050880331)("Company")';
+
+    const receipt = editor.doc.replace(
+      {
+        ref: getFirstMatchRef(
+          editor,
+          '[insert] Pty Limited a company incorporated in Australia having its registered office at [insert] (ACN [insert])("Company")',
+        ),
+        text: target,
+      },
+      { changeMode: 'tracked' },
+    );
+
+    expect(receipt.success).toBe(true);
+
+    const acceptedParts: string[] = [];
+    editor.state.doc.descendants((node: any) => {
+      if (!node.isText || !node.text) return;
+      const isDeleted = node.marks.some((mark: any) => mark.type.name === TrackDeleteMarkName);
+      if (!isDeleted) acceptedParts.push(node.text);
+    });
+
+    const accepted = acceptedParts.join('');
+    expect(accepted).toBe(target);
+    expect(accepted).not.toContain('PtyTitle');
+    expect(accepted).not.toContain('AustraliaNew');
+    expect(accepted).not.toContain('(ACNPark');
+  });
 });

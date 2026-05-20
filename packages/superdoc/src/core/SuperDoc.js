@@ -161,14 +161,32 @@ export class SuperDoc extends EventEmitter {
    * the systematic soundness fix across all of these fields (declaring them
    * `T | undefined` and casting at internal post-init access sites).
    *
+   * `@private` is a TypeScript-surface hide, not runtime privacy: the
+   * fields still exist on the runtime instance and internal callers
+   * across the package keep working. Consumers can no longer reach into
+   * them via `.d.ts`, which collapses the Pinia type graph from the
+   * public surface (SD-3213f). The headless-toolbar host contract was
+   * refactored in the same PR to replace raw store reach with the
+   * narrow methods `getPresentationEditorForDocument(documentId)` and
+   * `getComment(commentId)` below, so SuperDoc instances satisfy
+   * `HeadlessToolbarSuperdocHost` directly without exposing
+   * `superdocStore` publicly.
+   *
    * @type {ReturnType<typeof import('../stores/superdoc-store.js').useSuperdocStore>}
+   * @private
    */
   superdocStore;
 
-  /** @type {ReturnType<typeof import('../stores/comments-store.js').useCommentsStore>} */
+  /**
+   * @type {ReturnType<typeof import('../stores/comments-store.js').useCommentsStore>}
+   * @private
+   */
   commentsStore;
 
-  /** @type {ReturnType<typeof import('../composables/use-high-contrast-mode.js').useHighContrastMode>} */
+  /**
+   * @type {ReturnType<typeof import('../composables/use-high-contrast-mode.js').useHighContrastMode>}
+   * @private
+   */
   highContrastModeStore;
 
   /** @type {import('vue').App} */
@@ -463,6 +481,38 @@ export class SuperDoc extends EventEmitter {
       documents: this.superdocStore.documents,
       users: this.users,
     };
+  }
+
+  /**
+   * Look up the PresentationEditor associated with a given documentId.
+   * Returns null if no document matches or the document has no
+   * presentation editor. Replaces the legacy
+   * `superdoc.superdocStore.documents[].getPresentationEditor()` reach
+   * for `superdoc/headless-toolbar` host routing (SD-3213f).
+   *
+   * @param {string} documentId
+   * @returns {import('@superdoc/super-editor').PresentationEditor | null}
+   */
+  getPresentationEditorForDocument(documentId) {
+    if (typeof documentId !== 'string' || documentId.length === 0) return null;
+    const documents = this.superdocStore?.documents ?? [];
+    const matched = documents.find((doc) => doc?.getEditor?.()?.options?.documentId === documentId);
+    return matched?.getPresentationEditor?.() ?? null;
+  }
+
+  /**
+   * Look up a comment by id. Returns null if not found. Replaces the
+   * legacy `superdoc.commentsStore.getComment(id)` reach for
+   * `superdoc/headless-toolbar` helpers (SD-3213f). The return type is
+   * intentionally wide (`Record<string, unknown> | null`) so the public
+   * surface does not pull the Pinia comment model type graph.
+   *
+   * @param {string} commentId
+   * @returns {Record<string, unknown> | null}
+   */
+  getComment(commentId) {
+    if (typeof commentId !== 'string' || commentId.length === 0) return null;
+    return this.commentsStore?.getComment?.(commentId) ?? null;
   }
 
   /**

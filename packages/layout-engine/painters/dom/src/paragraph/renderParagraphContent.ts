@@ -5,7 +5,6 @@ import type {
   ParagraphMeasure,
   ResolvedParagraphContent,
   Run,
-  SdtMetadata,
   SourceAnchor,
 } from '@superdoc/contracts';
 import {
@@ -20,6 +19,7 @@ import {
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
+import { applyContainerSdtDataset, applySdtDataset } from '../sdt/dataset.js';
 import { createParagraphDecorationLayers, stampBetweenBorderDataset, type BetweenBorderInfo } from './borders/index.js';
 import {
   applyParagraphLineIndentation,
@@ -86,8 +86,6 @@ export type RenderParagraphContentParams = {
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   onSdtContainerChrome?: () => void;
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  applyContainerSdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   renderLine: ParagraphRenderLine;
   renderDropCap?: ParagraphRenderDropCap;
   captureLineSnapshot?: (
@@ -125,8 +123,6 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
-    applySdtDataset,
-    applyContainerSdtDataset,
     renderDropCap,
     lineTopOffset = 0,
   } = params;

@@ -11,7 +11,6 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
   PartialRowInfo,
-  SdtMetadata,
   TableBlock,
   TableMeasure,
   WrapExclusion,
@@ -30,6 +29,7 @@ import {
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
+import { applySdtDataset } from '../sdt/dataset.js';
 import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
@@ -86,8 +86,6 @@ type EmbeddedTableRenderParams = {
   ) => void;
   /** Optional callback to render non-image drawing content (shapes, charts, etc.) */
   renderDrawingContent?: (block: DrawingBlock, options?: { clipContainer?: HTMLElement }) => HTMLElement;
-  /** Function to apply SDT metadata as data attributes */
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Starting row index for partial rendering (inclusive, default 0) */
   fromRow?: number;
   /** Ending row index for partial rendering (exclusive, default all rows) */
@@ -131,7 +129,6 @@ type EmbeddedTableRenderParams = {
  *   measure: nestedTableMeasure,
  *   context,
  *   renderLine,
- *   applySdtDataset,
  * });
  * cellContent.appendChild(tableEl);
  * ```
@@ -148,7 +145,6 @@ const renderEmbeddedTable = (
     renderLine,
     captureLineSnapshot,
     renderDrawingContent,
-    applySdtDataset,
     fromRow: paramFromRow,
     toRow: paramToRow,
     partialRow: paramPartialRow,
@@ -191,7 +187,6 @@ const renderEmbeddedTable = (
     captureLineSnapshot,
     renderDrawingContent,
     applyFragmentFrame,
-    applySdtDataset,
     applyStyles,
     sdtBoundary,
     ancestorContainerKeys,
@@ -224,7 +219,6 @@ function renderPartialEmbeddedTable(params: {
   renderLine: EmbeddedTableRenderParams['renderLine'];
   captureLineSnapshot?: EmbeddedTableRenderParams['captureLineSnapshot'];
   renderDrawingContent?: EmbeddedTableRenderParams['renderDrawingContent'];
-  applySdtDataset: EmbeddedTableRenderParams['applySdtDataset'];
   sdtBoundary?: SdtBoundaryOptions;
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
@@ -242,7 +236,6 @@ function renderPartialEmbeddedTable(params: {
     renderLine,
     captureLineSnapshot,
     renderDrawingContent,
-    applySdtDataset,
     sdtBoundary,
     ancestorContainerKeys,
     ancestorContainerSdts,
@@ -319,7 +312,6 @@ function renderPartialEmbeddedTable(params: {
       renderLine,
       captureLineSnapshot,
       renderDrawingContent,
-      applySdtDataset,
       fromRow: rowSlice.fromRow,
       toRow: rowSlice.toRow,
       partialRow: rowSlice.partialRow,
@@ -404,8 +396,6 @@ type TableCellRenderDependencies = {
   renderDrawingContent?: (block: DrawingBlock, options?: { clipContainer?: HTMLElement }) => HTMLElement;
   /** Rendering context */
   context: FragmentRenderContext;
-  /** Function to apply SDT metadata as data attributes */
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Ancestor SDT keys for suppressing duplicate container styling in cells */
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   /** Ancestor SDT metadata chain for suppressing duplicate id-less container styling in cells */
@@ -450,7 +440,6 @@ type TableCellParagraphRenderParams = {
   betweenInfo?: BetweenBorderInfo;
   context: FragmentRenderContext;
   renderLine: TableCellRenderDependencies['renderLine'];
-  applySdtDataset: TableCellRenderDependencies['applySdtDataset'];
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   onSdtContainerChrome?: () => void;
@@ -546,7 +535,6 @@ const renderTableCellParagraphBlock = ({
   betweenInfo,
   context,
   renderLine,
-  applySdtDataset,
   ancestorContainerKeys,
   ancestorContainerSdts,
   onSdtContainerChrome,
@@ -596,7 +584,6 @@ const renderTableCellParagraphBlock = ({
       cellEl.style.overflow = 'visible';
       onSdtContainerChrome?.();
     },
-    applySdtDataset,
     renderLine: ({ block, line, lineIndex, isLastLine, resolvedListTextStartPx }) =>
       renderLine(block, line, context, lineIndex, isLastLine, resolvedListTextStartPx),
     convertFinalParagraphMark: isLastBlockInCell,
@@ -660,7 +647,6 @@ const renderTableCellParagraphBlock = ({
  *     return el;
  *   },
  *   context,
- *   applySdtDataset
  * });
  * container.appendChild(cellElement);
  * ```
@@ -679,7 +665,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     captureLineSnapshot,
     renderDrawingContent,
     context,
-    applySdtDataset,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
@@ -882,7 +867,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           renderLine,
           captureLineSnapshot,
           renderDrawingContent,
-          applySdtDataset,
           sdtBoundary: sdtBoundaries[i],
           ancestorContainerKeys,
           ancestorContainerSdts,
@@ -994,7 +978,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           betweenInfo: betweenInfoByOriginalBlockIndex.get(i),
           context,
           renderLine,
-          applySdtDataset,
           ancestorContainerKeys,
           ancestorContainerSdts,
           onSdtContainerChrome,

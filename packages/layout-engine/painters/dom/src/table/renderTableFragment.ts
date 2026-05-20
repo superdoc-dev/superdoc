@@ -21,6 +21,7 @@ import {
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
+import { applyContainerSdtDataset, applySdtDataset } from '../sdt/dataset.js';
 import { applyBorder, borderValueToSpec, hasExplicitCellBorders } from './border-utils.js';
 import { getTableCellGridBounds } from './grid-geometry.js';
 
@@ -72,10 +73,6 @@ export type TableRenderDependencies = {
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply fragment positioning and dimensions */
   applyFragmentFrame: (el: HTMLElement, fragment: Fragment) => void;
-  /** Function to apply SDT metadata as data attributes */
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  /** Function to apply container SDT metadata as data attributes */
-  applyContainerSdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Function to apply CSS styles to an element */
   applyStyles: ApplyStylesFn;
 };
@@ -140,7 +137,6 @@ export type TableRenderDependencies = {
  *   effectiveColumnWidths: tableMeasure.columnWidths,
  *   renderLine,
  *   applyFragmentFrame,
- *   applySdtDataset,
  *   applyStyles
  * });
  * container.appendChild(tableElement);
@@ -163,8 +159,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     captureLineSnapshot,
     renderDrawingContent,
     applyFragmentFrame,
-    applySdtDataset,
-    applyContainerSdtDataset,
     applyStyles,
   } = deps;
 
@@ -418,7 +412,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         renderLine,
         captureLineSnapshot,
         renderDrawingContent,
-        applySdtDataset,
         ancestorContainerKeys: nextAncestorContainerKeys,
         ancestorContainerSdts: nextAncestorContainerSdts,
         onSdtContainerChrome,
@@ -585,7 +578,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       renderLine,
       captureLineSnapshot,
       renderDrawingContent,
-      applySdtDataset,
       ancestorContainerKeys: nextAncestorContainerKeys,
       ancestorContainerSdts: nextAncestorContainerSdts,
       onSdtContainerChrome,

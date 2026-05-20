@@ -15,7 +15,6 @@ import { renderDrawingContent as renderSharedDrawingContent } from '../drawings/
 import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from '../images/hyperlink.js';
 import type { FragmentRenderContext } from '../fragment-context.js';
 import type { SdtBoundaryOptions } from '../sdt/container.js';
-import { applyContainerSdtDataset, applySdtDataset } from '../sdt/dataset.js';
 import { applyStyles } from '../utils/apply-styles.js';
 import { renderTableFragment } from './renderTableFragment.js';
 
@@ -156,8 +155,6 @@ export const renderResolvedTableFragment = ({
       },
       renderDrawingContent: renderDrawingContentForTableCell,
       applyFragmentFrame: (element, innerFragment) => applyFragmentFrame(element, innerFragment, context.section),
-      applySdtDataset,
-      applyContainerSdtDataset,
       applyStyles,
     });
 

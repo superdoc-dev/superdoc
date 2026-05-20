@@ -4,7 +4,6 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
   ResolvedFragmentItem,
-  SdtMetadata,
 } from '@superdoc/contracts';
 import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
@@ -24,8 +23,6 @@ type RenderParagraphFragmentParams = {
   applyStyles: ApplyStyles;
   applyResolvedFragmentFrame: (el: HTMLElement, item: ResolvedFragmentItem, fragment: ParaFragment) => void;
   applyFragmentFrame: (el: HTMLElement, fragment: ParaFragment) => void;
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  applyContainerSdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   renderLine: (input: ParagraphRenderLineInput) => HTMLElement;
   captureLineSnapshot: (
     lineEl: HTMLElement,
@@ -46,8 +43,6 @@ export const renderParagraphFragment = (params: RenderParagraphFragmentParams): 
     applyStyles,
     applyResolvedFragmentFrame,
     applyFragmentFrame,
-    applySdtDataset,
-    applyContainerSdtDataset,
     renderLine,
     captureLineSnapshot,
     createErrorPlaceholder,
@@ -121,8 +116,6 @@ export const renderParagraphFragment = (params: RenderParagraphFragmentParams): 
       resolvedContent: content,
       betweenInfo,
       sdtBoundary,
-      applySdtDataset,
-      applyContainerSdtDataset,
       renderDropCap: (descriptor, dropCapMeasure) => renderDropCap(doc, descriptor, dropCapMeasure),
       renderLine,
       captureLineSnapshot: (lineEl, options) => {

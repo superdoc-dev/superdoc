@@ -2473,8 +2473,6 @@ export class DomPainter {
       applyResolvedFragmentFrame: (el, item, paraFragment) =>
         this.applyResolvedFragmentFrame(el, item, paraFragment, context.section, context.story),
       applyFragmentFrame: (el, paraFragment) => this.applyFragmentFrame(el, paraFragment, context.section, context.story),
-      applySdtDataset,
-      applyContainerSdtDataset,
       renderLine: ({
         block,
         line,

@@ -44,7 +44,6 @@ describe('renderTableRow', () => {
     tableIndent: 0,
     context: { sectionIndex: 0, pageIndex: 0, columnIndex: 0 },
     renderLine: () => doc.createElement('div'),
-    applySdtDataset: () => {},
     cellSpacingPx: 6,
     ...overrides,
   });

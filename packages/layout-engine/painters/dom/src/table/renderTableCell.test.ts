@@ -96,9 +96,6 @@ describe('renderTableCell', () => {
     useDefaultBorder: false,
     context: { sectionIndex: 0, pageIndex: 0, columnIndex: 0 },
     renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
-    applySdtDataset: () => {
-      // noop for tests
-    },
   });
 
   it('uses an end-of-cell mark for the final paragraph in a table cell', () => {
@@ -254,9 +251,6 @@ describe('renderTableCell', () => {
 
     const { cellElement } = renderTableCell({
       ...createBaseDeps(),
-      applySdtDataset: (el, metadata) => {
-        if (el && metadata?.id) el.dataset.sdtId = metadata.id;
-      },
       cellMeasure: {
         blocks: [{ kind: 'image' as const, width: 50, height: 40 }],
         width: 80,
@@ -4474,6 +4468,8 @@ describe('renderTableCell', () => {
 
     it('applies drawing SDT metadata from attrs.sdt only', () => {
       const sdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
         id: 'drawing-sdt',
         tag: 'Drawing SDT',
         alias: 'Drawing',
@@ -4496,7 +4492,6 @@ describe('renderTableCell', () => {
         height: 100,
       };
 
-      const appliedMetadata: Array<SdtMetadata | null | undefined> = [];
       const { cellElement } = renderTableCell({
         ...createBaseDeps(),
         cellMeasure: {
@@ -4513,15 +4508,12 @@ describe('renderTableCell', () => {
           attrs: {},
         },
         renderDrawingContent: () => doc.createElement('div'),
-        applySdtDataset: (_el, metadata) => {
-          appliedMetadata.push(metadata);
-        },
       });
 
       const drawingWrapper = cellElement.querySelector('.superdoc-table-drawing')?.parentElement as HTMLElement | null;
       expect(drawingWrapper).toBeTruthy();
-      expect(appliedMetadata).toContain(sdt);
-      expect(appliedMetadata).not.toContain(vectorShapeBlock.attrs as unknown as SdtMetadata);
+      expect(drawingWrapper?.dataset.sdtId).toBe('drawing-sdt');
+      expect(drawingWrapper?.dataset.sdtType).toBe('structuredContent');
     });
 
     it('should apply width and height styles to returned element', () => {
@@ -6408,7 +6400,6 @@ describe('RTL cell padding swap', () => {
     useDefaultBorder: false,
     context: { sectionIndex: 0, pageIndex: 0, columnIndex: 0 },
     renderLine: () => doc.createElement('div'),
-    applySdtDataset: () => {},
   });
 
   const cellMeasure: TableCellMeasure = {

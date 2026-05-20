@@ -4,7 +4,6 @@ import type {
   Line,
   ParagraphBlock,
   PartialRowInfo,
-  SdtMetadata,
   TableBlock,
   TableBorders,
   TableMeasure,
@@ -172,8 +171,6 @@ type TableRowRenderDependencies = {
   ) => void;
   /** Function to render non-image drawing content (shapes, charts, etc.) */
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
-  /** Function to apply SDT metadata as data attributes */
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Ancestor SDT keys for suppressing duplicate container styling in cells */
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   /** Ancestor SDT metadata chain for suppressing duplicate id-less container styling in cells */
@@ -235,7 +232,6 @@ type TableRowRenderDependencies = {
  *   tableBorders,
  *   context,
  *   renderLine,
- *   applySdtDataset
  * });
  * // Appends all cell elements to container
  * ```
@@ -258,7 +254,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     renderLine,
     captureLineSnapshot,
     renderDrawingContent,
-    applySdtDataset,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
@@ -432,7 +427,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       captureLineSnapshot,
       renderDrawingContent,
       context,
-      applySdtDataset,
       ancestorContainerKeys,
       ancestorContainerSdts,
       onSdtContainerChrome,

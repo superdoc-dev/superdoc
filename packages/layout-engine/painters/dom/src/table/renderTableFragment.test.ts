@@ -124,9 +124,6 @@ describe('renderTableFragment', () => {
       applyFragmentFrame: () => {
         // The table renderer owns PM range metadata for table wrappers.
       },
-      applySdtDataset: () => {
-        // Not relevant to this metadata test.
-      },
       applyStyles: () => {
         // Not relevant to this metadata test.
       },
@@ -252,7 +249,6 @@ describe('renderTableFragment', () => {
       effectiveColumnWidths: measure.columnWidths,
       renderLine: () => doc.createElement('div'),
       applyFragmentFrame: () => {},
-      applySdtDataset: () => {},
       applyStyles: (el, styles) => Object.assign(el.style, styles),
     });
 
@@ -352,7 +348,6 @@ describe('renderTableFragment', () => {
       ancestorContainerKeys: ['structuredContent:outer-sdt'],
       renderLine: () => doc.createElement('div'),
       applyFragmentFrame: () => {},
-      applySdtDataset: () => {},
       applyStyles: (el, styles) => Object.assign(el.style, styles),
     });
 
@@ -391,7 +386,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: measure.columnWidths,
         renderLine: () => doc.createElement('div'),
         applyFragmentFrame: () => {},
-        applySdtDataset: () => {},
         applyStyles: () => {},
       });
 
@@ -426,7 +420,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: measure.columnWidths,
         renderLine: () => doc.createElement('div'),
         applyFragmentFrame: () => {},
-        applySdtDataset: () => {},
         applyStyles: () => {},
       });
 
@@ -555,9 +548,6 @@ describe('renderTableFragment', () => {
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
         },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
         applyStyles: () => {
           // Intentionally empty for test mock
         },
@@ -586,9 +576,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
-          // Intentionally empty for test mock
-        },
-        applySdtDataset: () => {
           // Intentionally empty for test mock
         },
         applyStyles: () => {
@@ -628,9 +615,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
-          // Intentionally empty for test mock
-        },
-        applySdtDataset: () => {
           // Intentionally empty for test mock
         },
         applyStyles: () => {
@@ -683,9 +667,6 @@ describe('renderTableFragment', () => {
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
         },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
         applyStyles: () => {
           // Intentionally empty for test mock
         },
@@ -726,9 +707,6 @@ describe('renderTableFragment', () => {
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
         },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
         applyStyles: () => {
           // Intentionally empty for test mock
         },
@@ -761,9 +739,6 @@ describe('renderTableFragment', () => {
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
         },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
         applyStyles: () => {
           // Intentionally empty for test mock
         },
@@ -790,9 +765,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
-          // Intentionally empty for test mock
-        },
-        applySdtDataset: () => {
           // Intentionally empty for test mock
         },
         applyStyles: () => {
@@ -828,9 +800,6 @@ describe('renderTableFragment', () => {
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
         },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
         applyStyles: () => {
           // Intentionally empty for test mock
         },
@@ -862,9 +831,6 @@ describe('renderTableFragment', () => {
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
         },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
         applyStyles: () => {
           // Intentionally empty for test mock
         },
@@ -888,9 +854,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
-          // Intentionally empty for test mock
-        },
-        applySdtDataset: () => {
           // Intentionally empty for test mock
         },
         applyStyles: () => {
@@ -925,9 +888,6 @@ describe('renderTableFragment', () => {
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
         },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
         applyStyles: () => {
           // Intentionally empty for test mock
         },
@@ -960,9 +920,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
-          // Intentionally empty for test mock
-        },
-        applySdtDataset: () => {
           // Intentionally empty for test mock
         },
         applyStyles: () => {
@@ -1005,9 +962,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
-          // Intentionally empty for test mock
-        },
-        applySdtDataset: () => {
           // Intentionally empty for test mock
         },
         applyStyles: () => {
@@ -1107,7 +1061,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {},
-        applySdtDataset: () => {},
         applyStyles: () => {},
       });
 
@@ -1152,7 +1105,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {},
-        applySdtDataset: () => {},
         applyStyles: () => {},
       });
 
@@ -1275,9 +1227,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
-          // Intentionally empty for test mock
-        },
-        applySdtDataset: () => {
           // Intentionally empty for test mock
         },
         applyStyles: () => {
@@ -1433,9 +1382,6 @@ describe('renderTableFragment', () => {
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
         },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
         applyStyles: () => {
           // Intentionally empty for test mock
         },
@@ -1547,9 +1493,6 @@ describe('renderTableFragment', () => {
         effectiveColumnWidths: measure.columnWidths,
         renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
         applyFragmentFrame: () => {
-          // Intentionally empty for test mock
-        },
-        applySdtDataset: () => {
           // Intentionally empty for test mock
         },
         applyStyles: () => {
@@ -1728,9 +1671,6 @@ describe('renderTableFragment', () => {
         applyFragmentFrame: () => {
           // Intentionally empty for test mock
         },
-        applySdtDataset: () => {
-          // Intentionally empty for test mock
-        },
         applyStyles: () => {
           // Intentionally empty for test mock
         },
@@ -1876,7 +1816,6 @@ describe('renderTableFragment', () => {
         renderLine: (_block: ParagraphBlock, _line: unknown, _ctx: unknown, _lineIndex: number, _isLastLine: boolean) =>
           doc.createElement('div'),
         applyFragmentFrame: () => {},
-        applySdtDataset: () => {},
         applyStyles: () => {},
       };
 
@@ -2004,7 +1943,6 @@ describe('renderTableFragment', () => {
         renderLine: () => doc.createElement('div'),
         applyStyles: (e, s) => Object.assign(e.style, s),
         applyFragmentFrame: () => {},
-        applySdtDataset: () => {},
       });
 
       // Ghost cell for col 0 (rowSpan=2, width=100) should be mirrored.
@@ -2073,7 +2011,6 @@ describe('renderTableFragment', () => {
         renderLine: () => doc.createElement('div'),
         applyStyles: (e, s) => Object.assign(e.style, s),
         applyFragmentFrame: () => {},
-        applySdtDataset: () => {},
       });
 
       // Cells should be mirrored: col 0 at x=100, col 1 at x=0

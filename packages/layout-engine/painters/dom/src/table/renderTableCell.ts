@@ -874,6 +874,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           continue;
         }
 
+        if (blockMeasure.height <= 0) {
+          continue;
+        }
+
         // Non-paragraph blocks occupy 1 segment in the combined line/segment index.
         const imgSegmentIndex = cumulativeLineCount;
         cumulativeLineCount += 1;
@@ -905,6 +909,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           if (blockMeasure.height > 0) {
             cumulativeLineCount += 1;
           }
+          continue;
+        }
+
+        if (blockMeasure.height <= 0) {
           continue;
         }
 

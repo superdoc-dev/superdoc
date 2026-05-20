@@ -648,6 +648,70 @@ describe('renderTableCell', () => {
     expect(renderedLines[0]?.dataset.blockId).toBe('para-after-anchor');
   });
 
+  it('keeps partial-row segment indexing aligned when zero-height flowing media precede paragraphs', () => {
+    const paraAfter: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-after-zero-media',
+      runs: [{ text: 'After media', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const zeroHeightImage: ImageBlock = {
+      kind: 'image',
+      id: 'zero-height-image',
+      src: 'data:image/png;base64,AAA',
+    };
+    const zeroHeightDrawing: DrawingBlock = {
+      kind: 'drawing',
+      id: 'zero-height-drawing',
+      drawingKind: 'image',
+      src: 'data:image/png;base64,BBB',
+    } as DrawingBlock;
+    const zeroImageMeasure = {
+      kind: 'image' as const,
+      width: 20,
+      height: 0,
+    };
+    const zeroDrawingMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      drawingKind: 'image',
+      width: 20,
+      height: 0,
+      scale: 1,
+      naturalWidth: 20,
+      naturalHeight: 20,
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [zeroImageMeasure, zeroDrawingMeasure, paragraphMeasure],
+        width: 120,
+        height: 20,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: {
+        id: 'cell-zero-height-flowing-media',
+        blocks: [zeroHeightImage, zeroHeightDrawing, paraAfter],
+        attrs: {},
+      },
+      fromLine: 0,
+      toLine: 1,
+      renderLine: (block) => {
+        const line = doc.createElement('div');
+        line.classList.add('segment-alignment-line');
+        line.dataset.blockId = (block as ParagraphBlock).id;
+        return line;
+      },
+    });
+
+    const renderedLines = Array.from(cellElement.querySelectorAll('.segment-alignment-line')) as HTMLElement[];
+    expect(renderedLines).toHaveLength(1);
+    expect(renderedLines[0]?.dataset.blockId).toBe('para-after-zero-media');
+    expect(cellElement.querySelector('.superdoc-image-fragment')).toBeFalsy();
+    expect(cellElement.querySelector('.superdoc-table-drawing')).toBeFalsy();
+  });
+
   it('adjusts column-relative anchored images by table indent and cell offset', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',

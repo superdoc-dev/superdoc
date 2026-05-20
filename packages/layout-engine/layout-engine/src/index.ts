@@ -1220,8 +1220,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
    * `footnoteBandOverflow.test.ts` is the safety net guaranteeing the band
    * never overflows the page bottom margin.
    */
-  const footnoteDemandByBlockId: Map<string, number> = (() => {
-    const out = new Map<string, number>();
+  // SD-2656: per-block footnote anchor entries. Stored as a sorted list of
+  // {pmPos, height} so the slicer can ask range-aware questions ("how much
+  // footnote demand is anchored in lines [pmStart, pmEnd) of this block?").
+  // Word's body break respects per-line anchor positions; charging the whole
+  // block's demand at block entry (the old behavior) over-defers paragraphs
+  // that have multiple anchors but where the first line only contains one of
+  // them.
+  type FootnoteAnchorEntry = { pmPos: number; refId: string; height: number };
+  const footnoteAnchorsByBlockId: Map<string, FootnoteAnchorEntry[]> = (() => {
+    const out = new Map<string, FootnoteAnchorEntry[]>();
     const refs = options.footnotes?.refs;
     const bodyHeights = options.footnotes?.bodyHeightById;
     if (!Array.isArray(refs) || refs.length === 0 || !bodyHeights) return out;
@@ -1273,7 +1281,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         if (pos < range.pmStart || pos > range.pmEnd) continue;
         const height = bodyHeights.get(refId);
         if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) continue;
-        out.set(topLevelId, (out.get(topLevelId) ?? 0) + height);
+        const list = out.get(topLevelId) ?? [];
+        list.push({ pmPos: pos, refId, height });
+        out.set(topLevelId, list);
         refByPos.delete(pos);
       }
     };
@@ -1300,8 +1310,45 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
     }
 
+    // Keep each block's anchors sorted by pmPos so range queries are linear.
+    for (const list of out.values()) list.sort((a, b) => a.pmPos - b.pmPos);
     return out;
   })();
+
+  /**
+   * Range-aware demand lookup. Returns the sum of footnote body heights for
+   * refs anchored in [pmStart, pmEnd] of the given block. With pmStart=null /
+   * pmEnd=null returns the block's total demand (legacy callers).
+   */
+  const getFootnoteDemandForBlockId = (blockId: string, pmStart?: number, pmEnd?: number): number => {
+    const entries = footnoteAnchorsByBlockId.get(blockId);
+    if (!entries || entries.length === 0) return 0;
+    if (pmStart == null || pmEnd == null) {
+      let total = 0;
+      for (const e of entries) total += e.height;
+      return total;
+    }
+    let total = 0;
+    for (const e of entries) {
+      if (e.pmPos >= pmStart && e.pmPos <= pmEnd) total += e.height;
+    }
+    return total;
+  };
+
+  /**
+   * Range-aware ref count. Used by the slicer to compute band overhead
+   * (separator + per-extra-ref gap + safety margin) for the candidate slice.
+   */
+  const getFootnoteRefCountForBlockId = (blockId: string, pmStart?: number, pmEnd?: number): number => {
+    const entries = footnoteAnchorsByBlockId.get(blockId);
+    if (!entries || entries.length === 0) return 0;
+    if (pmStart == null || pmEnd == null) return entries.length;
+    let count = 0;
+    for (const e of entries) {
+      if (e.pmPos >= pmStart && e.pmPos <= pmEnd) count += 1;
+    }
+    return count;
+  };
 
   // Paginator encapsulation for page/column helpers
   let pageCount = 0;
@@ -2485,7 +2532,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           floatManager,
           remeasureParagraph: options.remeasureParagraph,
           overrideSpacingAfter,
-          getFootnoteDemandForBlockId: (blockId: string) => footnoteDemandByBlockId.get(blockId) ?? 0,
+          getFootnoteDemandForBlockId,
+          getFootnoteRefCountForBlockId,
         },
         anchorsForPara
           ? {
@@ -3062,6 +3110,18 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       });
     }
     state.page.columnRegions = regions;
+  }
+
+  // SD-2656: stash each page's actual body-bottom on the Page so the band
+  // painter can render the separator immediately under the last body
+  // fragment instead of at the legacy reserve-derived position. Trailing
+  // paragraph spacing is subtracted because it's "below the last line" and
+  // shouldn't push the separator down by that much.
+  for (let i = 0; i < pages.length && i < paginator.states.length; i++) {
+    const s = paginator.states[i];
+    const raw = Math.max(s.maxCursorY ?? 0, s.cursorY ?? 0);
+    const trailing = s.trailingSpacing ?? 0;
+    (pages[i] as { bodyMaxY?: number }).bodyMaxY = Math.max(s.topMargin ?? 0, raw - trailing);
   }
 
   return {

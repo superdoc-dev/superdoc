@@ -37,6 +37,12 @@ export type PageState = {
    * instead of relying solely on the post-hoc page-level reserve.
    */
   footnoteDemandThisPage: number;
+  /**
+   * SD-2656: Number of distinct footnote refs anchored on this page so far.
+   * Drives the slicer's band-overhead computation (separator + per-extra-ref
+   * gap + safety margin), which must match the planner's reserve formula.
+   */
+  footnoteRefsThisPage: number;
 };
 
 export type PaginatorOptions = {
@@ -135,6 +141,7 @@ export function createPaginator(opts: PaginatorOptions) {
       maxCursorY: topMargin,
       pageFootnoteReserve,
       footnoteDemandThisPage: 0,
+      footnoteRefsThisPage: 0,
     };
     states.push(state);
     pages.push(state.page);

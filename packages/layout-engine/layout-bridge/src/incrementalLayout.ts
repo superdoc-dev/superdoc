@@ -320,6 +320,15 @@ const computeMaxFootnoteReserve = (layoutForPages: Layout, pageIndex: number, ba
   const bottomWithReserve = normalizeMargin(page.margins?.bottom, DEFAULT_MARGINS.bottom);
   const baseReserveSafe = Number.isFinite(baseReserve) ? Math.max(0, baseReserve) : 0;
   const bottomMargin = Math.max(0, bottomWithReserve - baseReserveSafe);
+  // SD-2656: in the bodyMaxY-anchored band architecture, the actual band
+  // capacity is `pageH - bottomMargin - bodyMaxY`. Using this as the planner's
+  // maxReserve forces the planner to split (continuation) any fn body that
+  // can't fit under body's actual position — which is what Word does.
+  // Falls back to the legacy calc for pages without recorded bodyMaxY.
+  const bodyMaxY = (page as { bodyMaxY?: number }).bodyMaxY;
+  if (typeof bodyMaxY === 'number' && Number.isFinite(bodyMaxY) && bodyMaxY > topMargin) {
+    return Math.max(0, pageSize.h - bottomMargin - bodyMaxY);
+  }
   const availableForBody = pageSize.h - topMargin - bottomMargin;
   if (!Number.isFinite(availableForBody)) return 0;
   return Math.max(0, availableForBody - MIN_FOOTNOTE_BODY_HEIGHT);
@@ -542,9 +551,17 @@ const splitRangeAtHeight = (
   };
 
   if (splitLine >= range.toLine) {
-    return getRangeRenderHeight(fitted) <= availableHeight
-      ? { fitted, remaining: null }
-      : { fitted: null, remaining: range };
+    // SD-2656: when all lines fit, return the fitted range regardless of
+    // spacingAfter. spacingAfter is the gap to the *next* paragraph; for
+    // the last item placed in a band slice it shouldn't be charged against
+    // the available height. Without this, a single-fn band whose body lines
+    // fit exactly but whose post-paragraph spacing pushes the total over
+    // the limit gets force-split (1 line placed + 3 lines continuation),
+    // which is what caused the reference fixture's last fn to drip across 2 pages.
+    if (fitted.height <= availableHeight) {
+      return { fitted, remaining: null };
+    }
+    return { fitted: null, remaining: range };
   }
 
   const remaining: FootnoteRange = {
@@ -616,9 +633,18 @@ const fitFootnoteContent = (
 
     if (range.kind === 'paragraph') {
       const split = splitRangeAtHeight(range, remainingSpace, measuresById);
-      if (split.fitted && getRangeRenderHeight(split.fitted) <= remainingSpace) {
-        fittedRanges.push(split.fitted);
-        usedHeight += getRangeRenderHeight(split.fitted);
+      if (split.fitted) {
+        // SD-2656: charge only the fitted *body* height (no spacingAfter)
+        // when the fitted range completes the input — it's the last item in
+        // this band slice, so trailing paragraph spacing is wasted. This
+        // matches the relaxed check inside splitRangeAtHeight above.
+        const fittedBodyHeight = split.fitted.height;
+        const fittedFullHeight = getRangeRenderHeight(split.fitted);
+        const charged = !split.remaining ? fittedBodyHeight : fittedFullHeight;
+        if (charged <= remainingSpace) {
+          fittedRanges.push(split.fitted);
+          usedHeight += charged;
+        }
       }
       if (split.remaining) {
         remainingRanges = [split.remaining, ...inputRanges.slice(index + 1)];
@@ -767,9 +793,7 @@ export async function incrementalLayout(
   }
 
   // Dirty region computation
-  const dirtyStart = performance.now();
   const dirty = computeDirtyRegions(previousBlocks, nextBlocks);
-  const dirtyTime = performance.now() - dirtyStart;
 
   if (dirty.deletedBlockIds.length > 0) {
     measureCache.invalidate(dirty.deletedBlockIds);
@@ -1170,8 +1194,6 @@ export async function incrementalLayout(
   const layoutEnd = performance.now();
   const layoutTime = layoutEnd - layoutStart;
   perfLog(`[Perf] 4.2 Layout document (pagination): ${layoutTime.toFixed(2)}ms`);
-
-  const pageCount = layout.pages.length;
 
   // Two-pass convergence loop for page number token resolution.
   // Steps: paginate -> build numbering context -> resolve PAGE/NUMPAGES tokens
@@ -1611,7 +1633,16 @@ export async function incrementalLayout(
             left: marginLeft,
             contentWidth: pageContentWidth,
           };
-          const bandTopY = pageSize.h - (page.margins.bottom ?? 0);
+          // SD-2656: paint the band immediately under body. layoutDocument
+          // stashes bodyMaxY on each Page (the y where body's last fragment
+          // ends, minus trailing paragraph spacing). Falling back to the
+          // legacy "page bottom margin" position preserves behavior for
+          // pages without any body content (header/footer-only pages).
+          const bodyMaxY = (page as { bodyMaxY?: number }).bodyMaxY;
+          const bandTopY =
+            typeof bodyMaxY === 'number' && Number.isFinite(bodyMaxY)
+              ? bodyMaxY
+              : pageSize.h - (page.margins.bottom ?? 0);
 
           const slicesByColumn = new Map<number, FootnoteSlice[]>();
           slices.forEach((slice) => {

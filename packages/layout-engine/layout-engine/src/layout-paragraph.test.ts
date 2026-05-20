@@ -63,6 +63,7 @@ const makePageState = (): PageState => ({
   maxCursorY: 50,
   pageFootnoteReserve: 0,
   footnoteDemandThisPage: 0,
+  footnoteRefsThisPage: 0,
 });
 
 /**

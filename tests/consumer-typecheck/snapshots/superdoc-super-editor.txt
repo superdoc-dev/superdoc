@@ -200,4 +200,5 @@ resolveSelectionTarget
 resolveTrackedChangeInStory
 seedEditorStateToYDoc
 shallowEqual
+syncCommentEntitiesFromCollaboration
 trackChangesHelpers

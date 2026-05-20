@@ -35,6 +35,7 @@ import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
 import { computeBetweenBorderContext, type BetweenBorderInfo } from '../paragraph/borders/index.js';
 import { renderTableDrawingFrame } from '../drawings/tableDrawingFrame.js';
 import { renderDrawingContent as renderSharedDrawingContent } from '../drawings/renderDrawingContent.js';
+import { applyStyles } from '../utils/apply-styles.js';
 import {
   computeRenderedTableFragmentHeight,
   createEmbeddedTableFragment,
@@ -48,24 +49,6 @@ type TableCellMeasure = TableRowMeasure['cells'][number];
 export function getCellSegmentCount(cell: TableCellMeasure): number {
   return getCellLines(cell).length;
 }
-
-/**
- * Applies inline CSS styles to an element, filtering out null/undefined/empty values.
- *
- * Only applies styles where the key exists in the element's style object and
- * the value is non-null and non-empty. This prevents accidentally clearing
- * existing styles with undefined values.
- *
- * @param el - The HTML element to apply styles to
- * @param styles - Partial CSSStyleDeclaration with styles to apply
- */
-const applyInlineStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
-  Object.entries(styles).forEach(([key, value]) => {
-    if (value != null && value !== '' && key in el.style) {
-      (el.style as unknown as Record<string, string>)[key] = String(value);
-    }
-  });
-};
 
 /**
  * Parameters for rendering a nested table inside a table cell.
@@ -214,7 +197,7 @@ const renderEmbeddedTable = (
     renderDrawingContent,
     applyFragmentFrame,
     applySdtDataset,
-    applyStyles: applyInlineStyles,
+    applyStyles,
     sdtBoundary,
     ancestorContainerKey,
     ancestorContainerSdt,

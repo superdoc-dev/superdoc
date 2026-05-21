@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ParagraphMeasure, TableCellMeasure, TableMeasure } from './index.js';
+import type { ParagraphMeasure, TableBlock, TableCellMeasure, TableMeasure } from './index.js';
 import {
   computeCellSliceContentHeight,
   computeFullCellContentHeight,
@@ -9,10 +9,10 @@ import {
 } from './table-cell-slice.js';
 
 describe('table cell segment mapping', () => {
-  const makeParagraph = (lineCount: number): ParagraphMeasure => ({
+  const makeParagraph = (lineCount: number, lineHeight = 20): ParagraphMeasure => ({
     kind: 'paragraph',
     lines: Array.from({ length: lineCount }, () => ({
-      lineHeight: 20,
+      lineHeight,
       width: 100,
       fromRun: 0,
       fromChar: 0,
@@ -21,13 +21,20 @@ describe('table cell segment mapping', () => {
       ascent: 14,
       descent: 6,
     })),
-    totalHeight: lineCount * 20,
+    totalHeight: lineCount * lineHeight,
   });
 
   const makeImage = (height: number) => ({
     kind: 'image' as const,
     width: 100,
     height,
+  });
+
+  const makeParagraphBlock = (id: string, spacing?: { before?: number; after?: number }) => ({
+    kind: 'paragraph' as const,
+    id,
+    runs: [],
+    attrs: spacing ? { spacing } : undefined,
   });
 
   it('counts paragraph and positive-height object segments', () => {
@@ -128,5 +135,69 @@ describe('table cell segment mapping', () => {
     expect(computeCellSliceContentHeight(blocks, 0, 1)).toBe(24);
     expect(createCellSliceCursor(blocks, 0).advanceLine(0)).toBe(24);
     expect(createCellSliceCursor(blocks, 0).minSegmentCost(0)).toBe(24);
+  });
+
+  it('includes embedded partial row cell padding and block spacing', () => {
+    const innerTableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        { cells: [{ blocks: [makeParagraph(1, 10)], width: 40, height: 10 }], height: 10 },
+        { cells: [{ blocks: [makeParagraph(1, 10)], width: 40, height: 10 }], height: 10 },
+      ],
+      columnWidths: [40],
+      totalWidth: 40,
+      totalHeight: 20,
+    };
+    const nestedTableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [
+            { blocks: [innerTableMeasure], width: 50, height: 20 },
+            { blocks: [makeParagraph(2, 10)], width: 50, height: 28 },
+          ],
+          height: 20,
+        },
+      ],
+      columnWidths: [50, 50],
+      totalWidth: 100,
+      totalHeight: 20,
+    };
+    const innerTableBlock: TableBlock = {
+      kind: 'table',
+      id: 'inner-table',
+      rows: [
+        { id: 'inner-row-1', cells: [{ id: 'inner-cell-1', blocks: [makeParagraphBlock('inner-p-1')] }] },
+        { id: 'inner-row-2', cells: [{ id: 'inner-cell-2', blocks: [makeParagraphBlock('inner-p-2')] }] },
+      ],
+    };
+    const nestedTableBlock: TableBlock = {
+      kind: 'table',
+      id: 'nested-table',
+      rows: [
+        {
+          id: 'nested-row',
+          cells: [
+            { id: 'nested-cell-1', blocks: [innerTableBlock], attrs: { padding: { top: 3, bottom: 4 } } },
+            {
+              id: 'nested-cell-2',
+              blocks: [makeParagraphBlock('nested-p', { before: 12 })],
+              attrs: { padding: { top: 5, bottom: 6 } },
+            },
+          ],
+        },
+      ],
+    };
+    const cell: TableCellMeasure = {
+      blocks: [nestedTableMeasure],
+      width: 100,
+      height: 28,
+    };
+    const cellBlock = { id: 'outer-cell', blocks: [nestedTableBlock] };
+    const blocks = describeCellRenderBlocks(cell, cellBlock, { top: 0, bottom: 0 });
+
+    expect(computeCellSliceContentHeight(blocks, 0, 1)).toBe(28);
+    expect(createCellSliceCursor(blocks, 0).advanceLine(0)).toBe(28);
+    expect(createCellSliceCursor(blocks, 0).minSegmentCost(0)).toBe(28);
   });
 });

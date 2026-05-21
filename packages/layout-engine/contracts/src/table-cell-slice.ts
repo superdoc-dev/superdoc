@@ -1,4 +1,11 @@
-import type { ParagraphMeasure, TableCell, TableCellMeasure, TableMeasure, TableRowMeasure } from './index.js';
+import type {
+  ParagraphMeasure,
+  TableCell,
+  TableCellMeasure,
+  TableMeasure,
+  TableRow,
+  TableRowMeasure,
+} from './index.js';
 import { effectiveTableCellSpacing } from './table-cell-spacing.js';
 
 /**
@@ -34,6 +41,8 @@ type TableRenderRow = {
   localEndLine: number;
   height: number;
   lineHeights: number[];
+  cells: TableCellMeasure[];
+  blockRow?: TableRow;
 };
 
 /** @internal */
@@ -126,10 +135,12 @@ export function describeCellRenderBlocks(
       });
     } else if (measure.kind === 'table') {
       const tableMeasure = measure as TableMeasure;
+      const tableData = data?.kind === 'table' ? data : undefined;
       const lineHeights: number[] = [];
       const tableRows: TableRenderRow[] = [];
       let tableLocalLine = 0;
-      for (const row of tableMeasure.rows) {
+      for (let rowIndex = 0; rowIndex < tableMeasure.rows.length; rowIndex += 1) {
+        const row = tableMeasure.rows[rowIndex];
         const rowLineHeights: number[] = [];
         for (const segment of getEmbeddedRowLines(row)) {
           rowLineHeights.push(segment.lineHeight);
@@ -140,6 +151,8 @@ export function describeCellRenderBlocks(
           localEndLine: tableLocalLine + rowLineHeights.length,
           height: row.height,
           lineHeights: rowLineHeights,
+          cells: row.cells,
+          blockRow: tableData?.rows?.[rowIndex],
         });
         tableLocalLine += rowLineHeights.length;
       }
@@ -147,7 +160,6 @@ export function describeCellRenderBlocks(
       const startLine = globalLine;
       globalLine += lineHeights.length;
       const sumLines = sumArray(lineHeights);
-      const tableData = data?.kind === 'table' ? data : undefined;
       const borderCollapse =
         tableData?.attrs?.borderCollapse ?? (tableData?.attrs?.cellSpacing != null ? 'separate' : 'collapse');
       const tableBorderVerticalPx =
@@ -472,7 +484,7 @@ function computeTableBlockSliceHeight(block: CellRenderBlock, localStart: number
     if (rendersFullRow) {
       height += row.height;
     } else {
-      height += sumArray(row.lineHeights.slice(rowLocalStart, rowLocalEnd));
+      height += computePartialTableRowSliceHeight(row, rowLocalStart, rowLocalEnd);
     }
   }
 
@@ -482,6 +494,34 @@ function computeTableBlockSliceHeight(block: CellRenderBlock, localStart: number
   }
 
   return height;
+}
+
+function computePartialTableRowSliceHeight(row: TableRenderRow, rowLocalStart: number, rowLocalEnd: number): number {
+  let partialHeight = 0;
+
+  for (let cellIndex = 0; cellIndex < row.cells.length; cellIndex += 1) {
+    const cellMeasure = row.cells[cellIndex];
+    const cellLineCount = getCellLines(cellMeasure).length;
+    const cellFrom = Math.min(rowLocalStart, cellLineCount);
+    const cellTo = Math.min(rowLocalEnd, cellLineCount);
+    const padding = getCellPadding(row.blockRow, cellIndex);
+    const blocks = describeCellRenderBlocks(cellMeasure, row.blockRow?.cells?.[cellIndex], padding);
+
+    partialHeight = Math.max(
+      partialHeight,
+      computeCellSliceContentHeight(blocks, cellFrom, cellTo) + padding.top + padding.bottom,
+    );
+  }
+
+  return partialHeight;
+}
+
+function getCellPadding(blockRow: TableRow | undefined, cellIndex: number): { top: number; bottom: number } {
+  const padding = blockRow?.cells?.[cellIndex]?.attrs?.padding;
+  return {
+    top: padding?.top ?? 0,
+    bottom: padding?.bottom ?? 0,
+  };
 }
 
 function sumArray(arr: number[]): number {

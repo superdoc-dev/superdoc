@@ -72,7 +72,7 @@ export type TableRenderDependencies = {
     context: FragmentRenderContext,
     options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
   ) => void;
-  /** Function to render drawing content (images, shapes, shape groups) */
+  /** Function to render non-image drawing content (shapes, charts, etc.) */
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply fragment positioning and dimensions */
   applyFragmentFrame: (el: HTMLElement, fragment: Fragment) => void;

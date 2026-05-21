@@ -788,7 +788,7 @@ describe('renderTableCell', () => {
     expect(cellElement.querySelector('.superdoc-drawing-placeholder')).toBeTruthy();
   });
 
-  it('uses the drawing content callback for image drawing blocks inside table cells', () => {
+  it('keeps image drawing blocks on the shared drawing renderer when a callback is provided', () => {
     const drawing: DrawingBlock = {
       kind: 'drawing',
       id: 'drawing-image-callback',
@@ -826,9 +826,9 @@ describe('renderTableCell', () => {
       },
     });
 
-    expect(callbackCount).toBe(1);
-    expect(cellElement.querySelector('.callback-drawing-image')).toBeTruthy();
-    expect(cellElement.querySelector('img.superdoc-drawing-image')).toBeFalsy();
+    expect(callbackCount).toBe(0);
+    expect(cellElement.querySelector('.callback-drawing-image')).toBeFalsy();
+    expect(cellElement.querySelector('img.superdoc-drawing-image')).toBeTruthy();
   });
 
   it('pushes text away from wrapSquare anchored images in table cells', () => {

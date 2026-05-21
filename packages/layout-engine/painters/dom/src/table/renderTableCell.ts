@@ -221,7 +221,7 @@ type EmbeddedTableRenderParams = {
     context: FragmentRenderContext,
     options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
   ) => void;
-  /** Optional callback to render drawing content (shapes, etc.) */
+  /** Optional callback to render non-image drawing content (shapes, charts, etc.) */
   renderDrawingContent?: (block: DrawingBlock, options?: { clipContainer?: HTMLElement }) => HTMLElement;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
@@ -565,11 +565,11 @@ type TableCellRenderDependencies = {
     options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
   ) => void;
   /**
-   * Optional callback function to render drawing content (vectorShapes, shapeGroups).
-   * If provided, this callback is used to render DrawingBlocks with drawingKind of 'vectorShape' or 'shapeGroup'.
+   * Optional callback function to render non-image drawing content (vectorShapes, shapeGroups, charts).
+   * If provided, this callback is used for DrawingBlocks whose drawingKind is not 'image'.
    * The callback receives a DrawingBlock and must return an HTMLElement.
    * The returned element will have width: 100% and height: 100% styles applied automatically.
-   * If undefined, a placeholder element with diagonal stripes pattern is rendered instead.
+   * If undefined, the shared drawing renderer is used.
    */
   renderDrawingContent?: (block: DrawingBlock, options?: { clipContainer?: HTMLElement }) => HTMLElement;
   /** Rendering context */
@@ -695,17 +695,27 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     hyperlink: ImageHyperlink | undefined,
     display: 'block' | 'inline-block',
   ): HTMLElement => buildImageHyperlinkAnchor(doc, imageEl, hyperlink, display);
-  const renderTableCellDrawingContent =
-    renderDrawingContent ??
-    ((block: DrawingBlock, options?: { clipContainer?: HTMLElement }): HTMLElement =>
-      renderSharedDrawingContent({
-        doc,
-        block,
-        geometry: 'geometry' in block ? block.geometry : undefined,
-        context,
-        clipContainer: options?.clipContainer,
-        buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
-      }));
+  const renderSharedTableCellDrawingContent = (
+    block: DrawingBlock,
+    options?: { clipContainer?: HTMLElement },
+  ): HTMLElement =>
+    renderSharedDrawingContent({
+      doc,
+      block,
+      geometry: 'geometry' in block ? block.geometry : undefined,
+      context,
+      clipContainer: options?.clipContainer,
+      buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+    });
+  const renderTableCellDrawingContent = (
+    block: DrawingBlock,
+    options?: { clipContainer?: HTMLElement },
+  ): HTMLElement => {
+    if (block.drawingKind === 'image') {
+      return renderSharedTableCellDrawingContent(block, options);
+    }
+    return renderDrawingContent?.(block, options) ?? renderSharedTableCellDrawingContent(block, options);
+  };
 
   // RTL: swap left↔right cell margins (ECMA-376 Part 4 §14.3.3–14.3.4, §14.3.7–14.3.8)
   const paddingLeft = isRtl ? (padding.right ?? 4) : (padding.left ?? 4);

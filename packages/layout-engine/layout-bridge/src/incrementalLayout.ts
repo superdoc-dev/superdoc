@@ -1633,15 +1633,25 @@ export async function incrementalLayout(
             left: marginLeft,
             contentWidth: pageContentWidth,
           };
-          // SD-2656: paint the band immediately under body. layoutDocument
-          // stashes bodyMaxY on each Page (the y where body's last fragment
-          // ends, minus trailing paragraph spacing). Falling back to the
-          // legacy "page bottom margin" position preserves behavior for
-          // pages without any body content (header/footer-only pages).
-          const bodyMaxY = (page as { bodyMaxY?: number }).bodyMaxY;
-          const bandTopY =
-            typeof bodyMaxY === 'number' && Number.isFinite(bodyMaxY)
-              ? bodyMaxY
+          // SD-2656: Word anchors the footnote band to the page's bottom
+          // margin (band bottom = pageH - originalBottomMargin), with any
+          // slack appearing as whitespace BETWEEN body and band. Our previous
+          // approach (band top = bodyMaxY) inverted that — whitespace landed
+          // BELOW the band instead, visibly different from Word on every
+          // page with a non-full band. We bottom-anchor per column, with
+          // bodyMaxY as a safety floor for the dense case (band would
+          // otherwise overlap body when planner-placed content fills the
+          // available reserve).
+          //
+          // `page.margins.bottom` is the convergence-inflated value (original
+          // + reserve). The original bottom margin is therefore margins.bottom
+          // minus the per-page reserve we just stashed.
+          const physicalBottomMargin = Math.max(0, (page.margins.bottom ?? 0) - (page.footnoteReserved ?? 0));
+          const pageBottomLimit = pageSize.h - physicalBottomMargin;
+          const bodyMaxYValue = (page as { bodyMaxY?: number }).bodyMaxY;
+          const bodyMaxY =
+            typeof bodyMaxYValue === 'number' && Number.isFinite(bodyMaxYValue)
+              ? bodyMaxYValue
               : pageSize.h - (page.margins.bottom ?? 0);
 
           const slicesByColumn = new Map<number, FootnoteSlice[]>();
@@ -1662,6 +1672,18 @@ export async function incrementalLayout(
 
             const columnKey = footnoteColumnKey(pageIndex, columnIndex);
             const isContinuation = plan.hasContinuationByColumn.get(columnKey) ?? false;
+
+            // SD-2656: compute this column's total band height so we can
+            // bottom-anchor it (Word-style). totalBandHeight matches the
+            // planner's demand calc: separator-before + divider + top-padding
+            // + sum(slice heights) + gap-between-slices.
+            const colSeparatorHeight = isContinuation ? continuationDividerHeight : safeDividerHeight;
+            let colTotalBandHeight = Math.max(0, plan.separatorSpacingBefore) + colSeparatorHeight + safeTopPadding;
+            for (let s = 0; s < columnSlices.length; s += 1) {
+              colTotalBandHeight += columnSlices[s].totalHeight;
+              if (s > 0) colTotalBandHeight += safeGap;
+            }
+            const bandTopY = Math.max(bodyMaxY, pageBottomLimit - colTotalBandHeight);
 
             // Optional visible separator line (Word-like). Uses a 1px filled rect.
             let cursorY = bandTopY + Math.max(0, plan.separatorSpacingBefore);

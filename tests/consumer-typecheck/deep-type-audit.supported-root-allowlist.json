@@ -1,0 +1,397 @@
+{
+  "version": 1,
+  "scope": "supported-root",
+  "generatedAt": "2026-05-21T16:00:16.417Z",
+  "entries": [
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|Editor.<value>.new(options)<0>.extensions[].editor.converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "Editor.<value>.new(options)<0>.extensions[].editor.converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 154,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|Editor.<value>.new(options)<0>.extensions[].editor.extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "Editor.<value>.new(options)<0>.extensions[].editor.extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|Extensions.<value>.Node.new(config).editor.converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "Extensions.<value>.Node.new(config).editor.converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 154,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|Extensions.<value>.Node.new(config).editor.extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "Extensions.<value>.Node.new(config).editor.extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.activeEditor.converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.activeEditor.converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 154,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.activeEditor.extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.activeEditor.extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|SuperDoc.config.modules.links.popoverResolver(ctx).editor.converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "SuperDoc.config.modules.links.popoverResolver(ctx).editor.converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 154,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|SuperDoc.config.modules.links.popoverResolver(ctx).editor.extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "SuperDoc.config.modules.links.popoverResolver(ctx).editor.extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|defineNode.<value>(config).editor.converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "defineNode.<value>(config).editor.converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 154,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|defineNode.<value>(config).editor.extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "defineNode.<value>(config).editor.extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|getRichTextExtensions.<value>=>return[].editor.converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "getRichTextExtensions.<value>=>return[].editor.converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 154,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|getRichTextExtensions.<value>=>return[].editor.extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "getRichTextExtensions.<value>=>return[].editor.extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|getSchemaIntrospection.<value>(options).editor.converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "getSchemaIntrospection.<value>(options).editor.converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 154,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|getSchemaIntrospection.<value>(options).editor.extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "getSchemaIntrospection.<value>(options).editor.extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|getStarterExtensions.<value>=>return[].editor.converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "getStarterExtensions.<value>=>return[].editor.converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 154,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|getStarterExtensions.<value>=>return[].editor.extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "getStarterExtensions.<value>=>return[].editor.extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/getActiveFormatting.d.ts|getActiveFormatting.<value>(editor)|editor: any",
+      "kind": "param",
+      "symbolPath": "getActiveFormatting.<value>(editor)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/getActiveFormatting.d.ts",
+      "line": 1,
+      "snippet": "editor: any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts|createZip.<value>(blobs)|blobs: any",
+      "kind": "param",
+      "symbolPath": "createZip.<value>(blobs)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts",
+      "line": 7,
+      "snippet": "blobs: any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts|createZip.<value>(fileNames)|fileNames: any",
+      "kind": "param",
+      "symbolPath": "createZip.<value>(fileNames)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts",
+      "line": 7,
+      "snippet": "fileNames: any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.element|element: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.element",
+      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
+      "line": 9,
+      "snippet": "element: any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.superdoc|superdoc: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.superdoc",
+      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
+      "line": 16,
+      "snippet": "superdoc: any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.commentsList.element|element: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsList.element",
+      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
+      "line": 9,
+      "snippet": "element: any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.commentsList.superdoc|superdoc: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsList.superdoc",
+      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
+      "line": 16,
+      "snippet": "superdoc: any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/getActiveFormatting.d.ts|getActiveFormatting.<value>=>return|export function getActiveFormatting(editor: any): any;",
+      "kind": "return",
+      "symbolPath": "getActiveFormatting.<value>=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/getActiveFormatting.d.ts",
+      "line": 1,
+      "snippet": "export function getActiveFormatting(editor: any): any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts|SuperDoc.toolbar.controller.getSnapshot=>return.context.target.commands<1>=>return|(...args: any[]) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.toolbar.controller.getSnapshot=>return.context.target.commands<1>=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts",
+      "line": 146,
+      "snippet": "(...args: any[]) => any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.toolbar.toolbar<14>|toolbar: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string",
+      "kind": "type",
+      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.toolbar.toolbar<14>",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 189,
+      "snippet": "toolbar: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.toolbar<14>|toolbar: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string",
+      "kind": "type",
+      "symbolPath": "SuperDoc.toolbar.toolbar<14>",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 189,
+      "snippet": "toolbar: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts|Editor.<value>.new(options)<0>.extensions[].config.renderDOM<1>|renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "kind": "type",
+      "symbolPath": "Editor.<value>.new(options)<0>.extensions[].config.renderDOM<1>",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts",
+      "line": 49,
+      "snippet": "renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts|Extensions.<value>.Node.new(config).editor.presentationEditor.options.extensions[].config.renderDOM<1>|renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "kind": "type",
+      "symbolPath": "Extensions.<value>.Node.new(config).editor.presentationEditor.options.extensions[].config.renderDOM<1>",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts",
+      "line": 49,
+      "snippet": "renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts|defineNode.<value>(config).editor.presentationEditor.options.extensions[].config.renderDOM<1>|renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "kind": "type",
+      "symbolPath": "defineNode.<value>(config).editor.presentationEditor.options.extensions[].config.renderDOM<1>",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts",
+      "line": 49,
+      "snippet": "renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts|getRichTextExtensions.<value>=>return[].config.renderDOM<1>|renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "kind": "type",
+      "symbolPath": "getRichTextExtensions.<value>=>return[].config.renderDOM<1>",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts",
+      "line": 49,
+      "snippet": "renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts|getSchemaIntrospection.<value>(options).editor.presentationEditor.options.extensions[].config.renderDOM<1>|renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "kind": "type",
+      "symbolPath": "getSchemaIntrospection.<value>(options).editor.presentationEditor.options.extensions[].config.renderDOM<1>",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts",
+      "line": 49,
+      "snippet": "renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts|getStarterExtensions.<value>=>return[].config.renderDOM<1>|renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "kind": "type",
+      "symbolPath": "getStarterExtensions.<value>=>return[].config.renderDOM<1>",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts",
+      "line": 49,
+      "snippet": "renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts|SuperDoc.toolbar.controller.getSnapshot=>return.context.target.commands<1>(args)<0>|...args: any[]",
+      "kind": "type",
+      "symbolPath": "SuperDoc.toolbar.controller.getSnapshot=>return.context.target.commands<1>(args)<0>",
+      "file": "node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts",
+      "line": 146,
+      "snippet": "...args: any[]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts|SuperDoc.toolbar.controller.getSnapshot=>return.context.target.commands<1>(args)[]|...args: any[]",
+      "kind": "type",
+      "symbolPath": "SuperDoc.toolbar.controller.getSnapshot=>return.context.target.commands<1>(args)[]",
+      "file": "node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts",
+      "line": 146,
+      "snippet": "...args: any[]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.container<14>|container: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, stri",
+      "kind": "type",
+      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.container<14>",
+      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
+      "line": 18,
+      "snippet": "container: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, stri",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.commentsList.container<14>|container: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, stri",
+      "kind": "type",
+      "symbolPath": "SuperDoc.commentsList.container<14>",
+      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
+      "line": 18,
+      "snippet": "container: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, stri",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/superdoc/src/core/SuperDoc.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.app<0>|app: import('vue').App;",
+      "kind": "type",
+      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.app<0>",
+      "file": "node_modules/superdoc/dist/superdoc/src/core/SuperDoc.d.ts",
+      "line": 81,
+      "snippet": "app: import('vue').App;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/superdoc/src/core/SuperDoc.d.ts|SuperDoc.app<0>|app: import('vue').App;",
+      "kind": "type",
+      "symbolPath": "SuperDoc.app<0>",
+      "file": "node_modules/superdoc/dist/superdoc/src/core/SuperDoc.d.ts",
+      "line": 81,
+      "snippet": "app: import('vue').App;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory (supported-root scope)"
+    }
+  ]
+}

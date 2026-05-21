@@ -3,6 +3,25 @@ import type { PresentationEditor } from '../editors/v1/core/presentation-editor/
 import type { DocumentApi } from '@superdoc/document-api';
 
 /**
+ * Event names the headless toolbar host subscribes to. Narrow union
+ * so a real `SuperDoc` instance (with the SD-3213 closed
+ * `SuperDocEventMap`-typed `on`) satisfies the structural host
+ * contract. Custom host stubs typed with a wider
+ * `on?: (event: string, ...) => void` are still assignable.
+ *
+ * Split from the UI controller's narrower
+ * `SuperDocUIHostEvent` (`ui/types.ts`, 3 events) because the toolbar
+ * additionally subscribes to `formatting-marks-change`; requiring the
+ * UI controller's `SuperDocLike` stub to accept that 4th event would
+ * be wider than the UI side actually consumes.
+ */
+export type HeadlessToolbarSuperdocHostEvent =
+  | 'editorCreate'
+  | 'document-mode-change'
+  | 'formatting-marks-change'
+  | 'zoomChange';
+
+/**
  * The editable surface that currently owns the toolbar context.
  *
  * `note` and `endnote` were added in Phase 2 of the unified-history rollout
@@ -247,7 +266,12 @@ export type HeadlessToolbarController = {
  */
 export type ToolbarExecuteFn = (id: PublicToolbarItemId, payload?: unknown) => boolean;
 
-export type HeadlessToolbarSuperdocHost = {
+/**
+ * Common fields shared by every accepted `createHeadlessToolbar` host
+ * shape. Pulled out so the two host branches below stay aligned without
+ * duplication.
+ */
+type HeadlessToolbarSuperdocHostBase = {
   activeEditor?: Editor | null;
   config?: {
     layoutEngineOptions?: {
@@ -255,8 +279,39 @@ export type HeadlessToolbarSuperdocHost = {
     };
   };
   toggleFormattingMarks?: () => void;
-  on?: (event: string, listener: (...args: any[]) => void) => void;
-  off?: (event: string, listener: (...args: any[]) => void) => void;
+  // The toolbar only subscribes to these SuperDoc events; keeping the
+  // host event names narrow lets strict event maps satisfy this
+  // structural host contract. See `HeadlessToolbarSuperdocHostEvent` above.
+  on?: (event: HeadlessToolbarSuperdocHostEvent, listener: (...args: any[]) => void) => void;
+  off?: (event: HeadlessToolbarSuperdocHostEvent, listener: (...args: any[]) => void) => void;
+};
+
+/**
+ * Narrow host shape introduced in SD-3213f. `SuperDoc` instances satisfy
+ * this branch directly: the two narrow methods replace the raw-store
+ * reach that `resolveToolbarSources` and `track-changes.ts` used before.
+ */
+type HeadlessToolbarSuperdocHostNarrow = HeadlessToolbarSuperdocHostBase & {
+  getPresentationEditorForDocument?: (documentId: string) => PresentationEditor | null;
+  getComment?: (commentId: string) => Record<string, unknown> | null;
+};
+
+/**
+ * Legacy host shape kept for pre-SD-3213f typed custom host stubs that
+ * pass `superdocStore.documents[]` directly. The runtime still accepts
+ * this path; the type is retained so inline object-literal custom hosts
+ * compile without `any` casts.
+ *
+ * `commentsStore` was never advertised on this type pre-SD-3213f, so it
+ * is intentionally not added here even though `track-changes.ts`
+ * accepts the field at runtime. Adding it now would be public-surface
+ * growth, not backward-compat.
+ *
+ * @deprecated Prefer the narrow host methods on
+ *   `HeadlessToolbarSuperdocHostNarrow` (SD-3213f). Will be removed in
+ *   a future major after custom host stubs adopt the narrow methods.
+ */
+type HeadlessToolbarSuperdocHostLegacy = HeadlessToolbarSuperdocHostBase & {
   superdocStore?: {
     documents?: Array<{
       getPresentationEditor?: () => PresentationEditor | null | undefined;
@@ -264,6 +319,14 @@ export type HeadlessToolbarSuperdocHost = {
     }>;
   };
 };
+
+/**
+ * Host accepted by `createHeadlessToolbar({ superdoc })`. Union of the
+ * narrow SD-3213f shape (preferred; SuperDoc satisfies it) and the
+ * legacy `superdocStore` shape (deprecated; kept so inline custom host
+ * stubs from before SD-3213f keep compiling without `any` casts).
+ */
+export type HeadlessToolbarSuperdocHost = HeadlessToolbarSuperdocHostNarrow | HeadlessToolbarSuperdocHostLegacy;
 
 export type CreateHeadlessToolbarOptions = {
   superdoc: HeadlessToolbarSuperdocHost;

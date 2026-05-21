@@ -45,9 +45,9 @@ class BoundRuntime implements RuntimeInvoker {
     options: InvokeOptions = {},
   ): Promise<TData> {
     if (this.closed) {
-      throw new SuperDocCliError('Document handle is closed.', {
+      throw new SuperDocCliError(`Document handle is closed; cannot invoke ${operation.operationId}.`, {
         code: 'DOCUMENT_CLOSED',
-        details: { sessionId: this.sessionId },
+        details: { sessionId: this.sessionId, operationId: operation.operationId },
       });
     }
     return this.runtime.invoke<TData>(operation, { ...params, sessionId: this.sessionId }, options);

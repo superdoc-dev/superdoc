@@ -7,9 +7,39 @@ const DEFAULT_TEXT_FONT_SIZE = 18;
 /**
  * @typedef {{ width: number, height: number, originalWidth?: number, originalHeight?: number }} WhiteboardPageSize
  * @typedef {{ x: number, y: number }} Point
+ *
+ * Authored input shapes — what `addStroke`/`addText`/`addImage` accept
+ * from a consumer (pixel-space coordinates, optional ids). The
+ * add* methods normalize these into the stored shapes below.
+ *
  * @typedef {{ points: number[][], color?: string, width?: number, type?: 'draw'|'erase' }} WhiteboardStroke
  * @typedef {{ id?: string|number, x: number, y: number, content: string, fontSize?: number, width?: number }} WhiteboardTextItem
  * @typedef {{ id?: string|number, stickerId?: string, x: number, y: number, src: string, width?: number, height?: number, type?: string }} WhiteboardImageItem
+ *
+ * Stored / normalized shapes — what the page actually holds in
+ * `this.strokes` / `this.text` / `this.images` and what gets
+ * serialized via `toJSON()` and re-applied via `applyData()`. Fields
+ * suffixed with `N` (pointsN, xN, yN, widthN, heightN, fontSizeN) are
+ * normalized to the page's 0..1 coordinate space; raw `width`/`height`
+ * pairs are kept where consumers expect pixel sizes.
+ *
+ * SD-3213 follow-up: the public types were previously `any[]` for the
+ * fields and the toJSON / applyData signatures; consumers reading
+ * `page.strokes[0].points` would have hit pointsN at runtime with no
+ * IntelliSense. The named shapes below restore typing without
+ * over-committing the authored shapes (which the add* methods
+ * normalize away).
+ *
+ * @typedef {{ pointsN: number[][], widthN?: number, color?: string, type?: 'draw'|'erase' }} WhiteboardStoredStroke
+ * @typedef {{ id: string|number, xN: number, yN: number, content: string, fontSizeN?: number, widthN?: number | null }} WhiteboardStoredTextItem
+ * @typedef {{ id: string|number, stickerId?: string | number | null, xN: number, yN: number, src: string, widthN?: number | null, heightN?: number | null, type?: string }} WhiteboardStoredImageItem
+ *
+ * @typedef {{
+ *  strokes?: WhiteboardStoredStroke[],
+ *  text?: WhiteboardStoredTextItem[],
+ *  images?: WhiteboardStoredImageItem[],
+ * }} WhiteboardStoredPageData
+ *
  * @typedef {{
  *  pageIndex: number,
  *  enabled: boolean,
@@ -26,13 +56,13 @@ export class WhiteboardPage {
   /** @type {number|null} */
   pageIndex = null;
 
-  /** @type {WhiteboardStroke[]} */
+  /** @type {WhiteboardStoredStroke[]} */
   strokes = [];
 
-  /** @type {WhiteboardTextItem[]} */
+  /** @type {WhiteboardStoredTextItem[]} */
   text = [];
 
-  /** @type {WhiteboardImageItem[]} */
+  /** @type {WhiteboardStoredImageItem[]} */
   images = [];
 
   /** @type {WhiteboardPageSize|null} */
@@ -681,7 +711,12 @@ export class WhiteboardPage {
 
   /**
    * Serialize page data.
-   * @returns {{ strokes: any[], text: any[], stickers: any[] }}
+   * Returns the page's serializable shape. SD-3213 follow-up: fixed
+   * stale JSDoc that said `stickers` (which never existed on the
+   * runtime return) and typed the values as the stored normalized
+   * shapes instead of `any[]`.
+   *
+   * @returns {{ strokes: WhiteboardStoredStroke[], text: WhiteboardStoredTextItem[], images: WhiteboardStoredImageItem[] }}
    */
   toJSON() {
     return {
@@ -693,7 +728,7 @@ export class WhiteboardPage {
 
   /**
    * Apply data to this page and re-render.
-   * @param {{ strokes?: any[], text?: any[], images?: any[] }} data
+   * @param {WhiteboardStoredPageData} data
    */
   applyData(data = {}) {
     const strokes = Array.isArray(data.strokes) ? data.strokes : [];

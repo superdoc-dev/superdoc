@@ -265,9 +265,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * ProseMirror schema for the editor.
+   *
+   * Typed as `Schema<string, string>` rather than bare `Schema` to
+   * drop the implicit `Schema<any, any>` default through the SD-3213
+   * supported-root audit. Node and mark name spaces are typed as
+   * `string` (the established ProseMirror constraint shape); consumer
+   * schemas with literal-typed names like `Schema<'paragraph', 'em'>`
+   * remain assignable.
+   *
    * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
-  schema!: Schema;
+  schema!: Schema<string, string>;
 
   /**
    * ProseMirror view instance.
@@ -1947,10 +1955,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Register PM plugin.
+   *
+   * `PluginState` is a call-site generic so the incoming plugin's
+   * state shape is preserved into the `handlePlugins` callback's
+   * `plugin` argument. The existing plugin list is heterogeneous
+   * (each entry can have a different state type) so it stays as
+   * `Plugin<unknown>[]` instead of being inferred under one specific
+   * state. Default `PluginState = unknown` removes the previous
+   * implicit `Plugin<any>` SD-3213 supported-root finding.
+   *
    * @param plugin PM plugin.
    * @param handlePlugins Optional function for handling plugin merge.
    */
-  registerPlugin(plugin: Plugin, handlePlugins?: (plugin: Plugin, plugins: Plugin[]) => Plugin[]): void {
+  registerPlugin<PluginState = unknown>(
+    plugin: Plugin<PluginState>,
+    handlePlugins?: (plugin: Plugin<PluginState>, plugins: Plugin<unknown>[]) => Plugin<unknown>[],
+  ): void {
     if (this.isDestroyed) return;
     if (!this.state?.plugins) return;
     const plugins =

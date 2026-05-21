@@ -1,17 +1,24 @@
 /**
- * Default event map with string keys and any arguments.
- * Using `any[]` is necessary here to allow flexible event argument types
- * while maintaining type safety through generic constraints in EventEmitter.
+ * Default event map: string event names → tuple of payload args.
+ *
+ * The index-signature value is `unknown[]` (SD-3213 EventEmitter drain).
+ * Specific event maps that extend this still type their known events
+ * precisely; the index-signature fallback only governs untyped event
+ * names. Currently this emitter is consumed by `Whiteboard` (no event
+ * map yet — tracked as a follow-up); SuperDoc itself uses the
+ * third-party `eventemitter3` and is unaffected by this change.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type DefaultEventMap = Record<string, any[]>;
+export type DefaultEventMap = Record<string, unknown[]>;
 
 /**
  * Event callback function type.
- * Using `any[]` default is necessary for variance and compatibility with event handlers.
+ *
+ * Default `Args extends unknown[] = unknown[]` (was `any[]`, SD-3213).
+ * Variance: when a specific event map provides a tighter tuple via
+ * `EventMap[K]`, that flows through to `EventCallback<EventMap[K]>` at
+ * the call site, so typed events keep their precise payloads.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type EventCallback<Args extends any[] = any[]> = (...args: Args) => void;
+export type EventCallback<Args extends unknown[] = unknown[]> = (...args: Args) => void;
 
 /**
  * EventEmitter class is used to emit and subscribe to events.
@@ -28,8 +35,11 @@ export class EventEmitter<EventMap extends DefaultEventMap = DefaultEventMap> {
    */
   on<K extends keyof EventMap>(name: K, fn: EventCallback<EventMap[K]>): void {
     const callbacks = this.#events.get(name);
-    if (callbacks) callbacks.push(fn);
-    else this.#events.set(name, [fn]);
+    // Storage erases the per-event tuple type to `EventCallback` (default
+    // `unknown[]`); the typed `fn` is sound at runtime because `emit`
+    // re-narrows via `EventMap[K]` on the way out.
+    if (callbacks) callbacks.push(fn as EventCallback);
+    else this.#events.set(name, [fn as EventCallback]);
   }
 
   /**

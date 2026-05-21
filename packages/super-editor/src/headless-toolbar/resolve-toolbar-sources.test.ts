@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { resolveToolbarSources } from './resolve-toolbar-sources.js';
 
@@ -91,5 +91,94 @@ describe('resolveToolbarSources', () => {
     expect(result.activeEditor).toBe(noteEditor);
     expect(result.context?.surface).toBe('note');
     expect(result.context?.target.doc).toBe(noteEditor.doc);
+  });
+
+  // SD-3213f: the resolver prefers the narrow
+  // `getPresentationEditorForDocument` host method when present, falling
+  // back to the legacy `superdocStore.documents[]` reach for custom host
+  // stubs that pre-date the narrow method. These two tests pin the
+  // dispatch logic so a future refactor cannot silently drop either
+  // branch.
+  it('uses the narrow getPresentationEditorForDocument host method when present', () => {
+    const bodyEditor = {
+      commands: { toggleBold: () => true },
+      doc: { kind: 'body-doc' },
+      isEditable: true,
+      state: {
+        selection: {
+          empty: false,
+        },
+      },
+      options: {
+        documentId: 'doc-narrow',
+      },
+    };
+    const presentationEditor = {
+      commands: { toggleBold: () => true },
+      isEditable: true,
+      state: {
+        selection: {
+          empty: false,
+        },
+      },
+      getActiveEditor: () => bodyEditor,
+    };
+    const getPresentationEditorForDocument = vi.fn(() => presentationEditor as any);
+
+    const result = resolveToolbarSources({
+      activeEditor: bodyEditor as any,
+      getPresentationEditorForDocument,
+    });
+
+    expect(getPresentationEditorForDocument).toHaveBeenCalledWith('doc-narrow');
+    expect(result.presentationEditor).toBe(presentationEditor);
+    expect(result.activeEditor).toBe(bodyEditor);
+  });
+
+  it('prefers the narrow host method over the legacy superdocStore fallback when both are present', () => {
+    const bodyEditor = {
+      commands: { toggleBold: () => true },
+      doc: { kind: 'body-doc' },
+      isEditable: true,
+      state: {
+        selection: {
+          empty: false,
+        },
+      },
+      options: {
+        documentId: 'doc-precedence',
+      },
+    };
+    const narrowPresentationEditor = {
+      commands: { toggleBold: () => true },
+      isEditable: true,
+      state: { selection: { empty: false } },
+      getActiveEditor: () => bodyEditor,
+    };
+    const legacyPresentationEditor = {
+      commands: { toggleBold: () => true },
+      isEditable: true,
+      state: { selection: { empty: false } },
+      getActiveEditor: () => bodyEditor,
+    };
+    const getPresentationEditorForDocument = vi.fn(() => narrowPresentationEditor as any);
+    const legacyGetPresentationEditor = vi.fn(() => legacyPresentationEditor as any);
+
+    const result = resolveToolbarSources({
+      activeEditor: bodyEditor as any,
+      getPresentationEditorForDocument,
+      superdocStore: {
+        documents: [
+          {
+            getEditor: () => bodyEditor as any,
+            getPresentationEditor: legacyGetPresentationEditor,
+          },
+        ],
+      },
+    });
+
+    expect(getPresentationEditorForDocument).toHaveBeenCalledWith('doc-precedence');
+    expect(legacyGetPresentationEditor).not.toHaveBeenCalled();
+    expect(result.presentationEditor).toBe(narrowPresentationEditor);
   });
 });

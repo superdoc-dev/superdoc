@@ -17,10 +17,13 @@
  *     for visibility but does not block CI on its own.
  *
  * Run:
- *   node deep-type-audit.mjs                # check against allowlist (CI mode)
- *   node deep-type-audit.mjs --pack         # pack+install before checking
- *   node deep-type-audit.mjs --write        # regenerate allowlist from current findings
- *   node deep-type-audit.mjs --report-only  # print findings, never fail
+ *   node deep-type-audit.mjs                          # report-only inventory (default)
+ *   node deep-type-audit.mjs --pack                   # pack+install before running
+ *   node deep-type-audit.mjs --strict-supported-root  # CI gate (SD-3213e)
+ *   node deep-type-audit.mjs --strict                 # broad strict mode (not in CI)
+ *   node deep-type-audit.mjs --write                  # regenerate broad allowlist
+ *   node deep-type-audit.mjs --pack --write --strict-supported-root
+ *                                                     # regenerate supported-root allowlist
  *
  * The fixture is intentionally outside the pnpm workspace so this audits
  * the customer-visible surface, not workspace symlinks. Install pattern
@@ -44,13 +47,23 @@ const doWrite = args.has('--write');
 // stale entries, compiler diagnostics, private specifier leaks). Without
 // it, the audit runs in inventory/reporting mode and always exits 0
 // unless the script itself errors. Strict mode is intentionally NOT used
-// in CI yet: it only becomes meaningful once SD-2966 defines the public
-// facade and the allowlist is re-seeded against that smaller surface.
+// in CI yet. The facade landed in SD-3212 PR C, but the audit still walks
+// every entry in `package.json#exports`, including the broad legacy
+// `./super-editor` surface. Until the audit is scoped to the curated
+// facade entries (SD-3213 follow-up), strict-on-everything would gate
+// on ~1.8k findings dominated by legacy reach.
 const doStrict = args.has('--strict');
+// SD-3213e: scoped strict gate. Filters findings to the supported-root
+// subset (rootBuckets includes 'supported-root') and compares against
+// `deep-type-audit.supported-root-allowlist.json`. Fails on new findings
+// (regression) AND stale entries (a drain landed; allowlist must shrink).
+// Orthogonal to `--strict` and `--pack`. Wired into CI as the first real
+// no-new-any gate for the public contract.
+const doStrictSupportedRoot = args.has('--strict-supported-root');
 // Legacy alias: previous versions exposed `--report-only` as the way to
 // opt out of failing CI. The default is now report-only, so this flag
 // becomes a no-op (kept so existing invocations don't break).
-const reportOnly = args.has('--report-only') || !doStrict;
+const reportOnly = args.has('--report-only') || (!doStrict && !doStrictSupportedRoot);
 
 // -- Optional pack + install (must run BEFORE requiring typescript so a
 // fresh checkout where tests/consumer-typecheck/node_modules is empty can
@@ -439,10 +452,51 @@ for (const root of roots) {
 function keyOf(f) {
   return [f.kind, f.file, f.symbolPath, f.snippet].join('|');
 }
+// Dedup preserves the existing stable key (kind|file|symbolPath|snippet)
+// so allowlist identity does not churn. SD-3213d enriches each deduped
+// row with attribution: `reachedFrom` is the set of package export entries
+// (subpaths) through which the same finding was recorded. The first
+// observation's other fields (line, symbolPath, etc.) win the row.
 const distinctFindings = new Map();
 for (const f of findings) {
   const k = keyOf(f);
-  if (!distinctFindings.has(k)) distinctFindings.set(k, f);
+  if (!distinctFindings.has(k)) {
+    distinctFindings.set(k, { ...f, reachedFrom: new Set([f.subpath]) });
+  } else {
+    distinctFindings.get(k).reachedFrom.add(f.subpath);
+  }
+}
+
+// SD-3213d: attribute root-entry findings to their root-classification
+// bucket (supported-root / legacy-root / internal-candidate). The
+// classification artifact lives in-repo, not in the installed fixture.
+// For findings not reached from the root entry, `rootBuckets` stays empty.
+// For root-reached findings whose top-level symbol isn't in the
+// classification, `rootBuckets` is ['unknown-root-export'] (counted
+// explicitly so reviewers can see the parse failure rate).
+const classificationPath = resolve(here, 'snapshots', 'superdoc-root-classification.json');
+const classification = existsSync(classificationPath)
+  ? JSON.parse(readFileSync(classificationPath, 'utf8'))
+  : { rows: [] };
+const rootBucketByName = new Map(classification.rows.map((r) => [r.name, r.bucket]));
+
+// symbolPath starts with the root export name followed by `.member`,
+// `(param)`, `[]`, `<N>`, `=>return`, `.<value>`, etc. The top-level
+// segment is everything before the first member/param/index/generic
+// boundary.
+function topLevelSymbolFrom(symbolPath) {
+  const m = symbolPath.match(/^([^.([<=]+)/);
+  return m ? m[1] : null;
+}
+
+for (const f of distinctFindings.values()) {
+  const buckets = new Set();
+  if (f.reachedFrom.has('.')) {
+    const top = topLevelSymbolFrom(f.symbolPath);
+    const bucket = top ? rootBucketByName.get(top) : null;
+    buckets.add(bucket ?? 'unknown-root-export');
+  }
+  f.rootBuckets = buckets;
 }
 
 const allowlistPath = resolve(here, 'deep-type-audit.allowlist.json');
@@ -462,6 +516,35 @@ for (const [key, f] of distinctFindings) {
 }
 const staleAllowlistKeys = [...remainingAllowlist];
 
+// SD-3213e: supported-root scoped gate. The broad allowlist above tracks
+// everything; this scoped one tracks ONLY findings reachable from root
+// '.' whose top-level symbol is classified as `supported-root`. That is
+// the subset that directly affects documented consumer IntelliSense.
+// Legacy-root, internal-candidate, and raw `./super-editor` reach are
+// intentionally excluded from this first strict gate; each has its own
+// drain story (legacy = compat, internal-candidate = should be hidden,
+// raw = redesign).
+const supportedRootAllowlistPath = resolve(here, 'deep-type-audit.supported-root-allowlist.json');
+const supportedRootAllowlist = existsSync(supportedRootAllowlistPath)
+  ? JSON.parse(readFileSync(supportedRootAllowlistPath, 'utf8'))
+  : { version: 1, generatedAt: null, entries: [] };
+const supportedRootAllowlistByKey = new Map(supportedRootAllowlist.entries.map((e) => [e.key, e]));
+
+const supportedRootFindings = new Map();
+for (const [key, f] of distinctFindings) {
+  if (f.rootBuckets.has('supported-root')) supportedRootFindings.set(key, f);
+}
+const newSupportedRoot = [];
+const remainingSupportedRoot = new Set(supportedRootAllowlistByKey.keys());
+for (const [key, f] of supportedRootFindings) {
+  if (supportedRootAllowlistByKey.has(key)) {
+    remainingSupportedRoot.delete(key);
+  } else {
+    newSupportedRoot.push({ key, ...f });
+  }
+}
+const staleSupportedRootKeys = [...remainingSupportedRoot];
+
 // -- Owner classification helper (used when seeding the allowlist) ---------
 function classifyOwner(f) {
   if (f.owner === 'upstream') return 'upstream';
@@ -470,15 +553,43 @@ function classifyOwner(f) {
   if (f.file.includes('trackChangesHelpers') || f.file.includes('fieldAnnotationHelpers')) return 'tier-3-helpers';
   if (f.file.endsWith('core/types/index.d.ts')) return 'tier-4-public-contract';
   // SuperConverter + DocxZipper expose `[key: string]: any` and
-  // `constructor(...args: any[])`. SD-2966's done-when criteria explicitly
-  // call these out as accidentally-public; group with tier-4 so the
-  // facade work owns the fix.
+  // `constructor(...args: any[])`. Both are classified as `legacy-root`
+  // in superdoc-root-classification.json (Decision 1 of
+  // package-boundaries.md); group with tier-4 so the public-contract
+  // drain work owns the fix.
   if (f.file.endsWith('SuperConverter.d.ts') || f.file.endsWith('DocxZipper.d.ts')) return 'tier-4-public-contract';
   return 'tier-5-other';
 }
 
 // -- Write mode -----------------------------------------------------------
+// `--write` interacts with the scope flag: with `--strict-supported-root`,
+// it regenerates only the supported-root allowlist; otherwise it
+// regenerates the broad allowlist.
 if (doWrite) {
+  if (doStrictSupportedRoot) {
+    const sorted = [...supportedRootFindings.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    const next = {
+      version: 1,
+      scope: 'supported-root',
+      generatedAt: new Date().toISOString(),
+      entries: sorted.map(([key, f]) => {
+        const existing = supportedRootAllowlistByKey.get(key);
+        return {
+          key,
+          kind: f.kind,
+          symbolPath: f.symbolPath,
+          file: f.file,
+          line: f.line,
+          snippet: f.snippet,
+          owner: existing?.owner ?? classifyOwner(f),
+          rationale: existing?.rationale ?? `auto-seeded from inventory (supported-root scope)`,
+        };
+      }),
+    };
+    writeFileSync(supportedRootAllowlistPath, JSON.stringify(next, null, 2) + '\n');
+    console.log(`[audit] Wrote supported-root allowlist with ${next.entries.length} entries to ${relative(repoRoot, supportedRootAllowlistPath)}`);
+    process.exit(0);
+  }
   const sorted = [...distinctFindings.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   const next = {
     version: 1,
@@ -531,6 +642,73 @@ for (const [k, v] of Object.entries(fileCounts).sort((a, b) => b[1] - a[1]).slic
   console.log(`  ${v.toString().padStart(5)}  ${k}`);
 }
 
+// SD-3213d attribution tables. The point of these breakdowns is to
+// distinguish supported-root leaks from legacy compat reach from raw
+// ./super-editor noise, so PR 3 can scope the strict gate to the
+// curated facade subset without guessing.
+const entryCounts = {};
+const rootBucketCounts = {};
+let curatedOnly = 0;
+let rawOnly = 0;
+let both = 0;
+for (const f of tieredFindings) {
+  for (const e of f.reachedFrom) entryCounts[e] = (entryCounts[e] ?? 0) + 1;
+  for (const b of f.rootBuckets) rootBucketCounts[b] = (rootBucketCounts[b] ?? 0) + 1;
+  const reachesCurated = [...f.reachedFrom].some((e) => e !== './super-editor');
+  const reachesRaw = f.reachedFrom.has('./super-editor');
+  if (reachesCurated && reachesRaw) both++;
+  else if (reachesCurated) curatedOnly++;
+  else if (reachesRaw) rawOnly++;
+}
+console.log(``);
+console.log(`[audit] By export entry (reachedFrom; one finding can count under several):`);
+for (const [k, v] of Object.entries(entryCounts).sort((a, b) => b[1] - a[1])) {
+  console.log(`  ${v.toString().padStart(5)}  ${k}`);
+}
+console.log(``);
+console.log(`[audit] By root bucket (only for findings reached from root '.'):`);
+for (const [k, v] of Object.entries(rootBucketCounts).sort((a, b) => b[1] - a[1])) {
+  console.log(`  ${v.toString().padStart(5)}  ${k}`);
+}
+console.log(``);
+console.log(`[audit] Curated facade entries vs raw ./super-editor reach:`);
+console.log(`  ${curatedOnly.toString().padStart(5)}  reached only from curated facade entries`);
+console.log(`  ${rawOnly.toString().padStart(5)}  reached only from ./super-editor`);
+console.log(`  ${both.toString().padStart(5)}  reached from both`);
+
+// JSON attribution report. Lives under tmp/ (gitignored). PR 3 reads
+// this to drive strict-scope selection without re-running the walker.
+const tmpDir = resolve(repoRoot, 'tmp');
+try {
+  require('node:fs').mkdirSync(tmpDir, { recursive: true });
+  const reportPath = join(tmpDir, 'deep-type-audit-attribution.json');
+  const report = {
+    generatedAt: new Date().toISOString(),
+    totals: {
+      distinct: distinctFindings.size,
+      byTier: tierCounts,
+      byEntry: entryCounts,
+      byRootBucket: rootBucketCounts,
+      curatedFacadeVsRaw: { curatedOnly, rawOnly, both },
+    },
+    findings: tieredFindings.map((f) => ({
+      kind: f.kind,
+      file: f.file,
+      line: f.line,
+      symbolPath: f.symbolPath,
+      snippet: f.snippet,
+      tier: f.tier,
+      reachedFrom: [...f.reachedFrom].sort(),
+      rootBuckets: [...f.rootBuckets].sort(),
+    })),
+  };
+  writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
+  console.log(``);
+  console.log(`[audit] Wrote attribution report: ${relative(repoRoot, reportPath)}`);
+} catch (err) {
+  console.warn(`[audit] WARN: could not write attribution report: ${err.message}`);
+}
+
 const haveAllowlist = existsSync(allowlistPath);
 if (haveAllowlist) {
   console.log(``);
@@ -558,15 +736,89 @@ if (haveAllowlist) {
   }
 } else {
   console.log(``);
-  console.log(`[audit] No allowlist present (deep-type-audit.allowlist.json).`);
-  console.log(`[audit] This is expected pre-SD-2966: the audit is inventory-only until the public facade is defined.`);
-  console.log(`[audit] Once SD-2966 lands, run \`node deep-type-audit.mjs --write\` to seed an allowlist scoped to the facade.`);
+  console.log(`[audit] No broad allowlist present (deep-type-audit.allowlist.json).`);
+  console.log(`[audit] The supported-root strict gate runs separately (--strict-supported-root); see the [supported-root] section below.`);
 }
 
-if (!doStrict) {
+// SD-3213e: supported-root strict gate report. Always print when there
+// is a supported-root allowlist, regardless of mode, so reviewers see
+// drain progress and top offenders even in report-only runs.
+const haveSupportedRootAllowlist = existsSync(supportedRootAllowlistPath);
+if (haveSupportedRootAllowlist) {
   console.log(``);
-  console.log(`[audit] PASS (report-only mode; pass --strict to gate CI on findings)`);
+  console.log(`[audit] [supported-root] Allowlist (current debt): ${supportedRootAllowlist.entries.length} entries`);
+  console.log(`[audit] [supported-root] Current findings: ${supportedRootFindings.size}`);
+  console.log(`[audit] [supported-root] New (not in allowlist): ${newSupportedRoot.length}`);
+  console.log(`[audit] [supported-root] Stale (in allowlist, drained): ${staleSupportedRootKeys.length}`);
+
+  // Top offenders: which files contribute the most to remaining debt. Drain
+  // PRs should start from here. Counts come from the CURRENT findings set
+  // (not the allowlist) so newly-introduced files surface too.
+  const offenderByFile = {};
+  const offenderBySymbol = {};
+  for (const f of supportedRootFindings.values()) {
+    offenderByFile[f.file] = (offenderByFile[f.file] ?? 0) + 1;
+    const top = (f.symbolPath.match(/^([^.([<=]+)/) ?? [])[1] ?? '?';
+    offenderBySymbol[top] = (offenderBySymbol[top] ?? 0) + 1;
+  }
+  console.log(``);
+  console.log(`[audit] [supported-root] Top offender files (drain targets):`);
+  for (const [k, v] of Object.entries(offenderByFile).sort((a, b) => b[1] - a[1]).slice(0, 5)) {
+    console.log(`  ${v.toString().padStart(5)}  ${k}`);
+  }
+  console.log(``);
+  console.log(`[audit] [supported-root] Top offender root symbols:`);
+  for (const [k, v] of Object.entries(offenderBySymbol).sort((a, b) => b[1] - a[1]).slice(0, 5)) {
+    console.log(`  ${v.toString().padStart(5)}  ${k}`);
+  }
+
+  if (newSupportedRoot.length > 0) {
+    console.log(``);
+    console.log(`[audit] [supported-root] NEW FINDINGS (regression):`);
+    for (const f of newSupportedRoot.slice(0, 50)) {
+      console.log(`  + ${f.kind}  ${f.symbolPath}`);
+      console.log(`        ${f.file}:${f.line}`);
+      console.log(`        ${f.snippet}`);
+    }
+    if (newSupportedRoot.length > 50) console.log(`  ... and ${newSupportedRoot.length - 50} more`);
+  }
+  if (staleSupportedRootKeys.length > 0) {
+    console.log(``);
+    console.log(`[audit] [supported-root] STALE (drain landed; allowlist must shrink):`);
+    for (const k of staleSupportedRootKeys.slice(0, 50)) {
+      const e = supportedRootAllowlistByKey.get(k);
+      console.log(`  - ${e.kind}  ${e.symbolPath}  (${e.file}:${e.line})`);
+    }
+    if (staleSupportedRootKeys.length > 50) console.log(`  ... and ${staleSupportedRootKeys.length - 50} more`);
+  }
+}
+
+if (!doStrict && !doStrictSupportedRoot) {
+  console.log(``);
+  console.log(`[audit] PASS (report-only mode; pass --strict or --strict-supported-root to gate CI on findings)`);
   process.exit(0);
+}
+
+if (doStrictSupportedRoot) {
+  if (!haveSupportedRootAllowlist && supportedRootFindings.size > 0) {
+    console.log(``);
+    console.log(`[audit] FAIL (--strict-supported-root): no supported-root allowlist exists yet but findings are present.`);
+    console.log(`[audit] - To seed the allowlist, run: node deep-type-audit.mjs --pack --write --strict-supported-root`);
+    process.exit(1);
+  }
+  if (haveSupportedRootAllowlist && (newSupportedRoot.length > 0 || staleSupportedRootKeys.length > 0)) {
+    console.log(``);
+    console.log(`[audit] FAIL (--strict-supported-root)`);
+    console.log(`[audit] - The allowlist is current known debt, not accepted API. New entries are regressions.`);
+    console.log(`[audit] - Stale entries mean a drain landed; the allowlist must shrink (run --write to regenerate).`);
+    console.log(`[audit] - To accept an intentional new finding (rare), run: node deep-type-audit.mjs --pack --write --strict-supported-root`);
+    process.exit(1);
+  }
+  if (!doStrict) {
+    console.log(``);
+    console.log(`[audit] PASS (--strict-supported-root)`);
+    process.exit(0);
+  }
 }
 
 if (haveAllowlist && (newFindings.length > 0 || staleAllowlistKeys.length > 0)) {

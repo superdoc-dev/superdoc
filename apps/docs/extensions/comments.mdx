@@ -246,8 +246,8 @@ const superdoc = new SuperDoc({
 ## Events
 
 ```javascript
-superdoc.on('commentsUpdate', ({ type, comment }) => {
-  // type: 'ADD' | 'deleted' | 'SELECTED'
+superdoc.on('comments-update', ({ type, comment }) => {
+  // type: 'pending' | 'add' | 'update' | 'deleted' | 'new' | 'resolved' | 'selected' | ...
 });
 ```
 

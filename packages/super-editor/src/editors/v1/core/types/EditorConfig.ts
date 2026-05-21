@@ -209,11 +209,18 @@ export interface Awareness {
 /**
  * Collaboration provider interface.
  * Accepts any Yjs-compatible provider (HocuspocusProvider, LiveblocksYjsProvider, TiptapCollabProvider, etc.)
+ *
+ * `on`/`off` use `(event: string, handler: (...args: unknown[]) => void)`
+ * to match the established pattern on `Awareness` above and the internal
+ * `ProviderEventHandler` cast in `helpers/collaboration-provider-sync.ts`.
+ * Consumers narrow `args` before reading; this is a TS-only tightening
+ * (no runtime change) that drains 32 SD-3213 supported-root any[]
+ * findings on EditorConfig.d.ts in a single source edit.
  */
 export interface CollaborationProvider {
   awareness?: Awareness | null;
-  on?(event: any, handler: (...args: any[]) => void): void;
-  off?(event: any, handler: (...args: any[]) => void): void;
+  on?(event: string, handler: (...args: unknown[]) => void): void;
+  off?(event: string, handler: (...args: unknown[]) => void): void;
   disconnect?(): void;
   destroy?(): void;
   /** Whether provider is synced - some use `synced`, others `isSynced` */

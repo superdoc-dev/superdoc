@@ -218,6 +218,36 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
+ * SD-3213g: single documented bridge between `SuperDocLike` and
+ * `resolveToolbarSources`'s `ToolbarHostShape`. The cast lives here so
+ * callers don't repeat `superdoc as never` at every site.
+ *
+ * Why the cast is intentional, not type-system noise:
+ *
+ * - `SuperDocLike` is intentionally stub-friendly. Its `activeEditor`
+ *   is `SuperDocEditorLike | null` (a UI-level structural type) so
+ *   consumer tests can pass narrow handcrafted hosts without pulling
+ *   in the full `Editor` graph.
+ * - At runtime, a real `SuperDoc` instance's `activeEditor` is always
+ *   a real `Editor` that satisfies `ToolbarHostShape` structurally.
+ *   The two types describe the same runtime value at different
+ *   abstraction levels.
+ * - Custom commands (and other UI paths) require **late-bound** routing
+ *   resolved at execute time, not at controller construction; the
+ *   cached `toolbarSnapshot.context` only reflects state at the last
+ *   subscription event. So fresh `resolveToolbarSources` calls are
+ *   load-bearing for the `'execute receives the routed editor
+ *   late-bound'` contract pinned in `custom-commands.test.ts`.
+ *
+ * Use this helper anywhere the UI needs a fresh resolver walk. Do not
+ * call `resolveToolbarSources(superdoc as never)` elsewhere in this
+ * file.
+ */
+function resolveFreshToolbarSources(superdoc: SuperDocUIOptions['superdoc']) {
+  return resolveToolbarSources(superdoc as never);
+}
+
+/**
  * Resolve the **routed** editor — the body, header, footer, or note
  * editor that PresentationEditor currently routes input/selection to.
  * Falls back to `superdoc.activeEditor` when no presentation layer is
@@ -230,7 +260,7 @@ function deepFreeze<T>(value: T): T {
  */
 function resolveRoutedEditor(superdoc: SuperDocUIOptions['superdoc']): SuperDocEditorLike | null {
   try {
-    const sources = resolveToolbarSources(superdoc as never);
+    const sources = resolveFreshToolbarSources(superdoc);
     return (sources.activeEditor as unknown as SuperDocEditorLike | null) ?? null;
   } catch {
     return (superdoc.activeEditor ?? null) as SuperDocEditorLike | null;
@@ -264,7 +294,7 @@ function resolvePresentationEditor(superdoc: SuperDocUIOptions['superdoc']): {
   off?: (event: string, handler: (...args: unknown[]) => void) => unknown;
 } | null {
   try {
-    const sources = resolveToolbarSources(superdoc as never);
+    const sources = resolveFreshToolbarSources(superdoc);
     return (sources.presentationEditor as never) ?? null;
   } catch {
     return null;
@@ -339,7 +369,7 @@ function readActiveStoryLocator(
 ): import('@superdoc/document-api').StoryLocator | null {
   let presentation: { getActiveStoryLocator?: () => unknown } | null = null;
   try {
-    const sources = resolveToolbarSources(superdoc as never);
+    const sources = resolveFreshToolbarSources(superdoc);
     presentation = (sources.presentationEditor as never) ?? null;
   } catch {
     return null;
@@ -398,6 +428,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // same selector substrate as the rest of the controller. Per-command
   // state derivers in the registry are wrapped to default to disabled
   // on throw, so a partial editor never wedges snapshot construction.
+  // SD-3213g: documented bridge cast. Same rationale as the comment on
+  // `resolveFreshToolbarSources` above: SuperDocLike is intentionally
+  // stub-friendly, runtime SuperDoc.activeEditor is a real Editor that
+  // satisfies the host contract structurally. Concentrated here so the
+  // call site stays an obvious boundary, not scattered casts elsewhere.
   const toolbarController: HeadlessToolbarController = createHeadlessToolbar({
     superdoc: superdoc as unknown as HeadlessToolbarSuperdocHost,
     // Pass the full registry so snapshot.commands is populated for

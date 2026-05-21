@@ -23,12 +23,14 @@ import type { FlowBlock } from '@superdoc/contracts';
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
+import { resolveParagraphProperties } from '@superdoc/style-engine/ooxml';
 
 import type { ProseMirrorJSON } from '../../types/EditorTypes.js';
 import type { FootnoteReference, FootnotesLayoutInput } from '../types.js';
 import { findNoteEntryById } from '../../../document-api-adapters/helpers/note-entry-lookup.js';
 import { normalizeNotePmJson } from '../../../document-api-adapters/helpers/note-pm-json.js';
 import { buildStoryKey } from '../../../document-api-adapters/story-runtime/story-key.js';
+import { createListRenderingSync } from '../../../extensions/paragraph/listRenderingSync.js';
 
 // Re-export types for consumers
 export type { FootnoteReference, FootnotesLayoutInput };
@@ -40,6 +42,10 @@ export type { FootnoteReference, FootnotesLayoutInput };
 /** Minimal shape of a converter object containing footnote data. */
 export type ConverterLike = {
   footnotes?: Array<{ id?: unknown; content?: unknown[] }>;
+  numbering?: unknown;
+  translatedNumbering?: unknown;
+  translatedLinkedStyles?: unknown;
+  convertedXml?: unknown;
 };
 
 export type NoteRenderOverride = {
@@ -132,6 +138,7 @@ export function buildFootnotesInput(
     try {
       const footnoteDoc = resolveNoteDocJson(id, importedFootnotes, renderOverride);
       if (!footnoteDoc) return;
+      applyFootnoteListRendering(footnoteDoc, converter, converterContext);
 
       const result = toFlowBlocks(footnoteDoc, {
         blockIdPrefix: `footnote-${id}-`,
@@ -262,6 +269,64 @@ function resolveNoteDocJson(
   return normalizeNotePmJson({
     type: 'doc',
     content: cloneNoteContentJson(content),
+  });
+}
+
+function isPmJsonObject(value: unknown): value is ProseMirrorJSON & { attrs?: Record<string, unknown> } {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function traversePmJson(node: ProseMirrorJSON, visitor: (node: ProseMirrorJSON) => boolean | void): void {
+  const result = visitor(node);
+  if (result === false || !Array.isArray(node.content)) return;
+  node.content.forEach((child) => {
+    if (isPmJsonObject(child)) {
+      traversePmJson(child, visitor);
+    }
+  });
+}
+
+function resolveFootnoteParagraphProperties(
+  node: ProseMirrorJSON & { attrs?: Record<string, unknown> },
+  converterContext: ConverterContext | undefined,
+): Record<string, unknown> {
+  const paragraphProperties =
+    typeof node.attrs?.paragraphProperties === 'object' && node.attrs.paragraphProperties !== null
+      ? (node.attrs.paragraphProperties as Record<string, unknown>)
+      : {};
+
+  if (!converterContext) {
+    return paragraphProperties;
+  }
+
+  return resolveParagraphProperties(
+    converterContext as never,
+    paragraphProperties as never,
+    converterContext.tableInfo,
+  ) as Record<string, unknown>;
+}
+
+function applyFootnoteListRendering(
+  footnoteDoc: ProseMirrorJSON,
+  converter: ConverterLike | null | undefined,
+  converterContext: ConverterContext | undefined,
+): void {
+  const listRenderingSync = createListRenderingSync({ converter });
+  let pos = 0;
+
+  listRenderingSync.syncListRendering({
+    visitNodes: (visit: (node: ProseMirrorJSON, pos: number) => boolean | void) => {
+      traversePmJson(footnoteDoc, (node) => visit(node, pos++));
+    },
+    resolveParagraphProperties: (node: ProseMirrorJSON & { attrs?: Record<string, unknown> }) =>
+      resolveFootnoteParagraphProperties(node, converterContext),
+    updateListRendering: (
+      node: ProseMirrorJSON & { attrs?: Record<string, unknown> },
+      _pos: number,
+      listRendering: unknown,
+    ) => {
+      node.attrs = { ...(node.attrs ?? {}), listRendering: listRendering ?? null };
+    },
   });
 }
 

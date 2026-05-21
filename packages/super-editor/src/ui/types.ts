@@ -35,13 +35,22 @@ export interface Subscribable<T> {
 }
 
 /**
- * Structural typing for the SuperDoc instance — keeps the UI controller
+ * Event names the UI controller (`createSuperDocUI`) subscribes to on
+ * a SuperDoc-like host. Narrower than
+ * `HeadlessToolbarSuperdocHostEvent` (which adds
+ * `formatting-marks-change`); a custom UI host stub only has to
+ * support the three events the UI controller actually consumes.
+ */
+export type SuperDocUIHostEvent = 'editorCreate' | 'document-mode-change' | 'zoomChange';
+
+/**
+ * Structural typing for the SuperDoc instance. Keeps the UI controller
  * loose from the SuperDoc Vue package's specific class type. The
  * controller only needs an event bus and an `activeEditor` reference.
  */
 export interface SuperDocLike {
-  on?(event: string, handler: (...args: unknown[]) => void): unknown;
-  off?(event: string, handler: (...args: unknown[]) => void): unknown;
+  on?(event: SuperDocUIHostEvent, handler: (...args: unknown[]) => void): unknown;
+  off?(event: SuperDocUIHostEvent, handler: (...args: unknown[]) => void): unknown;
   activeEditor?: SuperDocEditorLike | null;
   config?: { documentMode?: 'editing' | 'suggesting' | 'viewing' };
   /**

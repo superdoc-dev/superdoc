@@ -55,3 +55,33 @@ const docWithMinimalProvider: DocumentEntry = {
 
 // Reference all bindings so `tsc --noEmit` doesn't strip them.
 void [_sdProviderTypeIsExact, _docProviderTypeIsExact, minimalProvider, docWithMinimalProvider];
+
+// SD-3213: `CollaborationProvider.on/off` use `(event: string, handler:
+// (...args: unknown[]) => void)` instead of `(event: any, handler:
+// (...args: any[]) => void)`. Mirrors the existing pattern on
+// `Awareness` and matches the internal `ProviderEventHandler` cast in
+// `helpers/collaboration-provider-sync.ts`. This drained 32 supported-
+// root any-leak findings on EditorConfig.d.ts in a single source edit.
+declare const providerToInspect: CollaborationProvider;
+providerToInspect.on?.('synced', (...args) => {
+  // `args` is `unknown[]`, not `any[]`. Reading a property on an
+  // untyped element must error; if a future PR widens this back to
+  // `any[]`, the directive becomes unused and tsc fails (TS2578).
+  // @ts-expect-error SD-3213: provider on() args are unknown[], not any[].
+  args[0].foo;
+
+  // Narrowing the unknown element works as expected; `as unknown`
+  // assignment also compiles. Both prove `args[0]` is `unknown`.
+  const first = args[0];
+  if (typeof first === 'object' && first !== null && 'message' in first) {
+    void (first as { message: string }).message;
+  }
+  const _untyped: unknown = args[0];
+  void _untyped;
+});
+
+// `event` is `string`, not `any`. Passing a non-string must error;
+// if a future PR widens back to `any`, the directive becomes unused
+// and tsc fails (TS2578).
+// @ts-expect-error SD-3213: provider on() event is string, not any.
+providerToInspect.on?.(123, () => {});

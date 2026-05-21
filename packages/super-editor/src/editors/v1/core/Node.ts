@@ -107,7 +107,7 @@ export interface NodeConfig<
   >;
 
   /** Function to add ProseMirror plugins to the node */
-  addPmPlugins?: MaybeGetter<Plugin[]>;
+  addPmPlugins?: MaybeGetter<Plugin<unknown>[]>;
 
   /** Function to extend the ProseMirror node schema */
   extendNodeSchema?: MaybeGetter<Record<string, unknown>>;

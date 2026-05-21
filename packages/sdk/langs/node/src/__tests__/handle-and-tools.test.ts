@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { BoundDocApi } from '../generated/client.js';
-import { SuperDocDocument } from '../index.ts';
+import { SuperDocClient, SuperDocDocument } from '../index.ts';
 import { SuperDocCliError } from '../runtime/errors.js';
 import { dispatchSuperDocTool } from '../tools.ts';
 
@@ -17,6 +17,29 @@ describe('SuperDocDocument', () => {
     expect(typeof doc.getMarkdown).toBe('function');
     expect(typeof doc.query.match).toBe('function');
     expect('api' in (doc as unknown as Record<string, unknown>)).toBe(false);
+  });
+});
+
+describe('SuperDocClient handle lifecycle', () => {
+  test('invoke after close throws DOCUMENT_CLOSED with the attempted operation id', async () => {
+    const client = new SuperDocClient({ env: { SUPERDOC_CLI_BIN: '/tmp/fake-cli' } });
+    // Bypass the real CLI subprocess by stubbing the internal runtime and rawApi.
+    (client as any).runtime = { invoke: async () => ({}) };
+    (client as any).rawApi = { open: async () => ({ contextId: 'session-1' }) };
+
+    const doc = await client.open({} as any);
+    await doc.close();
+
+    try {
+      await doc.save();
+      throw new Error('Expected doc.save() to throw on a closed handle.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(SuperDocCliError);
+      const cliError = error as SuperDocCliError;
+      expect(cliError.code).toBe('DOCUMENT_CLOSED');
+      expect(cliError.message).toContain('doc.save');
+      expect(cliError.details).toEqual({ sessionId: 'session-1', operationId: 'doc.save' });
+    }
   });
 });
 

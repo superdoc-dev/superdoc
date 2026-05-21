@@ -75,6 +75,127 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 /** @typedef {import('./types/index.js').NavigableAddress} NavigableAddress */
 /** @typedef {import('@superdoc/super-editor/ui').SuperDocLike} SuperDocLike */
 
+/** @typedef {import('./types/index.js').AwarenessState} AwarenessState */
+/** @typedef {import('@superdoc/super-editor').Comment} Comment */
+/** @typedef {import('@superdoc/super-editor').FontsResolvedPayload} FontsResolvedPayload */
+/** @typedef {import('@superdoc/super-editor').ListDefinitionsPayload} ListDefinitionsPayload */
+/**
+ * Discriminator for `comments-update` payloads. Inlined rather than
+ * imported from `@superdoc/common` because the dist re-export path for
+ * `CommentEvent` doesn't survive the facade emit; the source values
+ * live in `shared/common/event-types.d.ts` (`comments_module_events`).
+ *
+ * @typedef {'resolved' | 'new' | 'add' | 'update' | 'deleted' | 'pending' | 'selected' | 'comments-list' | 'change-accepted' | 'change-rejected'} CommentEvent
+ */
+/** @typedef {import('./whiteboard/Whiteboard.js').WhiteboardData} WhiteboardData */
+
+/**
+ * Typed event map for `superdoc.on(name, fn)` / `superdoc.emit(name, ...)`.
+ *
+ * The map is closed: unknown event names (e.g. `superdoc.on('reayd', ...)`,
+ * a typo) are TS errors at compile time. This is a **TS-only tightening**.
+ * The runtime `eventemitter3` still accepts any string; it is consumers
+ * relying on dynamic event names who would see new type errors. Verified
+ * no internal SuperDoc code emits or subscribes to dynamic event names
+ * (every emit site is enumerated here).
+ *
+ * `exception` is typed as `SuperDocExceptionPayload`, a union of the three
+ * shapes the runtime currently emits today: `{ error, stage, document }`
+ * from `superdoc-store.js` document-init failures, `{ error, document }`
+ * from the catch in `restoreUnsavedChanges()`, and `{ error, editor?, code?,
+ * documentId? }` from `SuperDoc.vue` editor lifecycle. Normalizing these
+ * is tracked as a separate follow-up; this map types the current reality
+ * so consumers get a union they can narrow with `'stage' in payload` etc.
+ *
+ * `fonts-resolved` uses a **listener-transport pattern**: SuperDoc never
+ * emits it directly. Instead, `SuperDoc.vue:719` reads the registered
+ * `superdoc.listeners('fonts-resolved')[0]` and threads it into the new
+ * editor's `onFontsResolved` option. Cleanup of this transport (relay
+ * through SuperDoc instead) is a follow-up; typing it here matches the
+ * current consumer-visible contract.
+ *
+ * @typedef {{
+ *  ready: [SuperDocReadyPayload],
+ *  editorBeforeCreate: [SuperDocEditorPayload],
+ *  editorCreate: [SuperDocEditorPayload],
+ *  editorDestroy: [],
+ *  'pdf:document-ready': [],
+ *  'sidebar-toggle': [boolean],
+ *  zoomChange: [SuperDocZoomPayload],
+ *  'formatting-marks-change': [SuperDocFormattingMarksPayload],
+ *  'document-mode-change': [SuperDocDocumentModeChangePayload],
+ *  'editor-update': [SuperDocEditorUpdatePayload],
+ *  'content-error': [SuperDocContentErrorPayload],
+ *  'fonts-resolved': [FontsResolvedPayload],
+ *  'pagination-update': [SuperDocPaginationPayload],
+ *  'list-definitions-change': [ListDefinitionsPayload],
+ *  'comments-update': [SuperDocCommentsUpdatePayload],
+ *  'collaboration-ready': [SuperDocEditorPayload],
+ *  'awareness-update': [SuperDocAwarenessUpdatePayload],
+ *  locked: [SuperDocLockedPayload],
+ *  'whiteboard:init': [SuperDocWhiteboardPayload],
+ *  'whiteboard:ready': [SuperDocWhiteboardPayload],
+ *  'whiteboard:change': [WhiteboardData],
+ *  'whiteboard:enabled': [boolean],
+ *  'whiteboard:tool': [string],
+ *  exception: [SuperDocExceptionPayload],
+ * }} SuperDocEventMap
+ *
+ * @typedef {{ superdoc: SuperDoc }} SuperDocReadyPayload
+ * @typedef {{ editor: Editor }} SuperDocEditorPayload
+ * @typedef {{ whiteboard: Whiteboard }} SuperDocWhiteboardPayload
+ * @typedef {{ zoom: number }} SuperDocZoomPayload
+ * @typedef {{ showFormattingMarks: boolean, superdoc: SuperDoc }} SuperDocFormattingMarksPayload
+ * @typedef {{ documentMode: DocumentMode }} SuperDocDocumentModeChangePayload
+ * @typedef {{ totalPages: number, superdoc: SuperDoc }} SuperDocPaginationPayload
+ * @typedef {{ error: unknown, editor: Editor }} SuperDocContentErrorPayload
+ * @typedef {{ isLocked: boolean, lockedBy?: User | null }} SuperDocLockedPayload
+ *
+ * Editor-update envelope produced by `buildEditorPayloadBase` in
+ * `SuperDoc.vue`. `editor` is `effectiveEditor = editor ?? sourceEditor`,
+ * which is `undefined` only when neither was provided.
+ *
+ * @typedef {{
+ *  editor?: Editor,
+ *  sourceEditor?: Editor,
+ *  surface: string,
+ *  headerId: string | null,
+ *  sectionType: string | null,
+ * }} SuperDocEditorUpdatePayload
+ *
+ * Awareness payload from `awarenessHandler` in `collaboration.js`.
+ * `states` is `AwarenessState[]` (the publicly re-exported shape).
+ * `added` and `removed` are Yjs client IDs (numbers).
+ *
+ * @typedef {{
+ *  states: AwarenessState[],
+ *  added: number[],
+ *  removed: number[],
+ *  superdoc: SuperDoc,
+ * }} SuperDocAwarenessUpdatePayload
+ *
+ * Comments-update envelope from `comments-store.js`. `type` is one of the
+ * `CommentEvent` literals; `comment` is present for ADD/UPDATE/DELETED/NEW/
+ * RESOLVED and absent for PENDING. `changes` is present for DELETED to
+ * carry the per-document change record.
+ *
+ * @typedef {{
+ *  type: CommentEvent,
+ *  comment?: Comment,
+ *  changes?: Array<{ key: string, commentId: string, fileId?: string | null }>,
+ * }} SuperDocCommentsUpdatePayload
+ *
+ * Union of the three current `exception` payload shapes (debt: should be
+ * normalized to one shape in a follow-up). Consumers can narrow with
+ * `'stage' in payload` (store init) or `'code' in payload` (Vue editor
+ * lifecycle).
+ *
+ * @typedef {{ error: Error, stage: 'document-init', document: Document | null | undefined }} SuperDocExceptionStorePayload
+ * @typedef {{ error: unknown, document: Document }} SuperDocExceptionRestorePayload
+ * @typedef {{ error: unknown, editor?: Editor, code?: string, documentId?: string | null }} SuperDocExceptionEditorPayload
+ * @typedef {SuperDocExceptionStorePayload | SuperDocExceptionRestorePayload | SuperDocExceptionEditorPayload} SuperDocExceptionPayload
+ */
+
 /**
  * Config callbacks are optional on the public typedef because consumers do
  * not need to pass them. The fields wrapped by this helper (every callback
@@ -99,7 +220,7 @@ function asEventListener(listener) {
  * Expects a config object
  *
  * @class
- * @extends EventEmitter
+ * @extends {EventEmitter<SuperDocEventMap>}
  * @implements {SuperDocLike}
  */
 export class SuperDoc extends EventEmitter {

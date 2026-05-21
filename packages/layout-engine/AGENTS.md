@@ -57,6 +57,8 @@ reads.
 | Change style resolution | `style-engine/` |
 | Change text measurement | `measuring-dom/` |
 
+AIDEV-NOTE: `pm-adapter` must preserve shared `SdtMetadata` object identity for sibling blocks in one id-less SDT container; see `contracts/src/sdt-container.ts` before changing SDT imports.
+
 ## Style Engine (`style-engine/`)
 
 Single source of truth for OOXML style cascade resolution. All property resolution flows through here.

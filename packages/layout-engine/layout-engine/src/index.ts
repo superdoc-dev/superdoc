@@ -1227,11 +1227,17 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // block's demand at block entry (the old behavior) over-defers paragraphs
   // that have multiple anchors but where the first line only contains one of
   // them.
-  type FootnoteAnchorEntry = { pmPos: number; refId: string; height: number };
+  // SD-2656 Phase 2: each anchor entry carries both `height` (full body —
+  // used for the planner's actual reserve sizing) and `minStart` (measured
+  // first-renderable-slice — used by the body slicer to decide whether a
+  // NEW anchor's line can stay on its page. The rest of the fn body
+  // splits to continuation pages.)
+  type FootnoteAnchorEntry = { pmPos: number; refId: string; height: number; minStart: number };
   const footnoteAnchorsByBlockId: Map<string, FootnoteAnchorEntry[]> = (() => {
     const out = new Map<string, FootnoteAnchorEntry[]>();
     const refs = options.footnotes?.refs;
     const bodyHeights = options.footnotes?.bodyHeightById;
+    const bodyMinStarts = options.footnotes?.bodyMinStartById as Map<string, number> | undefined;
     if (!Array.isArray(refs) || refs.length === 0 || !bodyHeights) return out;
 
     /**
@@ -1281,8 +1287,18 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         if (pos < range.pmStart || pos > range.pmEnd) continue;
         const height = bodyHeights.get(refId);
         if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) continue;
+        const measuredMinStart = bodyMinStarts?.get(refId);
+        // minStart defaults to `min(measured, height)`; when no minStart was
+        // measured (legacy callers / tests without bodyMinStartById), fall
+        // back to a small fraction of total height capped at 14 px — close
+        // to the typical first-fn-line height — so the slicer still has a
+        // usable lower bound without over-reserving.
+        const minStart =
+          typeof measuredMinStart === 'number' && Number.isFinite(measuredMinStart) && measuredMinStart > 0
+            ? Math.min(measuredMinStart, height)
+            : Math.min(14, height);
         const list = out.get(topLevelId) ?? [];
-        list.push({ pmPos: pos, refId, height });
+        list.push({ pmPos: pos, refId, height, minStart });
         out.set(topLevelId, list);
         refByPos.delete(pos);
       }
@@ -1348,6 +1364,29 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (e.pmPos >= pmStart && e.pmPos <= pmEnd) count += 1;
     }
     return count;
+  };
+
+  /**
+   * SD-2656 Phase 2: range-aware MIN-START sum. Returns the sum of measured
+   * `minStart` (first renderable slice height) for fns anchored in
+   * [pmStart, pmEnd] of the given block. The body slicer charges this —
+   * not full body height — when deciding whether a body line that anchors
+   * a NEW fn can stay on its page. The rest of each fn body splits to
+   * continuation pages handled by the planner.
+   */
+  const getFootnoteAnchorMinStartForBlockId = (blockId: string, pmStart?: number, pmEnd?: number): number => {
+    const entries = footnoteAnchorsByBlockId.get(blockId);
+    if (!entries || entries.length === 0) return 0;
+    if (pmStart == null || pmEnd == null) {
+      let total = 0;
+      for (const e of entries) total += e.minStart;
+      return total;
+    }
+    let total = 0;
+    for (const e of entries) {
+      if (e.pmPos >= pmStart && e.pmPos <= pmEnd) total += e.minStart;
+    }
+    return total;
   };
 
   /**
@@ -2568,6 +2607,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           overrideSpacingAfter,
           getFootnoteDemandForBlockId,
           getFootnoteRefCountForBlockId,
+          getFootnoteAnchorMinStartForBlockId,
           getFootnoteBandOverhead,
         },
         anchorsForPara

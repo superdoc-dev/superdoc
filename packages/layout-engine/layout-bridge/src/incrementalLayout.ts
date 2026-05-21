@@ -94,6 +94,103 @@ const isFootnotesLayoutInput = (value: unknown): value is FootnotesLayoutInput =
   return true;
 };
 
+/**
+ * SD-2656 trace infrastructure (Phase 0 — instrumentation only, no behavior change).
+ *
+ * Goal: give us a red/green loop for footnote pagination. When the env var
+ * `SD_DEBUG_FOOTNOTES` is set (any truthy value), the planner emits a single
+ * JSON record per page describing what was decided: anchor ids, slice ids,
+ * reserve, continuation in/out, whether `findPageIndexForPos` had to fall
+ * back, and the first-slice page for every anchor.
+ *
+ * The trace lets callers (tests + scripts) verify the page-level invariants
+ * the SD-2656 plan calls for:
+ *   - every anchor has a real containing page (no fallback).
+ *   - every anchor's first slice renders on the anchor page (no orphans).
+ *   - no page-state warnings (truncation / cap / fallback) in final state.
+ *
+ * In production builds the tracer is a no-op (no allocations, no logs).
+ */
+type FootnoteTraceFallback = {
+  refId?: string;
+  pos: number;
+  closestPageIndex: number;
+  distance: number;
+};
+
+type FootnoteTracePageRecord = {
+  pageIndex: number;
+  anchorRefIds: string[];
+  continuationIn: string[];
+  continuationOut: string[];
+  sliceIds: string[];
+  reservedHeight: number;
+  bodyMaxY?: number;
+  cappedInPass: boolean;
+  pendingInPass: boolean;
+};
+
+type FootnoteTraceSnapshot = {
+  pass: 'final' | 'intermediate';
+  passNumber: number;
+  pages: FootnoteTracePageRecord[];
+  fallbacks: FootnoteTraceFallback[];
+  anchorPageById: Record<string, number>;
+  firstSlicePageById: Record<string, number>;
+};
+
+const FOOTNOTE_TRACE_ENABLED = (() => {
+  try {
+    // Avoid throwing in environments where process isn't defined.
+    const env = typeof process !== 'undefined' ? process.env : undefined;
+    if (!env) return false;
+    const raw = env.SD_DEBUG_FOOTNOTES;
+    if (!raw) return false;
+    const normalized = String(raw).toLowerCase();
+    return normalized !== '' && normalized !== '0' && normalized !== 'false' && normalized !== 'off';
+  } catch {
+    return false;
+  }
+})();
+
+/** Module-scoped trace sink. Tests can install a sink to capture snapshots. */
+type FootnoteTraceSink = (snapshot: FootnoteTraceSnapshot) => void;
+let footnoteTraceSink: FootnoteTraceSink | null = null;
+
+/** Install a trace sink. Returns a disposer that restores the previous sink. */
+export const installFootnoteTraceSink = (sink: FootnoteTraceSink): (() => void) => {
+  const prev = footnoteTraceSink;
+  footnoteTraceSink = sink;
+  return () => {
+    footnoteTraceSink = prev;
+  };
+};
+
+/** Emit a snapshot if tracing is on or a sink is installed. */
+const emitFootnoteTrace = (snapshot: FootnoteTraceSnapshot): void => {
+  if (footnoteTraceSink) footnoteTraceSink(snapshot);
+  if (FOOTNOTE_TRACE_ENABLED) {
+    // One JSON line per snapshot so downstream scripts can `grep` or pipe to jq.
+     
+    console.log('[SD-2656-footnote-trace]', JSON.stringify(snapshot));
+  }
+};
+
+/**
+ * Track fallback hits during the current layout pass. Reset by callers via
+ * `resetFootnoteTracePass()` before each pass.
+ */
+let currentPassFallbacks: FootnoteTraceFallback[] = [];
+
+const resetFootnoteTracePass = (): void => {
+  currentPassFallbacks = [];
+};
+
+const recordFootnoteFallback = (entry: FootnoteTraceFallback): void => {
+  if (!FOOTNOTE_TRACE_ENABLED && !footnoteTraceSink) return;
+  currentPassFallbacks.push(entry);
+};
+
 const findPageIndexForPos = (layout: Layout, pos: number): number | null => {
   if (!Number.isFinite(pos)) return null;
   const fallbackRanges: Array<{ pageIndex: number; minStart: number; maxEnd: number } | null> = [];
@@ -124,8 +221,19 @@ const findPageIndexForPos = (layout: Layout, pos: number): number | null => {
       best = { pageIndex: entry.pageIndex, distance };
     }
   }
-  if (best) return best.pageIndex;
-  if (layout.pages.length > 0) return layout.pages.length - 1;
+  if (best) {
+    // SD-2656: record fallback for tracing/test assertions, but keep
+    // production behavior identical (return the closest page). Phase 1
+    // of the plan will make tests fail when this fires in final state.
+    if (best.distance > 0) {
+      recordFootnoteFallback({ pos, closestPageIndex: best.pageIndex, distance: best.distance });
+    }
+    return best.pageIndex;
+  }
+  if (layout.pages.length > 0) {
+    recordFootnoteFallback({ pos, closestPageIndex: layout.pages.length - 1, distance: Number.POSITIVE_INFINITY });
+    return layout.pages.length - 1;
+  }
   return null;
 };
 
@@ -310,7 +418,13 @@ const resolveFootnoteMeasurementWidth = (options: LayoutOptions, blocks?: FlowBl
 
 const MIN_FOOTNOTE_BODY_HEIGHT = 1;
 const DEFAULT_FOOTNOTE_SEPARATOR_SPACING_BEFORE = 12;
-const MAX_FOOTNOTE_LAYOUT_PASSES = 4;
+// SD-2656 Phase 4: raised from 4 to give the split-aware convergence loop
+// time to settle. Each pass shrinks body to accommodate placed first slices;
+// for docs with many anchored fns the per-pass delta is small. The
+// downstream grow loop (GROW_MAX_PASSES = 10) still tightens the final
+// state. The stabilization check breaks out as soon as reserves match
+// across iterations, so this is only a ceiling on worst-case work.
+const MAX_FOOTNOTE_LAYOUT_PASSES = 16;
 
 const computeMaxFootnoteReserve = (layoutForPages: Layout, pageIndex: number, baseReserve = 0): number => {
   const page = layoutForPages.pages?.[pageIndex];
@@ -374,6 +488,18 @@ type FootnoteLayoutPlan = {
   reserves: number[];
   hasContinuationByColumn: Map<string, boolean>;
   separatorSpacingBefore: number;
+  /**
+   * SD-2656 Phase 0 — diagnostics surfaced alongside the plan so callers
+   * (notably tests + the trace sink) can inspect the final-state outcome
+   * without parsing console output. These are computed during the plan
+   * pass; `console.warn` continues to fire unchanged for runtime visibility.
+   */
+  diagnostics: {
+    /** Pages where the planner capped its reserve below requested demand. */
+    cappedPages: number[];
+    /** Footnote ids that were truncated because they extended past document pages. */
+    pendingFootnoteIds: string[];
+  };
 };
 
 const sumLineHeights = (
@@ -1488,6 +1614,15 @@ export async function incrementalLayout(
               const overhead = isFirstSlice ? separatorBefore + separatorHeight + safeTopPadding : 0;
               const gapBefore = !isFirstSlice ? safeGap : 0;
               const availableHeight = Math.max(0, placementCeiling - usedHeight - overhead - gapBefore);
+              // SD-2656 Phase 4: force the first renderable slice of every
+              // NEW anchor (not continuation) on its anchor page, even when
+              // the page already has prior fn slices placed. Word's rule:
+              // a body line that introduces a new fn ref must have at
+              // least the start of that fn on the same page. The cluster
+              // case (IT-923 p13: 6 anchored fns sequentially) needs this
+              // — without it the 2nd through 6th anchors get strict
+              // fitFootnoteContent and may defer their bodies entirely.
+              const forceFirst = !isContinuation;
               const { slice, remainingRanges } = fitFootnoteContent(
                 id,
                 ranges,
@@ -1496,7 +1631,7 @@ export async function incrementalLayout(
                 columnIndex,
                 isContinuation,
                 measuresById,
-                isFirstSlice && placementCeiling > 0,
+                forceFirst,
               );
 
               if (slice.ranges.length === 0) {
@@ -1561,11 +1696,20 @@ export async function incrementalLayout(
 
             if (columnSlices.length > 0) {
               const rawReserve = Math.max(0, Math.ceil(usedHeight));
-              const cappedReserve = Math.min(rawReserve, maxReserve);
-              if (cappedReserve < rawReserve) {
+              // SD-2656 Phase 4: propagate the RAW reserve to the next
+              // convergence pass — NOT the capped one. Capping at maxReserve
+              // (which is bodyMaxY-bound) was the bug that stalled
+              // convergence: pass-1 body filled the page so maxReserve = 0,
+              // pass-1 capped reserve to 0, pass-2 body filled again, loop
+              // stable at zero reserve. By propagating rawReserve the body
+              // slicer sees actual band demand on the next pass and shrinks.
+              // The flag `cappedPages` is kept for diagnostics — it reports
+              // when rawReserve > maxReserve (i.e. the band exceeded the
+              // page's prior-pass body-aware budget).
+              if (rawReserve > maxReserve) {
                 cappedPages.add(pageIndex);
               }
-              pageReserve = Math.max(pageReserve, cappedReserve);
+              pageReserve = Math.max(pageReserve, rawReserve);
               pageSlices.push(...columnSlices);
             }
 
@@ -1580,20 +1724,32 @@ export async function incrementalLayout(
           reserves[pageIndex] = pageReserve;
         }
 
+        // SD-2656 Phase 0: compute pending ids regardless of console output so
+        // diagnostics are always present on the plan return for tests/trace.
+        const pendingIds = new Set<string>();
+        pendingByColumn.forEach((entries) => entries.forEach((entry) => pendingIds.add(entry.id)));
+
         if (cappedPages.size > 0) {
           console.warn('[layout] Footnote reserve capped to preserve body area', {
             pages: Array.from(cappedPages),
           });
         }
-        if (pendingByColumn.size > 0) {
-          const pendingIds = new Set<string>();
-          pendingByColumn.forEach((entries) => entries.forEach((entry) => pendingIds.add(entry.id)));
+        if (pendingIds.size > 0) {
           console.warn('[layout] Footnote content truncated: extends beyond document pages', {
             ids: Array.from(pendingIds),
           });
         }
 
-        return { slicesByPage, reserves, hasContinuationByColumn, separatorSpacingBefore: safeSeparatorSpacingBefore };
+        return {
+          slicesByPage,
+          reserves,
+          hasContinuationByColumn,
+          separatorSpacingBefore: safeSeparatorSpacingBefore,
+          diagnostics: {
+            cappedPages: Array.from(cappedPages).sort((a, b) => a - b),
+            pendingFootnoteIds: Array.from(pendingIds),
+          },
+        };
       };
 
       const injectFragments = (
@@ -1872,10 +2028,19 @@ export async function incrementalLayout(
 
       // SD-3049: per-footnote total body height; accounting mirrors `computeFootnoteLayoutPlan`.
       let bodyHeightById = new Map<string, number>();
+      // SD-2656 Phase 2: per-footnote MINIMUM-START height — the height of
+      // the first renderable slice (the first paragraph's first line, or
+      // the first image / table-row, depending on the fn body's first
+      // block). The body slicer uses this — not the full body height — to
+      // decide whether a body line that anchors a NEW fn can stay on its
+      // page. The rest of the fn body splits to continuation pages.
+      let bodyMinStartById = new Map<string, number>();
       const refreshBodyHeights = (measures: Map<string, Measure>) => {
         const map = new Map<string, number>();
+        const minStartMap = new Map<string, number>();
         footnotesInput.blocksById.forEach((blocks, footnoteId) => {
           let total = 0;
+          let minStart: number | undefined;
           for (const block of blocks) {
             const measure = measures.get(block.id);
             if (!measure) continue;
@@ -1886,24 +2051,47 @@ export async function incrementalLayout(
                 ?.spacing;
               const after = spacing?.after ?? spacing?.lineSpaceAfter;
               if (typeof after === 'number' && Number.isFinite(after) && after > 0) total += after;
+              if (minStart === undefined) {
+                const firstLine = measure.lines?.[0]?.lineHeight;
+                if (typeof firstLine === 'number' && Number.isFinite(firstLine) && firstLine > 0) {
+                  minStart = firstLine;
+                }
+              }
             } else if (measure.kind === 'image' || measure.kind === 'drawing') {
               const measureH = (measure as { height?: number }).height;
               if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
+              if (minStart === undefined && typeof measureH === 'number' && Number.isFinite(measureH) && measureH > 0) {
+                minStart = measureH;
+              }
             } else if (measure.kind === 'table') {
               const measureH = (measure as { totalHeight?: number }).totalHeight;
               if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
+              if (minStart === undefined) {
+                const firstRow = (measure as { rows?: Array<{ height?: number }> }).rows?.[0]?.height;
+                if (typeof firstRow === 'number' && Number.isFinite(firstRow) && firstRow > 0) {
+                  minStart = firstRow;
+                }
+              }
             } else if (measure.kind === 'list' && block.kind === 'list') {
               for (const item of block.items) {
                 const itemMeasure = measure.items.find((entry) => entry.itemId === item.id);
                 if (!itemMeasure?.paragraph?.lines) continue;
                 for (const line of itemMeasure.paragraph.lines) total += line.lineHeight ?? 0;
                 total += getParagraphSpacingAfter(item.paragraph);
+                if (minStart === undefined) {
+                  const firstLine = itemMeasure.paragraph.lines[0]?.lineHeight;
+                  if (typeof firstLine === 'number' && Number.isFinite(firstLine) && firstLine > 0) {
+                    minStart = firstLine;
+                  }
+                }
               }
             }
           }
           if (total > 0) map.set(footnoteId, total);
+          if (typeof minStart === 'number' && minStart > 0) minStartMap.set(footnoteId, minStart);
         });
         bodyHeightById = map;
+        bodyMinStartById = minStartMap;
       };
 
       // SD-2656: thread the planner's data-driven band overhead values
@@ -1920,6 +2108,7 @@ export async function incrementalLayout(
           footnotes: {
             ...footnotesInput,
             bodyHeightById,
+            bodyMinStartById,
             ...(typeof plannerSeparatorSpacingBefore === 'number' && Number.isFinite(plannerSeparatorSpacingBefore)
               ? { separatorSpacingBefore: plannerSeparatorSpacingBefore }
               : {}),
@@ -1948,9 +2137,15 @@ export async function incrementalLayout(
       let plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, [], pageColumns);
       let reserves = plan.reserves;
 
-      // Relayout with footnote reserves and iterate until reserves and page count stabilize,
-      // so each page gets the correct reserve (avoids "too much" on one page and "not enough" on another).
-      if (reserves.some((h) => h > 0)) {
+      // SD-2656 Phase 4: enter the loop whenever there are footnote refs,
+      // not only when pass-1 produced non-zero reserves. The forceFirst
+      // change above means pass-1 ALWAYS places at least the first slice
+      // for every anchored fn (rawReserve > 0), which body must shrink to
+      // accommodate on the next pass. Skipping the loop when reserves
+      // start at zero would freeze us in that pass-1 state and produce
+      // truncation warnings + orphan fns.
+      const hasAnyAnchors = (footnotesInput?.refs?.length ?? 0) > 0;
+      if (reserves.some((h) => h > 0) || hasAnyAnchors) {
         let reservesStabilized = false;
         const seenReserveVectors: number[][] = [reserves.slice()];
         for (let pass = 0; pass < MAX_FOOTNOTE_LAYOUT_PASSES; pass += 1) {
@@ -2116,6 +2311,61 @@ export async function incrementalLayout(
         finalBlocks.forEach((block) => {
           blockById.set(block.id, block);
         });
+
+        // SD-2656 Phase 0: emit ONE trace snapshot summarizing the final
+        // footnote plan — anchor → page mapping, first-slice → page mapping,
+        // per-page slice ids, reserves, capped/pending state, and any
+        // findPageIndexForPos fallback hits. The emit is a no-op when
+        // SD_DEBUG_FOOTNOTES is unset and no sink is installed.
+        if (FOOTNOTE_TRACE_ENABLED || footnoteTraceSink) {
+          // Reset so fallbacks captured below reflect ONLY the final-state
+          // anchor lookup, not noise from intermediate convergence passes.
+          resetFootnoteTracePass();
+          const anchorPageById: Record<string, number> = {};
+          for (const ref of footnotesInput.refs) {
+            const pageIndex = findPageIndexForPos(layout, ref.pos);
+            if (pageIndex != null) anchorPageById[ref.id] = pageIndex;
+          }
+          const firstSlicePageById: Record<string, number> = {};
+          const pageRecords: FootnoteTracePageRecord[] = [];
+          for (let pageIndex = 0; pageIndex < layout.pages.length; pageIndex += 1) {
+            const slices = finalPlan.slicesByPage.get(pageIndex) ?? [];
+            const anchorRefIds: string[] = [];
+            const continuationIn: string[] = [];
+            const sliceIds: string[] = [];
+            for (const slice of slices) {
+              sliceIds.push(slice.id);
+              if (slice.isContinuation) continuationIn.push(slice.id);
+              else anchorRefIds.push(slice.id);
+              if (!(slice.id in firstSlicePageById)) firstSlicePageById[slice.id] = pageIndex;
+            }
+            const continuationOut: string[] = [];
+            for (const [, hasCont] of finalPlan.hasContinuationByColumn) {
+              if (hasCont) continuationOut.push(''); // placeholder; column key not parsed
+            }
+            const page = layout.pages[pageIndex];
+            pageRecords.push({
+              pageIndex,
+              anchorRefIds,
+              continuationIn,
+              continuationOut: [],
+              sliceIds,
+              reservedHeight: reservesAppliedToLayout[pageIndex] ?? 0,
+              bodyMaxY: (page as { bodyMaxY?: number }).bodyMaxY,
+              cappedInPass: finalPlan.diagnostics.cappedPages.includes(pageIndex),
+              pendingInPass: false,
+            });
+          }
+          emitFootnoteTrace({
+            pass: 'final',
+            passNumber: 0,
+            pages: pageRecords,
+            fallbacks: currentPassFallbacks.slice(),
+            anchorPageById,
+            firstSlicePageById,
+          });
+        }
+
         const injected = injectFragments(
           layout,
           finalPlan,

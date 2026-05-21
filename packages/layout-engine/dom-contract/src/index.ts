@@ -29,3 +29,6 @@ export {
   SDT_BLOCK_WITH_ID_SELECTOR,
   DRAGGABLE_SELECTOR,
 } from './selectors.js';
+
+export { getNoteStoryKind, isNonBodyStoryBlockId } from './note-story.js';
+export type { NoteStoryKind } from './note-story.js';

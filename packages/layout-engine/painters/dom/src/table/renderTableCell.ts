@@ -15,12 +15,14 @@ import type {
   TableMeasure,
   WrapExclusion,
   WrapTextMode,
+  CellRenderBlock,
+} from '@superdoc/contracts';
+import {
   computeCellSliceContentHeight,
   describeCellRenderBlocks,
   getCellLines,
   getCellSpacingPx,
   normalizeZIndex,
-  CellRenderBlock,
 } from '@superdoc/contracts';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { RenderedLineInfo } from '../renderer.js';

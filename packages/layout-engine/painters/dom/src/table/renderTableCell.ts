@@ -15,8 +15,13 @@ import type {
   TableMeasure,
   WrapExclusion,
   WrapTextMode,
+  computeCellSliceContentHeight,
+  describeCellRenderBlocks,
+  getCellLines,
+  getCellSpacingPx,
+  normalizeZIndex,
+  CellRenderBlock,
 } from '@superdoc/contracts';
-import { getCellLines, getCellSpacingPx, normalizeZIndex } from '@superdoc/contracts';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { RenderedLineInfo } from '../renderer.js';
 import type { FragmentRenderContext } from '../fragment-context.js';
@@ -464,6 +469,32 @@ const getMeasuredBlockHeight = (measure: Measure | undefined): number => {
   return 'height' in measure && typeof measure.height === 'number' ? measure.height : 0;
 };
 
+const getTableCellParagraphContextHeights = ({
+  renderBlock,
+  blockStartGlobal,
+  blockLineCount,
+  globalFromLine,
+  globalToLine,
+}: {
+  renderBlock: CellRenderBlock;
+  blockStartGlobal: number;
+  blockLineCount: number;
+  globalFromLine: number;
+  globalToLine: number;
+}): { contentHeight: number; totalHeight: number } => {
+  const localStartLine = Math.max(0, globalFromLine - blockStartGlobal);
+  const localEndLine = Math.min(blockLineCount, globalToLine - blockStartGlobal);
+  const lineSum = renderBlock.lineHeights.slice(localStartLine, localEndLine).reduce((sum, height) => sum + height, 0);
+  const rendersEntireBlock = localStartLine === 0 && localEndLine >= renderBlock.lineHeights.length;
+  const contentHeight = rendersEntireBlock ? Math.max(lineSum, renderBlock.totalHeight) : lineSum;
+  const totalHeight = computeCellSliceContentHeight(
+    [renderBlock],
+    renderBlock.globalStartLine + localStartLine,
+    renderBlock.globalStartLine + localEndLine,
+  );
+  return { contentHeight, totalHeight };
+};
+
 const getTableCellVisibleBlockIndexes = (
   measures: Measure[],
   blocks: Array<ParagraphBlock | TableBlock | ImageBlock | DrawingBlock>,
@@ -805,6 +836,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     const effectiveCellWidth = cellWidth ?? cellMeasure.width;
     const contentWidthPx = Math.max(0, effectiveCellWidth - paddingLeft - paddingRight);
     const contentHeightPx = Math.max(0, rowHeight - paddingTop - paddingBottom);
+    const cellRenderBlocks = describeCellRenderBlocks(cellMeasure, cell, { top: paddingTop, bottom: paddingBottom });
     let paragraphContextY = 0;
     let borderContextSegmentStart = 0;
     const betweenEntryBlockIndexes: number[] = [];
@@ -822,8 +854,21 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           return [];
         }
         const y = paragraphContextY;
-        const height = getMeasuredBlockHeight(measure);
-        paragraphContextY += height;
+        let height = getMeasuredBlockHeight(measure);
+        let totalHeight = height;
+        const renderBlock = cellRenderBlocks.find((entry) => entry.globalStartLine === blockStartGlobal);
+        if (block?.kind === 'paragraph' && measure?.kind === 'paragraph' && renderBlock?.kind === 'paragraph') {
+          const contextHeights = getTableCellParagraphContextHeights({
+            renderBlock,
+            blockStartGlobal,
+            blockLineCount,
+            globalFromLine,
+            globalToLine,
+          });
+          height = contextHeights.contentHeight;
+          totalHeight = contextHeights.totalHeight;
+        }
+        paragraphContextY += totalHeight;
         betweenEntryBlockIndexes.push(index);
         if (block?.kind !== 'paragraph' || measure?.kind !== 'paragraph' || !block.attrs?.borders) {
           return [

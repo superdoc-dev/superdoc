@@ -2850,6 +2850,55 @@ describe('renderTableCell', () => {
       expect(visibleBorder.style.borderTopStyle).toBe('solid');
     });
 
+    it('extends table-cell between-border groups through paragraph spacing gaps', () => {
+      const borders = {
+        top: { width: 1, style: 'solid' as const, color: '#111111' },
+        bottom: { width: 1, style: 'solid' as const, color: '#111111' },
+        between: { width: 2, style: 'dashed' as const, color: '#222222' },
+      };
+      const para1: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-between-spacing-1',
+        runs: [{ text: 'First', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { borders, spacing: { after: 10 } },
+      };
+      const para2: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-between-spacing-2',
+        runs: [{ text: 'Second', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { borders: { ...borders } },
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        renderLine: (block) => {
+          const line = doc.createElement('div');
+          line.dataset.blockId = (block as ParagraphBlock).id;
+          return line;
+        },
+        cellMeasure: {
+          blocks: [paragraphMeasure, paragraphMeasure],
+          width: 120,
+          height: 70,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: { id: 'cell-between-spacing', blocks: [para1, para2], attrs: {} },
+      });
+
+      const firstWrapper = cellElement.querySelector<HTMLElement>('[data-block-id="cell-between-spacing-1"]')
+        ?.parentElement as HTMLElement | null;
+      const secondWrapper = cellElement.querySelector<HTMLElement>('[data-block-id="cell-between-spacing-2"]')
+        ?.parentElement as HTMLElement | null;
+      expect(firstWrapper?.dataset.betweenBorder).toBe('true');
+      expect(firstWrapper?.dataset.gapBelow).toBe('10');
+      expect(secondWrapper?.dataset.suppressTopBorder).toBe('true');
+      const firstBorder = getParagraphBorderLayer(firstWrapper!);
+      expect(firstBorder.style.borderBottomStyle).toBe('dashed');
+      expect(firstBorder.style.bottom).toBe('-12px');
+    });
+
     it('groups table-cell paragraph borders across anchored out-of-flow blocks', () => {
       const borders = {
         top: { width: 1, style: 'solid' as const, color: '#111111' },

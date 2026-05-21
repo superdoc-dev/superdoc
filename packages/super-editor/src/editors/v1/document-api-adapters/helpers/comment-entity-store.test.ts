@@ -434,4 +434,102 @@ describe('syncCommentEntitiesFromCollaboration (SD-3214)', () => {
     expect(second).toEqual(new Set(['a', 'b', 'c']));
     expect(getCommentEntityStore(editor)).toHaveLength(3);
   });
+
+  // Codex P2 — "Keep deleted thread descendants out of the sync set":
+  // packages/superdoc/.../collaboration-comments.js#deleteYComment removes
+  // only the parent index from Y.Array. The browser UI drops replies
+  // locally. If our helper iterates the upstream array AFTER the browser
+  // delete, it would still see the reply entries and upsert them. Even
+  // though removeCommentEntityTree cascades the parent's deletion through
+  // the store, the returned `seen` set would still contain the reply id
+  // because the reply was upserted in that same pass — so the next sync
+  // would re-upsert the reply as an orphan with no parent.
+  describe('orphaned-reply handling (Codex P2)', () => {
+    it('does not upsert a reply whose parent disappeared from the upstream array', () => {
+      const editor = makeEditorWithConverter();
+      // Initial sync — parent and reply both upstream.
+      const first = syncCommentEntitiesFromCollaboration(editor, [
+        { commentId: 'root', commentText: 'parent body' },
+        { commentId: 'reply-1', parentCommentId: 'root', commentText: 'reply body' },
+      ]);
+      expect(
+        getCommentEntityStore(editor)
+          .map((e) => e.commentId)
+          .sort(),
+      ).toEqual(['reply-1', 'root']);
+
+      // Browser deletes parent only; reply still in upstream.
+      const second = syncCommentEntitiesFromCollaboration(
+        editor,
+        [{ commentId: 'reply-1', parentCommentId: 'root', commentText: 'reply body' }],
+        { previouslySynced: first },
+      );
+      expect(
+        getCommentEntityStore(editor)
+          .map((e) => e.commentId)
+          .sort(),
+        'parent + reply must both be pruned after parent deletion',
+      ).toEqual([]);
+      // And the returned sync set must NOT include the orphan reply, otherwise
+      // the next observer fire would re-upsert it as a parent-less orphan.
+      expect(second.has('reply-1'), 'reply id must not survive in the next sync set').toBe(false);
+    });
+
+    it('does not resurrect a reply as an orphan on a subsequent sync over the same upstream', () => {
+      // Same scenario as above, but we now run THREE syncs back-to-back, all
+      // observing the same "parent missing, reply present" upstream. Without
+      // the fix, the second and third syncs would re-upsert the reply each
+      // time, leaving an orphan record in the store.
+      const editor = makeEditorWithConverter();
+      const first = syncCommentEntitiesFromCollaboration(editor, [
+        { commentId: 'root' },
+        { commentId: 'reply-1', parentCommentId: 'root' },
+      ]);
+
+      const second = syncCommentEntitiesFromCollaboration(editor, [{ commentId: 'reply-1', parentCommentId: 'root' }], {
+        previouslySynced: first,
+      });
+
+      const third = syncCommentEntitiesFromCollaboration(editor, [{ commentId: 'reply-1', parentCommentId: 'root' }], {
+        previouslySynced: second,
+      });
+
+      expect(getCommentEntityStore(editor).map((e) => e.commentId)).toEqual([]);
+      expect(third.has('reply-1'), 'orphan reply must not appear in the third sync set').toBe(false);
+    });
+
+    it('still upserts a reply when its parent is in the same upstream pass (preserves valid threads)', () => {
+      // Sanity check that the orphan filter does NOT break the common case:
+      // parent + reply both upstream → both upserted.
+      const editor = makeEditorWithConverter();
+      const seen = syncCommentEntitiesFromCollaboration(editor, [
+        { commentId: 'root' },
+        { commentId: 'reply-1', parentCommentId: 'root' },
+        { commentId: 'reply-2', parentCommentId: 'root' },
+      ]);
+      expect(
+        getCommentEntityStore(editor)
+          .map((e) => e.commentId)
+          .sort(),
+      ).toEqual(['reply-1', 'reply-2', 'root']);
+      expect(seen).toEqual(new Set(['root', 'reply-1', 'reply-2']));
+    });
+
+    it('treats importedId as a valid parent reference (legacy DOCX threads)', () => {
+      // Imported comments may carry only `importedId`; a reply's
+      // `parentCommentId` can point at the parent's importedId rather than
+      // its canonical commentId.
+      const editor = makeEditorWithConverter();
+      const seen = syncCommentEntitiesFromCollaboration(editor, [
+        { commentId: 'canonical-root', importedId: '0' },
+        { commentId: 'reply-1', parentCommentId: '0' },
+      ]);
+      expect(
+        getCommentEntityStore(editor)
+          .map((e) => e.commentId)
+          .sort(),
+      ).toEqual(['canonical-root', 'reply-1']);
+      expect(seen.has('reply-1'), 'reply pointing at parent.importedId must still be accepted').toBe(true);
+    });
+  });
 });

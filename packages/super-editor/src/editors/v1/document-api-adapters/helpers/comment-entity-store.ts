@@ -214,12 +214,36 @@ export function syncCommentEntitiesFromCollaboration(
   const store = getCommentEntityStore(editor);
   const seen = new Set<string>();
 
+  // Pre-pass: collect every id (commentId AND importedId) that exists in the
+  // current upstream array. `deleteYComment` on the browser side removes only
+  // the parent index from Y.Array — reply entries linger upstream until the
+  // browser flushes them. Without this set we'd happily upsert those replies
+  // even though `removeCommentEntityTree` is about to cascade-delete them,
+  // and the next observer fire would resurrect them as orphans (Codex P2).
+  const upstreamIds = new Set<string>();
+  for (const raw of entries) {
+    if (!raw || typeof raw !== 'object') continue;
+    if (raw.trackedChange === true) continue;
+    const cid = toNonEmptyString(raw.commentId);
+    const iid = toNonEmptyString(raw.importedId);
+    if (cid) upstreamIds.add(cid);
+    if (iid) upstreamIds.add(iid);
+  }
+
   for (const raw of entries) {
     if (!raw || typeof raw !== 'object') continue;
     if (raw.trackedChange === true) continue;
 
     const commentId = toNonEmptyString(raw.commentId) ?? toNonEmptyString(raw.importedId);
     if (!commentId) continue;
+
+    // Skip orphan replies — entries whose parent no longer exists upstream.
+    // `parentCommentId` may reference the parent's `commentId` OR its
+    // `importedId` (DOCX-imported threads), hence checking against the
+    // combined set built above.
+    const parentRef = toNonEmptyString(raw.parentCommentId);
+    if (parentRef && !upstreamIds.has(parentRef)) continue;
+
     seen.add(commentId);
 
     const patch: Partial<CommentEntityRecord> = {};

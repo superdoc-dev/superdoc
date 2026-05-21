@@ -9,7 +9,7 @@ import {
   type MinimalWordLayout,
   type ResolvedListMarkerGeometry,
 } from '@superdoc/common/list-marker-utils';
-import { applySourceAnchorDataset } from '../renderer.js';
+import { applySourceAnchorDataset } from '../utils/source-anchor.js';
 
 type PainterListTextStartParams = {
   wordLayout: MinimalWordLayout | undefined;

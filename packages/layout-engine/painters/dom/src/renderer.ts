@@ -88,6 +88,7 @@ import { renderLine as renderRunLine } from './runs/render-line.js';
 import type { RunRenderContext } from './runs/types.js';
 import { buildImageFilters } from './runs/image-run.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
+import { applySourceAnchorDataset } from './utils/source-anchor.js';
 
 type LineEnd = {
   type?: string;
@@ -481,31 +482,6 @@ const resolveDecorationStory = (kind: 'header' | 'footer', data: PageDecorationP
   const id = data.headerFooterRefId ?? data.sectionType;
   return typeof id === 'string' && id.length > 0 ? { kind, id } : { kind };
 };
-
-export function applySourceAnchorDataset(element: HTMLElement, sourceAnchor?: SourceAnchor): void {
-  if (!sourceAnchor) {
-    delete element.dataset.sourceAnchor;
-    delete element.dataset.sourceNodeId;
-    delete element.dataset.sourceOccurrenceId;
-    return;
-  }
-
-  try {
-    element.dataset.sourceAnchor = JSON.stringify(sourceAnchor);
-  } catch {
-    delete element.dataset.sourceAnchor;
-  }
-  if (sourceAnchor.sourceNodeId) {
-    element.dataset.sourceNodeId = sourceAnchor.sourceNodeId;
-  } else {
-    delete element.dataset.sourceNodeId;
-  }
-  if (sourceAnchor.occurrenceId) {
-    element.dataset.sourceOccurrenceId = sourceAnchor.occurrenceId;
-  } else {
-    delete element.dataset.sourceOccurrenceId;
-  }
-}
 
 function readSourceAnchorDataset(element: HTMLElement | null | undefined): SourceAnchor | undefined {
   if (!element) return undefined;

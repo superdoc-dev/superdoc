@@ -833,6 +833,75 @@ describe('renderTableCell', () => {
     expect(image?.src).toBe('data:image/png;base64,AAA');
   });
 
+  it('keeps anchored image drawing blocks on the shared drawing renderer when a callback is provided', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchored-drawing-image-callback',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const drawing: DrawingBlock = {
+      kind: 'drawing',
+      id: 'drawing-image-anchored-callback',
+      drawingKind: 'image',
+      src: 'data:image/png;base64,AAA',
+      hyperlink: { url: 'https://example.com/anchored-drawing-image', tooltip: 'Open drawing image' },
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 12, vRelativeFrom: 'paragraph', offsetV: 7 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchored-drawing-image-callback' },
+    } as DrawingBlock;
+
+    let callbackCount = 0;
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [
+          paragraphMeasure,
+          {
+            kind: 'drawing',
+            drawingKind: 'image',
+            width: 30,
+            height: 15,
+            scale: 1,
+            naturalWidth: 30,
+            naturalHeight: 15,
+          },
+        ],
+        width: 100,
+        height: 50,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-with-anchored-callback-drawing-image', blocks: [para, drawing], attrs: {} },
+      renderDrawingContent: () => {
+        callbackCount += 1;
+        const el = doc.createElement('div');
+        el.classList.add('callback-drawing-image');
+        return el;
+      },
+    });
+
+    expect(callbackCount).toBe(0);
+    expect(cellElement.querySelector('.callback-drawing-image')).toBeFalsy();
+
+    const image = cellElement.querySelector('img.superdoc-drawing-image') as HTMLImageElement | null;
+    expect(image).toBeTruthy();
+    expect(image?.src).toBe('data:image/png;base64,AAA');
+
+    const anchor = image?.parentElement as HTMLAnchorElement | null;
+    expect(anchor?.tagName).toBe('A');
+    expect(anchor?.classList.contains('superdoc-link')).toBe(true);
+    expect(anchor?.href).toBe('https://example.com/anchored-drawing-image');
+    expect(anchor?.style.display).toBe('block');
+    expect(anchor?.style.width).toBe('100%');
+    expect(anchor?.style.height).toBe('100%');
+
+    const positionedWrapper = anchor?.parentElement?.parentElement as HTMLElement | null;
+    expect(positionedWrapper?.style.position).toBe('absolute');
+    expect(positionedWrapper?.style.left).toBe('12px');
+    expect(positionedWrapper?.style.top).toBe('7px');
+  });
+
   it('pushes text away from wrapSquare anchored images in table cells', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',

@@ -257,9 +257,8 @@ export const resolveFragmentLayoutIdentity = (fragment: Fragment, story?: Layout
  * This version string is used for cache invalidation. When any visual property of the block
  * changes, the version string changes, triggering a DOM rebuild instead of reusing cached elements.
  *
- * Duplicated from painters/dom/src/renderer.ts to allow the resolved layout stage to
- * pre-compute block versions without depending on painter-dom. Keep the two copies in sync
- * until the painter fully migrates to resolved versions.
+ * Kept in layout-resolved so the resolved layout stage can pre-compute block
+ * versions without depending on painter-dom.
  */
 export const deriveBlockVersion = (block: FlowBlock): string => {
   if (block.kind === 'paragraph') {

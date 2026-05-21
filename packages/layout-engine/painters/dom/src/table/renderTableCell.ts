@@ -813,7 +813,11 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         const measure = blockMeasures[index];
         const blockStartGlobal = borderContextSegmentStart;
         const blockLineCount = blockLineCounts[index] ?? 0;
+        const blockEndGlobal = blockStartGlobal + blockLineCount;
         borderContextSegmentStart += blockLineCount;
+        if (blockEndGlobal <= globalFromLine || blockStartGlobal >= globalToLine) {
+          return [];
+        }
         if (isAnchoredMediaBlock(block, measure) || isZeroHeightMediaBlock(block, measure)) {
           return [];
         }

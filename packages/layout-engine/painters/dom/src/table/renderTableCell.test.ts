@@ -2800,6 +2800,56 @@ describe('renderTableCell', () => {
       expect(firstBorder.style.borderBottomWidth).toBe('2px');
     });
 
+    it('does not group table-cell paragraph borders across hidden previous blocks', () => {
+      const borders = {
+        top: { width: 1, style: 'solid' as const, color: '#111111' },
+        bottom: { width: 1, style: 'solid' as const, color: '#111111' },
+        between: { width: 2, style: 'dashed' as const, color: '#222222' },
+      };
+      const para1: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-between-hidden-1',
+        runs: [{ text: 'Hidden', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { borders },
+      };
+      const para2: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-between-hidden-2',
+        runs: [{ text: 'Visible', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { borders: { ...borders } },
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        fromLine: 1,
+        toLine: 2,
+        renderLine: (block) => {
+          const line = doc.createElement('div');
+          line.dataset.blockId = (block as ParagraphBlock).id;
+          return line;
+        },
+        cellMeasure: {
+          blocks: [paragraphMeasure, paragraphMeasure],
+          width: 120,
+          height: 60,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: { id: 'cell-between-hidden', blocks: [para1, para2], attrs: {} },
+      });
+
+      const hiddenWrapper = cellElement.querySelector<HTMLElement>('[data-block-id="cell-between-hidden-1"]')
+        ?.parentElement as HTMLElement | null;
+      const visibleWrapper = cellElement.querySelector<HTMLElement>('[data-block-id="cell-between-hidden-2"]')
+        ?.parentElement as HTMLElement | null;
+      expect(hiddenWrapper).toBeUndefined();
+      expect(visibleWrapper?.dataset.suppressTopBorder).toBeUndefined();
+      const visibleBorder = getParagraphBorderLayer(visibleWrapper!);
+      expect(visibleBorder.style.borderTopWidth).toBe('1px');
+      expect(visibleBorder.style.borderTopStyle).toBe('solid');
+    });
+
     it('groups table-cell paragraph borders across anchored out-of-flow blocks', () => {
       const borders = {
         top: { width: 1, style: 'solid' as const, color: '#111111' },

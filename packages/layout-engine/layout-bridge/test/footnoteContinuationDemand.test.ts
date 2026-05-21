@@ -36,19 +36,22 @@ const makeMeasure = (lineHeight: number, lineCount: number): Measure => ({
 describe('SD-3050: continuation-aware body pagination', () => {
   it('reserves carry-forward demand on the continuation page so body packs tight', async () => {
     // Page geometry: body region 600px.
-    // Document: 12 body paragraphs (1 line × 20px each), ref in body line 1 (the
-    // very first paragraph) to a 60-line footnote (720px total).
-    // pageH = 744; maxReserve ≈ 599 (page minus margins minus 1px floor).
-    // Demand ≈ 720 + 24 overhead = 744px which exceeds maxReserve.
-    // Plan caps page-1 reserve at maxReserve and carries the overflow to page 2.
-    // Page 2 must reserve ~(720 + overhead − 575) ≈ 169px for continuation.
-    // Body region on page 2 ≈ 600 − 169 = 431px → at most 21 body lines.
+    // Document: enough body paragraphs to require ≥2 pages of body content
+    // by themselves (40 paragraphs × 20px = 800px > 600px region). The ref
+    // is anchored on page 1, and the footnote is large enough that page 1's
+    // band cannot fit it — forcing carry-forward to page 2's band.
     //
-    // Without continuation-aware breaks the body on page 2 might overrun and
-    // need a relayout to claw back. With SD-3050 it should land in the right
-    // shape on the converged final layout.
+    // Under the bodyMaxY-anchored architecture the page count is driven by
+    // body content, so this fixture must produce ≥2 pages from body alone
+    // (the planner does not synthesize standalone pages just for footnote
+    // continuation). The continuation invariant — "page 2 reserves
+    // carry-forward demand BEFORE body lays out so body packs tight" — is
+    // exactly what we assert against the converged final layout.
+    //
+    // pageH = 744; maxReserve ≈ 599 (page minus margins minus 1px floor).
+    // Footnote demand ≈ 720px + overhead, exceeds maxReserve, overflows to p2.
 
-    const BODY_LINES = 12;
+    const BODY_LINES = 40;
     const FOOTNOTE_LINES = 60;
     const LINE_H = 20;
     const FOOTNOTE_LINE_H = 12;

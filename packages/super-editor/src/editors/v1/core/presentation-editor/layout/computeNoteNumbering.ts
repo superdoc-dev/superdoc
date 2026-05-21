@@ -27,6 +27,13 @@ export type NumberingOptions = {
    * §17.11.19 eachPage — per-ref page assignment from a prior layout pass.
    * When provided AND the active restart is `eachPage`, the counter resets at
    * each page boundary. Refs not in the map are treated as page 0 (initial).
+   *
+   * NOTE: callers in the SuperDoc layout pipeline do not yet thread this map.
+   * Numbering runs BEFORE pagination, so per-page assignments are not
+   * available; the orchestrator coerces `eachPage` → `continuous` in that
+   * scenario. Implementing this properly requires a two-pass pagination
+   * handshake (numbering after layout + a stable re-flow). Filed for
+   * follow-up — do not advertise `eachPage` as supported until then.
    */
   refPageById?: Map<string, number>;
 };
@@ -51,7 +58,6 @@ export function computeNoteNumbering(
   const seen = new Set<string>();
   const sectionConfigs = options.sectionConfigs ?? new Map<number, SectionNoteConfig>();
   const refPageById = options.refPageById;
-  let counter = options.startCounter;
   let sectionIndex = 0;
   let lastPage: number | null = null;
   let anyOverride = false;
@@ -59,6 +65,14 @@ export function computeNoteNumbering(
   const restartFor = (s: number) => sectionConfigs.get(s)?.numRestart ?? options.defaultRestart ?? 'continuous';
   const numStartFor = (s: number) => sectionConfigs.get(s)?.numStart ?? options.startCounter;
   const numFmtFor = (s: number) => sectionConfigs.get(s)?.numFmt ?? options.defaultNumFmt;
+
+  // §17.11.11: section-0's w:footnotePr/w:numStart override applies to refs
+  // BEFORE the first section boundary. The reset block below only fires on
+  // sectionBreak nodes, so without seeding from numStartFor(0) here a single-
+  // section doc with a numStart override silently uses options.startCounter
+  // instead. numStartFor() already falls back to options.startCounter when
+  // section 0 has no config, so this is safe for the no-override case too.
+  let counter = numStartFor(0);
 
   try {
     editorState.doc?.descendants?.((node: any) => {

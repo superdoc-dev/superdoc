@@ -151,6 +151,22 @@ describe('computeNoteNumbering — §17.11.19 numRestart=eachSect', () => {
     const result = computeNoteNumbering(state, 'footnoteReference', opts({ sectionConfigs }));
     expect(result.numberById).toEqual({ a: 1, b: 10 });
   });
+
+  it('seeds counter from section-0 numStart override before any section boundary', () => {
+    // §17.11.11: a single-section doc with w:footnotePr/w:numStart=5 must
+    // start its first note at 5, not at the document-level startCounter.
+    // Pre-fix: counter started from options.startCounter (=1) and section-0
+    // overrides were only consulted when a later section boundary triggered
+    // a reset, which never happens in a single-section doc.
+    const state = makeEditorState([
+      { kind: 'ref', id: 'a' },
+      { kind: 'ref', id: 'b' },
+      { kind: 'ref', id: 'c' },
+    ]);
+    const sectionConfigs = new Map<number, SectionNoteConfig>([[0, { numStart: 5 }]]);
+    const result = computeNoteNumbering(state, 'footnoteReference', opts({ sectionConfigs }));
+    expect(result.numberById).toEqual({ a: 5, b: 6, c: 7 });
+  });
 });
 
 describe('computeNoteNumbering — §17.11.19 numRestart=eachPage', () => {
@@ -215,7 +231,9 @@ describe('computeNoteNumbering — §17.11.19 numRestart=eachPage', () => {
       ['b', 1],
     ]);
     const result = computeNoteNumbering(state, 'footnoteReference', opts({ sectionConfigs, refPageById }));
-    expect(result.numberById).toEqual({ a: 1, b: 7 });
+    // §17.11.11: section-0 numStart applies to refs on page 0 too (initial
+    // seed), and is the reset value at every page boundary thereafter.
+    expect(result.numberById).toEqual({ a: 7, b: 7 });
   });
 });
 

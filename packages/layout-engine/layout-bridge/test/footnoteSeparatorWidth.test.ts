@@ -76,7 +76,12 @@ describe('SD-2985: separator widths match ECMA-376 §17.11.1 / §17.11.23', () =
     const pageW = 612;
     const contentWidth = pageW - margins.left - margins.right;
     const blocks: FlowBlock[] = [];
-    for (let i = 0; i < 12; i += 1) {
+    // Body content must naturally span ≥2 pages in the bodyMaxY-anchored
+    // architecture (the planner does not synthesize standalone pages for
+    // footnote continuation). 40 body paragraphs × 20px = 800px > 600px
+    // region forces 2 body pages; the oversized footnote on page 1 then
+    // requires a continuation separator on page 2.
+    for (let i = 0; i < 40; i += 1) {
       blocks.push(makeParagraph(`body-${i}`, `Body line ${i + 1}.`, i * 20));
     }
     const ftBlock = makeParagraph('footnote-1-0-paragraph', 'Big footnote.', 0);

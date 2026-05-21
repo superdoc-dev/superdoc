@@ -1906,11 +1906,24 @@ export async function incrementalLayout(
         bodyHeightById = map;
       };
 
-      const relayout = (footnoteReservedByPageIndex: number[]) =>
+      // SD-2656: thread the planner's data-driven band overhead values
+      // (topPadding, dividerHeight, gap, separatorSpacingBefore) through
+      // `footnotes` so the layout-engine's body slicer computes the SAME
+      // `bandOverhead(refs)` budget the planner uses to size the band.
+      // Otherwise the slicer falls back to defaults that drift on docs with
+      // custom separator dimensions, packing body onto a page whose band
+      // can't actually fit the refs.
+      const relayout = (footnoteReservedByPageIndex: number[], plannerSeparatorSpacingBefore?: number) =>
         layoutDocument(currentBlocks, currentMeasures, {
           ...options,
           footnoteReservedByPageIndex,
-          footnotes: { ...footnotesInput, bodyHeightById },
+          footnotes: {
+            ...footnotesInput,
+            bodyHeightById,
+            ...(typeof plannerSeparatorSpacingBefore === 'number' && Number.isFinite(plannerSeparatorSpacingBefore)
+              ? { separatorSpacingBefore: plannerSeparatorSpacingBefore }
+              : {}),
+          },
           headerContentHeights,
           footerContentHeights,
           headerContentHeightsBySectionRef,
@@ -1941,7 +1954,7 @@ export async function incrementalLayout(
         let reservesStabilized = false;
         const seenReserveVectors: number[][] = [reserves.slice()];
         for (let pass = 0; pass < MAX_FOOTNOTE_LAYOUT_PASSES; pass += 1) {
-          layout = relayout(reserves);
+          layout = relayout(reserves, plan.separatorSpacingBefore);
           ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
           // SD-3049: measure the full set each iteration so `bodyHeightById`
           // stays complete; refs migrating between pages must not drop their

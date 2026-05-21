@@ -35,4 +35,54 @@ describe('SD-2986/B1: footnote formatter parity with formatPageNumber', () => {
     expect(formatFootnoteCardinal(0, 'decimal')).toBe(formatPageNumber(0, 'decimal'));
     expect(formatFootnoteCardinal(-3, 'upperRoman')).toBe(formatPageNumber(-3, 'upperRoman'));
   });
+
+  // Direct-string assertions: parity-only tests close the loop only if both
+  // helpers are correct. Pin the expected output for the less-obvious formats
+  // so a regression in BOTH helpers (e.g. someone "fixing" the inlined
+  // numberInDash to ` ${num} ` style) fails here rather than silently passing.
+  it('formats numberInDash as -n- in both helpers', () => {
+    for (const n of [1, 5, 12, 99]) {
+      const expected = `-${n}-`;
+      expect(formatFootnoteCardinal(n, 'numberInDash')).toBe(expected);
+      expect(formatPageNumber(n, 'numberInDash')).toBe(expected);
+    }
+  });
+
+  it('formats upperRoman correctly in both helpers', () => {
+    // Roman numerals are a common source of off-by-one or 9-vs-IX style bugs.
+    expect(formatFootnoteCardinal(1, 'upperRoman')).toBe('I');
+    expect(formatFootnoteCardinal(4, 'upperRoman')).toBe('IV');
+    expect(formatFootnoteCardinal(9, 'upperRoman')).toBe('IX');
+    expect(formatFootnoteCardinal(40, 'upperRoman')).toBe('XL');
+    expect(formatFootnoteCardinal(90, 'upperRoman')).toBe('XC');
+    expect(formatPageNumber(1, 'upperRoman')).toBe('I');
+    expect(formatPageNumber(4, 'upperRoman')).toBe('IV');
+    expect(formatPageNumber(9, 'upperRoman')).toBe('IX');
+    expect(formatPageNumber(40, 'upperRoman')).toBe('XL');
+    expect(formatPageNumber(90, 'upperRoman')).toBe('XC');
+  });
+
+  it('formats lowerRoman correctly in both helpers', () => {
+    expect(formatFootnoteCardinal(1, 'lowerRoman')).toBe('i');
+    expect(formatFootnoteCardinal(4, 'lowerRoman')).toBe('iv');
+    expect(formatFootnoteCardinal(9, 'lowerRoman')).toBe('ix');
+    expect(formatPageNumber(1, 'lowerRoman')).toBe('i');
+    expect(formatPageNumber(4, 'lowerRoman')).toBe('iv');
+    expect(formatPageNumber(9, 'lowerRoman')).toBe('ix');
+  });
+
+  it('formats upperLetter / lowerLetter using base-26 cycle (a, b, ..., z, aa)', () => {
+    expect(formatFootnoteCardinal(1, 'upperLetter')).toBe('A');
+    expect(formatFootnoteCardinal(26, 'upperLetter')).toBe('Z');
+    expect(formatFootnoteCardinal(27, 'upperLetter')).toBe('AA');
+    expect(formatFootnoteCardinal(1, 'lowerLetter')).toBe('a');
+    expect(formatFootnoteCardinal(26, 'lowerLetter')).toBe('z');
+    expect(formatFootnoteCardinal(27, 'lowerLetter')).toBe('aa');
+    expect(formatPageNumber(1, 'upperLetter')).toBe('A');
+    expect(formatPageNumber(26, 'upperLetter')).toBe('Z');
+    expect(formatPageNumber(27, 'upperLetter')).toBe('AA');
+    expect(formatPageNumber(1, 'lowerLetter')).toBe('a');
+    expect(formatPageNumber(26, 'lowerLetter')).toBe('z');
+    expect(formatPageNumber(27, 'lowerLetter')).toBe('aa');
+  });
 });

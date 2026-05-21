@@ -17,7 +17,6 @@ import type {
 import {
   computeFragmentPmRange,
   normalizeLines,
-  sliceLines,
   extractBlockPmRange,
   isEmptyTextParagraph,
   shouldSuppressOwnSpacing,
@@ -313,6 +312,17 @@ export type ParagraphLayoutContext = {
    * for the candidate slice.
    */
   getFootnoteRefCountForBlockId?: (blockId: string, pmStart?: number, pmEnd?: number) => number;
+
+  /**
+   * SD-2656: per-page footnote-band overhead in pixels for a given number of
+   * anchored refs. The slicer's `effectiveBottom` budget must match the
+   * planner's, otherwise body packs onto a page whose band cannot fit the
+   * refs. Source of truth lives in the planner (incrementalLayout.ts) and
+   * derives from `topPadding + dividerHeight + separatorSpacingBefore +
+   * (refs-1)*gap`. When not provided, the slicer falls back to a default
+   * formula that matches the planner's default values.
+   */
+  getFootnoteBandOverhead?: (refsTotal: number) => number;
 };
 
 export type AnchoredDrawingEntry = {
@@ -521,15 +531,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   }
 
   let fromLine = 0;
-  // SD-3049: charged to the page that receives the block's first committed
-  // fragment. `demandChargedPageNumber` tracks where the (tentative) charge
-  // currently lives so we can re-target it after `advanceColumn`. Once a
-  // fragment is committed (`demandLocked`), the charge stays put — re-charging
-  // on later page transitions would phantom-shrink continuation pages where
-  // the footnote ref does not land.
-  const blockFootnoteDemand = ctx.getFootnoteDemandForBlockId?.(block.id) ?? 0;
-  let demandChargedPageNumber: number | null = null;
-  let demandLocked = false;
   const attrs = getParagraphAttrs(block);
   const spacing = attrs?.spacing ?? {};
   const spacingExplicit = attrs?.spacingExplicit;
@@ -847,16 +848,30 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     } else {
       state.trailingSpacing = 0;
     }
-    // SD-2656: footnote band budgeting constants. The planner reserves
-    // `bandOverhead(refs) = SEPARATOR_PADDING + (refs-1) * INTER_REF_GAP +
-    // SAFETY_MARGIN` for every page where any footnote is anchored. The
-    // slicer must use the SAME formula or body packs onto a page whose band
-    // can't actually fit the refs.
-    const FN_BAND_OVERHEAD_PX = 22;
-    const FN_INTER_REF_GAP_PX = 2;
+    // SD-2656: footnote band overhead. Source of truth is the planner
+    // (incrementalLayout.ts), which derives overhead from data-driven
+    // separator dimensions (`topPadding`, `dividerHeight`,
+    // `separatorSpacingBefore`, inter-ref `gap`). The planner threads its
+    // formula through `ctx.getFootnoteBandOverhead` so the slicer's
+    // `effectiveBottom` budget matches the planner's exactly — otherwise
+    // body packs onto a page whose band can't actually fit the refs.
+    //
+    // The fallback formula below matches the planner's *default* values
+    // (topPadding=6, dividerHeight=6, separatorSpacingBefore≈14, gap=2)
+    // and is only used when ctx doesn't supply the overhead function (e.g.
+    // tests that don't exercise footnotes).
     const FN_SAFETY_MARGIN_PX = 1;
-    const bandOverhead = (refsTotal: number): number =>
-      refsTotal > 0 ? FN_BAND_OVERHEAD_PX + Math.max(0, refsTotal - 1) * FN_INTER_REF_GAP_PX + FN_SAFETY_MARGIN_PX : 0;
+    const fallbackBandOverhead = (refsTotal: number): number =>
+      refsTotal > 0 ? 22 + Math.max(0, refsTotal - 1) * 2 : 0;
+    const bandOverhead = (refsTotal: number): number => {
+      if (refsTotal <= 0) return 0;
+      const fromCtx = ctx.getFootnoteBandOverhead?.(refsTotal);
+      const base =
+        typeof fromCtx === 'number' && Number.isFinite(fromCtx) && fromCtx >= 0
+          ? fromCtx
+          : fallbackBandOverhead(refsTotal);
+      return base + FN_SAFETY_MARGIN_PX;
+    };
 
     /**
      * SD-2656: effective bottom for a candidate slice.
@@ -943,7 +958,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       offsetX = narrowestOffsetX;
     }
 
-    // Reserve border expansion from available height so sliceLines doesn't accept
+    // Reserve border expansion from available height so the slicer doesn't accept
     // lines that would overflow the page once border space is added.
     // SD-3049: use `effectiveBottom` (which already accounts for any
     // additional footnote demand above the page-level reserve) so we don't
@@ -964,9 +979,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       const range = computeFragmentPmRange(block, lines, fromLine, toLine + 1);
       const nextDemand = ctx.getFootnoteDemandForBlockId
         ? ctx.getFootnoteDemandForBlockId(block.id, range.pmStart, range.pmEnd)
-        : range.pmStart == null
-          ? blockFootnoteDemand
-          : 0;
+        : 0;
       const nextRefs = ctx.getFootnoteRefCountForBlockId
         ? ctx.getFootnoteRefCountForBlockId(block.id, range.pmStart, range.pmEnd)
         : 0;
@@ -996,19 +1009,11 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     const fragmentHeight = slice.height;
 
     // Commit demand from this slice into page state so subsequent blocks on
-    // the same page see the right effectiveBottom. demandChargedPageNumber
-    // is no longer used (each slice charges its own range-derived demand),
-    // but we keep the variable assignment below to satisfy the legacy
-    // unused-decl check.
+    // the same page see the right effectiveBottom.
     if (sliceDemand > 0 || sliceRefs > 0) {
       state.footnoteDemandThisPage += sliceDemand;
       state.footnoteRefsThisPage = (state.footnoteRefsThisPage ?? 0) + sliceRefs;
-      demandChargedPageNumber = state.page.number;
     }
-    void demandLocked;
-    // availableForSlice is no longer used (the line-by-line slicer above
-    // makes its own fit decisions). Keep a reference so `effectiveBottom`
-    // stays declared-as-read for downstream code that consults it.
     void effectiveBottom;
 
     // Apply negative indent adjustment to fragment position and width (similar to table indent handling).
@@ -1073,7 +1078,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       }
     }
     state.page.fragments.push(fragment);
-    demandLocked = true;
 
     state.cursorY += borderExpansion.top + fragmentHeight + borderExpansion.bottom;
     state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);

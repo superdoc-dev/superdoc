@@ -60,6 +60,29 @@ function serializeSectionConfigs(map: Map<number, SectionNoteConfig>): string {
     .map(([i, c]) => `${i}:${c.numFmt ?? ''}/${c.numStart ?? ''}/${c.numRestart ?? ''}`)
     .join(';');
 }
+
+/**
+ * Stable serialization of per-ref numbering / format maps for the flow-block
+ * cache key. The set of ids appears in `order` already, but the *values*
+ * (computed ordinals + per-id format overrides) must also vary the key —
+ * otherwise toggling `customMarkFollows` on a middle ref, or moving a ref
+ * across a section that changes its numFmt, leaves the cached reference
+ * runs out of date with the live numbering.
+ */
+function serializePerIdNumbering(
+  order: string[],
+  numberById: Record<string, number>,
+  formatById: Record<string, string> | undefined,
+): string {
+  if (order.length === 0) return '';
+  const parts: string[] = [];
+  for (const id of order) {
+    const n = numberById[id];
+    const f = formatById?.[id] ?? '';
+    parts.push(`${id}:${n ?? ''}/${f}`);
+  }
+  return parts.join(';');
+}
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import {
@@ -477,6 +500,13 @@ export class PresentationEditor extends EventEmitter {
   #flowBlockCache: FlowBlockCache = new FlowBlockCache();
   #footnoteNumberSignature: string | null = null;
   #endnoteNumberSignature: string | null = null;
+  // §17.11.19 eachPage requires a two-pass pagination handshake that the
+  // layout pipeline does not yet implement; we coerce eachPage → continuous
+  // and emit a single warning per kind per editor instance.
+  #warnedUnsupportedRestart: { footnote: boolean; endnote: boolean } = {
+    footnote: false,
+    endnote: false,
+  };
   #painterAdapter = new PresentationPainterAdapter();
   #pageGeometryHelper: PageGeometryHelper | null = null;
   #dragDropManager: DragDropManager | null = null;
@@ -960,6 +990,14 @@ export class PresentationEditor extends EventEmitter {
    * - Skips wrapping if the focus function has a `mock` property (Vitest/Jest mocks)
    * - Prevents interference with test assertions and mock function tracking
    */
+  #warnUnsupportedNumberingRestart(kind: 'footnote' | 'endnote'): void {
+    if (this.#warnedUnsupportedRestart[kind]) return;
+    this.#warnedUnsupportedRestart[kind] = true;
+    console.warn(
+      `[PresentationEditor] ${kind} numRestart="eachPage" is not yet supported (requires a two-pass pagination handshake). Falling back to "continuous". Tracked for follow-up.`,
+    );
+  }
+
   #wrapOffscreenEditorFocus(editor: Editor | null | undefined): void {
     const view = editor?.view;
     if (!view || !view.dom || typeof view.focus !== 'function') {
@@ -6060,6 +6098,12 @@ export class PresentationEditor extends EventEmitter {
       const sectionMetadata: SectionMetadata[] = [];
       let blocks: FlowBlock[] | undefined;
       let bookmarks: Map<string, number> = new Map();
+      // TODO(footnote): the block below (settings read → numbering → cache
+      // signatures → converterContext) is OOXML-semantics work that doesn't
+      // belong in PresentationEditor (see layout-engine CLAUDE.md). Extract
+      // a `buildFootnoteConverterContext` helper alongside computeNoteNumbering
+      // so the cache-signature dance lives in one place and is testable in
+      // isolation. Deferred from PR SD-2656 review per reviewer's offer.
       let converterContext: ConverterContext | undefined = undefined;
       try {
         const converter = (this.#editor as Editor & { converter?: Record<string, unknown> }).converter;
@@ -6097,6 +6141,36 @@ export class PresentationEditor extends EventEmitter {
           }
         }
 
+        // §17.11.19 numRestart=eachPage — requires a per-ref page-assignment
+        // map from a prior layout pass. The numbering runs BEFORE pagination,
+        // so refPageById is not available here. Coerce to `continuous` and
+        // warn once so the doc renders deterministic ordinals instead of
+        // silently rendering "continuous-looking but supposedly per-page"
+        // numbers. Wiring a real eachPage pass requires a two-pass handshake
+        // (number → layout → re-number → re-layout).
+        if (footnoteNumberRestart === 'eachPage') {
+          this.#warnUnsupportedNumberingRestart('footnote');
+          footnoteNumberRestart = 'continuous';
+        }
+        if (endnoteNumberRestart === 'eachPage') {
+          this.#warnUnsupportedNumberingRestart('endnote');
+          endnoteNumberRestart = 'continuous';
+        }
+        // Section-level overrides may also request eachPage; coerce the same
+        // way so the helper never sees a value it cannot honor.
+        for (const [secIndex, cfg] of footnoteSectionConfigs) {
+          if (cfg.numRestart === 'eachPage') {
+            footnoteSectionConfigs.set(secIndex, { ...cfg, numRestart: 'continuous' });
+            this.#warnUnsupportedNumberingRestart('footnote');
+          }
+        }
+        for (const [secIndex, cfg] of endnoteSectionConfigs) {
+          if (cfg.numRestart === 'eachPage') {
+            endnoteSectionConfigs.set(secIndex, { ...cfg, numRestart: 'continuous' });
+            this.#warnUnsupportedNumberingRestart('endnote');
+          }
+        }
+
         // §17.11.14 / §17.11.20 / §17.11.19 / §17.11.11.
         const footnoteNumbering = computeNoteNumbering(this.#editor?.state, 'footnoteReference', {
           startCounter: footnoteNumberStart,
@@ -6108,7 +6182,7 @@ export class PresentationEditor extends EventEmitter {
         const footnoteFormatById = footnoteNumbering.formatById;
         const footnoteOrder = footnoteNumbering.order;
         // Cache key: anything baked into cached reference runs.
-        const footnoteSignature = `${footnoteNumberStart}|${footnoteNumberFormat ?? ''}|${footnoteNumberRestart ?? ''}|${serializeSectionConfigs(footnoteSectionConfigs)}|${footnoteOrder.join('|')}`;
+        const footnoteSignature = `${footnoteNumberStart}|${footnoteNumberFormat ?? ''}|${footnoteNumberRestart ?? ''}|${serializeSectionConfigs(footnoteSectionConfigs)}|${serializePerIdNumbering(footnoteOrder, footnoteNumberById, footnoteFormatById)}`;
         if (footnoteSignature !== this.#footnoteNumberSignature) {
           this.#flowBlockCache.clear();
           this.#footnoteNumberSignature = footnoteSignature;
@@ -6122,7 +6196,7 @@ export class PresentationEditor extends EventEmitter {
         const endnoteNumberById = endnoteNumbering.numberById;
         const endnoteFormatById = endnoteNumbering.formatById;
         const endnoteOrder = endnoteNumbering.order;
-        const endnoteSignature = `${endnoteNumberStart}|${endnoteNumberFormat ?? ''}|${endnoteNumberRestart ?? ''}|${serializeSectionConfigs(endnoteSectionConfigs)}|${endnoteOrder.join('|')}`;
+        const endnoteSignature = `${endnoteNumberStart}|${endnoteNumberFormat ?? ''}|${endnoteNumberRestart ?? ''}|${serializeSectionConfigs(endnoteSectionConfigs)}|${serializePerIdNumbering(endnoteOrder, endnoteNumberById, endnoteFormatById)}`;
         if (endnoteSignature !== this.#endnoteNumberSignature) {
           this.#flowBlockCache.clear();
           this.#endnoteNumberSignature = endnoteSignature;

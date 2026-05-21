@@ -1350,6 +1350,40 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     return count;
   };
 
+  /**
+   * SD-2656: per-page footnote-band overhead in pixels. Matches the planner's
+   * data-driven formula (incrementalLayout.ts:1488 — `separatorBefore +
+   * separatorHeight + topPadding + (refs-1)*gap`). The slicer consults this
+   * via ctx so its body-fit budget matches the planner's band-size budget
+   * exactly. The defaults below mirror the planner's defaults so legacy /
+   * test callers that don't populate overhead fields still get correct math.
+   */
+  const getFootnoteBandOverhead = (() => {
+    const fn = options.footnotes as
+      | {
+          topPadding?: number;
+          dividerHeight?: number;
+          separatorSpacingBefore?: number;
+          gap?: number;
+        }
+      | undefined;
+    const safeNum = (v: number | undefined, fallback: number): number =>
+      typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback;
+    // Defaults match incrementalLayout.ts:1330-1342 (gap=2, topPadding=6,
+    // dividerHeight=6) and DEFAULT_FOOTNOTE_SEPARATOR_SPACING_BEFORE=12.
+    // The planner threads its measured `separatorSpacingBefore` (typically
+    // the first-fn lineHeight) through `options.footnotes` so subsequent
+    // passes converge with this slicer.
+    const topPadding = safeNum(fn?.topPadding, 6);
+    const dividerHeight = safeNum(fn?.dividerHeight, 6);
+    const separatorSpacingBefore = safeNum(fn?.separatorSpacingBefore, 12);
+    const gap = safeNum(fn?.gap, 2);
+    return (refsTotal: number): number => {
+      if (refsTotal <= 0) return 0;
+      return topPadding + dividerHeight + separatorSpacingBefore + Math.max(0, refsTotal - 1) * gap;
+    };
+  })();
+
   // Paginator encapsulation for page/column helpers
   let pageCount = 0;
   // Page numbering state
@@ -2534,6 +2568,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           overrideSpacingAfter,
           getFootnoteDemandForBlockId,
           getFootnoteRefCountForBlockId,
+          getFootnoteBandOverhead,
         },
         anchorsForPara
           ? {
@@ -3116,12 +3151,22 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // painter can render the separator immediately under the last body
   // fragment instead of at the legacy reserve-derived position. Trailing
   // paragraph spacing is subtracted because it's "below the last line" and
-  // shouldn't push the separator down by that much.
+  // shouldn't push the separator down by that much — but only when the
+  // current column's cursorY is the one that set maxCursorY. In a multi-
+  // column page, `advanceColumn` preserves maxCursorY across columns while
+  // resetting trailingSpacing to 0; the trailingSpacing observed at the
+  // page tail belongs to the last column's last fragment, not to whichever
+  // fragment set maxCursorY. Subtracting it unconditionally would clip the
+  // band up into the body of an earlier, taller column.
   for (let i = 0; i < pages.length && i < paginator.states.length; i++) {
     const s = paginator.states[i];
-    const raw = Math.max(s.maxCursorY ?? 0, s.cursorY ?? 0);
+    const maxY = s.maxCursorY ?? 0;
+    const cursorY = s.cursorY ?? 0;
     const trailing = s.trailingSpacing ?? 0;
-    (pages[i] as { bodyMaxY?: number }).bodyMaxY = Math.max(s.topMargin ?? 0, raw - trailing);
+    const raw = Math.max(maxY, cursorY);
+    const trailingAttachedToMax = cursorY >= maxY;
+    const adjusted = raw - (trailingAttachedToMax ? trailing : 0);
+    (pages[i] as { bodyMaxY?: number }).bodyMaxY = Math.max(s.topMargin ?? 0, adjusted);
   }
 
   return {

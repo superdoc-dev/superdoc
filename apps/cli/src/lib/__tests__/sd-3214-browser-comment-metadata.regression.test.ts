@@ -503,4 +503,67 @@ describe('SD-3214: two-client end-to-end', () => {
     expect(found, 'browser-authored comment after agent connect should reach agent').toBeDefined();
     expect((found as { creatorName?: string }).creatorName).toBe('Browser User');
   });
+
+  // Codex P2 — "Track own Y.Array writes before filtering": the bridge used
+  // to skip own-origin Y.Array events to avoid redundant work, but that also
+  // meant `previousSyncedIds` never learned about agent-authored comments.
+  // So a subsequent remote delete had no prior id to prune against, and the
+  // metadata stored at create time (text / creatorName / createdTime / …)
+  // would keep surfacing through doc.comments.list() even though the
+  // canonical Y.Array entry was gone.
+  //
+  // The fix updates `previousSyncedIds` on every observer fire, including
+  // own-origin ones. We assert the entity-store-resident metadata is pruned
+  // here; the PM anchor mark is local to this session and (correctly)
+  // outlives a Y.Array-only delete simulation, so we don't assert on
+  // list-membership — only on the stale-metadata symptom Codex described.
+  it('agent-authored entity-store metadata is pruned when a remote client deletes it from Y.Array', async () => {
+    const ydoc = new YDoc();
+    const session = await openDocument(undefined, createIo(), {
+      documentId: 'sd-3214-own-write-then-remote-delete',
+      ydoc,
+      collaborationProvider: createProviderStub(),
+      isNewFile: true,
+      user: { name: 'Headless Agent', email: 'agent@superdoc.dev' },
+    });
+    session.editor.doc.create.paragraph({ at: { kind: 'documentEnd' }, text: 'Agent-authored body.' });
+    const matchBlock = session.editor.doc.query.match({
+      select: { type: 'text', pattern: 'Agent-authored' },
+      require: 'first',
+    }).items[0].blocks[0];
+    session.editor.doc.comments.create({
+      target: { kind: 'text', blockId: matchBlock!.blockId, range: matchBlock!.range } as never,
+      text: 'agent says review this',
+    });
+
+    const yArr = ydoc.getArray<YMap<unknown>>('comments');
+    const seeded = yArr.toJSON() as Array<Record<string, unknown>>;
+    expect(seeded).toHaveLength(1);
+    const targetId = seeded[0].commentId as string;
+
+    const before = session.editor.doc.comments.list().items.find((c) => c.id === targetId);
+    expect(before, 'comment should be visible before remote delete').toBeDefined();
+    expect(before?.text, 'agent-authored text should be present pre-delete').toBe('agent says review this');
+    expect(before?.creatorName).toBe('Headless Agent');
+
+    // Remote client (different user origin) deletes the Y.Array entry.
+    ydoc.transact(
+      () => {
+        const idx = (yArr.toJSON() as Array<Record<string, unknown>>).findIndex((c) => c.commentId === targetId);
+        yArr.delete(idx, 1);
+      },
+      { user: { name: 'Other Browser', email: 'other@example.com' } },
+    );
+
+    const after = session.editor.doc.comments.list().items.find((c) => c.id === targetId);
+    session.dispose();
+
+    // The entity-store record carrying the rich metadata must be pruned. PM
+    // anchor presence is a separate concern; this test scopes to the
+    // metadata symptom Codex flagged ("stale local store entry").
+    expect(after?.text, 'stale agent-authored text must be pruned after remote delete').toBeUndefined();
+    expect(after?.creatorName, 'stale creatorName must be pruned after remote delete').toBeUndefined();
+    expect(after?.creatorEmail, 'stale creatorEmail must be pruned after remote delete').toBeUndefined();
+    expect(after?.createdTime, 'stale createdTime must be pruned after remote delete').toBeUndefined();
+  });
 });

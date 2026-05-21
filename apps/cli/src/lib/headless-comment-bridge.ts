@@ -330,13 +330,16 @@ export function buildHeadlessCommentBridge(ydoc: unknown, user?: UserIdentity): 
     // Initial seed: pull whatever is already in the room.
     syncYArrayToStore();
 
-    yArrayObserver = (event) => {
-      // Skip our own writes — they're already in the store via onCommentsUpdate.
-      const origin = (event.transaction.origin ?? null) as { user?: { name?: string; email?: string } } | null;
-      const originUser = origin?.user;
-      if (userOrigin && originUser && originUser.name === userOrigin.name && originUser.email === userOrigin.email) {
-        return;
-      }
+    yArrayObserver = () => {
+      // Re-sync on every Y.Array event, including own-origin writes. For own
+      // writes the store is already coherent (the wrapper's `commentsUpdate`
+      // emit pre-populates it before this observer fires), but the prune
+      // step relies on `previousSyncedIds` knowing every collab-synced id —
+      // including ids we authored ourselves — so a later remote delete of
+      // an agent-authored comment can be detected and cascaded. The sync
+      // is idempotent for entries already present, so iterating over our
+      // own writes is a no-op on store contents and only refreshes the
+      // synced-id bookkeeping.
       syncYArrayToStore();
     };
     yArray.observe(yArrayObserver);

@@ -12,6 +12,7 @@
 
 import type { FlowBlock, ParagraphBlock } from '@superdoc/contracts';
 import { resolveSectionDirection } from './direction/resolveSectionDirection.js';
+import { createListRenderingContext } from './list-rendering.js';
 import { isValidTrackedMode } from './tracked-changes.js';
 import {
   analyzeSectionRanges,
@@ -172,6 +173,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     defaultFont,
     defaultSize,
   );
+  const listRenderingContext = options?.resolveListRendering ? createListRenderingContext(converterContext) : undefined;
   if (options?.showBookmarks !== undefined) {
     converterContext.showBookmarks = options.showBookmarks;
   }
@@ -243,6 +245,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     flowBlockCache,
     trackedListMarkerOffsets: new Map<string, number>(),
     trackedListLastOrdinals: new Map<string, number>(),
+    listRenderingContext,
   };
 
   // Process nodes using handler dispatch pattern. Before each top-level node

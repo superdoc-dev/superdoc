@@ -15,19 +15,24 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
   return {
     ...actual,
-    toFlowBlocks: vi.fn((doc: unknown, opts?: { blockIdPrefix?: string }) => {
+    toFlowBlocks: vi.fn((doc: unknown, opts?: { blockIdPrefix?: string; resolveListRendering?: boolean }) => {
       // Return mock blocks based on blockIdPrefix
       if (typeof opts?.blockIdPrefix === 'string') {
         const id = opts.blockIdPrefix.replace('footnote-', '').replace('-', '');
         const firstParagraph = (doc as { content?: Array<{ type?: string; attrs?: Record<string, unknown> }> })
           ?.content?.[0];
         const listRendering = firstParagraph?.attrs?.listRendering as { markerText?: string } | undefined;
+        const numberingProperties = (
+          firstParagraph?.attrs?.paragraphProperties as { numberingProperties?: unknown } | undefined
+        )?.numberingProperties;
+        const markerText =
+          listRendering?.markerText ?? (opts.resolveListRendering && numberingProperties ? '1.' : undefined);
         return {
           blocks: [
             {
               kind: 'paragraph',
               runs: [{ kind: 'text', text: `Footnote ${id} text`, pmStart: 0, pmEnd: 10 }],
-              ...(listRendering ? { attrs: { wordLayout: { marker: { markerText: listRendering.markerText } } } } : {}),
+              ...(markerText ? { attrs: { wordLayout: { marker: { markerText } } } } : {}),
             },
           ],
           bookmarks: new Map(),
@@ -227,7 +232,7 @@ describe('buildFootnotesInput', () => {
       });
     });
 
-    it('adds listRendering to footnote paragraphs before layout conversion without mutating converter data', () => {
+    it('asks the adapter to resolve footnote list rendering without mutating converter data', () => {
       listMocks.allDefinitions = { 1: { 0: { start: '1' } } };
       listMocks.definitionDetailsByKey.set('1:0', {
         lvlText: '%1.',
@@ -252,14 +257,10 @@ describe('buildFootnotesInput', () => {
 
       buildFootnotesInput(editorState, converter, undefined, undefined);
 
-      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
-      expect(docArg?.content?.[0]?.attrs?.listRendering).toEqual({
-        markerText: '1.',
-        suffix: 'tab',
-        justification: 'left',
-        path: [1],
-        numberingType: 'decimal',
-      });
+      const [docArg, options] =
+        (toFlowBlocks as unknown as { mock: { calls: Array<[any, Record<string, unknown>]> } }).mock.calls.at(-1) ?? [];
+      expect(docArg?.content?.[0]?.attrs?.listRendering).toBeUndefined();
+      expect(options?.resolveListRendering).toBe(true);
       expect((converter.footnotes?.[0].content?.[0] as { attrs?: Record<string, unknown> })?.attrs?.listRendering).toBe(
         undefined,
       );

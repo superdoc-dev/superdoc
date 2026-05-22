@@ -12,13 +12,13 @@ ProseMirror Doc → pm-adapter → FlowBlock[] → layout-engine → Layout[] �
 
 | Package | Purpose | Key Entry |
 |---------|---------|-----------|
-| `contracts/` | Shared types (FlowBlock, Layout, etc.) | `src/index.ts` |
-| `pm-adapter/` | PM document → FlowBlocks conversion | `src/internal.ts` |
-| `layout-engine/` | Pagination algorithms | `src/index.ts` |
-| `layout-bridge/` | Layout orchestration & bridge utilities | `src/incrementalLayout.ts` |
-| `painters/dom/` | DOM rendering | `AGENTS.md`, `src/renderer.ts` |
-| `style-engine/` | OOXML style resolution | `src/index.ts` |
-| `geometry-utils/` | Math utilities for layout | `src/index.ts` |
+| `contracts/` | Shared types (FlowBlock, Layout, etc.) | `contracts/src/index.ts` |
+| `pm-adapter/` | PM document → FlowBlocks conversion | `pm-adapter/src/internal.ts` |
+| `layout-engine/` | Pagination algorithms | `layout-engine/src/index.ts` |
+| `layout-bridge/` | Layout orchestration & bridge utilities | `layout-bridge/src/incrementalLayout.ts` |
+| `painters/dom/` | DOM rendering | `painters/dom/AGENTS.md`, `painters/dom/src/renderer.ts` |
+| `style-engine/` | OOXML style resolution | `style-engine/src/index.ts` |
+| `geometry-utils/` | Math utilities for layout | `geometry-utils/src/index.ts` |
 
 ## Key Insight: DomPainter Receives Paint-Ready Data
 
@@ -105,26 +105,26 @@ feature and content rendering in concern-specific modules under
 `sdt/`, `notes/`, `textbox/`, `ruler/`, `features/`, or `utils/`). Read
 `painters/dom/AGENTS.md` before adding renderer code.
 
-## DomPainter Feature Modules (`painters/dom/src/features/`)
+## DomPainter Feature Registry
 
 Rendering logic for specific OOXML features belongs in **feature modules** under `painters/dom/src/features/<feature-name>/` or the matching concern directory. This keeps `renderer.ts` focused on orchestration while feature-specific logic lives in discoverable, self-contained modules.
 
 ### How to find where an OOXML element renders
 
-1. **Search `features/feature-registry.ts`** — maps OOXML element names (e.g., `w:pBdr`, `w:shd`) to their feature module
+1. **Search `painters/dom/src/features/feature-registry.ts`** — maps OOXML element names (e.g., `w:pBdr`, `w:shd`) to their feature module
 2. Each entry has: `feature` (folder name), `module` (import path), `handles` (OOXML elements), `spec` (ECMA-376 section)
 3. Open the feature's `index.ts` for its public API and `@ooxml`/`@spec` annotations
 
 ### Adding a new rendering feature
 
-1. **Add a registry entry** in `features/feature-registry.ts` first — this is the source of truth
+1. **Add a registry entry** in `painters/dom/src/features/feature-registry.ts` first — this is the source of truth
 2. **Create the feature folder** at `features/<feature-name>/`:
    - `index.ts` — barrel exports with `@ooxml` and `@spec` JSDoc annotations
    - Split logic into focused files (e.g., `group-analysis.ts`, `border-layer.ts`)
    - `types.ts` — shared types if needed
 3. **Import from the feature module** in `renderer.ts` — renderer calls feature functions, features don't import from renderer
 4. **Remove extracted code** from `renderer.ts` — don't leave dead copies
-5. **Update imports** in any other files that used the old renderer exports (e.g., `table/renderTableCell.ts`)
+5. **Update imports** in any other files that used the old renderer exports (e.g., `painters/dom/src/table/renderTableCell.ts`)
 
 ### Feature module conventions
 
@@ -138,7 +138,7 @@ Rendering logic for specific OOXML features belongs in **feature modules** under
 
 | Feature | OOXML elements | Folder |
 |---------|---------------|--------|
-| Paragraph borders & shading | `w:pBdr`, `w:shd` | `features/paragraph-borders/` |
+| Paragraph borders & shading | `w:pBdr`, `w:shd` | `painters/dom/src/paragraph/borders/` |
 
 ## Entry Points
 

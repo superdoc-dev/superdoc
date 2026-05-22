@@ -96,6 +96,24 @@ describe('SuperDocEditor', () => {
       expect(editorContainer.style.visibility).toBe('hidden');
       expect(editorContainer.style.pointerEvents).toBe('none');
     });
+
+    it('overlays loading content while contained and loading', () => {
+      const { container } = render(
+        <SuperDocEditor contained renderLoading={() => <div data-testid='loading'>Loading...</div>} />,
+      );
+
+      const wrapper = container.querySelector('.superdoc-wrapper') as HTMLElement;
+      const editorContainer = container.querySelector('.superdoc-editor-container') as HTMLElement;
+      const loadingContainer = container.querySelector('.superdoc-loading-container') as HTMLElement;
+
+      expect(wrapper.style.position).toBe('relative');
+      expect(editorContainer.style.display).not.toBe('none');
+      expect(editorContainer.style.visibility).toBe('hidden');
+      expect(editorContainer.style.flex).toBe('1 1 0%');
+      expect(loadingContainer.style.position).toBe('absolute');
+      expect(loadingContainer.style.inset).toBe('0');
+      expect(loadingContainer.style.zIndex).toBe('1');
+    });
   });
 
   describe('callbacks', () => {

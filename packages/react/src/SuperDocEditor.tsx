@@ -252,6 +252,14 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   const wrapperStyle: CSSProperties = {
     ...style,
     ...(contained && { display: 'flex', flexDirection: 'column' as const }),
+    ...(isLoading &&
+      renderLoading && { position: style?.position && style.position !== 'static' ? style.position : 'relative' }),
+  };
+
+  const loadingStyle: CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 1,
   };
 
   return (
@@ -264,7 +272,11 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
         className='superdoc-editor-container'
         style={{ ...hideWhenLoading, ...(contained && { flex: 1, minHeight: 0 }) }}
       />
-      {isLoading && !hasError && renderLoading && <div className='superdoc-loading-container'>{renderLoading()}</div>}
+      {isLoading && !hasError && renderLoading && (
+        <div className='superdoc-loading-container' style={loadingStyle}>
+          {renderLoading()}
+        </div>
+      )}
       {hasError && <div className='superdoc-error-container'>Failed to load editor. Check console for details.</div>}
     </div>
   );

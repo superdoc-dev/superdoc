@@ -221,6 +221,63 @@ describe('SD-2656 / IT-923 invariant: anchor + first fn slice on same page', () 
     assertCleanFinalState(snap);
   });
 
+  it('ordered cluster fn 6/7/8: fn6+fn7 fully rendered, fn8 first slice on cluster page (Word ordered-cluster rule)', async () => {
+    // SD-2656 ordered-cluster rule: for refs [fn6, fn7, fn8] introduced on
+    // the same body page, fn6 and fn7 (non-last) must render their full
+    // body on the cluster page; only fn8 (last) may split with overflow
+    // continuing on subsequent pages.
+    //
+    // Required band = fullHeight(fn6) + fullHeight(fn7) + firstLineHeight(fn8) + overhead
+    //               = 3*12 + 3*12 + 12 + ~25 = 109 px
+    const BODY_LINE_H = 20;
+    const FN_LINE_H = 12;
+    const FN_LINES = 3;
+    const refIds = ['6', '7', '8'];
+
+    let pos = 0;
+    const blocks: FlowBlock[] = [];
+    // Body block sequence forces a few body pages before the cluster.
+    for (let i = 0; i < 12; i += 1) {
+      const text = `Body sentence ${i + 1}.`;
+      blocks.push(makeParagraph(`body-${i}`, text, pos));
+      pos += text.length + 1;
+    }
+    const refs: Array<{ id: string; pos: number }> = [];
+    const fnBlocksById = new Map<string, FlowBlock[]>();
+    const fnMeasures: Record<string, { lineHeight: number; lineCount: number }> = {};
+    for (let i = 0; i < refIds.length; i += 1) {
+      const refId = refIds[i];
+      const text = `Anchor ${refId}.`;
+      const block = makeParagraph(`anchor-${refId}`, text, pos);
+      blocks.push(block);
+      const anchorPos = pos + 2;
+      refs.push({ id: refId, pos: anchorPos });
+      pos += text.length + 1;
+      const fnBlockId = `footnote-${refId}-0-paragraph`;
+      fnBlocksById.set(refId, [makeParagraph(fnBlockId, `fn ${refId} body.`, 0)]);
+      fnMeasures[fnBlockId] = { lineHeight: FN_LINE_H, lineCount: FN_LINES };
+    }
+    // Trailing body so the slicer is forced to balance body vs cluster
+    // reserve (rather than just dumping all remaining body onto p1).
+    for (let i = 0; i < 30; i += 1) {
+      const text = `Trail body ${i + 1}.`;
+      blocks.push(makeParagraph(`trail-${i}`, text, pos));
+      pos += text.length + 1;
+    }
+
+    const { snapshot } = await runWithTrace(blocks, refs, fnBlocksById, fnMeasures, {
+      contentH: 600,
+      bodyLineH: BODY_LINE_H,
+    });
+
+    expect(snapshot).not.toBeNull();
+    const snap = snapshot!;
+    // ALL three anchors must have anchor=firstSlice page.
+    assertSameAnchorAndFirstSlicePage(snap, refIds);
+    assertNoFallbackInFinalState(snap);
+    assertCleanFinalState(snap);
+  });
+
   it('page-47 shape: signature-page anchor stays with its footnote (replicates IT-923 p47 / fn 91)', async () => {
     // IT-923 page 47: 'IN WITNESS WHEREOF' signature paragraph anchors
     // fn 91 (a short DGCL citation). Word keeps the anchor and the fn

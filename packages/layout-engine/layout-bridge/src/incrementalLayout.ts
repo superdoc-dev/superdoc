@@ -171,7 +171,7 @@ const emitFootnoteTrace = (snapshot: FootnoteTraceSnapshot): void => {
   if (footnoteTraceSink) footnoteTraceSink(snapshot);
   if (FOOTNOTE_TRACE_ENABLED) {
     // One JSON line per snapshot so downstream scripts can `grep` or pipe to jq.
-     
+
     console.log('[SD-2656-footnote-trace]', JSON.stringify(snapshot));
   }
 };
@@ -1599,6 +1599,12 @@ export async function incrementalLayout(
               id: string,
               ranges: FootnoteRange[],
               isContinuation: boolean,
+              // SD-2656: ordered-cluster rule — new anchors that are NOT the
+              // last anchor on this page must render their full body. Only
+              // the LAST new anchor on the page (and continuations from
+              // prior pages) may split. Pass `isLastNewAnchor=true` for the
+              // last entry in the new-anchors loop; false for all others.
+              isLastNewAnchor: boolean = true,
             ): { placed: boolean; remaining: FootnoteRange[] } => {
               if (!ranges || ranges.length === 0) {
                 return { placed: false, remaining: [] };
@@ -1614,14 +1620,17 @@ export async function incrementalLayout(
               const overhead = isFirstSlice ? separatorBefore + separatorHeight + safeTopPadding : 0;
               const gapBefore = !isFirstSlice ? safeGap : 0;
               const availableHeight = Math.max(0, placementCeiling - usedHeight - overhead - gapBefore);
-              // SD-2656 Phase 4: force the first renderable slice of every
-              // NEW anchor (not continuation) on its anchor page, even when
-              // the page already has prior fn slices placed. Word's rule:
-              // a body line that introduces a new fn ref must have at
-              // least the start of that fn on the same page. The cluster
-              // case (IT-923 p13: 6 anchored fns sequentially) needs this
-              // — without it the 2nd through 6th anchors get strict
-              // fitFootnoteContent and may defer their bodies entirely.
+              // SD-2656 ordered-cluster rule:
+              // The body slicer reserves band space using the cluster
+              // formula (fn1..fnN-1 fullHeight + fnN firstLineHeight +
+              // overhead). The planner therefore has the right amount of
+              // space; we just need to place what fits.
+              // - Force first slice for every NEW anchor (last or not) —
+              //   the slicer has already reserved at LEAST firstLineHeight
+              //   per anchor. The non-last anchors will naturally get
+              //   their full body fitted since the slicer reserved their
+              //   fullHeight as well.
+              // - Continuations from prior pages use strict fit.
               const forceFirst = !isContinuation;
               const { slice, remainingRanges } = fitFootnoteContent(
                 id,
@@ -1633,6 +1642,10 @@ export async function incrementalLayout(
                 measuresById,
                 forceFirst,
               );
+              // `isLastNewAnchor` is exposed for future strict-fit logic
+              // (currently informational — the slicer's cluster math is
+              // the primary enforcement).
+              void isLastNewAnchor;
 
               if (slice.ranges.length === 0) {
                 return { placed: false, remaining: ranges };
@@ -1677,7 +1690,8 @@ export async function incrementalLayout(
                 const id = ids[idIndex];
                 const ranges = rangesByFootnoteId.get(id) ?? [];
                 if (ranges.length === 0) continue;
-                const result = placeFootnote(id, ranges, false);
+                const isLastNewAnchor = idIndex === ids.length - 1;
+                const result = placeFootnote(id, ranges, false, isLastNewAnchor);
                 if (!result.placed) {
                   nextPending.push({ id, ranges });
                   for (let remainingIndex = idIndex + 1; remainingIndex < ids.length; remainingIndex += 1) {
@@ -2028,19 +2042,23 @@ export async function incrementalLayout(
 
       // SD-3049: per-footnote total body height; accounting mirrors `computeFootnoteLayoutPlan`.
       let bodyHeightById = new Map<string, number>();
-      // SD-2656 Phase 2: per-footnote MINIMUM-START height — the height of
-      // the first renderable slice (the first paragraph's first line, or
-      // the first image / table-row, depending on the fn body's first
-      // block). The body slicer uses this — not the full body height — to
-      // decide whether a body line that anchors a NEW fn can stay on its
-      // page. The rest of the fn body splits to continuation pages.
-      let bodyMinStartById = new Map<string, number>();
+      // SD-2656 Phase 2: per-footnote FIRST-LINE height — the height of the
+      // first renderable line (first paragraph's first line, or first
+      // image/table-row height for non-text bodies). The body slicer and
+      // planner use both `bodyHeightById` (full body) AND
+      // `bodyFirstLineById` (first line) to implement the Word-fidelity
+      // ordered-cluster rule: in a page's anchor cluster
+      // [fn1, fn2, ..., fnN], notes 1..N-1 must render fully on the page;
+      // only fnN may be split to its first line with overflow continuing
+      // on subsequent pages. So the required band space depends on
+      // POSITION in the cluster, not a single per-fn minStart.
+      let bodyFirstLineById = new Map<string, number>();
       const refreshBodyHeights = (measures: Map<string, Measure>) => {
         const map = new Map<string, number>();
-        const minStartMap = new Map<string, number>();
+        const firstLineMap = new Map<string, number>();
         footnotesInput.blocksById.forEach((blocks, footnoteId) => {
           let total = 0;
-          let minStart: number | undefined;
+          let firstLine: number | undefined;
           for (const block of blocks) {
             const measure = measures.get(block.id);
             if (!measure) continue;
@@ -2051,26 +2069,27 @@ export async function incrementalLayout(
                 ?.spacing;
               const after = spacing?.after ?? spacing?.lineSpaceAfter;
               if (typeof after === 'number' && Number.isFinite(after) && after > 0) total += after;
-              if (minStart === undefined) {
-                const firstLine = measure.lines?.[0]?.lineHeight;
-                if (typeof firstLine === 'number' && Number.isFinite(firstLine) && firstLine > 0) {
-                  minStart = firstLine;
-                }
+              if (firstLine === undefined) {
+                const lh = measure.lines?.[0]?.lineHeight;
+                if (typeof lh === 'number' && Number.isFinite(lh) && lh > 0) firstLine = lh;
               }
             } else if (measure.kind === 'image' || measure.kind === 'drawing') {
               const measureH = (measure as { height?: number }).height;
               if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
-              if (minStart === undefined && typeof measureH === 'number' && Number.isFinite(measureH) && measureH > 0) {
-                minStart = measureH;
+              if (
+                firstLine === undefined &&
+                typeof measureH === 'number' &&
+                Number.isFinite(measureH) &&
+                measureH > 0
+              ) {
+                firstLine = measureH;
               }
             } else if (measure.kind === 'table') {
               const measureH = (measure as { totalHeight?: number }).totalHeight;
               if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
-              if (minStart === undefined) {
+              if (firstLine === undefined) {
                 const firstRow = (measure as { rows?: Array<{ height?: number }> }).rows?.[0]?.height;
-                if (typeof firstRow === 'number' && Number.isFinite(firstRow) && firstRow > 0) {
-                  minStart = firstRow;
-                }
+                if (typeof firstRow === 'number' && Number.isFinite(firstRow) && firstRow > 0) firstLine = firstRow;
               }
             } else if (measure.kind === 'list' && block.kind === 'list') {
               for (const item of block.items) {
@@ -2078,20 +2097,18 @@ export async function incrementalLayout(
                 if (!itemMeasure?.paragraph?.lines) continue;
                 for (const line of itemMeasure.paragraph.lines) total += line.lineHeight ?? 0;
                 total += getParagraphSpacingAfter(item.paragraph);
-                if (minStart === undefined) {
-                  const firstLine = itemMeasure.paragraph.lines[0]?.lineHeight;
-                  if (typeof firstLine === 'number' && Number.isFinite(firstLine) && firstLine > 0) {
-                    minStart = firstLine;
-                  }
+                if (firstLine === undefined) {
+                  const lh = itemMeasure.paragraph.lines[0]?.lineHeight;
+                  if (typeof lh === 'number' && Number.isFinite(lh) && lh > 0) firstLine = lh;
                 }
               }
             }
           }
           if (total > 0) map.set(footnoteId, total);
-          if (typeof minStart === 'number' && minStart > 0) minStartMap.set(footnoteId, minStart);
+          if (typeof firstLine === 'number' && firstLine > 0) firstLineMap.set(footnoteId, firstLine);
         });
         bodyHeightById = map;
-        bodyMinStartById = minStartMap;
+        bodyFirstLineById = firstLineMap;
       };
 
       // SD-2656: thread the planner's data-driven band overhead values
@@ -2108,7 +2125,7 @@ export async function incrementalLayout(
           footnotes: {
             ...footnotesInput,
             bodyHeightById,
-            bodyMinStartById,
+            bodyFirstLineById,
             ...(typeof plannerSeparatorSpacingBefore === 'number' && Number.isFinite(plannerSeparatorSpacingBefore)
               ? { separatorSpacingBefore: plannerSeparatorSpacingBefore }
               : {}),

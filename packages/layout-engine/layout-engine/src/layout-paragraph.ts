@@ -314,13 +314,20 @@ export type ParagraphLayoutContext = {
   getFootnoteRefCountForBlockId?: (blockId: string, pmStart?: number, pmEnd?: number) => number;
 
   /**
-   * SD-2656 Phase 2: range-aware MIN-START sum. Returns measured
-   * first-renderable-slice height per fn anchored in [pmStart, pmEnd] of
-   * this block. The slicer charges this — NOT full demand — when deciding
-   * whether a body line that newly anchors a fn can stay on its page. The
-   * rest of each fn body splits to continuation pages.
+   * SD-2656: ordered anchor list for cluster accounting. Returns refs
+   * anchored in [pmStart, pmEnd] of this block in document order, each
+   * with both `fullHeight` (entire body) and `firstLineHeight` (first
+   * renderable line). The slicer combines this with prior committed
+   * anchors on the page to compute the ordered-cluster required band
+   * height: fn1..fnN-1 must render fully on the page; only fnN (the last
+   * anchor in document order) may split to firstLineHeight with overflow
+   * continuing to subsequent pages. Replaces the flat-sum minStart query.
    */
-  getFootnoteAnchorMinStartForBlockId?: (blockId: string, pmStart?: number, pmEnd?: number) => number;
+  getFootnoteAnchorsForBlockRange?: (
+    blockId: string,
+    pmStart?: number,
+    pmEnd?: number,
+  ) => Array<{ refId: string; fullHeight: number; firstLineHeight: number; pmPos: number }>;
 
   /**
    * SD-2656: per-page footnote-band overhead in pixels for a given number of
@@ -902,32 +909,77 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
      */
     const rawContentBottom = state.contentBottom + state.pageFootnoteReserve;
     /**
-     * SD-2656 Phase 3: split-aware effective bottom.
+     * SD-2656: ordered-cluster effective bottom.
      *
-     * Word's body-break rule: an anchor line stays on its page as long as
-     * the MINIMUM first slice (separator + one renderable fn line) of each
-     * newly anchored fn fits in the remaining band space. The rest of each
-     * fn body splits to continuation pages.
+     * Word's body-break rule for footnotes — for the ordered set of
+     * footnote anchors [fn1, fn2, ..., fnN] introduced on a page:
+     *   - fn1..fnN-1 MUST render completely on the same page
+     *   - only fnN may split: it renders at least its first line, with
+     *     remaining content continuing on subsequent pages
      *
-     * `extraMinStart` = sum of measured first-line heights for fns anchored
-     * by the current candidate slice. `state.footnoteDemandThisPage` is now
-     * accumulated minStart (NOT full body) so subsequent body blocks on the
-     * same page see the right "promised" band height, not the worst-case
-     * full-fn-body demand which would crush body content.
+     * Required band height for the page:
+     *   sum(fullHeight of fn1..fnN-1) + firstLineHeight(fnN) + bandOverhead
      *
-     * The planner's `state.pageFootnoteReserve` acts as a floor and carries
-     * any continuation demand from prior pages plus the planner's monotonic
-     * grow-loop result.
+     * Adding a NEW anchor to a page is non-linear: it upgrades the previous
+     * "last" anchor from firstLineHeight → fullHeight in the band budget,
+     * then adds firstLineHeight for the new last. Body lines that would
+     * introduce such an upgrade must verify the upgraded budget still
+     * fits before accepting the line.
+     *
+     * The committed anchors live in `state.footnoteAnchorsThisPage` (in
+     * document order). The candidate slice's anchors are passed in
+     * `candidateAnchors`. We compute the combined ordered list, apply the
+     * fn1..fnN-1 = full, fnN = firstLine rule, and add band overhead.
      */
-    const computeEffectiveBottom = (extraMinStart: number, extraRefs: number): number => {
-      const committedMin = state.footnoteDemandThisPage; // now minStart-only sums
-      const totalMin = committedMin + extraMinStart;
-      const totalRefs = state.footnoteRefsThisPage + extraRefs;
-      const demandWithOverhead = totalMin > 0 ? totalMin + bandOverhead(totalRefs) : 0;
-      const reservedSpace = Math.max(state.pageFootnoteReserve, demandWithOverhead);
+    const computeOrderedRequiredBand = (
+      candidateAnchors: ReadonlyArray<{ refId: string; fullHeight: number; firstLineHeight: number }>,
+    ): number => {
+      const committed = state.footnoteAnchorsThisPage ?? [];
+      const total = committed.length + candidateAnchors.length;
+      if (total === 0) return 0;
+      let required = 0;
+      // Iterate the combined cluster in document order. Every entry except
+      // the LAST contributes its full body; the last contributes only its
+      // first line.
+      const last = total - 1;
+      const at = (index: number) =>
+        index < committed.length ? committed[index] : candidateAnchors[index - committed.length];
+      for (let i = 0; i < total; i += 1) {
+        const entry = at(i);
+        required += i === last ? entry.firstLineHeight : entry.fullHeight;
+      }
+      required += bandOverhead(total);
+      return required;
+    };
+    const computeEffectiveBottom = (
+      candidateAnchors: ReadonlyArray<{ refId: string; fullHeight: number; firstLineHeight: number }>,
+    ): number => {
+      const required = computeOrderedRequiredBand(candidateAnchors);
+      const reservedSpace = Math.max(state.pageFootnoteReserve, required);
       const minBodyLineHeight = lines[fromLine]?.lineHeight ?? 0;
       const maxAdditional = Math.max(0, rawContentBottom - state.topMargin - minBodyLineHeight);
       return rawContentBottom - Math.min(reservedSpace, maxAdditional);
+    };
+    const queryCandidateAnchors = (
+      pmStart: number | undefined,
+      pmEnd: number | undefined,
+    ): Array<{ refId: string; fullHeight: number; firstLineHeight: number; pmPos: number }> => {
+      if (ctx.getFootnoteAnchorsForBlockRange) {
+        return ctx.getFootnoteAnchorsForBlockRange(block.id, pmStart, pmEnd);
+      }
+      // Legacy fallback for callers that didn't migrate to the ordered API:
+      // synthesize anchor entries from the flat demand. When ref count is
+      // unknown, treat the demand as a single anchor.
+      const demand = ctx.getFootnoteDemandForBlockId ? ctx.getFootnoteDemandForBlockId(block.id, pmStart, pmEnd) : 0;
+      if (demand <= 0) return [];
+      const refs = ctx.getFootnoteRefCountForBlockId ? ctx.getFootnoteRefCountForBlockId(block.id, pmStart, pmEnd) : 1;
+      const count = Math.max(1, refs);
+      const per = demand / count;
+      const out: Array<{ refId: string; fullHeight: number; firstLineHeight: number; pmPos: number }> = [];
+      for (let i = 0; i < count; i += 1) {
+        out.push({ refId: `legacy-${block.id}-${i}`, fullHeight: per, firstLineHeight: per, pmPos: pmStart ?? 0 });
+      }
+      return out;
     };
 
     // SD-2656: pre-slicer advance check must preview the FIRST candidate
@@ -944,34 +996,26 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // up clipped — but that case is handled by the planner's continuation
     // split (separate fix path).
     const previewRange = computeFragmentPmRange(block, lines, fromLine, fromLine + 1);
-    // SD-2656 Phase 3: charge MIN-START for candidate refs (the rest of
-    // each fn body splits to continuation pages), not full body demand.
-    const previewMinStart = ctx.getFootnoteAnchorMinStartForBlockId
-      ? ctx.getFootnoteAnchorMinStartForBlockId(block.id, previewRange.pmStart, previewRange.pmEnd)
-      : ctx.getFootnoteDemandForBlockId
-        ? ctx.getFootnoteDemandForBlockId(block.id, previewRange.pmStart, previewRange.pmEnd)
-        : 0;
-    const previewRefs = ctx.getFootnoteRefCountForBlockId
-      ? ctx.getFootnoteRefCountForBlockId(block.id, previewRange.pmStart, previewRange.pmEnd)
-      : 0;
-    let effectiveBottom = computeEffectiveBottom(previewMinStart, previewRefs);
+    // SD-2656: ordered-cluster preview for the first candidate line.
+    const previewAnchors = queryCandidateAnchors(previewRange.pmStart, previewRange.pmEnd);
+    let effectiveBottom = computeEffectiveBottom(previewAnchors);
 
     if (state.cursorY >= effectiveBottom) {
       state = advanceColumn(state);
-      effectiveBottom = computeEffectiveBottom(previewMinStart, previewRefs);
+      effectiveBottom = computeEffectiveBottom(previewAnchors);
     }
 
     const availableHeight = effectiveBottom - state.cursorY;
     if (availableHeight <= 0) {
       state = advanceColumn(state);
-      effectiveBottom = computeEffectiveBottom(previewMinStart, previewRefs);
+      effectiveBottom = computeEffectiveBottom(previewAnchors);
     }
 
     const nextLineHeight = lines[fromLine].lineHeight || 0;
     const remainingHeight = effectiveBottom - state.cursorY;
     if (state.page.fragments.length > 0 && remainingHeight < nextLineHeight) {
       state = advanceColumn(state);
-      effectiveBottom = computeEffectiveBottom(previewMinStart, previewRefs);
+      effectiveBottom = computeEffectiveBottom(previewAnchors);
     }
 
     // Use the narrowest width and offset if we remeasured
@@ -996,55 +1040,54 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // overflow, stop — the rest spills to the next page.
     let toLine = fromLine;
     let height = 0;
-    // SD-2656 Phase 3: track MIN-START sum for the slice. When the slice
-    // commits to a page, this minStart-only demand accumulates into
-    // state.footnoteDemandThisPage so subsequent body blocks on the same
-    // page reserve only the minimum each fn needs. The rest of every fn
-    // body splits to continuation pages handled by the planner.
-    let sliceMinStart = 0;
-    let sliceRefs = 0;
+    // SD-2656: track the slice's anchored refs (ordered, with full + first-
+    // line heights). Once the slice commits to a page, these entries get
+    // appended to state.footnoteAnchorsThisPage so subsequent body blocks
+    // see the cluster grow and the previous "last" upgrades from
+    // firstLineHeight to fullHeight in the required band budget.
+    let sliceAnchors: Array<{ refId: string; fullHeight: number; firstLineHeight: number; pmPos: number }> = [];
     while (toLine < lines.length) {
       const lineHeight = lines[toLine].lineHeight || 0;
       const range = computeFragmentPmRange(block, lines, fromLine, toLine + 1);
-      const nextMinStart = ctx.getFootnoteAnchorMinStartForBlockId
-        ? ctx.getFootnoteAnchorMinStartForBlockId(block.id, range.pmStart, range.pmEnd)
-        : ctx.getFootnoteDemandForBlockId
-          ? ctx.getFootnoteDemandForBlockId(block.id, range.pmStart, range.pmEnd)
-          : 0;
-      const nextRefs = ctx.getFootnoteRefCountForBlockId
-        ? ctx.getFootnoteRefCountForBlockId(block.id, range.pmStart, range.pmEnd)
-        : 0;
+      const nextAnchors = queryCandidateAnchors(range.pmStart, range.pmEnd);
 
       if (toLine === fromLine) {
         // First line: commit unconditionally. The pre-slicer checks above
         // already advanced the column if even a single line couldn't fit,
         // so reaching this point means the first line is allowed.
         height = lineHeight;
-        sliceMinStart = nextMinStart;
-        sliceRefs = nextRefs;
+        sliceAnchors = nextAnchors;
         toLine = fromLine + 1;
         continue;
       }
 
-      const effBot = computeEffectiveBottom(nextMinStart, nextRefs);
+      const effBot = computeEffectiveBottom(nextAnchors);
       const candidateBottom = state.cursorY + height + lineHeight + borderVertical;
       if (candidateBottom > effBot) break;
 
       height += lineHeight;
-      sliceMinStart = nextMinStart;
-      sliceRefs = nextRefs;
+      sliceAnchors = nextAnchors;
       toLine += 1;
     }
 
     const slice = { toLine, height };
     const fragmentHeight = slice.height;
 
-    // SD-2656 Phase 3: commit MIN-START sum (not full body) into page state.
-    // This is the crux: state.footnoteDemandThisPage now represents the
-    // promised band overhead for anchored fns, not the worst-case full body.
-    if (sliceMinStart > 0 || sliceRefs > 0) {
-      state.footnoteDemandThisPage += sliceMinStart;
-      state.footnoteRefsThisPage = (state.footnoteRefsThisPage ?? 0) + sliceRefs;
+    // SD-2656: commit anchored refs into page state in document order. The
+    // ordered cluster grows; the previous "last" anchor (if any) on this
+    // page is now obligated to render fully because a new last exists.
+    if (sliceAnchors.length > 0) {
+      // Keep legacy fields in sync (full body sum + count) for callers /
+      // tests that haven't migrated to footnoteAnchorsThisPage yet.
+      for (const anchor of sliceAnchors) {
+        state.footnoteAnchorsThisPage.push({
+          refId: anchor.refId,
+          fullHeight: anchor.fullHeight,
+          firstLineHeight: anchor.firstLineHeight,
+        });
+        state.footnoteDemandThisPage += anchor.fullHeight;
+        state.footnoteRefsThisPage = (state.footnoteRefsThisPage ?? 0) + 1;
+      }
     }
     void effectiveBottom;
 

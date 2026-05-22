@@ -43,6 +43,16 @@ export type PageState = {
    * gap + safety margin), which must match the planner's reserve formula.
    */
   footnoteRefsThisPage: number;
+  /**
+   * SD-2656: ordered list (document order) of footnote anchors committed to
+   * this page. The body slicer uses this to compute the Word-fidelity
+   * ordered-cluster required band height: for refs [fn1..fnN] on a page,
+   * fn1..fnN-1 must render their full body on the page; only fnN may
+   * split to its first line with overflow continuing on subsequent pages.
+   * Adding a new anchor upgrades the previous "last" entry from
+   * firstLineHeight → fullHeight in the required-band computation.
+   */
+  footnoteAnchorsThisPage: Array<{ refId: string; fullHeight: number; firstLineHeight: number }>;
 };
 
 export type PaginatorOptions = {
@@ -142,6 +152,7 @@ export function createPaginator(opts: PaginatorOptions) {
       pageFootnoteReserve,
       footnoteDemandThisPage: 0,
       footnoteRefsThisPage: 0,
+      footnoteAnchorsThisPage: [],
     };
     states.push(state);
     pages.push(state.page);

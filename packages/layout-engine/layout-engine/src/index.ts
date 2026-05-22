@@ -1227,23 +1227,17 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // block's demand at block entry (the old behavior) over-defers paragraphs
   // that have multiple anchors but where the first line only contains one of
   // them.
-  // SD-2656: each anchor entry carries both `fullHeight` (entire body —
-  // used when the fn is a NON-LAST anchor in a page's cluster and must
-  // render completely) and `firstLineHeight` (used ONLY when the fn is the
-  // LAST anchor on its page and is allowed to split). The body slicer
-  // implements Word's ordered-cluster rule: for anchors [fn1..fnN] on a
-  // page, fn1..fnN-1 must render fully on the page; only fnN may split.
-  type FootnoteAnchorEntry = {
-    pmPos: number;
-    refId: string;
-    fullHeight: number;
-    firstLineHeight: number;
-  };
+  // SD-2656 Phase 2: each anchor entry carries both `height` (full body —
+  // used for the planner's actual reserve sizing) and `minStart` (measured
+  // first-renderable-slice — used by the body slicer to decide whether a
+  // NEW anchor's line can stay on its page. The rest of the fn body
+  // splits to continuation pages.)
+  type FootnoteAnchorEntry = { pmPos: number; refId: string; height: number; minStart: number };
   const footnoteAnchorsByBlockId: Map<string, FootnoteAnchorEntry[]> = (() => {
     const out = new Map<string, FootnoteAnchorEntry[]>();
     const refs = options.footnotes?.refs;
     const bodyHeights = options.footnotes?.bodyHeightById;
-    const bodyFirstLines = options.footnotes?.bodyFirstLineById as Map<string, number> | undefined;
+    const bodyMinStarts = options.footnotes?.bodyMinStartById as Map<string, number> | undefined;
     if (!Array.isArray(refs) || refs.length === 0 || !bodyHeights) return out;
 
     /**
@@ -1291,15 +1285,20 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     const recordIfHit = (range: { pmStart: number; pmEnd: number }, topLevelId: string): void => {
       for (const [pos, refId] of refByPos.entries()) {
         if (pos < range.pmStart || pos > range.pmEnd) continue;
-        const fullHeight = bodyHeights.get(refId);
-        if (typeof fullHeight !== 'number' || !Number.isFinite(fullHeight) || fullHeight <= 0) continue;
-        const measuredFirstLine = bodyFirstLines?.get(refId);
-        const firstLineHeight =
-          typeof measuredFirstLine === 'number' && Number.isFinite(measuredFirstLine) && measuredFirstLine > 0
-            ? Math.min(measuredFirstLine, fullHeight)
-            : Math.min(14, fullHeight);
+        const height = bodyHeights.get(refId);
+        if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) continue;
+        const measuredMinStart = bodyMinStarts?.get(refId);
+        // minStart defaults to `min(measured, height)`; when no minStart was
+        // measured (legacy callers / tests without bodyMinStartById), fall
+        // back to a small fraction of total height capped at 14 px — close
+        // to the typical first-fn-line height — so the slicer still has a
+        // usable lower bound without over-reserving.
+        const minStart =
+          typeof measuredMinStart === 'number' && Number.isFinite(measuredMinStart) && measuredMinStart > 0
+            ? Math.min(measuredMinStart, height)
+            : Math.min(14, height);
         const list = out.get(topLevelId) ?? [];
-        list.push({ pmPos: pos, refId, fullHeight, firstLineHeight });
+        list.push({ pmPos: pos, refId, height, minStart });
         out.set(topLevelId, list);
         refByPos.delete(pos);
       }
@@ -1342,12 +1341,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (!entries || entries.length === 0) return 0;
     if (pmStart == null || pmEnd == null) {
       let total = 0;
-      for (const e of entries) total += e.fullHeight;
+      for (const e of entries) total += e.height;
       return total;
     }
     let total = 0;
     for (const e of entries) {
-      if (e.pmPos >= pmStart && e.pmPos <= pmEnd) total += e.fullHeight;
+      if (e.pmPos >= pmStart && e.pmPos <= pmEnd) total += e.height;
     }
     return total;
   };
@@ -1368,26 +1367,26 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   };
 
   /**
-   * SD-2656: ordered anchor list for the body slicer's cluster accounting.
-   * Returns refs anchored in [pmStart, pmEnd] of the block in document
-   * order, each with both `fullHeight` and `firstLineHeight`. The slicer
-   * combines this with `state.footnoteAnchorsThisPage` to compute the
-   * ordered-cluster required band height — fn1..fnN-1 must render fully,
-   * only fnN may split to its first line.
+   * SD-2656 Phase 2: range-aware MIN-START sum. Returns the sum of measured
+   * `minStart` (first renderable slice height) for fns anchored in
+   * [pmStart, pmEnd] of the given block. The body slicer charges this —
+   * not full body height — when deciding whether a body line that anchors
+   * a NEW fn can stay on its page. The rest of each fn body splits to
+   * continuation pages handled by the planner.
    */
-  const getFootnoteAnchorsForBlockRange = (
-    blockId: string,
-    pmStart?: number,
-    pmEnd?: number,
-  ): Array<{ refId: string; fullHeight: number; firstLineHeight: number; pmPos: number }> => {
+  const getFootnoteAnchorMinStartForBlockId = (blockId: string, pmStart?: number, pmEnd?: number): number => {
     const entries = footnoteAnchorsByBlockId.get(blockId);
-    if (!entries || entries.length === 0) return [];
-    const out: Array<{ refId: string; fullHeight: number; firstLineHeight: number; pmPos: number }> = [];
-    for (const e of entries) {
-      if (pmStart != null && pmEnd != null && (e.pmPos < pmStart || e.pmPos > pmEnd)) continue;
-      out.push({ refId: e.refId, fullHeight: e.fullHeight, firstLineHeight: e.firstLineHeight, pmPos: e.pmPos });
+    if (!entries || entries.length === 0) return 0;
+    if (pmStart == null || pmEnd == null) {
+      let total = 0;
+      for (const e of entries) total += e.minStart;
+      return total;
     }
-    return out;
+    let total = 0;
+    for (const e of entries) {
+      if (e.pmPos >= pmStart && e.pmPos <= pmEnd) total += e.minStart;
+    }
+    return total;
   };
 
   /**
@@ -2608,7 +2607,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           overrideSpacingAfter,
           getFootnoteDemandForBlockId,
           getFootnoteRefCountForBlockId,
-          getFootnoteAnchorsForBlockRange,
+          getFootnoteAnchorMinStartForBlockId,
           getFootnoteBandOverhead,
         },
         anchorsForPara

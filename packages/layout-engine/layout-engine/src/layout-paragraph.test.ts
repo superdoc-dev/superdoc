@@ -64,7 +64,6 @@ const makePageState = (): PageState => ({
   pageFootnoteReserve: 0,
   footnoteDemandThisPage: 0,
   footnoteRefsThisPage: 0,
-  footnoteAnchorsThisPage: [],
 });
 
 /**

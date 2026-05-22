@@ -27,8 +27,14 @@ export const DOM_CLASS_NAMES = {
    */
   INLINE_SDT_WRAPPER: 'superdoc-structured-content-inline',
 
+  /** Inline structured-content label chrome. */
+  INLINE_SDT_LABEL: 'superdoc-structured-content-inline__label',
+
   /** Block-level structured-content container. */
   BLOCK_SDT: 'superdoc-structured-content-block',
+
+  /** Block-level structured-content label chrome. */
+  BLOCK_SDT_LABEL: 'superdoc-structured-content__label',
 
   /** Table fragment container (resize overlay and click-mapping target). */
   TABLE_FRAGMENT: 'superdoc-table-fragment',

@@ -92,8 +92,7 @@ function isVisibleRect(rect: DOMRect): boolean {
 
 function isStructuredContentChromeLabel(el: HTMLElement): boolean {
   return (
-    el.classList.contains(`${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}__label`) ||
-    el.classList.contains('superdoc-structured-content__label')
+    el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_LABEL) || el.classList.contains(DOM_CLASS_NAMES.BLOCK_SDT_LABEL)
   );
 }
 

@@ -120,8 +120,7 @@ function getInlineSdtWrapperBoundaryPos(
 
 function isStructuredContentChromeLabel(el: HTMLElement): boolean {
   return (
-    el.classList.contains(`${CLASS.inlineSdtWrapper}__label`) ||
-    el.classList.contains('superdoc-structured-content__label')
+    el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_LABEL) || el.classList.contains(DOM_CLASS_NAMES.BLOCK_SDT_LABEL)
   );
 }
 

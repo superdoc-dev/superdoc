@@ -531,5 +531,74 @@ describe('syncCommentEntitiesFromCollaboration (SD-3214)', () => {
       ).toEqual(['canonical-root', 'reply-1']);
       expect(seen.has('reply-1'), 'reply pointing at parent.importedId must still be accepted').toBe(true);
     });
+
+    // Codex follow-up: a one-shot orphan filter (build upstreamIds once,
+    // skip entries whose direct parent is missing) handles A→B but breaks on
+    // A→B→C. B is correctly skipped because A is gone, but C's parent B is
+    // still present in `upstreamIds`, so C survives the upsert and dangles
+    // as an orphan whose chain leads nowhere. Filter must be applied
+    // transitively until the upstream set is stable.
+    it('drops the entire orphan chain when an ancestor is missing upstream (A→B→C, A deleted)', () => {
+      const editor = makeEditorWithConverter();
+      const first = syncCommentEntitiesFromCollaboration(editor, [
+        { commentId: 'A' },
+        { commentId: 'B', parentCommentId: 'A' },
+        { commentId: 'C', parentCommentId: 'B' },
+      ]);
+      expect(
+        getCommentEntityStore(editor)
+          .map((e) => e.commentId)
+          .sort(),
+      ).toEqual(['A', 'B', 'C']);
+
+      // A is deleted upstream. B and C linger (browser only flushed A).
+      const second = syncCommentEntitiesFromCollaboration(
+        editor,
+        [
+          { commentId: 'B', parentCommentId: 'A' },
+          { commentId: 'C', parentCommentId: 'B' },
+        ],
+        { previouslySynced: first },
+      );
+      expect(
+        getCommentEntityStore(editor)
+          .map((e) => e.commentId)
+          .sort(),
+        'A → B → C: with A gone, B and C must both be pruned',
+      ).toEqual([]);
+      expect(second.has('B'), 'B must not appear in the sync set').toBe(false);
+      expect(second.has('C'), 'C must not appear in the sync set (or it would be re-upserted)').toBe(false);
+    });
+
+    it('does not resurrect a grandchild orphan on subsequent syncs over the same upstream (A→B→C)', () => {
+      const editor = makeEditorWithConverter();
+      const first = syncCommentEntitiesFromCollaboration(editor, [
+        { commentId: 'A' },
+        { commentId: 'B', parentCommentId: 'A' },
+        { commentId: 'C', parentCommentId: 'B' },
+      ]);
+
+      const second = syncCommentEntitiesFromCollaboration(
+        editor,
+        [
+          { commentId: 'B', parentCommentId: 'A' },
+          { commentId: 'C', parentCommentId: 'B' },
+        ],
+        { previouslySynced: first },
+      );
+
+      const third = syncCommentEntitiesFromCollaboration(
+        editor,
+        [
+          { commentId: 'B', parentCommentId: 'A' },
+          { commentId: 'C', parentCommentId: 'B' },
+        ],
+        { previouslySynced: second },
+      );
+
+      expect(getCommentEntityStore(editor).map((e) => e.commentId)).toEqual([]);
+      expect(third.has('B')).toBe(false);
+      expect(third.has('C')).toBe(false);
+    });
   });
 });

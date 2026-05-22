@@ -215,12 +215,17 @@ export function syncCommentEntitiesFromCollaboration(
   const seen = new Set<string>();
 
   // Pre-pass: collect every id (commentId AND importedId) that exists in the
-  // current upstream array. `deleteYComment` on the browser side removes only
-  // the parent index from Y.Array — reply entries linger upstream until the
-  // browser flushes them. Without this set we'd happily upsert those replies
-  // even though `removeCommentEntityTree` is about to cascade-delete them,
-  // and the next observer fire would resurrect them as orphans (Codex P2).
+  // current upstream array, then transitively drop entries whose
+  // `parentCommentId` is missing from the set. `deleteYComment` on the
+  // browser side removes only the parent index from Y.Array — replies (and
+  // replies-of-replies) linger upstream until the browser flushes them. A
+  // single-pass filter handles A→B (B skipped when A is gone) but breaks on
+  // A→B→C: B would be skipped, yet B's id is still in `upstreamIds`, so C
+  // survives and dangles as an orphan whose chain leads nowhere. The
+  // fixed-point loop below removes orphan ids from the set until stable, so
+  // any depth of orphan chain collapses in one go.
   const upstreamIds = new Set<string>();
+  const validEntries: Array<Record<string, unknown>> = [];
   for (const raw of entries) {
     if (!raw || typeof raw !== 'object') continue;
     if (raw.trackedChange === true) continue;
@@ -228,21 +233,36 @@ export function syncCommentEntitiesFromCollaboration(
     const iid = toNonEmptyString(raw.importedId);
     if (cid) upstreamIds.add(cid);
     if (iid) upstreamIds.add(iid);
+    validEntries.push(raw);
   }
 
-  for (const raw of entries) {
-    if (!raw || typeof raw !== 'object') continue;
-    if (raw.trackedChange === true) continue;
+  // Iteratively drop orphan ids until the set is stable. Each pass removes
+  // entries whose declared parent is no longer represented in `upstreamIds`;
+  // the next pass then re-evaluates entries that were transitively orphaned
+  // by the previous removal. Worst-case cost is O(depth × validEntries),
+  // bounded by document size — Y.Array of comments is small in practice.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const raw of validEntries) {
+      const parentRef = toNonEmptyString(raw.parentCommentId);
+      if (!parentRef) continue;
+      if (upstreamIds.has(parentRef)) continue;
+      const cid = toNonEmptyString(raw.commentId);
+      const iid = toNonEmptyString(raw.importedId);
+      if (cid && upstreamIds.delete(cid)) changed = true;
+      if (iid && upstreamIds.delete(iid)) changed = true;
+    }
+  }
 
+  for (const raw of validEntries) {
     const commentId = toNonEmptyString(raw.commentId) ?? toNonEmptyString(raw.importedId);
     if (!commentId) continue;
 
-    // Skip orphan replies — entries whose parent no longer exists upstream.
-    // `parentCommentId` may reference the parent's `commentId` OR its
-    // `importedId` (DOCX-imported threads), hence checking against the
-    // combined set built above.
-    const parentRef = toNonEmptyString(raw.parentCommentId);
-    if (parentRef && !upstreamIds.has(parentRef)) continue;
+    // After the fixed-point pass, an entry is an orphan iff its own id was
+    // dropped from `upstreamIds`. Skip it so the prune step can cascade-
+    // delete the local record without `seen` re-marking the orphan as live.
+    if (!upstreamIds.has(commentId)) continue;
 
     seen.add(commentId);
 

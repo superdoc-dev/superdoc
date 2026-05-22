@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DOM_CLASS_NAMES,
+  STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES,
   DATA_ATTRS,
   DATASET_KEYS,
   buildImagePmSelector,
@@ -38,6 +39,13 @@ describe('@superdoc/dom-contract', () => {
       ANNOTATION_CONTENT: 'annotation-content',
       ANNOTATION_CARET_ANCHOR: 'annotation-caret-anchor',
     });
+  });
+
+  it('exports the structured content chrome label class set', () => {
+    expect(STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES).toEqual([
+      DOM_CLASS_NAMES.INLINE_SDT_LABEL,
+      DOM_CLASS_NAMES.BLOCK_SDT_LABEL,
+    ]);
   });
 
   it('exports the stable data attribute names and dataset keys', () => {

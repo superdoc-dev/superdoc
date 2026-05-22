@@ -16,7 +16,7 @@
  * @module dom-observer/DomPointerMapping
  */
 
-import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
+import { DOM_CLASS_NAMES, STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES } from '@superdoc/dom-contract';
 
 // ---------------------------------------------------------------------------
 // Debug logging (disabled by default — flip to true for click-mapping traces)
@@ -119,9 +119,7 @@ function getInlineSdtWrapperBoundaryPos(
 }
 
 function isStructuredContentChromeLabel(el: HTMLElement): boolean {
-  return (
-    el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_LABEL) || el.classList.contains(DOM_CLASS_NAMES.BLOCK_SDT_LABEL)
-  );
+  return STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES.some((className) => el.classList.contains(className));
 }
 
 /**

@@ -24,7 +24,7 @@
  * @deprecated Use DomPointerMapping from super-editor/dom-observer instead.
  */
 
-import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
+import { DOM_CLASS_NAMES, STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES } from '@superdoc/dom-contract';
 
 // Debug logging for click-to-position pipeline (disabled - enable for debugging)
 const DEBUG_CLICK_MAPPING = false;
@@ -91,9 +91,7 @@ function isVisibleRect(rect: DOMRect): boolean {
 }
 
 function isStructuredContentChromeLabel(el: HTMLElement): boolean {
-  return (
-    el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_LABEL) || el.classList.contains(DOM_CLASS_NAMES.BLOCK_SDT_LABEL)
-  );
+  return STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES.some((className) => el.classList.contains(className));
 }
 
 /**

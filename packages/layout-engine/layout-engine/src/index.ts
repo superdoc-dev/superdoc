@@ -38,7 +38,7 @@ import {
   applyPendingToActive,
   SINGLE_COLUMN_DEFAULT,
 } from './section-breaks.js';
-import { layoutParagraphBlock } from './layout-paragraph.js';
+import { layoutParagraphBlock, type FootnoteAnchorRef } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
 import { layoutDrawingBlock } from './layout-drawing.js';
 import { layoutTableBlock, createAnchoredTableFragment, ANCHORED_TABLE_FULL_WIDTH_RATIO } from './layout-table.js';
@@ -490,6 +490,14 @@ export type LayoutOptions = {
      * demand at fragment-commit time so body packs tight to the demand.
      */
     bodyHeightById?: Map<string, number>;
+    /**
+     * SD-2656: per-footnote first valid line/run height. The ordered-cluster
+     * rule (Word-style) requires only the LAST anchor on a page to fit its
+     * first line; all earlier anchors must fit fully (bodyHeightById). When
+     * present, the body slicer uses this value for the last anchor in the
+     * candidate cluster, otherwise falls back to bodyHeightById.
+     */
+    firstLineHeightById?: Map<string, number>;
     [key: string]: unknown;
   };
   /**
@@ -1227,11 +1235,18 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // block's demand at block entry (the old behavior) over-defers paragraphs
   // that have multiple anchors but where the first line only contains one of
   // them.
-  type FootnoteAnchorEntry = { pmPos: number; refId: string; height: number };
+  // SD-2656: each anchor carries both full body height and first-line height.
+  // The body slicer applies the ordered-cluster rule at break time:
+  //   demand = sum(fullHeight of cluster[0..N-1]) + firstLineHeight(cluster[N-1])
+  // i.e. all anchors except the last must fit fully; only the last may split.
+  // Aliased to the public FootnoteAnchorRef so callers across packages share
+  // one type.
+  type FootnoteAnchorEntry = FootnoteAnchorRef;
   const footnoteAnchorsByBlockId: Map<string, FootnoteAnchorEntry[]> = (() => {
     const out = new Map<string, FootnoteAnchorEntry[]>();
     const refs = options.footnotes?.refs;
     const bodyHeights = options.footnotes?.bodyHeightById;
+    const firstLineHeights = options.footnotes?.firstLineHeightById;
     if (!Array.isArray(refs) || refs.length === 0 || !bodyHeights) return out;
 
     /**
@@ -1279,10 +1294,18 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     const recordIfHit = (range: { pmStart: number; pmEnd: number }, topLevelId: string): void => {
       for (const [pos, refId] of refByPos.entries()) {
         if (pos < range.pmStart || pos > range.pmEnd) continue;
-        const height = bodyHeights.get(refId);
-        if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) continue;
+        const fullHeight = bodyHeights.get(refId);
+        if (typeof fullHeight !== 'number' || !Number.isFinite(fullHeight) || fullHeight <= 0) continue;
+        const firstLineRaw = firstLineHeights?.get(refId);
+        // SD-2656: firstLine defaults to fullHeight when not provided — i.e.
+        // legacy callers / atomic footnotes (image, drawing) get the safe
+        // upper bound. Real paragraph footnotes provide a smaller value.
+        const firstLineHeight =
+          typeof firstLineRaw === 'number' && Number.isFinite(firstLineRaw) && firstLineRaw > 0
+            ? Math.min(firstLineRaw, fullHeight)
+            : fullHeight;
         const list = out.get(topLevelId) ?? [];
-        list.push({ pmPos: pos, refId, height });
+        list.push({ pmPos: pos, refId, fullHeight, firstLineHeight });
         out.set(topLevelId, list);
         refByPos.delete(pos);
       }
@@ -1316,22 +1339,45 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   })();
 
   /**
-   * Range-aware demand lookup. Returns the sum of footnote body heights for
-   * refs anchored in [pmStart, pmEnd] of the given block. With pmStart=null /
-   * pmEnd=null returns the block's total demand (legacy callers).
+   * SD-2656: return the ordered list of footnote anchor entries in
+   * `[pmStart, pmEnd]` of the given block (or the whole block if no range).
+   * Each entry carries `fullHeight` and `firstLineHeight`. The body slicer
+   * combines this candidate list with PageState's committed anchors and
+   * applies the ordered-cluster rule.
    */
-  const getFootnoteDemandForBlockId = (blockId: string, pmStart?: number, pmEnd?: number): number => {
+  const getFootnoteAnchorsForBlockId = (blockId: string, pmStart?: number, pmEnd?: number): FootnoteAnchorEntry[] => {
     const entries = footnoteAnchorsByBlockId.get(blockId);
-    if (!entries || entries.length === 0) return 0;
-    if (pmStart == null || pmEnd == null) {
-      let total = 0;
-      for (const e of entries) total += e.height;
-      return total;
-    }
-    let total = 0;
+    if (!entries || entries.length === 0) return [];
+    if (pmStart == null || pmEnd == null) return entries;
+    const out: FootnoteAnchorEntry[] = [];
     for (const e of entries) {
-      if (e.pmPos >= pmStart && e.pmPos <= pmEnd) total += e.height;
+      if (e.pmPos >= pmStart && e.pmPos <= pmEnd) out.push(e);
     }
+    return out;
+  };
+
+  /**
+   * Range-aware demand lookup under the ordered-cluster rule:
+   *
+   *   demand = sum(fullHeight of cluster[0..N-1]) + firstLineHeight(cluster[N-1])
+   *
+   * where `cluster` = committed anchors on the current page followed by the
+   * candidate anchors in this block range. With no committed list provided,
+   * treats the in-range entries as the full cluster.
+   */
+  const getFootnoteDemandForBlockId = (
+    blockId: string,
+    pmStart?: number,
+    pmEnd?: number,
+    committed?: ReadonlyArray<FootnoteAnchorEntry>,
+  ): number => {
+    const candidate = getFootnoteAnchorsForBlockId(blockId, pmStart, pmEnd);
+    if (candidate.length === 0 && (!committed || committed.length === 0)) return 0;
+    const cluster = committed && committed.length > 0 ? [...committed, ...candidate] : candidate;
+    if (cluster.length === 0) return 0;
+    let total = 0;
+    for (let i = 0; i < cluster.length - 1; i += 1) total += cluster[i].fullHeight;
+    total += cluster[cluster.length - 1].firstLineHeight;
     return total;
   };
 
@@ -2569,6 +2615,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           getFootnoteDemandForBlockId,
           getFootnoteRefCountForBlockId,
           getFootnoteBandOverhead,
+          getFootnoteAnchorsForBlockId,
         },
         anchorsForPara
           ? {

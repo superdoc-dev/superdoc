@@ -1,0 +1,1543 @@
+{
+  "word": {
+    "totalPages": 49
+  },
+  "superdoc": {
+    "totalPages": 57
+  },
+  "delta": 8,
+  "driftStartsAt": 10,
+  "matchingPages": 14,
+  "totalPagesCompared": 57,
+  "clusterViolations": [
+    {
+      "page": 10,
+      "anchor": 18,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 14,
+      "anchor": 28,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 14,
+      "anchor": 29,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 16,
+      "anchor": 30,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 16,
+      "anchor": 31,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 18,
+      "anchor": 32,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 18,
+      "anchor": 33,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 19,
+      "anchor": 34,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 19,
+      "anchor": 35,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 19,
+      "anchor": 36,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 19,
+      "anchor": 37,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 20,
+      "anchor": 38,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 20,
+      "anchor": 39,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 20,
+      "anchor": 40,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 20,
+      "anchor": 41,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 21,
+      "anchor": 42,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 21,
+      "anchor": 43,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 21,
+      "anchor": 44,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 23,
+      "anchor": 45,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 23,
+      "anchor": 46,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 23,
+      "anchor": 47,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 24,
+      "anchor": 48,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 25,
+      "anchor": 49,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 25,
+      "anchor": 50,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 26,
+      "anchor": 51,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 26,
+      "anchor": 52,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 28,
+      "anchor": 53,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 28,
+      "anchor": 54,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 29,
+      "anchor": 55,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 30,
+      "anchor": 56,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 31,
+      "anchor": 57,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 32,
+      "anchor": 58,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 33,
+      "anchor": 59,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 34,
+      "anchor": 60,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 35,
+      "anchor": 61,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 36,
+      "anchor": 62,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 36,
+      "anchor": 63,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 36,
+      "anchor": 64,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 37,
+      "anchor": 65,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 37,
+      "anchor": 66,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 37,
+      "anchor": 67,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 37,
+      "anchor": 68,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 37,
+      "anchor": 69,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 38,
+      "anchor": 70,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 38,
+      "anchor": 71,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 38,
+      "anchor": 72,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 38,
+      "anchor": 73,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 39,
+      "anchor": 74,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 39,
+      "anchor": 75,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 39,
+      "anchor": 76,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 39,
+      "anchor": 77,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 39,
+      "anchor": 78,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 40,
+      "anchor": 79,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 40,
+      "anchor": 80,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 40,
+      "anchor": 81,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 40,
+      "anchor": 82,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 41,
+      "anchor": 83,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 41,
+      "anchor": 84,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 42,
+      "anchor": 85,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 44,
+      "anchor": 86,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 44,
+      "anchor": 87,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 45,
+      "anchor": 88,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 45,
+      "anchor": 89,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 46,
+      "anchor": 90,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 47,
+      "anchor": 91,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    },
+    {
+      "page": 48,
+      "anchor": 92,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 48,
+      "anchor": 93,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "full render"
+    },
+    {
+      "page": 48,
+      "anchor": 94,
+      "kind": "anchor-missing-on-anchor-page",
+      "expected": "at least firstLine"
+    }
+  ],
+  "perFootnoteShift": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+    "8": 0,
+    "9": 0,
+    "10": 0,
+    "11": 0,
+    "12": 0,
+    "13": 0,
+    "14": 0,
+    "15": 0,
+    "16": 0,
+    "17": 0,
+    "18": 1,
+    "19": 0,
+    "20": 0,
+    "21": 0,
+    "22": 0,
+    "23": 0,
+    "24": 0,
+    "25": 0,
+    "26": 0,
+    "27": 0,
+    "28": 1,
+    "29": 1,
+    "30": 1,
+    "31": 1,
+    "32": 1,
+    "33": 1,
+    "34": 1,
+    "35": 1,
+    "36": 2,
+    "37": 2,
+    "38": 1,
+    "39": 1,
+    "40": 2,
+    "41": 2,
+    "42": 1,
+    "43": 1,
+    "44": 2,
+    "45": 2,
+    "46": 2,
+    "47": 2,
+    "48": 2,
+    "49": 2,
+    "50": 2,
+    "51": 2,
+    "52": 3,
+    "53": 2,
+    "54": 3,
+    "55": 3,
+    "56": 3,
+    "57": 3,
+    "58": 4,
+    "59": 4,
+    "60": 4,
+    "61": 4,
+    "62": 3,
+    "63": 3,
+    "64": 4,
+    "65": 3,
+    "66": 4,
+    "67": 4,
+    "68": 4,
+    "69": 4,
+    "70": 4,
+    "71": 4,
+    "72": 4,
+    "73": 5,
+    "74": 4,
+    "75": 4,
+    "76": 4,
+    "77": 5,
+    "78": 5,
+    "79": 4,
+    "80": 4,
+    "81": 4,
+    "82": 5,
+    "83": 5,
+    "84": 5,
+    "85": 5,
+    "86": 6,
+    "87": 6,
+    "88": 6,
+    "89": 6,
+    "90": 6,
+    "91": 6,
+    "92": 6,
+    "93": 6,
+    "94": 7
+  },
+  "pages": [
+    {
+      "page": 1,
+      "expectedAnchors": [1],
+      "actualRefs": [1],
+      "footnoteSliceNums": [1],
+      "footnoteReserved": 36,
+      "match": true,
+      "cluster": [
+        {
+          "anchor": 1,
+          "status": "ok-split-or-full",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 2,
+      "expectedAnchors": [],
+      "actualRefs": [],
+      "footnoteSliceNums": [],
+      "footnoteReserved": 0,
+      "match": true,
+      "cluster": []
+    },
+    {
+      "page": 3,
+      "expectedAnchors": [],
+      "actualRefs": [],
+      "footnoteSliceNums": [],
+      "footnoteReserved": 0,
+      "match": true,
+      "cluster": []
+    },
+    {
+      "page": 4,
+      "expectedAnchors": [2, 3],
+      "actualRefs": [2, 3],
+      "footnoteSliceNums": [2, 3],
+      "footnoteReserved": 223,
+      "match": true,
+      "cluster": [
+        {
+          "anchor": 2,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 3,
+          "status": "ok-split-or-full",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 5,
+      "expectedAnchors": [4, 5],
+      "actualRefs": [4, 5],
+      "footnoteSliceNums": [4, 5],
+      "footnoteReserved": 752,
+      "match": true,
+      "cluster": [
+        {
+          "anchor": 4,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 5,
+          "status": "ok-split-or-full",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 6,
+      "expectedAnchors": [6, 7],
+      "actualRefs": [6, 7],
+      "footnoteSliceNums": [5, 6, 7],
+      "footnoteReserved": 539,
+      "match": true,
+      "cluster": [
+        {
+          "anchor": 6,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 7,
+          "status": "ok-split-or-full",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 7,
+      "expectedAnchors": [8, 9, 10],
+      "actualRefs": [8, 9, 10],
+      "footnoteSliceNums": [7, 8, 9, 10],
+      "footnoteReserved": 473,
+      "match": true,
+      "cluster": [
+        {
+          "anchor": 8,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 9,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 10,
+          "status": "ok-split-or-full",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 8,
+      "expectedAnchors": [11, 12],
+      "actualRefs": [11, 12],
+      "footnoteSliceNums": [11, 12],
+      "footnoteReserved": 156,
+      "match": true,
+      "cluster": [
+        {
+          "anchor": 11,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 12,
+          "status": "ok-split-or-full",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 9,
+      "expectedAnchors": [13, 14, 15],
+      "actualRefs": [13, 14, 15],
+      "footnoteSliceNums": [13, 14, 15],
+      "footnoteReserved": 194,
+      "match": true,
+      "cluster": [
+        {
+          "anchor": 13,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 14,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 15,
+          "status": "ok-split-or-full",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 10,
+      "expectedAnchors": [16, 17, 18],
+      "actualRefs": [16, 17],
+      "footnoteSliceNums": [15, 16, 17],
+      "footnoteReserved": 233,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 16,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 17,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 18,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 11,
+      "expectedAnchors": [],
+      "actualRefs": [18],
+      "footnoteSliceNums": [18],
+      "footnoteReserved": 584,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 12,
+      "expectedAnchors": [19, 20],
+      "actualRefs": [19, 20],
+      "footnoteSliceNums": [19, 20],
+      "footnoteReserved": 207,
+      "match": true,
+      "cluster": [
+        {
+          "anchor": 19,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 20,
+          "status": "ok-split-or-full",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 13,
+      "expectedAnchors": [21, 22, 23, 24, 25, 26],
+      "actualRefs": [21, 22, 23, 24, 25, 26],
+      "footnoteSliceNums": [21, 22, 23, 24, 25, 26],
+      "footnoteReserved": 546,
+      "match": true,
+      "cluster": [
+        {
+          "anchor": 21,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 22,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 23,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 24,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 25,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 26,
+          "status": "ok-split-or-full",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 14,
+      "expectedAnchors": [27, 28, 29],
+      "actualRefs": [27],
+      "footnoteSliceNums": [26, 27],
+      "footnoteReserved": 675,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 27,
+          "status": "ok-complete",
+          "isLast": false
+        },
+        {
+          "anchor": 28,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 29,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 15,
+      "expectedAnchors": [],
+      "actualRefs": [28, 29],
+      "footnoteSliceNums": [28, 29],
+      "footnoteReserved": 615,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 16,
+      "expectedAnchors": [30, 31],
+      "actualRefs": [],
+      "footnoteSliceNums": [],
+      "footnoteReserved": 0,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 30,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 31,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 17,
+      "expectedAnchors": [],
+      "actualRefs": [30, 31],
+      "footnoteSliceNums": [30, 31],
+      "footnoteReserved": 330,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 18,
+      "expectedAnchors": [32, 33],
+      "actualRefs": [],
+      "footnoteSliceNums": [31],
+      "footnoteReserved": 790,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 32,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 33,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 19,
+      "expectedAnchors": [34, 35, 36, 37],
+      "actualRefs": [32, 33],
+      "footnoteSliceNums": [31, 32, 33],
+      "footnoteReserved": 317,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 34,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 35,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 36,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 37,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 20,
+      "expectedAnchors": [38, 39, 40, 41],
+      "actualRefs": [34, 35],
+      "footnoteSliceNums": [33, 34, 35],
+      "footnoteReserved": 414,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 38,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 39,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 40,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 41,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 21,
+      "expectedAnchors": [42, 43, 44],
+      "actualRefs": [36, 37, 38, 39],
+      "footnoteSliceNums": [36, 37, 38, 39],
+      "footnoteReserved": 513.2666666666668,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 42,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 43,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 44,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 22,
+      "expectedAnchors": [],
+      "actualRefs": [40, 41, 42, 43],
+      "footnoteSliceNums": [40, 41, 42, 43],
+      "footnoteReserved": 273,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 23,
+      "expectedAnchors": [45, 46, 47],
+      "actualRefs": [44],
+      "footnoteSliceNums": [44],
+      "footnoteReserved": 769,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 45,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 46,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 47,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 24,
+      "expectedAnchors": [48],
+      "actualRefs": [],
+      "footnoteSliceNums": [],
+      "footnoteReserved": 0,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 48,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 25,
+      "expectedAnchors": [49, 50],
+      "actualRefs": [45, 46, 47],
+      "footnoteSliceNums": [45, 46, 47],
+      "footnoteReserved": 187,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 49,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 50,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 26,
+      "expectedAnchors": [51, 52],
+      "actualRefs": [48],
+      "footnoteSliceNums": [48],
+      "footnoteReserved": 105,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 51,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 52,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 27,
+      "expectedAnchors": [],
+      "actualRefs": [49, 50],
+      "footnoteSliceNums": [49, 50],
+      "footnoteReserved": 330,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 28,
+      "expectedAnchors": [53, 54],
+      "actualRefs": [51],
+      "footnoteSliceNums": [51],
+      "footnoteReserved": 644,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 53,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 54,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 29,
+      "expectedAnchors": [55],
+      "actualRefs": [52],
+      "footnoteSliceNums": [52],
+      "footnoteReserved": 36,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 55,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 30,
+      "expectedAnchors": [56],
+      "actualRefs": [53],
+      "footnoteSliceNums": [52, 53],
+      "footnoteReserved": 77,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 56,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 31,
+      "expectedAnchors": [57],
+      "actualRefs": [54],
+      "footnoteSliceNums": [54],
+      "footnoteReserved": 138,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 57,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 32,
+      "expectedAnchors": [58],
+      "actualRefs": [55],
+      "footnoteSliceNums": [54, 55],
+      "footnoteReserved": 377,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 58,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 33,
+      "expectedAnchors": [59],
+      "actualRefs": [56],
+      "footnoteSliceNums": [56],
+      "footnoteReserved": 473,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 59,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 34,
+      "expectedAnchors": [60],
+      "actualRefs": [57],
+      "footnoteSliceNums": [57],
+      "footnoteReserved": 36,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 60,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 35,
+      "expectedAnchors": [61],
+      "actualRefs": [],
+      "footnoteSliceNums": [57],
+      "footnoteReserved": 59,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 61,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 36,
+      "expectedAnchors": [62, 63, 64],
+      "actualRefs": [58],
+      "footnoteSliceNums": [58],
+      "footnoteReserved": 273,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 62,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 63,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 64,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 37,
+      "expectedAnchors": [65, 66, 67, 68, 69],
+      "actualRefs": [59],
+      "footnoteSliceNums": [59],
+      "footnoteReserved": 189,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 65,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 66,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 67,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 68,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 69,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 38,
+      "expectedAnchors": [70, 71, 72, 73],
+      "actualRefs": [60],
+      "footnoteSliceNums": [59, 60],
+      "footnoteReserved": 353,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 70,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 71,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 72,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 73,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 39,
+      "expectedAnchors": [74, 75, 76, 77, 78],
+      "actualRefs": [61, 62, 63],
+      "footnoteSliceNums": [61, 62, 63],
+      "footnoteReserved": 210,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 74,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 75,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 76,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 77,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 78,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 40,
+      "expectedAnchors": [79, 80, 81, 82],
+      "actualRefs": [64, 65],
+      "footnoteSliceNums": [64, 65],
+      "footnoteReserved": 291,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 79,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 80,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 81,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 82,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 41,
+      "expectedAnchors": [83, 84],
+      "actualRefs": [66, 67, 68, 69],
+      "footnoteSliceNums": [66, 67, 68, 69],
+      "footnoteReserved": 491,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 83,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 84,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 42,
+      "expectedAnchors": [85],
+      "actualRefs": [70, 71, 72],
+      "footnoteSliceNums": [70, 71, 72],
+      "footnoteReserved": 291,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 85,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 43,
+      "expectedAnchors": [],
+      "actualRefs": [73, 74, 75, 76],
+      "footnoteSliceNums": [73, 74, 75, 76],
+      "footnoteReserved": 375,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 44,
+      "expectedAnchors": [86, 87],
+      "actualRefs": [77, 78, 79, 80, 81],
+      "footnoteSliceNums": [77, 78, 79, 80, 81],
+      "footnoteReserved": 652,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 86,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 87,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 45,
+      "expectedAnchors": [88, 89],
+      "actualRefs": [82],
+      "footnoteSliceNums": [81, 82],
+      "footnoteReserved": 703,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 88,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 89,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 46,
+      "expectedAnchors": [90],
+      "actualRefs": [83, 84],
+      "footnoteSliceNums": [83, 84],
+      "footnoteReserved": 687,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 90,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 47,
+      "expectedAnchors": [91],
+      "actualRefs": [85],
+      "footnoteSliceNums": [85],
+      "footnoteReserved": 67,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 91,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 48,
+      "expectedAnchors": [92, 93, 94],
+      "actualRefs": [],
+      "footnoteSliceNums": [85],
+      "footnoteReserved": 661,
+      "match": false,
+      "cluster": [
+        {
+          "anchor": 92,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 93,
+          "status": "missing",
+          "isLast": false
+        },
+        {
+          "anchor": 94,
+          "status": "missing",
+          "isLast": true
+        }
+      ]
+    },
+    {
+      "page": 49,
+      "expectedAnchors": [],
+      "actualRefs": [],
+      "footnoteSliceNums": [],
+      "footnoteReserved": 0,
+      "match": true,
+      "cluster": []
+    },
+    {
+      "page": 50,
+      "expectedAnchors": [],
+      "actualRefs": [86, 87],
+      "footnoteSliceNums": [86, 87],
+      "footnoteReserved": 315,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 51,
+      "expectedAnchors": [],
+      "actualRefs": [88, 89],
+      "footnoteSliceNums": [88, 89],
+      "footnoteReserved": 440,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 52,
+      "expectedAnchors": [],
+      "actualRefs": [90],
+      "footnoteSliceNums": [90],
+      "footnoteReserved": 223,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 53,
+      "expectedAnchors": [],
+      "actualRefs": [91],
+      "footnoteSliceNums": [91],
+      "footnoteReserved": 59,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 54,
+      "expectedAnchors": [],
+      "actualRefs": [92, 93],
+      "footnoteSliceNums": [92, 93],
+      "footnoteReserved": 742,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 55,
+      "expectedAnchors": [],
+      "actualRefs": [94],
+      "footnoteSliceNums": [94],
+      "footnoteReserved": 36,
+      "match": false,
+      "cluster": []
+    },
+    {
+      "page": 56,
+      "expectedAnchors": [],
+      "actualRefs": [],
+      "footnoteSliceNums": [94],
+      "footnoteReserved": 769,
+      "match": true,
+      "cluster": []
+    },
+    {
+      "page": 57,
+      "expectedAnchors": [],
+      "actualRefs": [],
+      "footnoteSliceNums": [],
+      "footnoteReserved": 0,
+      "match": true,
+      "cluster": []
+    }
+  ]
+}

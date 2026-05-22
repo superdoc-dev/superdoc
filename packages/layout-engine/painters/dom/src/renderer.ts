@@ -160,6 +160,11 @@ type WordLayoutMarker = {
     color?: string;
     letterSpacing?: number;
     vanish?: boolean;
+    // SD-2656: caps marks from the level rPr ( w:caps / w:smallCaps ).
+    // Without these the marker text renders verbatim ("First") instead of
+    // Word's all-caps ("FIRST") for legal/contract-style numbered lists.
+    allCaps?: boolean;
+    smallCaps?: boolean;
   };
 };
 
@@ -3794,6 +3799,9 @@ export class DomPainter {
         if (marker.run.italic) markerEl.style.fontStyle = 'italic';
         if (marker.run.color) markerEl.style.color = marker.run.color;
         if (marker.run.letterSpacing) markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
+        // SD-2656: caps marks on the level rPr — uppercase for w:caps.
+        if (marker.run.allCaps) markerEl.style.textTransform = 'uppercase';
+        else if (marker.run.smallCaps) markerEl.style.fontVariant = 'small-caps';
       } else {
         // Fallback: legacy behavior
         markerEl.textContent = item.marker.text;

@@ -28,6 +28,19 @@ import { getFragmentZIndex } from '@superdoc/contracts';
 const PX_PER_PT = 96 / 72;
 
 const spacingDebugEnabled = false;
+
+/**
+ * SD-2656: ordered footnote anchor entry. The body slicer reads the candidate
+ * anchors for a given PM range and pushes them onto `PageState.footnoteAnchorsThisPage`
+ * after committing the slice; the demand formula consumes the resulting list.
+ */
+export type FootnoteAnchorRef = {
+  pmPos: number;
+  refId: string;
+  fullHeight: number;
+  firstLineHeight: number;
+};
+
 /**
  * Type definition for Word layout attributes attached to paragraph blocks.
  * This is a subset of the WordParagraphLayoutOutput from @superdoc/word-layout.
@@ -293,17 +306,34 @@ export type ParagraphLayoutContext = {
    */
   overrideSpacingAfter?: number;
   /**
-   * SD-3049 / SD-2656: returns the cumulative footnote body height of refs
-   * anchored inside this block, optionally filtered to a PM range. With no
-   * range, returns the whole-block total. With a range, returns demand for
-   * fns whose anchor pmPos falls in [pmStart, pmEnd].
+   * SD-3049 / SD-2656: footnote demand under the ordered-cluster rule.
    *
-   * The slicer uses the ranged form to charge demand line-by-line as it
-   * commits a slice, which matches Word's body break (fits the next line
-   * only if it + its anchored fns + already-on-page fns + band overhead all
-   * fit on the page).
+   *   demand = sum(fullHeight of cluster[0..N-1]) + firstLineHeight(cluster[N-1])
+   *
+   * where `cluster` is the ordered list of footnote anchors on the page. The
+   * caller passes the already-committed anchors (from PageState) plus the
+   * candidate range; this returns the demand assuming the candidate range is
+   * appended to the page's cluster.
+   *
+   * With no committed list, the in-range anchors are treated as the full
+   * cluster. With no range, returns the whole-block demand.
    */
-  getFootnoteDemandForBlockId?: (blockId: string, pmStart?: number, pmEnd?: number) => number;
+  getFootnoteDemandForBlockId?: (
+    blockId: string,
+    pmStart?: number,
+    pmEnd?: number,
+    committed?: ReadonlyArray<FootnoteAnchorRef>,
+  ) => number;
+
+  /**
+   * SD-2656: returns the ordered anchor entries in `[pmStart, pmEnd]` so the
+   * slicer can push them onto PageState after accepting a candidate line.
+   */
+  getFootnoteAnchorsForBlockId?: (
+    blockId: string,
+    pmStart?: number,
+    pmEnd?: number,
+  ) => ReadonlyArray<FootnoteAnchorRef>;
 
   /**
    * SD-2656: companion to getFootnoteDemandForBlockId — returns the number
@@ -884,16 +914,18 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
      * entirely by what THIS page's slices have charged so far + what the
      * candidate slice would charge.
      *
-     * `extraDemand` and `extraRefs` describe demand contributed by lines in
-     * the current slice that haven't yet been committed to
-     * `state.footnoteDemandThisPage`. Already-on-page demand stays in the
-     * page state; demand from yet-to-commit lines is added here so the
-     * slicer can ask "does this candidate line still fit if I also charge
-     * its anchored fns to the band?".
+     * `extraDemand` IS the total ordered-cluster demand for the page after
+     * the candidate slice is committed (i.e., the demand function already
+     * received state.footnoteAnchorsThisPage as `committed` and returned the
+     * full cluster demand). Do NOT add state.footnoteDemandThisPage — that
+     * would double-count the already-committed anchors (e.g. fn4 contributes
+     * `firstLine(fn4)` to state.footnoteDemandThisPage when first committed,
+     * then `full(fn4)` to extraDemand when fn5 arrives and upgrades fn4 from
+     * "last" to "non-last"). Trust extraDemand as the total.
      */
     const rawContentBottom = state.contentBottom + state.pageFootnoteReserve;
     const computeEffectiveBottom = (extraDemand: number, extraRefs: number): number => {
-      const totalDemand = state.footnoteDemandThisPage + extraDemand;
+      const totalDemand = extraDemand;
       const totalRefs = state.footnoteRefsThisPage + extraRefs;
       const demandWithOverhead = totalDemand > 0 ? totalDemand + bandOverhead(totalRefs) : 0;
       // SD-2656: respect the planner's per-page reserve as a floor. The
@@ -923,31 +955,81 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // commit-first-line rule keeps making progress and the band may end
     // up clipped — but that case is handled by the planner's continuation
     // split (separate fix path).
+    // SD-2656: two-mode cluster demand to match Word's behavior.
+    //
+    //   PREFERRED demand = sum(fullHeight of ALL anchors) + overhead.
+    //                      Reserves enough for every footnote to render fully.
+    //                      Word's default — pack body conservatively so the
+    //                      band can hold complete content.
+    //
+    //   ORDERED demand   = sum(fullHeight of non-last) + firstLineHeight(last)
+    //                      + overhead. The MINIMUM that satisfies the rule
+    //                      (cluster preserved, last anchor may split).
+    //
+    // The slicer tries preferred first. If a line + preferred doesn't fit,
+    // we fall back to ordered. Only when ordered also fails does the page
+    // break. Result: when content can fit fully, body packs conservatively
+    // (Word-like). When content can't fit fully, cluster is still preserved
+    // by splitting the last anchor (rule preserved).
+    const computeDemandsForRange = (pmStart: number, pmEnd: number) => {
+      const candidate = ctx.getFootnoteAnchorsForBlockId
+        ? ctx.getFootnoteAnchorsForBlockId(block.id, pmStart, pmEnd)
+        : [];
+      if (candidate.length === 0 && state.footnoteAnchorsThisPage.length === 0) {
+        return { preferred: 0, ordered: 0 };
+      }
+      const cluster = [...state.footnoteAnchorsThisPage, ...candidate];
+      let preferred = 0;
+      for (const a of cluster) preferred += a.fullHeight;
+      const lastIdx = cluster.length - 1;
+      let ordered = 0;
+      for (let i = 0; i < lastIdx; i += 1) ordered += cluster[i].fullHeight;
+      if (lastIdx >= 0) ordered += cluster[lastIdx].firstLineHeight;
+      return { preferred, ordered };
+    };
+
     const previewRange = computeFragmentPmRange(block, lines, fromLine, fromLine + 1);
-    const previewDemand = ctx.getFootnoteDemandForBlockId
-      ? ctx.getFootnoteDemandForBlockId(block.id, previewRange.pmStart, previewRange.pmEnd)
-      : 0;
     const previewRefs = ctx.getFootnoteRefCountForBlockId
       ? ctx.getFootnoteRefCountForBlockId(block.id, previewRange.pmStart, previewRange.pmEnd)
       : 0;
-    let effectiveBottom = computeEffectiveBottom(previewDemand, previewRefs);
+    // Compute preview demands from CURRENT state (footnoteAnchorsThisPage
+    // changes after advanceColumn — the new page has a fresh, empty list).
+    const computePreviewBottom = (allowOrderedFallback: boolean) => {
+      const d = computeDemandsForRange(previewRange.pmStart ?? 0, previewRange.pmEnd ?? 0);
+      // Try preferred first. Fall back to ordered ONLY when explicitly
+      // allowed — used post-advance as a deadlock-breaker for oversized
+      // first blocks (the unconditional first-line commit handles physical
+      // overflow). Pre-advance we use preferred-only so the body breaks
+      // BEFORE a block whose cluster can't fit fully, matching Word's
+      // "keep the cluster intact on its natural page" behavior.
+      let bot = computeEffectiveBottom(d.preferred, previewRefs);
+      if (allowOrderedFallback && state.cursorY >= bot) {
+        bot = computeEffectiveBottom(d.ordered, previewRefs);
+      }
+      return bot;
+    };
+    // Pre-advance: preferred-only (don't accept under firstLine fallback —
+    // force the body to push the whole block to the next page).
+    let effectiveBottom = computePreviewBottom(false);
 
     if (state.cursorY >= effectiveBottom) {
       state = advanceColumn(state);
-      effectiveBottom = computeEffectiveBottom(previewDemand, previewRefs);
+      // Post-advance: allow ordered fallback as a deadlock-breaker so an
+      // oversized first block doesn't loop forever.
+      effectiveBottom = computePreviewBottom(true);
     }
 
     const availableHeight = effectiveBottom - state.cursorY;
     if (availableHeight <= 0) {
       state = advanceColumn(state);
-      effectiveBottom = computeEffectiveBottom(previewDemand, previewRefs);
+      effectiveBottom = computePreviewBottom(true);
     }
 
     const nextLineHeight = lines[fromLine].lineHeight || 0;
     const remainingHeight = effectiveBottom - state.cursorY;
     if (state.page.fragments.length > 0 && remainingHeight < nextLineHeight) {
       state = advanceColumn(state);
-      effectiveBottom = computeEffectiveBottom(previewDemand, previewRefs);
+      effectiveBottom = computePreviewBottom(true);
     }
 
     // Use the narrowest width and offset if we remeasured
@@ -977,42 +1059,77 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     while (toLine < lines.length) {
       const lineHeight = lines[toLine].lineHeight || 0;
       const range = computeFragmentPmRange(block, lines, fromLine, toLine + 1);
-      const nextDemand = ctx.getFootnoteDemandForBlockId
-        ? ctx.getFootnoteDemandForBlockId(block.id, range.pmStart, range.pmEnd)
-        : 0;
+      // SD-2656: two-mode demand. Try preferred (full of all anchors) first
+      // — that's Word's default, packs body conservatively for full band
+      // content. If preferred doesn't fit, try ordered (firstLine for last
+      // anchor) — keeps cluster intact, last anchor splits. If neither
+      // fits, break the body slice.
+      const demands = computeDemandsForRange(range.pmStart ?? 0, range.pmEnd ?? 0);
       const nextRefs = ctx.getFootnoteRefCountForBlockId
         ? ctx.getFootnoteRefCountForBlockId(block.id, range.pmStart, range.pmEnd)
         : 0;
 
       if (toLine === fromLine) {
         // First line: commit unconditionally. The pre-slicer checks above
-        // already advanced the column if even a single line couldn't fit,
-        // so reaching this point means the first line is allowed.
+        // already advanced the column if even a single line couldn't fit.
         height = lineHeight;
-        sliceDemand = nextDemand;
+        sliceDemand = demands.preferred;
         sliceRefs = nextRefs;
         toLine = fromLine + 1;
         continue;
       }
 
-      const effBot = computeEffectiveBottom(nextDemand, nextRefs);
       const candidateBottom = state.cursorY + height + lineHeight + borderVertical;
-      if (candidateBottom > effBot) break;
-
-      height += lineHeight;
-      sliceDemand = nextDemand;
-      sliceRefs = nextRefs;
-      toLine += 1;
+      // SD-2656: try preferred (full of all anchors). If preferred doesn't
+      // fit but the line introduces a new anchor that could split (the new
+      // last), fall back to ordered (firstLine for last) so the cluster
+      // stays on this page. The last anchor renders firstLine and continues
+      // on the next page. Without this fallback, the line moves entirely
+      // to the next page and the cluster splits across pages — leaving a
+      // large empty space in the current page's band.
+      let effBot = computeEffectiveBottom(demands.preferred, nextRefs);
+      if (candidateBottom <= effBot) {
+        height += lineHeight;
+        sliceDemand = demands.preferred;
+        sliceRefs = nextRefs;
+        toLine += 1;
+        continue;
+      }
+      effBot = computeEffectiveBottom(demands.ordered, nextRefs);
+      if (candidateBottom <= effBot) {
+        height += lineHeight;
+        sliceDemand = demands.ordered;
+        sliceRefs = nextRefs;
+        toLine += 1;
+        continue;
+      }
+      break;
     }
 
     const slice = { toLine, height };
     const fragmentHeight = slice.height;
 
-    // Commit demand from this slice into page state so subsequent blocks on
-    // the same page see the right effectiveBottom.
+    // Commit demand from this slice into page state. sliceDemand is the
+    // ordered-cluster TOTAL for the page (it already accounts for committed
+    // anchors), so the page-level tracker is replaced, not accumulated. The
+    // ref count is additive (each slice's refs are new).
     if (sliceDemand > 0 || sliceRefs > 0) {
-      state.footnoteDemandThisPage += sliceDemand;
+      state.footnoteDemandThisPage = sliceDemand;
       state.footnoteRefsThisPage = (state.footnoteRefsThisPage ?? 0) + sliceRefs;
+    }
+    // SD-2656: push the anchors actually introduced by this slice onto the
+    // page's ordered cluster. The demand for the NEXT slice/block will then
+    // see them as committed (so the current cluster's last anchor upgrades
+    // from firstLine to fullHeight when a new anchor is added later).
+    if (ctx.getFootnoteAnchorsForBlockId) {
+      const committedRange = computeFragmentPmRange(block, lines, fromLine, toLine);
+      const newAnchors = ctx.getFootnoteAnchorsForBlockId(block.id, committedRange.pmStart, committedRange.pmEnd);
+      if (newAnchors.length > 0) {
+        const seen = new Set(state.footnoteAnchorsThisPage.map((a) => a.refId));
+        for (const a of newAnchors) {
+          if (!seen.has(a.refId)) state.footnoteAnchorsThisPage.push(a);
+        }
+      }
     }
     void effectiveBottom;
 

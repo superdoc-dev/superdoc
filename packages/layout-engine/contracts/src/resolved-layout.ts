@@ -487,6 +487,14 @@ export type ResolvedListMarkerItem = {
     italic?: boolean;
     color?: string;
     letterSpacing?: number;
+    /**
+     * SD-2656: caps marks from the level rPr ( w:caps / w:smallCaps ). When
+     * `allCaps` is true the painter applies CSS text-transform: uppercase to
+     * the marker text — matching Word's legal/contract list rendering
+     * ("FIRST:", "SECOND:", "THIRD:") for `ordinalText` numbering.
+     */
+    allCaps?: boolean;
+    smallCaps?: boolean;
   };
   /** Optional DOCX source evidence for list-marker observations. */
   sourceAnchor?: SourceAnchor;

@@ -1430,25 +1430,29 @@ export async function incrementalLayout(
           // the footnotes actually need, the body grows its reserve to match on the next
           // pass, and placement never exceeds maxReserve so footnotes cannot render past
           // the page's bottom margin.
-          let demand = 0;
-          for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
-            const ids = idsByColumn.get(pageIndex)?.get(columnIndex) ?? [];
-            let columnDemand = 0;
-            ids.forEach((id, idx) => {
-              const ranges = rangesByFootnoteId.get(id) ?? [];
-              let rangesHeight = 0;
-              ranges.forEach((range) => {
-                const spacingAfter = 'spacingAfter' in range ? (range.spacingAfter ?? 0) : 0;
-                rangesHeight += range.height + spacingAfter;
-              });
-              columnDemand += rangesHeight + (idx > 0 ? safeGap : 0);
+          // SD-2656: placement ceiling = maxReserve (the actual band capacity
+          // left by the body after its ordered-cluster reservation).
+          const placementCeiling = maxReserve;
+
+          // SD-2656: per-footnote full and first-line heights, used to
+          // estimate next-page cluster demand for the carry-forward bump.
+          const fullHeightOf = (id: string): number => {
+            const ranges = rangesByFootnoteId.get(id) ?? [];
+            let total = 0;
+            ranges.forEach((range) => {
+              const spacingAfter = 'spacingAfter' in range ? (range.spacingAfter ?? 0) : 0;
+              total += range.height + spacingAfter;
             });
-            if (columnDemand > 0) {
-              columnDemand += safeSeparatorSpacingBefore + safeDividerHeight + safeTopPadding;
+            return total;
+          };
+          const firstLineOf = (id: string): number => {
+            const measured = firstLineHeightById.get(id);
+            if (typeof measured === 'number' && Number.isFinite(measured) && measured > 0) {
+              return measured;
             }
-            if (columnDemand > demand) demand = columnDemand;
-          }
-          const placementCeiling = demand > 0 ? Math.min(Math.ceil(demand), maxReserve) : maxReserve;
+            const ranges = rangesByFootnoteId.get(id) ?? [];
+            return ranges.length > 0 ? ranges[0].height : 0;
+          };
 
           const pendingForPage = new Map<number, Array<{ id: string; ranges: FootnoteRange[] }>>();
           pendingByColumn.forEach((entries, columnIndex) => {
@@ -1466,13 +1470,20 @@ export async function incrementalLayout(
             let usedHeight = 0;
             const columnSlices: FootnoteSlice[] = [];
             const nextPending: Array<{ id: string; ranges: FootnoteRange[] }> = [];
-            let stopPlacement = false;
             const columnKey = footnoteColumnKey(pageIndex, columnIndex);
 
+            // SD-2656: planner enforcement of the ordered-cluster rule. For
+            // new anchors that are NOT the last on this page, partial
+            // placement is forbidden — they must fit fully, otherwise the
+            // body reserved space for `full(non-last)` that the planner
+            // would waste on a single line. For the LAST anchor (and for
+            // incoming continuations), forceFirst keeps the existing
+            // behavior (place at least one slice when budget allows).
             const placeFootnote = (
               id: string,
               ranges: FootnoteRange[],
               isContinuation: boolean,
+              isLastOnPage: boolean,
             ): { placed: boolean; remaining: FootnoteRange[] } => {
               if (!ranges || ranges.length === 0) {
                 return { placed: false, remaining: [] };
@@ -1488,6 +1499,15 @@ export async function incrementalLayout(
               const overhead = isFirstSlice ? separatorBefore + separatorHeight + safeTopPadding : 0;
               const gapBefore = !isFirstSlice ? safeGap : 0;
               const availableHeight = Math.max(0, placementCeiling - usedHeight - overhead - gapBefore);
+              // SD-2656: forceFirst applies whenever the anchor is allowed to
+              // split — i.e. the LAST anchor on the cluster (rule), or a
+              // continuation draining leftover space. Not gated on
+              // isFirstSlice — the last anchor is usually placed AFTER its
+              // non-last siblings, so it's rarely the first slice on the
+              // column. Without this, fn N on a cluster of [A..N-1, N] fails
+              // to render its first line and the rule "last anchor renders
+              // at least firstLine" is violated.
+              const allowForceFirst = (isLastOnPage || isContinuation) && placementCeiling > 0;
               const { slice, remainingRanges } = fitFootnoteContent(
                 id,
                 ranges,
@@ -1496,10 +1516,16 @@ export async function incrementalLayout(
                 columnIndex,
                 isContinuation,
                 measuresById,
-                isFirstSlice && placementCeiling > 0,
+                allowForceFirst,
               );
 
               if (slice.ranges.length === 0) {
+                return { placed: false, remaining: ranges };
+              }
+              // Non-last new anchor that only partially fit: refuse the
+              // placement entirely. The whole anchor defers to the next page
+              // so the rule "non-last anchors complete on their page" holds.
+              if (!isLastOnPage && !isContinuation && remainingRanges.length > 0) {
                 return { placed: false, remaining: ranges };
               }
 
@@ -1518,44 +1544,58 @@ export async function incrementalLayout(
               return { placed: true, remaining: remainingRanges };
             };
 
+            // SD-2656: reserve cluster room BEFORE placing continuations, so
+            // a huge incoming continuation can't eat the band and starve the
+            // current page's cluster. Continuations render at the TOP of the
+            // band (Word's order) because we place them first onto
+            // columnSlices, but their availableHeight is capped at
+            // (placementCeiling - clusterReserve).
+            const ids = idsByColumn.get(pageIndex)?.get(columnIndex) ?? [];
+            const lastIdx = ids.length - 1;
+            let clusterReserve = 0;
+            for (let i = 0; i < ids.length; i += 1) {
+              const isLast = i === lastIdx;
+              clusterReserve += isLast ? firstLineOf(ids[i]) : fullHeightOf(ids[i]);
+              if (i > 0) clusterReserve += safeGap;
+            }
+
+            // Continuations first (visual top). Pretend cluster's room is
+            // already used so placeFootnote sees the lowered ceiling.
+            usedHeight += clusterReserve;
             const pending = pendingForPage.get(columnIndex) ?? [];
             for (const entry of pending) {
-              if (stopPlacement) {
-                nextPending.push(entry);
-                continue;
-              }
               if (!entry.ranges || entry.ranges.length === 0) continue;
-              const result = placeFootnote(entry.id, entry.ranges, true);
+              const result = placeFootnote(entry.id, entry.ranges, true, false);
               if (!result.placed) {
+                // Continuation doesn't fit alongside the cluster reservation
+                // — defer this and all later continuations to next page.
                 nextPending.push(entry);
-                stopPlacement = true;
                 continue;
               }
               if (result.remaining.length > 0) {
                 nextPending.push({ id: entry.id, ranges: result.remaining });
               }
             }
+            usedHeight -= clusterReserve;
 
-            if (!stopPlacement) {
-              const ids = idsByColumn.get(pageIndex)?.get(columnIndex) ?? [];
-              for (let idIndex = 0; idIndex < ids.length; idIndex += 1) {
-                const id = ids[idIndex];
-                const ranges = rangesByFootnoteId.get(id) ?? [];
-                if (ranges.length === 0) continue;
-                const result = placeFootnote(id, ranges, false);
-                if (!result.placed) {
-                  nextPending.push({ id, ranges });
-                  for (let remainingIndex = idIndex + 1; remainingIndex < ids.length; remainingIndex += 1) {
-                    const remainingId = ids[remainingIndex];
-                    const remainingRanges = rangesByFootnoteId.get(remainingId) ?? [];
-                    nextPending.push({ id: remainingId, ranges: remainingRanges });
-                  }
-                  stopPlacement = true;
-                  break;
+            // New anchors second (visual bottom).
+            for (let idIndex = 0; idIndex < ids.length; idIndex += 1) {
+              const id = ids[idIndex];
+              const ranges = rangesByFootnoteId.get(id) ?? [];
+              if (ranges.length === 0) continue;
+              const isLastOnPage = idIndex === lastIdx;
+              const result = placeFootnote(id, ranges, false, isLastOnPage);
+              if (!result.placed) {
+                nextPending.push({ id, ranges });
+                for (let remainingIndex = idIndex + 1; remainingIndex < ids.length; remainingIndex += 1) {
+                  const remainingId = ids[remainingIndex];
+                  const remainingRanges = rangesByFootnoteId.get(remainingId) ?? [];
+                  nextPending.push({ id: remainingId, ranges: remainingRanges });
                 }
-                if (result.remaining.length > 0) {
-                  nextPending.push({ id, ranges: result.remaining });
-                }
+                break;
+              }
+              if (result.remaining.length > 0) {
+                nextPending.push({ id, ranges: result.remaining });
               }
             }
 
@@ -1577,7 +1617,63 @@ export async function incrementalLayout(
           if (pageSlices.length > 0) {
             slicesByPage.set(pageIndex, pageSlices);
           }
-          reserves[pageIndex] = pageReserve;
+          // SD-2656: MAX with any pre-existing value (set by an earlier
+          // page's pending-continuation bump) so we don't overwrite the
+          // bumped reserve.
+          reserves[pageIndex] = Math.max(reserves[pageIndex] ?? 0, pageReserve);
+
+          // SD-2656: bump reserves[pageIndex+1] to include BOTH:
+          //   1. pending continuation from this page (rendered at top of
+          //      next page's band)
+          //   2. next page's own ordered-cluster demand (full of non-last +
+          //      firstLine of last)
+          // so the body slicer on the next layout pass leaves room for both.
+          // Otherwise either continuations starve new anchors (cluster
+          // violation) or new anchors starve continuations (overflow drips
+          // across many pages).
+          if (pageIndex + 1 < pageCount) {
+            let continuationDemand = 0;
+            pendingByColumn.forEach((entries) => {
+              entries.forEach((entry) => {
+                entry.ranges.forEach((range) => {
+                  const spacingAfter = 'spacingAfter' in range ? (range.spacingAfter ?? 0) : 0;
+                  continuationDemand += range.height + spacingAfter;
+                });
+              });
+            });
+            // Estimate next page's cluster demand using ORDERED (rule
+            // minimum: full of non-last + firstLine of last). The body's
+            // own demand check tries PREFERRED first and falls back to
+            // ordered locally, so the bump only needs to guarantee the
+            // minimum cluster room — body upgrades to preferred when
+            // physical space allows.
+            let nextClusterDemand = 0;
+            for (let cIdx = 0; cIdx < columnCount; cIdx += 1) {
+              const idsNext = idsByColumn.get(pageIndex + 1)?.get(cIdx) ?? [];
+              if (idsNext.length === 0) continue;
+              let columnCluster = 0;
+              for (let i = 0; i < idsNext.length; i += 1) {
+                const isLast = i === idsNext.length - 1;
+                columnCluster += isLast ? firstLineOf(idsNext[i]) : fullHeightOf(idsNext[i]);
+                if (i > 0) columnCluster += safeGap;
+              }
+              if (columnCluster > nextClusterDemand) nextClusterDemand = columnCluster;
+            }
+            const totalBumpRaw = continuationDemand + nextClusterDemand;
+            if (totalBumpRaw > 0) {
+              const overhead = safeSeparatorSpacingBefore + continuationDividerHeight + safeTopPadding;
+              const nextPage = layoutForPages.pages?.[pageIndex + 1];
+              const nextPageSize = nextPage?.size ?? layoutForPages.pageSize ?? DEFAULT_PAGE_SIZE;
+              const nextTop = normalizeMargin(nextPage?.margins?.top, DEFAULT_MARGINS.top);
+              const nextBottomRaw = normalizeMargin(nextPage?.margins?.bottom, DEFAULT_MARGINS.bottom);
+              const physicalContentHeight = Math.max(0, nextPageSize.h - nextTop - nextBottomRaw);
+              const safeCap = Math.max(0, physicalContentHeight - MIN_FOOTNOTE_BODY_HEIGHT * 20);
+              reserves[pageIndex + 1] = Math.max(
+                reserves[pageIndex + 1] ?? 0,
+                Math.min(Math.ceil(totalBumpRaw + overhead), safeCap),
+              );
+            }
+          }
         }
 
         if (cappedPages.size > 0) {
@@ -1871,11 +1967,16 @@ export async function incrementalLayout(
       };
 
       // SD-3049: per-footnote total body height; accounting mirrors `computeFootnoteLayoutPlan`.
+      // SD-2656: alongside the total, compute the first valid line/run height
+      // so the body slicer can apply the ordered-cluster demand model.
       let bodyHeightById = new Map<string, number>();
+      let firstLineHeightById = new Map<string, number>();
       const refreshBodyHeights = (measures: Map<string, Measure>) => {
-        const map = new Map<string, number>();
+        const totalMap = new Map<string, number>();
+        const firstLineMap = new Map<string, number>();
         footnotesInput.blocksById.forEach((blocks, footnoteId) => {
           let total = 0;
+          let firstLine = 0;
           for (const block of blocks) {
             const measure = measures.get(block.id);
             if (!measure) continue;
@@ -1886,12 +1987,21 @@ export async function incrementalLayout(
                 ?.spacing;
               const after = spacing?.after ?? spacing?.lineSpaceAfter;
               if (typeof after === 'number' && Number.isFinite(after) && after > 0) total += after;
+              // SD-2656: first paragraph's first line is the first valid run.
+              if (firstLine === 0) {
+                const lines = (measure as { lines?: Array<{ lineHeight?: number }> }).lines;
+                const lh = lines && lines.length > 0 ? lines[0].lineHeight : undefined;
+                if (typeof lh === 'number' && Number.isFinite(lh) && lh > 0) firstLine = lh;
+              }
             } else if (measure.kind === 'image' || measure.kind === 'drawing') {
               const measureH = (measure as { height?: number }).height;
               if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
+              // SD-2656: atomic content — first "line" is the whole thing.
+              if (firstLine === 0 && typeof measureH === 'number' && Number.isFinite(measureH)) firstLine = measureH;
             } else if (measure.kind === 'table') {
               const measureH = (measure as { totalHeight?: number }).totalHeight;
               if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
+              if (firstLine === 0 && typeof measureH === 'number' && Number.isFinite(measureH)) firstLine = measureH;
             } else if (measure.kind === 'list' && block.kind === 'list') {
               for (const item of block.items) {
                 const itemMeasure = measure.items.find((entry) => entry.itemId === item.id);
@@ -1899,11 +2009,19 @@ export async function incrementalLayout(
                 for (const line of itemMeasure.paragraph.lines) total += line.lineHeight ?? 0;
                 total += getParagraphSpacingAfter(item.paragraph);
               }
+              // SD-2656: first list item's first line.
+              if (firstLine === 0) {
+                const firstItem = measure.items[0];
+                const lh = firstItem?.paragraph?.lines?.[0]?.lineHeight;
+                if (typeof lh === 'number' && Number.isFinite(lh) && lh > 0) firstLine = lh;
+              }
             }
           }
-          if (total > 0) map.set(footnoteId, total);
+          if (total > 0) totalMap.set(footnoteId, total);
+          if (firstLine > 0) firstLineMap.set(footnoteId, firstLine);
         });
-        bodyHeightById = map;
+        bodyHeightById = totalMap;
+        firstLineHeightById = firstLineMap;
       };
 
       // SD-2656: thread the planner's data-driven band overhead values
@@ -1920,6 +2038,7 @@ export async function incrementalLayout(
           footnotes: {
             ...footnotesInput,
             bodyHeightById,
+            firstLineHeightById,
             ...(typeof plannerSeparatorSpacingBefore === 'number' && Number.isFinite(plannerSeparatorSpacingBefore)
               ? { separatorSpacingBefore: plannerSeparatorSpacingBefore }
               : {}),

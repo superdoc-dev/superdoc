@@ -1,0 +1,3461 @@
+{
+  "totalPages": 57,
+  "pages": [
+    {
+      "pageIndex": 0,
+      "pageNumber": 1,
+      "footnoteReserved": 36,
+      "bodyMaxY": 919.4666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 217.99999999999997,
+        "bottom": 132,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "2",
+          "wordNum": 1
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "2",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 945,
+          "height": 1,
+          "wordNum": 1
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-1-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 940,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 1,
+      "pageNumber": 2,
+      "footnoteReserved": 0,
+      "bodyMaxY": 947.5333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 96,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [],
+      "footnoteSlices": [],
+      "separators": []
+    },
+    {
+      "pageIndex": 2,
+      "pageNumber": 3,
+      "footnoteReserved": 0,
+      "bodyMaxY": 768.0666666666666,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 96,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [],
+      "footnoteSlices": [],
+      "separators": []
+    },
+    {
+      "pageIndex": 3,
+      "pageNumber": 4,
+      "footnoteReserved": 223,
+      "bodyMaxY": 694.5333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 319,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "3",
+          "wordNum": 2
+        },
+        {
+          "sdId": "4",
+          "wordNum": 3
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "3",
+          "fromLine": 0,
+          "toLine": 8,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 758,
+          "height": 8,
+          "wordNum": 2
+        },
+        {
+          "id": "4",
+          "fromLine": 0,
+          "toLine": 4,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 891,
+          "height": 4,
+          "wordNum": 3
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-4-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 753,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 4,
+      "pageNumber": 5,
+      "footnoteReserved": 752,
+      "bodyMaxY": 196.33333333333331,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 848,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "5",
+          "wordNum": 4
+        },
+        {
+          "sdId": "6",
+          "wordNum": 5
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "5",
+          "fromLine": 0,
+          "toLine": 20,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 229,
+          "height": 20,
+          "wordNum": 4
+        },
+        {
+          "id": "6",
+          "fromLine": 0,
+          "toLine": 10,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 545,
+          "height": 10,
+          "wordNum": 5
+        },
+        {
+          "id": "6",
+          "fromLine": 0,
+          "toLine": 13,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 707,
+          "height": 13,
+          "wordNum": 5
+        },
+        {
+          "id": "6",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 914,
+          "height": 3,
+          "wordNum": 5
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-5-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 224,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 5,
+      "pageNumber": 6,
+      "footnoteReserved": 539,
+      "bodyMaxY": 413.8666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 635,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "7",
+          "wordNum": 6
+        },
+        {
+          "sdId": "8",
+          "wordNum": 7
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "6",
+          "fromLine": 3,
+          "toLine": 9,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 441,
+          "height": 6,
+          "wordNum": 5
+        },
+        {
+          "id": "6",
+          "fromLine": 0,
+          "toLine": 12,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 541,
+          "height": 12,
+          "wordNum": 5
+        },
+        {
+          "id": "7",
+          "fromLine": 0,
+          "toLine": 10,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 735,
+          "height": 10,
+          "wordNum": 6
+        },
+        {
+          "id": "8",
+          "fromLine": 0,
+          "toLine": 4,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 899,
+          "height": 4,
+          "wordNum": 7
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-6-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 436,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 6,
+      "pageNumber": 7,
+      "footnoteReserved": 473,
+      "bodyMaxY": 479.59999999999997,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 569,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "9",
+          "wordNum": 8
+        },
+        {
+          "sdId": "10",
+          "wordNum": 9
+        },
+        {
+          "sdId": "11",
+          "wordNum": 10
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "8",
+          "fromLine": 4,
+          "toLine": 13,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 600,
+          "height": 9,
+          "wordNum": 7
+        },
+        {
+          "id": "9",
+          "fromLine": 0,
+          "toLine": 6,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 748,
+          "height": 6,
+          "wordNum": 8
+        },
+        {
+          "id": "10",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 850,
+          "height": 3,
+          "wordNum": 9
+        },
+        {
+          "id": "11",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 906,
+          "height": 3,
+          "wordNum": 10
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-7-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 595,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 7,
+      "pageNumber": 8,
+      "footnoteReserved": 156,
+      "bodyMaxY": 802.6666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 252,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "12",
+          "wordNum": 11
+        },
+        {
+          "sdId": "13",
+          "wordNum": 12
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "12",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 865,
+          "height": 3,
+          "wordNum": 11
+        },
+        {
+          "id": "13",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 921,
+          "height": 2,
+          "wordNum": 12
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-8-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 860,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 8,
+      "pageNumber": 9,
+      "footnoteReserved": 194,
+      "bodyMaxY": 752.0666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 290,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "14",
+          "wordNum": 13
+        },
+        {
+          "sdId": "15",
+          "wordNum": 14
+        },
+        {
+          "sdId": "16",
+          "wordNum": 15
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "14",
+          "fromLine": 0,
+          "toLine": 7,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 787,
+          "height": 7,
+          "wordNum": 13
+        },
+        {
+          "id": "15",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 904,
+          "height": 2,
+          "wordNum": 14
+        },
+        {
+          "id": "16",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 945,
+          "height": 1,
+          "wordNum": 15
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-9-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 782,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 9,
+      "pageNumber": 10,
+      "footnoteReserved": 233,
+      "bodyMaxY": 717.4666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 329,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "17",
+          "wordNum": 16
+        },
+        {
+          "sdId": "18",
+          "wordNum": 17
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "16",
+          "fromLine": 1,
+          "toLine": 7,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 763,
+          "height": 6,
+          "wordNum": 15
+        },
+        {
+          "id": "17",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 865,
+          "height": 2,
+          "wordNum": 16
+        },
+        {
+          "id": "18",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 906,
+          "height": 3,
+          "wordNum": 17
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-10-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 758,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 10,
+      "pageNumber": 11,
+      "footnoteReserved": 584,
+      "bodyMaxY": 364.99999999999994,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 680,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "19",
+          "wordNum": 18
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "19",
+          "fromLine": 0,
+          "toLine": 15,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 476,
+          "height": 15,
+          "wordNum": 18
+        },
+        {
+          "id": "19",
+          "fromLine": 0,
+          "toLine": 12,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 714,
+          "height": 12,
+          "wordNum": 18
+        },
+        {
+          "id": "19",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 906,
+          "height": 3,
+          "wordNum": 18
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-11-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 471,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 11,
+      "pageNumber": 12,
+      "footnoteReserved": 207,
+      "bodyMaxY": 633.1333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 303,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "20",
+          "wordNum": 19
+        },
+        {
+          "sdId": "21",
+          "wordNum": 20
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "20",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 773,
+          "height": 3,
+          "wordNum": 19
+        },
+        {
+          "id": "21",
+          "fromLine": 0,
+          "toLine": 8,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 829,
+          "height": 8,
+          "wordNum": 20
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-12-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 768,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 12,
+      "pageNumber": 13,
+      "footnoteReserved": 546,
+      "bodyMaxY": 412.1333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 642,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "22",
+          "wordNum": 21
+        },
+        {
+          "sdId": "23",
+          "wordNum": 22
+        },
+        {
+          "sdId": "24",
+          "wordNum": 23
+        },
+        {
+          "sdId": "25",
+          "wordNum": 24
+        },
+        {
+          "sdId": "26",
+          "wordNum": 25
+        },
+        {
+          "sdId": "27",
+          "wordNum": 26
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "22",
+          "fromLine": 0,
+          "toLine": 7,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 435,
+          "height": 7,
+          "wordNum": 21
+        },
+        {
+          "id": "23",
+          "fromLine": 0,
+          "toLine": 6,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 552,
+          "height": 6,
+          "wordNum": 22
+        },
+        {
+          "id": "24",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 654,
+          "height": 3,
+          "wordNum": 23
+        },
+        {
+          "id": "25",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 710,
+          "height": 3,
+          "wordNum": 24
+        },
+        {
+          "id": "26",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 766,
+          "height": 3,
+          "wordNum": 25
+        },
+        {
+          "id": "27",
+          "fromLine": 0,
+          "toLine": 9,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 822,
+          "height": 9,
+          "wordNum": 26
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-13-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 430,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 13,
+      "pageNumber": 14,
+      "footnoteReserved": 675,
+      "bodyMaxY": 281.5333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 771,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "28",
+          "wordNum": 27
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "27",
+          "fromLine": 9,
+          "toLine": 11,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 881,
+          "height": 2,
+          "wordNum": 26
+        },
+        {
+          "id": "28",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 921,
+          "height": 2,
+          "wordNum": 27
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-14-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 876,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 14,
+      "pageNumber": 15,
+      "footnoteReserved": 615,
+      "bodyMaxY": 330.4,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 711,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "29",
+          "wordNum": 28
+        },
+        {
+          "sdId": "30",
+          "wordNum": 29
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "29",
+          "fromLine": 0,
+          "toLine": 6,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 804,
+          "height": 6,
+          "wordNum": 28
+        },
+        {
+          "id": "30",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 906,
+          "height": 3,
+          "wordNum": 29
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-15-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 799,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 15,
+      "pageNumber": 16,
+      "footnoteReserved": 0,
+      "bodyMaxY": 951.8666666666669,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 96,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [],
+      "footnoteSlices": [],
+      "separators": []
+    },
+    {
+      "pageIndex": 16,
+      "pageNumber": 17,
+      "footnoteReserved": 330,
+      "bodyMaxY": 615.4,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 426,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "31",
+          "wordNum": 30
+        },
+        {
+          "sdId": "32",
+          "wordNum": 31
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "31",
+          "fromLine": 0,
+          "toLine": 6,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 651,
+          "height": 6,
+          "wordNum": 30
+        },
+        {
+          "id": "32",
+          "fromLine": 0,
+          "toLine": 5,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 753,
+          "height": 5,
+          "wordNum": 31
+        },
+        {
+          "id": "32",
+          "fromLine": 0,
+          "toLine": 8,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 837,
+          "height": 8,
+          "wordNum": 31
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-17-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 646,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 17,
+      "pageNumber": 18,
+      "footnoteReserved": 790,
+      "bodyMaxY": 162.6,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 886,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [],
+      "footnoteSlices": [
+        {
+          "id": "32",
+          "fromLine": 8,
+          "toLine": 15,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 191,
+          "height": 7,
+          "wordNum": 31
+        },
+        {
+          "id": "32",
+          "fromLine": 0,
+          "toLine": 10,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 306,
+          "height": 10,
+          "wordNum": 31
+        },
+        {
+          "id": "32",
+          "fromLine": 0,
+          "toLine": 6,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 467,
+          "height": 6,
+          "wordNum": 31
+        },
+        {
+          "id": "32",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 567,
+          "height": 1,
+          "wordNum": 31
+        },
+        {
+          "id": "32",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 591,
+          "height": 1,
+          "wordNum": 31
+        },
+        {
+          "id": "32",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 614,
+          "height": 1,
+          "wordNum": 31
+        },
+        {
+          "id": "32",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 637,
+          "height": 2,
+          "wordNum": 31
+        },
+        {
+          "id": "32",
+          "fromLine": 0,
+          "toLine": 11,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 676,
+          "height": 11,
+          "wordNum": 31
+        },
+        {
+          "id": "32",
+          "fromLine": 0,
+          "toLine": 7,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 853,
+          "height": 7,
+          "wordNum": 31
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-18-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 186,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 18,
+      "pageNumber": 19,
+      "footnoteReserved": 317,
+      "bodyMaxY": 631.4000000000001,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 413,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "33",
+          "wordNum": 32
+        },
+        {
+          "sdId": "34",
+          "wordNum": 33
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "32",
+          "fromLine": 0,
+          "toLine": 6,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 664,
+          "height": 6,
+          "wordNum": 31
+        },
+        {
+          "id": "33",
+          "fromLine": 0,
+          "toLine": 11,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 766,
+          "height": 11,
+          "wordNum": 32
+        },
+        {
+          "id": "34",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 945,
+          "height": 1,
+          "wordNum": 33
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-19-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 659,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 19,
+      "pageNumber": 20,
+      "footnoteReserved": 414,
+      "bodyMaxY": 531.9333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 510,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "35",
+          "wordNum": 34
+        },
+        {
+          "sdId": "36",
+          "wordNum": 35
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "34",
+          "fromLine": 1,
+          "toLine": 3,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 763,
+          "height": 2,
+          "wordNum": 33
+        },
+        {
+          "id": "35",
+          "fromLine": 0,
+          "toLine": 4,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 804,
+          "height": 4,
+          "wordNum": 34
+        },
+        {
+          "id": "36",
+          "fromLine": 0,
+          "toLine": 5,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 875,
+          "height": 5,
+          "wordNum": 35
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-20-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 758,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 20,
+      "pageNumber": 21,
+      "footnoteReserved": 513.2666666666668,
+      "bodyMaxY": 429.8666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 609.2666666666668,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "37",
+          "wordNum": 36
+        },
+        {
+          "sdId": "38",
+          "wordNum": 37
+        },
+        {
+          "sdId": "39",
+          "wordNum": 38
+        },
+        {
+          "sdId": "40",
+          "wordNum": 39
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "37",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 539,
+          "height": 3,
+          "wordNum": 36
+        },
+        {
+          "id": "38",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 595,
+          "height": 2,
+          "wordNum": 37
+        },
+        {
+          "id": "39",
+          "fromLine": 0,
+          "toLine": 17,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 635,
+          "height": 17,
+          "wordNum": 38
+        },
+        {
+          "id": "40",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 906,
+          "height": 3,
+          "wordNum": 39
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-21-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 534,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 21,
+      "pageNumber": 22,
+      "footnoteReserved": 273,
+      "bodyMaxY": 681.1333333333332,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 369,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "41",
+          "wordNum": 40
+        },
+        {
+          "sdId": "42",
+          "wordNum": 41
+        },
+        {
+          "sdId": "43",
+          "wordNum": 42
+        },
+        {
+          "sdId": "44",
+          "wordNum": 43
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "41",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 707,
+          "height": 2,
+          "wordNum": 40
+        },
+        {
+          "id": "42",
+          "fromLine": 0,
+          "toLine": 5,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 748,
+          "height": 5,
+          "wordNum": 41
+        },
+        {
+          "id": "43",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 835,
+          "height": 2,
+          "wordNum": 42
+        },
+        {
+          "id": "44",
+          "fromLine": 0,
+          "toLine": 5,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 875,
+          "height": 5,
+          "wordNum": 43
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-22-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 702,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 22,
+      "pageNumber": 23,
+      "footnoteReserved": 769,
+      "bodyMaxY": 179.46666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 865,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "45",
+          "wordNum": 44
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "45",
+          "fromLine": 0,
+          "toLine": 15,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 722,
+          "height": 15,
+          "wordNum": 44
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-23-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 717,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 23,
+      "pageNumber": 24,
+      "footnoteReserved": 0,
+      "bodyMaxY": 914.6666666666666,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 96,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [],
+      "footnoteSlices": [],
+      "separators": []
+    },
+    {
+      "pageIndex": 24,
+      "pageNumber": 25,
+      "footnoteReserved": 187,
+      "bodyMaxY": 765.4666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 283,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "46",
+          "wordNum": 45
+        },
+        {
+          "sdId": "47",
+          "wordNum": 46
+        },
+        {
+          "sdId": "48",
+          "wordNum": 47
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "46",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 794,
+          "height": 1,
+          "wordNum": 45
+        },
+        {
+          "id": "47",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 819,
+          "height": 1,
+          "wordNum": 46
+        },
+        {
+          "id": "48",
+          "fromLine": 0,
+          "toLine": 7,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 845,
+          "height": 7,
+          "wordNum": 47
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-25-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 789,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 25,
+      "pageNumber": 26,
+      "footnoteReserved": 105,
+      "bodyMaxY": 835.5333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 201,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "49",
+          "wordNum": 48
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "49",
+          "fromLine": 0,
+          "toLine": 5,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 875,
+          "height": 5,
+          "wordNum": 48
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-26-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 870,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 26,
+      "pageNumber": 27,
+      "footnoteReserved": 330,
+      "bodyMaxY": 615.4,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 426,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "50",
+          "wordNum": 49
+        },
+        {
+          "sdId": "51",
+          "wordNum": 50
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "50",
+          "fromLine": 0,
+          "toLine": 6,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 758,
+          "height": 6,
+          "wordNum": 49
+        },
+        {
+          "id": "51",
+          "fromLine": 0,
+          "toLine": 6,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 860,
+          "height": 6,
+          "wordNum": 50
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-27-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 753,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 27,
+      "pageNumber": 28,
+      "footnoteReserved": 644,
+      "bodyMaxY": 312.66666666666663,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 740,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "52",
+          "wordNum": 51
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "52",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 921,
+          "height": 2,
+          "wordNum": 51
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-28-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 916,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 28,
+      "pageNumber": 29,
+      "footnoteReserved": 36,
+      "bodyMaxY": 917.2666666666664,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 132,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "53",
+          "wordNum": 52
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "53",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 945,
+          "height": 1,
+          "wordNum": 52
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-29-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 940,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 29,
+      "pageNumber": 30,
+      "footnoteReserved": 77,
+      "bodyMaxY": 882.6666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 173,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "54",
+          "wordNum": 53
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "53",
+          "fromLine": 1,
+          "toLine": 3,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 904,
+          "height": 2,
+          "wordNum": 52
+        },
+        {
+          "id": "54",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 945,
+          "height": 1,
+          "wordNum": 53
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-30-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 899,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 30,
+      "pageNumber": 31,
+      "footnoteReserved": 138,
+      "bodyMaxY": 817.8,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 234,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "55",
+          "wordNum": 54
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "55",
+          "fromLine": 0,
+          "toLine": 7,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 853,
+          "height": 7,
+          "wordNum": 54
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-31-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 848,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 31,
+      "pageNumber": 32,
+      "footnoteReserved": 377,
+      "bodyMaxY": 566.5333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 473,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "56",
+          "wordNum": 55
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "55",
+          "fromLine": 7,
+          "toLine": 10,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 881,
+          "height": 3,
+          "wordNum": 54
+        },
+        {
+          "id": "56",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 937,
+          "height": 1,
+          "wordNum": 55
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-32-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 876,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 32,
+      "pageNumber": 33,
+      "footnoteReserved": 473,
+      "bodyMaxY": 481.33333333333326,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 569,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "57",
+          "wordNum": 56
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "57",
+          "fromLine": 0,
+          "toLine": 11,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 783,
+          "height": 11,
+          "wordNum": 56
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-33-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 778,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 33,
+      "pageNumber": 34,
+      "footnoteReserved": 36,
+      "bodyMaxY": 913.8000000000001,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 132,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "58",
+          "wordNum": 57
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "58",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 945,
+          "height": 1,
+          "wordNum": 57
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-34-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 940,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 34,
+      "pageNumber": 35,
+      "footnoteReserved": 59,
+      "bodyMaxY": 900.4,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 155,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [],
+      "footnoteSlices": [
+        {
+          "id": "58",
+          "fromLine": 1,
+          "toLine": 3,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 921,
+          "height": 2,
+          "wordNum": 57
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-35-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 916,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 35,
+      "pageNumber": 36,
+      "footnoteReserved": 273,
+      "bodyMaxY": 682.8666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 369,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "59",
+          "wordNum": 58
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "59",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 906,
+          "height": 3,
+          "wordNum": 58
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-36-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 901,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 36,
+      "pageNumber": 37,
+      "footnoteReserved": 189,
+      "bodyMaxY": 768.0666666666666,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 285,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "60",
+          "wordNum": 59
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "60",
+          "fromLine": 0,
+          "toLine": 11,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 791,
+          "height": 11,
+          "wordNum": 59
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-37-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 786,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 37,
+      "pageNumber": 38,
+      "footnoteReserved": 353,
+      "bodyMaxY": 597.6666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 449,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "61",
+          "wordNum": 60
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "60",
+          "fromLine": 11,
+          "toLine": 12,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 635,
+          "height": 1,
+          "wordNum": 59
+        },
+        {
+          "id": "61",
+          "fromLine": 0,
+          "toLine": 19,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 661,
+          "height": 19,
+          "wordNum": 60
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-38-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 630,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 38,
+      "pageNumber": 39,
+      "footnoteReserved": 210,
+      "bodyMaxY": 749.4666666666666,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 306,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "62",
+          "wordNum": 61
+        },
+        {
+          "sdId": "63",
+          "wordNum": 62
+        },
+        {
+          "sdId": "64",
+          "wordNum": 63
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "62",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 825,
+          "height": 2,
+          "wordNum": 61
+        },
+        {
+          "id": "63",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 865,
+          "height": 3,
+          "wordNum": 62
+        },
+        {
+          "id": "64",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 921,
+          "height": 2,
+          "wordNum": 63
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-39-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 820,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 39,
+      "pageNumber": 40,
+      "footnoteReserved": 291,
+      "bodyMaxY": 633.1333333333334,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 387,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "65",
+          "wordNum": 64
+        },
+        {
+          "sdId": "66",
+          "wordNum": 65
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "65",
+          "fromLine": 0,
+          "toLine": 9,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 697,
+          "height": 9,
+          "wordNum": 64
+        },
+        {
+          "id": "66",
+          "fromLine": 0,
+          "toLine": 7,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 845,
+          "height": 7,
+          "wordNum": 65
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-40-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 692,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 40,
+      "pageNumber": 41,
+      "footnoteReserved": 491,
+      "bodyMaxY": 465.33333333333337,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 587,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "67",
+          "wordNum": 66
+        },
+        {
+          "sdId": "68",
+          "wordNum": 67
+        },
+        {
+          "sdId": "69",
+          "wordNum": 68
+        },
+        {
+          "sdId": "70",
+          "wordNum": 69
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "67",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 769,
+          "height": 2,
+          "wordNum": 66
+        },
+        {
+          "id": "68",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 809,
+          "height": 3,
+          "wordNum": 67
+        },
+        {
+          "id": "69",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 865,
+          "height": 2,
+          "wordNum": 68
+        },
+        {
+          "id": "70",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 906,
+          "height": 3,
+          "wordNum": 69
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-41-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 764,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 41,
+      "pageNumber": 42,
+      "footnoteReserved": 291,
+      "bodyMaxY": 666.8666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 387,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "71",
+          "wordNum": 70
+        },
+        {
+          "sdId": "72",
+          "wordNum": 71
+        },
+        {
+          "sdId": "73",
+          "wordNum": 72
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "71",
+          "fromLine": 0,
+          "toLine": 4,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 809,
+          "height": 4,
+          "wordNum": 70
+        },
+        {
+          "id": "72",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 881,
+          "height": 1,
+          "wordNum": 71
+        },
+        {
+          "id": "73",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 906,
+          "height": 3,
+          "wordNum": 72
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-42-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 804,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 42,
+      "pageNumber": 43,
+      "footnoteReserved": 375,
+      "bodyMaxY": 581.6666666666665,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 471,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "74",
+          "wordNum": 73
+        },
+        {
+          "sdId": "75",
+          "wordNum": 74
+        },
+        {
+          "sdId": "76",
+          "wordNum": 75
+        },
+        {
+          "sdId": "77",
+          "wordNum": 76
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "74",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 723,
+          "height": 1,
+          "wordNum": 73
+        },
+        {
+          "id": "75",
+          "fromLine": 0,
+          "toLine": 5,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 748,
+          "height": 5,
+          "wordNum": 74
+        },
+        {
+          "id": "76",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 835,
+          "height": 2,
+          "wordNum": 75
+        },
+        {
+          "id": "77",
+          "fromLine": 0,
+          "toLine": 5,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 875,
+          "height": 5,
+          "wordNum": 76
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-43-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 718,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 43,
+      "pageNumber": 44,
+      "footnoteReserved": 652,
+      "bodyMaxY": 298.4,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 748,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "78",
+          "wordNum": 77
+        },
+        {
+          "sdId": "79",
+          "wordNum": 78
+        },
+        {
+          "sdId": "80",
+          "wordNum": 79
+        },
+        {
+          "sdId": "81",
+          "wordNum": 80
+        },
+        {
+          "sdId": "82",
+          "wordNum": 81
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "78",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 329,
+          "height": 3,
+          "wordNum": 77
+        },
+        {
+          "id": "79",
+          "fromLine": 0,
+          "toLine": 14,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 385,
+          "height": 14,
+          "wordNum": 78
+        },
+        {
+          "id": "79",
+          "fromLine": 0,
+          "toLine": 11,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 608,
+          "height": 11,
+          "wordNum": 78
+        },
+        {
+          "id": "80",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 787,
+          "height": 2,
+          "wordNum": 79
+        },
+        {
+          "id": "81",
+          "fromLine": 0,
+          "toLine": 7,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 827,
+          "height": 7,
+          "wordNum": 80
+        },
+        {
+          "id": "82",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 945,
+          "height": 1,
+          "wordNum": 81
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-44-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 324,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 44,
+      "pageNumber": 45,
+      "footnoteReserved": 703,
+      "bodyMaxY": 247.79999999999998,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 799,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "83",
+          "wordNum": 82
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "82",
+          "fromLine": 1,
+          "toLine": 9,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 789,
+          "height": 8,
+          "wordNum": 81
+        },
+        {
+          "id": "83",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 921,
+          "height": 2,
+          "wordNum": 82
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-45-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 784,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 45,
+      "pageNumber": 46,
+      "footnoteReserved": 687,
+      "bodyMaxY": 262.9333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 783,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "84",
+          "wordNum": 83
+        },
+        {
+          "sdId": "85",
+          "wordNum": 84
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "84",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 773,
+          "height": 2,
+          "wordNum": 83
+        },
+        {
+          "id": "85",
+          "fromLine": 0,
+          "toLine": 9,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 814,
+          "height": 9,
+          "wordNum": 84
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-46-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 768,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 46,
+      "pageNumber": 47,
+      "footnoteReserved": 67,
+      "bodyMaxY": 882.6666666666666,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 163,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "86",
+          "wordNum": 85
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "86",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 914,
+          "height": 3,
+          "wordNum": 85
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-47-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 909,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 47,
+      "pageNumber": 48,
+      "footnoteReserved": 661,
+      "bodyMaxY": 297.5333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 757,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [],
+      "footnoteSlices": [
+        {
+          "id": "86",
+          "fromLine": 3,
+          "toLine": 22,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 661,
+          "height": 19,
+          "wordNum": 85
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-48-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 656,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 48,
+      "pageNumber": 49,
+      "footnoteReserved": 0,
+      "bodyMaxY": 949.2666666666665,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 96,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [],
+      "footnoteSlices": [],
+      "separators": []
+    },
+    {
+      "pageIndex": 49,
+      "pageNumber": 50,
+      "footnoteReserved": 315,
+      "bodyMaxY": 616.2666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 411,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "87",
+          "wordNum": 86
+        },
+        {
+          "sdId": "88",
+          "wordNum": 87
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "87",
+          "fromLine": 0,
+          "toLine": 13,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 666,
+          "height": 13,
+          "wordNum": 86
+        },
+        {
+          "id": "88",
+          "fromLine": 0,
+          "toLine": 5,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 875,
+          "height": 5,
+          "wordNum": 87
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-50-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 661,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 50,
+      "pageNumber": 51,
+      "footnoteReserved": 440,
+      "bodyMaxY": 515.9333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 536,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "89",
+          "wordNum": 88
+        },
+        {
+          "sdId": "90",
+          "wordNum": 89
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "89",
+          "fromLine": 0,
+          "toLine": 8,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 758,
+          "height": 8,
+          "wordNum": 88
+        },
+        {
+          "id": "90",
+          "fromLine": 0,
+          "toLine": 4,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 891,
+          "height": 4,
+          "wordNum": 89
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-51-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 753,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 51,
+      "pageNumber": 52,
+      "footnoteReserved": 223,
+      "bodyMaxY": 513.3333333333334,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 319,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "91",
+          "wordNum": 90
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "91",
+          "fromLine": 0,
+          "toLine": 8,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 829,
+          "height": 8,
+          "wordNum": 90
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-52-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 824,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 52,
+      "pageNumber": 53,
+      "footnoteReserved": 59,
+      "bodyMaxY": 228.33333333333331,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 155,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "92",
+          "wordNum": 91
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "92",
+          "fromLine": 0,
+          "toLine": 2,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 921,
+          "height": 2,
+          "wordNum": 91
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-53-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 916,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 53,
+      "pageNumber": 54,
+      "footnoteReserved": 742,
+      "bodyMaxY": 211.4666666666667,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 838,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "93",
+          "wordNum": 92
+        },
+        {
+          "sdId": "94",
+          "wordNum": 93
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "93",
+          "fromLine": 0,
+          "toLine": 3,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 789,
+          "height": 3,
+          "wordNum": 92
+        },
+        {
+          "id": "94",
+          "fromLine": 0,
+          "toLine": 7,
+          "continuesFromPrev": false,
+          "continuesOnNext": false,
+          "y": 845,
+          "height": 7,
+          "wordNum": 93
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-54-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 784,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 54,
+      "pageNumber": 55,
+      "footnoteReserved": 36,
+      "bodyMaxY": 918.1333333333333,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 132,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [
+        {
+          "sdId": "95",
+          "wordNum": 94
+        }
+      ],
+      "footnoteSlices": [
+        {
+          "id": "95",
+          "fromLine": 0,
+          "toLine": 1,
+          "continuesFromPrev": false,
+          "continuesOnNext": true,
+          "y": 945,
+          "height": 1,
+          "wordNum": 94
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-separator-page-55-col-0",
+          "kind": "first",
+          "x": 96,
+          "y": 940,
+          "width": 312,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 55,
+      "pageNumber": 56,
+      "footnoteReserved": 769,
+      "bodyMaxY": 179.46666666666664,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 865,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [],
+      "footnoteSlices": [
+        {
+          "id": "95",
+          "fromLine": 1,
+          "toLine": 2,
+          "continuesFromPrev": true,
+          "continuesOnNext": false,
+          "y": 937,
+          "height": 1,
+          "wordNum": 94
+        }
+      ],
+      "separators": [
+        {
+          "blockId": "footnote-continuation-separator-page-56-col-0",
+          "kind": "continuation",
+          "x": 96,
+          "y": 932,
+          "width": 624,
+          "height": 1
+        }
+      ]
+    },
+    {
+      "pageIndex": 56,
+      "pageNumber": 57,
+      "footnoteReserved": 0,
+      "bodyMaxY": 364.13333333333327,
+      "pageSize": {
+        "w": 816,
+        "h": 1056
+      },
+      "margins": {
+        "top": 96,
+        "bottom": 96,
+        "left": 96,
+        "right": 96,
+        "header": 48,
+        "footer": 48
+      },
+      "bodyRefs": [],
+      "footnoteSlices": [],
+      "separators": []
+    }
+  ],
+  "idToNum": {
+    "2": 1,
+    "3": 2,
+    "4": 3,
+    "5": 4,
+    "6": 5,
+    "7": 6,
+    "8": 7,
+    "9": 8,
+    "10": 9,
+    "11": 10,
+    "12": 11,
+    "13": 12,
+    "14": 13,
+    "15": 14,
+    "16": 15,
+    "17": 16,
+    "18": 17,
+    "19": 18,
+    "20": 19,
+    "21": 20,
+    "22": 21,
+    "23": 22,
+    "24": 23,
+    "25": 24,
+    "26": 25,
+    "27": 26,
+    "28": 27,
+    "29": 28,
+    "30": 29,
+    "31": 30,
+    "32": 31,
+    "33": 32,
+    "34": 33,
+    "35": 34,
+    "36": 35,
+    "37": 36,
+    "38": 37,
+    "39": 38,
+    "40": 39,
+    "41": 40,
+    "42": 41,
+    "43": 42,
+    "44": 43,
+    "45": 44,
+    "46": 45,
+    "47": 46,
+    "48": 47,
+    "49": 48,
+    "50": 49,
+    "51": 50,
+    "52": 51,
+    "53": 52,
+    "54": 53,
+    "55": 54,
+    "56": 55,
+    "57": 56,
+    "58": 57,
+    "59": 58,
+    "60": 59,
+    "61": 60,
+    "62": 61,
+    "63": 62,
+    "64": 63,
+    "65": 64,
+    "66": 65,
+    "67": 66,
+    "68": 67,
+    "69": 68,
+    "70": 69,
+    "71": 70,
+    "72": 71,
+    "73": 72,
+    "74": 73,
+    "75": 74,
+    "76": 75,
+    "77": 76,
+    "78": 77,
+    "79": 78,
+    "80": 79,
+    "81": 80,
+    "82": 81,
+    "83": 82,
+    "84": 83,
+    "85": 84,
+    "86": 85,
+    "87": 86,
+    "88": 87,
+    "89": 88,
+    "90": 89,
+    "91": 90,
+    "92": 91,
+    "93": 92,
+    "94": 93,
+    "95": 94
+  }
+}

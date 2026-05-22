@@ -22,6 +22,11 @@ export type MinimalMarkerRun = {
   fontSize?: number;
   bold?: boolean;
   italic?: boolean;
+  // SD-2656: caps mark on the level rPr ( w:caps ). When true the marker
+  // text is rendered with CSS text-transform: uppercase, matching Word's
+  // legal/contract list styles ("FIRST:", "SECOND:", "THIRD:").
+  allCaps?: boolean;
+  smallCaps?: boolean;
 };
 
 /**

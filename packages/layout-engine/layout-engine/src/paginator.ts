@@ -43,6 +43,16 @@ export type PageState = {
    * gap + safety margin), which must match the planner's reserve formula.
    */
   footnoteRefsThisPage: number;
+  /**
+   * SD-2656: ordered list of footnote anchors committed to this page (by
+   * document/PM order). The body slicer pushes a new entry when it accepts a
+   * candidate line that introduces a new anchor. The list drives the ordered-
+   * cluster demand formula:
+   *   demand = sum(fullHeight of cluster[0..N-1]) + firstLineHeight(cluster[N-1])
+   * i.e. all anchors except the last must fit fully; only the last may split.
+   * Identified by refId so callers can dedupe and walk in document order.
+   */
+  footnoteAnchorsThisPage: Array<{ pmPos: number; refId: string; fullHeight: number; firstLineHeight: number }>;
 };
 
 export type PaginatorOptions = {
@@ -142,6 +152,7 @@ export function createPaginator(opts: PaginatorOptions) {
       pageFootnoteReserve,
       footnoteDemandThisPage: 0,
       footnoteRefsThisPage: 0,
+      footnoteAnchorsThisPage: [],
     };
     states.push(state);
     pages.push(state.page);

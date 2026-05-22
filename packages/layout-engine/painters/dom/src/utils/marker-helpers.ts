@@ -86,6 +86,11 @@ type MarkerRunStyle = {
   italic?: boolean | null;
   color?: string | null;
   letterSpacing?: number | null;
+  // SD-2656: caps marks from the level rPr. allCaps -> "FIRST" (uppercase);
+  // smallCaps -> small-caps. Without these the legal list markers render as
+  // plain "First" / "Second" / "Third" instead of Word's "FIRST" / "SECOND".
+  allCaps?: boolean | null;
+  smallCaps?: boolean | null;
 };
 
 /**
@@ -121,6 +126,11 @@ export const createListMarkerElement = (
   }
   if (run.letterSpacing != null) {
     markerEl.style.letterSpacing = `${run.letterSpacing}px`;
+  }
+  if (run.allCaps) {
+    markerEl.style.textTransform = 'uppercase';
+  } else if (run.smallCaps) {
+    markerEl.style.fontVariant = 'small-caps';
   }
 
   markerContainer.appendChild(markerEl);

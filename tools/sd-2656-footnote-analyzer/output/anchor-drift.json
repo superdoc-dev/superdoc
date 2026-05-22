@@ -1,12 +1,12 @@
 {
   "summary": {
     "wordTotal": 49,
-    "sdTotal": 57,
-    "delta": 8,
-    "perfectlyAligned": 11,
+    "sdTotal": 50,
+    "delta": 1,
+    "perfectlyAligned": 14,
     "totalWithAnchors": 40,
-    "driftEvents": 8,
-    "spillEvents": 13
+    "driftEvents": 9,
+    "spillEvents": 17
   },
   "rows": [
     {
@@ -40,9 +40,9 @@
     {
       "wordPage": 5,
       "wordAnchors": [4, 5],
-      "sdPages": [5, 5],
-      "drift": 0,
-      "spillCount": 0
+      "sdPages": [4, 5],
+      "drift": -1,
+      "spillCount": 1
     },
     {
       "wordPage": 6,
@@ -75,9 +75,9 @@
     {
       "wordPage": 10,
       "wordAnchors": [16, 17, 18],
-      "sdPages": [10, 10, 11],
+      "sdPages": [10, 10, 10],
       "drift": 0,
-      "spillCount": 1
+      "spillCount": 0
     },
     {
       "wordPage": 11,
@@ -89,23 +89,23 @@
     {
       "wordPage": 12,
       "wordAnchors": [19, 20],
-      "sdPages": [12, 12],
-      "drift": 0,
-      "spillCount": 0
+      "sdPages": [11, 12],
+      "drift": -1,
+      "spillCount": 1
     },
     {
       "wordPage": 13,
       "wordAnchors": [21, 22, 23, 24, 25, 26],
-      "sdPages": [13, 13, 13, 13, 13, 13],
-      "drift": 0,
-      "spillCount": 0
+      "sdPages": [12, 12, 12, 12, 13, 13],
+      "drift": -1,
+      "spillCount": 2
     },
     {
       "wordPage": 14,
       "wordAnchors": [27, 28, 29],
-      "sdPages": [14, 15, 15],
-      "drift": 0,
-      "spillCount": 2
+      "sdPages": [13, 13, 14],
+      "drift": -1,
+      "spillCount": 1
     },
     {
       "wordPage": 15,
@@ -117,9 +117,9 @@
     {
       "wordPage": 16,
       "wordAnchors": [30, 31],
-      "sdPages": [17, 17],
-      "drift": 1,
-      "spillCount": 0
+      "sdPages": [15, 16],
+      "drift": -1,
+      "spillCount": 1
     },
     {
       "wordPage": 17,
@@ -131,29 +131,29 @@
     {
       "wordPage": 18,
       "wordAnchors": [32, 33],
-      "sdPages": [19, 19],
-      "drift": 1,
+      "sdPages": [17, 17],
+      "drift": -1,
       "spillCount": 0
     },
     {
       "wordPage": 19,
       "wordAnchors": [34, 35, 36, 37],
-      "sdPages": [20, 20, 21, 21],
-      "drift": 1,
+      "sdPages": [18, 18, 19, 19],
+      "drift": -1,
       "spillCount": 2
     },
     {
       "wordPage": 20,
       "wordAnchors": [38, 39, 40, 41],
-      "sdPages": [21, 21, 22, 22],
-      "drift": 1,
+      "sdPages": [19, 19, 20, 20],
+      "drift": -1,
       "spillCount": 2
     },
     {
       "wordPage": 21,
       "wordAnchors": [42, 43, 44],
-      "sdPages": [22, 22, 23],
-      "drift": 1,
+      "sdPages": [20, 20, 21],
+      "drift": -1,
       "spillCount": 1
     },
     {
@@ -166,29 +166,29 @@
     {
       "wordPage": 23,
       "wordAnchors": [45, 46, 47],
-      "sdPages": [25, 25, 25],
-      "drift": 2,
-      "spillCount": 0
+      "sdPages": [22, 22, 23],
+      "drift": -1,
+      "spillCount": 1
     },
     {
       "wordPage": 24,
       "wordAnchors": [48],
-      "sdPages": [26],
-      "drift": 2,
+      "sdPages": [23],
+      "drift": -1,
       "spillCount": 0
     },
     {
       "wordPage": 25,
       "wordAnchors": [49, 50],
-      "sdPages": [27, 27],
-      "drift": 2,
+      "sdPages": [24, 24],
+      "drift": -1,
       "spillCount": 0
     },
     {
       "wordPage": 26,
       "wordAnchors": [51, 52],
-      "sdPages": [28, 29],
-      "drift": 2,
+      "sdPages": [25, 26],
+      "drift": -1,
       "spillCount": 1
     },
     {
@@ -201,106 +201,106 @@
     {
       "wordPage": 28,
       "wordAnchors": [53, 54],
-      "sdPages": [30, 31],
-      "drift": 2,
+      "sdPages": [27, 28],
+      "drift": -1,
       "spillCount": 1
     },
     {
       "wordPage": 29,
       "wordAnchors": [55],
-      "sdPages": [32],
-      "drift": 3,
+      "sdPages": [28],
+      "drift": -1,
       "spillCount": 0
     },
     {
       "wordPage": 30,
       "wordAnchors": [56],
-      "sdPages": [33],
-      "drift": 3,
+      "sdPages": [29],
+      "drift": -1,
       "spillCount": 0
     },
     {
       "wordPage": 31,
       "wordAnchors": [57],
-      "sdPages": [34],
-      "drift": 3,
+      "sdPages": [30],
+      "drift": -1,
       "spillCount": 0
     },
     {
       "wordPage": 32,
       "wordAnchors": [58],
-      "sdPages": [36],
-      "drift": 4,
+      "sdPages": [32],
+      "drift": 0,
       "spillCount": 0
     },
     {
       "wordPage": 33,
       "wordAnchors": [59],
-      "sdPages": [37],
-      "drift": 4,
+      "sdPages": [33],
+      "drift": 0,
       "spillCount": 0
     },
     {
       "wordPage": 34,
       "wordAnchors": [60],
-      "sdPages": [38],
-      "drift": 4,
+      "sdPages": [33],
+      "drift": -1,
       "spillCount": 0
     },
     {
       "wordPage": 35,
       "wordAnchors": [61],
-      "sdPages": [39],
-      "drift": 4,
+      "sdPages": [35],
+      "drift": 0,
       "spillCount": 0
     },
     {
       "wordPage": 36,
       "wordAnchors": [62, 63, 64],
-      "sdPages": [39, 39, 40],
-      "drift": 3,
-      "spillCount": 1
+      "sdPages": [35, 35, 35],
+      "drift": -1,
+      "spillCount": 0
     },
     {
       "wordPage": 37,
       "wordAnchors": [65, 66, 67, 68, 69],
-      "sdPages": [40, 41, 41, 41, 41],
-      "drift": 3,
-      "spillCount": 4
+      "sdPages": [36, 36, 36, 36, 37],
+      "drift": -1,
+      "spillCount": 1
     },
     {
       "wordPage": 38,
       "wordAnchors": [70, 71, 72, 73],
-      "sdPages": [42, 42, 42, 43],
-      "drift": 4,
+      "sdPages": [37, 37, 37, 38],
+      "drift": -1,
       "spillCount": 1
     },
     {
       "wordPage": 39,
       "wordAnchors": [74, 75, 76, 77, 78],
-      "sdPages": [43, 43, 43, 44, 44],
-      "drift": 4,
+      "sdPages": [38, 38, 38, 39, 39],
+      "drift": -1,
       "spillCount": 2
     },
     {
       "wordPage": 40,
       "wordAnchors": [79, 80, 81, 82],
-      "sdPages": [44, 44, 44, 45],
-      "drift": 4,
+      "sdPages": [39, 39, 39, 40],
+      "drift": -1,
       "spillCount": 1
     },
     {
       "wordPage": 41,
       "wordAnchors": [83, 84],
-      "sdPages": [46, 46],
-      "drift": 5,
-      "spillCount": 0
+      "sdPages": [40, 41],
+      "drift": -1,
+      "spillCount": 1
     },
     {
       "wordPage": 42,
       "wordAnchors": [85],
-      "sdPages": [47],
-      "drift": 5,
+      "sdPages": [42],
+      "drift": 0,
       "spillCount": 0
     },
     {
@@ -313,37 +313,37 @@
     {
       "wordPage": 44,
       "wordAnchors": [86, 87],
-      "sdPages": [50, 50],
-      "drift": 6,
+      "sdPages": [44, 44],
+      "drift": 0,
       "spillCount": 0
     },
     {
       "wordPage": 45,
       "wordAnchors": [88, 89],
-      "sdPages": [51, 51],
-      "drift": 6,
-      "spillCount": 0
+      "sdPages": [45, 46],
+      "drift": 0,
+      "spillCount": 1
     },
     {
       "wordPage": 46,
       "wordAnchors": [90],
-      "sdPages": [52],
-      "drift": 6,
+      "sdPages": [46],
+      "drift": 0,
       "spillCount": 0
     },
     {
       "wordPage": 47,
       "wordAnchors": [91],
-      "sdPages": [53],
-      "drift": 6,
+      "sdPages": [48],
+      "drift": 1,
       "spillCount": 0
     },
     {
       "wordPage": 48,
       "wordAnchors": [92, 93, 94],
-      "sdPages": [54, 54, 55],
-      "drift": 6,
-      "spillCount": 1
+      "sdPages": [49, 49, 49],
+      "drift": 1,
+      "spillCount": 0
     },
     {
       "wordPage": 49,
@@ -355,67 +355,75 @@
   ],
   "driftEvents": [
     {
-      "wordPage": 16,
+      "wordPage": 5,
+      "delta": -1,
+      "newDrift": -1,
+      "anchors": [4, 5],
+      "sdPages": [4, 5],
+      "cause": "cluster-spill"
+    },
+    {
+      "wordPage": 6,
       "delta": 1,
-      "newDrift": 1,
-      "anchors": [30, 31],
-      "sdPages": [17, 17],
+      "newDrift": 0,
+      "anchors": [6, 7],
+      "sdPages": [6, 6],
       "cause": "page-break-shift"
     },
     {
-      "wordPage": 23,
-      "delta": 1,
-      "newDrift": 2,
-      "anchors": [45, 46, 47],
-      "sdPages": [25, 25, 25],
-      "cause": "page-break-shift"
-    },
-    {
-      "wordPage": 29,
-      "delta": 1,
-      "newDrift": 3,
-      "anchors": [55],
-      "sdPages": [32],
-      "cause": "page-break-shift"
+      "wordPage": 12,
+      "delta": -1,
+      "newDrift": -1,
+      "anchors": [19, 20],
+      "sdPages": [11, 12],
+      "cause": "cluster-spill"
     },
     {
       "wordPage": 32,
       "delta": 1,
-      "newDrift": 4,
+      "newDrift": 0,
       "anchors": [58],
-      "sdPages": [36],
+      "sdPages": [32],
+      "cause": "page-break-shift"
+    },
+    {
+      "wordPage": 34,
+      "delta": -1,
+      "newDrift": -1,
+      "anchors": [60],
+      "sdPages": [33],
+      "cause": "page-break-shift"
+    },
+    {
+      "wordPage": 35,
+      "delta": 1,
+      "newDrift": 0,
+      "anchors": [61],
+      "sdPages": [35],
       "cause": "page-break-shift"
     },
     {
       "wordPage": 36,
       "delta": -1,
-      "newDrift": 3,
+      "newDrift": -1,
       "anchors": [62, 63, 64],
-      "sdPages": [39, 39, 40],
-      "cause": "cluster-spill"
-    },
-    {
-      "wordPage": 38,
-      "delta": 1,
-      "newDrift": 4,
-      "anchors": [70, 71, 72, 73],
-      "sdPages": [42, 42, 42, 43],
-      "cause": "cluster-spill"
-    },
-    {
-      "wordPage": 41,
-      "delta": 1,
-      "newDrift": 5,
-      "anchors": [83, 84],
-      "sdPages": [46, 46],
+      "sdPages": [35, 35, 35],
       "cause": "page-break-shift"
     },
     {
-      "wordPage": 44,
+      "wordPage": 42,
       "delta": 1,
-      "newDrift": 6,
-      "anchors": [86, 87],
-      "sdPages": [50, 50],
+      "newDrift": 0,
+      "anchors": [85],
+      "sdPages": [42],
+      "cause": "page-break-shift"
+    },
+    {
+      "wordPage": 47,
+      "delta": 1,
+      "newDrift": 1,
+      "anchors": [91],
+      "sdPages": [48],
       "cause": "page-break-shift"
     }
   ]

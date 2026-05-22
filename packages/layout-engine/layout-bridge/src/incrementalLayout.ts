@@ -2349,6 +2349,9 @@ export async function incrementalLayout(
             const p = plan[i] ?? 0;
             if (p > a) return true; // under-reserved — grow must bump
             if (a >= TIGHTEN_SLACK_PX && p === 0) return true; // dead reserve — tighten can reclaim
+            // SD-2656 Phase 4: dead reserve where plan > 0 (e.g. bump-inflated
+            // continuation page where final demand is much smaller).
+            if (a >= TIGHTEN_SLACK_PX && a - p > TIGHTEN_SLACK_PX) return true;
           }
           return false;
         })();
@@ -2361,27 +2364,38 @@ export async function incrementalLayout(
             );
           }
 
-          // Opportunistic tighten: the grow loop is monotonic, so pages whose
-          // plan no longer asks for a reserve (footnote content shifted to
-          // later pages during an earlier pass) still carry their old reserve.
-          // Zero those pages' reserves and regrow any that gain footnote
-          // content after the body reflows. Revert if regrow can't stabilize
-          // safely or would add pages. Iterate a few times — each tighten
-          // + regrow can expose a fresh set of "reserved but plan==0" pages
-          // after the body reflows.
+          // SD-2656 Phase 4: opportunistic tighten — pages whose body reserved
+          // significantly more than the planner now needs. Two cases:
+          //
+          //   (a) planned === 0: footnote content shifted off this page in
+          //       an earlier pass. The reserve is fully dead — tighten to 0.
+          //
+          //   (b) planned > 0 but applied >> planned: previous pass's bump
+          //       (e.g. for a continuation that was longer then than now)
+          //       was preserved by the grow-only loop and never shrank back.
+          //       Tighten to planned so body reclaims the dead space; grow
+          //       will bump back up if the new bodyMaxY changes plan demand.
+          //
+          // Revert iff regrow can't stabilize or page count grows (safety net
+          // for cluster spills induced by absorbing body content).
           const MAX_TIGHTEN_ITERATIONS = 8;
           for (let iteration = 0; iteration < MAX_TIGHTEN_ITERATIONS; iteration += 1) {
-            const pagesToTighten: number[] = [];
+            const pagesToTighten: Array<{ i: number; target: number }> = [];
             for (let i = 0; i < reservesAppliedToLayout.length; i += 1) {
               const applied = reservesAppliedToLayout[i] ?? 0;
               const planned = finalPlan.reserves[i] ?? 0;
-              if (applied >= TIGHTEN_SLACK_PX && planned === 0) pagesToTighten.push(i);
+              if (applied < TIGHTEN_SLACK_PX) continue;
+              if (planned === 0) {
+                pagesToTighten.push({ i, target: 0 });
+              } else if (applied - planned > TIGHTEN_SLACK_PX) {
+                pagesToTighten.push({ i, target: planned });
+              }
             }
             if (pagesToTighten.length === 0) break;
             const safeApplied = reservesAppliedToLayout.slice();
             const safePageCount = layout.pages.length;
             const tightened = reservesAppliedToLayout.slice();
-            for (const i of pagesToTighten) tightened[i] = 0;
+            for (const { i, target } of pagesToTighten) tightened[i] = target;
             await applyReserves(tightened);
             if (!(await growReserves(GROW_MAX_PASSES)) || layout.pages.length > safePageCount) {
               await applyReserves(safeApplied);

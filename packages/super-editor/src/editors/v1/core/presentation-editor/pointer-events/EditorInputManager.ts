@@ -596,9 +596,12 @@ export class EditorInputManager {
 
   // Focus suppression (for draggable annotations)
   #suppressFocusInFromDraggable = false;
-  #skipPointerDownForStructuredContentLabel = false;
-  #pendingStructuredContentLabelClick: { label: HTMLElement; clientX: number; clientY: number } | null = null;
-  #suppressNextStructuredContentLabelClick = false;
+  #pendingStructuredContentLabelGesture: {
+    label: HTMLElement;
+    clientX: number;
+    clientY: number;
+    pointerId: number;
+  } | null = null;
 
   // Debug state
   #debugLastPointer: { clientX: number; clientY: number; x: number; y: number } | null = null;
@@ -612,7 +615,7 @@ export class EditorInputManager {
   // Bound handlers for event listener cleanup
   #boundHandleStructuredContentLabelPointerDown: ((e: PointerEvent) => void) | null = null;
   #boundHandleStructuredContentLabelPointerUp: ((e: PointerEvent) => void) | null = null;
-  #boundHandleStructuredContentLabelMouseUp: ((e: MouseEvent) => void) | null = null;
+  #boundHandleStructuredContentLabelPointerCancel: ((e: PointerEvent) => void) | null = null;
   #boundHandleStructuredContentLabelClick: ((e: MouseEvent) => void) | null = null;
   #boundHandlePointerDown: ((e: PointerEvent) => void) | null = null;
   #boundHandlePointerMove: ((e: PointerEvent) => void) | null = null;
@@ -664,7 +667,7 @@ export class EditorInputManager {
     // Create bound handlers
     this.#boundHandleStructuredContentLabelPointerDown = this.#handleStructuredContentLabelPointerDown.bind(this);
     this.#boundHandleStructuredContentLabelPointerUp = this.#handleStructuredContentLabelPointerUp.bind(this);
-    this.#boundHandleStructuredContentLabelMouseUp = this.#handleStructuredContentLabelPointerUp.bind(this);
+    this.#boundHandleStructuredContentLabelPointerCancel = this.#handleStructuredContentLabelPointerCancel.bind(this);
     this.#boundHandleStructuredContentLabelClick = this.#handleStructuredContentLabelClickEvent.bind(this);
     this.#boundHandlePointerDown = this.#handlePointerDown.bind(this);
     this.#boundHandlePointerMove = this.#handlePointerMove.bind(this);
@@ -678,17 +681,9 @@ export class EditorInputManager {
     this.#boundHandleEditorBlur = this.#handleEditorBlur.bind(this);
 
     // Attach pointer event listeners
-    visibleHost.addEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
-    visibleHost.addEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
-    visibleHost.addEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
-    visibleHost.addEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
-    viewportHost.addEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
-    viewportHost.addEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
-    viewportHost.addEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
-    viewportHost.addEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
     doc.addEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
     doc.addEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
-    doc.addEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
+    doc.addEventListener('pointercancel', this.#boundHandleStructuredContentLabelPointerCancel, true);
     doc.addEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
     viewportHost.addEventListener('pointerdown', this.#boundHandlePointerDown);
     viewportHost.addEventListener('pointermove', this.#boundHandlePointerMove);
@@ -721,23 +716,15 @@ export class EditorInputManager {
     const doc = viewportHost.ownerDocument ?? document;
 
     if (this.#boundHandleStructuredContentLabelPointerDown) {
-      visibleHost.removeEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
-      viewportHost.removeEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
       doc.removeEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
     }
     if (this.#boundHandleStructuredContentLabelPointerUp) {
-      visibleHost.removeEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
-      viewportHost.removeEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
       doc.removeEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
     }
-    if (this.#boundHandleStructuredContentLabelMouseUp) {
-      visibleHost.removeEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
-      viewportHost.removeEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
-      doc.removeEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
+    if (this.#boundHandleStructuredContentLabelPointerCancel) {
+      doc.removeEventListener('pointercancel', this.#boundHandleStructuredContentLabelPointerCancel, true);
     }
     if (this.#boundHandleStructuredContentLabelClick) {
-      visibleHost.removeEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
-      viewportHost.removeEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
       doc.removeEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
     }
     if (this.#boundHandlePointerDown) {
@@ -777,7 +764,7 @@ export class EditorInputManager {
     // Clear bound handlers
     this.#boundHandleStructuredContentLabelPointerDown = null;
     this.#boundHandleStructuredContentLabelPointerUp = null;
-    this.#boundHandleStructuredContentLabelMouseUp = null;
+    this.#boundHandleStructuredContentLabelPointerCancel = null;
     this.#boundHandleStructuredContentLabelClick = null;
     this.#boundHandlePointerDown = null;
     this.#boundHandlePointerMove = null;
@@ -1401,9 +1388,7 @@ export class EditorInputManager {
     // Skip ruler handle clicks
     if (target?.closest?.('.superdoc-ruler-handle') != null) return;
 
-    const skipStructuredContentLabelPointerDown = this.#skipPointerDownForStructuredContentLabel;
-    this.#skipPointerDownForStructuredContentLabel = false;
-    if (skipStructuredContentLabelPointerDown) {
+    if (this.#pendingStructuredContentLabelGesture) {
       this.#suppressFocusInFromDraggable = target?.closest?.(DRAG_SOURCE_SELECTOR) != null;
       return;
     }
@@ -1767,59 +1752,58 @@ export class EditorInputManager {
 
   #handleStructuredContentLabelPointerDown(event: PointerEvent): void {
     if (!this.#deps) return;
+    this.#pendingStructuredContentLabelGesture = null;
     if (event.button !== 0) return;
 
     const target = event.target as HTMLElement | null;
     const label = this.#resolveStructuredContentLabelTarget(event, target);
-    this.#skipPointerDownForStructuredContentLabel = label != null;
-    this.#pendingStructuredContentLabelClick = label ? { label, clientX: event.clientX, clientY: event.clientY } : null;
+    this.#pendingStructuredContentLabelGesture = label
+      ? { label, clientX: event.clientX, clientY: event.clientY, pointerId: event.pointerId }
+      : null;
   }
 
-  #handleStructuredContentLabelPointerUp(event: MouseEvent): void {
+  #handleStructuredContentLabelPointerUp(event: PointerEvent): void {
     if (!this.#deps) return;
     if (event.button !== 0) return;
 
-    const pending = this.#pendingStructuredContentLabelClick;
-    this.#pendingStructuredContentLabelClick = null;
+    const pending = this.#pendingStructuredContentLabelGesture;
     if (!pending) return;
+    if (pending.pointerId !== event.pointerId) return;
 
     const deltaX = event.clientX - pending.clientX;
     const deltaY = event.clientY - pending.clientY;
     const movedDistance = Math.hypot(deltaX, deltaY);
-    if (movedDistance > DRAG_SELECTION_DISTANCE_THRESHOLD_PX) return;
+    if (movedDistance > DRAG_SELECTION_DISTANCE_THRESHOLD_PX) {
+      this.#pendingStructuredContentLabelGesture = null;
+    }
+  }
 
-    const bodyEditor = this.#deps.getEditor();
-    if (this.#handleStructuredContentLabelClick(event, pending.label, bodyEditor)) {
-      this.#suppressNextStructuredContentLabelClick = true;
-      event.stopImmediatePropagation();
+  #handleStructuredContentLabelPointerCancel(event: PointerEvent): void {
+    const pending = this.#pendingStructuredContentLabelGesture;
+    if (!pending || pending.pointerId !== event.pointerId) {
       return;
     }
 
-    const editor = this.#deps.getActiveEditor();
-    if (bodyEditor !== editor && this.#handleStructuredContentLabelClick(event, pending.label, editor)) {
-      this.#suppressNextStructuredContentLabelClick = true;
-      event.stopImmediatePropagation();
-    }
+    this.#pendingStructuredContentLabelGesture = null;
   }
 
   #handleStructuredContentLabelClickEvent(event: MouseEvent): void {
     if (!this.#deps) return;
-    if (this.#suppressNextStructuredContentLabelClick) {
-      this.#suppressNextStructuredContentLabelClick = false;
-      event.stopImmediatePropagation();
-      return;
-    }
 
     const target = event.target as HTMLElement | null;
     const bodyEditor = this.#deps.getEditor();
-    if (this.#handleStructuredContentLabelClick(event, target, bodyEditor)) {
-      event.stopImmediatePropagation();
-      return;
-    }
+    try {
+      if (this.#handleStructuredContentLabelClick(event, target, bodyEditor)) {
+        event.stopImmediatePropagation();
+        return;
+      }
 
-    const editor = this.#deps.getActiveEditor();
-    if (bodyEditor !== editor && this.#handleStructuredContentLabelClick(event, target, editor)) {
-      event.stopImmediatePropagation();
+      const editor = this.#deps.getActiveEditor();
+      if (bodyEditor !== editor && this.#handleStructuredContentLabelClick(event, target, editor)) {
+        event.stopImmediatePropagation();
+      }
+    } finally {
+      this.#pendingStructuredContentLabelGesture = null;
     }
   }
 

@@ -426,7 +426,7 @@ describe('EditorInputManager structured content clicks', () => {
     expect(mockTextSelectionCreate).not.toHaveBeenCalled();
   });
 
-  it('selects a draggable block structured content label on mouseup without blocking pointerdown', () => {
+  it('selects a draggable block structured content label on click without blocking pointerdown', () => {
     mountWithDoc('plainSdt');
     const wrapper = document.createElement('div');
     wrapper.className = 'superdoc-structured-content-block';
@@ -450,15 +450,23 @@ describe('EditorInputManager structured content clicks', () => {
     } as PointerEventInit);
     label.dispatchEvent(pointerDown);
 
-    const pointerUp = new MouseEvent('mouseup', {
+    const pointerUp = new PointerEventImpl('pointerup', {
       bubbles: true,
       cancelable: true,
       button: 0,
       buttons: 0,
       clientX: 24,
       clientY: 24,
-    });
+    } as PointerEventInit);
     label.dispatchEvent(pointerUp);
+    label.dispatchEvent(
+      new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 24,
+        clientY: 24,
+      }),
+    );
 
     expect(pointerDown.defaultPrevented).toBe(false);
     expect(resolvePointerPositionHit as unknown as Mock).not.toHaveBeenCalled();
@@ -558,6 +566,102 @@ describe('EditorInputManager structured content clicks', () => {
     expect(resolvePointerPositionHit as unknown as Mock).not.toHaveBeenCalled();
     expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
     expect(mockTextSelectionCreate).not.toHaveBeenCalled();
+  });
+
+  it('clears a pending structured content label gesture on pointercancel', () => {
+    mountWithDoc('plainSdt');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'superdoc-structured-content-block';
+    wrapper.dataset.pmStart = '10';
+    wrapper.dataset.pmEnd = '31';
+    const label = document.createElement('div');
+    label.className = 'superdoc-structured-content__label';
+    wrapper.appendChild(label);
+    viewportHost.appendChild(wrapper);
+
+    const PointerEventImpl = getPointerEventImpl();
+    label.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 24,
+      } as PointerEventInit),
+    );
+    label.dispatchEvent(
+      new PointerEventImpl('pointercancel', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX: 24,
+        clientY: 24,
+      } as PointerEventInit),
+    );
+    label.dispatchEvent(
+      new PointerEventImpl('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX: 24,
+        clientY: 24,
+      } as PointerEventInit),
+    );
+
+    expect(mockNodeSelectionCreate).not.toHaveBeenCalled();
+    expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('does not suppress a later label click when the click after pointerup never arrives', () => {
+    mountWithDoc('plainSdt');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'superdoc-structured-content-block';
+    wrapper.dataset.pmStart = '10';
+    wrapper.dataset.pmEnd = '31';
+    const label = document.createElement('div');
+    label.className = 'superdoc-structured-content__label';
+    wrapper.appendChild(label);
+    viewportHost.appendChild(wrapper);
+
+    const PointerEventImpl = getPointerEventImpl();
+    label.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 24,
+      } as PointerEventInit),
+    );
+    label.dispatchEvent(
+      new PointerEventImpl('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX: 24,
+        clientY: 24,
+      } as PointerEventInit),
+    );
+
+    mockNodeSelectionCreate.mockClear();
+    mockEditor.view.dispatch.mockClear();
+
+    label.dispatchEvent(
+      new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 24,
+        clientY: 24,
+      }),
+    );
+
+    expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
+    expect(mockEditor.view.dispatch).toHaveBeenCalledWith(mockEditor.state.tr);
   });
 
   it('ignores structured content labels rendered by another input manager', () => {

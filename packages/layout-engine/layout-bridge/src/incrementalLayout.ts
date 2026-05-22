@@ -1,5 +1,6 @@
 import type {
   FlowBlock,
+  FootnotePageLedger,
   Layout,
   Measure,
   HeaderFooterLayout,
@@ -33,6 +34,7 @@ import {
 import { FeatureFlags } from './featureFlags';
 import { PageTokenLogger, HeaderFooterCacheLogger, globalMetrics } from './instrumentation';
 import { HeaderFooterCacheState, invalidateHeaderFooterCache } from './cacheInvalidation';
+import { getPreferredReserveCandidates, getPreferredReserveTrialTargets, scoreFootnoteWindow } from './footnote-scorer';
 
 export type HeaderFooterMeasureFn = (
   block: FlowBlock,
@@ -2341,6 +2343,52 @@ export async function incrementalLayout(
             finalPageColumns,
           );
         };
+        const buildFootnoteLedgers = (plan: FootnoteLayoutPlan, appliedReserves: number[], pageCount: number) => {
+          const ledgers: FootnotePageLedger[] = [];
+          for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+            const draft = plan.ledgersByPage.get(pageIndex);
+            if (!draft) continue;
+            const appliedBodyReservePx = Math.max(0, appliedReserves[pageIndex] ?? plan.reserves[pageIndex] ?? 0);
+            ledgers.push({
+              pageIndex,
+              anchorIds: draft.anchorIds,
+              mandatorySliceIds: draft.mandatorySliceIds,
+              continuationSliceIds: draft.continuationSliceIds,
+              extendedSliceIds: draft.extendedSliceIds,
+              continuationIn: draft.continuationIn,
+              continuationOut: draft.continuationOut,
+              mandatoryReservePx: draft.mandatoryReservePx,
+              preferredReservePx: draft.preferredReservePx,
+              actualBandHeightPx: draft.actualBandHeightPx,
+              appliedBodyReservePx,
+              deadReservePx: Math.max(0, appliedBodyReservePx - draft.actualBandHeightPx),
+              lastAnchorRenderedLines: draft.lastAnchorRenderedLines,
+            });
+          }
+          return ledgers;
+        };
+        const capReserveForRelayout = (
+          requestedReserve: number,
+          pageIndex: number,
+          referenceLayout: Layout,
+          referenceReserves: number[],
+        ): number => {
+          const requested = Number.isFinite(requestedReserve) ? Math.max(0, requestedReserve) : 0;
+          const page = referenceLayout.pages?.[pageIndex];
+          if (!page) return requested;
+
+          const pageSize = page.size ?? referenceLayout.pageSize ?? DEFAULT_PAGE_SIZE;
+          const topMargin = normalizeMargin(page.margins?.top, DEFAULT_MARGINS.top);
+          const bottomWithReserve = normalizeMargin(page.margins?.bottom, DEFAULT_MARGINS.bottom);
+          const currentReserve = Number.isFinite(referenceReserves[pageIndex])
+            ? Math.max(0, referenceReserves[pageIndex])
+            : 0;
+          const physicalBottomMargin = Math.max(0, bottomWithReserve - currentReserve);
+          const physicalContentHeight = pageSize.h - topMargin - physicalBottomMargin;
+          if (!Number.isFinite(physicalContentHeight)) return requested;
+
+          return Math.min(requested, Math.max(0, physicalContentHeight - MIN_FOOTNOTE_BODY_HEIGHT));
+        };
         // Grow-only convergence: ensures every page reserves at least as much
         // as its plan demands, so footnotes never render past the page bottom.
         // Monotonic (reserves only increase) and safe under oscillation. Needs
@@ -2372,6 +2420,107 @@ export async function incrementalLayout(
           return false;
         };
 
+        const GROW_MAX_PASSES = 10;
+        const PREFERRED_RESERVE_MAX_CANDIDATES = 12;
+        const PREFERRED_RESERVE_MAX_ACCEPTED_CANDIDATES = PREFERRED_RESERVE_MAX_CANDIDATES;
+        const PREFERRED_RESERVE_WINDOW_AHEAD = 3;
+
+        // SD-2656: scored preferred-reserve trials.
+        //
+        // Ordered-minimum reserve is the correctness floor. Word sometimes
+        // spends more space on the last anchor's footnote, but applying that
+        // locally in the body slicer caused large downstream drift. This pass
+        // tries one candidate at a time after the mandatory layout has already
+        // stabilized, then keeps the candidate only if the page-window scorer
+        // proves the result is globally safe. The scorer guards both the local
+        // page window and the full document, so we can try candidates while
+        // still rejecting changes that create late-document slack.
+        const runPreferredReserveTrials = async () => {
+          let acceptedPreferredTrials = 0;
+          let rejectedPreferredTrials = 0;
+          const rejectedPreferredPages = new Set<number>();
+
+          for (let candidatePass = 0; candidatePass < PREFERRED_RESERVE_MAX_CANDIDATES; candidatePass += 1) {
+            const beforeLayout = layout;
+            const beforePlan = finalPlan;
+            const beforeReserves = reservesAppliedToLayout.slice();
+            const beforeLedgers = buildFootnoteLedgers(beforePlan, beforeReserves, beforeLayout.pages.length);
+            const candidate = getPreferredReserveCandidates(beforeLedgers).find(
+              (entry) => !rejectedPreferredPages.has(entry.pageIndex),
+            );
+            if (!candidate) break;
+
+            const targetReserves = getPreferredReserveTrialTargets(candidate, beforeReserves[candidate.pageIndex] ?? 0);
+            let acceptedCandidate = false;
+
+            for (const targetReserve of targetReserves) {
+              const trialReserves = beforeReserves.slice();
+              const cappedPreferredReserve = capReserveForRelayout(
+                targetReserve,
+                candidate.pageIndex,
+                beforeLayout,
+                beforeReserves,
+              );
+              trialReserves[candidate.pageIndex] = Math.max(
+                trialReserves[candidate.pageIndex] ?? 0,
+                cappedPreferredReserve,
+              );
+
+              await applyReserves(trialReserves);
+              const trialConverged = await growReserves(GROW_MAX_PASSES);
+              const afterLedgers = buildFootnoteLedgers(finalPlan, reservesAppliedToLayout, layout.pages.length);
+              const score = scoreFootnoteWindow({
+                beforeLayout,
+                afterLayout: layout,
+                candidatePageIndex: candidate.pageIndex,
+                candidateAnchorId: candidate.anchorIds[candidate.anchorIds.length - 1],
+                beforeLedger: beforeLedgers,
+                afterLedger: afterLedgers,
+                windowAhead: PREFERRED_RESERVE_WINDOW_AHEAD,
+              });
+
+              if (trialConverged && score.accept) {
+                if (layoutDebugEnabled) {
+                  console.log('[incrementalLayout] Accepted footnote preferred-reserve trial', {
+                    pageIndex: candidate.pageIndex,
+                    targetReserve,
+                    score,
+                  });
+                }
+                acceptedPreferredTrials += 1;
+                acceptedCandidate = true;
+                break;
+              }
+
+              if (layoutDebugEnabled) {
+                console.log('[incrementalLayout] Rejected footnote preferred-reserve trial', {
+                  pageIndex: candidate.pageIndex,
+                  targetReserve,
+                  trialConverged,
+                  score,
+                });
+              }
+
+              await applyReserves(beforeReserves);
+            }
+
+            if (acceptedCandidate) {
+              if (acceptedPreferredTrials >= PREFERRED_RESERVE_MAX_ACCEPTED_CANDIDATES) break;
+              continue;
+            }
+
+            rejectedPreferredTrials += 1;
+            rejectedPreferredPages.add(candidate.pageIndex);
+          }
+
+          if (layoutDebugEnabled && (acceptedPreferredTrials > 0 || rejectedPreferredTrials > 0)) {
+            console.log('[incrementalLayout] Footnote preferred-reserve trials', {
+              accepted: acceptedPreferredTrials,
+              rejected: rejectedPreferredTrials,
+            });
+          }
+        };
+
         // Fast path for well-converged docs: if every page's current reserve
         // already satisfies the plan and no page is carrying dead reserve,
         // skip both the initial grow and the tighten loop entirely. Avoids
@@ -2394,7 +2543,6 @@ export async function incrementalLayout(
         })();
 
         if (needsWork) {
-          const GROW_MAX_PASSES = 10;
           if (!(await growReserves(GROW_MAX_PASSES))) {
             console.warn(
               '[incrementalLayout] Footnote post-reserve loop did not converge; some pages may have footnotes overflowing the reserved band.',
@@ -2440,6 +2588,8 @@ export async function incrementalLayout(
             }
           }
         }
+
+        await runPreferredReserveTrials();
 
         const blockById = new Map<string, FlowBlock>();
         finalBlocks.forEach((block) => {

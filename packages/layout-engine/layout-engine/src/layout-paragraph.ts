@@ -955,81 +955,65 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // commit-first-line rule keeps making progress and the band may end
     // up clipped — but that case is handled by the planner's continuation
     // split (separate fix path).
-    // SD-2656: two-mode cluster demand to match Word's behavior.
+    // SD-2656 Phase 1: body acceptance uses the ORDERED MINIMUM only.
     //
-    //   PREFERRED demand = sum(fullHeight of ALL anchors) + overhead.
-    //                      Reserves enough for every footnote to render fully.
-    //                      Word's default — pack body conservatively so the
-    //                      band can hold complete content.
+    //   ORDERED demand = sum(fullHeight of non-last) + firstLineHeight(last)
+    //                    + overhead.
     //
-    //   ORDERED demand   = sum(fullHeight of non-last) + firstLineHeight(last)
-    //                      + overhead. The MINIMUM that satisfies the rule
-    //                      (cluster preserved, last anchor may split).
+    // This is the rule's minimum: cluster's non-last anchors must fit fully,
+    // and the last anchor needs at least its first line. The body's
+    // acceptance rule is "the next line fits if ordered demand still fits".
     //
-    // The slicer tries preferred first. If a line + preferred doesn't fit,
-    // we fall back to ordered. Only when ordered also fails does the page
-    // break. Result: when content can fit fully, body packs conservatively
-    // (Word-like). When content can't fit fully, cluster is still preserved
-    // by splitting the last anchor (rule preserved).
-    const computeDemandsForRange = (pmStart: number, pmEnd: number) => {
+    // Why ORDERED only (not preferred): Phase 0 ledger diagnostics on
+    // IT-923 showed that 24 pages had `deadReserve > 30 px` — body
+    // reserved space for the PREFERRED (full of all) demand, but the
+    // planner only painted ORDERED-equivalent content. That dead reserve
+    // was the drift fuel. With ORDERED as the acceptance rule, body packs
+    // tighter; the planner uses any leftover capacity opportunistically
+    // (Phase 2) to extend the last anchor or drain continuations.
+    const computeOrderedDemandForRange = (pmStart: number, pmEnd: number): number => {
       const candidate = ctx.getFootnoteAnchorsForBlockId
         ? ctx.getFootnoteAnchorsForBlockId(block.id, pmStart, pmEnd)
         : [];
       if (candidate.length === 0 && state.footnoteAnchorsThisPage.length === 0) {
-        return { preferred: 0, ordered: 0 };
+        return 0;
       }
       const cluster = [...state.footnoteAnchorsThisPage, ...candidate];
-      let preferred = 0;
-      for (const a of cluster) preferred += a.fullHeight;
       const lastIdx = cluster.length - 1;
       let ordered = 0;
       for (let i = 0; i < lastIdx; i += 1) ordered += cluster[i].fullHeight;
       if (lastIdx >= 0) ordered += cluster[lastIdx].firstLineHeight;
-      return { preferred, ordered };
+      return ordered;
     };
 
     const previewRange = computeFragmentPmRange(block, lines, fromLine, fromLine + 1);
     const previewRefs = ctx.getFootnoteRefCountForBlockId
       ? ctx.getFootnoteRefCountForBlockId(block.id, previewRange.pmStart, previewRange.pmEnd)
       : 0;
-    // Compute preview demands from CURRENT state (footnoteAnchorsThisPage
-    // changes after advanceColumn — the new page has a fresh, empty list).
-    const computePreviewBottom = (allowOrderedFallback: boolean) => {
-      const d = computeDemandsForRange(previewRange.pmStart ?? 0, previewRange.pmEnd ?? 0);
-      // Try preferred first. Fall back to ordered ONLY when explicitly
-      // allowed — used post-advance as a deadlock-breaker for oversized
-      // first blocks (the unconditional first-line commit handles physical
-      // overflow). Pre-advance we use preferred-only so the body breaks
-      // BEFORE a block whose cluster can't fit fully, matching Word's
-      // "keep the cluster intact on its natural page" behavior.
-      let bot = computeEffectiveBottom(d.preferred, previewRefs);
-      if (allowOrderedFallback && state.cursorY >= bot) {
-        bot = computeEffectiveBottom(d.ordered, previewRefs);
-      }
-      return bot;
+    // Re-evaluates against current state after advanceColumn (footnoteAnchorsThisPage
+    // resets on a fresh page, so demand can shrink).
+    const computePreviewBottom = () => {
+      const demand = computeOrderedDemandForRange(previewRange.pmStart ?? 0, previewRange.pmEnd ?? 0);
+      return computeEffectiveBottom(demand, previewRefs);
     };
-    // Pre-advance: preferred-only (don't accept under firstLine fallback —
-    // force the body to push the whole block to the next page).
-    let effectiveBottom = computePreviewBottom(false);
+    let effectiveBottom = computePreviewBottom();
 
     if (state.cursorY >= effectiveBottom) {
       state = advanceColumn(state);
-      // Post-advance: allow ordered fallback as a deadlock-breaker so an
-      // oversized first block doesn't loop forever.
-      effectiveBottom = computePreviewBottom(true);
+      effectiveBottom = computePreviewBottom();
     }
 
     const availableHeight = effectiveBottom - state.cursorY;
     if (availableHeight <= 0) {
       state = advanceColumn(state);
-      effectiveBottom = computePreviewBottom(true);
+      effectiveBottom = computePreviewBottom();
     }
 
     const nextLineHeight = lines[fromLine].lineHeight || 0;
     const remainingHeight = effectiveBottom - state.cursorY;
     if (state.page.fragments.length > 0 && remainingHeight < nextLineHeight) {
       state = advanceColumn(state);
-      effectiveBottom = computePreviewBottom(true);
+      effectiveBottom = computePreviewBottom();
     }
 
     // Use the narrowest width and offset if we remeasured
@@ -1059,12 +1043,11 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     while (toLine < lines.length) {
       const lineHeight = lines[toLine].lineHeight || 0;
       const range = computeFragmentPmRange(block, lines, fromLine, toLine + 1);
-      // SD-2656: two-mode demand. Try preferred (full of all anchors) first
-      // — that's Word's default, packs body conservatively for full band
-      // content. If preferred doesn't fit, try ordered (firstLine for last
-      // anchor) — keeps cluster intact, last anchor splits. If neither
-      // fits, break the body slice.
-      const demands = computeDemandsForRange(range.pmStart ?? 0, range.pmEnd ?? 0);
+      // SD-2656 Phase 1: ordered-minimum acceptance. The body accepts a
+      // line if ordered demand (full of non-last + firstLine of last)
+      // still fits. The planner uses any leftover capacity opportunistically
+      // (continuations, extending the last anchor).
+      const orderedDemand = computeOrderedDemandForRange(range.pmStart ?? 0, range.pmEnd ?? 0);
       const nextRefs = ctx.getFootnoteRefCountForBlockId
         ? ctx.getFootnoteRefCountForBlockId(block.id, range.pmStart, range.pmEnd)
         : 0;
@@ -1073,37 +1056,19 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         // First line: commit unconditionally. The pre-slicer checks above
         // already advanced the column if even a single line couldn't fit.
         height = lineHeight;
-        sliceDemand = demands.preferred;
+        sliceDemand = orderedDemand;
         sliceRefs = nextRefs;
         toLine = fromLine + 1;
         continue;
       }
 
       const candidateBottom = state.cursorY + height + lineHeight + borderVertical;
-      // SD-2656: try preferred (full of all anchors). If preferred doesn't
-      // fit but the line introduces a new anchor that could split (the new
-      // last), fall back to ordered (firstLine for last) so the cluster
-      // stays on this page. The last anchor renders firstLine and continues
-      // on the next page. Without this fallback, the line moves entirely
-      // to the next page and the cluster splits across pages — leaving a
-      // large empty space in the current page's band.
-      let effBot = computeEffectiveBottom(demands.preferred, nextRefs);
-      if (candidateBottom <= effBot) {
-        height += lineHeight;
-        sliceDemand = demands.preferred;
-        sliceRefs = nextRefs;
-        toLine += 1;
-        continue;
-      }
-      effBot = computeEffectiveBottom(demands.ordered, nextRefs);
-      if (candidateBottom <= effBot) {
-        height += lineHeight;
-        sliceDemand = demands.ordered;
-        sliceRefs = nextRefs;
-        toLine += 1;
-        continue;
-      }
-      break;
+      const effBot = computeEffectiveBottom(orderedDemand, nextRefs);
+      if (candidateBottom > effBot) break;
+      height += lineHeight;
+      sliceDemand = orderedDemand;
+      sliceRefs = nextRefs;
+      toLine += 1;
     }
 
     const slice = { toLine, height };

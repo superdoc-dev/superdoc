@@ -1489,7 +1489,7 @@ export class EditorInputManager {
       }
     }
 
-    if (this.#handleStructuredContentLabelClick(event, target, bodyEditor)) {
+    if (this.#handleStructuredContentLabelClick(event, target, editor)) {
       return;
     }
 
@@ -1720,7 +1720,7 @@ export class EditorInputManager {
     if (event.button !== 0) return;
 
     const target = event.target as HTMLElement | null;
-    const editor = this.#deps.getEditor();
+    const editor = this.#deps.getActiveEditor();
     if (this.#handleStructuredContentLabelClick(event, target, editor)) {
       event.stopImmediatePropagation();
     }

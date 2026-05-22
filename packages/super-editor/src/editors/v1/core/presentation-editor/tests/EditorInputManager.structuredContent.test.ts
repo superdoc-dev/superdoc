@@ -170,6 +170,8 @@ describe('EditorInputManager structured content clicks', () => {
     off: Mock;
     emit: Mock;
   };
+  let getActiveEditor: Mock;
+  let getEditor: Mock;
   let mockHitTestTable: Mock;
 
   function mountWithDoc(mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary' | 'nestedInlineInBlock') {
@@ -230,9 +232,11 @@ describe('EditorInputManager structured content clicks', () => {
     }
 
     manager = new EditorInputManagerClass!();
+    getActiveEditor = vi.fn(() => mockEditor);
+    getEditor = vi.fn(() => mockEditor);
     manager.setDependencies({
-      getActiveEditor: vi.fn(() => mockEditor),
-      getEditor: vi.fn(() => mockEditor),
+      getActiveEditor,
+      getEditor,
       getLayoutState: vi.fn(() => ({ layout: {} as any, blocks: [], measures: [] })),
       getEpochMapper: vi.fn(() => ({
         mapPosFromLayoutToCurrentDetailed: vi.fn(() => ({ ok: true, pos: 12, toEpoch: 1 })),
@@ -421,6 +425,51 @@ describe('EditorInputManager structured content clicks', () => {
 
     expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
     expect(mockEditor.view.focus).toHaveBeenCalled();
+  });
+
+  it('uses the active editor doc when a structured content label is clicked', () => {
+    mountWithDoc('plainSdt');
+    const activeEditor = {
+      ...mockEditor,
+      state: {
+        ...mockEditor.state,
+        doc: createMockDoc('inlineSdtAfterBoundary'),
+        tr: {
+          setSelection: vi.fn().mockReturnThis(),
+          setStoredMarks: vi.fn().mockReturnThis(),
+        },
+      },
+      view: {
+        ...mockEditor.view,
+        dispatch: vi.fn(),
+        focus: vi.fn(),
+      },
+    };
+    getActiveEditor.mockReturnValue(activeEditor);
+    const wrapper = document.createElement('span');
+    wrapper.className = 'superdoc-structured-content-inline';
+    wrapper.dataset.pmStart = '10';
+    wrapper.dataset.pmEnd = '13';
+    const label = document.createElement('span');
+    label.className = 'superdoc-structured-content-inline__label';
+    wrapper.appendChild(label);
+    viewportHost.appendChild(wrapper);
+
+    const PointerEventImpl = getPointerEventImpl();
+    label.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 28,
+        clientY: 28,
+      } as PointerEventInit),
+    );
+
+    expect(mockNodeSelectionCreate).toHaveBeenCalledWith(activeEditor.state.doc, 10);
+    expect(activeEditor.view.dispatch).toHaveBeenCalledWith(activeEditor.state.tr);
+    expect(mockTextSelectionCreate).not.toHaveBeenCalled();
   });
 
   it('selects the whole block structured content when its label is clicked', () => {

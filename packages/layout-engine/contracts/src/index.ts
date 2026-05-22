@@ -1863,6 +1863,56 @@ export type Measure =
   | ColumnBreakMeasure;
 
 /** A rendered page containing positioned fragments. Page numbers are 1-indexed. */
+/**
+ * SD-2656: per-page footnote planning ledger.
+ *
+ * The single source of truth that body pagination, footnote placement, and
+ * continuation carry must all agree on. Without it the three subsystems read
+ * different numbers (body reserves X, planner paints Y, carry-forward thinks
+ * Z) and the resulting drift compounds across the document.
+ *
+ * Mandatory invariants checked by `tools/sd-2656-footnote-analyzer`:
+ *   1. `actualBandHeight <= appliedBodyReserve`  (band fits)
+ *   2. `mandatorySlices` always equals `full(non-last) + firstLine(last)` of
+ *      the page's anchored cluster (rule).
+ *   3. `continuationIn[P]` matches `continuationOut[P-1]` (carry parity).
+ *   4. `deadReserve = appliedBodyReserve - actualBandHeight` is small (drift
+ *      fuel above ~30 px is a planning bug).
+ */
+export type FootnoteContinuationEntry = {
+  /** Footnote id (OOXML id, not the Word visible number). */
+  id: string;
+  /** How many ranges remain to render. */
+  remainingRangeCount: number;
+  /** Total height of the remaining ranges. */
+  remainingHeightPx: number;
+};
+
+export type FootnotePageLedger = {
+  pageIndex: number;
+  /** Ordered footnote ids whose body refs are anchored on this page. */
+  anchorIds: string[];
+  /** Slices required by the rule: full of non-last + firstLine of last. */
+  mandatorySliceIds: string[];
+  /** Slices for content drained from prior pages. */
+  continuationSliceIds: string[];
+  /** Slices for last-anchor content beyond firstLine (rendered only if there
+   *  is leftover space after mandatory + continuation). */
+  extendedSliceIds: string[];
+  /** Continuations arriving from page-1. */
+  continuationIn: FootnoteContinuationEntry[];
+  /** Continuations deferred to page+1. */
+  continuationOut: FootnoteContinuationEntry[];
+  /** Mandatory-reserve px: mandatorySlices height + overhead. */
+  mandatoryReservePx: number;
+  /** Total painted band height in px, including separator + gaps. */
+  actualBandHeightPx: number;
+  /** Body's applied reserve (i.e. `page.footnoteReserved`) for this page. */
+  appliedBodyReservePx: number;
+  /** appliedBodyReservePx - actualBandHeightPx — wasted body area. */
+  deadReservePx: number;
+};
+
 export type Page = {
   number: number;
   fragments: Fragment[];
@@ -1873,6 +1923,12 @@ export type Page = {
    * decoration boxes anchored to the real bottom margin while the body shrinks.
    */
   footnoteReserved?: number;
+  /**
+   * SD-2656: page-level footnote planning ledger. Populated by the layout
+   * bridge when footnotes are present. Read by the diagnostic toolkit and
+   * (in later phases) by body pagination itself.
+   */
+  footnoteLedger?: FootnotePageLedger;
   numberText?: string;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';

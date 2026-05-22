@@ -1214,3 +1214,131 @@ For every page P, the `__sd_footnote_trace[P]` record contains, in addition to t
 - Per-page over-reservation savings under the simulator.
 
 These are tracked in the diagnostic toolkit's output to make regressions visible, but they do not fail the build by themselves. The rule is the gate.
+
+## Next Phase — Committed Page Planning (May 22, 2026)
+
+The current PR closes the "rule satisfied on every page" gap but still has a **loose coupling** between three things that ought to agree:
+
+1. The space body pagination **reserves**.
+2. The footnote slices the planner **actually paints**.
+3. The **continuation demand** carried to later pages.
+
+Today's flow is reserve-estimation:
+
+```text
+estimate reserve  ->  relayout body  ->  later decide which footnote slices actually paint
+```
+
+Word behaves more like committed page planning:
+
+```text
+while deciding body page:
+  know current page footnote obligations
+  reserve only what must be reserved
+  use remaining space to drain continuations
+  commit exact slices
+```
+
+That coupling difference is what produces the remaining `+6 → +8` drift on IT-923: body reserves get larger than the slices that actually paint, body moves later than Word, future anchors move later, drift accumulates.
+
+### Code areas with the gap today
+
+| Concern | File |
+|---|---|
+| Body reserve applied as extra bottom margin | `packages/layout-engine/layout-engine/src/index.ts` |
+| Body slicer uses preferred/full demand before ordered minimum (too conservative) | `packages/layout-engine/layout-engine/src/layout-paragraph.ts` |
+| Next-page reserve bump can over-reserve continuation demand | `packages/layout-engine/layout-bridge/src/incrementalLayout.ts` (carry-forward block) |
+| Painting uses the slices actually placed, which can be smaller than the applied reserve | `packages/layout-engine/layout-bridge/src/incrementalLayout.ts` (injectFragments) |
+
+### The Page Ledger (the new source of truth)
+
+Each page should carry an explicit ledger so body fit, footnote placement, continuation carry, and diagnostics all read the same data:
+
+```ts
+type FootnotePageLedger = {
+  pageIndex: number;
+
+  // Anchor obligations on this page (ordered cluster).
+  anchorIds: string[];
+
+  // Mandatory: what the rule REQUIRES — never displaced.
+  mandatorySlices: FootnoteSlice[];       // full(non-last) + firstLine(last)
+  mandatoryReserve: number;               // mandatorySlices height + overhead
+
+  // Opportunistic: continuations & extended last-anchor content.
+  continuationSlices: FootnoteSlice[];    // drained from prior pages
+  extendedSlices: FootnoteSlice[];        // more of last anchor when room allows
+
+  // Continuation tracking.
+  continuationIn: ContinuationEntry[];    // arrived from page-1
+  continuationOut: ContinuationEntry[];   // deferred to page+1
+
+  // Actual rendering and reservation, side by side.
+  actualBandHeight: number;               // sum of all slices + overhead
+  appliedBodyReserve: number;             // what the body actually subtracted
+  deadReserve: number;                    // appliedBodyReserve - actualBandHeight
+};
+```
+
+The ledger answers, for every page, exactly three questions:
+
+1. *Did body reserve enough?* → `appliedBodyReserve >= actualBandHeight`.
+2. *Did we waste body area?* → `deadReserve` (lower is better; large = drift fuel).
+3. *Does carry-forward match?* → `continuationIn[P] == continuationOut[P-1]`.
+
+### Implementation phases
+
+**Phase 0 — Ledger + diagnostics (no behavior change).**
+
+Add the type. Populate it during the existing planner. Surface via the toolkit (`extract-page-state.js`). New script `check-ledger-invariants.py` asserts the three contracts above. This is the red/green loop for the rest of the work.
+
+**Phase 1 — Body acceptance uses ordered minimum.**
+
+`layout-paragraph.ts` currently checks preferred (full of all anchors) first and falls back to ordered only when preferred fails. That's too conservative — body packs less than the rule allows, and the planner ends up with extra room it never uses (dead reserve, then drift). Switch the acceptance check to ordered as the primary rule. The planner can opportunistically render more of the last anchor if there is leftover space.
+
+**Phase 2 — Mandatory vs opportunistic placement in the planner.**
+
+`placeFootnote` already enforces "non-last must fully fit". Extend this with a clean split:
+
+- *Mandatory pass*: place `mandatorySlices` (full of non-last + firstLine of last) — guaranteed by body's reservation.
+- *Opportunistic pass*: with leftover capacity, drain continuations (FIFO from `continuationIn`) and/or extend the last anchor beyond firstLine.
+
+The current code conflates these — continuations are placed in the same loop as new anchors. Splitting them lets the mandatory invariant hold even when continuations are huge.
+
+**Phase 3 — Bounded continuation draining.**
+
+The current carry-forward bump adds the full continuation demand to next page's reserve (capped at physical capacity). If the continuation chain is multi-page, it bumps the immediately-next page by an amount that may not actually fit alongside next page's own cluster.
+
+Bound it: `next page's mandatoryReserve + the continuation amount that can REALISTICALLY fit after that, given next page's own cluster size`. Overflow propagates naturally page-by-page instead of being dumped on one page.
+
+**Phase 4 — Reserve shrink.**
+
+The convergence loop grows reserves and only narrowly tightens (when `planned === 0`). With the ledger, tightening is principled: detect `deadReserve > THRESHOLD` and shrink in next pass by exactly the dead amount. This prevents drift from over-reservation snowballing.
+
+**Phase 5 — Behavior tests (not page-count tests).**
+
+| Test | Asserts |
+|---|---|
+| `[1, 2, 3]` cluster | 1 and 2 complete on anchor page; 3 starts. |
+| Long continuation + new anchors | Mandatory reserve protected; continuation only uses leftover. |
+| `preferred no-fit, ordered fits` | Body line stays on page (under ordered). |
+| No dead reserve over threshold | On fixture pages 14, 23, 28, 45, 54 specifically. |
+| IT-923 anchor + slice completion ledger | Matches Word inventory exactly. |
+
+**Phase 6 — Word metric tuning.**
+
+Only after the reserve math is correct, tune the smaller discrepancies:
+
+- Separator spacing.
+- Continuation-separator width / height.
+- Per-paragraph `spacingAfter` inside footnotes.
+- Trailing footnote paragraph spacing.
+- Line-height rounding.
+- Footer collision distance.
+- List indentation and marker width.
+
+These currently hide behind the reserve mismatch. Fix them last.
+
+### Recommended ordering
+
+Start with **Phase 0**. Without the ledger, screenshot-driven tuning improves one page and regresses another because we cannot see whether body reserve, actual band height, and continuation carry are agreeing. Once the ledger lights up the invariants, the rest is correctness work, not guesswork.

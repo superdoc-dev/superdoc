@@ -10,7 +10,7 @@
 //
 // Reads from window.superdocdev.editor.presentationEditor.getLayoutSnapshot()
 // + DOM-based extraction for body ref markers.
- 
+
 (() => {
   // Dev app exposes both `window.editor` (Editor) and `window.superdoc` (SuperDoc).
   // The CLAUDE.md mentions `superdocdev` for some builds — try them in order.
@@ -176,6 +176,8 @@
       bodyRefs,
       footnoteSlices: slicesWithNum,
       separators,
+      // SD-2656 Phase 0: per-page footnote planning ledger.
+      ledger: page.footnoteLedger ?? null,
     });
   }
   out.idToNum = idToNum;

@@ -374,6 +374,26 @@ type FootnoteLayoutPlan = {
   reserves: number[];
   hasContinuationByColumn: Map<string, boolean>;
   separatorSpacingBefore: number;
+  // SD-2656 Phase 0: per-page ledger data captured during planning. The
+  // planner is the only place that knows mandatorySlices vs continuationSlices
+  // vs extendedSlices and the continuation in/out queues — surface that here
+  // so injectFragments can attach it to each Page object.
+  ledgersByPage: Map<number, FootnotePageLedgerDraft>;
+};
+
+/**
+ * Planner-emitted per-page ledger fragments. Combined with the applied body
+ * reserve at injection time to form the full FootnotePageLedger.
+ */
+type FootnotePageLedgerDraft = {
+  anchorIds: string[];
+  mandatorySliceIds: string[];
+  continuationSliceIds: string[];
+  extendedSliceIds: string[];
+  continuationIn: Array<{ id: string; remainingRangeCount: number; remainingHeightPx: number }>;
+  continuationOut: Array<{ id: string; remainingRangeCount: number; remainingHeightPx: number }>;
+  mandatoryReservePx: number;
+  actualBandHeightPx: number;
 };
 
 const sumLineHeights = (
@@ -1399,6 +1419,8 @@ export async function incrementalLayout(
         const hasContinuationByColumn = new Map<string, boolean>();
         const rangesByFootnoteId = new Map<string, FootnoteRange[]>();
         const cappedPages = new Set<number>();
+        // SD-2656 Phase 0: per-page ledger drafts captured during planning.
+        const ledgersByPage = new Map<number, FootnotePageLedgerDraft>();
 
         const allIds = collectFootnoteIdsByColumn(idsByColumn);
         allIds.forEach((id) => {
@@ -1460,6 +1482,25 @@ export async function incrementalLayout(
             const list = pendingForPage.get(targetIndex) ?? [];
             list.push(...entries);
             pendingForPage.set(targetIndex, list);
+          });
+          // SD-2656 Phase 0: capture continuationIn for the ledger BEFORE we
+          // start placing on this page (pendingForPage will be consumed by
+          // placement).
+          const continuationInForPage: Array<{ id: string; remainingRangeCount: number; remainingHeightPx: number }> =
+            [];
+          pendingForPage.forEach((entries) => {
+            entries.forEach((entry) => {
+              let total = 0;
+              entry.ranges.forEach((range) => {
+                const spacingAfter = 'spacingAfter' in range ? (range.spacingAfter ?? 0) : 0;
+                total += range.height + spacingAfter;
+              });
+              continuationInForPage.push({
+                id: entry.id,
+                remainingRangeCount: entry.ranges.length,
+                remainingHeightPx: total,
+              });
+            });
           });
           pendingByColumn = new Map();
 
@@ -1622,6 +1663,90 @@ export async function incrementalLayout(
           // bumped reserve.
           reserves[pageIndex] = Math.max(reserves[pageIndex] ?? 0, pageReserve);
 
+          // SD-2656 Phase 0: build the per-page ledger draft. The planner is
+          // the only place that knows which slices were placed as
+          // continuations vs new anchors and what continuationOut carries to
+          // the next page. injectFragments combines this with the applied
+          // body reserve to populate page.footnoteLedger.
+          {
+            const idsOnPage = (() => {
+              const out: string[] = [];
+              for (let cIdx = 0; cIdx < columnCount; cIdx += 1) {
+                const colIds = idsByColumn.get(pageIndex)?.get(cIdx) ?? [];
+                for (const id of colIds) if (!out.includes(id)) out.push(id);
+              }
+              return out;
+            })();
+
+            // Slice classification: mandatorySlice = first placed slice of
+            // each new anchor (the rule's "render at least firstLine of
+            // last + full of non-last" is satisfied by the union of these);
+            // extendedSlice = subsequent slices of the same new anchor;
+            // continuationSlice = isContinuation slices (from prior pages).
+            const seenNewAnchor = new Set<string>();
+            const mandatorySliceIds: string[] = [];
+            const continuationSliceIds: string[] = [];
+            const extendedSliceIds: string[] = [];
+            let actualBandHeight = 0;
+            const safeSepBefore = Math.max(0, separatorSpacingBefore);
+            const overheadBase = safeSepBefore + safeDividerHeight + safeTopPadding;
+            for (const slice of pageSlices) {
+              if (slice.isContinuation) {
+                continuationSliceIds.push(slice.id);
+              } else if (!seenNewAnchor.has(slice.id)) {
+                mandatorySliceIds.push(slice.id);
+                seenNewAnchor.add(slice.id);
+              } else {
+                extendedSliceIds.push(slice.id);
+              }
+              actualBandHeight += slice.totalHeight;
+            }
+            if (pageSlices.length > 0) {
+              actualBandHeight += overheadBase + safeGap * Math.max(0, pageSlices.length - 1);
+            }
+
+            // Mandatory reserve = full of non-last + firstLine of last for
+            // the page's anchor cluster (regardless of how the planner
+            // actually placed them — this is what the rule requires).
+            let mandatoryReserve = 0;
+            if (idsOnPage.length > 0) {
+              for (let i = 0; i < idsOnPage.length; i += 1) {
+                const isLast = i === idsOnPage.length - 1;
+                mandatoryReserve += isLast ? firstLineOf(idsOnPage[i]) : fullHeightOf(idsOnPage[i]);
+                if (i > 0) mandatoryReserve += safeGap;
+              }
+              mandatoryReserve += overheadBase;
+            }
+
+            // continuationOut: what we just deferred to the next page.
+            const continuationOut: Array<{ id: string; remainingRangeCount: number; remainingHeightPx: number }> = [];
+            pendingByColumn.forEach((entries) => {
+              entries.forEach((entry) => {
+                let total = 0;
+                entry.ranges.forEach((range) => {
+                  const spacingAfter = 'spacingAfter' in range ? (range.spacingAfter ?? 0) : 0;
+                  total += range.height + spacingAfter;
+                });
+                continuationOut.push({
+                  id: entry.id,
+                  remainingRangeCount: entry.ranges.length,
+                  remainingHeightPx: total,
+                });
+              });
+            });
+
+            ledgersByPage.set(pageIndex, {
+              anchorIds: idsOnPage,
+              mandatorySliceIds,
+              continuationSliceIds,
+              extendedSliceIds,
+              continuationIn: continuationInForPage,
+              continuationOut,
+              mandatoryReservePx: Math.ceil(mandatoryReserve),
+              actualBandHeightPx: Math.ceil(actualBandHeight),
+            });
+          }
+
           // SD-2656: bump reserves[pageIndex+1] to include BOTH:
           //   1. pending continuation from this page (rendered at top of
           //      next page's band)
@@ -1689,7 +1814,13 @@ export async function incrementalLayout(
           });
         }
 
-        return { slicesByPage, reserves, hasContinuationByColumn, separatorSpacingBefore: safeSeparatorSpacingBefore };
+        return {
+          slicesByPage,
+          reserves,
+          hasContinuationByColumn,
+          separatorSpacingBefore: safeSeparatorSpacingBefore,
+          ledgersByPage,
+        };
       };
 
       const injectFragments = (
@@ -1706,6 +1837,25 @@ export async function incrementalLayout(
         for (let pageIndex = 0; pageIndex < layoutForPages.pages.length; pageIndex++) {
           const page = layoutForPages.pages[pageIndex];
           page.footnoteReserved = Math.max(0, reservesByPageIndex[pageIndex] ?? plan.reserves[pageIndex] ?? 0);
+          // SD-2656 Phase 0: attach the per-page ledger. Combine the planner
+          // draft with the applied body reserve we just stamped. This is the
+          // single source of truth that Phase 1+ will read.
+          const draft = plan.ledgersByPage.get(pageIndex);
+          if (draft) {
+            page.footnoteLedger = {
+              pageIndex,
+              anchorIds: draft.anchorIds,
+              mandatorySliceIds: draft.mandatorySliceIds,
+              continuationSliceIds: draft.continuationSliceIds,
+              extendedSliceIds: draft.extendedSliceIds,
+              continuationIn: draft.continuationIn,
+              continuationOut: draft.continuationOut,
+              mandatoryReservePx: draft.mandatoryReservePx,
+              actualBandHeightPx: draft.actualBandHeightPx,
+              appliedBodyReservePx: page.footnoteReserved ?? 0,
+              deadReservePx: Math.max(0, (page.footnoteReserved ?? 0) - draft.actualBandHeightPx),
+            };
+          }
           const slices = plan.slicesByPage.get(pageIndex) ?? [];
           if (slices.length === 0) continue;
           if (!page.margins) continue;

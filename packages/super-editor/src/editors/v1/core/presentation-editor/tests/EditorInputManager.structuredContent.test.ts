@@ -393,6 +393,36 @@ describe('EditorInputManager structured content clicks', () => {
     expect(mockTextSelectionCreate).not.toHaveBeenCalled();
   });
 
+  it('focuses the editor when an inline structured content label is clicked', () => {
+    mountWithDoc('inlineSdtAfterBoundary');
+    const outsideButton = document.createElement('button');
+    mountRoot.appendChild(outsideButton);
+    outsideButton.focus();
+    const wrapper = document.createElement('span');
+    wrapper.className = 'superdoc-structured-content-inline';
+    wrapper.dataset.pmStart = '10';
+    wrapper.dataset.pmEnd = '13';
+    const label = document.createElement('span');
+    label.className = 'superdoc-structured-content-inline__label';
+    wrapper.appendChild(label);
+    viewportHost.appendChild(wrapper);
+
+    const PointerEventImpl = getPointerEventImpl();
+    label.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 28,
+        clientY: 28,
+      } as PointerEventInit),
+    );
+
+    expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
+    expect(mockEditor.view.focus).toHaveBeenCalled();
+  });
+
   it('selects the whole block structured content when its label is clicked', () => {
     mountWithDoc('plainSdt');
     const wrapper = document.createElement('div');

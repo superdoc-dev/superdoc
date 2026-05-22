@@ -2056,6 +2056,7 @@ export class EditorInputManager {
         }
 
         this.#callbacks.scheduleSelectionUpdate?.();
+        this.#focusEditor();
         return true;
       }
     }
@@ -2096,6 +2097,7 @@ export class EditorInputManager {
           }
         }, 0);
 
+        this.#focusEditor();
         return true;
       }
     }

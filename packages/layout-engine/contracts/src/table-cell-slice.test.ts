@@ -90,7 +90,7 @@ describe('table cell segment mapping', () => {
     };
     const block: TableCell = {
       id: 'cell-anchored-tail',
-      blocks: [makeParagraphBlock(12), makeAnchoredImageBlock()],
+      blocks: [makeParagraphBlock('paragraph-before-anchor', { after: 12 }), makeAnchoredImageBlock()],
     };
     const blocks = describeCellRenderBlocks(cell, block, { top: 0, bottom: 5 });
 

@@ -69,6 +69,9 @@ const PM_TRACK_CHANGE_SELECTOR = '.track-insert[data-id], .track-delete[data-id]
 const VISIBLE_HEADER_FOOTER_SELECTOR = '.superdoc-page-header, .superdoc-page-footer';
 const VISIBLE_BODY_CONTENT_SELECTOR = '.superdoc-line, .superdoc-fragment, [data-block-id]';
 const COMMENT_THREAD_HIT_TOLERANCE_PX = 3;
+const INLINE_SDT_LABEL_SELECTOR = `.${DOM_CLASS_NAMES.INLINE_SDT_LABEL}`;
+const BLOCK_SDT_LABEL_SELECTOR = `.${DOM_CLASS_NAMES.BLOCK_SDT_LABEL}`;
+const SDT_LABEL_SELECTOR = `${INLINE_SDT_LABEL_SELECTOR}, ${BLOCK_SDT_LABEL_SELECTOR}`;
 const COMMENT_THREAD_HIT_SAMPLE_OFFSETS: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
   [-COMMENT_THREAD_HIT_TOLERANCE_PX, 0],
@@ -2120,7 +2123,7 @@ export class EditorInputManager {
     if (!doc) return false;
 
     const labelTarget = this.#resolveStructuredContentLabelTarget(event, target);
-    const inlineLabel = labelTarget?.closest?.('.superdoc-structured-content-inline__label') as HTMLElement | null;
+    const inlineLabel = labelTarget?.closest?.(INLINE_SDT_LABEL_SELECTOR) as HTMLElement | null;
     if (inlineLabel) {
       const resolved = this.#resolveStructuredContentInlineFromElement(doc, inlineLabel);
       if (resolved) {
@@ -2143,7 +2146,7 @@ export class EditorInputManager {
       }
     }
 
-    const blockLabel = labelTarget?.closest?.('.superdoc-structured-content__label') as HTMLElement | null;
+    const blockLabel = labelTarget?.closest?.(BLOCK_SDT_LABEL_SELECTOR) as HTMLElement | null;
     if (blockLabel) {
       const resolved = this.#resolveStructuredContentBlockFromElement(doc, blockLabel);
       if (resolved) {
@@ -2185,8 +2188,7 @@ export class EditorInputManager {
   }
 
   #resolveStructuredContentLabelTarget(event: MouseEvent, target: HTMLElement | null): HTMLElement | null {
-    const labelSelector = '.superdoc-structured-content-inline__label, .superdoc-structured-content__label';
-    const directLabel = target?.closest?.(labelSelector) as HTMLElement | null;
+    const directLabel = target?.closest?.(SDT_LABEL_SELECTOR) as HTMLElement | null;
     if (directLabel && this.#isStructuredContentLabelOwned(directLabel)) return directLabel;
 
     const doc = target?.ownerDocument ?? document;
@@ -2195,11 +2197,11 @@ export class EditorInputManager {
 
     for (const element of elementsFromPoint(event.clientX, event.clientY)) {
       if (!(element instanceof HTMLElement)) continue;
-      const label = element.closest?.(labelSelector) as HTMLElement | null;
+      const label = element.closest?.(SDT_LABEL_SELECTOR) as HTMLElement | null;
       if (label && this.#isStructuredContentLabelOwned(label)) return label;
     }
 
-    for (const label of Array.from(doc.querySelectorAll<HTMLElement>(labelSelector))) {
+    for (const label of Array.from(doc.querySelectorAll<HTMLElement>(SDT_LABEL_SELECTOR))) {
       if (!this.#isStructuredContentLabelOwned(label)) {
         continue;
       }

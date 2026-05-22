@@ -436,7 +436,7 @@ describe('StructuredContentLockPlugin', () => {
 
     // Build a fresh state with the desired selection without going through
     // applyTransaction — this bypasses other plugins' appendTransaction (e.g.
-    // the select-plugin's first-click select-all and ZWSP-slot adjustments)
+    // inline SDT ZWSP-slot adjustments)
     // so each test can pin the exact selection it wants to exercise. Use
     // editor.setState so both editor._state and view.state stay in sync —
     // editor._state is what subsequent dispatchTransaction calls read.
@@ -506,7 +506,7 @@ describe('StructuredContentLockPlugin', () => {
       });
     });
 
-    describe('Path 1 — selection covers SDT content (triple-click / first-click select-all)', () => {
+    describe('Path 1 — selection covers SDT content (label selection / triple-click)', () => {
       const selectAllCases = [
         // [lockMode, shouldPromote, description]
         ['unlocked', true, 'unlocked: promotes content selection to NodeSelection on wrapper'],

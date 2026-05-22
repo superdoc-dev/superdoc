@@ -58,7 +58,7 @@ function getPointerEventImpl(): typeof PointerEvent | typeof MouseEvent {
   );
 }
 
-function createMockDoc(mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary') {
+function createMockDoc(mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary' | 'nestedInlineInBlock') {
   return {
     content: { size: 200 },
     nodeAt: vi.fn(() => ({ nodeSize: 20 })),
@@ -89,10 +89,43 @@ function createMockDoc(mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary
           end: (depth: number) => (depth === 2 ? 12 : 199),
         };
       }
+      if (mode === 'nestedInlineInBlock') {
+        return {
+          depth: 3,
+          node: (depth: number) => {
+            if (depth === 3) return { type: { name: 'structuredContent' }, nodeSize: 5 };
+            if (depth === 2) return { type: { name: 'paragraph' } };
+            if (depth === 1) return { type: { name: 'structuredContentBlock' } };
+            return { type: { name: 'doc' } };
+          },
+          before: (depth: number) => {
+            if (depth === 3) return 10;
+            if (depth === 1) return 5;
+            return 6;
+          },
+          start: (depth: number) => {
+            if (depth === 3) return 11;
+            if (depth === 1) return 6;
+            return 7;
+          },
+          end: (depth: number) => {
+            if (depth === 3) return 14;
+            if (depth === 1) return 30;
+            return 29;
+          },
+        };
+      }
       return {
         depth: 1,
         node: (depth: number) => {
-          if (depth === 1) return { type: { name: 'structuredContentBlock' } };
+          if (depth === 1) {
+            return {
+              type: { name: 'structuredContentBlock' },
+              descendants: (cb: (node: unknown, pos: number) => void) => {
+                cb({ isTextblock: true, nodeSize: 20 }, 0);
+              },
+            };
+          }
           return { type: { name: 'doc' } };
         },
         before: (_depth: number) => 10,
@@ -106,7 +139,7 @@ function createMockDoc(mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary
   };
 }
 
-describe('EditorInputManager structuredContentBlock table exception', () => {
+describe('EditorInputManager structured content clicks', () => {
   let EditorInputManagerClass:
     | (new () => {
         setDependencies: (deps: unknown) => void;
@@ -139,7 +172,7 @@ describe('EditorInputManager structuredContentBlock table exception', () => {
   };
   let mockHitTestTable: Mock;
 
-  function mountWithDoc(mode: 'tableInSdt' | 'plainSdt') {
+  function mountWithDoc(mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary' | 'nestedInlineInBlock') {
     mockEditor.state.doc = createMockDoc(mode);
   }
 
@@ -265,7 +298,7 @@ describe('EditorInputManager structuredContentBlock table exception', () => {
     expect(mockNodeSelectionCreate).not.toHaveBeenCalled();
   });
 
-  it('uses NodeSelection for plain structuredContentBlock click (non-table)', () => {
+  it('uses collapsed TextSelection for plain structuredContentBlock body click', () => {
     mountWithDoc('plainSdt');
     const target = document.createElement('span');
     viewportHost.appendChild(target);
@@ -283,7 +316,30 @@ describe('EditorInputManager structuredContentBlock table exception', () => {
     );
 
     expect(resolvePointerPositionHit as unknown as Mock).toHaveBeenCalled();
-    expect(mockNodeSelectionCreate).toHaveBeenCalled();
+    expect(mockTextSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 12);
+    expect(mockNodeSelectionCreate).not.toHaveBeenCalled();
+  });
+
+  it('resolves nested inline structured content before an ancestor block', () => {
+    mountWithDoc('nestedInlineInBlock');
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 24,
+      } as PointerEventInit),
+    );
+
+    expect(resolvePointerPositionHit as unknown as Mock).toHaveBeenCalled();
+    expect(mockTextSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 12);
+    expect(mockNodeSelectionCreate).not.toHaveBeenCalled();
   });
 
   it('applies inline structured content boundary handling when the click lands at the trailing edge', () => {
@@ -307,5 +363,61 @@ describe('EditorInputManager structuredContentBlock table exception', () => {
     expect(mockTextSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 13);
     expect(mockApplyEditableSlotAtInlineBoundary).toHaveBeenCalledWith(mockEditor.state.tr, 13, 'after');
     expect(mockNodeSelectionCreate).not.toHaveBeenCalled();
+  });
+
+  it('selects the whole inline structured content when its label is clicked', () => {
+    mountWithDoc('inlineSdtAfterBoundary');
+    const wrapper = document.createElement('span');
+    wrapper.className = 'superdoc-structured-content-inline';
+    wrapper.dataset.pmStart = '10';
+    wrapper.dataset.pmEnd = '13';
+    const label = document.createElement('span');
+    label.className = 'superdoc-structured-content-inline__label';
+    wrapper.appendChild(label);
+    viewportHost.appendChild(wrapper);
+
+    const PointerEventImpl = getPointerEventImpl();
+    label.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 28,
+        clientY: 28,
+      } as PointerEventInit),
+    );
+
+    expect(resolvePointerPositionHit as unknown as Mock).not.toHaveBeenCalled();
+    expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
+    expect(mockTextSelectionCreate).not.toHaveBeenCalled();
+  });
+
+  it('selects the whole block structured content when its label is clicked', () => {
+    mountWithDoc('plainSdt');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'superdoc-structured-content-block';
+    wrapper.dataset.pmStart = '10';
+    wrapper.dataset.pmEnd = '31';
+    const label = document.createElement('div');
+    label.className = 'superdoc-structured-content__label';
+    wrapper.appendChild(label);
+    viewportHost.appendChild(wrapper);
+
+    const PointerEventImpl = getPointerEventImpl();
+    label.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 24,
+      } as PointerEventInit),
+    );
+
+    expect(resolvePointerPositionHit as unknown as Mock).not.toHaveBeenCalled();
+    expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
+    expect(mockTextSelectionCreate).not.toHaveBeenCalled();
   });
 });

@@ -118,19 +118,27 @@ function getInlineSdtWrapperBoundaryPos(
   return side === 'before' ? start - 1 : end + 1;
 }
 
+function isStructuredContentChromeLabel(el: HTMLElement): boolean {
+  return (
+    el.classList.contains(`${CLASS.inlineSdtWrapper}__label`) ||
+    el.classList.contains('superdoc-structured-content__label')
+  );
+}
+
 /**
  * Collects clickable span/anchor elements inside a line.
  *
- * Filters to elements with PM position data and excludes inline SDT wrapper
- * elements — their child spans provide more accurate character-level
- * positioning.
+ * Filters to elements with PM position data and excludes SDT chrome. Inline
+ * SDT wrappers and labels carry PM ranges for highlighting/drag affordances,
+ * but only child content spans should drive body-text caret placement.
  */
 function getClickableSpans(lineEl: HTMLElement): HTMLElement[] {
   return (Array.from(lineEl.querySelectorAll('span, a')) as HTMLElement[]).filter(
     (el) =>
       el.dataset.pmStart !== undefined &&
       el.dataset.pmEnd !== undefined &&
-      !el.classList.contains(CLASS.inlineSdtWrapper),
+      !el.classList.contains(CLASS.inlineSdtWrapper) &&
+      !isStructuredContentChromeLabel(el),
   );
 }
 

@@ -504,6 +504,60 @@ describe('DomPointerMapping', () => {
       expect(result).toBeLessThanOrEqual(21);
     });
 
+    it('ignores active inline SDT labels when mapping clicks to body text', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment" data-block-id="block1">
+            <div class="superdoc-line" data-pm-start="145" data-pm-end="253">
+              <span class="superdoc-structured-content-inline ProseMirror-selectednode" data-pm-start="145" data-pm-end="199">
+                <span class="superdoc-structured-content-inline__label" data-pm-start="145" data-pm-end="199">Inner Nested SDT</span>
+                <span data-pm-start="164" data-pm-end="188"> labore et dolore magna </span>
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const fragment = container.querySelector('.superdoc-fragment') as HTMLElement;
+      const line = container.querySelector('.superdoc-line') as HTMLElement;
+      const wrapper = container.querySelector('.superdoc-structured-content-inline') as HTMLElement;
+      const label = container.querySelector('.superdoc-structured-content-inline__label') as HTMLElement;
+      const textSpan = container.querySelector(
+        '.superdoc-structured-content-inline span[data-pm-start]:not(.superdoc-structured-content-inline__label)',
+      ) as HTMLElement;
+      const textNode = textSpan.firstChild as Text;
+
+      mockRect(page, { left: 0, top: 0, width: 800, height: 800 });
+      mockRect(fragment, { left: 90, top: 280, width: 700, height: 40 });
+      mockRect(line, { left: 99, top: 280, width: 595, height: 26 });
+      mockRect(wrapper, { left: 99, top: 280, width: 310, height: 26 });
+      mockRect(label, { left: 205, top: 260, width: 98, height: 18 });
+      mockRect(textSpan, { left: 186, top: 280, width: 174, height: 26 });
+
+      const doc = document as MutableElementsFromPointDocument;
+      const originalCaretRangeFromPoint = doc.caretRangeFromPoint;
+      doc.caretRangeFromPoint = () => {
+        const range = document.createRange();
+        range.setStart(textNode, 14);
+        range.setEnd(textNode, 14);
+        return range;
+      };
+
+      try {
+        withMockedElementsFromPoint([textSpan, wrapper, line, fragment, page, container], () => {
+          const result = clickToPositionDom(container, 279, 293);
+          expect(result).toBe(178);
+        });
+      } finally {
+        if (originalCaretRangeFromPoint) {
+          doc.caretRangeFromPoint = originalCaretRangeFromPoint;
+        } else {
+          delete doc.caretRangeFromPoint;
+        }
+      }
+    });
+
     it('returns the position after a terminal inline SDT when clicking to its visual right', () => {
       container.innerHTML = `
         <div class="superdoc-page" data-page-index="0">

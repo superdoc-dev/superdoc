@@ -50,7 +50,7 @@ describe('StructuredContentSelectPlugin', () => {
     return handled;
   }
 
-  it('selects inline SDT content on first click in editing mode', () => {
+  it('keeps inline SDT content clicks collapsed in editing mode', () => {
     const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
     const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);
     applyDoc(schema.nodes.doc.create(null, [paragraph]));
@@ -59,13 +59,12 @@ describe('StructuredContentSelectPlugin', () => {
     expect(sdt).not.toBeNull();
 
     const contentFrom = sdt.pos + 1;
-    const contentTo = sdt.pos + sdt.node.nodeSize - 1;
 
     editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, contentFrom + 1)));
 
-    expect(editor.state.selection.empty).toBe(false);
-    expect(editor.state.selection.from).toBe(contentFrom);
-    expect(editor.state.selection.to).toBe(contentTo);
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.state.selection.from).toBe(contentFrom + 1);
+    expect(editor.state.selection.to).toBe(contentFrom + 1);
   });
 
   it('does not auto-select inline SDT content in viewing mode', () => {

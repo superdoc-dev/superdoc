@@ -90,6 +90,13 @@ function isVisibleRect(rect: DOMRect): boolean {
   return rect.width > 0 && rect.height > 0;
 }
 
+function isStructuredContentChromeLabel(el: HTMLElement): boolean {
+  return (
+    el.classList.contains(`${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}__label`) ||
+    el.classList.contains('superdoc-structured-content__label')
+  );
+}
+
 /**
  * Maps a click coordinate to a ProseMirror document position using DOM data attributes.
  *
@@ -384,7 +391,8 @@ function processFragment(fragmentEl: HTMLElement, viewX: number, viewY: number):
     (el) =>
       el.dataset.pmStart !== undefined &&
       el.dataset.pmEnd !== undefined &&
-      !el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_WRAPPER),
+      !el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_WRAPPER) &&
+      !isStructuredContentChromeLabel(el),
   );
 
   log(
@@ -462,7 +470,8 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
     (el) =>
       el.dataset.pmStart !== undefined &&
       el.dataset.pmEnd !== undefined &&
-      !el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_WRAPPER),
+      !el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_WRAPPER) &&
+      !isStructuredContentChromeLabel(el),
   );
 
   log(

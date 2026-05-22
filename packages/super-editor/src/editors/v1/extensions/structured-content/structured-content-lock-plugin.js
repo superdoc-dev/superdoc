@@ -107,9 +107,9 @@ export function createStructuredContentLockPlugin() {
         }
 
         // Path 1 — non-collapsed selection that exactly covers the editable
-        // content of an SDT (e.g., the select-plugin's first-click select-all,
-        // a triple-click that lands on the content range, or precise keyboard
-        // selection). For wrapper-deletable lock modes, promote to a
+        // content of an SDT (e.g., a label/handle selection, a triple-click
+        // that lands on the content range, or precise keyboard selection).
+        // For wrapper-deletable lock modes, promote to a
         // NodeSelection on the wrapper so the next operation targets the whole
         // field. For Backspace/Delete we stop here — the user sees the wrapper
         // highlighted and presses again to confirm (matches Word's "click to

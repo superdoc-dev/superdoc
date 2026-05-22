@@ -94,8 +94,8 @@ export function createStructuredContentSelectPlugin(editor) {
 
           const contentFrom = pos + 1;
           const contentTo = pos + node.nodeSize - 1;
-          const wrapsSelection = selection.from <= contentFrom && selection.to >= contentTo;
-          if (!wrapsSelection) return true;
+          const selectsWholeContent = selection.from === contentFrom && selection.to === contentTo;
+          if (!selectsWholeContent) return true;
 
           selectedSdt = {
             node,

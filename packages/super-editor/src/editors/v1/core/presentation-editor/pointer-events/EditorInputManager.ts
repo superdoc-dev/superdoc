@@ -596,6 +596,9 @@ export class EditorInputManager {
 
   // Focus suppression (for draggable annotations)
   #suppressFocusInFromDraggable = false;
+  #skipPointerDownForStructuredContentLabel = false;
+  #pendingStructuredContentLabelClick: { label: HTMLElement; clientX: number; clientY: number } | null = null;
+  #suppressNextStructuredContentLabelClick = false;
 
   // Debug state
   #debugLastPointer: { clientX: number; clientY: number; x: number; y: number } | null = null;
@@ -608,6 +611,9 @@ export class EditorInputManager {
 
   // Bound handlers for event listener cleanup
   #boundHandleStructuredContentLabelPointerDown: ((e: PointerEvent) => void) | null = null;
+  #boundHandleStructuredContentLabelPointerUp: ((e: PointerEvent) => void) | null = null;
+  #boundHandleStructuredContentLabelMouseUp: ((e: MouseEvent) => void) | null = null;
+  #boundHandleStructuredContentLabelClick: ((e: MouseEvent) => void) | null = null;
   #boundHandlePointerDown: ((e: PointerEvent) => void) | null = null;
   #boundHandlePointerMove: ((e: PointerEvent) => void) | null = null;
   #boundHandlePointerUp: ((e: PointerEvent) => void) | null = null;
@@ -657,6 +663,9 @@ export class EditorInputManager {
 
     // Create bound handlers
     this.#boundHandleStructuredContentLabelPointerDown = this.#handleStructuredContentLabelPointerDown.bind(this);
+    this.#boundHandleStructuredContentLabelPointerUp = this.#handleStructuredContentLabelPointerUp.bind(this);
+    this.#boundHandleStructuredContentLabelMouseUp = this.#handleStructuredContentLabelPointerUp.bind(this);
+    this.#boundHandleStructuredContentLabelClick = this.#handleStructuredContentLabelClickEvent.bind(this);
     this.#boundHandlePointerDown = this.#handlePointerDown.bind(this);
     this.#boundHandlePointerMove = this.#handlePointerMove.bind(this);
     this.#boundHandlePointerUp = this.#handlePointerUp.bind(this);
@@ -670,6 +679,17 @@ export class EditorInputManager {
 
     // Attach pointer event listeners
     visibleHost.addEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
+    visibleHost.addEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
+    visibleHost.addEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
+    visibleHost.addEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
+    viewportHost.addEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
+    viewportHost.addEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
+    viewportHost.addEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
+    viewportHost.addEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
+    doc.addEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
+    doc.addEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
+    doc.addEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
+    doc.addEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
     viewportHost.addEventListener('pointerdown', this.#boundHandlePointerDown);
     viewportHost.addEventListener('pointermove', this.#boundHandlePointerMove);
     viewportHost.addEventListener('pointerup', this.#boundHandlePointerUp);
@@ -698,9 +718,27 @@ export class EditorInputManager {
 
     const viewportHost = this.#deps.getViewportHost();
     const visibleHost = this.#deps.getVisibleHost();
+    const doc = viewportHost.ownerDocument ?? document;
 
     if (this.#boundHandleStructuredContentLabelPointerDown) {
       visibleHost.removeEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
+      viewportHost.removeEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
+      doc.removeEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
+    }
+    if (this.#boundHandleStructuredContentLabelPointerUp) {
+      visibleHost.removeEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
+      viewportHost.removeEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
+      doc.removeEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
+    }
+    if (this.#boundHandleStructuredContentLabelMouseUp) {
+      visibleHost.removeEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
+      viewportHost.removeEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
+      doc.removeEventListener('mouseup', this.#boundHandleStructuredContentLabelMouseUp, true);
+    }
+    if (this.#boundHandleStructuredContentLabelClick) {
+      visibleHost.removeEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
+      viewportHost.removeEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
+      doc.removeEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
     }
     if (this.#boundHandlePointerDown) {
       viewportHost.removeEventListener('pointerdown', this.#boundHandlePointerDown);
@@ -738,6 +776,9 @@ export class EditorInputManager {
 
     // Clear bound handlers
     this.#boundHandleStructuredContentLabelPointerDown = null;
+    this.#boundHandleStructuredContentLabelPointerUp = null;
+    this.#boundHandleStructuredContentLabelMouseUp = null;
+    this.#boundHandleStructuredContentLabelClick = null;
     this.#boundHandlePointerDown = null;
     this.#boundHandlePointerMove = null;
     this.#boundHandlePointerUp = null;
@@ -1360,6 +1401,13 @@ export class EditorInputManager {
     // Skip ruler handle clicks
     if (target?.closest?.('.superdoc-ruler-handle') != null) return;
 
+    const skipStructuredContentLabelPointerDown = this.#skipPointerDownForStructuredContentLabel;
+    this.#skipPointerDownForStructuredContentLabel = false;
+    if (skipStructuredContentLabelPointerDown) {
+      this.#suppressFocusInFromDraggable = target?.closest?.(DRAG_SOURCE_SELECTOR) != null;
+      return;
+    }
+
     // Handle link clicks - dispatch custom event on pointerdown for immediate UI response
     // Navigation prevention happens in #handleClick (on 'click' event)
     const linkEl = target?.closest?.('a.superdoc-link') as HTMLAnchorElement | null;
@@ -1372,11 +1420,17 @@ export class EditorInputManager {
     const annotationEl = target?.closest?.(buildAnnotationSelector()) as HTMLElement | null;
     const isDraggableAnnotation = target?.closest?.(DRAGGABLE_SELECTOR) != null;
     const isNativeDragSource = target?.closest?.(DRAG_SOURCE_SELECTOR) != null;
+    const structuredContentDragSource = target?.closest?.(
+      '[data-drag-source-kind="structuredContent"]',
+    ) as HTMLElement | null;
     const suppressFocusForDrag = isDraggableAnnotation || isNativeDragSource;
     this.#suppressFocusInFromDraggable = suppressFocusForDrag;
 
     if (annotationEl) {
       this.#handleAnnotationClick(event, annotationEl);
+      return;
+    }
+    if (structuredContentDragSource) {
       return;
     }
 
@@ -1487,10 +1541,6 @@ export class EditorInputManager {
         useActiveSurfaceHitTest = activeStorySession != null;
         editor = bodyEditor;
       }
-    }
-
-    if (this.#handleStructuredContentLabelClick(event, target, editor)) {
-      return;
     }
 
     // Check for header/footer region hit
@@ -1720,8 +1770,55 @@ export class EditorInputManager {
     if (event.button !== 0) return;
 
     const target = event.target as HTMLElement | null;
+    const label = this.#resolveStructuredContentLabelTarget(event, target);
+    this.#skipPointerDownForStructuredContentLabel = label != null;
+    this.#pendingStructuredContentLabelClick = label ? { label, clientX: event.clientX, clientY: event.clientY } : null;
+  }
+
+  #handleStructuredContentLabelPointerUp(event: MouseEvent): void {
+    if (!this.#deps) return;
+    if (event.button !== 0) return;
+
+    const pending = this.#pendingStructuredContentLabelClick;
+    this.#pendingStructuredContentLabelClick = null;
+    if (!pending) return;
+
+    const deltaX = event.clientX - pending.clientX;
+    const deltaY = event.clientY - pending.clientY;
+    const movedDistance = Math.hypot(deltaX, deltaY);
+    if (movedDistance > DRAG_SELECTION_DISTANCE_THRESHOLD_PX) return;
+
+    const bodyEditor = this.#deps.getEditor();
+    if (this.#handleStructuredContentLabelClick(event, pending.label, bodyEditor)) {
+      this.#suppressNextStructuredContentLabelClick = true;
+      event.stopImmediatePropagation();
+      return;
+    }
+
     const editor = this.#deps.getActiveEditor();
-    if (this.#handleStructuredContentLabelClick(event, target, editor)) {
+    if (bodyEditor !== editor && this.#handleStructuredContentLabelClick(event, pending.label, editor)) {
+      this.#suppressNextStructuredContentLabelClick = true;
+      event.stopImmediatePropagation();
+    }
+  }
+
+  #handleStructuredContentLabelClickEvent(event: MouseEvent): void {
+    if (!this.#deps) return;
+    if (this.#suppressNextStructuredContentLabelClick) {
+      this.#suppressNextStructuredContentLabelClick = false;
+      event.stopImmediatePropagation();
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    const bodyEditor = this.#deps.getEditor();
+    if (this.#handleStructuredContentLabelClick(event, target, bodyEditor)) {
+      event.stopImmediatePropagation();
+      return;
+    }
+
+    const editor = this.#deps.getActiveEditor();
+    if (bodyEditor !== editor && this.#handleStructuredContentLabelClick(event, target, editor)) {
       event.stopImmediatePropagation();
     }
   }
@@ -2034,7 +2131,7 @@ export class EditorInputManager {
     }
   }
 
-  #handleStructuredContentLabelClick(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {
+  #handleStructuredContentLabelClick(event: MouseEvent, target: HTMLElement | null, editor: Editor): boolean {
     const doc = editor.state?.doc;
     if (!doc) return false;
 
@@ -2045,7 +2142,8 @@ export class EditorInputManager {
       if (resolved) {
         event.preventDefault();
         const applyNodeSelection = () => {
-          const tr = editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, resolved.pos));
+          const state = editor.view?.state ?? editor.state;
+          const tr = state.tr.setSelection(NodeSelection.create(state.doc, resolved.pos));
           editor.view?.dispatch(tr);
         };
         try {
@@ -2066,17 +2164,21 @@ export class EditorInputManager {
       const resolved = this.#resolveStructuredContentBlockFromElement(doc, blockLabel);
       if (resolved) {
         event.preventDefault();
+
         const applySelection = () => {
-          const selection = NodeSelection.create(editor.state.doc, resolved.pos);
-          const tr = editor.state.tr.setSelection(selection);
+          const state = editor.view?.state ?? editor.state;
+          const selection = NodeSelection.create(state.doc, resolved.pos);
+          const tr = state.tr.setSelection(selection);
           editor.view?.dispatch(tr);
-          if (editor.state.selection.from !== resolved.pos) {
+          const currentSelection = (editor.view?.state ?? editor.state).selection;
+          if (currentSelection.from !== resolved.pos) {
             // Painted block labels carry the layout-mapped start. In fragmented
             // blocks that hint can resolve to the selectable wrapper even when
             // the canonical doc position is normalized back to the prior caret.
             const labelPmStart = Number(blockLabel.dataset?.pmStart);
             if (Number.isFinite(labelPmStart)) {
-              const retry = editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, labelPmStart));
+              const latestState = editor.view?.state ?? editor.state;
+              const retry = latestState.tr.setSelection(NodeSelection.create(latestState.doc, labelPmStart));
               editor.view?.dispatch(retry);
             }
           }
@@ -2085,7 +2187,8 @@ export class EditorInputManager {
         try {
           applySelection();
         } catch {
-          const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, resolved.start, resolved.end));
+          const state = editor.view?.state ?? editor.state;
+          const tr = state.tr.setSelection(TextSelection.create(state.doc, resolved.start, resolved.end));
           editor.view?.dispatch(tr);
         }
 
@@ -2097,7 +2200,7 @@ export class EditorInputManager {
     return false;
   }
 
-  #resolveStructuredContentLabelTarget(event: PointerEvent, target: HTMLElement | null): HTMLElement | null {
+  #resolveStructuredContentLabelTarget(event: MouseEvent, target: HTMLElement | null): HTMLElement | null {
     const labelSelector = '.superdoc-structured-content-inline__label, .superdoc-structured-content__label';
     const directLabel = target?.closest?.(labelSelector) as HTMLElement | null;
     if (directLabel) return directLabel;
@@ -2110,6 +2213,20 @@ export class EditorInputManager {
       if (!(element instanceof HTMLElement)) continue;
       const label = element.closest?.(labelSelector) as HTMLElement | null;
       if (label) return label;
+    }
+
+    for (const label of Array.from(doc.querySelectorAll<HTMLElement>(labelSelector))) {
+      const rect = label.getBoundingClientRect();
+      if (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom
+      ) {
+        return label;
+      }
     }
 
     return null;

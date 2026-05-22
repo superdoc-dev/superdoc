@@ -297,6 +297,39 @@ describe('StructuredContentSelectPlugin', () => {
     expect(editor.state.doc.textContent).toBe(beforeText);
   });
 
+  it('does not collapse a parent block selection that contains an inline SDT', () => {
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('Before '), inlineSdt, schema.text(' after')]);
+    const blockSdt = schema.nodes.structuredContentBlock.create({ id: 'block-1' }, [paragraph]);
+    applyDoc(schema.nodes.doc.create(null, [blockSdt]));
+
+    const inline = findNode(editor.state.doc, 'structuredContent');
+    const block = findNode(editor.state.doc, 'structuredContentBlock');
+    expect(inline).not.toBeNull();
+    expect(block).not.toBeNull();
+
+    let textFrom = null;
+    let textTo = null;
+    block.node.descendants((node, pos) => {
+      if (!node.isText) return true;
+      const textPos = block.pos + 1 + pos;
+      textFrom ??= textPos;
+      textTo = textPos + node.nodeSize;
+      return true;
+    });
+
+    expect(textFrom).not.toBeNull();
+    expect(textTo).not.toBeNull();
+
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, textFrom)));
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, textFrom, textTo)));
+
+    expect(editor.state.selection.empty).toBe(false);
+    expect(editor.state.selection.from).toBe(textFrom);
+    expect(editor.state.selection.to).toBe(textTo);
+    expect(editor.state.selection.from).not.toBe(inline.pos);
+  });
+
   it('does not intercept Ctrl/Cmd+ArrowRight near inline SDT boundary', () => {
     const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
     const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);

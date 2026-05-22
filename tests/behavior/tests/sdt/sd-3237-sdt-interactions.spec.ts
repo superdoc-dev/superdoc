@@ -205,10 +205,10 @@ async function getSdtRange(
         let textFrom: number | null = null;
         let textTo: number | null = null;
         node.descendants((child: any, childPos: number) => {
-          if (!child.isTextblock) return true;
+          if (!child.isText) return true;
           const basePos = pos + 1 + childPos;
-          if (textFrom == null) textFrom = basePos + 1;
-          textTo = basePos + child.nodeSize - 1;
+          if (textFrom == null) textFrom = basePos;
+          textTo = basePos + child.nodeSize;
           return true;
         });
 
@@ -329,6 +329,49 @@ test.describe('SD-3237 structured content interactions', () => {
       from: blockRange.pos,
       to: blockRange.nodeEnd,
     });
+  });
+
+  test('block SDT label click keeps selecting the outer block when it contains a nested inline SDT', async ({
+    superdoc,
+  }) => {
+    const nestedBlock = blockById('5101');
+    const nonNestedBlock = blockById('715705189');
+    const nestedBlockRange = await getSdtRange(superdoc.page, '5101', 'structuredContentBlock');
+    const nonNestedBlockRange = await getSdtRange(superdoc.page, '715705189', 'structuredContentBlock');
+    const nestedInlineRange = await getSdtRange(superdoc.page, '5102', 'structuredContent');
+
+    const nonNestedTextPoint = await getTextPoint(superdoc.page, 'NOT NESTED', 3);
+    await superdoc.page.mouse.click(nonNestedTextPoint.x, nonNestedTextPoint.y);
+    await superdoc.waitForStable();
+
+    const nonNestedLabelPoint = await getElementCenter(superdoc.page, nonNestedBlock, BLOCK_LABEL);
+    await superdoc.page.mouse.click(nonNestedLabelPoint.x, nonNestedLabelPoint.y);
+    await superdoc.waitForStable();
+    const nonNestedSelection = await getSelectionInfo(superdoc.page);
+
+    expect(nonNestedSelection).toMatchObject({
+      empty: false,
+      nodeType: 'structuredContentBlock',
+      from: nonNestedBlockRange.pos,
+      to: nonNestedBlockRange.nodeEnd,
+    });
+
+    const nestedTextPoint = await getTextPoint(superdoc.page, 'NESTED', 1, 0, nestedBlock);
+    await superdoc.page.mouse.click(nestedTextPoint.x, nestedTextPoint.y);
+    await superdoc.waitForStable();
+
+    const nestedLabelPoint = await getElementCenter(superdoc.page, nestedBlock, BLOCK_LABEL);
+    await superdoc.page.mouse.click(nestedLabelPoint.x, nestedLabelPoint.y);
+    await superdoc.waitForStable();
+    const nestedSelection = await getSelectionInfo(superdoc.page);
+
+    expect(nestedSelection).toMatchObject({
+      empty: false,
+      nodeType: 'structuredContentBlock',
+      from: nestedBlockRange.pos,
+      to: nestedBlockRange.nodeEnd,
+    });
+    expect(nestedSelection.from).not.toBe(nestedInlineRange.pos);
   });
 
   test('nested inline SDT clicks place and move caret while both wrappers stay active', async ({ superdoc }) => {

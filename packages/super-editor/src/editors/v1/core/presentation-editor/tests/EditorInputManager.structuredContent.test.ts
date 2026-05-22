@@ -121,6 +121,7 @@ function createMockDoc(mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary
           if (depth === 1) {
             return {
               type: { name: 'structuredContentBlock' },
+              nodeSize: 21,
               descendants: (cb: (node: unknown, pos: number) => void) => {
                 cb({ isTextblock: true, nodeSize: 20 }, 0);
               },
@@ -381,18 +382,85 @@ describe('EditorInputManager structured content clicks', () => {
     wrapper.appendChild(label);
     viewportHost.appendChild(wrapper);
 
-    const PointerEventImpl = getPointerEventImpl();
     label.dispatchEvent(
-      new PointerEventImpl('pointerdown', {
+      new MouseEvent('click', {
         bubbles: true,
         cancelable: true,
-        button: 0,
-        buttons: 1,
         clientX: 28,
         clientY: 28,
-      } as PointerEventInit),
+      }),
     );
 
+    expect(resolvePointerPositionHit as unknown as Mock).not.toHaveBeenCalled();
+    expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
+    expect(mockTextSelectionCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not prevent default on structured content label pointerdown', () => {
+    mountWithDoc('inlineSdtAfterBoundary');
+    const wrapper = document.createElement('span');
+    wrapper.className = 'superdoc-structured-content-inline';
+    wrapper.dataset.pmStart = '10';
+    wrapper.dataset.pmEnd = '13';
+    const label = document.createElement('span');
+    label.className = 'superdoc-structured-content-inline__label';
+    label.draggable = true;
+    label.dataset.dragSourceKind = 'structuredContent';
+    wrapper.appendChild(label);
+    viewportHost.appendChild(wrapper);
+
+    const PointerEventImpl = getPointerEventImpl();
+    const event = new PointerEventImpl('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      clientX: 28,
+      clientY: 28,
+    } as PointerEventInit);
+    label.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(resolvePointerPositionHit as unknown as Mock).not.toHaveBeenCalled();
+    expect(mockNodeSelectionCreate).not.toHaveBeenCalled();
+    expect(mockTextSelectionCreate).not.toHaveBeenCalled();
+  });
+
+  it('selects a draggable block structured content label on mouseup without blocking pointerdown', () => {
+    mountWithDoc('plainSdt');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'superdoc-structured-content-block';
+    wrapper.dataset.pmStart = '10';
+    wrapper.dataset.pmEnd = '31';
+    const label = document.createElement('div');
+    label.className = 'superdoc-structured-content__label';
+    label.draggable = true;
+    label.dataset.dragSourceKind = 'structuredContent';
+    wrapper.appendChild(label);
+    viewportHost.appendChild(wrapper);
+
+    const PointerEventImpl = getPointerEventImpl();
+    const pointerDown = new PointerEventImpl('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      clientX: 24,
+      clientY: 24,
+    } as PointerEventInit);
+    label.dispatchEvent(pointerDown);
+
+    const pointerUp = new MouseEvent('mouseup', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 0,
+      clientX: 24,
+      clientY: 24,
+    });
+    label.dispatchEvent(pointerUp);
+
+    expect(pointerDown.defaultPrevented).toBe(false);
     expect(resolvePointerPositionHit as unknown as Mock).not.toHaveBeenCalled();
     expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
     expect(mockTextSelectionCreate).not.toHaveBeenCalled();
@@ -412,16 +480,13 @@ describe('EditorInputManager structured content clicks', () => {
     wrapper.appendChild(label);
     viewportHost.appendChild(wrapper);
 
-    const PointerEventImpl = getPointerEventImpl();
     label.dispatchEvent(
-      new PointerEventImpl('pointerdown', {
+      new MouseEvent('click', {
         bubbles: true,
         cancelable: true,
-        button: 0,
-        buttons: 1,
         clientX: 28,
         clientY: 28,
-      } as PointerEventInit),
+      }),
     );
 
     expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
@@ -456,16 +521,13 @@ describe('EditorInputManager structured content clicks', () => {
     wrapper.appendChild(label);
     viewportHost.appendChild(wrapper);
 
-    const PointerEventImpl = getPointerEventImpl();
     label.dispatchEvent(
-      new PointerEventImpl('pointerdown', {
+      new MouseEvent('click', {
         bubbles: true,
         cancelable: true,
-        button: 0,
-        buttons: 1,
         clientX: 28,
         clientY: 28,
-      } as PointerEventInit),
+      }),
     );
 
     expect(mockNodeSelectionCreate).toHaveBeenCalledWith(activeEditor.state.doc, 10);
@@ -484,70 +546,17 @@ describe('EditorInputManager structured content clicks', () => {
     wrapper.appendChild(label);
     viewportHost.appendChild(wrapper);
 
-    const PointerEventImpl = getPointerEventImpl();
     label.dispatchEvent(
-      new PointerEventImpl('pointerdown', {
+      new MouseEvent('click', {
         bubbles: true,
         cancelable: true,
-        button: 0,
-        buttons: 1,
         clientX: 24,
         clientY: 24,
-      } as PointerEventInit),
+      }),
     );
 
     expect(resolvePointerPositionHit as unknown as Mock).not.toHaveBeenCalled();
     expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
     expect(mockTextSelectionCreate).not.toHaveBeenCalled();
-  });
-
-  it('does not retry block label selection after the selection moves elsewhere', () => {
-    vi.useFakeTimers();
-    mountWithDoc('plainSdt');
-    mockNodeSelectionCreate.mockImplementation((_doc, pos: number) => ({
-      empty: false,
-      from: pos,
-      node: { type: { name: 'structuredContentBlock' } },
-    }));
-    mockEditor.view.dispatch.mockImplementation(() => {
-      const selection = mockEditor.state.tr.setSelection.mock.calls.at(-1)?.[0];
-      if (selection?.from === 11) {
-        mockEditor.state.selection = selection;
-      }
-    });
-    const wrapper = document.createElement('div');
-    wrapper.className = 'superdoc-structured-content-block';
-    wrapper.dataset.pmStart = '11';
-    wrapper.dataset.pmEnd = '31';
-    const label = document.createElement('div');
-    label.className = 'superdoc-structured-content__label';
-    label.dataset.pmStart = '11';
-    wrapper.appendChild(label);
-    viewportHost.appendChild(wrapper);
-
-    const PointerEventImpl = getPointerEventImpl();
-    label.dispatchEvent(
-      new PointerEventImpl('pointerdown', {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 1,
-        clientX: 24,
-        clientY: 24,
-      } as PointerEventInit),
-    );
-
-    expect(mockNodeSelectionCreate).toHaveBeenCalledTimes(2);
-    mockEditor.state.selection = {
-      empty: true,
-      from: 12,
-      to: 12,
-      node: null,
-      $anchor: null,
-    };
-
-    vi.runOnlyPendingTimers();
-
-    expect(mockNodeSelectionCreate).toHaveBeenCalledTimes(2);
   });
 });

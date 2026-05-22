@@ -84,6 +84,18 @@ describe('SuperDocEditor', () => {
 
       expect(container.querySelector('[data-testid="loading"]')).toBeTruthy();
     });
+
+    it('keeps the editor container measurable while loading', () => {
+      const { container } = render(
+        <SuperDocEditor renderLoading={() => <div data-testid='loading'>Loading...</div>} />,
+      );
+
+      const editorContainer = container.querySelector('.superdoc-editor-container') as HTMLElement;
+
+      expect(editorContainer.style.display).not.toBe('none');
+      expect(editorContainer.style.visibility).toBe('hidden');
+      expect(editorContainer.style.pointerEvents).toBe('none');
+    });
   });
 
   describe('callbacks', () => {

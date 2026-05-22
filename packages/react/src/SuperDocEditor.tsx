@@ -245,7 +245,9 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   }, [documentProp, user, users, modules, role, hideToolbar, contained, containerId, toolbarId]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
-  const hideWhenLoading: CSSProperties | undefined = isLoading ? { display: 'none' } : undefined;
+  const hideWhenLoading: CSSProperties | undefined = isLoading
+    ? { visibility: 'hidden', pointerEvents: 'none' }
+    : undefined;
 
   const wrapperStyle: CSSProperties = {
     ...style,

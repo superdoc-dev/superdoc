@@ -975,10 +975,9 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       const candidate = ctx.getFootnoteAnchorsForBlockId
         ? ctx.getFootnoteAnchorsForBlockId(block.id, pmStart, pmEnd)
         : [];
-      if (candidate.length === 0 && state.footnoteAnchorsThisPage.length === 0) {
-        return 0;
-      }
-      const cluster = [...state.footnoteAnchorsThisPage, ...candidate];
+      const committed = state.footnoteAnchorsThisPage ?? [];
+      if (candidate.length === 0 && committed.length === 0) return 0;
+      const cluster = [...committed, ...candidate];
       const lastIdx = cluster.length - 1;
       let ordered = 0;
       for (let i = 0; i < lastIdx; i += 1) ordered += cluster[i].fullHeight;
@@ -1090,6 +1089,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       const committedRange = computeFragmentPmRange(block, lines, fromLine, toLine);
       const newAnchors = ctx.getFootnoteAnchorsForBlockId(block.id, committedRange.pmStart, committedRange.pmEnd);
       if (newAnchors.length > 0) {
+        if (!state.footnoteAnchorsThisPage) state.footnoteAnchorsThisPage = [];
         const seen = new Set(state.footnoteAnchorsThisPage.map((a) => a.refId));
         for (const a of newAnchors) {
           if (!seen.has(a.refId)) state.footnoteAnchorsThisPage.push(a);

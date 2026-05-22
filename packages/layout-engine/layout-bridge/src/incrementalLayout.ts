@@ -1747,15 +1747,20 @@ export async function incrementalLayout(
             });
           }
 
-          // SD-2656: bump reserves[pageIndex+1] to include BOTH:
-          //   1. pending continuation from this page (rendered at top of
-          //      next page's band)
-          //   2. next page's own ordered-cluster demand (full of non-last +
-          //      firstLine of last)
-          // so the body slicer on the next layout pass leaves room for both.
-          // Otherwise either continuations starve new anchors (cluster
-          // violation) or new anchors starve continuations (overflow drips
-          // across many pages).
+          // SD-2656 Phase 3: bounded continuation draining.
+          //
+          // The carry-forward bump gives the next page enough room for
+          //   (a) its own cluster (mandatory by the rule), AND
+          //   (b) the portion of the inbound continuation that can
+          //       realistically fit alongside (a) on the next page.
+          //
+          // Previously we summed continuationDemand + nextClusterDemand
+          // capped at physical body area. That over-reserved when the
+          // continuation chain was longer than one page: the next page
+          // couldn't drain ALL of it anyway, so reserving the whole chain
+          // just inflated dead reserve. Overflow now propagates naturally:
+          // any continuation beyond next-page capacity stays in
+          // pendingByColumn and lands on page+2, page+3, etc.
           if (pageIndex + 1 < pageCount) {
             let continuationDemand = 0;
             pendingByColumn.forEach((entries) => {
@@ -1766,12 +1771,7 @@ export async function incrementalLayout(
                 });
               });
             });
-            // Estimate next page's cluster demand using ORDERED (rule
-            // minimum: full of non-last + firstLine of last). The body's
-            // own demand check tries PREFERRED first and falls back to
-            // ordered locally, so the bump only needs to guarantee the
-            // minimum cluster room — body upgrades to preferred when
-            // physical space allows.
+            // Next page's mandatory cluster demand (ordered minimum).
             let nextClusterDemand = 0;
             for (let cIdx = 0; cIdx < columnCount; cIdx += 1) {
               const idsNext = idsByColumn.get(pageIndex + 1)?.get(cIdx) ?? [];
@@ -1784,19 +1784,28 @@ export async function incrementalLayout(
               }
               if (columnCluster > nextClusterDemand) nextClusterDemand = columnCluster;
             }
-            const totalBumpRaw = continuationDemand + nextClusterDemand;
-            if (totalBumpRaw > 0) {
+            if (continuationDemand > 0 || nextClusterDemand > 0) {
               const overhead = safeSeparatorSpacingBefore + continuationDividerHeight + safeTopPadding;
               const nextPage = layoutForPages.pages?.[pageIndex + 1];
               const nextPageSize = nextPage?.size ?? layoutForPages.pageSize ?? DEFAULT_PAGE_SIZE;
               const nextTop = normalizeMargin(nextPage?.margins?.top, DEFAULT_MARGINS.top);
               const nextBottomRaw = normalizeMargin(nextPage?.margins?.bottom, DEFAULT_MARGINS.bottom);
               const physicalContentHeight = Math.max(0, nextPageSize.h - nextTop - nextBottomRaw);
-              const safeCap = Math.max(0, physicalContentHeight - MIN_FOOTNOTE_BODY_HEIGHT * 20);
-              reserves[pageIndex + 1] = Math.max(
-                reserves[pageIndex + 1] ?? 0,
-                Math.min(Math.ceil(totalBumpRaw + overhead), safeCap),
-              );
+              const minBodyHeight = MIN_FOOTNOTE_BODY_HEIGHT * 20;
+              const nextPageMaxBand = Math.max(0, physicalContentHeight - minBodyHeight);
+              // The band has a single overhead block (separator + padding)
+              // whether or not we have a cluster.
+              const overheadForBand = nextClusterDemand > 0 || continuationDemand > 0 ? overhead : 0;
+              // Mandatory cluster room (cluster slices only, no overhead).
+              const clusterRoomPx =
+                nextClusterDemand > 0 ? Math.min(nextClusterDemand, Math.max(0, nextPageMaxBand - overheadForBand)) : 0;
+              // Continuation room = whatever's left after cluster + overhead.
+              const continuationRoomPx = Math.max(0, nextPageMaxBand - overheadForBand - clusterRoomPx);
+              const continuationToReservePx = Math.min(continuationDemand, continuationRoomPx);
+              // Final reserve: cluster + continuation + single overhead block,
+              // clamped at the physical band cap.
+              const finalReserve = Math.min(clusterRoomPx + continuationToReservePx + overheadForBand, nextPageMaxBand);
+              reserves[pageIndex + 1] = Math.max(reserves[pageIndex + 1] ?? 0, Math.ceil(finalReserve));
             }
           }
         }

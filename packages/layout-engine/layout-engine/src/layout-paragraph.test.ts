@@ -1490,7 +1490,13 @@ describe('SD-3049: footnote demand survives advanceColumn within one iteration',
       advanceColumn: mock(() => pageQ),
       columnX: mock(() => 50),
       floatManager: makeFloatManager(),
-      getFootnoteDemandForBlockId: (blockId) => (blockId === 'block-x' ? BLOCK_DEMAND : 0),
+      // Phase 1 (SD-2656): body uses ORDERED minimum from anchors, not the
+      // legacy block-demand getter. Demand transfer on spill must still hold
+      // — express it via anchors whose ordered-minimum equals BLOCK_DEMAND.
+      getFootnoteAnchorsForBlockId: (blockId) =>
+        blockId === 'block-x'
+          ? [{ pmPos: 0, refId: 'r1', fullHeight: BLOCK_DEMAND, firstLineHeight: BLOCK_DEMAND }]
+          : [],
     });
 
     expect(pageQ.footnoteDemandThisPage).toBe(BLOCK_DEMAND);

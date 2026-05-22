@@ -471,6 +471,8 @@ describe('EditorInputManager structured content clicks', () => {
     expect(pointerDown.defaultPrevented).toBe(false);
     expect(resolvePointerPositionHit as unknown as Mock).not.toHaveBeenCalled();
     expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
+    expect(mockNodeSelectionCreate).toHaveBeenCalledTimes(1);
+    expect(mockEditor.view.dispatch).toHaveBeenCalledTimes(1);
     expect(mockTextSelectionCreate).not.toHaveBeenCalled();
   });
 
@@ -551,6 +553,7 @@ describe('EditorInputManager structured content clicks', () => {
     wrapper.dataset.pmEnd = '31';
     const label = document.createElement('div');
     label.className = 'superdoc-structured-content__label';
+    label.dataset.pmStart = '10';
     wrapper.appendChild(label);
     viewportHost.appendChild(wrapper);
 
@@ -565,6 +568,8 @@ describe('EditorInputManager structured content clicks', () => {
 
     expect(resolvePointerPositionHit as unknown as Mock).not.toHaveBeenCalled();
     expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
+    expect(mockNodeSelectionCreate).toHaveBeenCalledTimes(1);
+    expect(mockEditor.view.dispatch).toHaveBeenCalledTimes(1);
     expect(mockTextSelectionCreate).not.toHaveBeenCalled();
   });
 

@@ -2157,18 +2157,6 @@ export class EditorInputManager {
           const selection = NodeSelection.create(state.doc, resolved.pos);
           const tr = state.tr.setSelection(selection);
           editor.view?.dispatch(tr);
-          const currentSelection = (editor.view?.state ?? editor.state).selection;
-          if (currentSelection.from !== resolved.pos) {
-            // Painted block labels carry the layout-mapped start. In fragmented
-            // blocks that hint can resolve to the selectable wrapper even when
-            // the canonical doc position is normalized back to the prior caret.
-            const labelPmStart = Number(blockLabel.dataset?.pmStart);
-            if (Number.isFinite(labelPmStart)) {
-              const latestState = editor.view?.state ?? editor.state;
-              const retry = latestState.tr.setSelection(NodeSelection.create(latestState.doc, labelPmStart));
-              editor.view?.dispatch(retry);
-            }
-          }
         };
 
         try {

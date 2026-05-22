@@ -314,15 +314,6 @@ export type ParagraphLayoutContext = {
   getFootnoteRefCountForBlockId?: (blockId: string, pmStart?: number, pmEnd?: number) => number;
 
   /**
-   * SD-2656 Phase 2: range-aware MIN-START sum. Returns measured
-   * first-renderable-slice height per fn anchored in [pmStart, pmEnd] of
-   * this block. The slicer charges this — NOT full demand — when deciding
-   * whether a body line that newly anchors a fn can stay on its page. The
-   * rest of each fn body splits to continuation pages.
-   */
-  getFootnoteAnchorMinStartForBlockId?: (blockId: string, pmStart?: number, pmEnd?: number) => number;
-
-  /**
    * SD-2656: per-page footnote-band overhead in pixels for a given number of
    * anchored refs. The slicer's `effectiveBottom` budget must match the
    * planner's, otherwise body packs onto a page whose band cannot fit the
@@ -901,29 +892,18 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
      * its anchored fns to the band?".
      */
     const rawContentBottom = state.contentBottom + state.pageFootnoteReserve;
-    /**
-     * SD-2656 Phase 3: split-aware effective bottom.
-     *
-     * Word's body-break rule: an anchor line stays on its page as long as
-     * the MINIMUM first slice (separator + one renderable fn line) of each
-     * newly anchored fn fits in the remaining band space. The rest of each
-     * fn body splits to continuation pages.
-     *
-     * `extraMinStart` = sum of measured first-line heights for fns anchored
-     * by the current candidate slice. `state.footnoteDemandThisPage` is now
-     * accumulated minStart (NOT full body) so subsequent body blocks on the
-     * same page see the right "promised" band height, not the worst-case
-     * full-fn-body demand which would crush body content.
-     *
-     * The planner's `state.pageFootnoteReserve` acts as a floor and carries
-     * any continuation demand from prior pages plus the planner's monotonic
-     * grow-loop result.
-     */
-    const computeEffectiveBottom = (extraMinStart: number, extraRefs: number): number => {
-      const committedMin = state.footnoteDemandThisPage; // now minStart-only sums
-      const totalMin = committedMin + extraMinStart;
+    const computeEffectiveBottom = (extraDemand: number, extraRefs: number): number => {
+      const totalDemand = state.footnoteDemandThisPage + extraDemand;
       const totalRefs = state.footnoteRefsThisPage + extraRefs;
-      const demandWithOverhead = totalMin > 0 ? totalMin + bandOverhead(totalRefs) : 0;
+      const demandWithOverhead = totalDemand > 0 ? totalDemand + bandOverhead(totalRefs) : 0;
+      // SD-2656: respect the planner's per-page reserve as a floor. The
+      // convergence loop sets `state.pageFootnoteReserve` to communicate
+      // continuation demand from prior pages (fn body content that was
+      // deferred because it didn't fit on its anchor page). Range-aware
+      // demand alone misses this — the slicer only knows about fns anchored
+      // in THIS page's body, not about fn bodies migrating in from previous
+      // pages. Taking the max of (continuation-reserve, anchored-demand+
+      // overhead) ensures body leaves room for whichever is larger.
       const reservedSpace = Math.max(state.pageFootnoteReserve, demandWithOverhead);
       const minBodyLineHeight = lines[fromLine]?.lineHeight ?? 0;
       const maxAdditional = Math.max(0, rawContentBottom - state.topMargin - minBodyLineHeight);
@@ -944,34 +924,30 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // up clipped — but that case is handled by the planner's continuation
     // split (separate fix path).
     const previewRange = computeFragmentPmRange(block, lines, fromLine, fromLine + 1);
-    // SD-2656 Phase 3: charge MIN-START for candidate refs (the rest of
-    // each fn body splits to continuation pages), not full body demand.
-    const previewMinStart = ctx.getFootnoteAnchorMinStartForBlockId
-      ? ctx.getFootnoteAnchorMinStartForBlockId(block.id, previewRange.pmStart, previewRange.pmEnd)
-      : ctx.getFootnoteDemandForBlockId
-        ? ctx.getFootnoteDemandForBlockId(block.id, previewRange.pmStart, previewRange.pmEnd)
-        : 0;
+    const previewDemand = ctx.getFootnoteDemandForBlockId
+      ? ctx.getFootnoteDemandForBlockId(block.id, previewRange.pmStart, previewRange.pmEnd)
+      : 0;
     const previewRefs = ctx.getFootnoteRefCountForBlockId
       ? ctx.getFootnoteRefCountForBlockId(block.id, previewRange.pmStart, previewRange.pmEnd)
       : 0;
-    let effectiveBottom = computeEffectiveBottom(previewMinStart, previewRefs);
+    let effectiveBottom = computeEffectiveBottom(previewDemand, previewRefs);
 
     if (state.cursorY >= effectiveBottom) {
       state = advanceColumn(state);
-      effectiveBottom = computeEffectiveBottom(previewMinStart, previewRefs);
+      effectiveBottom = computeEffectiveBottom(previewDemand, previewRefs);
     }
 
     const availableHeight = effectiveBottom - state.cursorY;
     if (availableHeight <= 0) {
       state = advanceColumn(state);
-      effectiveBottom = computeEffectiveBottom(previewMinStart, previewRefs);
+      effectiveBottom = computeEffectiveBottom(previewDemand, previewRefs);
     }
 
     const nextLineHeight = lines[fromLine].lineHeight || 0;
     const remainingHeight = effectiveBottom - state.cursorY;
     if (state.page.fragments.length > 0 && remainingHeight < nextLineHeight) {
       state = advanceColumn(state);
-      effectiveBottom = computeEffectiveBottom(previewMinStart, previewRefs);
+      effectiveBottom = computeEffectiveBottom(previewDemand, previewRefs);
     }
 
     // Use the narrowest width and offset if we remeasured
@@ -996,21 +972,14 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // overflow, stop — the rest spills to the next page.
     let toLine = fromLine;
     let height = 0;
-    // SD-2656 Phase 3: track MIN-START sum for the slice. When the slice
-    // commits to a page, this minStart-only demand accumulates into
-    // state.footnoteDemandThisPage so subsequent body blocks on the same
-    // page reserve only the minimum each fn needs. The rest of every fn
-    // body splits to continuation pages handled by the planner.
-    let sliceMinStart = 0;
+    let sliceDemand = 0;
     let sliceRefs = 0;
     while (toLine < lines.length) {
       const lineHeight = lines[toLine].lineHeight || 0;
       const range = computeFragmentPmRange(block, lines, fromLine, toLine + 1);
-      const nextMinStart = ctx.getFootnoteAnchorMinStartForBlockId
-        ? ctx.getFootnoteAnchorMinStartForBlockId(block.id, range.pmStart, range.pmEnd)
-        : ctx.getFootnoteDemandForBlockId
-          ? ctx.getFootnoteDemandForBlockId(block.id, range.pmStart, range.pmEnd)
-          : 0;
+      const nextDemand = ctx.getFootnoteDemandForBlockId
+        ? ctx.getFootnoteDemandForBlockId(block.id, range.pmStart, range.pmEnd)
+        : 0;
       const nextRefs = ctx.getFootnoteRefCountForBlockId
         ? ctx.getFootnoteRefCountForBlockId(block.id, range.pmStart, range.pmEnd)
         : 0;
@@ -1020,18 +989,18 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         // already advanced the column if even a single line couldn't fit,
         // so reaching this point means the first line is allowed.
         height = lineHeight;
-        sliceMinStart = nextMinStart;
+        sliceDemand = nextDemand;
         sliceRefs = nextRefs;
         toLine = fromLine + 1;
         continue;
       }
 
-      const effBot = computeEffectiveBottom(nextMinStart, nextRefs);
+      const effBot = computeEffectiveBottom(nextDemand, nextRefs);
       const candidateBottom = state.cursorY + height + lineHeight + borderVertical;
       if (candidateBottom > effBot) break;
 
       height += lineHeight;
-      sliceMinStart = nextMinStart;
+      sliceDemand = nextDemand;
       sliceRefs = nextRefs;
       toLine += 1;
     }
@@ -1039,11 +1008,10 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     const slice = { toLine, height };
     const fragmentHeight = slice.height;
 
-    // SD-2656 Phase 3: commit MIN-START sum (not full body) into page state.
-    // This is the crux: state.footnoteDemandThisPage now represents the
-    // promised band overhead for anchored fns, not the worst-case full body.
-    if (sliceMinStart > 0 || sliceRefs > 0) {
-      state.footnoteDemandThisPage += sliceMinStart;
+    // Commit demand from this slice into page state so subsequent blocks on
+    // the same page see the right effectiveBottom.
+    if (sliceDemand > 0 || sliceRefs > 0) {
+      state.footnoteDemandThisPage += sliceDemand;
       state.footnoteRefsThisPage = (state.footnoteRefsThisPage ?? 0) + sliceRefs;
     }
     void effectiveBottom;

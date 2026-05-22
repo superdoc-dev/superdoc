@@ -2203,7 +2203,7 @@ export class EditorInputManager {
   #resolveStructuredContentLabelTarget(event: MouseEvent, target: HTMLElement | null): HTMLElement | null {
     const labelSelector = '.superdoc-structured-content-inline__label, .superdoc-structured-content__label';
     const directLabel = target?.closest?.(labelSelector) as HTMLElement | null;
-    if (directLabel) return directLabel;
+    if (directLabel && this.#isStructuredContentLabelOwned(directLabel)) return directLabel;
 
     const doc = target?.ownerDocument ?? document;
     const elementsFromPoint = doc.elementsFromPoint?.bind(doc);
@@ -2212,10 +2212,13 @@ export class EditorInputManager {
     for (const element of elementsFromPoint(event.clientX, event.clientY)) {
       if (!(element instanceof HTMLElement)) continue;
       const label = element.closest?.(labelSelector) as HTMLElement | null;
-      if (label) return label;
+      if (label && this.#isStructuredContentLabelOwned(label)) return label;
     }
 
     for (const label of Array.from(doc.querySelectorAll<HTMLElement>(labelSelector))) {
+      if (!this.#isStructuredContentLabelOwned(label)) {
+        continue;
+      }
       const rect = label.getBoundingClientRect();
       if (
         rect.width > 0 &&
@@ -2230,6 +2233,12 @@ export class EditorInputManager {
     }
 
     return null;
+  }
+
+  #isStructuredContentLabelOwned(label: HTMLElement): boolean {
+    const visibleHost = this.#deps?.getVisibleHost();
+    const viewportHost = this.#deps?.getViewportHost();
+    return Boolean(visibleHost?.contains(label) || viewportHost?.contains(label));
   }
 
   #resolveStructuredContentBlockFromElement(

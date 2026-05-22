@@ -559,4 +559,91 @@ describe('EditorInputManager structured content clicks', () => {
     expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
     expect(mockTextSelectionCreate).not.toHaveBeenCalled();
   });
+
+  it('ignores structured content labels rendered by another input manager', () => {
+    mountWithDoc('plainSdt');
+    const otherViewportHost = document.createElement('div');
+    const otherVisibleHost = document.createElement('div');
+    otherVisibleHost.appendChild(otherViewportHost);
+    mountRoot.appendChild(otherVisibleHost);
+
+    const otherEditor = {
+      ...mockEditor,
+      state: {
+        ...mockEditor.state,
+        doc: createMockDoc('plainSdt'),
+        tr: {
+          setSelection: vi.fn().mockReturnThis(),
+          setStoredMarks: vi.fn().mockReturnThis(),
+        },
+      },
+      view: {
+        ...mockEditor.view,
+        dispatch: vi.fn(),
+        dom: document.createElement('div'),
+        focus: vi.fn(),
+      },
+      on: vi.fn(),
+      off: vi.fn(),
+      emit: vi.fn(),
+    };
+
+    const otherManager = new EditorInputManagerClass!();
+    otherManager.setDependencies({
+      getActiveEditor: vi.fn(() => otherEditor),
+      getEditor: vi.fn(() => otherEditor),
+      getLayoutState: vi.fn(() => ({ layout: {} as any, blocks: [], measures: [] })),
+      getEpochMapper: vi.fn(() => ({
+        mapPosFromLayoutToCurrentDetailed: vi.fn(() => ({ ok: true, pos: 12, toEpoch: 1 })),
+      })),
+      getViewportHost: vi.fn(() => otherViewportHost),
+      getVisibleHost: vi.fn(() => otherVisibleHost),
+      getLayoutMode: vi.fn(() => 'vertical'),
+      getHeaderFooterSession: vi.fn(() => null),
+      getPageGeometryHelper: vi.fn(() => null),
+      getZoom: vi.fn(() => 1),
+      isViewLocked: vi.fn(() => false),
+      getDocumentMode: vi.fn(() => 'editing'),
+      getPageElement: vi.fn(() => null),
+      isSelectionAwareVirtualizationEnabled: vi.fn(() => false),
+    });
+    otherManager.setCallbacks({
+      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({
+        x: clientX,
+        y: clientY,
+        pageIndex: 0,
+        pageLocalY: clientY,
+      })),
+      scheduleSelectionUpdate: vi.fn(),
+      updateSelectionDebugHud: vi.fn(),
+      hitTestTable: vi.fn(() => null),
+    });
+    otherManager.bind();
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'superdoc-structured-content-block';
+    wrapper.dataset.pmStart = '10';
+    wrapper.dataset.pmEnd = '31';
+    const label = document.createElement('div');
+    label.className = 'superdoc-structured-content__label';
+    wrapper.appendChild(label);
+    otherViewportHost.appendChild(wrapper);
+
+    try {
+      label.dispatchEvent(
+        new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          clientX: 24,
+          clientY: 24,
+        }),
+      );
+    } finally {
+      otherManager.destroy();
+    }
+
+    expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+    expect(otherEditor.view.dispatch).toHaveBeenCalledWith(otherEditor.state.tr);
+    expect(mockNodeSelectionCreate).toHaveBeenCalledWith(otherEditor.state.doc, 10);
+  });
 });

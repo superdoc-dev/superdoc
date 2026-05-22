@@ -393,7 +393,11 @@ type FootnotePageLedgerDraft = {
   continuationIn: Array<{ id: string; remainingRangeCount: number; remainingHeightPx: number }>;
   continuationOut: Array<{ id: string; remainingRangeCount: number; remainingHeightPx: number }>;
   mandatoryReservePx: number;
+  /** SD-2656 Phase 7: Word-like preferred reserve = full(non-last) + full(last) + overhead. */
+  preferredReservePx: number;
   actualBandHeightPx: number;
+  /** Number of measured lines rendered for the last anchor on this page (0 if no cluster). */
+  lastAnchorRenderedLines: number;
 };
 
 const sumLineHeights = (
@@ -1709,13 +1713,42 @@ export async function incrementalLayout(
             // the page's anchor cluster (regardless of how the planner
             // actually placed them — this is what the rule requires).
             let mandatoryReserve = 0;
+            // SD-2656 Phase 7: Preferred reserve = full of every anchor on the
+            // cluster (Word-like — last anchor also renders fully when room
+            // exists). Body slicer may choose this when safe.
+            let preferredReserve = 0;
             if (idsOnPage.length > 0) {
               for (let i = 0; i < idsOnPage.length; i += 1) {
                 const isLast = i === idsOnPage.length - 1;
                 mandatoryReserve += isLast ? firstLineOf(idsOnPage[i]) : fullHeightOf(idsOnPage[i]);
-                if (i > 0) mandatoryReserve += safeGap;
+                preferredReserve += fullHeightOf(idsOnPage[i]);
+                if (i > 0) {
+                  mandatoryReserve += safeGap;
+                  preferredReserve += safeGap;
+                }
               }
               mandatoryReserve += overheadBase;
+              preferredReserve += overheadBase;
+            }
+
+            // SD-2656 Phase 7: how many measured lines of the last anchor we
+            // actually rendered. Used to flag "mandatory-only" pages where
+            // Word would have rendered more of the last footnote.
+            let lastAnchorRenderedLines = 0;
+            if (idsOnPage.length > 0) {
+              const lastId = idsOnPage[idsOnPage.length - 1];
+              for (const slice of pageSlices) {
+                if (slice.id !== lastId || slice.isContinuation) continue;
+                for (const range of slice.ranges) {
+                  // Only paragraph and list-item ranges have line tracking;
+                  // table/image/drawing footnote ranges are single blocks.
+                  if (range.kind === 'paragraph' || range.kind === 'list-item') {
+                    lastAnchorRenderedLines += Math.max(0, range.toLine - range.fromLine);
+                  } else {
+                    lastAnchorRenderedLines += 1;
+                  }
+                }
+              }
             }
 
             // continuationOut: what we just deferred to the next page.
@@ -1743,7 +1776,9 @@ export async function incrementalLayout(
               continuationIn: continuationInForPage,
               continuationOut,
               mandatoryReservePx: Math.ceil(mandatoryReserve),
+              preferredReservePx: Math.ceil(preferredReserve),
               actualBandHeightPx: Math.ceil(actualBandHeight),
+              lastAnchorRenderedLines,
             });
           }
 
@@ -1860,9 +1895,11 @@ export async function incrementalLayout(
               continuationIn: draft.continuationIn,
               continuationOut: draft.continuationOut,
               mandatoryReservePx: draft.mandatoryReservePx,
+              preferredReservePx: draft.preferredReservePx,
               actualBandHeightPx: draft.actualBandHeightPx,
               appliedBodyReservePx: page.footnoteReserved ?? 0,
               deadReservePx: Math.max(0, (page.footnoteReserved ?? 0) - draft.actualBandHeightPx),
+              lastAnchorRenderedLines: draft.lastAnchorRenderedLines,
             };
           }
           const slices = plan.slicesByPage.get(pageIndex) ?? [];

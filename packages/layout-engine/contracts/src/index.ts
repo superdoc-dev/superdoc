@@ -1905,12 +1905,20 @@ export type FootnotePageLedger = {
   continuationOut: FootnoteContinuationEntry[];
   /** Mandatory-reserve px: mandatorySlices height + overhead. */
   mandatoryReservePx: number;
+  /** SD-2656 Phase 7: Word-like "preferred" reserve px. Body slicer is allowed
+   *  to reserve this much when doing so does not cause cluster spill or
+   *  continuation overflow. = full(non-last) + asMuchAsFits(last) + overhead. */
+  preferredReservePx: number;
   /** Total painted band height in px, including separator + gaps. */
   actualBandHeightPx: number;
   /** Body's applied reserve (i.e. `page.footnoteReserved`) for this page. */
   appliedBodyReservePx: number;
   /** appliedBodyReservePx - actualBandHeightPx — wasted body area. */
   deadReservePx: number;
+  /** Number of measured lines actually rendered for the LAST anchor on this
+   *  page (0 if there is no cluster anchor). Used to flag "mandatory-only"
+   *  pages where Word would have rendered more. */
+  lastAnchorRenderedLines: number;
 };
 
 export type Page = {

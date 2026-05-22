@@ -267,6 +267,7 @@ describe('EditorInputManager structured content clicks', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     manager.destroy();
     mountRoot.remove();
     vi.clearAllMocks();
@@ -498,5 +499,55 @@ describe('EditorInputManager structured content clicks', () => {
     expect(resolvePointerPositionHit as unknown as Mock).not.toHaveBeenCalled();
     expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 10);
     expect(mockTextSelectionCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not retry block label selection after the selection moves elsewhere', () => {
+    vi.useFakeTimers();
+    mountWithDoc('plainSdt');
+    mockNodeSelectionCreate.mockImplementation((_doc, pos: number) => ({
+      empty: false,
+      from: pos,
+      node: { type: { name: 'structuredContentBlock' } },
+    }));
+    mockEditor.view.dispatch.mockImplementation(() => {
+      const selection = mockEditor.state.tr.setSelection.mock.calls.at(-1)?.[0];
+      if (selection?.from === 11) {
+        mockEditor.state.selection = selection;
+      }
+    });
+    const wrapper = document.createElement('div');
+    wrapper.className = 'superdoc-structured-content-block';
+    wrapper.dataset.pmStart = '11';
+    wrapper.dataset.pmEnd = '31';
+    const label = document.createElement('div');
+    label.className = 'superdoc-structured-content__label';
+    label.dataset.pmStart = '11';
+    wrapper.appendChild(label);
+    viewportHost.appendChild(wrapper);
+
+    const PointerEventImpl = getPointerEventImpl();
+    label.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 24,
+      } as PointerEventInit),
+    );
+
+    expect(mockNodeSelectionCreate).toHaveBeenCalledTimes(2);
+    mockEditor.state.selection = {
+      empty: true,
+      from: 12,
+      to: 12,
+      node: null,
+      $anchor: null,
+    };
+
+    vi.runOnlyPendingTimers();
+
+    expect(mockNodeSelectionCreate).toHaveBeenCalledTimes(2);
   });
 });

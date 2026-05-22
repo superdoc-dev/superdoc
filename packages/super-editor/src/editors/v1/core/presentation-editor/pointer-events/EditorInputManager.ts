@@ -2088,14 +2088,6 @@ export class EditorInputManager {
           const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, resolved.start, resolved.end));
           editor.view?.dispatch(tr);
         }
-        globalThis.setTimeout(() => {
-          const selection = editor.state.selection;
-          if (selection.node?.type?.name !== 'structuredContentBlock' || selection.from !== resolved.pos) {
-            try {
-              applySelection();
-            } catch {}
-          }
-        }, 0);
 
         this.#focusEditor();
         return true;

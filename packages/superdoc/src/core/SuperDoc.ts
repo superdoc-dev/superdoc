@@ -119,6 +119,29 @@ interface SuperDocContentErrorPayload {
   error: unknown;
   editor: Editor;
 }
+interface SuperDocEditorUpdatePayload {
+  editor?: Editor;
+  sourceEditor?: Editor;
+  surface: string;
+  headerId: string | null;
+  sectionType: string | null;
+}
+interface SuperDocSdtRef {
+  id: string;
+  tag?: string;
+  alias?: string;
+  controlType: string;
+  scope: 'inline' | 'block';
+}
+interface SuperDocContentControlActiveChangePayload {
+  active: SuperDocSdtRef | null;
+  previous: SuperDocSdtRef | null;
+  source: 'keyboard' | 'pointer';
+}
+interface SuperDocContentControlClickPayload {
+  target: SuperDocSdtRef;
+  source: 'pointer';
+}
 
 /**
  * SuperDoc lifecycle event registry. Keys are event names emitted via
@@ -142,6 +165,8 @@ interface SuperDocEventMap {
   'pagination-update': [SuperDocPaginationPayload];
   'list-definitions-change': [ListDefinitionsPayload];
   'comments-update': [SuperDocCommentsUpdatePayload];
+  'content-control:active-change': [SuperDocContentControlActiveChangePayload];
+  'content-control:click': [SuperDocContentControlClickPayload];
   'collaboration-ready': [SuperDocEditorPayload];
   'awareness-update': [SuperDocAwarenessUpdatePayload];
   locked: [SuperDocLockedPayload];
@@ -412,6 +437,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     onContentError: () => null,
     onReady: () => null,
     onCommentsUpdate: () => null,
+    onContentControlActiveChange: () => null,
+    onContentControlClick: () => null,
     onAwarenessUpdate: () => null,
     onLocked: () => null,
     onPdfDocumentReady: () => null,
@@ -841,6 +868,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.#onConfig('editorDestroy', this.config.onEditorDestroy);
     this.#onConfig('ready', this.config.onReady);
     this.#onConfig('comments-update', this.config.onCommentsUpdate);
+    this.#onConfig('content-control:active-change', this.config.onContentControlActiveChange);
+    this.#onConfig('content-control:click', this.config.onContentControlClick);
     this.#onConfig('awareness-update', this.config.onAwarenessUpdate);
     this.#onConfig('locked', this.config.onLocked);
     this.#onConfig('pdf:document-ready', this.config.onPdfDocumentReady);

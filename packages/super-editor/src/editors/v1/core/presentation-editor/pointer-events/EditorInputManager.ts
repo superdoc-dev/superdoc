@@ -1733,7 +1733,7 @@ export class EditorInputManager {
             nextSelection = Selection.near(doc.resolve(hit.pos), 1);
           }
         }
-        let tr = editor.state.tr.setSelection(nextSelection);
+        let tr = editor.state.tr.setSelection(nextSelection).setMeta('uiEvent', 'click');
         if (inlineSdtBoundaryPos != null && inlineSdtBoundaryDirection) {
           tr = applyEditableSlotAtInlineBoundary(tr, inlineSdtBoundaryPos, inlineSdtBoundaryDirection);
           nextSelection = tr.selection;

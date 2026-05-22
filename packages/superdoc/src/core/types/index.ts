@@ -1430,6 +1430,25 @@ export interface EditorTransactionEvent {
   sectionType?: string | null;
 }
 
+export interface SdtRef {
+  id: string;
+  tag?: string;
+  alias?: string;
+  controlType: string;
+  scope: 'inline' | 'block';
+}
+
+export interface ContentControlActiveChangePayload {
+  active: SdtRef | null;
+  previous: SdtRef | null;
+  source: 'keyboard' | 'pointer';
+}
+
+export interface ContentControlClickPayload {
+  target: SdtRef;
+  source: 'pointer';
+}
+
 export interface SuperDocLayoutEngineOptions {
   /**
    * Layout engine flow mode.
@@ -1644,6 +1663,10 @@ export interface Config {
   onReady?: (params: SuperDocReadyPayload) => void;
   /** Callback when comments are updated. */
   onCommentsUpdate?: (params: SuperDocCommentsUpdatePayload) => void;
+  /** Callback when active content control changes. */
+  onContentControlActiveChange?: (params: ContentControlActiveChangePayload) => void;
+  /** Callback when user clicks inside a content control. */
+  onContentControlClick?: (params: ContentControlClickPayload) => void;
   /** Callback when awareness is updated. */
   onAwarenessUpdate?: (params: SuperDocAwarenessUpdatePayload) => void;
   /** Callback when the SuperDoc is locked or unlocked. */

@@ -123,7 +123,7 @@ describe('EditorInputManager structuredContentBlock table exception', () => {
     isEditable: boolean;
     state: {
       doc: ReturnType<typeof createMockDoc>;
-      tr: { setSelection: Mock; setStoredMarks: Mock };
+      tr: { setSelection: Mock; setStoredMarks: Mock; setMeta: Mock };
       selection: { $anchor: null };
       storedMarks: null;
     };
@@ -175,6 +175,7 @@ describe('EditorInputManager structuredContentBlock table exception', () => {
         doc: createMockDoc('plainSdt'),
         tr: {
           setSelection: vi.fn().mockReturnThis(),
+          setMeta: vi.fn().mockReturnThis(),
           setStoredMarks: vi.fn().mockReturnThis(),
         },
         selection: { $anchor: null },

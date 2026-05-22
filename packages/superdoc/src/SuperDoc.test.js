@@ -581,6 +581,72 @@ describe('SuperDoc.vue', () => {
     });
   });
 
+  it('bridges content-control editor events to superdoc public events', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const listeners = {};
+    const editorMock = {
+      options: { documentId: 'doc-1' },
+      on: vi.fn((event, handler) => {
+        listeners[event] = handler;
+      }),
+    };
+
+    options.onCreate({ editor: editorMock });
+
+    const activePayload = {
+      active: { id: 'cc-2', controlType: 'text', scope: 'inline', tag: 'tag-2', alias: 'Alias 2' },
+      previous: { id: 'cc-1', controlType: 'text', scope: 'inline', tag: 'tag-1', alias: 'Alias 1' },
+      source: 'pointer',
+    };
+    const blurPayload = {
+      active: null,
+      previous: { id: 'cc-2', controlType: 'text', scope: 'inline', tag: 'tag-2', alias: 'Alias 2' },
+      source: 'keyboard',
+    };
+    const clickPayload = {
+      target: { id: 'cc-2', controlType: 'text', scope: 'inline', tag: 'tag-2', alias: 'Alias 2' },
+      source: 'pointer',
+    };
+
+    listeners.contentControlFocus?.(activePayload);
+    listeners.contentControlBlur?.(blurPayload);
+    listeners.contentControlClick?.(clickPayload);
+
+    expect(superdocStub.emit).toHaveBeenCalledWith('content-control:active-change', activePayload);
+    expect(superdocStub.emit).toHaveBeenCalledWith('content-control:active-change', blurPayload);
+    expect(superdocStub.emit).toHaveBeenCalledWith('content-control:click', clickPayload);
+  });
+
+  it('bridges content-control blur payload (active=null) as active-change event', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const listeners = {};
+    const editorMock = {
+      options: { documentId: 'doc-1' },
+      on: vi.fn((event, handler) => {
+        listeners[event] = handler;
+      }),
+    };
+
+    options.onCreate({ editor: editorMock });
+
+    const blurPayload = {
+      active: null,
+      previous: { id: 'cc-prev', controlType: 'text', scope: 'inline', tag: 'tag-prev', alias: 'Prev' },
+      source: 'keyboard',
+    };
+    listeners.contentControlBlur?.(blurPayload);
+
+    expect(superdocStub.emit).toHaveBeenCalledWith('content-control:active-change', blurPayload);
+  });
+
   it('does not emit public exception events for recoverable password prompt errors by default', async () => {
     const superdocStub = createSuperdocStub();
     const surfaceManager = {

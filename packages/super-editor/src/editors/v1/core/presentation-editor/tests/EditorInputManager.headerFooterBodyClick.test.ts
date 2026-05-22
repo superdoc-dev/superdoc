@@ -65,6 +65,7 @@ describe('EditorInputManager - body click during header/footer session', () => {
         },
         tr: {
           setSelection: vi.fn().mockReturnThis(),
+          setMeta: vi.fn().mockReturnThis(),
           setStoredMarks: vi.fn().mockReturnThis(),
         },
         selection: { $anchor: null },

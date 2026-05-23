@@ -632,6 +632,9 @@ export class SuperDoc extends EventEmitter {
     return this.superdocStore.documents.filter((d) => d.type === DOCX).length;
   }
 
+  /**
+   * @returns {{ documents: RuntimeDocument[], users: User[] }}
+   */
   get state() {
     return {
       documents: this.superdocStore.documents,

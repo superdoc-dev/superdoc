@@ -11,7 +11,7 @@ export const useSuperdocStore = defineStore('superdoc', () => {
   const currentConfig = ref(null);
   let exceptionHandler = null;
   const commentsStore = useCommentsStore();
-  const documents = ref([]);
+  const documents = ref(/** @type {import('@superdoc/core/types/index.js').RuntimeDocument[]} */ ([]));
   const documentBounds = ref([]);
   const pages = reactive({});
   const documentUsers = ref([]);

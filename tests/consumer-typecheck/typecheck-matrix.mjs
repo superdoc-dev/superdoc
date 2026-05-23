@@ -420,6 +420,31 @@ const scenarios = [
     files: ['src/track-changes-helpers-typed.ts'],
     mustPass: true,
   },
+  // SD-673 Phase 3: Document API consumer fixture. Imports `DocumentApi`
+  // from `superdoc` and pins return / parameter shapes for representative
+  // operations (find, query.match, insert, format.apply, contentControls.*,
+  // comments.create, capabilities, metadata.*). Also asserts bad inputs
+  // are rejected via @ts-expect-error.
+  {
+    name: 'bundler / document-api consumer (SD-673 Phase 3)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/document-api-consumer.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / document-api consumer (SD-673 Phase 3)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/document-api-consumer.ts'],
+    mustPass: true,
+  },
   // SD-2892: full public-facing surface with skipLibCheck=false. These
   // scenarios pack SuperDoc, install it into the consumer fixture, and compile
   // every public consumer assertion under the resolution modes customers use.

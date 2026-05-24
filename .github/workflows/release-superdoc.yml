@@ -132,8 +132,10 @@ jobs:
       # Runs before publishing so a release cannot ship a regression that
       # bypassed PR CI (manual republish, hotfix branch, recovery flow).
       - name: SuperDoc public interface check
-        # Wraps typecheck-matrix, deep-type-audit, package-shape-gate,
-        # snapshot --all --check, and check-root-classification-closure.
+        # Wraps the nine wrapper stages: contract-tiers-test,
+        # contract-tiers, jsdoc-ratchet, build (skipped here),
+        # consumer-typecheck-matrix, deep-type-audit-supported-root,
+        # package-shape, export-snapshots, root-classification-closure.
         # --skip-build because the Build step above already ran
         # `pnpm run build` (which includes build:superdoc).
         run: pnpm check:public:superdoc --skip-build

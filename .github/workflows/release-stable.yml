@@ -115,8 +115,10 @@ jobs:
       # ship to every consumer pinned to `^1` or `latest`. Run identical
       # checks here so the stable lane cannot silently relax the gate.
       - name: SuperDoc public interface check
-        # Wraps typecheck-matrix, deep-type-audit, package-shape-gate,
-        # snapshot --all --check, and check-root-classification-closure.
+        # Wraps the nine wrapper stages: contract-tiers-test,
+        # contract-tiers, jsdoc-ratchet, build (skipped here),
+        # consumer-typecheck-matrix, deep-type-audit-supported-root,
+        # package-shape, export-snapshots, root-classification-closure.
         # Same coverage as PR CI; runs before stable release so any
         # bypass path (manual republish, hotfix) still catches
         # regressions. --skip-build because Build above already ran.

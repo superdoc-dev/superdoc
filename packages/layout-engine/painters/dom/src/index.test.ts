@@ -13030,6 +13030,205 @@ describe('applyRunDataAttributes', () => {
         expect(fragment.dataset.sdtContainerEnd).toBe('true');
       });
 
+      it('limits block SDT chrome to paragraph content width', () => {
+        const textSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-text',
+          runs: [{ text: 'Short content', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 13 }],
+          attrs: {
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-text',
+              alias: 'Text Control',
+            },
+          },
+        };
+
+        const textSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 13,
+              width: 96,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 20,
+        };
+
+        const textSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-text',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 13,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [textSdtBlock], measures: [textSdtMeasure] });
+        painter.paint(textSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('0px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('96px');
+      });
+
+      it('limits block SDT chrome to inline image content width', () => {
+        const imageOnlySdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-image-only',
+          runs: [
+            {
+              kind: 'image',
+              src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+              width: 210,
+              height: 118,
+              pmStart: 0,
+              pmEnd: 1,
+            },
+          ],
+          attrs: {
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-image-only',
+              alias: 'Image Control',
+            },
+          },
+        };
+
+        const imageOnlySdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 0,
+              width: 210,
+              ascent: 118,
+              descent: 0,
+              lineHeight: 118,
+            },
+          ],
+          totalHeight: 118,
+        };
+
+        const imageOnlySdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-image-only',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 1,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [imageOnlySdtBlock], measures: [imageOnlySdtMeasure] });
+        painter.paint(imageOnlySdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('0px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('210px');
+      });
+
+      it('positions block SDT chrome around centered paragraph content', () => {
+        const centeredSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-centered',
+          runs: [{ text: 'Centered', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 8 }],
+          attrs: {
+            alignment: 'center',
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-centered',
+              alias: 'Centered Control',
+            },
+          },
+        };
+
+        const centeredSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 8,
+              width: 100,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 20,
+        };
+
+        const centeredSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-centered',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 8,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [centeredSdtBlock], measures: [centeredSdtMeasure] });
+        painter.paint(centeredSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('110px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('100px');
+      });
+
       it('updates block SDT boundaries when appending a new fragment during patch rendering', () => {
         const sdtMetadata = {
           type: 'structuredContent' as const,

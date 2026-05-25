@@ -31,11 +31,21 @@ describe('ensureSdtContainerStyles', () => {
     const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
     const cssText = styleEl?.textContent ?? '';
     const blockRule = cssText.match(/\.superdoc-structured-content-block\s*\{([^}]*)\}/)?.[1] ?? '';
+    const hoverRule =
+      cssText.match(
+        /\.superdoc-structured-content-block:not\(.ProseMirror-selectednode\):hover::before\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+    const backgroundRule = cssText.match(/\.superdoc-structured-content-block::before\s*\{([^}]*)\}/)?.[1] ?? '';
     const chromeRule = cssText.match(/\.superdoc-structured-content-block::after\s*\{([^}]*)\}/)?.[1] ?? '';
 
     expect(blockRule).not.toContain('padding:');
     expect(blockRule).not.toContain('border:');
+    expect(blockRule).toContain('--sd-sdt-chrome-left: 0px;');
+    expect(blockRule).toContain('--sd-sdt-chrome-width: 100%;');
+    expect(backgroundRule).toContain('width: var(--sd-sdt-chrome-width, 100%);');
+    expect(hoverRule).toContain('background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);');
     expect(chromeRule).toContain('position: absolute;');
+    expect(chromeRule).toContain('width: var(--sd-sdt-chrome-width, 100%);');
     expect(chromeRule).toContain('border: 1px solid transparent;');
     expect(chromeRule).toContain('pointer-events: none;');
   });

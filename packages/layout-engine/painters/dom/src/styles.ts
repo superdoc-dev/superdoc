@@ -500,19 +500,36 @@ const SDT_CONTAINER_STYLES = `
   box-sizing: border-box;
   border-radius: 4px;
   position: relative;
+  --sd-sdt-chrome-left: 0px;
+  --sd-sdt-chrome-width: 100%;
+}
+
+.superdoc-structured-content-block::before {
+  content: '';
+  position: absolute;
+  left: var(--sd-sdt-chrome-left, 0px);
+  top: 0;
+  bottom: 0;
+  width: var(--sd-sdt-chrome-width, 100%);
+  border-radius: inherit;
+  box-sizing: border-box;
+  pointer-events: none;
 }
 
 .superdoc-structured-content-block::after {
   content: '';
   position: absolute;
-  inset: 0;
+  left: var(--sd-sdt-chrome-left, 0px);
+  top: 0;
+  bottom: 0;
+  width: var(--sd-sdt-chrome-width, 100%);
   border: 1px solid transparent;
   border-radius: inherit;
   box-sizing: border-box;
   pointer-events: none;
 }
 
-.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover::before {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
 }
 
@@ -521,7 +538,7 @@ const SDT_CONTAINER_STYLES = `
 }
 
 /* Group hover (JavaScript-coordinated via PresentationEditor) */
-.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) {
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode)::before {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
 }
 
@@ -543,9 +560,9 @@ const SDT_CONTAINER_STYLES = `
   align-items: center;
   justify-content: center;
   position: absolute;
-  left: 2px;
+  left: calc(var(--sd-sdt-chrome-left, 0px) + 2px);
   top: -19px;
-  width: calc(100% - 4px);
+  width: calc(var(--sd-sdt-chrome-width, 100%) - 4px);
   max-width: 130px;
   min-width: 0;
   height: 18px;
@@ -723,6 +740,14 @@ const SDT_CONTAINER_STYLES = `
 .superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode, [data-appearance='hidden']) {
   background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
   z-index: 9999999;
+}
+
+.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode) {
+  background-color: transparent;
+}
+
+.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode)::before {
+  background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
 }
 
 /* Viewing mode: remove structured content affordances */

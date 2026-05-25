@@ -748,6 +748,29 @@ describe('StructuredContentLockPlugin', () => {
         },
       );
 
+      it.each([['unlocked'], ['sdtLocked']])(
+        '%s: select-all + Cmd+X leaves content selection for PM clipboard handling',
+        (lockMode) => {
+          const doc = createDocWithSDTAndSurroundingText(lockMode, 'structuredContent');
+          const state = applyDocToEditor(doc);
+          const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+          const contentFrom = sdtInfo.pos + 1;
+          const contentTo = sdtInfo.end - 1;
+
+          setSelection(state, TextSelection.create(state.doc, contentFrom, contentTo));
+
+          const result = invokeLockHandleKeyDown('x', { metaKey: true });
+          expect(result.handled).toBe(false);
+          expect(result.prevented).toBe(false);
+
+          const sel = editor.state.selection;
+          expect(sel).toBeInstanceOf(TextSelection);
+          expect(sel).not.toBeInstanceOf(NodeSelection);
+          expect(sel.from).toBe(contentFrom);
+          expect(sel.to).toBe(contentTo);
+        },
+      );
+
       it('sdtLocked: select-all + Backspace still allows content deletion (no promotion)', () => {
         const doc = createDocWithSDTAndSurroundingText('sdtLocked', 'structuredContent');
         const state = applyDocToEditor(doc);

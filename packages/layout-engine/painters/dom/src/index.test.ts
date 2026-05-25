@@ -13397,6 +13397,74 @@ describe('applyRunDataAttributes', () => {
         expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('100px');
       });
 
+      it('positions centered block SDT chrome within paragraph indents', () => {
+        const centeredIndentedSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-centered-indented',
+          runs: [{ text: 'Centered', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 8 }],
+          attrs: {
+            alignment: 'center',
+            indent: { left: 40, right: 60 },
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-centered-indented',
+              alias: 'Centered Indented Control',
+            },
+          },
+        };
+
+        const centeredIndentedSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 8,
+              width: 100,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 20,
+        };
+
+        const centeredIndentedSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-centered-indented',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 8,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({
+          blocks: [centeredIndentedSdtBlock],
+          measures: [centeredIndentedSdtMeasure],
+        });
+        painter.paint(centeredIndentedSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('100px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('100px');
+      });
+
       it('updates block SDT boundaries when appending a new fragment during patch rendering', () => {
         const sdtMetadata = {
           type: 'structuredContent' as const,

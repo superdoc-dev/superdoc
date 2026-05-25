@@ -5552,7 +5552,14 @@ export class DomPainter {
       const resolvedLine = content?.lines[index];
       const lineIndex = resolvedLine?.lineIndex ?? fragmentFromLine + index;
       const lineOffset = this.resolveBlockSdtChromeLineOffset(block, line, resolvedLine, lineIndex);
-      const alignmentSlack = Math.max(0, fragmentWidth - lineOffset - lineWidth);
+      const availableWidth = this.resolveBlockSdtChromeAvailableWidth(
+        block,
+        line,
+        fragmentWidth,
+        lineOffset,
+        resolvedLine,
+      );
+      const alignmentSlack = Math.max(0, availableWidth - lineWidth);
       const alignment = block.attrs?.alignment;
       const lineLeft =
         lineOffset + (alignment === 'center' ? alignmentSlack / 2 : alignment === 'right' ? alignmentSlack : 0);
@@ -5610,6 +5617,25 @@ export class DomPainter {
       return hanging;
     }
     return 0;
+  }
+
+  private resolveBlockSdtChromeAvailableWidth(
+    block: ParagraphBlock,
+    line: Line,
+    fragmentWidth: number,
+    lineOffset: number,
+    resolvedLine: ResolvedParagraphContent['lines'][number] | undefined,
+  ): number {
+    if (resolvedLine) {
+      return Math.max(0, resolvedLine.availableWidth);
+    }
+
+    const rightIndent = Math.max(0, block.attrs?.indent?.right ?? 0);
+    const fallbackAvailableWidth = Math.max(0, fragmentWidth - lineOffset - rightIndent);
+    if (line.maxWidth != null) {
+      return Math.min(line.maxWidth, fallbackAvailableWidth);
+    }
+    return fallbackAvailableWidth;
   }
 
   private setTextContentWithFormattingSpaceMarks(element: HTMLElement, text: string): void {

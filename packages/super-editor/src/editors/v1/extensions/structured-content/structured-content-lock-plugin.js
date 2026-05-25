@@ -109,19 +109,19 @@ export function createStructuredContentLockPlugin() {
         // Path 1 — non-collapsed selection that exactly covers the editable
         // content of an SDT (e.g., a label/handle selection, a triple-click
         // that lands on the content range, or precise keyboard selection).
-        // For wrapper-deletable lock modes, promote to a
+        // For wrapper-deletable but content-locked modes, promote to a
         // NodeSelection on the wrapper so the next operation targets the whole
-        // field. For Backspace/Delete we stop here — the user sees the wrapper
-        // highlighted and presses again to confirm (matches Word's "click to
-        // select, key to delete"). For Cut we let the event continue so PM's
-        // clipboard handler runs against the just-installed NodeSelection and
-        // the wrapper is cut in a single keystroke.
+        // field instead of trying to edit locked content. For content-editable
+        // modes, let the normal command chain delete the selected content while
+        // preserving the SDT wrapper.
         if (from !== to && !(selection instanceof NodeSelection)) {
           const exactContentSDT = sdtNodes.find((s) => from === s.pos + 1 && to === s.end - 1);
           if (exactContentSDT) {
-            const isSdtLocked =
-              exactContentSDT.lockMode === 'sdtLocked' || exactContentSDT.lockMode === 'sdtContentLocked';
-            if (!isSdtLocked) {
+            const isContentLocked =
+              exactContentSDT.lockMode === 'contentLocked' || exactContentSDT.lockMode === 'sdtContentLocked';
+            const isWrapperDeletable =
+              exactContentSDT.lockMode !== 'sdtLocked' && exactContentSDT.lockMode !== 'sdtContentLocked';
+            if (isContentLocked && isWrapperDeletable) {
               const tr = state.tr.setSelection(NodeSelection.create(state.doc, exactContentSDT.pos));
               view.dispatch(tr);
               if (isCut) {
@@ -145,15 +145,12 @@ export function createStructuredContentLockPlugin() {
           if (isBackspace && from > 0) {
             affectedFrom = from - 1;
             // Path 2 — caret is exactly at the trailing wrapper boundary of an
-            // SDT. Backspace here is a wrapper-touching action (PM's keymap
-            // chains through to selectNodeBackward, which produces a
-            // NodeSelection on the wrapper). Expand the affected range so
-            // contentLocked alone — which only locks content edits — doesn't
-            // mistake this for an in-content edit and block it.
+            // SDT. The Backspace keymap has a specialized command that selects
+            // the inline SDT content, so let that run instead of treating this
+            // as an attempted wrapper deletion.
             const adjacentSDT = sdtNodes.find((s) => s.end === from);
             if (adjacentSDT) {
-              affectedFrom = adjacentSDT.pos;
-              affectedTo = adjacentSDT.end;
+              return false;
             }
           } else if (isDelete && to < state.doc.content.size) {
             affectedTo = to + 1;

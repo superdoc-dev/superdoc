@@ -43,10 +43,61 @@ const findNode = (doc, typeName, predicate = () => true) => {
 };
 
 describe('selectInlineSdtBeforeRunStart', () => {
-  it.each(['unlocked', 'contentLocked'])('selects the %s inline SDT wrapper before the current run', (lockMode) => {
+  it.each(['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'])(
+    'selects only the %s inline SDT content before the current run',
+    (lockMode) => {
+      const schema = makeSchema();
+      const doc = makeDoc(schema, lockMode);
+      const sdt = findNode(doc, 'structuredContent');
+      const followingRun = findNode(doc, 'run', (node) => node.textContent.startsWith('Adding'));
+      const state = EditorState.create({
+        schema,
+        doc,
+        selection: TextSelection.create(doc, followingRun.pos + 1),
+      });
+
+      let dispatched;
+      const ok = selectInlineSdtBeforeRunStart()({ state, dispatch: (tr) => (dispatched = tr) });
+
+      expect(ok).toBe(true);
+      expect(dispatched).toBeDefined();
+      expect(dispatched.selection).toBeInstanceOf(TextSelection);
+      expect(dispatched.selection).not.toBeInstanceOf(NodeSelection);
+      expect(dispatched.selection.from).toBe(sdt.pos + 1);
+      expect(dispatched.selection.to).toBe(sdt.end - 1);
+      expect(dispatched.selection.content().content.textBetween(0, dispatched.selection.content().content.size)).toBe(
+        'Locked content',
+      );
+    },
+  );
+
+  it.each(['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'])(
+    'selects only the %s inline SDT content from the trailing boundary',
+    (lockMode) => {
+      const schema = makeSchema();
+      const doc = makeDoc(schema, lockMode);
+      const sdt = findNode(doc, 'structuredContent');
+      const state = EditorState.create({
+        schema,
+        doc,
+        selection: TextSelection.create(doc, sdt.end),
+      });
+
+      let dispatched;
+      const ok = selectInlineSdtBeforeRunStart()({ state, dispatch: (tr) => (dispatched = tr) });
+
+      expect(ok).toBe(true);
+      expect(dispatched).toBeDefined();
+      expect(dispatched.selection).toBeInstanceOf(TextSelection);
+      expect(dispatched.selection).not.toBeInstanceOf(NodeSelection);
+      expect(dispatched.selection.from).toBe(sdt.pos + 1);
+      expect(dispatched.selection.to).toBe(sdt.end - 1);
+    },
+  );
+
+  it('returns true without dispatching when no dispatch is provided', () => {
     const schema = makeSchema();
-    const doc = makeDoc(schema, lockMode);
-    const sdt = findNode(doc, 'structuredContent');
+    const doc = makeDoc(schema);
     const followingRun = findNode(doc, 'run', (node) => node.textContent.startsWith('Adding'));
     const state = EditorState.create({
       schema,
@@ -54,31 +105,9 @@ describe('selectInlineSdtBeforeRunStart', () => {
       selection: TextSelection.create(doc, followingRun.pos + 1),
     });
 
-    let dispatched;
-    const ok = selectInlineSdtBeforeRunStart()({ state, dispatch: (tr) => (dispatched = tr) });
+    const ok = selectInlineSdtBeforeRunStart()({ state });
 
     expect(ok).toBe(true);
-    expect(dispatched).toBeDefined();
-    expect(dispatched.selection).toBeInstanceOf(NodeSelection);
-    expect(dispatched.selection.from).toBe(sdt.pos);
-    expect(dispatched.selection.to).toBe(sdt.end);
-  });
-
-  it.each(['sdtLocked', 'sdtContentLocked'])('consumes Backspace without selecting %s wrappers', (lockMode) => {
-    const schema = makeSchema();
-    const doc = makeDoc(schema, lockMode);
-    const followingRun = findNode(doc, 'run', (node) => node.textContent.startsWith('Adding'));
-    const state = EditorState.create({
-      schema,
-      doc,
-      selection: TextSelection.create(doc, followingRun.pos + 1),
-    });
-    const dispatch = vi.fn();
-
-    const ok = selectInlineSdtBeforeRunStart()({ state, dispatch });
-
-    expect(ok).toBe(true);
-    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('returns false when the cursor is not at the start of a run', () => {

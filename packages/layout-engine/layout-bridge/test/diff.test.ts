@@ -218,6 +218,38 @@ describe('computeDirtyRegions', () => {
     expect(result.stableBlockIds.has('0-paragraph')).toBe(true);
   });
 
+  it.each([
+    ['src', { src: 'other.png' }],
+    ['alt', { alt: 'Diagram' }],
+    ['title', { title: 'Title' }],
+    ['clipPath', { clipPath: 'inset(1px)' }],
+    ['distTop', { distTop: 1 }],
+    ['distBottom', { distBottom: 2 }],
+    ['distLeft', { distLeft: 3 }],
+    ['distRight', { distRight: 4 }],
+    ['verticalAlign', { verticalAlign: 'top' as const }],
+    ['rotation', { rotation: 90 }],
+    ['flipH', { flipH: true }],
+    ['flipV', { flipV: true }],
+    ['gain', { gain: '50000' }],
+    ['blacklevel', { blacklevel: '20000' }],
+    ['grayscale', { grayscale: true }],
+    ['lum', { lum: { bright: 10000, contrast: -10000 } }],
+    ['hyperlink', { hyperlink: { url: 'https://example.com', tooltip: 'Example' } }],
+    ['dataAttrs', { dataAttrs: { 'data-example': '1' } }],
+  ] satisfies Array<[string, Partial<ImageRun>]>)(
+    'detects inline image %s changes inside paragraphs',
+    (_field, overrides) => {
+      const prev = [paragraphWithRuns('0-paragraph', [imageRun('img.png', 100, 50)])];
+      const next = [paragraphWithRuns('0-paragraph', [{ ...imageRun('img.png', 100, 50), ...overrides }])];
+
+      const result = computeDirtyRegions(prev, next);
+
+      expect(result.firstDirtyIndex).toBe(0);
+      expect(result.stableBlockIds.has('0-paragraph')).toBe(false);
+    },
+  );
+
   it('detects inline image SDT metadata changes inside paragraphs', () => {
     const prev = [paragraphWithRuns('0-paragraph', [imageRun('img.png', 100, 50)])];
     const next = [

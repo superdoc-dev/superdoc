@@ -22,6 +22,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { measureCache } from '@superdoc/layout-bridge';
+import { isContentLockedMode } from '../extensions/structured-content/lockModes.js';
 
 // Configuration constants
 const OVERLAY_EXPANSION_PX = 2000;
@@ -31,7 +32,6 @@ const DIMENSION_CHANGE_THRESHOLD_PX = 1;
 const Z_INDEX_OVERLAY = 10;
 const Z_INDEX_HANDLE = 15;
 const Z_INDEX_GUIDELINE = 20;
-const CONTENT_LOCKED_MODES = new Set(['contentLocked', 'sdtContentLocked']);
 
 /**
  * Validates that the editor prop conforms to expected ProseMirror structure
@@ -81,7 +81,7 @@ const resizeEditor = computed(() => {
 
 const isImageContentLocked = computed(() => {
   const lockMode = resolveImageLockMode(props.imageElement);
-  return lockMode ? CONTENT_LOCKED_MODES.has(lockMode) : false;
+  return isContentLockedMode(lockMode);
 });
 
 const isResizeDisabled = computed(
@@ -143,7 +143,7 @@ function resolveImageLockMode(imageElement) {
     );
   }
 
-  return lockModes.find((lockMode) => CONTENT_LOCKED_MODES.has(lockMode)) ?? lockModes[0] ?? null;
+  return lockModes.find(isContentLockedMode) ?? lockModes[0] ?? null;
 }
 
 /**

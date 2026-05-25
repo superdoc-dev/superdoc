@@ -13472,6 +13472,70 @@ describe('applyRunDataAttributes', () => {
         expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('100px');
       });
 
+      it('positions block SDT chrome around default RTL paragraph content', () => {
+        const rtlSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-rtl',
+          runs: [{ text: 'مرحبا', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 5 }],
+          attrs: {
+            directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' },
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-rtl',
+              alias: 'RTL Control',
+            },
+          },
+        };
+
+        const rtlSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 5,
+              width: 80,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 20,
+        };
+
+        const rtlSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-rtl',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 5,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [rtlSdtBlock], measures: [rtlSdtMeasure] });
+        painter.paint(rtlSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('240px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('80px');
+      });
+
       it('positions centered block SDT chrome within paragraph indents', () => {
         const centeredIndentedSdtBlock: FlowBlock = {
           kind: 'paragraph',

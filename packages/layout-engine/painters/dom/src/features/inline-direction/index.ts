@@ -19,7 +19,7 @@
  * @spec  ECMA-376 §17.3.1.1 (bidi), §17.3.2.30 (rtl)
  */
 
-export { applyRtlStyles, shouldUseSegmentPositioning } from './rtl-styles.js';
+export { applyRtlStyles, resolveTextAlign, shouldUseSegmentPositioning } from './rtl-styles.js';
 export {
   resolveRunDirectionAttribute,
   normalizeRtlDateTokenForWordParity,

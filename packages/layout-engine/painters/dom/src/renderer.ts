@@ -54,6 +54,7 @@ import type {
   ResolvedImageItem,
   ResolvedDrawingItem,
   ResolvedListMarkerItem,
+  ResolvedParagraphContent,
   LayoutSourceIdentity,
   LayoutStoryLocator,
 } from '@superdoc/contracts';
@@ -3231,7 +3232,7 @@ export class DomPainter {
 
       // Apply SDT container styling (document sections, structured content blocks)
       applySdtContainerStyling(this.doc, fragmentEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
-      this.applyBlockSdtChromeBounds(fragmentEl, block, lines, fragment.width);
+      this.applyBlockSdtChromeBounds(fragmentEl, block, lines, fragment.width, content);
 
       // Render drop cap if present (only on the first fragment, not continuation)
       if (content?.dropCap) {
@@ -5519,6 +5520,7 @@ export class DomPainter {
     block: ParagraphBlock,
     lines: Line[],
     fragmentWidth: number,
+    content?: ResolvedParagraphContent,
   ): void {
     const sdt = block.attrs?.sdt ?? block.attrs?.containerSdt;
     if (sdt?.type !== 'structuredContent' || sdt.scope !== 'block') return;
@@ -5527,7 +5529,7 @@ export class DomPainter {
     let contentLeft = Number.POSITIVE_INFINITY;
     let contentRight = Number.NEGATIVE_INFINITY;
 
-    for (const line of lines) {
+    for (const [index, line] of lines.entries()) {
       const runsForLine = sliceRunsForLine(expandedBlock, line);
       if (runsForLine.length === 0) continue;
 
@@ -5546,9 +5548,11 @@ export class DomPainter {
       const lineWidth = Math.max(0, line.naturalWidth ?? line.width ?? 0);
       if (lineWidth <= 0) continue;
 
-      const alignmentSlack = Math.max(0, fragmentWidth - lineWidth);
+      const lineOffset = this.resolveBlockSdtChromeLineOffset(block, line, content?.lines[index], index);
+      const alignmentSlack = Math.max(0, fragmentWidth - lineOffset - lineWidth);
       const alignment = block.attrs?.alignment;
-      const lineLeft = alignment === 'center' ? alignmentSlack / 2 : alignment === 'right' ? alignmentSlack : 0;
+      const lineLeft =
+        lineOffset + (alignment === 'center' ? alignmentSlack / 2 : alignment === 'right' ? alignmentSlack : 0);
       contentLeft = Math.min(contentLeft, lineLeft);
       contentRight = Math.max(contentRight, lineLeft + lineWidth);
     }
@@ -5561,6 +5565,48 @@ export class DomPainter {
 
     element.style.setProperty('--sd-sdt-chrome-left', `${chromeLeft}px`);
     element.style.setProperty('--sd-sdt-chrome-width', `${chromeWidth}px`);
+  }
+
+  private resolveBlockSdtChromeLineOffset(
+    block: ParagraphBlock,
+    line: Line,
+    resolvedLine: ResolvedParagraphContent['lines'][number] | undefined,
+    lineIndex: number,
+  ): number {
+    if (resolvedLine) {
+      if (resolvedLine.isListFirstLine) {
+        return resolvedLine.resolvedListTextStartPx ?? resolvedLine.indentOffset;
+      }
+      if (resolvedLine.hasExplicitSegmentPositioning) {
+        return resolvedLine.indentOffset;
+      }
+      return Math.max(0, resolvedLine.paddingLeftPx + resolvedLine.textIndentPx);
+    }
+
+    const paraIndent = block.attrs?.indent;
+    const indentLeft = paraIndent?.left ?? 0;
+    const firstLine = paraIndent?.firstLine ?? 0;
+    const hanging = paraIndent?.hanging ?? 0;
+    const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+    const firstLineOffset = suppressFirstLineIndent ? 0 : firstLine - hanging;
+    const isFirstLine = lineIndex === 0;
+    const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
+
+    if (hasExplicitSegmentPositioning) {
+      const effectiveLeftIndent = indentLeft < 0 ? 0 : indentLeft;
+      return Math.max(0, effectiveLeftIndent + (isFirstLine ? firstLineOffset : 0));
+    }
+
+    if (isFirstLine) {
+      return Math.max(0, indentLeft + firstLineOffset);
+    }
+    if (indentLeft > 0) {
+      return indentLeft;
+    }
+    if (hanging > 0 && indentLeft >= 0) {
+      return hanging;
+    }
+    return 0;
   }
 
   private setTextContentWithFormattingSpaceMarks(element: HTMLElement, text: string): void {

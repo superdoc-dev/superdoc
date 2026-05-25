@@ -13093,6 +13093,70 @@ describe('applyRunDataAttributes', () => {
         expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('96px');
       });
 
+      it('offsets block SDT chrome for indented paragraph content', () => {
+        const indentedSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-indented',
+          runs: [{ text: 'Indented', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 8 }],
+          attrs: {
+            indent: { left: 40 },
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-indented',
+              alias: 'Indented Control',
+            },
+          },
+        };
+
+        const indentedSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 8,
+              width: 96,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 20,
+        };
+
+        const indentedSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-indented',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 8,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [indentedSdtBlock], measures: [indentedSdtMeasure] });
+        painter.paint(indentedSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('40px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('96px');
+      });
+
       it('limits block SDT chrome to inline image content width', () => {
         const imageOnlySdtBlock: FlowBlock = {
           kind: 'paragraph',

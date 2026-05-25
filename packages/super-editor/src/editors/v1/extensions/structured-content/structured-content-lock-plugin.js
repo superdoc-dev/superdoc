@@ -170,8 +170,12 @@ export function createStructuredContentLockPlugin() {
             }
           } else if (isDelete && to < state.doc.content.size) {
             affectedTo = to + 1;
-            // Symmetric: caret immediately before an SDT.
+            // Symmetric: caret immediately before an inline SDT. Let the
+            // Delete keymap select its content, mirroring trailing Backspace.
             const adjacentSDT = sdtNodes.find((s) => s.pos === to);
+            if (adjacentSDT?.type === 'structuredContent') {
+              return false;
+            }
             if (adjacentSDT) {
               affectedFrom = adjacentSDT.pos;
               affectedTo = adjacentSDT.end;

@@ -10,5 +10,6 @@ describe('core command map types', () => {
     const declaration = readFileSync(declarationPath, 'utf8');
 
     expect(declaration).toContain("| 'selectInlineSdtBeforeRunStart'");
+    expect(declaration).toContain("| 'selectInlineSdtAfterRunEnd'");
   });
 });

@@ -59,6 +59,7 @@ export const handleDelete = (editor) => {
 
   return editor.commands.first(({ commands }) => [
     () => commands.deleteBlockSdtAtTextBlockStart(),
+    () => commands.selectInlineSdtAfterRunEnd(),
     () => commands.deleteSkipEmptyRun(),
     () => commands.deleteAtomAfter(),
     () => commands.deleteNextToRun(),

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { handleBackspace } from './keymap.js';
+import { handleBackspace, handleDelete } from './keymap.js';
 
 /**
  * Pins the ordering of commands in the Backspace chain.
@@ -159,5 +159,61 @@ describe('handleBackspace chain ordering', () => {
     expect(callLog).toContain('backspaceAcrossRuns');
     expect(callLog).toContain('deleteSelection');
     expect(callLog).not.toContain('mixedBidiBackspace');
+  });
+});
+
+describe('handleDelete chain ordering', () => {
+  const makeEditor = () => {
+    const callLog = [];
+    const tr = {
+      setMeta: vi.fn(() => tr),
+    };
+    const make = (name) => () => {
+      callLog.push(name);
+      return false;
+    };
+
+    const commands = {
+      deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
+      selectInlineSdtAfterRunEnd: make('selectInlineSdtAfterRunEnd'),
+      deleteSkipEmptyRun: make('deleteSkipEmptyRun'),
+      deleteAtomAfter: make('deleteAtomAfter'),
+      deleteNextToRun: make('deleteNextToRun'),
+      deleteSelection: make('deleteSelection'),
+      joinForward: make('joinForward'),
+      selectNodeForward: make('selectNodeForward'),
+    };
+
+    const editor = {
+      view: { state: { tr }, dispatch: vi.fn() },
+      commands: {
+        first: vi.fn((build) => {
+          const fns = build({ commands });
+          for (const fn of fns) {
+            const result = fn();
+            if (result) return result;
+          }
+          return false;
+        }),
+      },
+    };
+
+    return { editor, callLog };
+  };
+
+  it('runs inline SDT forward selection before generic Delete fallbacks', () => {
+    const { editor, callLog } = makeEditor();
+    handleDelete(editor);
+
+    expect(callLog).toEqual([
+      'deleteBlockSdtAtTextBlockStart',
+      'selectInlineSdtAfterRunEnd',
+      'deleteSkipEmptyRun',
+      'deleteAtomAfter',
+      'deleteNextToRun',
+      'deleteSelection',
+      'joinForward',
+      'selectNodeForward',
+    ]);
   });
 });

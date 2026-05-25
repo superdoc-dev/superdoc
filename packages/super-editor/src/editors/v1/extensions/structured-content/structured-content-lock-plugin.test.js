@@ -3,7 +3,7 @@ import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
 import { Slice } from 'prosemirror-model';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { initTestEditor } from '@tests/helpers/helpers.js';
-import { handleBackspace } from '@core/extensions/keymap.js';
+import { handleBackspace, handleDelete } from '@core/extensions/keymap.js';
 import { STRUCTURED_CONTENT_LOCK_KEY } from './structured-content-lock-plugin.js';
 
 /**
@@ -473,10 +473,15 @@ describe('StructuredContentLockPlugin', () => {
           false,
           'sdtContentLocked + Backspace at trailing boundary: lets keymap select content',
         ],
-        ['unlocked', 'Delete', false, 'unlocked + Delete at leading boundary: lets PM run (selectNodeForward)'],
-        ['contentLocked', 'Delete', false, 'contentLocked + Delete at leading boundary: lets PM run'],
-        ['sdtLocked', 'Delete', true, 'sdtLocked + Delete at leading boundary: blocked'],
-        ['sdtContentLocked', 'Delete', true, 'sdtContentLocked + Delete at leading boundary: blocked'],
+        ['unlocked', 'Delete', false, 'unlocked + Delete at leading boundary: lets keymap select content'],
+        ['contentLocked', 'Delete', false, 'contentLocked + Delete at leading boundary: lets keymap select content'],
+        ['sdtLocked', 'Delete', false, 'sdtLocked + Delete at leading boundary: lets keymap select content'],
+        [
+          'sdtContentLocked',
+          'Delete',
+          false,
+          'sdtContentLocked + Delete at leading boundary: lets keymap select content',
+        ],
       ];
 
       it.each(adjacencyCases)('%s + %s', (lockMode, key, shouldConsume) => {
@@ -503,6 +508,24 @@ describe('StructuredContentLockPlugin', () => {
           placeCaretAt(state, sdtInfo.end);
 
           handleBackspace(editor);
+
+          const selection = editor.state.selection;
+          expect(selection).toBeInstanceOf(TextSelection);
+          expect(selection.from).toBe(sdtInfo.pos + 1);
+          expect(selection.to).toBe(sdtInfo.end - 1);
+        },
+      );
+
+      it.each(['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'])(
+        '%s + Delete at the leading boundary selects inline SDT content',
+        (lockMode) => {
+          const doc = createDocWithSDTAndSurroundingText(lockMode, 'structuredContent');
+          const state = applyDocToEditor(doc);
+          const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+
+          placeCaretAt(state, sdtInfo.pos);
+
+          handleDelete(editor);
 
           const selection = editor.state.selection;
           expect(selection).toBeInstanceOf(TextSelection);

@@ -3232,7 +3232,15 @@ export class DomPainter {
 
       // Apply SDT container styling (document sections, structured content blocks)
       applySdtContainerStyling(this.doc, fragmentEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
-      this.applyBlockSdtChromeBounds(fragmentEl, block, lines, fragment.width, fragment.fromLine, content);
+      this.applyBlockSdtChromeBounds(
+        fragmentEl,
+        block,
+        lines,
+        fragment.width,
+        fragment.fromLine,
+        paraContinuesOnNext,
+        content,
+      );
 
       // Render drop cap if present (only on the first fragment, not continuation)
       if (content?.dropCap) {
@@ -5521,6 +5529,7 @@ export class DomPainter {
     lines: Line[],
     fragmentWidth: number,
     fragmentFromLine: number,
+    fragmentContinuesOnNext: boolean | undefined,
     content?: ResolvedParagraphContent,
   ): void {
     const sdt = block.attrs?.sdt ?? block.attrs?.containerSdt;
@@ -5559,12 +5568,23 @@ export class DomPainter {
         lineOffset,
         resolvedLine,
       );
-      const alignmentSlack = Math.max(0, availableWidth - lineWidth);
+      const paintedLineWidth = this.resolveBlockSdtChromePaintedLineWidth(
+        block,
+        line,
+        lineWidth,
+        availableWidth,
+        index,
+        lines.length,
+        fragmentContinuesOnNext,
+        resolvedLine,
+        content,
+      );
+      const alignmentSlack = Math.max(0, availableWidth - paintedLineWidth);
       const alignment = block.attrs?.alignment;
       const lineLeft =
         lineOffset + (alignment === 'center' ? alignmentSlack / 2 : alignment === 'right' ? alignmentSlack : 0);
       contentLeft = Math.min(contentLeft, lineLeft);
-      contentRight = Math.max(contentRight, lineLeft + lineWidth);
+      contentRight = Math.max(contentRight, lineLeft + paintedLineWidth);
     }
 
     if (!Number.isFinite(contentLeft) || !Number.isFinite(contentRight)) return;
@@ -5636,6 +5656,37 @@ export class DomPainter {
       return Math.min(line.maxWidth, fallbackAvailableWidth);
     }
     return fallbackAvailableWidth;
+  }
+
+  private resolveBlockSdtChromePaintedLineWidth(
+    block: ParagraphBlock,
+    line: Line,
+    lineWidth: number,
+    availableWidth: number,
+    fragmentLineIndex: number,
+    fragmentLineCount: number,
+    fragmentContinuesOnNext: boolean | undefined,
+    resolvedLine: ResolvedParagraphContent['lines'][number] | undefined,
+    content: ResolvedParagraphContent | undefined,
+  ): number {
+    const explicitPositionedSegmentCount = line.segments?.filter((segment) => segment.x !== undefined).length ?? 0;
+    const hasMultipleExplicitPositionedSegments = explicitPositionedSegmentCount > 1;
+    const paragraphEndsWithLineBreak =
+      content?.paragraphEndsWithLineBreak === true || block.runs[block.runs.length - 1]?.kind === 'lineBreak';
+    const isLastLineOfParagraph =
+      resolvedLine != null
+        ? resolvedLine.skipJustify
+        : fragmentLineIndex === fragmentLineCount - 1 && !fragmentContinuesOnNext;
+    const justifyShouldApply = shouldApplyJustify({
+      alignment: block.attrs?.alignment,
+      hasExplicitPositioning: line.segments?.some((segment) => segment.x !== undefined) === true,
+      hasExplicitTabStops: line.hasExplicitTabStops === true,
+      isLastLineOfParagraph,
+      paragraphEndsWithLineBreak,
+      skipJustifyOverride: (resolvedLine?.skipJustify ?? false) || hasMultipleExplicitPositionedSegments,
+    });
+
+    return justifyShouldApply ? Math.max(lineWidth, availableWidth) : lineWidth;
   }
 
   private setTextContentWithFormattingSpaceMarks(element: HTMLElement, text: string): void {

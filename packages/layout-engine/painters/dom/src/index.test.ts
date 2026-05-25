@@ -13093,6 +13093,81 @@ describe('applyRunDataAttributes', () => {
         expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('96px');
       });
 
+      it('expands block SDT chrome to justified line width', () => {
+        const justifiedSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-justified',
+          runs: [{ text: 'Alpha beta gamma', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 16 }],
+          attrs: {
+            alignment: 'justify',
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-justified',
+              alias: 'Justified Control',
+            },
+          },
+        };
+
+        const justifiedSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 10,
+              width: 100,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+            {
+              fromRun: 0,
+              fromChar: 11,
+              toRun: 0,
+              toChar: 16,
+              width: 60,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 40,
+        };
+
+        const justifiedSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-justified',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 10,
+                  continuesOnNext: true,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [justifiedSdtBlock], measures: [justifiedSdtMeasure] });
+        painter.paint(justifiedSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('');
+      });
+
       it('offsets block SDT chrome for indented paragraph content', () => {
         const indentedSdtBlock: FlowBlock = {
           kind: 'paragraph',

@@ -456,6 +456,14 @@ describe('StructuredContentLockPlugin', () => {
       return setSelection(state, TextSelection.create(state.doc, pos));
     }
 
+    function pressDeleteThroughHandlers() {
+      const result = invokeLockHandleKeyDown('Delete');
+      if (!result.handled) {
+        handleDelete(editor);
+      }
+      return result;
+    }
+
     describe('Path 2 — caret immediately adjacent to inline SDT', () => {
       const adjacencyCases = [
         // [lockMode, key, shouldConsume, description]
@@ -687,6 +695,33 @@ describe('StructuredContentLockPlugin', () => {
         expect(result.prevented).toBe(true);
         expect(sdtNodeExists(editor.state.doc, 'structuredContent')).toBe(false);
       });
+
+      it.each([
+        ['unlocked', false, true],
+        ['sdtLocked', false, true],
+        ['contentLocked', true, false],
+        ['sdtContentLocked', true, false],
+      ])(
+        '%s: exact content selection + Delete follows lock plugin then keymap',
+        (lockMode, pluginConsumes, deletesContent) => {
+          const doc = createDocWithSDTAndSurroundingText(lockMode, 'structuredContent');
+          const state = applyDocToEditor(doc);
+          const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+
+          setSelection(state, TextSelection.create(state.doc, sdtInfo.pos + 1, sdtInfo.end - 1));
+
+          const result = pressDeleteThroughHandlers();
+
+          expect(result.handled).toBe(pluginConsumes);
+          const sdtAfter = findSDTNode(editor.state.doc, 'structuredContent');
+          if (lockMode === 'contentLocked') {
+            expect(sdtAfter).toBeNull();
+          } else {
+            expect(sdtAfter).not.toBeNull();
+            expect(sdtAfter.node.textContent === '').toBe(deletesContent);
+          }
+        },
+      );
 
       it.each([['contentLocked']])(
         '%s: select-all + Cmd+X promotes to NodeSelection in one keystroke (no preventDefault)',

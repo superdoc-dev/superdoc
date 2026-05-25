@@ -27,6 +27,8 @@ interface HarnessConfig {
   showSelection?: boolean;
   allowSelectionInViewMode?: boolean;
   documentMode?: 'editing' | 'viewing' | 'suggesting';
+  previewScroll?: boolean;
+  blockPreviewScrollEvents?: boolean;
 }
 
 type DocumentMode = 'editing' | 'suggesting' | 'viewing';
@@ -63,6 +65,8 @@ function buildHarnessUrl(config: HarnessConfig = {}): string {
   if (config.showSelection !== undefined) params.set('showSelection', config.showSelection ? '1' : '0');
   if (config.allowSelectionInViewMode) params.set('allowSelectionInViewMode', '1');
   if (config.documentMode) params.set('documentMode', config.documentMode);
+  if (config.previewScroll) params.set('previewScroll', '1');
+  if (config.blockPreviewScrollEvents) params.set('blockPreviewScrollEvents', '1');
   const qs = params.toString();
   return qs ? `${HARNESS_URL}?${qs}` : HARNESS_URL;
 }

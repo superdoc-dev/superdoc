@@ -499,7 +499,8 @@ export class PresentationEditor extends EventEmitter {
   #semanticResizeDebounce: number | null = null;
   #lastSemanticContainerWidth: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
-  #scrollHandler: (() => void) | null = null;
+  #scrollHandler: ((event?: Event) => void) | null = null;
+  #handledScrollEvents = new WeakSet<Event>();
   #scrollContainer: Element | Window | null = null;
   #scrollContainerValidated = false;
   #sectionMetadata: SectionMetadata[] = [];
@@ -4070,11 +4071,12 @@ export class PresentationEditor extends EventEmitter {
 
     if (this.#scrollHandler) {
       if (this.#scrollContainer) {
-        this.#scrollContainer.removeEventListener('scroll', this.#scrollHandler);
+        this.#scrollContainer.removeEventListener('scroll', this.#scrollHandler, { capture: true });
       }
       const win = this.#visibleHost?.ownerDocument?.defaultView;
-      win?.removeEventListener('scroll', this.#scrollHandler);
+      win?.removeEventListener('scroll', this.#scrollHandler, { capture: true });
       this.#scrollHandler = null;
+      this.#handledScrollEvents = new WeakSet<Event>();
       this.#scrollContainer = null;
     }
     this.#inputBridge?.notifyTargetChanged();
@@ -4797,20 +4799,25 @@ export class PresentationEditor extends EventEmitter {
 
     // Scroll handler for virtualization - find the actual scroll container
     // by walking up the DOM tree to find the first scrollable ancestor
-    this.#scrollHandler = () => {
+    this.#handledScrollEvents = new WeakSet<Event>();
+    this.#scrollHandler = (event?: Event) => {
+      if (event) {
+        if (this.#handledScrollEvents.has(event)) return;
+        this.#handledScrollEvents.add(event);
+      }
       this.#painterAdapter.onScroll();
     };
 
     // Find the scrollable ancestor and attach listener there
     this.#scrollContainer = this.#findScrollableAncestor(this.#visibleHost);
     if (this.#scrollContainer) {
-      this.#scrollContainer.addEventListener('scroll', this.#scrollHandler, { passive: true });
+      this.#scrollContainer.addEventListener('scroll', this.#scrollHandler, { passive: true, capture: true });
     }
 
     // Also listen on window as fallback
     const win = this.#visibleHost.ownerDocument?.defaultView;
     if (win && this.#scrollContainer !== win) {
-      win.addEventListener('scroll', this.#scrollHandler, { passive: true });
+      win.addEventListener('scroll', this.#scrollHandler, { passive: true, capture: true });
     }
   }
 
@@ -4887,11 +4894,11 @@ export class PresentationEditor extends EventEmitter {
     if (!next || next === this.#scrollContainer) return;
 
     const prev = this.#scrollContainer;
-    prev.removeEventListener('scroll', this.#scrollHandler!);
+    prev.removeEventListener('scroll', this.#scrollHandler!, { capture: true });
     this.#scrollContainer = next;
 
     if (next instanceof Element) {
-      next.addEventListener('scroll', this.#scrollHandler!, { passive: true });
+      next.addEventListener('scroll', this.#scrollHandler!, { passive: true, capture: true });
     }
     this.#painterAdapter.setScrollContainer(next instanceof HTMLElement ? next : null);
   }

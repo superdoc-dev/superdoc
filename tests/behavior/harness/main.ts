@@ -73,9 +73,28 @@ const allowSelectionInViewMode = params.get('allowSelectionInViewMode') === '1';
 const documentMode = params.get('documentMode') as 'editing' | 'viewing' | 'suggesting' | null;
 const contentOverride = params.get('contentOverride') ?? undefined;
 const overrideType = (params.get('overrideType') as OverrideType | null) ?? undefined;
+const previewScroll = params.get('previewScroll') === '1';
+const blockPreviewScrollEvents = params.get('blockPreviewScrollEvents') === '1';
 
 if (!showCaret) {
   document.documentElement.style.setProperty('caret-color', 'transparent', 'important');
+}
+
+if (previewScroll) {
+  const harnessMain = document.querySelector<HTMLElement>('#harness-main');
+  if (harnessMain) {
+    harnessMain.style.height = '720px';
+    harnessMain.style.overflowY = 'auto';
+    if (blockPreviewScrollEvents) {
+      harnessMain.addEventListener(
+        'scroll',
+        (event) => {
+          event.stopImmediatePropagation();
+        },
+        { capture: true },
+      );
+    }
+  }
 }
 
 let instance: SuperDocInstance | null = null;

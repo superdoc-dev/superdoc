@@ -31,6 +31,7 @@ const DIMENSION_CHANGE_THRESHOLD_PX = 1;
 const Z_INDEX_OVERLAY = 10;
 const Z_INDEX_HANDLE = 15;
 const Z_INDEX_GUIDELINE = 20;
+const CONTENT_LOCKED_MODES = new Set(['contentLocked', 'sdtContentLocked']);
 
 /**
  * Validates that the editor prop conforms to expected ProseMirror structure
@@ -78,8 +79,16 @@ const resizeEditor = computed(() => {
   return typeof editor?.getActiveEditor === 'function' ? editor.getActiveEditor() : editor;
 });
 
+const isImageContentLocked = computed(() => {
+  const lockMode = resolveImageLockMode(props.imageElement);
+  return lockMode ? CONTENT_LOCKED_MODES.has(lockMode) : false;
+});
+
 const isResizeDisabled = computed(
-  () => resizeEditor.value?.options?.documentMode === 'viewing' || !resizeEditor.value?.isEditable,
+  () =>
+    resizeEditor.value?.options?.documentMode === 'viewing' ||
+    !resizeEditor.value?.isEditable ||
+    isImageContentLocked.value,
 );
 
 /**
@@ -106,6 +115,26 @@ const dragState = ref(null);
  * Flag to track forced cleanup (overlay hidden during drag)
  */
 const forcedCleanup = ref(false);
+
+function readLockMode(element) {
+  return element?.dataset?.lockMode || element?.getAttribute?.('data-lock-mode') || null;
+}
+
+function resolveImageLockMode(imageElement) {
+  if (!imageElement) return null;
+
+  const directLockMode = readLockMode(imageElement);
+  if (directLockMode) return directLockMode;
+
+  const innerLockedElement = imageElement.querySelector?.('[data-lock-mode]');
+  const innerLockMode = readLockMode(innerLockedElement);
+  if (innerLockMode) return innerLockMode;
+
+  const sdtElement = imageElement.closest?.(
+    '.superdoc-structured-content-block[data-lock-mode], .superdoc-structured-content-inline[data-lock-mode]',
+  );
+  return readLockMode(sdtElement);
+}
 
 /**
  * Overlay position and size relative to image element.
@@ -536,7 +565,7 @@ function onDocumentMouseUp(event) {
  */
 function dispatchResizeTransaction(blockId, newWidth, newHeight) {
   const editor = resizeEditor.value;
-  if (!isValidEditor(editor) || !props.imageElement) {
+  if (!isValidEditor(editor) || !props.imageElement || isResizeDisabled.value) {
     return;
   }
 

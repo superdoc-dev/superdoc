@@ -25,6 +25,21 @@ describe('ensureSdtContainerStyles', () => {
     expect(cssText).toContain('border-color: var(--sd-content-controls-inline-hover-border, transparent);');
   });
 
+  it('keeps block SDT chrome paint-only so it does not change fragment geometry', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const blockRule = cssText.match(/\.superdoc-structured-content-block\s*\{([^}]*)\}/)?.[1] ?? '';
+    const chromeRule = cssText.match(/\.superdoc-structured-content-block::after\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(blockRule).not.toContain('padding:');
+    expect(blockRule).not.toContain('border:');
+    expect(chromeRule).toContain('position: absolute;');
+    expect(chromeRule).toContain('border: 1px solid transparent;');
+    expect(chromeRule).toContain('pointer-events: none;');
+  });
+
   it('gives empty inline SDTs a default visible affordance', () => {
     ensureSdtContainerStyles(document);
 

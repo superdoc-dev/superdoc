@@ -5907,8 +5907,7 @@ export class DomPainter {
     // When we don't use a wrapper (no clipPath, or clipPath with width/height 0), apply them on the img so layout is correct.
     const useWrapper = hasClipPath && run.width > 0 && run.height > 0;
     if (!useWrapper) {
-      // Apply vertical alignment (bottom-aligned to text baseline)
-      img.style.verticalAlign = run.verticalAlign ?? 'bottom';
+      img.style.verticalAlign = run.verticalAlign ?? 'top';
 
       // Apply spacing as CSS margins
       if (run.distTop) {
@@ -5985,7 +5984,7 @@ export class DomPainter {
       wrapper.style.height = `${run.height}px`;
       wrapper.style.boxSizing = 'border-box';
       wrapper.style.overflow = 'hidden';
-      wrapper.style.verticalAlign = run.verticalAlign ?? 'bottom';
+      wrapper.style.verticalAlign = run.verticalAlign ?? 'top';
       if (run.distTop) wrapper.style.marginTop = `${run.distTop}px`;
       if (run.distBottom) wrapper.style.marginBottom = `${run.distBottom}px`;
       if (run.distLeft) wrapper.style.marginLeft = `${run.distLeft}px`;
@@ -6035,7 +6034,7 @@ export class DomPainter {
       wrapper.style.display = 'inline-block';
       wrapper.style.width = `${run.width}px`;
       wrapper.style.height = `${run.height}px`;
-      wrapper.style.verticalAlign = run.verticalAlign ?? 'bottom';
+      wrapper.style.verticalAlign = run.verticalAlign ?? 'top';
       wrapper.style.position = 'relative';
       wrapper.style.zIndex = '1';
       if (run.distTop) wrapper.style.marginTop = `${run.distTop}px`;

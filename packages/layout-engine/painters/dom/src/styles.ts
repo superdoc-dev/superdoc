@@ -497,27 +497,44 @@ const SDT_CONTAINER_STYLES = `
 
 /* Structured Content Block - Blue border container */
 .superdoc-structured-content-block {
-  padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid transparent;
   position: relative;
+}
+
+.superdoc-structured-content-block::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  box-sizing: border-box;
+  pointer-events: none;
 }
 
 .superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
+}
+
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover::after {
   border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 /* Group hover (JavaScript-coordinated via PresentationEditor) */
 .superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
+}
+
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode)::after {
   border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 .superdoc-structured-content-block.ProseMirror-selectednode {
-  border-color: var(--sd-content-controls-block-border, #629be7);
   outline: none;
+}
+
+.superdoc-structured-content-block.ProseMirror-selectednode::after {
+  border-color: var(--sd-content-controls-block-border, #629be7);
 }
 
 /* Structured content drag handle/label - positioned above */
@@ -566,27 +583,39 @@ const SDT_CONTAINER_STYLES = `
 /* First fragment of a multi-fragment SDT: top corners, no bottom border */
 .superdoc-structured-content-block[data-sdt-container-start="true"]:not([data-sdt-container-end="true"]) {
   border-radius: 4px 4px 0 0;
+}
+
+.superdoc-structured-content-block[data-sdt-container-start="true"]:not([data-sdt-container-end="true"])::after {
   border-bottom: none;
 }
 
 /* Last fragment of a multi-fragment SDT: bottom corners, no top border */
 .superdoc-structured-content-block[data-sdt-container-end="true"]:not([data-sdt-container-start="true"]) {
   border-radius: 0 0 4px 4px;
+}
+
+.superdoc-structured-content-block[data-sdt-container-end="true"]:not([data-sdt-container-start="true"])::after {
   border-top: none;
 }
 
 /* Middle fragment (neither start nor end): no corners, no top/bottom borders */
 .superdoc-structured-content-block:not([data-sdt-container-start="true"]):not([data-sdt-container-end="true"]) {
   border-radius: 0;
+}
+
+.superdoc-structured-content-block:not([data-sdt-container-start="true"]):not([data-sdt-container-end="true"])::after {
   border-top: none;
   border-bottom: none;
 }
 
 /* Collapse double borders between adjacent SDT blocks */
 .superdoc-structured-content-block + .superdoc-structured-content-block {
-  border-top: none;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
+}
+
+.superdoc-structured-content-block + .superdoc-structured-content-block::after {
+  border-top: none;
 }
 
 /* Structured Content Inline - Inline wrapper with blue border */
@@ -709,6 +738,13 @@ const SDT_CONTAINER_STYLES = `
   border: none;
 }
 
+.presentation-editor--viewing .superdoc-structured-content-block::after,
+.presentation-editor--viewing .superdoc-structured-content-block:hover::after,
+.presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover::after,
+.presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-group-hover::after {
+  border: none;
+}
+
 .presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover,
 .presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-group-hover {
   background: none;
@@ -738,6 +774,10 @@ const SDT_CONTAINER_STYLES = `
     background: none;
     border: none;
     padding: 0;
+  }
+
+  .superdoc-structured-content-block::after {
+    border: none;
   }
 
   .superdoc-document-section__tooltip,

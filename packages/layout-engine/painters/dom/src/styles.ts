@@ -613,6 +613,25 @@ const SDT_CONTAINER_STYLES = `
   outline: none;
   background-color: transparent;
 }
+
+.superdoc-structured-content-inline[data-empty='true']:not([data-appearance='hidden']) {
+  border-color: var(--sd-content-controls-inline-border, #629be7);
+}
+
+.superdoc-empty-inline-sdt-placeholder {
+  display: inline-block;
+  width: 8px;
+  height: 0;
+  line-height: 0;
+  vertical-align: baseline;
+  overflow: hidden;
+}
+
+.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder {
+  width: 0;
+  min-width: 0;
+}
+
 /* Inline structured content label - shown when active */
 .superdoc-structured-content-inline__label {
   position: absolute;

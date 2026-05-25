@@ -405,6 +405,38 @@ describe('paragraph converters', () => {
       });
     });
 
+    it('should not merge empty inline SDT placeholders into adjacent text runs', () => {
+      const run1: TextRun = {
+        text: 'before',
+        fontFamily: 'Arial',
+        fontSize: 16,
+        pmStart: 0,
+        pmEnd: 6,
+      };
+      const placeholder: TextRun = {
+        kind: 'text',
+        text: '',
+        fontFamily: 'Arial',
+        fontSize: 16,
+        pmStart: 6,
+        pmEnd: 6,
+        visualPlaceholder: 'emptyInlineSdt',
+        sdt: { type: 'structuredContent', scope: 'inline', id: 'sdt-empty' },
+      };
+      const run2: TextRun = {
+        text: 'after',
+        fontFamily: 'Arial',
+        fontSize: 16,
+        pmStart: 6,
+        pmEnd: 11,
+      };
+
+      vi.mocked(trackedChangesCompatible).mockReturnValue(true);
+
+      const result = mergeAdjacentRuns([run1, placeholder, run2]);
+      expect(result).toEqual([run1, placeholder, run2]);
+    });
+
     it('should not merge runs with non-continuous PM positions', () => {
       const run1: TextRun = {
         text: 'hello',
@@ -1590,6 +1622,79 @@ describe('paragraph converters', () => {
             enableComments: true,
           }),
         );
+      });
+
+      it('should emit a visual placeholder run for empty inline structuredContent', () => {
+        const sdtNode: PMNode = {
+          type: 'structuredContent',
+          content: [],
+        };
+        const sdtMetadata: SdtMetadata = {
+          type: 'structuredContent',
+          scope: 'inline',
+          id: 'empty-inline-sdt',
+          alias: 'Empty SDT',
+        };
+        positions.set(sdtNode, { start: 20, end: 22 });
+        vi.mocked(resolveNodeSdtMetadata).mockReturnValue(sdtMetadata);
+
+        const blocks = paragraphToFlowBlocks(
+          {
+            type: 'paragraph',
+            content: [sdtNode],
+          },
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+        );
+
+        const paraBlock = blocks[0] as ParagraphBlock;
+        expect(paraBlock.runs).toEqual([
+          expect.objectContaining({
+            kind: 'text',
+            text: '',
+            sdt: sdtMetadata,
+            visualPlaceholder: 'emptyInlineSdt',
+            pmStart: 21,
+            pmEnd: 21,
+          }),
+        ]);
+      });
+
+      it('should emit a visual placeholder run for inline structuredContent with omitted content', () => {
+        const sdtNode: PMNode = {
+          type: 'structuredContent',
+        };
+        const sdtMetadata: SdtMetadata = {
+          type: 'structuredContent',
+          scope: 'inline',
+          id: 'contentless-inline-sdt',
+        };
+        positions.set(sdtNode, { start: 30, end: 32 });
+        vi.mocked(resolveNodeSdtMetadata).mockReturnValue(sdtMetadata);
+
+        const blocks = paragraphToFlowBlocks(
+          {
+            type: 'paragraph',
+            content: [sdtNode],
+          },
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+        );
+
+        const paraBlock = blocks[0] as ParagraphBlock;
+        expect(paraBlock.runs).toEqual([
+          expect.objectContaining({
+            text: '',
+            sdt: sdtMetadata,
+            visualPlaceholder: 'emptyInlineSdt',
+            pmStart: 31,
+            pmEnd: 31,
+          }),
+        ]);
       });
 
       it('should render fieldAnnotation as FieldAnnotationRun with inner content as displayLabel', () => {

@@ -145,6 +145,19 @@ export function createStructuredContentLockPlugin() {
         // boundaries can span wider ranges, but filterTransaction catches the real
         // step range as a safety net (with a possible brief cursor jump).
         if (from === to) {
+          const emptyInlineSDT = sdtNodes.find(
+            (s) => s.type === 'structuredContent' && s.pos + 1 === from && s.end - 1 === from,
+          );
+          if ((isBackspace || isDelete) && emptyInlineSDT) {
+            const isWrapperDeletable =
+              emptyInlineSDT.lockMode !== 'sdtLocked' && emptyInlineSDT.lockMode !== 'sdtContentLocked';
+            event.preventDefault();
+            if (isWrapperDeletable) {
+              view.dispatch(state.tr.delete(emptyInlineSDT.pos, emptyInlineSDT.end));
+            }
+            return true;
+          }
+
           if (isBackspace && from > 0) {
             affectedFrom = from - 1;
             // Path 2 — caret is exactly at the trailing wrapper boundary of an

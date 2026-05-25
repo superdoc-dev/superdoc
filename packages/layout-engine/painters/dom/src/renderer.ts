@@ -66,6 +66,7 @@ import {
   expandRunsForInlineNewlines,
   getCellSpacingPx,
   getParagraphInlineDirection,
+  isEmptyInlineSdtPlaceholderRun,
   normalizeColumnLayout,
   normalizeBaselineShift,
   resolveBaseFontSizeForVerticalText,
@@ -5528,6 +5529,18 @@ export class DomPainter {
     }
   }
 
+  private renderEmptyInlineSdtPlaceholderRun(run: TextRun): HTMLElement | null {
+    if (!this.doc) return null;
+    const elem = this.doc.createElement('span');
+    elem.classList.add('superdoc-empty-inline-sdt-placeholder');
+    elem.setAttribute('aria-hidden', 'true');
+    elem.dataset.layoutEpoch = String(this.layoutEpoch);
+    if (run.pmStart != null) elem.dataset.pmStart = String(run.pmStart);
+    if (run.pmEnd != null) elem.dataset.pmEnd = String(run.pmEnd);
+    this.applySdtDataset(elem, run.sdt);
+    return elem;
+  }
+
   private findLastTextRun(runs: Run[]): { run: TextRun; index: number } | null {
     for (let index = runs.length - 1; index >= 0; index -= 1) {
       const run = runs[index];
@@ -5663,6 +5676,10 @@ export class DomPainter {
     // Handle BreakRun - similar to LineBreakRun, breaks are handled by the measurer
     if (this.isBreakRun(run)) {
       return null;
+    }
+
+    if (isEmptyInlineSdtPlaceholderRun(run)) {
+      return this.renderEmptyInlineSdtPlaceholderRun(run);
     }
 
     // Handle TextRun
@@ -6721,6 +6738,9 @@ export class DomPainter {
         if (resolved && this.doc) {
           if (!geoSdtWrapper) {
             geoSdtWrapper = this.createInlineSdtWrapper(resolved.sdt);
+            if (isEmptyInlineSdtPlaceholderRun(runForSdt)) {
+              geoSdtWrapper.dataset.empty = 'true';
+            }
             geoSdtId = thisRunSdtId;
             geoSdtWrapperLeft = elemLeftPx;
             geoSdtMaxRight = elemLeftPx;
@@ -6881,6 +6901,23 @@ export class DomPainter {
           continue;
         }
 
+        if (isEmptyInlineSdtPlaceholderRun(baseRun)) {
+          const elem = this.renderRun(baseRun, context, trackedConfig);
+          if (elem) {
+            if (styleId) {
+              elem.setAttribute('styleid', styleId);
+            }
+            const segment = runSegments[0]!;
+            const baseX = segment.x !== undefined ? segment.x : cumulativeX;
+            const xPos = baseX + indentOffset;
+            elem.style.position = 'absolute';
+            elem.style.left = `${xPos}px`;
+            appendToLineGeo(elem, baseRun, xPos, segment.width);
+            cumulativeX = baseX + segment.width;
+          }
+          continue;
+        }
+
         // At this point, baseRun must be TextRun (has .text property)
         if (!('text' in baseRun)) {
           continue;
@@ -7013,6 +7050,9 @@ export class DomPainter {
           if (resolved && this.doc) {
             if (!currentInlineSdtWrapper) {
               currentInlineSdtWrapper = this.createInlineSdtWrapper(resolved.sdt);
+              if (isEmptyInlineSdtPlaceholderRun(run)) {
+                currentInlineSdtWrapper.dataset.empty = 'true';
+              }
               this.syncInlineSdtWrapperTypography(currentInlineSdtWrapper, run);
               currentInlineSdtId = runSdtId;
             }

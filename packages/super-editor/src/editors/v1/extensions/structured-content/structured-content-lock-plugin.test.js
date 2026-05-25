@@ -566,6 +566,30 @@ describe('StructuredContentLockPlugin', () => {
         expect(invokeLockHandleKeyDown('Backspace').handled).toBe(true);
         expect(sdtNodeExists(editor.state.doc, 'structuredContent')).toBe(false);
       });
+
+      it.each([
+        ['unlocked', 'Backspace', true],
+        ['unlocked', 'Delete', true],
+        ['contentLocked', 'Backspace', true],
+        ['sdtLocked', 'Backspace', false],
+        ['sdtContentLocked', 'Backspace', false],
+      ])('%s + %s inside an empty inline SDT', (lockMode, key, shouldDeleteWrapper) => {
+        const beforeText = schema.text('Before ');
+        const sdt = schema.nodes.structuredContent.create({ id: 'test-123', lockMode });
+        const afterText = schema.text(' After');
+        const paragraph = schema.nodes.paragraph.create(null, [beforeText, sdt, afterText]);
+        const doc = schema.nodes.doc.create(null, [paragraph]);
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+
+        placeCaretAt(state, sdtInfo.pos + 1);
+
+        const result = invokeLockHandleKeyDown(key);
+
+        expect(result.handled).toBe(true);
+        expect(result.prevented).toBe(true);
+        expect(sdtNodeExists(editor.state.doc, 'structuredContent')).toBe(!shouldDeleteWrapper);
+      });
     });
 
     describe('Path 1 — selection covers SDT content (label selection / triple-click)', () => {

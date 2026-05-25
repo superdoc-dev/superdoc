@@ -9,6 +9,14 @@
 
 import type { FlowBlock, Line, Run, TextRun } from './index.js';
 
+export function isEmptyInlineSdtPlaceholderRun(run: Run): run is TextRun & { visualPlaceholder: 'emptyInlineSdt' } {
+  return (
+    (run.kind === 'text' || run.kind === undefined) &&
+    'text' in run &&
+    (run as TextRun).visualPlaceholder === 'emptyInlineSdt'
+  );
+}
+
 /**
  * Expands text runs that contain inline newlines into multiple runs.
  *
@@ -82,6 +90,11 @@ export function sliceRunsForLine(block: FlowBlock, line: Line): Run[] {
     }
 
     const text = run.text ?? '';
+    if (isEmptyInlineSdtPlaceholderRun(run)) {
+      result.push(run);
+      continue;
+    }
+
     const isFirstRun = runIndex === line.fromRun;
     const isLastRun = runIndex === line.toRun;
 

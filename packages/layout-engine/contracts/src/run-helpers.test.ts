@@ -136,4 +136,21 @@ describe('sliceRunsForLine', () => {
     const line = makeLine({ fromRun: 0, fromChar: 2, toRun: 0, toChar: 2 });
     expect(sliceRunsForLine(block, line)).toEqual([]);
   });
+
+  it('preserves empty inline SDT visual placeholders', () => {
+    const run: TextRun = {
+      kind: 'text',
+      text: '',
+      fontFamily: 'Arial',
+      fontSize: 12,
+      pmStart: 10,
+      pmEnd: 10,
+      visualPlaceholder: 'emptyInlineSdt',
+      sdt: { type: 'structuredContent', scope: 'inline', id: 'sdt-1' },
+    };
+    const block = makeParagraph([run]);
+    const line = makeLine({ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0 });
+
+    expect(sliceRunsForLine(block, line)).toEqual([run]);
+  });
 });

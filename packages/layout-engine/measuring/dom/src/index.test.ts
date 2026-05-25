@@ -684,6 +684,38 @@ describe('measureBlock', () => {
         expect(line.toRun).toBeGreaterThanOrEqual(line.fromRun);
       });
     });
+
+    it('measures empty inline SDT placeholders as a small inline box', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-inline-sdt',
+        runs: [
+          {
+            kind: 'text',
+            text: '',
+            fontFamily: 'Arial',
+            fontSize: 16,
+            pmStart: 10,
+            pmEnd: 10,
+            visualPlaceholder: 'emptyInlineSdt',
+            sdt: { type: 'structuredContent', scope: 'inline', id: 'sdt-empty' },
+          },
+        ],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0]).toMatchObject({
+        fromRun: 0,
+        fromChar: 0,
+        toRun: 0,
+        toChar: 0,
+        width: 8,
+        segments: [{ runIndex: 0, fromChar: 0, toChar: 0, width: 8 }],
+      });
+    });
   });
 
   describe('advanced styling', () => {

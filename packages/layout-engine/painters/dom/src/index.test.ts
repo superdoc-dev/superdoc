@@ -2773,6 +2773,74 @@ describe('DomPainter', () => {
     expect(wrapper.textContent).not.toContain('Harvey citation');
   });
 
+  it('renders a visible wrapper for an empty inline SDT placeholder', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sc-empty',
+      runs: [
+        { text: 'Before ', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 7 },
+        {
+          kind: 'text',
+          text: '',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 8,
+          pmEnd: 8,
+          visualPlaceholder: 'emptyInlineSdt',
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'sc-empty-1',
+            alias: 'Empty SDT',
+          },
+        },
+        { text: ' after', fontFamily: 'Arial', fontSize: 16, pmStart: 8, pmEnd: 14 },
+      ],
+      attrs: {},
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 2, toChar: 6, width: 120, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sc-empty',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 0,
+              pmEnd: 14,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const wrapper = mount.querySelector(
+      '.superdoc-structured-content-inline[data-sdt-id="sc-empty-1"]',
+    ) as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.dataset.empty).toBe('true');
+    expect(wrapper?.dataset.pmStart).toBe('8');
+    expect(wrapper?.dataset.pmEnd).toBe('8');
+    expect(wrapper?.querySelector('.superdoc-empty-inline-sdt-placeholder')).toBeTruthy();
+    expect(wrapper?.textContent).not.toContain('old content');
+  });
+
   it('keeps inline SDT wrapper font-size in sync when run font-size changes', () => {
     const block: FlowBlock = {
       kind: 'paragraph',

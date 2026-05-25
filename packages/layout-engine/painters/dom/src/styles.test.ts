@@ -25,6 +25,36 @@ describe('ensureSdtContainerStyles', () => {
     expect(cssText).toContain('border-color: var(--sd-content-controls-inline-hover-border, transparent);');
   });
 
+  it('gives empty inline SDTs a default visible affordance', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const emptyRule = cssText.match(
+      /\.superdoc-structured-content-inline\[data-empty='true'\]:not\(\[data-appearance='hidden'\]\)\s*\{([^}]*)\}/,
+    )?.[1];
+
+    expect(cssText).toContain(".superdoc-structured-content-inline[data-empty='true']:not([data-appearance='hidden'])");
+    expect(cssText).toContain('border-color: var(--sd-content-controls-inline-border, #629be7);');
+    expect(emptyRule).not.toContain('display: inline-block');
+    expect(emptyRule).not.toContain('vertical-align');
+  });
+
+  it('reserves empty inline SDT width without adding line-box height', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const placeholderRule = cssText.match(/\.superdoc-empty-inline-sdt-placeholder\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(placeholderRule).toContain('display: inline-block;');
+    expect(placeholderRule).toContain('width: 8px;');
+    expect(placeholderRule).toContain('height: 0;');
+    expect(placeholderRule).toContain('line-height: 0;');
+    expect(placeholderRule).toContain('vertical-align: baseline;');
+    expect(placeholderRule).not.toContain('height: 1em;');
+  });
+
   it('suppresses structured-content hover backgrounds in viewing mode, including grouped hover', () => {
     ensureSdtContainerStyles(document);
 

@@ -342,6 +342,8 @@ export type TextRun = RunMarks & {
    */
   dataAttrs?: Record<string, string>;
   sdt?: SdtMetadata;
+  /** Layout-only placeholder for visual affordances that do not represent document text. */
+  visualPlaceholder?: 'emptyInlineSdt';
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
   token?: 'pageNumber' | 'totalPageCount' | 'pageReference';
@@ -2197,6 +2199,6 @@ export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from 
 
 // Pure transformations on inline-run shapes (used by pm-adapter, layout-bridge,
 // and painter-dom). Located in contracts to avoid reverse stage dependencies.
-export { expandRunsForInlineNewlines, sliceRunsForLine } from './run-helpers.js';
+export { expandRunsForInlineNewlines, isEmptyInlineSdtPlaceholderRun, sliceRunsForLine } from './run-helpers.js';
 
 export * as Engines from './engines/index.js';

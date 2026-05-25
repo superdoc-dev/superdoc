@@ -7945,6 +7945,26 @@ const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string
   return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
 };
 
+const stableSerializeEvidenceValue = (value: unknown): string => {
+  if (value === undefined) return '';
+  if (value === null) return 'null';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerializeEvidenceValue(item)).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .filter((key) => record[key] !== undefined)
+      .map((key) => `${JSON.stringify(key)}:${stableSerializeEvidenceValue(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(String(value));
+};
+
 /**
  * Type guard to validate list marker attributes structure.
  *
@@ -8047,6 +8067,17 @@ const deriveBlockVersion = (block: FlowBlock): string => {
             imgRun.distLeft ?? '',
             imgRun.distRight ?? '',
             readClipPathValue((imgRun as { clipPath?: unknown }).clipPath),
+            imgRun.verticalAlign ?? '',
+            imgRun.rotation ?? '',
+            imgRun.flipH ? 1 : 0,
+            imgRun.flipV ? 1 : 0,
+            imgRun.gain ?? '',
+            imgRun.blacklevel ?? '',
+            imgRun.grayscale ? 1 : 0,
+            stableSerializeEvidenceValue(imgRun.lum),
+            stableSerializeEvidenceValue(imgRun.hyperlink),
+            stableSerializeEvidenceValue(imgRun.sdt),
+            stableSerializeEvidenceValue(imgRun.dataAttrs),
             // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
           ].join(',');
         }

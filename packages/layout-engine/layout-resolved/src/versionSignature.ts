@@ -230,6 +230,17 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
             imgRun.distLeft ?? '',
             imgRun.distRight ?? '',
             readClipPathValue((imgRun as { clipPath?: unknown }).clipPath),
+            imgRun.verticalAlign ?? '',
+            imgRun.rotation ?? '',
+            imgRun.flipH ? 1 : 0,
+            imgRun.flipV ? 1 : 0,
+            imgRun.gain ?? '',
+            imgRun.blacklevel ?? '',
+            imgRun.grayscale ? 1 : 0,
+            stableSerializeEvidenceValue(imgRun.lum),
+            stableSerializeEvidenceValue(imgRun.hyperlink),
+            stableSerializeEvidenceValue(imgRun.sdt),
+            stableSerializeEvidenceValue(imgRun.dataAttrs),
           ].join(',');
         }
 

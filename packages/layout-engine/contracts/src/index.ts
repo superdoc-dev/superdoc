@@ -458,10 +458,10 @@ export type ImageRun = {
 
   /**
    * Vertical alignment of image relative to text baseline.
-   * Currently only 'bottom' is supported (image sits on baseline).
-   * Future: 'top', 'middle', 'baseline', 'text-top', 'text-bottom'.
+   * 'top' keeps the image box inside the measured line height; 'bottom'
+   * preserves legacy baseline alignment for existing callers.
    */
-  verticalAlign?: 'bottom';
+  verticalAlign?: 'top' | 'bottom';
 
   /** Absolute ProseMirror position (inclusive) of this image run. */
   pmStart?: number;

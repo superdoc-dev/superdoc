@@ -2,12 +2,18 @@
 .superdoc-structured-content-block.superdoc-structured-content-block {
   border-color: var(--superdoc-field-owner-color, #629be7);
   --sd-content-controls-inline-border: var(--superdoc-field-owner-color, #629be7);
+  --sd-content-controls-inline-bg: color-mix(in srgb, var(--superdoc-field-owner-color, #629be7) 8%, transparent);
   --sd-content-controls-inline-hover-border: var(--superdoc-field-owner-color, #629be7);
-  --sd-content-controls-inline-hover-bg: color-mix(in srgb, var(--superdoc-field-owner-color, #629be7) 8%, transparent);
+  --sd-content-controls-inline-hover-bg: color-mix(
+    in srgb,
+    var(--superdoc-field-owner-color, #629be7) 12%,
+    transparent
+  );
   --sd-content-controls-block-border: var(--superdoc-field-owner-color, #629be7);
+  --sd-content-controls-block-bg: color-mix(in srgb, var(--superdoc-field-owner-color, #629be7) 8%, transparent);
   --sd-content-controls-block-hover-border: var(--superdoc-field-owner-color, #629be7);
-  --sd-content-controls-block-hover-bg: color-mix(in srgb, var(--superdoc-field-owner-color, #629be7) 8%, transparent);
-  --sd-content-controls-lock-hover-bg: color-mix(in srgb, var(--superdoc-field-owner-color, #629be7) 8%, transparent);
+  --sd-content-controls-block-hover-bg: color-mix(in srgb, var(--superdoc-field-owner-color, #629be7) 12%, transparent);
+  --sd-content-controls-lock-hover-bg: color-mix(in srgb, var(--superdoc-field-owner-color, #629be7) 12%, transparent);
   --sd-content-controls-label-border: var(--superdoc-field-owner-color, #629be7);
   --sd-content-controls-label-bg: color-mix(in srgb, var(--superdoc-field-owner-color, #629be7) 87%, transparent);
 }
@@ -26,16 +32,22 @@
 .superdoc-structured-content-block[data-sdt-tag*='"fieldType":"signer"'] {
   border-color: var(--superdoc-field-signer-color, #d97706);
   --sd-content-controls-inline-border: var(--superdoc-field-signer-color, #d97706);
+  --sd-content-controls-inline-bg: color-mix(in srgb, var(--superdoc-field-signer-color, #d97706) 8%, transparent);
   --sd-content-controls-inline-hover-border: var(--superdoc-field-signer-color, #d97706);
   --sd-content-controls-inline-hover-bg: color-mix(
     in srgb,
-    var(--superdoc-field-signer-color, #d97706) 8%,
+    var(--superdoc-field-signer-color, #d97706) 12%,
     transparent
   );
   --sd-content-controls-block-border: var(--superdoc-field-signer-color, #d97706);
+  --sd-content-controls-block-bg: color-mix(in srgb, var(--superdoc-field-signer-color, #d97706) 8%, transparent);
   --sd-content-controls-block-hover-border: var(--superdoc-field-signer-color, #d97706);
-  --sd-content-controls-block-hover-bg: color-mix(in srgb, var(--superdoc-field-signer-color, #d97706) 8%, transparent);
-  --sd-content-controls-lock-hover-bg: color-mix(in srgb, var(--superdoc-field-signer-color, #d97706) 8%, transparent);
+  --sd-content-controls-block-hover-bg: color-mix(
+    in srgb,
+    var(--superdoc-field-signer-color, #d97706) 12%,
+    transparent
+  );
+  --sd-content-controls-lock-hover-bg: color-mix(in srgb, var(--superdoc-field-signer-color, #d97706) 12%, transparent);
   --sd-content-controls-label-border: var(--superdoc-field-signer-color, #d97706);
   --sd-content-controls-label-bg: color-mix(in srgb, var(--superdoc-field-signer-color, #d97706) 87%, transparent);
 }

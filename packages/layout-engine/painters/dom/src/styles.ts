@@ -501,6 +501,7 @@ const SDT_CONTAINER_STYLES = `
   box-sizing: border-box;
   border-radius: 4px;
   border: 1px solid transparent;
+  background-color: var(--sd-content-controls-block-bg, transparent);
   position: relative;
 }
 
@@ -596,6 +597,7 @@ const SDT_CONTAINER_STYLES = `
   box-sizing: border-box;
   border-radius: 4px;
   border: 1px solid transparent;
+  background-color: var(--sd-content-controls-inline-bg, transparent);
   position: relative;
   display: inline;
   font-size: initial;
@@ -651,6 +653,7 @@ const SDT_CONTAINER_STYLES = `
   padding: 0;
   border: none;
   border-radius: 0;
+  background-color: transparent;
 }
 .superdoc-structured-content-inline[data-appearance='hidden']:hover {
   background-color: transparent;

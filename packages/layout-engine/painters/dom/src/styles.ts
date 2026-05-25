@@ -770,6 +770,12 @@ const SDT_CONTAINER_STYLES = `
   border: none;
 }
 
+.presentation-editor--viewing .superdoc-structured-content-block:hover::before,
+.presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover::before,
+.presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-group-hover::before {
+  background: none;
+}
+
 .presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover,
 .presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-group-hover {
   background: none;

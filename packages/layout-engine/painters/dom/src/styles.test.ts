@@ -85,6 +85,10 @@ describe('ensureSdtContainerStyles', () => {
 
     const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
     const cssText = styleEl?.textContent ?? '';
+    const beforeRule =
+      cssText.match(
+        /\.presentation-editor--viewing \.superdoc-structured-content-block(?:\:hover|\.sdt-group-hover|\[data-lock-mode\]\.sdt-group-hover)::before\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
 
     expect(cssText).toContain('.presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover');
     expect(cssText).toContain(
@@ -94,6 +98,7 @@ describe('ensureSdtContainerStyles', () => {
       '.presentation-editor--viewing .superdoc-structured-content-inline[data-lock-mode]:hover',
     );
     expect(cssText).toContain('background: none;');
+    expect(beforeRule).toContain('background: none;');
   });
 });
 

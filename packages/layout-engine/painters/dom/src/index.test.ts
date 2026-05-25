@@ -13157,6 +13157,110 @@ describe('applyRunDataAttributes', () => {
         expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('96px');
       });
 
+      it('uses paragraph-global line index for block SDT chrome on continuation fragments', () => {
+        const continuedSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-continued',
+          runs: [{ text: 'First line second line', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 22 }],
+          attrs: {
+            indent: { left: 40, firstLine: 30 },
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-continued',
+              alias: 'Continued Control',
+            },
+          },
+        };
+
+        const continuedSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 10,
+              width: 100,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+            {
+              fromRun: 0,
+              fromChar: 11,
+              toRun: 0,
+              toChar: 22,
+              width: 96,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 40,
+        };
+
+        const fragment: Fragment = {
+          kind: 'para',
+          blockId: 'block-sdt-continued',
+          fromLine: 1,
+          toLine: 2,
+          x: 20,
+          y: 30,
+          width: 320,
+          pmStart: 11,
+          pmEnd: 22,
+          continuesFromPrev: true,
+        };
+
+        const continuedSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [{ number: 1, fragments: [fragment] }],
+        };
+
+        const painter = createTestPainter({ blocks: [continuedSdtBlock], measures: [continuedSdtMeasure] });
+        painter.setResolvedLayout({
+          version: 1,
+          flowMode: 'paginated',
+          pageGap: 0,
+          pages: [
+            {
+              id: 'page-0',
+              index: 0,
+              number: 1,
+              width: 400,
+              height: 500,
+              items: [
+                {
+                  kind: 'fragment',
+                  id: 'block-sdt-continued:1:2',
+                  pageIndex: 0,
+                  x: fragment.x,
+                  y: fragment.y,
+                  width: fragment.width,
+                  height: 20,
+                  fragmentKind: 'para',
+                  fragment,
+                  blockId: 'block-sdt-continued',
+                  fragmentIndex: 0,
+                  pmStart: fragment.pmStart,
+                  pmEnd: fragment.pmEnd,
+                  continuesFromPrev: true,
+                  block: continuedSdtBlock,
+                  measure: continuedSdtMeasure,
+                },
+              ],
+            },
+          ],
+        });
+        painter.paint(continuedSdtLayout, mount);
+
+        const paintedFragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(paintedFragment.style.width).toBe('320px');
+        expect(paintedFragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('40px');
+        expect(paintedFragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('96px');
+      });
+
       it('limits block SDT chrome to inline image content width', () => {
         const imageOnlySdtBlock: FlowBlock = {
           kind: 'paragraph',

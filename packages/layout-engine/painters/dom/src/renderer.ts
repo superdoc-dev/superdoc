@@ -3232,7 +3232,7 @@ export class DomPainter {
 
       // Apply SDT container styling (document sections, structured content blocks)
       applySdtContainerStyling(this.doc, fragmentEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
-      this.applyBlockSdtChromeBounds(fragmentEl, block, lines, fragment.width, content);
+      this.applyBlockSdtChromeBounds(fragmentEl, block, lines, fragment.width, fragment.fromLine, content);
 
       // Render drop cap if present (only on the first fragment, not continuation)
       if (content?.dropCap) {
@@ -5520,6 +5520,7 @@ export class DomPainter {
     block: ParagraphBlock,
     lines: Line[],
     fragmentWidth: number,
+    fragmentFromLine: number,
     content?: ResolvedParagraphContent,
   ): void {
     const sdt = block.attrs?.sdt ?? block.attrs?.containerSdt;
@@ -5548,7 +5549,9 @@ export class DomPainter {
       const lineWidth = Math.max(0, line.naturalWidth ?? line.width ?? 0);
       if (lineWidth <= 0) continue;
 
-      const lineOffset = this.resolveBlockSdtChromeLineOffset(block, line, content?.lines[index], index);
+      const resolvedLine = content?.lines[index];
+      const lineIndex = resolvedLine?.lineIndex ?? fragmentFromLine + index;
+      const lineOffset = this.resolveBlockSdtChromeLineOffset(block, line, resolvedLine, lineIndex);
       const alignmentSlack = Math.max(0, fragmentWidth - lineOffset - lineWidth);
       const alignment = block.attrs?.alignment;
       const lineLeft =

@@ -47,6 +47,12 @@ const inlineStructuredContentDoc = {
   ],
 };
 
+const inlineStructuredContentDocWithLockMode = (lockMode) => {
+  const doc = structuredClone(inlineStructuredContentDoc);
+  doc.content[0].content[1].attrs.lockMode = lockMode;
+  return doc;
+};
+
 /**
  * Test the handleKeyDown plugin handler directly via someProp.
  * Returns true if the handler blocked the key, false if allowed.
@@ -200,6 +206,42 @@ describe('Editable extension insertText beforeinput handling', () => {
     expect(editor.state.doc.textBetween(0, editor.state.selection.from)).toBe('A a');
     expect(editor.state.selection.empty).toBe(true);
   });
+
+  it.each([
+    ['contentLocked', 'after', 'A Fielda Z', 'A Fielda'],
+    ['sdtContentLocked', 'after', 'A Fielda Z', 'A Fielda'],
+    ['contentLocked', 'before', 'A aField Z', 'A a'],
+    ['sdtContentLocked', 'before', 'A aField Z', 'A a'],
+  ])(
+    'inserts collapsed beforeinput insertText outside a %s inline SDT at the %s boundary',
+    (lockMode, boundary, expectedText, expectedTextBeforeSelection) => {
+      ({ editor } = initTestEditor({
+        loadFromSchema: true,
+        content: inlineStructuredContentDocWithLockMode(lockMode),
+      }));
+
+      const sdt = getInlineStructuredContent();
+      const pos = boundary === 'after' ? sdt.pos + sdt.node.nodeSize : sdt.pos;
+      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pos)));
+
+      const beforeInputEvent = new InputEvent('beforeinput', {
+        data: 'a',
+        inputType: 'insertText',
+        bubbles: true,
+        cancelable: true,
+      });
+      const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
+
+      const updatedSdt = findStructuredContent(editor.state.doc);
+      expect(prevented).toBe(true);
+      expect(updatedSdt).not.toBeNull();
+      expect(updatedSdt.node.attrs.lockMode).toBe(lockMode);
+      expect(updatedSdt.node.textContent).toBe('Field');
+      expect(editor.state.doc.textContent).toBe(expectedText);
+      expect(editor.state.doc.textBetween(0, editor.state.selection.from)).toBe(expectedTextBeforeSelection);
+      expect(editor.state.selection.empty).toBe(true);
+    },
+  );
 
   it('intercepts collapsed beforeinput insertText for active footer editors', () => {
     ({ editor } = initTestEditor({

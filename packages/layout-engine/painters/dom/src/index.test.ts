@@ -7325,6 +7325,9 @@ describe('DomPainter', () => {
   });
 
   describe('renderImageRun (inline image runs)', () => {
+    const inlineImageSrc =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
     const renderInlineImageRun = (
       run: Extract<FlowBlock, { kind: 'paragraph' }>['runs'][number],
       lineWidth = 100,
@@ -7376,6 +7379,94 @@ describe('DomPainter', () => {
       const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
     };
+
+    const renderInlineImageTextLine = (runs: Extract<FlowBlock, { kind: 'paragraph' }>['runs']) => {
+      const imageBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'img-text-block',
+        runs,
+      };
+
+      const imageMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: runs.length - 1,
+            toChar: 'text' in runs[runs.length - 1]! ? runs[runs.length - 1]!.text.length : 0,
+            width: 140,
+            ascent: 40,
+            descent: 0,
+            lineHeight: 40,
+          },
+        ],
+        totalHeight: 40,
+      };
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-text-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 140,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      painter.paint(imageLayout, mount);
+    };
+
+    it('bottom-aligns normal text runs on lines containing inline images', () => {
+      renderInlineImageTextLine([
+        { text: 'Before ', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 7 },
+        { kind: 'image', src: inlineImageSrc, width: 40, height: 40, pmStart: 7, pmEnd: 8 },
+        { text: ' after', fontFamily: 'Arial', fontSize: 16, pmStart: 8, pmEnd: 14 },
+      ]);
+
+      const textSpans = Array.from(mount.querySelectorAll('.superdoc-line > span')) as HTMLElement[];
+      expect(textSpans.map((span) => span.textContent)).toEqual(['Before ', ' after']);
+      expect(textSpans[0]?.style.lineHeight).toBe('normal');
+      expect(textSpans[0]?.style.verticalAlign).toBe('bottom');
+      expect(textSpans[1]?.style.lineHeight).toBe('normal');
+      expect(textSpans[1]?.style.verticalAlign).toBe('bottom');
+
+      const img = mount.querySelector('img') as HTMLImageElement | null;
+      expect(img?.style.verticalAlign).toBe('top');
+    });
+
+    it('preserves explicit vertical positioning on text runs beside inline images', () => {
+      renderInlineImageTextLine([
+        { text: 'Base ', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 5 },
+        { kind: 'image', src: inlineImageSrc, width: 40, height: 40, pmStart: 5, pmEnd: 6 },
+        {
+          text: '2',
+          fontFamily: 'Arial',
+          fontSize: 10.4,
+          vertAlign: 'superscript',
+          pmStart: 6,
+          pmEnd: 7,
+        },
+      ]);
+
+      const textSpans = Array.from(mount.querySelectorAll('.superdoc-line > span')) as HTMLElement[];
+      expect(textSpans.map((span) => span.textContent)).toEqual(['Base ', '2']);
+      expect(textSpans[0]?.style.lineHeight).toBe('normal');
+      expect(textSpans[0]?.style.verticalAlign).toBe('bottom');
+      expect(textSpans[1]?.style.lineHeight).toBe('1');
+      expect(textSpans[1]?.style.verticalAlign).toBe('5.28px');
+    });
 
     it('renders img element with valid data URL', () => {
       const imageBlock: FlowBlock = {

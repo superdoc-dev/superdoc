@@ -5502,6 +5502,17 @@ export class DomPainter {
     return wrapper;
   }
 
+  private alignNormalTextBesideInlineImage(element: HTMLElement, run: Run, lineContainsInlineImage: boolean): void {
+    if (!lineContainsInlineImage) return;
+    if ((run.kind !== 'text' && run.kind !== undefined) || !('text' in run)) return;
+
+    const textRun = run as TextRun;
+    if (normalizeBaselineShift(textRun.baselineShift) != null || textRun.vertAlign != null) return;
+
+    element.style.lineHeight = 'normal';
+    element.style.verticalAlign = 'bottom';
+  }
+
   private setTextContentWithFormattingSpaceMarks(element: HTMLElement, text: string): void {
     if (!this.showFormattingMarks || !text.includes(' ') || !this.doc) {
       element.textContent = text;
@@ -6608,6 +6619,7 @@ export class DomPainter {
       spaceCount,
       shouldJustify: justifyShouldApply,
     });
+    const lineContainsInlineImage = runsForLine.some((run) => this.isImageRun(run));
     const resolveLineIndentOffset = (): number => {
       if (indentOffsetOverride != null) {
         return indentOffsetOverride;
@@ -6945,6 +6957,7 @@ export class DomPainter {
             if (styleId) {
               elem.setAttribute('styleid', styleId);
             }
+            this.alignNormalTextBesideInlineImage(elem, segmentRun, lineContainsInlineImage);
             // Determine X position for this segment
             // Layout positions are relative to content area start (0).
             // Add indentOffset to position content at the correct paragraph indent.
@@ -7044,6 +7057,7 @@ export class DomPainter {
           if (styleId) {
             elem.setAttribute('styleid', styleId);
           }
+          this.alignNormalTextBesideInlineImage(elem, run, lineContainsInlineImage);
 
           // If this run has inline SDT, add to or create wrapper
           if (resolved && this.doc) {

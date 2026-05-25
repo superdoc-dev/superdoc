@@ -1,5 +1,6 @@
 import { NodeSelection, Plugin, PluginKey } from 'prosemirror-state';
 import { ySyncPluginKey } from 'y-prosemirror';
+import { BLOCK_NODE_METADATA_UPDATE_META } from '../block-node/block-node.js';
 
 export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock');
 
@@ -205,6 +206,10 @@ export function createStructuredContentLockPlugin() {
       // always be applied locally to keep every client converged, even if the
       // incoming step spans locked SDTs.
       if (tr.getMeta?.(ySyncPluginKey)) {
+        return true;
+      }
+
+      if (tr.getMeta?.(BLOCK_NODE_METADATA_UPDATE_META)) {
         return true;
       }
 

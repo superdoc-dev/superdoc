@@ -123,11 +123,13 @@ export function createStructuredContentLockPlugin() {
             const isWrapperDeletable =
               exactContentSDT.lockMode !== 'sdtLocked' && exactContentSDT.lockMode !== 'sdtContentLocked';
             if (isContentLocked && isWrapperDeletable) {
-              const tr = state.tr.setSelection(NodeSelection.create(state.doc, exactContentSDT.pos));
-              view.dispatch(tr);
               if (isCut) {
+                const tr = state.tr.setSelection(NodeSelection.create(state.doc, exactContentSDT.pos));
+                view.dispatch(tr);
                 return false;
               }
+              const tr = state.tr.delete(exactContentSDT.pos, exactContentSDT.end);
+              view.dispatch(tr);
               event.preventDefault();
               return true;
             }

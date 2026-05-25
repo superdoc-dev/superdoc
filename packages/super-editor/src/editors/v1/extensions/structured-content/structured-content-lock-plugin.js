@@ -140,10 +140,11 @@ export function createStructuredContentLockPlugin() {
         let affectedFrom = from;
         let affectedTo = to;
 
-        // If selection is collapsed, backspace/delete affects adjacent position.
-        // Note: this is a single-character approximation. joinBackward at paragraph
-        // boundaries can span wider ranges, but filterTransaction catches the real
-        // step range as a safety net (with a possible brief cursor jump).
+        // If selection is collapsed, Backspace/Delete affects adjacent content.
+        // Inline SDT wrapper boundaries are handed to keymap commands so both
+        // directions can select the SDT content before a destructive action.
+        // Other positions use a single-character approximation here;
+        // filterTransaction catches wider step ranges as a safety net.
         if (from === to) {
           const emptyInlineSDT = sdtNodes.find(
             (s) => s.type === 'structuredContent' && s.pos + 1 === from && s.end - 1 === from,

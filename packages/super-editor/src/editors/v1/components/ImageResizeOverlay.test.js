@@ -113,6 +113,23 @@ describe('ImageResizeOverlay', () => {
       wrapper.unmount();
       remove();
     });
+
+    it('should report resize disabled when an outer SDT is content-locked even if the image has an unlocked lock mode', () => {
+      const editor = createMockEditor();
+      const { imageEl, remove } = createResizableImageElement({
+        lockMode: 'unlocked',
+        ancestorLockMode: 'contentLocked',
+      });
+
+      const wrapper = mount(ImageResizeOverlay, {
+        props: { editor, visible: true, imageElement: imageEl },
+      });
+
+      expect(wrapper.vm.isResizeDisabled).toBe(true);
+
+      wrapper.unmount();
+      remove();
+    });
   });
 
   it.each(['contentLocked', 'sdtContentLocked'])(

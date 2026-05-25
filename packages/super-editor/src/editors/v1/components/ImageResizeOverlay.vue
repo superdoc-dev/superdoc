@@ -123,17 +123,27 @@ function readLockMode(element) {
 function resolveImageLockMode(imageElement) {
   if (!imageElement) return null;
 
+  const lockModes = [];
   const directLockMode = readLockMode(imageElement);
-  if (directLockMode) return directLockMode;
+  if (directLockMode) lockModes.push(directLockMode);
 
-  const innerLockedElement = imageElement.querySelector?.('[data-lock-mode]');
-  const innerLockMode = readLockMode(innerLockedElement);
-  if (innerLockMode) return innerLockMode;
+  imageElement.querySelectorAll?.('[data-lock-mode]').forEach((element) => {
+    const lockMode = readLockMode(element);
+    if (lockMode) lockModes.push(lockMode);
+  });
 
-  const sdtElement = imageElement.closest?.(
+  let sdtElement = imageElement.closest?.(
     '.superdoc-structured-content-block[data-lock-mode], .superdoc-structured-content-inline[data-lock-mode]',
   );
-  return readLockMode(sdtElement);
+  while (sdtElement) {
+    const lockMode = readLockMode(sdtElement);
+    if (lockMode) lockModes.push(lockMode);
+    sdtElement = sdtElement.parentElement?.closest?.(
+      '.superdoc-structured-content-block[data-lock-mode], .superdoc-structured-content-inline[data-lock-mode]',
+    );
+  }
+
+  return lockModes.find((lockMode) => CONTENT_LOCKED_MODES.has(lockMode)) ?? lockModes[0] ?? null;
 }
 
 /**

@@ -218,6 +218,28 @@ describe('computeDirtyRegions', () => {
     expect(result.stableBlockIds.has('0-paragraph')).toBe(true);
   });
 
+  it('detects inline image SDT metadata changes inside paragraphs', () => {
+    const prev = [paragraphWithRuns('0-paragraph', [imageRun('img.png', 100, 50)])];
+    const next = [
+      paragraphWithRuns('0-paragraph', [
+        {
+          ...imageRun('img.png', 100, 50),
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'image-sdt',
+            lockMode: 'contentLocked',
+          },
+        },
+      ]),
+    ];
+
+    const result = computeDirtyRegions(prev, next);
+
+    expect(result.firstDirtyIndex).toBe(0);
+    expect(result.stableBlockIds.has('0-paragraph')).toBe(false);
+  });
+
   it('detects inline image resize in mixed text and image paragraphs', () => {
     const prev = [
       paragraphWithRuns('0-paragraph', [

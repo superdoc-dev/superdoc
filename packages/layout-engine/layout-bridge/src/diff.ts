@@ -477,6 +477,7 @@ const imageRunsEqual = (a: ImageRun, b: ImageRun): boolean => {
     a.grayscale === b.grayscale &&
     jsonEqual(a.lum, b.lum) &&
     jsonEqual(a.hyperlink, b.hyperlink) &&
+    jsonEqual(a.sdt, b.sdt) &&
     shallowRecordEqual(a.dataAttrs, b.dataAttrs)
   );
 };

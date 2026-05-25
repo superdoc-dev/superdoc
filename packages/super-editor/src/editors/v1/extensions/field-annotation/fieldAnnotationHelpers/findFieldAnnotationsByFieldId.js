@@ -2,9 +2,12 @@ import { findChildren } from '@core/helpers/findChildren.js';
 
 /**
  * Find field annotations by field ID or array of field IDs.
- * @param fieldIdOrArray The field ID or array of field IDs.
- * @param state The editor state.
- * @returns The field annotations array.
+ *
+ * @param {string | string[]} fieldIdOrArray - Single field ID or array
+ *   of IDs to match against `node.attrs.fieldId`.
+ * @param {import('./types.js').EditorState} state - The editor state to search.
+ * @returns {import('./types.js').FieldAnnotationEntry[]} Matching
+ *   `{ node, pos }` entries.
  */
 export function findFieldAnnotationsByFieldId(fieldIdOrArray, state) {
   let fieldAnnotations = findChildren(state.doc, (node) => {

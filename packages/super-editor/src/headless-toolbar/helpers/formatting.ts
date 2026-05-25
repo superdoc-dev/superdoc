@@ -7,6 +7,27 @@ import { getCurrentResolvedParagraphProperties, isFieldAnnotationSelection, reso
 import { createDirectCommandExecute, isCommandDisabled } from './general.js';
 import type { ToolbarContext } from '../types.js';
 
+/**
+ * Local mirror of `ActiveFormattingEntry` from `getActiveFormatting.js`
+ * (the JS typedef isn't re-exportable cleanly from TS). Discriminated
+ * union: `copyFormat` uses a boolean `attrs: true` sentinel, every
+ * other entry carries a real attrs record.
+ */
+type FormattingEntry = { name: 'copyFormat'; attrs: true } | { name: string; attrs: Record<string, unknown> };
+
+type FormattingEntryWithAttrs = Extract<FormattingEntry, { attrs: Record<string, unknown> }>;
+
+const hasFormattingAttrs = (entry: FormattingEntry): entry is FormattingEntryWithAttrs => {
+  return typeof entry.attrs === 'object' && entry.attrs !== null;
+};
+
+const getFormattingAttr = (entries: FormattingEntry[], name: string, attr: string): unknown[] => {
+  return entries
+    .filter((entry): entry is FormattingEntryWithAttrs => entry.name === name && hasFormattingAttrs(entry))
+    .map((entry) => entry.attrs[attr])
+    .filter((value) => value != null);
+};
+
 export const normalizeFontSizeValue = (value: unknown) => {
   if (typeof value === 'number') {
     return `${value}pt`;
@@ -59,12 +80,10 @@ export const isFormattingActivatedFromLinkedStyle = (
   return result;
 };
 
-export const hasNegatedFormattingMark = (
-  formatting: Array<{ name: string; attrs?: Record<string, unknown> }>,
-  markName: string,
-) => {
+export const hasNegatedFormattingMark = (formatting: FormattingEntry[], markName: string) => {
   const rawActiveMark = formatting.find((mark) => mark.name === markName);
-  return rawActiveMark ? isNegatedMark(rawActiveMark.name, rawActiveMark.attrs) : false;
+  if (!rawActiveMark || !hasFormattingAttrs(rawActiveMark)) return false;
+  return isNegatedMark(rawActiveMark.name, rawActiveMark.attrs);
 };
 
 type FormatCommandsStorage = {
@@ -195,10 +214,7 @@ export const createFontSizeStateDeriver =
       };
     }
 
-    const values = formatting
-      .filter((mark) => mark.name === 'fontSize')
-      .map((mark) => mark.attrs?.fontSize)
-      .filter((value) => value != null);
+    const values = getFormattingAttr(formatting, 'fontSize', 'fontSize');
 
     const normalizedValues = values.map((value) => normalizeFontSizeValue(value));
     const uniqueValues = [...new Set(normalizedValues)];
@@ -236,10 +252,7 @@ export const createFontFamilyStateDeriver =
       };
     }
 
-    const values = formatting
-      .filter((mark) => mark.name === 'fontFamily')
-      .map((mark) => mark.attrs?.fontFamily)
-      .filter((value) => value != null);
+    const values = getFormattingAttr(formatting, 'fontFamily', 'fontFamily');
 
     const normalizedValues = values.map((value) => normalizeFontFamilyValue(value));
     const uniqueValues = [...new Set(normalizedValues)];
@@ -281,10 +294,7 @@ export const createTextColorStateDeriver =
       };
     }
 
-    const values = formatting
-      .filter((mark) => mark.name === 'color')
-      .map((mark) => mark.attrs?.color)
-      .filter((value) => value != null);
+    const values = getFormattingAttr(formatting, 'color', 'color');
 
     const markNegated = hasNegatedFormattingMark(formatting, 'color');
     const normalizedValues = values.map((value) => normalizeColorValue(value));
@@ -313,10 +323,7 @@ export const createHighlightColorStateDeriver =
       };
     }
 
-    const values = formatting
-      .filter((mark) => mark.name === 'highlight')
-      .map((mark) => mark.attrs?.color)
-      .filter((value) => value != null);
+    const values = getFormattingAttr(formatting, 'highlight', 'color');
 
     const markNegated = hasNegatedFormattingMark(formatting, 'highlight');
     const normalizedValues = values.map((value) => normalizeColorValue(value));
@@ -345,10 +352,7 @@ export const createLinkStateDeriver =
       };
     }
 
-    const values = formatting
-      .filter((mark) => mark.name === 'link')
-      .map((mark) => mark.attrs?.href)
-      .filter((value) => value != null);
+    const values = getFormattingAttr(formatting, 'link', 'href');
 
     const normalizedValues = values.map((value) => normalizeLinkHrefValue(value));
     const uniqueValues = [...new Set(normalizedValues)];

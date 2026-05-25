@@ -60,6 +60,7 @@
                   "getting-started/frameworks/nuxt",
                   "getting-started/frameworks/angular",
                   "getting-started/frameworks/laravel",
+                  "getting-started/frameworks/solid",
                   "getting-started/frameworks/vanilla-js"
                 ]
               },

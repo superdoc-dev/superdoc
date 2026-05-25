@@ -1267,7 +1267,9 @@ function copySequenceStateOverrides(editor, fromNumId, toNumId, levels) {
   for (const sourceEl of sourceNumDef.elements) {
     if (sourceEl.name !== 'w:lvlOverride') continue;
 
-    const ilvl = sourceEl.attributes?.['w:ilvl'];
+    // SD-3240: OOXML attribute values are typed as `unknown`; the
+    // level set expects strings, which is what the parser produces.
+    const ilvl = /** @type {string | null | undefined} */ (sourceEl.attributes?.['w:ilvl']);
     if (ilvl == null) continue;
     if (levelSet && !levelSet.has(ilvl)) continue;
 

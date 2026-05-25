@@ -120,6 +120,21 @@
     "ci": true
   },
   {
+    "id": "getting-started-solid",
+    "section": "getting-started",
+    "subsection": "frameworks",
+    "kind": "integration-example",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Solid starter",
+    "category": "Getting Started",
+    "surface": "Frameworks",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/getting-started/solid",
+    "docs": "https://docs.superdoc.dev/getting-started/frameworks/solid",
+    "ci": true
+  },
+  {
     "id": "editor-built-in-comments",
     "section": "editor",
     "subsection": "built-in-ui",

@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-05-18T22:39:27.584Z",
+  "generatedAt": "2026-05-23T12:40:30.787Z",
   "ticket": "SD-3212 PR A0",
   "package": "superdoc",
   "rootExport": {
     "types": {
-      "import": "./dist/superdoc/src/index.d.ts",
-      "require": "./dist/superdoc/src/index.d.cts"
+      "import": "./dist/superdoc/src/public/index.d.ts",
+      "require": "./dist/superdoc/src/public/index.d.cts"
     },
     "import": "./dist/superdoc.es.js",
     "require": "./dist/superdoc.cjs"
   },
   "sources": {
     "types.import": {
-      "path": "./dist/superdoc/src/index.d.ts",
+      "path": "./dist/superdoc/src/public/index.d.ts",
       "names": [
         "AIWriter",
         "AnnotatorHelpers",
@@ -162,6 +162,10 @@
         "StoryLocator",
         "SuperConverter",
         "SuperDoc",
+        "SuperDocExceptionEditorPayload",
+        "SuperDocExceptionPayload",
+        "SuperDocExceptionRestorePayload",
+        "SuperDocExceptionStorePayload",
         "SuperDocLayoutEngineOptions",
         "SuperDocTelemetryConfig",
         "SuperEditor",
@@ -218,7 +222,7 @@
       "error": null
     },
     "types.require": {
-      "path": "./dist/superdoc/src/index.d.cts",
+      "path": "./dist/superdoc/src/public/index.d.cts",
       "names": [
         "AIWriter",
         "AnnotatorHelpers",
@@ -368,6 +372,10 @@
         "StoryLocator",
         "SuperConverter",
         "SuperDoc",
+        "SuperDocExceptionEditorPayload",
+        "SuperDocExceptionPayload",
+        "SuperDocExceptionRestorePayload",
+        "SuperDocExceptionStorePayload",
         "SuperDocLayoutEngineOptions",
         "SuperDocTelemetryConfig",
         "SuperEditor",
@@ -519,11 +527,11 @@
     }
   },
   "counts": {
-    "types.import": 200,
-    "types.require": 200,
+    "types.import": 204,
+    "types.require": 204,
     "import": 41,
     "require": 41,
-    "union": 200
+    "union": 204
   },
   "divergences": {
     "typesImportVsRequire": {
@@ -668,6 +676,10 @@
         "SelectionHandle",
         "SelectionInfo",
         "StoryLocator",
+        "SuperDocExceptionEditorPayload",
+        "SuperDocExceptionPayload",
+        "SuperDocExceptionRestorePayload",
+        "SuperDocExceptionStorePayload",
         "SuperDocLayoutEngineOptions",
         "SuperDocTelemetryConfig",
         "SurfaceComponentProps",

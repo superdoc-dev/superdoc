@@ -160,7 +160,7 @@ export interface RuntimeDocument extends Document {
    * silently replacing whatever was passed. SD-2872 removed this from
    * the public `Document` interface so consumers stop trying to use it
    * as a stable per-document override; it lives on `RuntimeDocument`
-   * only so internal SuperDoc.js callsites can type the assignment.
+   * only so internal SuperDoc callsites can type the assignment.
    */
   role?: 'editor' | 'viewer' | 'suggester';
   /**
@@ -181,12 +181,31 @@ export interface RuntimeDocument extends Document {
    * Use the Document API (`editor.doc`) instead.
    */
   getPresentationEditor?: () => SuperEditorPresentationEditor | null | undefined;
+  /**
+   * Runtime-only flag mirrored from `Config.rulers` per document by the
+   * Pinia store. SuperDoc writes this on each document during the
+   * setShowRulers flow; not part of consumer-supplied `Document`.
+   */
+  rulers?: boolean;
+  /**
+   * Runtime-only method attached by the comments composable on each
+   * document. Set after the comments store is ready; called during
+   * mode switches. Not part of consumer-supplied `Document`.
+   */
+  restoreComments?: () => void;
+  /**
+   * Runtime-only method attached by the comments composable on each
+   * document. Set after the comments store is ready; called during
+   * DOCX export when comments should be stripped. Not part of
+   * consumer-supplied `Document`.
+   */
+  removeComments?: () => void;
 }
 
 /** Collaboration module configuration. */
 export interface CollaborationConfig {
   /** External Yjs document (provider-agnostic mode). */
-  ydoc?: object;
+  ydoc?: YDoc;
   /** External collaboration provider (provider-agnostic mode). */
   provider?: CollaborationProvider;
   /** Internal provider type (deprecated). */
@@ -1287,6 +1306,65 @@ export interface SuperDocTelemetryConfig {
   licenseKey?: string;
 }
 
+/**
+ * Exception payload raised by the SuperDoc store during document
+ * initialization (empty entry, init failure, normalization error).
+ * Always carries `stage: 'document-init'` and the offending document
+ * config (`null`/`undefined` when the entry itself was empty).
+ *
+ * `error` is `unknown` because the catch path in `initializeDocuments`
+ * forwards the raw caught value (`catch (e) { emitException({ error: e,
+ * ... }) }`) and thrown values can be anything in JS. The other two
+ * emit sites construct `new Error(...)`, but consumers must narrow
+ * before reading `.message`.
+ */
+export interface SuperDocExceptionStorePayload {
+  error: unknown;
+  stage: 'document-init';
+  document: Document | null | undefined;
+}
+
+/**
+ * Exception payload raised when restoring SuperDoc state from a
+ * persisted source fails. Carries the document the runtime tried to
+ * restore.
+ */
+export interface SuperDocExceptionRestorePayload {
+  error: unknown;
+  document: Document;
+}
+
+/**
+ * Exception payload raised by the underlying editor lifecycle (load,
+ * encryption-prompt, command failures, etc.). `code` is set when the
+ * editor maps the failure to a known kind (e.g. `'password-required'`).
+ * `editor` is `Editor | null | undefined` because the password-prompt
+ * re-emit path forwards `originalException?.editor ?? null`, so
+ * consumers may receive `null` (not just `undefined`).
+ */
+export interface SuperDocExceptionEditorPayload {
+  error: unknown;
+  editor?: Editor | null;
+  code?: string;
+  documentId?: string | null;
+}
+
+/**
+ * Union of all `exception` event payloads SuperDoc emits at runtime.
+ * Consumers can narrow with `'stage' in payload` (store init) or
+ * `'code' in payload` (editor lifecycle).
+ *
+ * The union exists today because three independent emit sites
+ * (`initializeDocuments`, the restore path, and the editor lifecycle)
+ * pre-date a shared error contract. Normalizing them to a single
+ * payload shape is a separate follow-up; consumers can narrow with
+ * the `in` checks above in the meantime.
+ */
+export type SuperDocExceptionPayload =
+  | SuperDocExceptionStorePayload
+  | SuperDocExceptionRestorePayload
+  | SuperDocExceptionEditorPayload;
+
 export interface Config {
   /** The ID of the SuperDoc. */
   superdocId?: string;
@@ -1294,6 +1372,12 @@ export interface Config {
   selector: string | HTMLElement;
   /** The mode of the document (default: 'editing'). */
   documentMode?: DocumentMode;
+  /**
+   * When `documentMode` is `'viewing'`, allow the user to make text
+   * selections even though editing is disabled. Defaults to `false`.
+   * Forwarded to the underlying editor as `options.allowSelectionInViewMode`.
+   */
+  allowSelectionInViewMode?: boolean;
   /** The role of the user in this SuperDoc. */
   role?: 'editor' | 'viewer' | 'suggester';
   /**
@@ -1362,8 +1446,21 @@ export interface Config {
   onTransaction?: (params: EditorTransactionEvent) => void;
   /** Callback after an editor is destroyed. */
   onEditorDestroy?: () => void;
-  /** Callback when there is an error in the content. */
-  onContentError?: (params: { error: object; editor: Editor; documentId: string; file: File }) => void;
+  /**
+   * Callback when an editor reports a content error (parse failure, doc
+   * import error, etc.). `error` is widened to `unknown` because the
+   * super-editor side mostly normalizes to `Error` but some emitters
+   * (e.g. `insertContentAt`) forward the original caught value. `file`
+   * matches `Document.data` (`File | Blob | null | undefined`) since
+   * the document can be loaded from any of those shapes. `documentId`
+   * is guaranteed at runtime by `#initDocuments`.
+   */
+  onContentError?: (params: {
+    error: unknown;
+    editor: Editor;
+    documentId: string;
+    file: File | Blob | null | undefined;
+  }) => void;
   /** Callback when the SuperDoc is ready. */
   onReady?: (editor: { superdoc: SuperDoc }) => void;
   /** Callback when comments are updated. */
@@ -1380,8 +1477,13 @@ export interface Config {
   onCollaborationReady?: (params: { editor: Editor }) => void;
   /** Callback when document is updated. */
   onEditorUpdate?: (params: EditorUpdateEvent) => void;
-  /** Callback when an exception is thrown. */
-  onException?: (params: { error: Error; editor?: Editor | null; code?: string }) => void;
+  /**
+   * Callback when SuperDoc emits an `exception` event. The payload is a
+   * union of three runtime shapes (store init, restore failure, editor
+   * lifecycle). Narrow with `'stage' in params` (store init) or `'code'
+   * in params` (editor) before reading shape-specific fields.
+   */
+  onException?: (params: SuperDocExceptionPayload) => void;
   /** Callback when the comments list is rendered. */
   onCommentsListChange?: (params: { isRendered: boolean }) => void;
   /**
@@ -1485,7 +1587,7 @@ export interface Config {
  * call sites cast `this.config` to this type so they can access these
  * invariants without per-site null guards.
  *
- * Use this from internal SuperDoc.js callsites that need the augmented shape
+ * Use this from internal SuperDoc callsites that need the augmented shape
  * (e.g. `/** @type {InternalConfig} *\/ (this.config).socket = ...`).
  */
 export interface InternalConfig extends Config {
@@ -1495,8 +1597,15 @@ export interface InternalConfig extends Config {
    * not part of the public Config surface.
    */
   socket?: HocuspocusProviderWebsocket;
-  /** Normalized to `[]` by `#init` if the consumer passes nothing or `undefined`. */
-  documents: Document[];
+  /**
+   * Normalized to `[]` by `#init` if the consumer passes nothing or
+   * `undefined`. Narrowed to `RuntimeDocument[]` because once `#init`
+   * runs, each entry has been augmented with the runtime-only fields
+   * (`role`, `getEditor`, `getPresentationEditor`, etc.). Consumers
+   * still pass `Document[]` via the public `Config` interface; this
+   * override only describes the post-init shape internal callsites see.
+   */
+  documents: RuntimeDocument[];
   /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
   modules: Modules;
   /** Spread of `DEFAULT_USER` over consumer input by `#init`; `name` always present. */

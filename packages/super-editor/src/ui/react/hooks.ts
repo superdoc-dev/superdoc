@@ -69,10 +69,7 @@ export function useSuperDocTrackChanges(): TrackChangesSlice {
  * ```
  */
 export function useSuperDocContentControls(): ContentControlsSlice {
-  return useSuperDocSlice(
-    (ui) => ui.select((state) => state.contentControls, shallowEqual),
-    EMPTY_CONTENT_CONTROLS,
-  );
+  return useSuperDocSlice((ui) => ui.select((state) => state.contentControls, shallowEqual), EMPTY_CONTENT_CONTROLS);
 }
 
 /** Subscribe to the full toolbar snapshot (context + per-command states). */

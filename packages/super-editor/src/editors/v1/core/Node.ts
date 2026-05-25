@@ -1,13 +1,71 @@
 import { getExtensionConfigField } from './helpers/getExtensionConfigField.js';
 import { callOrGet } from './utilities/callOrGet.js';
 import type { MaybeGetter } from './utilities/callOrGet.js';
-import type { NodeType, ParseRule, DOMOutputSpec, Node as PmNode } from 'prosemirror-model';
+import type { NodeType, ParseRule, Node as PmNode } from 'prosemirror-model';
 import type { Plugin } from 'prosemirror-state';
 import type { NodeView, EditorView, Decoration, DecorationSource } from 'prosemirror-view';
 import type { InputRule } from './InputRule.js';
 import type { Editor } from './Editor.js';
 import type { Command } from './types/ChainedCommands.js';
-import type { AttributeSpec } from './Attribute.js';
+import type { AttributeSpec, AttributeValue } from './Attribute.js';
+
+/**
+ * Attribute object accepted inside a `SuperDocDOMOutputSpec` tuple.
+ * Runtime `setAttribute` coerces non-string values, so number /
+ * boolean / null / undefined are accepted alongside string.
+ */
+export type RenderDOMAttrs = Record<string, string | number | boolean | null | undefined>;
+
+/**
+ * Tuple branch of `SuperDocDOMOutputSpec`, declared as an interface
+ * to break TypeScript's direct-recursion check (PM's upstream
+ * `readonly [string, ...any[]]` avoids this because `any` swallows
+ * the recursion; we cannot replicate that with `unknown`). The
+ * interface form defers the self-reference through a named type,
+ * which TS accepts.
+ *
+ * The shape mirrors PM's tuple convention: index 0 is the tagName,
+ * subsequent items are an optional attrs object, the literal `0`
+ * (content hole), or nested specs. Both readonly and mutable
+ * arrays satisfy this interface because `ReadonlyArray` is the
+ * supertype of `Array`.
+ */
+export interface SuperDocDOMOutputSpecTuple extends ReadonlyArray<SuperDocDOMOutputSpec | RenderDOMAttrs | 0> {
+  readonly 0: string;
+}
+
+/**
+ * Public DOM rendering output spec for `NodeConfig.renderDOM`.
+ * Mirrors ProseMirror's `DOMOutputSpec` shape but replaces the
+ * upstream `readonly [string, ...any[]]` tuple branch with the
+ * `SuperDocDOMOutputSpecTuple` interface above, so the public type
+ * surface does not leak `any` through the SD-3213 supported-root
+ * audit.
+ *
+ * `globalThis.Node` is used to disambiguate from the editor `Node`
+ * class exported from this same file.
+ */
+export type SuperDocDOMOutputSpec =
+  | string
+  | globalThis.Node
+  | { dom: globalThis.Node; contentDOM?: HTMLElement }
+  | SuperDocDOMOutputSpecTuple;
+
+/**
+ * Public function signature for `NodeConfig.renderDOM`. Function-only
+ * (not `MaybeGetter`) because the runtime in
+ * `packages/super-editor/src/editors/v1/core/Schema.js:99` invokes
+ * `renderDOM({ node, htmlAttributes })` directly with no
+ * `callOrGet()` wrapper. Typing it as `MaybeGetter<T>` would
+ * advertise a direct-value form that throws `TypeError` at runtime.
+ *
+ * `htmlAttributes` is the `Record<string, AttributeValue>` that
+ * `Attribute.getAttributesToRender()` returns at runtime.
+ */
+export type RenderDOMFn = (props: {
+  node: PmNode;
+  htmlAttributes: Record<string, AttributeValue>;
+}) => SuperDocDOMOutputSpec;
 
 /**
  * Configuration for Node extensions.
@@ -68,8 +126,21 @@ export interface NodeConfig<
   /** The DOM parsing rules */
   parseDOM?: MaybeGetter<ParseRule[]>;
 
-  /** The DOM rendering function - returns a DOMOutputSpec (allows mutable arrays for JS compatibility) */
-  renderDOM?: MaybeGetter<DOMOutputSpec>;
+  /**
+   * The DOM rendering function for the node. Receives
+   * `{ node, htmlAttributes }` at runtime (see `Schema.js:99`) and
+   * returns a `SuperDocDOMOutputSpec`: a public local alias
+   * mirroring ProseMirror's `DOMOutputSpec` shape but with an
+   * unknown-free tuple branch.
+   *
+   * Typed as a plain function (`RenderDOMFn`) rather than
+   * `MaybeGetter<SuperDocDOMOutputSpec>` because the runtime only
+   * invokes the function form. A direct-value `renderDOM: ['br']`
+   * type-checks under `MaybeGetter<T>` but throws `TypeError` at
+   * runtime. Narrowing the type aligns the public contract with
+   * what the runtime actually supports.
+   */
+  renderDOM?: RenderDOMFn;
 
   /** Function or object to add options to the node */
   addOptions?: MaybeGetter<Options>;

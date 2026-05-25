@@ -18,9 +18,39 @@ import type { OrderedListStyle } from '../../../extensions/types/paragraph-comma
 // Types
 // ---------------------------------------------------------------------------
 
+/**
+ * SD-3240: OOXML element subtree as held inside `NumberingModel`
+ * records. Recursive; each element has an optional name, attributes
+ * map, and nested children.
+ */
+export interface NumberingElement {
+  name?: string;
+  attributes?: Record<string, unknown>;
+  elements?: NumberingElement[];
+  [key: string]: unknown;
+}
+
+/**
+ * SD-3240: minimal shape internal callers read from numbering
+ * abstract / definition records. The OOXML element tree lives at
+ * `.elements`; specific tag-level fields are accessed via deeper
+ * indexing that callers narrow locally.
+ */
+export interface NumberingRecord {
+  name?: string;
+  attributes?: Record<string, unknown>;
+  elements?: NumberingElement[];
+  [key: string]: unknown;
+}
+
 export interface NumberingModel {
-  abstracts: Record<number, any>;
-  definitions: Record<number, any>;
+  // SD-3240: changed from `Record<number, any>` to a structural type
+  // with `.elements`. Internal callers read `.elements` to walk the
+  // OOXML tree; deeper field access goes through local casts. The
+  // change drains the audit findings reachable through
+  // `editor.converter.numbering.abstracts` / `.definitions`.
+  abstracts: Record<number, NumberingRecord>;
+  definitions: Record<number, NumberingRecord>;
 }
 
 interface GenerateOptions {
@@ -293,7 +323,10 @@ export function generateNewListDefinition(numbering: NumberingModel, options: Ge
 
   if (level != null && start != null && text != null && fmt != null) {
     if (numbering.definitions[numId]) {
-      const abstractId = numbering.definitions[numId]?.elements[0]?.attributes['w:val'];
+      // SD-3240: attribute values are typed as `unknown` (OOXML attrs
+      // can be any primitive). Cast to number for indexing into the
+      // typed `abstracts` map.
+      const abstractId = numbering.definitions[numId]?.elements?.[0]?.attributes?.['w:val'] as number;
       newAbstractId = abstractId;
       const abstract = numbering.abstracts[abstractId];
       newAbstractDef = { ...abstract };
@@ -354,7 +387,9 @@ export function changeNumIdSameAbstract(
   const newId = getNextId(numbering.definitions);
 
   const def = numbering.definitions[numId];
-  const abstractId = def?.elements?.find((el: any) => el.name === 'w:abstractNumId')?.attributes?.['w:val'];
+  const abstractId = def?.elements?.find((el: NumberingElement) => el.name === 'w:abstractNumId')?.attributes?.[
+    'w:val'
+  ] as number | undefined;
   const abstract = abstractId != null ? numbering.abstracts[abstractId] : undefined;
 
   if (!abstract) {
@@ -386,7 +421,7 @@ export function removeListDefinitions(numbering: NumberingModel, listId: number)
   const def = numbering.definitions[listId];
   if (!def) return;
 
-  const abstractId = def.elements?.[0]?.attributes?.['w:val'];
+  const abstractId = def.elements?.[0]?.attributes?.['w:val'] as number | undefined;
   delete numbering.definitions[listId];
   if (abstractId != null) delete numbering.abstracts[abstractId];
 }

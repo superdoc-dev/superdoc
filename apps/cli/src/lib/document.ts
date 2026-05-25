@@ -222,6 +222,11 @@ export async function openDocument(
   // afterCommit hooks are always wired, including in headless CLI sessions.
   initPartsRuntime(editor as never);
 
+  // SD-3214: bridge observes ydoc.getArray('comments') and feeds remote
+  // (browser-authored) metadata into the editor's CommentEntityStore so the
+  // headless SDK can read text/creatorName/createdTime via doc.comments.list().
+  commentBridge?.attachEditor(editor as never);
+
   // Apply content override post-init.
   //   - markdown: DOM-free AST pipeline
   //   - plainText: builds PM paragraphs directly, preserving all whitespace

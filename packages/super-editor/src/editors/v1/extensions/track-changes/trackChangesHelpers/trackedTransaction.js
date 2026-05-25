@@ -308,9 +308,27 @@ const getPendingDeadKeyPlaceholder = ({ tr, newTr, user }) => {
 };
 
 /**
- * Tracked transaction to track changes.
- * @param {{ tr: import('prosemirror-state').Transaction; state: import('prosemirror-state').EditorState; user: import('@core/types/EditorConfig.js').User; replacements?: 'paired' | 'independent' }} params
- * @returns {import('prosemirror-state').Transaction} Modified transaction.
+ * Process a transaction through the track-changes pipeline and return
+ * a modified transaction with tracked-change marks applied (or the
+ * original transaction unchanged when track-changes is bypassed, e.g.
+ * for Yjs remote-origin transactions or disallowed meta).
+ *
+ * The per-property JSDoc style below is load-bearing: a single-blob
+ * `@param {{ ... }} params` form does not bind to the destructured
+ * arrow-function signature in vite-plugin-dts emit and resurfaces the
+ * function as `(...args: any[]): any` (SD-2980 PR C).
+ *
+ * @param {object} args
+ * @param {import('./types.js').Transaction} args.tr - The incoming
+ *   transaction to process.
+ * @param {import('./types.js').EditorState} args.state - The editor
+ *   state before `args.tr` is applied.
+ * @param {import('@core/types/EditorConfig.js').User} args.user - The
+ *   acting user; required to attribute the tracked change.
+ * @param {'paired' | 'independent'} [args.replacements] - Strategy
+ *   for processing replacement steps. Defaults to `'paired'`.
+ * @returns {import('./types.js').Transaction} The (possibly modified)
+ *   transaction ready to dispatch.
  */
 export const trackedTransaction = ({ tr, state, user, replacements = 'paired' }) => {
   const onlyInputTypeMeta = ['inputType', 'uiEvent', 'paste', 'pointer', 'composition'];

@@ -6,6 +6,7 @@
  */
 
 import type { Editor } from '../Editor.js';
+import type { CollaborationProvider } from '../types/EditorConfig.js';
 import type { TrackedChangesMode, FlowBlock, Layout, Measure, FlowMode, SectionMetadata } from '@superdoc/contracts';
 import type { LayoutMode, RulerOptions } from '@superdoc/painter-dom';
 import type { ProofingConfig } from './proofing/types.js';
@@ -193,13 +194,13 @@ export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] 
    */
   documentMode?: 'editing' | 'viewing' | 'suggesting';
   /**
-   * Collaboration provider with awareness support (e.g., WebsocketProvider from y-websocket).
-   * Required for remote cursor rendering.
+   * Collaboration provider (e.g., WebsocketProvider from y-websocket).
+   * Uses the shared `CollaborationProvider` interface from `EditorConfig`
+   * so SuperDoc and PresentationEditor agree on the provider contract.
+   * PresentationEditor internally narrows `awareness` before reading
+   * `setLocalStateField`; consumers may pass any Y-compatible provider.
    */
-  collaborationProvider?: {
-    awareness?: AwarenessWithSetField;
-    disconnect?: () => void;
-  } | null;
+  collaborationProvider?: CollaborationProvider | null;
   /**
    * Whether to disable the context menu.
    * @default false

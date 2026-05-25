@@ -11,11 +11,7 @@ test.use({ config: { toolbar: 'full', showSelection: true } });
 // explicit because it's the contract this spec asserts against.
 const HIDDEN_IDS = ['1001', '1004', '1005'] as const;
 const VISIBLE_IDS = ['1002', '1003'] as const; // boundingBox + omitted (default)
-const HIDDEN_ALIAS_CANARIES = [
-  'HIDDEN_ALIAS_LEAK_CANARY',
-  'HIDDEN_ALIAS_DOUBLE_A',
-  'HIDDEN_ALIAS_DOUBLE_B',
-] as const;
+const HIDDEN_ALIAS_CANARIES = ['HIDDEN_ALIAS_LEAK_CANARY', 'HIDDEN_ALIAS_DOUBLE_A', 'HIDDEN_ALIAS_DOUBLE_B'] as const;
 
 const INLINE_SDT = '.superdoc-structured-content-inline';
 const INLINE_LABEL = '.superdoc-structured-content-inline__label';
@@ -78,9 +74,7 @@ test.describe('inline SDT appearance=hidden (SD-3110)', () => {
     const layoutText = await superdoc.page.evaluate(() => {
       // .presentation-editor__pages is the painter-dom root; selection,
       // copy, and visual reads operate on it.
-      const root =
-        document.querySelector('.presentation-editor__pages') ??
-        document.querySelector('.superdoc-layout');
+      const root = document.querySelector('.presentation-editor__pages') ?? document.querySelector('.superdoc-layout');
       return root?.textContent ?? '';
     });
 
@@ -101,9 +95,7 @@ test.describe('inline SDT appearance=hidden (SD-3110)', () => {
     // is split across lines/fragments — each fragment carries the same
     // data-sdt-id. Scope to the painter class and take `.first()`: the
     // CSS specificity bug is per-element, so a single wrapper is enough.
-    const wrapper = superdoc.page
-      .locator('.superdoc-structured-content-inline[data-sdt-id="1001"]')
-      .first();
+    const wrapper = superdoc.page.locator('.superdoc-structured-content-inline[data-sdt-id="1001"]').first();
     await wrapper.hover();
     await superdoc.waitForStable();
 

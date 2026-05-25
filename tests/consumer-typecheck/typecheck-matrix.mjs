@@ -370,6 +370,105 @@ const scenarios = [
     files: ['src/track-changes-helpers.ts'],
     mustPass: true,
   },
+  // SD-2980 PR A: fieldAnnotationHelpers exported under `superdoc/super-editor`
+  // now carry typed JSDoc on every helper. The fixture pins each helper's
+  // return shape (`{ node, pos }`, plus DOMRect for the rect variant) and
+  // proves arguments are real ProseMirror types, not `any`.
+  {
+    name: 'bundler / field annotation helper typing (SD-2980)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/field-annotation-helpers-typed.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / field annotation helper typing (SD-2980)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/field-annotation-helpers-typed.ts'],
+    mustPass: true,
+  },
+  // SD-2980 PR B: trackChangesHelpers core (markSnapshotHelpers +
+  // documentHelpers) now carry typed JSDoc. The fixture pins each
+  // exported helper's return shape, the MarkSnapshot output type, the
+  // PmMark|null return on findMarkInRangeBySnapshot, and the 3-arg
+  // documentHelpers.findChildren signature (distinct from the simpler
+  // @core/helpers/findChildren).
+  {
+    name: 'bundler / track changes helpers typing (SD-2980 PR B)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/track-changes-helpers-typed.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / track changes helpers typing (SD-2980 PR B)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/track-changes-helpers-typed.ts'],
+    mustPass: true,
+  },
+  // SD-673 Phase 3: Document API consumer fixture. Imports `DocumentApi`
+  // from `superdoc` and pins return / parameter shapes for representative
+  // operations (find, query.match, insert, format.apply, contentControls.*,
+  // comments.create, capabilities, metadata.*). Also asserts bad inputs
+  // are rejected via @ts-expect-error.
+  {
+    name: 'bundler / document-api consumer (SD-673 Phase 3)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/document-api-consumer.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / document-api consumer (SD-673 Phase 3)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/document-api-consumer.ts'],
+    mustPass: true,
+  },
+  // SD-673 Phase 4D: SuperDoc Config callback shapes. Pins
+  // `Config.onContentError` and `Config.onException` payload typings
+  // after they were widened to match runtime emit reality (error:
+  // unknown, file: File | Blob | null | undefined, exception union).
+  {
+    name: 'bundler / superdoc config callbacks (SD-673 Phase 4D)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/superdoc-config-callbacks.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / superdoc config callbacks (SD-673 Phase 4D)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/superdoc-config-callbacks.ts'],
+    mustPass: true,
+  },
   // SD-2892: full public-facing surface with skipLibCheck=false. These
   // scenarios pack SuperDoc, install it into the consumer fixture, and compile
   // every public consumer assertion under the resolution modes customers use.
@@ -631,6 +730,57 @@ const scenarios = [
     strict: true,
     noPropertyAccessFromIndexSignature: true,
     files: ['src/extensions-helpers.ts'],
+    mustPass: true,
+  },
+  // SD-3240 / SD-3245: editor.converter, editor.extensionService, and
+  // getActiveFormatting are typed surfaces, not `any`. Drains the final
+  // 18 supported-root allowlist entries (16 + 2) to 0. The fixture's
+  // `Equal<T, any>` checks regress the build if any of those surfaces
+  // widen back to `any`.
+  {
+    name: 'bundler / editor surfaces not any (SD-3240)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/editor-surfaces-not-any.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / editor surfaces not any (SD-3240)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/editor-surfaces-not-any.ts'],
+    mustPass: true,
+  },
+  // SD-3213: NodeConfig.renderDOM uses a local SuperDocDOMOutputSpec
+  // alias instead of PM's DOMOutputSpec (which contains
+  // `readonly [string, ...any[]]`). Pins the four consumer shapes
+  // (string, tuple with attrs+0, nested tuples, { dom, contentDOM? })
+  // plus negative assertions for bad tuple elements and non-string
+  // tagName.
+  {
+    name: 'bundler / node renderDOM (SD-3213)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/node-render-dom.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / node renderDOM (SD-3213)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/node-render-dom.ts'],
     mustPass: true,
   },
   // SD-3213 sub 2: ProseMirror generic defaults on Editor + Node

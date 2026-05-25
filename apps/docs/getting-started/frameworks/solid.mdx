@@ -1,0 +1,127 @@
+---
+title: Solid Integration
+sidebarTitle: Solid
+keywords: 'solid docx editor, solidjs docx editor, solid word component, superdoc solid, microsoft word solid, solidjs document editor'
+---
+
+SuperDoc works in Solid through the core `superdoc` package. Mount it into a DOM element, clean it up on unmount, and drive it with Solid's fine-grained reactivity.
+
+<Note>
+SuperDoc does not ship a first-party Solid wrapper. Use the core `superdoc` package directly, or build a community wrapper on top of it.
+</Note>
+
+## Install
+
+```bash
+npm install superdoc
+```
+
+## Quick start
+
+```tsx
+import { onCleanup, onMount } from 'solid-js';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+export default function App() {
+  let superdoc: SuperDoc | undefined;
+  const editorId = 'superdoc-editor';
+
+  onMount(() => {
+    superdoc = new SuperDoc({
+      selector: `#${editorId}`,
+    });
+  });
+
+  onCleanup(() => {
+    superdoc?.destroy();
+  });
+
+  return <div id={editorId} style={{ height: '700px' }} />;
+}
+```
+
+## Core concepts
+
+### Document modes
+
+| Mode         | Description               |
+| ------------ | ------------------------- |
+| `editing`    | Full editing capabilities |
+| `viewing`    | Read-only presentation    |
+| `suggesting` | Track changes mode        |
+
+```tsx
+new SuperDoc({
+  selector: `#${editorId}`,
+  document: file(),
+  documentMode: 'editing',
+});
+```
+
+### User roles
+
+| Role        | Can Edit | Can Suggest | Can View |
+| ----------- | -------- | ----------- | -------- |
+| `editor`    | Yes      | Yes         | Yes      |
+| `suggester` | No       | Yes         | Yes      |
+| `viewer`    | No       | No          | Yes      |
+
+```tsx
+new SuperDoc({
+  selector: `#${editorId}`,
+  document: file(),
+  role: 'editor',
+});
+```
+
+## Handle file uploads
+
+```tsx
+import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+function FileEditor() {
+  const [file, setFile] = createSignal<File | null>(null);
+  const editorId = 'superdoc-editor';
+  let superdoc: SuperDoc | undefined;
+
+  createEffect(() => {
+    const selected = file();
+    if (!selected) return;
+
+    superdoc = new SuperDoc({
+      selector: `#${editorId}`,
+      document: selected,
+      user: { name: 'User', email: 'user@company.com' },
+    });
+
+    onCleanup(() => {
+      superdoc?.destroy();
+    });
+  });
+
+  return (
+    <div>
+      <input
+        type='file'
+        accept='.docx'
+        onChange={(event) => {
+          const selected = event.currentTarget.files?.[0];
+          if (selected) setFile(selected);
+        }}
+      />
+      <Show when={file()}>
+        <div id={editorId} style={{ height: '700px' }} />
+      </Show>
+    </div>
+  );
+}
+```
+
+## Next steps
+
+- [React Integration](/getting-started/frameworks/react) - React setup
+- [API Reference](/editor/superdoc/configuration) - Configuration options
+- [Examples](https://github.com/superdoc-dev/superdoc/tree/main/examples/getting-started/solid) - Working examples

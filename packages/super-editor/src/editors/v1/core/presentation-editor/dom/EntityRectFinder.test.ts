@@ -241,8 +241,7 @@ function paintSdtWrapper(
     // in the painter tests: see painters/dom/src/index.test.ts which
     // hardcodes these strings. Prefer the constant here.)
     wrapper.className =
-      opts.className ??
-      (opts.scope === 'block' ? DOM_CLASS_NAMES.BLOCK_SDT : DOM_CLASS_NAMES.INLINE_SDT_WRAPPER);
+      opts.className ?? (opts.scope === 'block' ? DOM_CLASS_NAMES.BLOCK_SDT : DOM_CLASS_NAMES.INLINE_SDT_WRAPPER);
   }
   wrapper.dataset.sdtId = id;
   wrapper.dataset.sdtType = opts.type ?? 'structuredContent';

@@ -13,7 +13,12 @@ function makeAdapter(): CustomXmlPartsAdapter {
   return {
     list: mock().mockReturnValue({ items: [], total: 0 }),
     get: mock().mockReturnValue(null),
-    create: mock().mockReturnValue({ success: true, id: '{X}', partName: 'customXml/item1.xml', propsPartName: 'customXml/itemProps1.xml' }),
+    create: mock().mockReturnValue({
+      success: true,
+      id: '{X}',
+      partName: 'customXml/item1.xml',
+      propsPartName: 'customXml/itemProps1.xml',
+    }),
     patch: mock().mockReturnValue({ success: true, target: { id: '{X}' } }),
     remove: mock().mockReturnValue({ success: true, target: { id: '{X}' } }),
   };
@@ -93,9 +98,7 @@ describe('customXml.parts target validation', () => {
 
   it('rejects target with empty partName', () => {
     const adapter = makeAdapter();
-    expect(() => executeCustomXmlPartsGet(adapter, { target: { partName: '' } })).toThrow(
-      DocumentApiValidationError,
-    );
+    expect(() => executeCustomXmlPartsGet(adapter, { target: { partName: '' } })).toThrow(DocumentApiValidationError);
   });
 
   it('rejects target with BOTH id and partName', () => {

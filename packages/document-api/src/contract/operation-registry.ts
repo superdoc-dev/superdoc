@@ -1646,13 +1646,24 @@ type _NoExtraRegistryKeys = Assert<keyof OperationRegistry extends OperationId ?
 
 /**
  * Typed invoke request. TypeScript narrows input and options based on operationId.
+ *
+ * When an operation has no options (`options: never` in the registry), the
+ * request shape forbids `options` via `options?: never` rather than via an
+ * intersection with `Record<string, never>` (which would also forbid
+ * `operationId` and `input`, making the typed overload unmatchable and
+ * silently falling through to the dynamic `unknown` return).
  */
-export type InvokeRequest<T extends OperationId> = {
-  operationId: T;
-  input: OperationRegistry[T]['input'];
-} & (OperationRegistry[T]['options'] extends never
-  ? Record<string, never>
-  : { options?: OperationRegistry[T]['options'] });
+export type InvokeRequest<T extends OperationId> = OperationRegistry[T]['options'] extends never
+  ? {
+      operationId: T;
+      input: OperationRegistry[T]['input'];
+      options?: never;
+    }
+  : {
+      operationId: T;
+      input: OperationRegistry[T]['input'];
+      options?: OperationRegistry[T]['options'];
+    };
 
 /**
  * Typed invoke result, narrowed by operationId.

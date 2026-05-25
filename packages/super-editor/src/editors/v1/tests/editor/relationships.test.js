@@ -139,6 +139,49 @@ describe('Relationships tests', () => {
     expect(hasUnderline).toBe(false);
   });
 
+  // PR-3209 regression tests for fixes.
+  it('preserves non-Hyperlink styleId on linked text after unlinking', () => {
+    editor.commands.insertContent('emphasized');
+    editor.commands.selectAll();
+    editor.commands.setMark('textStyle', { styleId: 'Emphasis' });
+    editor.commands.setLink({ href: 'https://www.superdoc.dev' });
+    editor.commands.unsetLink();
+
+    const styleIds = [];
+    editor.state.doc.descendants((node) => {
+      if (!node.isText) return;
+      node.marks.forEach((mark) => {
+        if (mark.type.name === 'textStyle') styleIds.push(mark.attrs?.styleId ?? null);
+      });
+    });
+    expect(styleIds).toContain('Emphasis');
+  });
+
+  it('renders link with underline even when underlying text has explicit underlineType=none', () => {
+    const underlineMarkType = editor.schema.marks.underline;
+    editor.commands.insertContent('mute');
+    editor.commands.selectAll();
+
+    editor.commands.command(({ tr, dispatch }) => {
+      const { from, to } = editor.state.selection;
+      tr.addMark(from, to, underlineMarkType.create({ underlineType: 'none' }));
+      dispatch(tr);
+      return true;
+    });
+
+    editor.commands.setLink({ href: 'https://www.superdoc.dev' });
+
+    let visibleUnderline = null;
+    editor.state.doc.descendants((node) => {
+      if (!node.isText) return;
+      node.marks.forEach((mark) => {
+        if (mark.type.name !== 'underline') return;
+        if (mark.attrs?.underlineType !== 'none') visibleUnderline = mark;
+      });
+    });
+    expect(visibleUnderline).not.toBeNull();
+  });
+
   it('keeps imported inline underline mark when removing link', async () => {
     const imported = await loadTestDataForEditorTests('hyperlink_node.docx');
     const { editor: importedEditor } = initTestEditor({

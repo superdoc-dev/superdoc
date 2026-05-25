@@ -5,12 +5,7 @@
  * This module is format-aware (docx), but translator-agnostic.
  */
 
-import {
-  combineIndentProperties,
-  combineProperties,
-  combineRunProperties,
-  FONT_SLOT_THEME_PAIRS,
-} from '../cascade.js';
+import { combineIndentProperties, combineProperties, combineRunProperties, FONT_SLOT_THEME_PAIRS } from '../cascade.js';
 import type { PropertyObject } from '../cascade.js';
 import type { ParagraphConditionalFormatting, ParagraphProperties, ParagraphTabStop, RunProperties } from './types.ts';
 import type { NumberingProperties } from './numbering-types.ts';

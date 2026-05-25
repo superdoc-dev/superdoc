@@ -16,10 +16,8 @@ export const CUSTOM_XML_DATA_RELATIONSHIP_TYPE =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml';
 export const CUSTOM_XML_PROPS_RELATIONSHIP_TYPE =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps';
-export const CUSTOM_XML_PROPS_CONTENT_TYPE =
-  'application/vnd.openxmlformats-officedocument.customXmlProperties+xml';
-export const CUSTOM_XML_DATASTORE_NAMESPACE =
-  'http://schemas.openxmlformats.org/officeDocument/2006/customXml';
+export const CUSTOM_XML_PROPS_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.customXmlProperties+xml';
+export const CUSTOM_XML_DATASTORE_NAMESPACE = 'http://schemas.openxmlformats.org/officeDocument/2006/customXml';
 
 // ---------------------------------------------------------------------------
 // Local helpers
@@ -367,19 +365,20 @@ function buildItemPropsRoot(itemId, schemaRefs) {
         'ds:itemID': itemId,
         'xmlns:ds': CUSTOM_XML_DATASTORE_NAMESPACE,
       },
-      elements: schemaRefs === undefined
-        ? []
-        : [
-            {
-              type: 'element',
-              name: 'ds:schemaRefs',
-              elements: schemaRefs.map((uri) => ({
+      elements:
+        schemaRefs === undefined
+          ? []
+          : [
+              {
                 type: 'element',
-                name: 'ds:schemaRef',
-                attributes: { 'ds:uri': uri },
-              })),
-            },
-          ],
+                name: 'ds:schemaRefs',
+                elements: schemaRefs.map((uri) => ({
+                  type: 'element',
+                  name: 'ds:schemaRef',
+                  attributes: { 'ds:uri': uri },
+                })),
+              },
+            ],
     },
   ];
   return elements[0];

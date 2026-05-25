@@ -18,6 +18,11 @@ import { ExtensionService } from './ExtensionService.js';
 import { CommandService } from './CommandService.js';
 import { Attribute } from './Attribute.js';
 import { SuperConverter } from '@core/super-converter/SuperConverter.js';
+import type {
+  ConvertedXmlPart,
+  EditorConverterSurface,
+  EditorExtensionServiceSurface,
+} from './types/EditorPublicSurfaces.js';
 import {
   Commands,
   Editable,
@@ -253,10 +258,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #commandService!: CommandService;
 
-  /**
-   * Service for managing extensions
-   */
-  extensionService!: ExtensionService;
+  /** Extension service. See `EditorExtensionServiceSurface`. SD-3240. */
+  extensionService!: EditorExtensionServiceSurface;
 
   /**
    * Storage for extension data
@@ -348,7 +351,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * The document converter instance
    */
-  converter!: SuperConverter;
+  /** Document converter handle. See `EditorConverterSurface`. SD-3240. */
+  converter!: EditorConverterSurface;
 
   /**
    * Toolbar instance (if attached)
@@ -426,7 +430,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     onFocus: () => null,
     onBlur: () => null,
     onDestroy: () => null,
-    onContentError: ({ error }: { editor: Editor; error: Error }) => {
+    onContentError: ({ error }: { editor: Editor; error: unknown; disableCollaboration?: () => void }) => {
       throw error;
     },
     onTrackedChangesUpdate: () => null,
@@ -648,7 +652,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (!this.#telemetry || this.#documentOpenTracked) return;
 
       try {
-        const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
+        const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() ?? null;
         this.#telemetry.trackDocumentOpen(documentId, documentCreatedAt);
         this.#documentOpenTracked = true;
       } catch {
@@ -1108,7 +1112,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #initProtectionState(): void {
     const protStorage = getProtectionStorage(this);
     if (!protStorage) return;
-    const settingsRoot = this.converter ? readSettingsRoot(this.converter) : null;
+    // SD-3240: readSettingsRoot accepts a narrow `ConverterWithDocumentSettings`
+    // shape that overlaps with EditorConverterSurface but uses a
+    // different `pageStyles` typing (alternateHeaders flag). Cast to
+    // the local narrow interface. Both shapes are honest no-`any`
+    // contracts on the same runtime instance.
+    const settingsRoot = this.converter
+      ? readSettingsRoot(this.converter as unknown as Parameters<typeof readSettingsRoot>[0])
+      : null;
     protStorage.state = parseProtectionState(settingsRoot);
     protStorage.initialized = true;
   }
@@ -2115,7 +2126,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     const isolatedExternalExtensions = externalExtensions.map((extension) => cloneExtensionInstance(extension));
 
-    this.extensionService = ExtensionService.create(allExtensions, isolatedExternalExtensions, this);
+    // SD-3240: ExtensionService.d.ts uses a `[key: string]: any` catchall
+    // for internal-implementation members. The runtime instance has the
+    // surface members; the cast bridges the structural gap without
+    // reintroducing `any` on the public field type.
+    this.extensionService = ExtensionService.create(
+      allExtensions,
+      isolatedExternalExtensions,
+      this,
+    ) as unknown as EditorExtensionServiceSurface;
   }
 
   /**
@@ -2131,8 +2150,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Create the document converter as this.converter.
    */
   #createConverter(): void {
+    // SD-3240: SuperConverter.d.ts uses a `[key: string]: any` catchall
+    // for internal-implementation members. The runtime instance has the
+    // surface members; the cast bridges the structural gap without
+    // reintroducing `any` on the public field type.
     if (this.options.converter) {
-      this.converter = this.options.converter as SuperConverter;
+      this.converter = this.options.converter as unknown as EditorConverterSurface;
     } else {
       this.converter = new SuperConverter({
         docx: this.options.content,
@@ -2145,7 +2168,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         mockDocument: this.options.mockDocument ?? null,
         isNewFile: this.options.isNewFile ?? false,
         trackedChangesOptions: this.options.trackedChanges ?? null,
-      });
+      }) as unknown as EditorConverterSurface;
     }
   }
 
@@ -2367,7 +2390,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     const suppressedNames = new Set(
       (this.extensionService?.extensions || [])
-        .filter((ext: { config?: { excludeFromSummaryJSON?: boolean } }) => {
+        .filter((ext) => {
+          // SD-3240: extension entries are typed but `excludeFromSummaryJSON`
+          // is a runtime opt-in on the config record (Options/Storage generics
+          // hide it). Cast at the read site to access the optional flag.
           const config = (ext as { config?: { excludeFromSummaryJSON?: boolean } })?.config;
           const suppressFlag = config?.excludeFromSummaryJSON;
           return Boolean(suppressFlag);
@@ -3174,16 +3200,20 @@ export class Editor extends EventEmitter<EditorEventMap> {
    *
    * Return type depends on flags:
    * - `exportXmlOnly: true` → `string` (raw XML)
-   * - `exportJsonOnly: true` → `string` (JSON string)
+   * - `exportJsonOnly: true` → `ConvertedXmlPart` (the xml-js intermediate
+   *   tree; recursive `name` / `attributes` / `elements` shape, NOT a JSON
+   *   string). SD-3248: this overload previously typed as `Promise<string>`,
+   *   which did not match runtime. Consumers should walk the returned tree
+   *   directly; calling `JSON.parse` on it would never have worked.
    * - `getUpdatedDocs: true` → `Record<string, string | null>` (file map)
    * - Default → `Blob` (browser) or `Buffer` (Node.js headless). The runtime
    *   value is determined by the editor's `isHeadless` option at construction
-   *   time, which the type system cannot see — so the default overload is
+   *   time, which the type system cannot see, so the default overload is
    *   generic with `Blob` as the default. Browser consumers get `Blob`
    *   automatically; Node headless consumers opt in with `exportDocx<Buffer>()`.
    */
   async exportDocx(params: ExportDocxParams & { exportXmlOnly: true }): Promise<string>;
-  async exportDocx(params: ExportDocxParams & { exportJsonOnly: true }): Promise<string>;
+  async exportDocx(params: ExportDocxParams & { exportJsonOnly: true }): Promise<ConvertedXmlPart>;
   async exportDocx(params: ExportDocxParams & { getUpdatedDocs: true }): Promise<Record<string, string | null>>;
   async exportDocx<T extends Blob | Buffer = Blob>(
     params?: ExportDocxParams & { exportXmlOnly?: false; exportJsonOnly?: false; getUpdatedDocs?: false },
@@ -3197,7 +3227,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
     compression,
-  }: ExportDocxParams = {}): Promise<Blob | Buffer | Record<string, string | null> | string | undefined> {
+  }: ExportDocxParams = {}): Promise<
+    Blob | Buffer | Record<string, string | null> | string | ConvertedXmlPart | undefined
+  > {
     try {
       const exportHostEditor = resolveMainBodyEditor(this);
       commitLiveStorySessionRuntimes(exportHostEditor);

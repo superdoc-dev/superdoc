@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-05-19T11:33:50.546Z",
   "summary": {
-    "total": 200,
+    "total": 204,
     "byBucket": {
       "legacy-root": 60,
       "internal-candidate": 8,
-      "supported-root": 132
+      "supported-root": 136
     },
     "byConfidence": {
-      "high": 98,
+      "high": 102,
       "medium": 100,
       "low": 2
     }
@@ -1641,6 +1641,50 @@
       "inDcts": true,
       "inEsm": true,
       "inCjs": true
+    },
+    {
+      "name": "SuperDocExceptionEditorPayload",
+      "bucket": "supported-root",
+      "rationale": "Member of the SuperDocExceptionPayload union; named so consumers can discriminate the editor-lifecycle shape. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocExceptionPayload",
+      "bucket": "supported-root",
+      "rationale": "Public Config.onException callback parameter. Union of the three runtime emit shapes. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocExceptionRestorePayload",
+      "bucket": "supported-root",
+      "rationale": "Member of the SuperDocExceptionPayload union; named so consumers can discriminate the restore-failure shape. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocExceptionStorePayload",
+      "bucket": "supported-root",
+      "rationale": "Member of the SuperDocExceptionPayload union; named so consumers can discriminate the store-init shape via `'stage' in payload`. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
     },
     {
       "name": "SuperDocLayoutEngineOptions",

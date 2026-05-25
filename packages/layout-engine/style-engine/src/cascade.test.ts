@@ -189,10 +189,7 @@ describe('cascade - combineRunProperties', () => {
     });
 
     it('drops concrete `cs` from lower when higher supplies `cstheme` (lowercase)', () => {
-      const result = combineRunProperties([
-        { fontFamily: { cs: 'Arial' } },
-        { fontFamily: { cstheme: 'majorBidi' } },
-      ]);
+      const result = combineRunProperties([{ fontFamily: { cs: 'Arial' } }, { fontFamily: { cstheme: 'majorBidi' } }]);
       expect(result.fontFamily).toEqual({ cstheme: 'majorBidi' });
     });
 
@@ -221,10 +218,7 @@ describe('cascade - combineRunProperties', () => {
     });
 
     it('drops theme `cstheme` from lower when higher supplies concrete `cs`', () => {
-      const result = combineRunProperties([
-        { fontFamily: { cstheme: 'majorBidi' } },
-        { fontFamily: { cs: 'Arial' } },
-      ]);
+      const result = combineRunProperties([{ fontFamily: { cstheme: 'majorBidi' } }, { fontFamily: { cs: 'Arial' } }]);
       expect(result.fontFamily).toEqual({ cs: 'Arial' });
     });
 

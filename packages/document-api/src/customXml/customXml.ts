@@ -95,10 +95,7 @@ function validateContent(content: unknown, operationName: string): asserts conte
 
 function validateSchemaRefs(schemaRefs: unknown, operationName: string): asserts schemaRefs is string[] {
   if (!Array.isArray(schemaRefs)) {
-    throw new DocumentApiValidationError(
-      'INVALID_INPUT',
-      `${operationName} 'schemaRefs' must be an array of strings.`,
-    );
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName} 'schemaRefs' must be an array of strings.`);
   }
   for (const [i, entry] of schemaRefs.entries()) {
     if (typeof entry !== 'string' || entry.length === 0) {

@@ -5,12 +5,13 @@
  * operation-extra-invokers.ts with a single generic path.
  */
 
-import { RESPONSE_ENVELOPE_KEY, SUCCESS_VERB } from '../cli/operation-hints.js';
+import { SUCCESS_VERB } from '../cli/operation-hints.js';
 import type { CliExposedOperationId } from '../cli/operation-set.js';
 import { cliCommandTokens } from '../cli/operation-set.js';
 import { withActiveContext } from './context.js';
 import { openDocument, openSessionDocument, type EditorWithDoc } from './document.js';
 import { mapInvokeError } from './error-mapping.js';
+import { resolveResponseEnvelopeKey } from './response-envelope.js';
 import { formatOutput } from './output-formatters.js';
 import { syncCollaborativeSessionSnapshot } from './session-collab.js';
 import { PRE_INVOKE_HOOKS, POST_INVOKE_HOOKS } from './special-handlers.js';
@@ -63,12 +64,11 @@ const ECHO_INPUT_FIELDS: Partial<Record<CliExposedOperationId, string[]>> = {
 
 function buildEnvelopeData(
   operationId: CliExposedOperationId,
+  envelopeKey: string | null,
   document: DocumentPayload,
   result: unknown,
   input: Record<string, unknown>,
 ): Record<string, unknown> {
-  const envelopeKey = RESPONSE_ENVELOPE_KEY[operationId];
-
   const echoFields = ECHO_INPUT_FIELDS[operationId];
   const extras: Record<string, unknown> = {};
   if (echoFields) {
@@ -95,6 +95,12 @@ function buildPrettyOutput(operationId: CliExposedOperationId, document: Documen
 
 export async function executeReadOperation(request: DocOperationRequest): Promise<CommandExecution> {
   const { operationId, input, context } = request;
+  // Resolve the response envelope key up front so a hint-table drift fails
+  // before we open the document or run the operation. Reads have no on-disk
+  // side effects today, but doing this here keeps the guard symmetric with
+  // the mutation path and protects future read-time effects (e.g. collab
+  // snapshot sync) from running past a drift failure.
+  const envelopeKey = resolveResponseEnvelopeKey(operationId);
   const doc = readOptionalString(input, 'doc');
   const commandName = deriveCommandName(operationId);
 
@@ -112,7 +118,7 @@ export async function executeReadOperation(request: DocOperationRequest): Promis
 
       return {
         command: commandName,
-        data: buildEnvelopeData(operationId, document, result, input),
+        data: buildEnvelopeData(operationId, envelopeKey, document, result, input),
         pretty: buildPrettyOutput(operationId, document, result),
       };
     } finally {
@@ -148,7 +154,7 @@ export async function executeReadOperation(request: DocOperationRequest): Promis
           };
           return {
             command: commandName,
-            data: buildEnvelopeData(operationId, document, result, input),
+            data: buildEnvelopeData(operationId, envelopeKey, document, result, input),
             pretty: buildPrettyOutput(operationId, document, result),
           };
         }
@@ -161,7 +167,7 @@ export async function executeReadOperation(request: DocOperationRequest): Promis
         };
         return {
           command: commandName,
-          data: buildEnvelopeData(operationId, document, result, input),
+          data: buildEnvelopeData(operationId, envelopeKey, document, result, input),
           pretty: buildPrettyOutput(operationId, document, result),
         };
       } finally {

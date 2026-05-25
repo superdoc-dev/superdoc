@@ -105,7 +105,7 @@ export const useCommentsStore = defineStore('comments', () => {
    * Get a comment by either ID or imported ID
    *
    * @param {string} id The comment ID
-   * @returns {Object} The comment object
+   * @returns {Record<string, unknown> | null | undefined} The comment object, `null` if no id was provided, or `undefined` if not found.
    */
   const getComment = (id) => {
     if (id === undefined || id === null) return null;
@@ -618,16 +618,13 @@ export const useCommentsStore = defineStore('comments', () => {
         didChange = setIfChanged(target, 'trackedChangeStory', normalizedTrackedChangeStory) || didChange;
       }
       if (normalizedTrackedChangeStoryKind !== undefined && normalizedTrackedChangeStoryKind !== null) {
-        didChange =
-          setIfChanged(target, 'trackedChangeStoryKind', normalizedTrackedChangeStoryKind) || didChange;
+        didChange = setIfChanged(target, 'trackedChangeStoryKind', normalizedTrackedChangeStoryKind) || didChange;
       }
       if (normalizedTrackedChangeStoryLabel !== undefined && normalizedTrackedChangeStoryLabel !== '') {
-        didChange =
-          setIfChanged(target, 'trackedChangeStoryLabel', normalizedTrackedChangeStoryLabel) || didChange;
+        didChange = setIfChanged(target, 'trackedChangeStoryLabel', normalizedTrackedChangeStoryLabel) || didChange;
       }
       if (normalizedTrackedChangeAnchorKey !== undefined && normalizedTrackedChangeAnchorKey !== null) {
-        didChange =
-          setIfChanged(target, 'trackedChangeAnchorKey', normalizedTrackedChangeAnchorKey) || didChange;
+        didChange = setIfChanged(target, 'trackedChangeAnchorKey', normalizedTrackedChangeAnchorKey) || didChange;
       }
       return didChange;
     };

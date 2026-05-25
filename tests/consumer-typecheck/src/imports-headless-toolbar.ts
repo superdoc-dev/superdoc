@@ -48,3 +48,42 @@ const linkValue: string | null | undefined = snapshot.commands['link']?.value;
 
 // Verify ToolbarExecuteFn type
 const execFn: ToolbarExecuteFn = (id, payload?) => true;
+
+// SD-3213: ToolbarTarget.commands is the documented escape hatch for
+// direct command access when execute() doesn't cover the use case
+// (see headless-toolbar/README.md). The index-signature value is
+// `(...args: unknown[]) => unknown`, not `(...args: any[]) => any`,
+// so consumers narrow before reading return values.
+declare const ctx: ToolbarContext;
+const targetCommands = ctx.target.commands;
+const someCommand = targetCommands['someCommand'];
+if (someCommand) {
+  // Return is `unknown`, not `any`. Reading a property without
+  // narrowing must error; if a future PR widens back to `any`, the
+  // directive becomes unused and tsc fails (TS2578).
+  const result = someCommand('arg1', 42);
+  // @ts-expect-error SD-3213: target.commands[id] returns unknown, not any.
+  result.foo;
+  // Narrowing works as expected.
+  const _untyped: unknown = result;
+  void _untyped;
+}
+void targetCommands;
+void execFn;
+
+// SD-3213: a consumer constructing a custom ToolbarTarget (e.g. for
+// tests or a non-Editor command source) can still satisfy the
+// tightened signature by typing their commands with the same
+// `(...args: unknown[]) => unknown` shape. This pins the most common
+// custom-stub construction so a future re-widening or narrowing
+// would surface here.
+const customTarget: ToolbarTarget = {
+  commands: {
+    arbitrary: (...args) => {
+      // `args` is `unknown[]`; reading args[0].foo would error
+      // without narrowing.
+      return args.length;
+    },
+  },
+};
+void customTarget;

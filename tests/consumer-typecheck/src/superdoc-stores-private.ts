@@ -53,6 +53,28 @@ void superdoc.commentsStore;
 // of the public TypeScript surface.
 void superdoc.highContrastModeStore;
 
+// @ts-expect-error commentsList is the internal SuperComments mount
+// handle (SD-3213); not part of the public TypeScript surface.
+void superdoc.commentsList;
+
+// @ts-expect-error app is the internal Vue app handle (SD-3213);
+// not part of the public TypeScript surface. The documented public
+// surface is `superdoc.toolbar` (the SuperToolbar wrapper), not
+// `superdoc.app`.
+void superdoc.app;
+
+// @ts-expect-error toolbar.toolbar is the internal Vue
+// ComponentPublicInstance mounted by SuperToolbar (SD-3213); the
+// documented public surface is `superdoc.toolbar` itself. The
+// nested `.toolbar` field is internal mount state.
+void superdoc.toolbar.toolbar;
+
+// Positive: `superdoc.toolbar` (the SuperToolbar class instance)
+// remains accessible: it is the documented public surface
+// (`apps/docs/editor/built-in-ui/toolbar.mdx` shows multiple
+// `const toolbar = superdoc.toolbar` examples).
+void superdoc.toolbar;
+
 // --- Positive assertions ---------------------------------------------------
 // Documented factories accepting a SuperDoc instance must continue to
 // compile after the hide. These compile because SuperDoc now exposes the

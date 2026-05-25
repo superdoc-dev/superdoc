@@ -120,17 +120,13 @@ describe('collectEntityHitsFromChain', () => {
   });
 
   it('surfaces a contentControl hit for block structured-content wrappers', () => {
-    const inner = buildPaintedChain([
-      { sdtId: 'sdt-2', sdtType: 'structuredContent', sdtScope: 'block' },
-    ]);
+    const inner = buildPaintedChain([{ sdtId: 'sdt-2', sdtType: 'structuredContent', sdtScope: 'block' }]);
 
     expect(collectEntityHitsFromChain(inner)).toEqual([{ type: 'contentControl', id: 'sdt-2', scope: 'block' }]);
   });
 
   it('does not surface non-structuredContent SDT types (fieldAnnotation, documentSection, docPartObject)', () => {
-    const fieldAnnotation = buildPaintedChain([
-      { sdtId: 'fa-1', sdtType: 'fieldAnnotation' },
-    ]);
+    const fieldAnnotation = buildPaintedChain([{ sdtId: 'fa-1', sdtType: 'fieldAnnotation' }]);
     expect(collectEntityHitsFromChain(fieldAnnotation)).toEqual([]);
 
     const section = buildPaintedChain([{ sdtId: 'sec-1', sdtType: 'documentSection' }]);
@@ -186,9 +182,7 @@ describe('collectEntityHitsFromChain', () => {
       { sdtId: 'sdt-x', sdtType: 'structuredContent', sdtScope: 'inline' },
     ]);
 
-    expect(collectEntityHitsFromChain(inner)).toEqual([
-      { type: 'contentControl', id: 'sdt-x', scope: 'inline' },
-    ]);
+    expect(collectEntityHitsFromChain(inner)).toEqual([{ type: 'contentControl', id: 'sdt-x', scope: 'inline' }]);
   });
 
   // -------------------------------------------------------------------------

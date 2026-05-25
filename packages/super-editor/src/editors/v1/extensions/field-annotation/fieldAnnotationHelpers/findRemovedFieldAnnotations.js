@@ -1,7 +1,25 @@
 import { ReplaceStep } from 'prosemirror-transform';
 import { findChildren } from '@core/helpers/findChildren';
 
+/**
+ * Find field annotations that were removed by a transaction.
+ *
+ * Inspects the transaction's `ReplaceStep`s against `tr.before` and
+ * returns annotations whose positions were deleted (and that didn't
+ * reappear elsewhere in `tr.doc` under the same `fieldId`).
+ *
+ * Skips when:
+ * - the transaction has no steps,
+ * - it carries unexpected meta keys,
+ * - it's an undo / redo / drop / fieldAnnotationUpdate / tableGeneration tx.
+ *
+ * @param {import('./types.js').Transaction} tr - The transaction to inspect.
+ * @returns {import('./types.js').FieldAnnotationEntry[]} Removed
+ *   `{ node, pos }` entries. Empty array when nothing was removed or the
+ *   transaction is skipped.
+ */
 export function findRemovedFieldAnnotations(tr) {
+  /** @type {import('./types.js').FieldAnnotationEntry[]} */
   let removedNodes = [];
 
   if (
@@ -49,6 +67,10 @@ export function findRemovedFieldAnnotations(tr) {
   return removedNodes;
 }
 
+/**
+ * @param {import('./types.js').Transaction} tr
+ * @returns {boolean}
+ */
 function transactionDeletedAnything(tr) {
   return tr.steps.some((step) => {
     if (step instanceof ReplaceStep || step instanceof ReplaceAroundStep) {

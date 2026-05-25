@@ -76,14 +76,7 @@ const issues: Issue[] = [];
 
 // Manifest entry schema (SD-3217 round 4). Every entry in
 // demos/manifest.json and examples/manifest.json must declare these.
-const ALLOWED_SECTIONS = new Set([
-  'editor',
-  'document-engine',
-  'ai',
-  'solutions',
-  'getting-started',
-  'advanced',
-]);
+const ALLOWED_SECTIONS = new Set(['editor', 'document-engine', 'ai', 'solutions', 'getting-started', 'advanced']);
 const ALLOWED_KINDS = new Set(['minimal-example', 'integration-example', 'workflow-demo', 'reference-workspace']);
 const ALLOWED_STATUSES = new Set(['active', 'hidden', 'archived', 'shim']);
 const ALLOWED_SOURCE_KINDS = new Set(['local', 'external']);
@@ -113,19 +106,44 @@ function validateManifest(manifestPath: string, relPath: string): void {
     const e = entry as Record<string, unknown>;
     const eid = typeof e.id === 'string' ? e.id : '<no-id>';
     if (typeof e.section !== 'string' || !ALLOWED_SECTIONS.has(e.section)) {
-      issues.push({ file: relPath, line: 0, kind: 'manifest-schema', detail: `${eid}: section missing or not one of ${[...ALLOWED_SECTIONS].join(', ')}` });
+      issues.push({
+        file: relPath,
+        line: 0,
+        kind: 'manifest-schema',
+        detail: `${eid}: section missing or not one of ${[...ALLOWED_SECTIONS].join(', ')}`,
+      });
     }
     if (typeof e.subsection !== 'string' || e.subsection.length === 0) {
-      issues.push({ file: relPath, line: 0, kind: 'manifest-schema', detail: `${eid}: subsection missing or empty (use 'core' if no natural subsection)` });
+      issues.push({
+        file: relPath,
+        line: 0,
+        kind: 'manifest-schema',
+        detail: `${eid}: subsection missing or empty (use 'core' if no natural subsection)`,
+      });
     }
     if (typeof e.kind !== 'string' || !ALLOWED_KINDS.has(e.kind)) {
-      issues.push({ file: relPath, line: 0, kind: 'manifest-schema', detail: `${eid}: kind missing or not one of ${[...ALLOWED_KINDS].join(', ')}` });
+      issues.push({
+        file: relPath,
+        line: 0,
+        kind: 'manifest-schema',
+        detail: `${eid}: kind missing or not one of ${[...ALLOWED_KINDS].join(', ')}`,
+      });
     }
     if (typeof e.status !== 'string' || !ALLOWED_STATUSES.has(e.status)) {
-      issues.push({ file: relPath, line: 0, kind: 'manifest-schema', detail: `${eid}: status missing or not one of ${[...ALLOWED_STATUSES].join(', ')}` });
+      issues.push({
+        file: relPath,
+        line: 0,
+        kind: 'manifest-schema',
+        detail: `${eid}: status missing or not one of ${[...ALLOWED_STATUSES].join(', ')}`,
+      });
     }
     if (typeof e.sourceKind !== 'string' || !ALLOWED_SOURCE_KINDS.has(e.sourceKind)) {
-      issues.push({ file: relPath, line: 0, kind: 'manifest-schema', detail: `${eid}: sourceKind missing or not one of ${[...ALLOWED_SOURCE_KINDS].join(', ')}` });
+      issues.push({
+        file: relPath,
+        line: 0,
+        kind: 'manifest-schema',
+        detail: `${eid}: sourceKind missing or not one of ${[...ALLOWED_SOURCE_KINDS].join(', ')}`,
+      });
     }
     // sourceKind must agree with sourceRepo: monorepo entries are local,
     // anything else is external. Cheap drift check.

@@ -369,7 +369,7 @@ superdoc_search({select: {type: "text", pattern: "target phrase"}, require: "fir
 superdoc_comment({
   action: "create",
   text: "Please review this section.",
-  target: {kind: "text", blockId: "<blocks[0].blockId>", range: {start: <highlightRange.start>, end: <highlightRange.end>}}
+  target: {kind: "text", blockId: "<items[0].blocks[0].blockId>", range: {start: <items[0].blocks[0].range.start>, end: <items[0].blocks[0].range.end>}}
 })
 ```
 

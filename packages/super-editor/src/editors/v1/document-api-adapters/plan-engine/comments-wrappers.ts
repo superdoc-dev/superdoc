@@ -147,6 +147,29 @@ function listCommentAnchorsSafe(editor: Editor): ReturnType<typeof listCommentAn
   }
 }
 
+/**
+ * SD-3214: emit the canonical `commentsUpdate` event from Document-API
+ * wrappers for engine commands that don't emit themselves (resolveComment,
+ * reopenComment, removeComment). This lets downstream subscribers — the
+ * headless collaboration bridge, the browser's onCommentsUpdate callback
+ * pipeline, and the user's `onCommentsUpdate` config hook — react to
+ * `editor.doc.comments.*` mutations symmetrically with how `addComment`
+ * and `editComment` already broadcast.
+ *
+ * Browser side stays unaffected for the manual commentsStore path (which
+ * calls `editor.commands.removeComment` directly), because that path
+ * never goes through these wrappers.
+ */
+function emitCommentLifecycleUpdate(
+  editor: Editor,
+  type: 'deleted' | 'update' | 'resolved',
+  comment: Record<string, unknown>,
+): void {
+  const emitter = (editor as unknown as { emit?: (event: string, payload: unknown) => void }).emit;
+  if (typeof emitter !== 'function') return;
+  emitter.call(editor, 'commentsUpdate', { type, comment });
+}
+
 function applyTextSelection(editor: Editor, from: number, to: number): boolean {
   const setTextSelection = editor.commands?.setTextSelection;
   if (typeof setTextSelection === 'function') {
@@ -762,6 +785,8 @@ function resolveCommentHandler(editor: Editor, input: ResolveCommentInput, optio
     };
   }
 
+  let resolvedTimestamp: number | null = null;
+
   const receipt = executeDomainCommand(
     editor,
     () => {
@@ -770,10 +795,11 @@ function resolveCommentHandler(editor: Editor, input: ResolveCommentInput, optio
         importedId: identity.importedId,
       });
       if (didResolve) {
+        resolvedTimestamp = Date.now();
         upsertCommentEntity(store, identity.commentId, {
           importedId: identity.importedId,
           isDone: true,
-          resolvedTime: Date.now(),
+          resolvedTime: resolvedTimestamp,
         });
       }
       return Boolean(didResolve);
@@ -787,6 +813,18 @@ function resolveCommentHandler(editor: Editor, input: ResolveCommentInput, optio
       failure: { code: 'NO_OP', message: 'Comment resolve produced no change.' },
     };
   }
+
+  // SD-3214: the resolveComment engine command sets `tr.setMeta(CommentsPluginKey, { event: 'update' })`
+  // but does not emit `commentsUpdate`. The browser commentsStore handles its own resolve flow by
+  // emitting `comments-update` manually + writing to Y.Array. Document-API consumers (CLI, MCP) need
+  // the wrapper to fire the canonical event so the headless bridge can propagate to Y.Array via its
+  // existing `'update'` / `'resolved'` handler.
+  emitCommentLifecycleUpdate(editor, 'resolved', {
+    commentId: identity.commentId,
+    importedId: identity.importedId,
+    isDone: true,
+    resolvedTime: resolvedTimestamp,
+  });
 
   return { success: true, updated: [toCommentAddress(identity.commentId)] };
 }
@@ -850,6 +888,16 @@ function reopenCommentHandler(editor: Editor, input: ReopenCommentInput, options
     };
   }
 
+  // SD-3214: reopenComment doesn't emit either — surface a canonical
+  // 'update' event so the bridge can mirror the cleared resolved markers
+  // into Y.Array.
+  emitCommentLifecycleUpdate(editor, 'update', {
+    commentId: identity.commentId,
+    importedId: identity.importedId,
+    isDone: false,
+    resolvedTime: null,
+  });
+
   return { success: true, updated: [toCommentAddress(identity.commentId)] };
 }
 
@@ -888,6 +936,17 @@ function removeCommentHandler(editor: Editor, input: RemoveCommentInput, options
   }
   if (!removedIds.size && didRemove) {
     removedIds.add(identity.commentId);
+  }
+
+  // SD-3214: removeComment engine command sets `tr.setMeta` but doesn't emit
+  // `commentsUpdate`. Emit here so the headless bridge propagates the delete
+  // to Y.Array (and the browser's existing DELETED branch refreshes its Vue
+  // list). Emits per removed id so thread-reply cascades reach subscribers.
+  for (const removedId of removedIds) {
+    emitCommentLifecycleUpdate(editor, 'deleted', {
+      commentId: removedId,
+      importedId: removedId === identity.commentId ? identity.importedId : undefined,
+    });
   }
 
   return {

@@ -533,8 +533,15 @@ export interface EditorOptions {
   /** Called when editor is destroyed */
   onDestroy?: () => void;
 
-  /** Called when there's a content error */
-  onContentError?: (params: { editor: Editor; error: Error }) => void;
+  /**
+   * Called when there's a content error. `error` is `unknown` because
+   * the emit sites do not normalize uniformly: `Editor.ts` wraps caught
+   * values in `Error`, but `insertContentAt` forwards the raw caught
+   * value. `disableCollaboration` is provided by the insertion path so
+   * callers can recover by detaching collaboration; absent on the
+   * Editor.ts emit.
+   */
+  onContentError?: (params: { editor: Editor; error: unknown; disableCollaboration?: () => void }) => void;
 
   /** Called when tracked changes update */
   onTrackedChangesUpdate?: (params: { changes: unknown }) => void;

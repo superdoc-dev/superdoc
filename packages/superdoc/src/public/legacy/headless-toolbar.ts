@@ -21,9 +21,9 @@
  *     no-growth posture this entry is classified under in
  *     `docs/architecture/package-boundaries.md` Decision 4.
  *   - AIDEV-NOTE: Adding or removing an export here updates the
- *     `expectedNames` for the `legacy/headless-toolbar` entry in
- *     `FACADE_ENTRIES` inside
- *     `packages/superdoc/scripts/verify-public-facade-emit.cjs` in the
+ *     The postbuild gate `verify-public-facade-emit.cjs` parses this file
+ *     and verifies that the emitted declarations expose exactly these
+ *     named exports. No second hand-maintained list to keep in sync.
  *     same PR. Skipping that step fails the postbuild gate.
  *   - This entry does not re-export `Editor` or `EditorCommands`, so
  *     the verifier skips the command-signature probe here. The root

@@ -871,3 +871,54 @@ describe('queryMatchAdapter — cardinality', () => {
     expect(result.total).toBe(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wire-shape regression guard
+//
+// Pins the public contract of items[] so callers (LLM tool prompts, agent
+// guides) cannot drift back to fields that do not exist on the wire. The
+// `superdoc_comment` MCP description previously told agents to use
+// `items[0].context.textRanges[0]`, which is a field on `doc.find` output
+// (the legacy sibling) and not on `doc.query.match` (where `superdoc_search`
+// dispatches). Comments use `TextAddress | TextTarget` built from
+// `items[0].blocks[*]`.
+// ---------------------------------------------------------------------------
+
+describe('queryMatchAdapter — wire-shape contract', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedDeps.getRevision.mockReturnValue('rev-1');
+  });
+
+  it('emits items without a `context` field; range data lives on blocks[i]', () => {
+    const candidates = [{ nodeId: 'p1', pos: 0, end: 22, text: 'Title Body text here' }];
+    const editor = makeEditorWithBlocks(candidates);
+    setupBlockIndex(candidates.map(({ nodeId, pos, end }) => ({ nodeId, pos, end })));
+    setupFindResult({
+      matches: [{ kind: 'text', blockId: 'p1' }],
+      context: [{ textRanges: [{ kind: 'text', blockId: 'p1', range: { start: 5, end: 17 } }] }],
+      total: 1,
+    });
+    mockedDeps.captureRunsInRange.mockReturnValue(captured([capturedRun(5, 17, [])]));
+
+    const result = queryMatchAdapter(editor, {
+      select: { type: 'text', pattern: 'Body text he' },
+    });
+
+    const item = result.items[0] as any;
+
+    // The wire output of `query.match` has no `context` and no `textRanges`.
+    // Adding either would silently re-enable the previously-broken agent
+    // guidance that pointed at `items[0].context.textRanges[0]`.
+    expect(item.context).toBeUndefined();
+    expect(item.textRanges).toBeUndefined();
+
+    // The block-relative range a comment target needs lives on blocks[i].range.
+    expect(item.blocks[0].blockId).toBe('p1');
+    expect(item.blocks[0].range).toEqual({ start: 5, end: 17 });
+
+    // `target` is a SelectionTarget (kind:'selection'), which `comments.create`
+    // does NOT accept (it takes TextAddress | TextTarget, kind:'text').
+    expect(item.target.kind).toBe('selection');
+  });
+});

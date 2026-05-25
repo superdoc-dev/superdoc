@@ -2,10 +2,20 @@ import { findChildren } from '@core/helpers/findChildren.js';
 import { getAllHeaderFooterEditors } from '../../../core/helpers/annotator.js';
 
 /**
- * Find field annotations in headers and footers by field ID or array of field IDs.
- * @param fieldIdOrArray The field ID or array of field IDs.
- * @param editor The editor state.
- * @returns The field annotations array.
+ * Find field annotations across all header / footer sub-editors that
+ * match the given field ID(s). If the active section editor's
+ * `documentId` matches a sub-editor, that sub-editor's live state is
+ * used instead of its snapshot state.
+ *
+ * @param {string | string[]} fieldIdOrArray - Field ID or array of IDs
+ *   to match against `node.attrs.fieldId`.
+ * @param {import('./types.js').Editor} editor - The main editor whose
+ *   registered headers / footers are walked.
+ * @param {import('./types.js').Editor} activeSectionEditor - The
+ *   currently-focused section sub-editor; its `state` overrides the
+ *   snapshot state for a matching `documentId`.
+ * @returns {import('./types.js').FieldAnnotationEntry[]} `{ node, pos }`
+ *   per match across all header / footer sub-editors.
  */
 export function findHeaderFooterAnnotationsByFieldId(fieldIdOrArray, editor, activeSectionEditor) {
   const sectionEditors = getAllHeaderFooterEditors(editor);

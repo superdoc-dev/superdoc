@@ -196,8 +196,18 @@ export type ToolbarCommandState = {
 };
 
 // Minimal execution surface for headless toolbar consumers.
+//
+// `commands` is the heterogeneous registry of editor commands documented
+// as an escape hatch for direct access when `execute()` doesn't cover
+// the use case (see headless-toolbar/README.md and apps/docs/advanced/
+// headless-toolbar.mdx). Each command has its own arg shape, so the
+// index-signature value is `(...args: unknown[]) => unknown` instead
+// of the previous `any[] => any`. This mirrors the established
+// `AnyCommand` pattern used by `EditorCommands` (ChainedCommands.ts:31)
+// and drains 3 SD-3213 supported-root any-leak findings. Consumers
+// narrow at the call site for the specific command they're invoking.
 export type ToolbarTarget = {
-  commands: Record<string, (...args: any[]) => any>;
+  commands: Record<string, (...args: unknown[]) => unknown>;
   doc?: DocumentApi;
 };
 

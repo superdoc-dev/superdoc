@@ -358,12 +358,13 @@ describe('customXml.parts write-side', () => {
 
     const converted = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter
       .convertedXml;
-    const relsDoc = converted['word/_rels/document.xml.rels'] as { elements?: Array<{ elements?: Array<{ attributes?: Record<string, string> }> }> } | undefined;
+    const relsDoc = converted['word/_rels/document.xml.rels'] as
+      | { elements?: Array<{ elements?: Array<{ attributes?: Record<string, string> }> }> }
+      | undefined;
     const relsRoot = relsDoc?.elements?.[0];
     const customXmlRels = (relsRoot?.elements ?? []).filter(
       (rel) =>
-        rel?.attributes?.Type ===
-        'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml',
+        rel?.attributes?.Type === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml',
     );
     expect(customXmlRels.length).toBe(1);
     expect(customXmlRels[0]!.attributes?.Target).toBe('../customXml/item1.xml');
@@ -442,12 +443,13 @@ describe('customXml.parts write-side', () => {
     expect(converted['customXml/itemProps1.xml']).toBeUndefined();
     expect(converted['customXml/_rels/item1.xml.rels']).toBeUndefined();
 
-    const relsDoc = converted['word/_rels/document.xml.rels'] as { elements?: Array<{ elements?: Array<{ attributes?: Record<string, string> }> }> } | undefined;
+    const relsDoc = converted['word/_rels/document.xml.rels'] as
+      | { elements?: Array<{ elements?: Array<{ attributes?: Record<string, string> }> }> }
+      | undefined;
     const relsRoot = relsDoc?.elements?.[0];
     const lingering = (relsRoot?.elements ?? []).filter(
       (rel) =>
-        rel?.attributes?.Type ===
-        'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml',
+        rel?.attributes?.Type === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml',
     );
     expect(lingering).toEqual([]);
 
@@ -610,8 +612,9 @@ describe('customXml.parts write-side', () => {
     // Seed: simulate a doc with a bibliography custom XML part already
     // loaded. The converter's bibliographyPart cache will hold sources.
     const editor = await createEditorWithEmptyPackage();
-    const converter = (editor as unknown as { converter: { convertedXml: Record<string, unknown>; bibliographyPart?: unknown } })
-      .converter;
+    const converter = (
+      editor as unknown as { converter: { convertedXml: Record<string, unknown>; bibliographyPart?: unknown } }
+    ).converter;
     // Fake a populated bibliographyPart cache pointing at customXml/item1.xml.
     converter.bibliographyPart = {
       sources: [
@@ -658,7 +661,10 @@ describe('customXml.parts write-side', () => {
     // After export, convertedXml should NOT have the part again (or, if
     // it does, that's the staleness bug).
     const partResurrectedInConvertedXml = converter.convertedXml['customXml/item1.xml'] !== undefined;
-    expect(partResurrectedInConvertedXml, 'syncBibliographyPartToPackage re-added the removed part to convertedXml').toBe(false);
+    expect(
+      partResurrectedInConvertedXml,
+      'syncBibliographyPartToPackage re-added the removed part to convertedXml',
+    ).toBe(false);
 
     editor.destroy();
   });
@@ -677,10 +683,7 @@ describe('customXml.parts write-side', () => {
     editor.destroy();
 
     // Reimport from the exported bytes through the canonical loader.
-    const [reloadedDocx, reloadedMedia, reloadedMediaFiles, reloadedFonts] = await Editor.loadXmlData(
-      bytes,
-      true,
-    );
+    const [reloadedDocx, reloadedMedia, reloadedMediaFiles, reloadedFonts] = await Editor.loadXmlData(bytes, true);
     const { editor: reloaded } = initTestEditor({
       content: reloadedDocx,
       media: reloadedMedia,

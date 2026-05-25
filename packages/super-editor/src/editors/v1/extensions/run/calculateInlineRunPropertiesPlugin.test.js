@@ -1162,7 +1162,12 @@ describe('calculateInlineRunPropertiesPlugin', () => {
       {
         name: 'A4: ascii-only theme preserved',
         existing: { asciiTheme: 'majorBidi' },
-        marksFontFamily: { ascii: 'Calibri Light', hAnsi: 'Calibri Light', eastAsia: 'Calibri Light', cs: 'Calibri Light' },
+        marksFontFamily: {
+          ascii: 'Calibri Light',
+          hAnsi: 'Calibri Light',
+          eastAsia: 'Calibri Light',
+          cs: 'Calibri Light',
+        },
         // hAnsi/eastAsia/cs are mark-derived concrete; only asciiTheme had a theme to preserve.
         expected: {
           asciiTheme: 'majorBidi',
@@ -1185,7 +1190,12 @@ describe('calculateInlineRunPropertiesPlugin', () => {
       {
         name: 'A6: cs-only theme preserved (lowercase `cstheme` OOXML quirk)',
         existing: { cstheme: 'majorBidi' },
-        marksFontFamily: { ascii: 'Calibri Light', hAnsi: 'Calibri Light', eastAsia: 'Calibri Light', cs: 'Calibri Light' },
+        marksFontFamily: {
+          ascii: 'Calibri Light',
+          hAnsi: 'Calibri Light',
+          eastAsia: 'Calibri Light',
+          cs: 'Calibri Light',
+        },
         expected: {
           ascii: 'Calibri Light',
           hAnsi: 'Calibri Light',
@@ -1287,12 +1297,7 @@ describe('calculateInlineRunPropertiesPlugin', () => {
       resolveRunPropertiesMock.mockImplementation(() => ({}));
 
       const schema = makeSchema();
-      const doc = paragraphDoc(
-        schema,
-        { runProperties: null, runPropertiesInlineKeys: null },
-        [],
-        'Latin',
-      );
+      const doc = paragraphDoc(schema, { runProperties: null, runPropertiesInlineKeys: null }, [], 'Latin');
       const state = createState(schema, doc);
       const { from, to } = runTextRange(state.doc, 0, 5);
 

@@ -17,9 +17,9 @@
  *
  *   import { DocxZipper } from 'superdoc';
  *
- * AIDEV-NOTE: Single-export facade. Update `expectedNames` for the
- * `legacy/docx-zipper` entry in `FACADE_ENTRIES` inside
- * `packages/superdoc/scripts/verify-public-facade-emit.cjs` in the
+ * AIDEV-NOTE: The postbuild gate `verify-public-facade-emit.cjs` parses this file
+ * and verifies that the emitted declarations expose exactly these
+ * named exports. No second hand-maintained list to keep in sync.
  * same PR if the surface changes.
  */
 import DocxZipper from '@superdoc/super-editor/docx-zipper';

@@ -2726,9 +2726,7 @@ describe('DomPainter', () => {
 
     const measure: Measure = {
       kind: 'paragraph',
-      lines: [
-        { fromRun: 0, fromChar: 0, toRun: 2, toChar: 7, width: 200, ascent: 12, descent: 4, lineHeight: 20 },
-      ],
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 2, toChar: 7, width: 200, ascent: 12, descent: 4, lineHeight: 20 }],
       totalHeight: 20,
     };
 

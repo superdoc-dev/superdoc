@@ -352,6 +352,7 @@ import type {
   EditorViewWithScrollFlag,
   PotentiallyMockedFunction,
   ResolvedLayoutOptions,
+  AwarenessWithSetField,
 } from './types.js';
 
 // Re-export public types for backward compatibility
@@ -780,12 +781,18 @@ export class PresentationEditor extends EventEmitter {
     this.#selectionOverlay.appendChild(this.#localSelectionLayer);
     this.#viewportHost.appendChild(this.#selectionOverlay);
 
-    // Initialize remote cursor manager
+    // Initialize remote cursor manager. The cast widens the shared
+    // CollaborationProvider to the manager's internal CollaborationProviderLike
+    // shape, which asserts `awareness.setLocalStateField` exists. Runtime
+    // collaboration providers (HocuspocusProvider, y-websocket, etc.) expose
+    // it; the assertion documents the requirement at the boundary.
     this.#remoteCursorManager = new RemoteCursorManager({
       visibleHost: this.#visibleHost,
       remoteCursorOverlay: this.#remoteCursorOverlay,
       presence: validatedPresence,
-      collaborationProvider: options.collaborationProvider,
+      collaborationProvider: options.collaborationProvider as
+        | { awareness?: AwarenessWithSetField | null; disconnect?: () => void }
+        | undefined,
       fallbackColors: PresentationEditor.FALLBACK_COLORS,
       cursorStyles: PresentationEditor.CURSOR_STYLES,
       maxSelectionRectsPerUser: MAX_SELECTION_RECTS_PER_USER,
@@ -1144,8 +1151,12 @@ export class PresentationEditor extends EventEmitter {
     this.#options.collaborationProvider = collaborationProvider;
 
     // 2. Update RemoteCursorManager's provider reference so setup() reads
-    //    the correct provider when collaborationReady fires.
-    this.#remoteCursorManager?.setCollaborationProvider(collaborationProvider);
+    //    the correct provider when collaborationReady fires. The cast
+    //    matches the boundary assertion in the constructor: collaboration
+    //    providers expose `awareness.setLocalStateField` at runtime.
+    this.#remoteCursorManager?.setCollaborationProvider(
+      collaborationProvider as { awareness?: AwarenessWithSetField | null; disconnect?: () => void },
+    );
 
     // 3. Delegate to the backing Editor — triggers plugin reconfigure + Y.js observers.
     //    The collaborationReady event fires asynchronously (setTimeout in initSyncListener).
@@ -1156,7 +1167,9 @@ export class PresentationEditor extends EventEmitter {
     } catch (err) {
       // Editor attach failed and rolled back its own state. Restore ours too.
       this.#options.collaborationProvider = prevProvider;
-      this.#remoteCursorManager?.setCollaborationProvider(prevProvider ?? null);
+      this.#remoteCursorManager?.setCollaborationProvider(
+        (prevProvider ?? null) as { awareness?: AwarenessWithSetField | null; disconnect?: () => void } | null,
+      );
       throw err;
     }
   }
@@ -6210,8 +6223,13 @@ export class PresentationEditor extends EventEmitter {
           }
         } catch {}
 
+        // SD-3240: converter.convertedXml / translatedLinkedStyles /
+        // translatedNumbering are typed on the public surface as
+        // narrower (unknown-bearing) shapes than ConverterContext
+        // requires. Cast at the boundary; the runtime values match
+        // the shape ConverterContext expects.
         converterContext = converter
-          ? {
+          ? ({
               docx: converter.convertedXml,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
               ...(Object.keys(endnoteNumberById).length ? { endnoteNumberById } : {}),
@@ -6224,7 +6242,7 @@ export class PresentationEditor extends EventEmitter {
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
               ...(defaultTableStyleId ? { defaultTableStyleId } : {}),
-            }
+            } as unknown as ConverterContext)
           : undefined;
         const atomNodeTypes = getAtomNodeTypesFromSchema(this.#editor?.schema ?? null);
         const positionMapStart = perfNow();
@@ -6243,7 +6261,10 @@ export class PresentationEditor extends EventEmitter {
           enableTrackedChanges: this.#trackedChangesEnabled,
           enableComments: commentsEnabled,
           enableRichHyperlinks: true,
-          themeColors: this.#editor?.converter?.themeColors ?? undefined,
+          // SD-3240: converter.themeColors is `unknown` on the public
+          // EditorConverterSurface; cast to the consumer-expected type
+          // here. The runtime shape matches at call time.
+          themeColors: (this.#editor?.converter?.themeColors ?? undefined) as Record<string, string> | undefined,
           converterContext,
           flowBlockCache: this.#flowBlockCache,
           showBookmarks: this.#layoutOptions.showBookmarks ?? false,

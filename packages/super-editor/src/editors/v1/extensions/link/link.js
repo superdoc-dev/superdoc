@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { TextSelection } from 'prosemirror-state';
 import { Mark } from '@core/Mark.js';
 import { Attribute } from '@core/Attribute.js';
 import { getMarkRange } from '@core/helpers/getMarkRange.js';
@@ -231,18 +232,27 @@ export const Link = Mark.create({
 
           if (underlineMarkType) {
             const rangesMissingUnderline = [];
+            const negationMarksToRemove = [];
             tr.doc.nodesBetween(from, to, (node, pos) => {
               if (!node.isText || node.nodeSize <= 0) return;
-              const hasUnderline = node.marks.some((mark) => mark.type === underlineMarkType);
-              if (hasUnderline) return;
+              // underlineType: 'none' is a negation marker (renders as <span>, not <u>),
+              // not a visible underline — treat it as missing so the link gets one.
+              const existing = node.marks.find((mark) => mark.type === underlineMarkType);
+              const hasVisibleUnderline = existing && existing.attrs?.underlineType !== 'none';
+              if (hasVisibleUnderline) return;
 
-              // Only apply while overlapping with current selection/link range
               const rangeFrom = Math.max(pos, from);
               const rangeTo = Math.min(pos + node.nodeSize, to);
               if (rangeFrom >= rangeTo) return;
+              if (existing && existing.attrs?.underlineType === 'none') {
+                negationMarksToRemove.push({ from: rangeFrom, to: rangeTo, mark: existing });
+              }
               rangesMissingUnderline.push({ from: rangeFrom, to: rangeTo });
             });
 
+            negationMarksToRemove.forEach((range) => {
+              tr = tr.removeMark(range.from, range.to, range.mark);
+            });
             rangesMissingUnderline.forEach((range) => {
               tr = tr.addMark(range.from, range.to, underlineMarkType.create({ autoAdded: true }));
             });
@@ -283,14 +293,36 @@ export const Link = Mark.create({
           let { from, to } = selection;
 
           if (selection.empty && linkMarkType) {
-            const range = getMarkRange(selection.$from, linkMarkType);
-            if (range) {
-              from = range.from;
-              to = range.to;
+            const initialRange = getMarkRange(selection.$from, linkMarkType);
+            if (initialRange) {
+              from = initialRange.from;
+              to = initialRange.to;
+            } else {
+              // Imported DOCX links can sit at node boundaries where getMarkRange misses.
+              const doc = state.doc;
+              const docSize = doc.content.size;
+              const probePositions = [selection.from - 1, selection.from, selection.from + 1].filter(
+                (pos) => pos >= 0 && pos <= docSize,
+              );
+
+              for (const pos of probePositions) {
+                const range = getMarkRange(doc.resolve(pos), linkMarkType);
+                if (range) {
+                  from = range.from;
+                  to = range.to;
+                  break;
+                }
+              }
             }
           }
 
           const commandChain = chain();
+          if (selection.empty && linkMarkType && from !== to) {
+            commandChain.command(({ tr }) => {
+              tr.setSelection(TextSelection.create(tr.doc, from, to));
+              return true;
+            });
+          }
 
           return commandChain
             .unsetColor()
@@ -344,6 +376,28 @@ export const Link = Mark.create({
                     node.marks,
                   );
                 });
+
+              // Imported DOCX links can still exist as run node marks, remove too.
+              if (linkMarkType) {
+                const runNodeMarkRemovals = [];
+                tr.doc.nodesBetween(from, to, (node, pos) => {
+                  if (node.type.name !== 'run') return;
+                  if (!node.marks.some((mark) => mark.type === linkMarkType)) return;
+                  runNodeMarkRemovals.push(pos);
+                });
+
+                runNodeMarkRemovals.reverse().forEach((pos) => {
+                  const mappedPos = tr.mapping.map(pos);
+                  const runNode = tr.doc.nodeAt(mappedPos);
+                  if (!runNode) return;
+                  tr.setNodeMarkup(
+                    mappedPos,
+                    runNode.type,
+                    runNode.attrs,
+                    runNode.marks.filter((mark) => mark.type !== linkMarkType),
+                  );
+                });
+              }
 
               return true;
             })

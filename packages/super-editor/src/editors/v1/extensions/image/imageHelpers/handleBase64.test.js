@@ -33,7 +33,7 @@ describe('handleBase64', () => {
     const file = base64ToFile(base64);
 
     expect(file.type).toBe('image/jpeg');
-    expect(file.name).toMatch(/^image-\d+\.jpeg$/);
+    expect(file.name).toMatch(/^image-\d+\.jpg$/);
     expect(file.size).toBe(Buffer.byteLength(payload));
   });
 

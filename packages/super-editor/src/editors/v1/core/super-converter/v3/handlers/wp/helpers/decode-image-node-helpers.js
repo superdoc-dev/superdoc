@@ -3,6 +3,7 @@ import {
   getDataUriMetadata,
   getFallbackImageNameFromDataUri,
   sanitizeDocxMediaName,
+  tryDecodeDataUriText,
 } from '@converter/helpers/mediaHelpers.js';
 import { prepareTextAnnotation } from '@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js';
 import { wrapTextInRun } from '@converter/exporter.js';
@@ -20,12 +21,7 @@ function isExportableDataUriMetadata(metadata) {
   if (metadata.isBase64) return true;
   if (metadata.mimeType !== 'image/svg+xml') return false;
 
-  try {
-    decodeURIComponent(metadata.payload);
-    return true;
-  } catch {
-    return false;
-  }
+  return tryDecodeDataUriText(metadata.payload) != null;
 }
 
 function createMediaTargetForDataUri(params, src) {

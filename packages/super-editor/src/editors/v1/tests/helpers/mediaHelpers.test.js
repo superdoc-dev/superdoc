@@ -3,6 +3,7 @@ import {
   getDataUriMetadata,
   getFallbackImageNameFromDataUri,
   sanitizeDocxMediaName,
+  tryDecodeDataUriText,
 } from '../../core/super-converter/helpers/mediaHelpers.js';
 
 describe('sanitizeDocxMediaName', () => {
@@ -69,5 +70,15 @@ describe('getFallbackImageNameFromDataUri', () => {
   it('returns fallback when type cannot be derived', () => {
     expect(getFallbackImageNameFromDataUri('data:,')).toBe('image');
     expect(getFallbackImageNameFromDataUri('', 'custom')).toBe('custom');
+  });
+});
+
+describe('tryDecodeDataUriText', () => {
+  it('decodes percent-encoded data URI text payloads', () => {
+    expect(tryDecodeDataUriText('%3Csvg%2F%3E')).toBe('<svg/>');
+  });
+
+  it('returns null for malformed percent escapes', () => {
+    expect(tryDecodeDataUriText('%')).toBeNull();
   });
 });

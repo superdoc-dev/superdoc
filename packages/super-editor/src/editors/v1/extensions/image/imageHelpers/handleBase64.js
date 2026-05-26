@@ -1,5 +1,5 @@
 // @ts-check
-import { getDataUriMetadata } from '@converter/helpers/mediaHelpers.js';
+import { getDataUriMetadata, tryDecodeDataUriText } from '@converter/helpers/mediaHelpers.js';
 import { simpleStringHash } from '@core/utilities/hash.js';
 
 const DEFAULT_MIME_TYPE = 'application/octet-stream';
@@ -23,14 +23,6 @@ const decodeBase64ToBinaryString = (data) => {
   throw new Error('Unable to decode base64 payload in the current environment.');
 };
 
-const decodeDataUriText = (data) => {
-  try {
-    return decodeURIComponent(data);
-  } catch {
-    return null;
-  }
-};
-
 const binaryStringToBytes = (binaryString) => {
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
@@ -52,7 +44,7 @@ const extractBase64Meta = (dataUri) => {
   const mimeType = rawMimeType || DEFAULT_MIME_TYPE;
   const isBase64 = Boolean(metadata?.isBase64);
   const payload = metadata?.payload || '';
-  const binaryString = isBase64 ? decodeBase64ToBinaryString(payload) : decodeDataUriText(payload);
+  const binaryString = isBase64 ? decodeBase64ToBinaryString(payload) : tryDecodeDataUriText(payload);
   if (binaryString == null) return null;
 
   const hash = simpleStringHash(binaryString);

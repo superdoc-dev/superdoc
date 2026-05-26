@@ -46,6 +46,14 @@ export const getDataUriMetadata = (src = '') => {
   };
 };
 
+export const tryDecodeDataUriText = (payload = '') => {
+  try {
+    return decodeURIComponent(payload);
+  } catch {
+    return null;
+  }
+};
+
 export const getFallbackImageNameFromDataUri = (src = '', fallback = 'image') => {
   const extension = getDataUriMetadata(src)?.extension;
 

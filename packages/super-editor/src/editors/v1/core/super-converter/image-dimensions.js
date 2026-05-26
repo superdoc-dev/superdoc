@@ -1,5 +1,5 @@
 import { base64ToUint8Array } from './helpers.js';
-import { getDataUriMetadata } from './helpers/mediaHelpers.js';
+import { getDataUriMetadata, tryDecodeDataUriText } from './helpers/mediaHelpers.js';
 
 /**
  * Read intrinsic image dimensions from raw binary headers.
@@ -177,7 +177,8 @@ export function readImageDimensionsFromDataUri(dataUri) {
 
   if (metadata.mimeType === 'image/svg+xml') {
     try {
-      const svgText = metadata.isBase64 ? atob(metadata.payload) : decodeURIComponent(metadata.payload);
+      const svgText = metadata.isBase64 ? atob(metadata.payload) : tryDecodeDataUriText(metadata.payload);
+      if (svgText == null) return null;
       return readSvgDimensions(svgText);
     } catch {
       return null;

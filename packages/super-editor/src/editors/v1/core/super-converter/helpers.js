@@ -1,6 +1,6 @@
 import { parseSizeUnit } from '../utilities/index.js';
 import { xml2js } from 'xml-js';
-import { getDataUriMetadata } from './helpers/mediaHelpers.js';
+import { getDataUriMetadata, tryDecodeDataUriText } from './helpers/mediaHelpers.js';
 
 // --- Browser-compatible CRC32 (replaces buffer-crc32 to avoid Node.js Buffer dependency) ---
 const CRC32_TABLE = new Uint32Array(256);
@@ -65,11 +65,12 @@ function dataUriToArrayBuffer(data) {
         throw new Error(`Unsupported non-base64 data URI media type: ${metadata.mimeType || 'unknown'}`);
       }
 
-      try {
-        return stringToUtf8ArrayBuffer(decodeURIComponent(metadata.payload));
-      } catch {
+      const decodedPayload = tryDecodeDataUriText(metadata.payload);
+      if (decodedPayload == null) {
         throw new Error('Invalid non-base64 data URI payload');
       }
+
+      return stringToUtf8ArrayBuffer(decodedPayload);
     }
 
     base64 = metadata.payload;

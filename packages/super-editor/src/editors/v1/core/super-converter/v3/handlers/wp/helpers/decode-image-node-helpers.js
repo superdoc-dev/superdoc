@@ -30,6 +30,7 @@ const EXPORTABLE_IMAGE_DATA_URI_MIME_TYPES = new Set([
 function createMediaTargetForDataUri(params, src) {
   const metadata = getDataUriMetadata(src);
   if (!metadata || !EXPORTABLE_IMAGE_DATA_URI_MIME_TYPES.has(metadata.mimeType)) return null;
+  if (!metadata.isBase64 && metadata.mimeType !== 'image/svg+xml') return null;
 
   const extension = metadata.extension;
   if (!extension) return null;

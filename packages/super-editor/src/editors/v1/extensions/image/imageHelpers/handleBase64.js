@@ -76,7 +76,8 @@ const extractBase64Meta = (dataUri) => {
   const isBase64 = metaParts.some((part) => part.toLowerCase() === 'base64');
   const binaryString = isBase64 ? decodeBase64ToBinaryString(payload) : decodeDataUriText(payload);
   const hash = simpleHash(binaryString);
-  const extension = mimeType === 'image/svg+xml' ? 'svg' : mimeType.split('/')[1] || 'bin';
+  const normalizedMimeType = mimeType.toLowerCase();
+  const extension = normalizedMimeType === 'image/svg+xml' ? 'svg' : normalizedMimeType.split('/')[1] || 'bin';
   const filename = `image-${hash}.${extension}`;
 
   return { mimeType, binaryString, filename, isBase64 };

@@ -10,6 +10,16 @@ const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/d
 const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const IMAGE_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString();
+}
+
 function getImageExtensionFromDataUri(src) {
   if (typeof src !== 'string' || !src.startsWith('data:')) return null;
 
@@ -21,17 +31,26 @@ function getImageExtensionFromDataUri(src) {
   return subtype.toLowerCase() === 'svg+xml' ? 'svg' : subtype.toLowerCase();
 }
 
-function createMediaTargetForDataUri(params, attrs, src, imageName) {
+function createMediaTargetForDataUri(params, src) {
   const extension = getImageExtensionFromDataUri(src);
   if (!extension) return null;
 
-  const preferredBaseName = attrs.alt || imageName || 'image';
-  const fileBaseName = sanitizeDocxMediaName(preferredBaseName, 'image');
-  const fileName = `${fileBaseName}_${generateDocxRandomId(8)}.${extension}`;
+  if (!params.media) params.media = {};
+  const existingEntry = Object.entries(params.media).find(([, value]) => value === src);
+  if (existingEntry?.[0]?.startsWith('word/')) {
+    return existingEntry[0].slice(5);
+  }
+
+  const fileBaseName = sanitizeDocxMediaName(`image-${simpleHash(src)}`, 'image');
+  let fileName = `${fileBaseName}.${extension}`;
+  let packagePath = `word/media/${fileName}`;
+  if (params.media[packagePath] && params.media[packagePath] !== src) {
+    fileName = `${fileBaseName}_${generateDocxRandomId(8)}.${extension}`;
+    packagePath = `word/media/${fileName}`;
+  }
   const relationshipTarget = `media/${fileName}`;
 
-  if (!params.media) params.media = {};
-  params.media[`word/${relationshipTarget}`] = src;
+  params.media[packagePath] = src;
 
   return relationshipTarget;
 }
@@ -244,7 +263,7 @@ export const translateImageNode = (params) => {
   }
 
   if (imageId) {
-    const path = src?.split('word/')[1];
+    const path = src?.startsWith('data:') ? createMediaTargetForDataUri(params, src) : src?.split('word/')[1];
     const relationships = params.isHeaderFooter ? params.existingRelationships : getDocumentRelationships(params);
     const existingRelation = findImageRelationship(relationships, {
       id: imageId,
@@ -257,10 +276,9 @@ export const translateImageNode = (params) => {
       addImageRelationshipForId(params, imageId, path);
     }
   } else if (params.node.type === 'image' && !imageId) {
-    const path = src?.startsWith('data:')
-      ? createMediaTargetForDataUri(params, attrs, src, imageName)
-      : src?.split('word/')[1];
-    imageId = addNewImageRelationship(params, path);
+    const path = src?.startsWith('data:') ? createMediaTargetForDataUri(params, src) : src?.split('word/')[1];
+    const existingRelation = findImageRelationship(params.relationships, { target: path });
+    imageId = existingRelation?.attributes?.Id ?? addNewImageRelationship(params, path);
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
     // We already handled the no-type case above; here the type IS valid.
     const type = src?.split(';')[0].split('/')[1];

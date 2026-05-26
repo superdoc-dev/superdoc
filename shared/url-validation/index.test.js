@@ -36,6 +36,14 @@ describe('url-validation', () => {
       expect(isValidImageDataUrl('data:text/html,%3Cp%3Ebad%3C%2Fp%3E')).toBe(false);
       expect(isValidImageDataUrl('data:image/svg+xml,%')).toBe(false);
     });
+
+    it('accepts image data URLs at the maximum length and rejects one byte over', () => {
+      const prefix = 'data:image/svg+xml,';
+      const payload = 'a'.repeat(MAX_IMAGE_DATA_URL_LENGTH - prefix.length);
+
+      expect(isValidImageDataUrl(`${prefix}${payload}`)).toBe(true);
+      expect(isValidImageDataUrl(`${prefix}${payload}a`)).toBe(false);
+    });
   });
 
   describe('sanitizeHref', () => {

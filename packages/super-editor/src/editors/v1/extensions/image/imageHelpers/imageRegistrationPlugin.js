@@ -193,6 +193,11 @@ const parseSizeFromImageUrl = (src) => {
 const hasFinitePositiveSize = (size) =>
   Number.isFinite(size?.width) && size.width > 0 && Number.isFinite(size?.height) && size.height > 0;
 
+const isSvgFile = (file) => file?.type === 'image/svg+xml';
+
+const shouldRegisterInPlace = (node) =>
+  node.attrs?.src?.startsWith('data:image/svg+xml') && hasFinitePositiveSize(node.attrs?.size);
+
 const getOrInitMediaStore = (editor) => {
   if (!editor?.storage?.image?.media) {
     editor.storage.image.media = {};
@@ -214,6 +219,11 @@ const getOrInitMediaStore = (editor) => {
  */
 export const handleNodePath = (foundImages, editor, state) => {
   const { tr } = state;
+  registerImagesInTransaction(foundImages, editor, tr);
+  return tr;
+};
+
+const registerImagesInTransaction = (foundImages, editor, tr) => {
   const { mediaStore, existingFileNames } = getOrInitMediaStore(editor);
 
   foundImages.forEach(({ node, pos }) => {
@@ -244,8 +254,6 @@ export const handleNodePath = (foundImages, editor, state) => {
       rId,
     });
   });
-
-  return tr;
 };
 
 /**
@@ -264,19 +272,28 @@ export const handleBrowserPath = (foundImages, editor, view, state) => {
   // Relative paths are resolved by the browser natively for display.
   // Register them in the background for export without removing from the document.
   const relativeImages = foundImages.filter(({ node }) => isRelativeUrl(node.attrs?.src));
-  const imagesToProcess = foundImages.filter(({ node }) => !isRelativeUrl(node.attrs?.src));
+  const inPlaceImages = foundImages.filter(
+    ({ node }) => !isRelativeUrl(node.attrs?.src) && shouldRegisterInPlace(node),
+  );
+  const imagesToProcess = foundImages.filter(
+    ({ node }) => !isRelativeUrl(node.attrs?.src) && !shouldRegisterInPlace(node),
+  );
 
   if (relativeImages.length > 0) {
     registerRelativeImages(relativeImages, editor, view);
   }
 
-  if (imagesToProcess.length === 0) return null;
+  const tr = state.tr;
+  if (inPlaceImages.length > 0) {
+    registerImagesInTransaction(inPlaceImages, editor, tr);
+  }
+
+  if (imagesToProcess.length === 0) return tr.docChanged ? tr : null;
 
   // Register the images. (async process).
   registerImages(imagesToProcess, editor, view);
 
   // Remove all the images that were found. These will eventually be replaced by the updated images.
-  const tr = state.tr;
 
   // We need to delete the image nodes and replace them with decorations. This will change their positions.
 
@@ -487,20 +504,24 @@ const registerImages = async (foundImages, editor, view) => {
     }
 
     try {
-      const process = await checkAndProcessImage({
-        getMaxContentSize: () => editor.getMaxContentSize(),
-        file,
-      });
+      if (isSvgFile(file) && hasFinitePositiveSize(image.node.attrs?.size)) {
+        await uploadAndInsertImage({ editor, view, file, size: image.node.attrs.size, id });
+      } else {
+        const process = await checkAndProcessImage({
+          getMaxContentSize: () => editor.getMaxContentSize(),
+          file,
+        });
 
-      if (!process.file) {
-        // Processing failed, remove placeholder
-        const tr = view.state.tr;
-        removeImagePlaceholder(view.state, tr, id);
-        view.dispatch(tr);
-        return;
+        if (!process.file) {
+          // Processing failed, remove placeholder
+          const tr = view.state.tr;
+          removeImagePlaceholder(view.state, tr, id);
+          view.dispatch(tr);
+          return;
+        }
+
+        await uploadAndInsertImage({ editor, view, file: process.file, size: process.size, id });
       }
-
-      await uploadAndInsertImage({ editor, view, file: process.file, size: process.size, id });
     } catch (error) {
       console.error(`Error processing image from ${src}:`, error);
       // Ensure placeholder is removed even on error

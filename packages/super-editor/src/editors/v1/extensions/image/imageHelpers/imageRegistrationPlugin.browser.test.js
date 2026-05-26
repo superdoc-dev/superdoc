@@ -63,8 +63,9 @@ vi.mock('./fileNameUtils.js', () => ({
 // ── Imports (after mocks) ─────────────────────────────────────────────
 import { Decoration } from 'prosemirror-view';
 import { handleBrowserPath } from './imageRegistrationPlugin.js';
+import { getBase64FileMeta } from './handleBase64';
 import { urlToFile, validateUrlAccessibility } from './handleUrl';
-import { addImageRelationship } from './startImageUpload';
+import { addImageRelationship, checkAndProcessImage, uploadAndInsertImage } from './startImageUpload';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 const createImageNode = (attrs) => ({
@@ -163,6 +164,30 @@ describe('handleBrowserPath', () => {
     const [firstPos] = tr.delete.mock.calls[0];
     const [secondPos] = tr.delete.mock.calls[1];
     expect(firstPos).toBeGreaterThan(secondPos);
+  });
+
+  it('registers sized SVG data URI images in place without canvas processing', () => {
+    const svgDataUri = 'data:image/svg+xml;base64,PHN2Zy8+';
+    const id = {};
+    const imageNode = createImageNode({
+      src: svgDataUri,
+      size: { width: 200, height: 50 },
+    });
+    getBase64FileMeta.mockReturnValueOnce({ filename: 'image-123.svg', mimeType: 'image/svg+xml' });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id }], editor, view, state);
+
+    expect(checkAndProcessImage).not.toHaveBeenCalled();
+    expect(uploadAndInsertImage).not.toHaveBeenCalled();
+    expect(addImageRelationship).toHaveBeenCalledWith({
+      editor,
+      path: expect.stringMatching(/^media\/image-\d+\.svg$/),
+    });
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(20, undefined, {
+      ...imageNode.attrs,
+      src: expect.stringMatching(/^word\/media\/image-\d+\.svg$/),
+      rId: 'rId99',
+    });
   });
 });
 

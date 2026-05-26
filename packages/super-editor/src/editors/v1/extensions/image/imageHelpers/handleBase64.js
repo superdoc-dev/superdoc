@@ -47,7 +47,7 @@ const extractBase64Meta = (base64String) => {
   const mimeType = rawMimeType || DEFAULT_MIME_TYPE;
   const binaryString = decodeBase64ToBinaryString(payload);
   const hash = simpleHash(binaryString);
-  const extension = mimeType.split('/')[1] || 'bin';
+  const extension = mimeType === 'image/svg+xml' ? 'svg' : mimeType.split('/')[1] || 'bin';
   const filename = `image-${hash}.${extension}`;
 
   return { mimeType, binaryString, filename };

@@ -10,7 +10,7 @@ export const getFallbackImageNameFromDataUri = (src = '', fallback = 'image') =>
 
   const [prefix] = src.split(';');
   const [, maybeType] = prefix.split('/');
-  const extension = maybeType?.toLowerCase();
+  const extension = maybeType?.toLowerCase() === 'svg+xml' ? 'svg' : maybeType?.toLowerCase();
 
   return extension ? `${fallback}.${extension}` : fallback;
 };

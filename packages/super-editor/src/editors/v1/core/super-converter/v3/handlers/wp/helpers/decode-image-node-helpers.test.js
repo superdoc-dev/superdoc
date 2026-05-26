@@ -112,6 +112,27 @@ describe('translateImageNode', () => {
     expect(result.elements).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'a:graphic' })]));
   });
 
+  it('should register data URI image media when rId is missing', () => {
+    const src = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    baseParams.node.attrs = {
+      src,
+      alt: 'Signature Example',
+      size: { width: 200, height: 50 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(1);
+    expect(baseParams.relationships[0].attributes.Target).toBe('media/Signature_Example_123.svg');
+    expect(baseParams.media['word/media/Signature_Example_123.svg']).toBe(src);
+
+    const blip = result.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+    expect(blip.attributes['r:embed']).toBe(baseParams.relationships[0].attributes.Id);
+  });
+
   it('should use clamped fallback size (1 EMU) when attrs.size is empty', () => {
     baseParams.node.attrs.size = {};
 

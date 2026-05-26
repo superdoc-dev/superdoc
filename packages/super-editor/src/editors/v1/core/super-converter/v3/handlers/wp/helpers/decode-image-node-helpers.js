@@ -10,6 +10,32 @@ const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/d
 const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const IMAGE_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 
+function getImageExtensionFromDataUri(src) {
+  if (typeof src !== 'string' || !src.startsWith('data:')) return null;
+
+  const prefix = src.slice(5, src.indexOf(',') === -1 ? undefined : src.indexOf(','));
+  const mime = prefix.split(';')[0];
+  const [, subtype] = mime.split('/');
+  if (!subtype) return null;
+
+  return subtype.toLowerCase() === 'svg+xml' ? 'svg' : subtype.toLowerCase();
+}
+
+function createMediaTargetForDataUri(params, attrs, src, imageName) {
+  const extension = getImageExtensionFromDataUri(src);
+  if (!extension) return null;
+
+  const preferredBaseName = attrs.alt || imageName || 'image';
+  const fileBaseName = sanitizeDocxMediaName(preferredBaseName, 'image');
+  const fileName = `${fileBaseName}_${generateDocxRandomId(8)}.${extension}`;
+  const relationshipTarget = `media/${fileName}`;
+
+  if (!params.media) params.media = {};
+  params.media[`word/${relationshipTarget}`] = src;
+
+  return relationshipTarget;
+}
+
 /**
  * Resolve the hyperlink relationship rId for an image, if applicable.
  * Called once so that both wp:docPr and pic:cNvPr share the same rId.
@@ -231,7 +257,9 @@ export const translateImageNode = (params) => {
       addImageRelationshipForId(params, imageId, path);
     }
   } else if (params.node.type === 'image' && !imageId) {
-    const path = src?.split('word/')[1];
+    const path = src?.startsWith('data:')
+      ? createMediaTargetForDataUri(params, attrs, src, imageName)
+      : src?.split('word/')[1];
     imageId = addNewImageRelationship(params, path);
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
     // We already handled the no-type case above; here the type IS valid.

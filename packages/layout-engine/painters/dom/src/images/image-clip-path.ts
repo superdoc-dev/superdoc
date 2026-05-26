@@ -1,5 +1,16 @@
 import { parseInsetClipPathForScale } from '@superdoc/contracts';
 
+const SUPPORTED_IMAGE_CLIP_PATH_PREFIXES = ['inset(', 'polygon(', 'circle(', 'ellipse(', 'path(', 'rect('];
+
+export const readImageClipPathValue = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim();
+  if (normalized.length === 0) return '';
+  const lower = normalized.toLowerCase();
+  if (!SUPPORTED_IMAGE_CLIP_PATH_PREFIXES.some((prefix) => lower.startsWith(prefix))) return '';
+  return normalized;
+};
+
 /**
  * Resolves a clip-path value to a trimmed non-empty string, or undefined if invalid.
  */

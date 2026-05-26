@@ -1,5 +1,4 @@
 import type {
-  Run,
   ParagraphBorders,
   ParagraphBorder,
   TableBorders,
@@ -82,108 +81,13 @@ export const hashCellBorders = (borders: CellBorders | undefined): string => {
   return parts.join(';');
 };
 
-/**
- * Type guard to check if a run has a string property.
- *
- * @param run - The run to check
- * @param prop - The property name to check
- * @returns True if the run has the property and it's a string
- */
-export const hasStringProp = (run: Run, prop: string): run is Run & Record<string, string> => {
-  return prop in run && typeof (run as Record<string, unknown>)[prop] === 'string';
-};
-
-/**
- * Type guard to check if a run has a number property.
- *
- * @param run - The run to check
- * @param prop - The property name to check
- * @returns True if the run has the property and it's a number
- */
-export const hasNumberProp = (run: Run, prop: string): run is Run & Record<string, number> => {
-  return prop in run && typeof (run as Record<string, unknown>)[prop] === 'number';
-};
-
-/**
- * Type guard to check if a run has a boolean property.
- *
- * @param run - The run to check
- * @param prop - The property name to check
- * @returns True if the run has the property and it's a boolean
- */
-export const hasBooleanProp = (run: Run, prop: string): run is Run & Record<string, boolean> => {
-  return prop in run && typeof (run as Record<string, unknown>)[prop] === 'boolean';
-};
-
-/**
- * Safely gets a string property from a run, with type narrowing.
- *
- * @param run - The run to get the property from
- * @param prop - The property name
- * @returns The string value or empty string if not present
- */
-export const getRunStringProp = (run: Run, prop: string): string => {
-  if (hasStringProp(run, prop)) {
-    return run[prop];
-  }
-  return '';
-};
-
-/**
- * Safely gets a number property from a run, with type narrowing.
- *
- * @param run - The run to get the property from
- * @param prop - The property name
- * @returns The number value or 0 if not present
- */
-export const getRunNumberProp = (run: Run, prop: string): number => {
-  if (hasNumberProp(run, prop)) {
-    return run[prop];
-  }
-  return 0;
-};
-
-/**
- * Safely gets a boolean property from a run, with type narrowing.
- *
- * @param run - The run to get the property from
- * @param prop - The property name
- * @returns The boolean value or false if not present
- */
-export const getRunBooleanProp = (run: Run, prop: string): boolean => {
-  if (hasBooleanProp(run, prop)) {
-    return run[prop];
-  }
-  return false;
-};
-
-/**
- * Safely gets the underline style from a run.
- * Handles the object-shaped underline property { style?, color? }.
- *
- * @param run - The run to get the underline style from
- * @returns The underline style or empty string if not present
- */
-export const getRunUnderlineStyle = (run: Run): string => {
-  if ('underline' in run && typeof run.underline === 'boolean') {
-    return run.underline ? 'single' : '';
-  }
-  if ('underline' in run && run.underline && typeof run.underline === 'object') {
-    return (run.underline as { style?: string }).style ?? '';
-  }
-  return '';
-};
-
-/**
- * Safely gets the underline color from a run.
- * Handles the object-shaped underline property { style?, color? }.
- *
- * @param run - The run to get the underline color from
- * @returns The underline color or empty string if not present
- */
-export const getRunUnderlineColor = (run: Run): string => {
-  if ('underline' in run && run.underline && typeof run.underline === 'object') {
-    return (run.underline as { color?: string }).color ?? '';
-  }
-  return '';
-};
+export {
+  getRunBooleanProp,
+  getRunNumberProp,
+  getRunStringProp,
+  getRunUnderlineColor,
+  getRunUnderlineStyle,
+  hasBooleanProp,
+  hasNumberProp,
+  hasStringProp,
+} from './runs/hash.js';

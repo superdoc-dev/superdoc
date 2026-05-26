@@ -6,7 +6,7 @@ import {
   getParagraphBorderBox,
   computeBorderSpaceExpansion,
   type BetweenBorderInfo,
-} from './features/paragraph-borders/index.js';
+} from './paragraph/borders/index.js';
 import { hashParagraphBorders } from './paragraph-hash-utils.js';
 
 /** Helper to create BetweenBorderInfo for tests that previously passed a boolean. */

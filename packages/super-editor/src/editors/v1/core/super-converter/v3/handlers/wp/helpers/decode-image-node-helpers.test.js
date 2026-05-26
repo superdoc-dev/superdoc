@@ -273,6 +273,31 @@ describe('translateImageNode', () => {
     expect(result).toEqual({ type: 'text', text: 'annotation' });
   });
 
+  it('should export fieldAnnotation SVG data URI media with svg extension', () => {
+    const src = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    baseParams.node = {
+      type: 'fieldAnnotation',
+      attrs: {
+        fieldId: 'signatureField',
+        hash: 'signatureHash',
+        src,
+        size: { width: 200, height: 50 },
+      },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(1);
+    expect(baseParams.relationships[0].attributes.Target).toBe('media/signatureField_signatureHash.svg');
+    expect(baseParams.media['word/media/signatureField_signatureHash.svg']).toBe(src);
+
+    const blip = result.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+    expect(blip.attributes['r:embed']).toBe(baseParams.relationships[0].attributes.Id);
+  });
+
   it('should resize images inside tableCell to maxWidth', () => {
     baseParams.node.attrs.size = { width: 500, height: 500 };
     baseParams.tableCell = {

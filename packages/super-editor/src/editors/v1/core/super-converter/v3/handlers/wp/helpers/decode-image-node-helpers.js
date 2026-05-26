@@ -215,7 +215,7 @@ export const translateImageNode = (params) => {
   // For fieldAnnotations without a recognizable MIME type, fall back to text
   // annotation before attempting size resolution (they have no image data).
   if (params.node.type === 'fieldAnnotation' && !imageId) {
-    const type = src?.split(';')[0].split('/')[1];
+    const type = getImageExtensionFromDataUri(src) ?? src?.split(';')[0].split('/')[1];
     if (!type) {
       return prepareTextAnnotation(params);
     }
@@ -272,7 +272,7 @@ export const translateImageNode = (params) => {
     imageId = existingRelation?.attributes?.Id ?? addNewImageRelationship(params, path);
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
     // We already handled the no-type case above; here the type IS valid.
-    const type = src?.split(';')[0].split('/')[1];
+    const type = getImageExtensionFromDataUri(src) ?? src?.split(';')[0].split('/')[1];
 
     const sanitizedHash = sanitizeDocxMediaName(attrs.hash, generateDocxRandomId(4));
     const fileName = `${imageName}_${sanitizedHash}.${type}`;

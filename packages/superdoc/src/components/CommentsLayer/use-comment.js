@@ -27,10 +27,11 @@ export default function useComment(params) {
   const commentElement = ref(null);
   const isFocused = ref(params.isFocused || false);
 
-  const creatorEmail = params.creatorEmail;
-  const creatorName = params.creatorName;
-  const creatorImage = params.creatorImage;
-  const createdTime = params.createdTime || Date.now();
+  const creatorId = ref(params.creatorId ?? null);
+  const creatorEmail = ref(params.creatorEmail ?? null);
+  const creatorName = ref(params.creatorName ?? null);
+  const creatorImage = ref(params.creatorImage ?? null);
+  const createdTime = ref(params.createdTime || Date.now());
   const importedAuthor = ref(params.importedAuthor || null);
   const docxCommentJSON = ref(params.docxCommentJSON || null);
   const origin = params.origin;
@@ -65,19 +66,22 @@ export default function useComment(params) {
   const deletedText = ref(params.deletedText || null);
 
   const resolvedTime = ref(params.resolvedTime || null);
+  const resolvedById = ref(params.resolvedById || null);
   const resolvedByEmail = ref(params.resolvedByEmail || null);
   const resolvedByName = ref(params.resolvedByName || null);
 
   /**
    * Mark this conversation as resolved with UTC date
    *
+   * @param {String} id The actor id of the user marking this conversation as done
    * @param {String} email The email of the user marking this conversation as done
    * @param {String} name The name of the user marking this conversation as done
    * @returns {void}
    */
-  const resolveComment = ({ email, name, superdoc }) => {
+  const resolveComment = ({ id, email, name, superdoc }) => {
     if (resolvedTime.value) return;
     resolvedTime.value = Date.now();
+    resolvedById.value = id ?? null;
     resolvedByEmail.value = email;
     resolvedByName.value = name;
 
@@ -209,7 +213,7 @@ export default function useComment(params) {
   const getCommentUser = () => {
     const user = importedAuthor.value
       ? { name: importedAuthor.value.name || '(Imported)', email: importedAuthor.value.email }
-      : { name: creatorName, email: creatorEmail, image: creatorImage };
+      : { id: creatorId.value, name: creatorName.value, email: creatorEmail.value, image: creatorImage.value };
 
     return user;
   };
@@ -244,10 +248,11 @@ export default function useComment(params) {
         return { ...u, name: u.name ? u.name : u.email };
       }),
       createdAtVersionNumber,
-      creatorEmail,
-      creatorName,
-      creatorImage,
-      createdTime,
+      creatorId: creatorId.value,
+      creatorEmail: creatorEmail.value,
+      creatorName: creatorName.value,
+      creatorImage: creatorImage.value,
+      createdTime: createdTime.value,
       importedAuthor: importedAuthor.value,
       docxCommentJSON: docxCommentJSON.value,
       isInternal: isInternal.value,
@@ -263,6 +268,7 @@ export default function useComment(params) {
       trackedChangeAnchorKey: trackedChangeAnchorKey.value,
       deletedText: deletedText.value,
       resolvedTime: resolvedTime.value,
+      resolvedById: resolvedById.value,
       resolvedByEmail: resolvedByEmail.value,
       resolvedByName: resolvedByName.value,
       origin,
@@ -284,6 +290,7 @@ export default function useComment(params) {
     mentions,
     commentElement,
     isFocused,
+    creatorId,
     creatorEmail,
     creatorName,
     creatorImage,
@@ -302,6 +309,7 @@ export default function useComment(params) {
     trackedChangeStoryLabel,
     trackedChangeAnchorKey,
     resolvedTime,
+    resolvedById,
     resolvedByEmail,
     resolvedByName,
     importedAuthor,

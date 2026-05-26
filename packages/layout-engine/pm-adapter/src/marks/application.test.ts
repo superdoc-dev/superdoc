@@ -411,6 +411,56 @@ describe('mark application', () => {
 
       expect(trackedChangesCompatible(a, b)).toBe(false);
     });
+
+    it('returns true for the same overlap layers in different order', () => {
+      const insertParent: TrackedChangeMeta = { kind: 'insert', id: 'ins-parent' };
+      const deleteChild: TrackedChangeMeta = {
+        kind: 'delete',
+        id: 'del-child',
+        overlapParentId: 'ins-parent',
+        relationship: 'child',
+      };
+      const a: TextRun = {
+        text: 'Hello',
+        fontFamily: 'Arial',
+        fontSize: 12,
+        trackedChanges: [deleteChild, insertParent],
+      };
+      const b: TextRun = {
+        text: 'World',
+        fontFamily: 'Arial',
+        fontSize: 12,
+        trackedChanges: [insertParent, deleteChild],
+      };
+
+      expect(trackedChangesCompatible(a, b)).toBe(true);
+    });
+
+    it('returns false when one run has an extra overlap layer', () => {
+      const insertParent: TrackedChangeMeta = { kind: 'insert', id: 'ins-parent' };
+      const a: TextRun = {
+        text: 'Hello',
+        fontFamily: 'Arial',
+        fontSize: 12,
+        trackedChanges: [insertParent],
+      };
+      const b: TextRun = {
+        text: 'World',
+        fontFamily: 'Arial',
+        fontSize: 12,
+        trackedChanges: [
+          insertParent,
+          {
+            kind: 'delete',
+            id: 'del-child',
+            overlapParentId: 'ins-parent',
+            relationship: 'child',
+          },
+        ],
+      };
+
+      expect(trackedChangesCompatible(a, b)).toBe(false);
+    });
   });
 
   describe('collectTrackedChangeFromMarks', () => {
@@ -1041,6 +1091,31 @@ describe('mark application', () => {
       expect(run.trackedChange?.author).toBe('John');
     });
 
+    it('normalizes overlapping tracked change layers with parent insert first', () => {
+      const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
+      applyMarksToRun(run, [
+        {
+          type: TRACK_DELETE_MARK,
+          attrs: { id: 'del-child', overlapParentId: 'ins-parent', author: 'Reviewer' },
+        },
+        {
+          type: TRACK_INSERT_MARK,
+          attrs: { id: 'ins-parent', author: 'Author' },
+        },
+      ]);
+
+      expect(run.trackedChanges?.map((layer) => `${layer.kind}:${layer.id}`)).toEqual([
+        'insert:ins-parent',
+        'delete:del-child',
+      ]);
+      expect(run.trackedChanges?.[0].relationship).toBe('parent');
+      expect(run.trackedChanges?.[1].relationship).toBe('child');
+      expect(run.trackedChanges?.[1].overlapParentId).toBe('ins-parent');
+      expect(run.trackedChange).toBe(run.trackedChanges?.[0]);
+      expect(run.trackedChange?.kind).toBe('insert');
+      expect(run.trackedChange?.id).toBe('ins-parent');
+    });
+
     it('applies link mark with enableRichHyperlinks disabled', () => {
       const run: TextRun = { text: 'Hello', fontFamily: 'Arial', fontSize: 12 };
       applyMarksToRun(run, [{ type: 'link', attrs: { href: 'https://example.com' } }], { enableRichHyperlinks: false });
@@ -1072,6 +1147,7 @@ describe('mark application', () => {
 
       // Insert should take priority over format
       expect(run.trackedChange?.kind).toBe('insert');
+      expect(run.trackedChanges?.map((layer) => layer.kind)).toEqual(['insert', 'format']);
     });
 
     it('ignores unknown mark types', () => {

@@ -1527,6 +1527,35 @@ describe('SuperDoc.vue', () => {
     expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
   });
 
+  it('forwards replacedFile comment loads to the comments store', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editor = {
+      options: {
+        documentId: 'doc-1',
+        shouldLoadComments: false,
+      },
+    };
+
+    options.onCommentsLoaded({
+      editor,
+      comments: [{ commentId: 'c-1' }],
+      replacedFile: true,
+    });
+    await nextTick();
+
+    expect(commentsStoreStub.processLoadedDocxComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor,
+      comments: [{ commentId: 'c-1' }],
+      documentId: 'doc-1',
+      replacedFile: true,
+    });
+  });
+
   it('clears tracked-change positions for non-body tracked-change updates when viewing-mode comments are hidden', async () => {
     const superdocStub = createSuperdocStub();
     superdocStub.config.documentMode = 'viewing';

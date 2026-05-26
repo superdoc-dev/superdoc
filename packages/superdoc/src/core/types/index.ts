@@ -93,8 +93,8 @@ export interface AwarenessUser extends User {
  * The runtime helper `awarenessStatesToArray` spreads each remote user
  * onto the top of the entry (`{ clientId, ...value.user, color }`), so
  * `User` fields like `name`, `email`, `image` appear at the top level
- * (not nested under a `user` property). Consumers should read
- * `state.name` / `state.email`, not `state.user.name`.
+ * (not nested under a `user` property). Consumers should read `state.id`,
+ * `state.name`, and `state.email`, not `state.user.name`.
  *
  * Application-specific fields attached to the awareness state by the
  * provider surface through the `[key: string]: unknown` index
@@ -1765,8 +1765,8 @@ export interface Config {
  * call sites cast `this.config` to this type so they can access these
  * invariants without per-site null guards.
  *
- * Use this from internal SuperDoc callsites that need the augmented shape
- * (e.g. `/** @type {InternalConfig} *\/ (this.config).socket = ...`).
+ * Use this from internal SuperDoc callsites that need the augmented
+ * shape, e.g. `(this.config as InternalConfig).socket = ...`.
  */
 export interface InternalConfig extends Config {
   /**

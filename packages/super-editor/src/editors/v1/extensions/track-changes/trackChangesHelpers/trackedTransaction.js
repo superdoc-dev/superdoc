@@ -10,6 +10,11 @@ import { TrackDeleteMarkName, TrackInsertMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { findMark } from '@core/helpers/index.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
+import {
+  getCurrentUserIdentity,
+  getChangeAuthorIdentity,
+  matchesSameUserRefinement,
+} from '../review-model/identity.js';
 
 const COMPOSITION_INPUT_TYPES = new Set(['insertCompositionText', 'deleteCompositionText']);
 const COMBINING_MARK_REGEX = /^\p{Mark}$/u;
@@ -85,8 +90,14 @@ const getOwnedDeadKeyPlaceholderInfoAt = ({ doc, pos, user }) => {
   }
 
   const textNodeAtPos = getTextNodeAtPos({ doc, pos });
+  const currentIdentity = getCurrentUserIdentity({ options: { user } });
   const hasOwnTrackedInsert = textNodeAtPos?.node?.marks?.some(
-    (mark) => mark.type.name === TrackInsertMarkName && mark.attrs?.authorEmail === user.email,
+    (mark) =>
+      mark.type.name === TrackInsertMarkName &&
+      matchesSameUserRefinement({
+        currentUser: currentIdentity,
+        change: getChangeAuthorIdentity(mark),
+      }),
   );
 
   return hasOwnTrackedInsert ? { placeholderChar, combiningMark, textNodeAtPos } : null;
@@ -303,6 +314,7 @@ const getPendingDeadKeyPlaceholder = ({ tr, newTr, user }) => {
   return {
     pos,
     placeholderChar: insertedText,
+    authorId: user.id,
     authorEmail: user.email,
   };
 };
@@ -336,7 +348,12 @@ export const trackedTransaction = ({ tr, state, user, replacements = 'paired' })
   const isProgrammaticInput = tr.getMeta('inputType') === 'programmatic';
   const ySyncMeta = tr.getMeta(ySyncPluginKey);
   const pendingDeadKeyPlaceholder = TrackChangesBasePluginKey.getState(state)?.pendingDeadKeyPlaceholder ?? null;
-  const allowedMeta = new Set([...onlyInputTypeMeta, ySyncPluginKey.key, 'forceTrackChanges']);
+  const allowedMeta = new Set([
+    ...onlyInputTypeMeta,
+    ySyncPluginKey.key,
+    'forceTrackChanges',
+    'protectTrackedReviewState',
+  ]);
   const hasDisallowedMeta = tr.meta && Object.keys(tr.meta).some((meta) => !allowedMeta.has(meta));
 
   if (
@@ -415,6 +432,7 @@ export const trackedTransaction = ({ tr, state, user, replacements = 'paired' })
         date,
         originalStep,
         originalStepIndex,
+        replacements,
       });
     } else {
       // Non-structural steps (AttrStep, SetNodeMarkupStep) are typically

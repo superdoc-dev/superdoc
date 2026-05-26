@@ -17,6 +17,47 @@ import { selectedRect } from 'prosemirror-tables';
 export const resolveContextMenuCommandEditor = (editor) => {
   return typeof editor?.getActiveEditor === 'function' ? editor.getActiveEditor() : editor;
 };
+
+const TRACKED_MARK_NAMES = new Set(['trackInsert', 'trackDelete', 'trackFormat']);
+const TRACKED_MARK_PRIORITY = {
+  trackDelete: 3,
+  trackFormat: 2,
+  trackInsert: 1,
+};
+
+function isTrackedChangeMark(mark) {
+  return Boolean(mark?.type?.name && TRACKED_MARK_NAMES.has(mark.type.name));
+}
+
+function choosePreferredTrackedChangeId(marks) {
+  const candidates = [];
+  const seen = new Set();
+
+  marks.forEach((mark, index) => {
+    if (!isTrackedChangeMark(mark)) return;
+    const id = typeof mark.attrs?.id === 'string' ? mark.attrs.id : '';
+    if (!id) return;
+    const key = `${mark.type.name}:${id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push({
+      id,
+      markType: mark.type.name,
+      isChildOverlap: Boolean(mark.attrs?.overlapParentId),
+      index,
+    });
+  });
+
+  candidates.sort((a, b) => {
+    if (a.isChildOverlap !== b.isChildOverlap) return a.isChildOverlap ? -1 : 1;
+    const priorityDelta = (TRACKED_MARK_PRIORITY[b.markType] ?? 0) - (TRACKED_MARK_PRIORITY[a.markType] ?? 0);
+    if (priorityDelta !== 0) return priorityDelta;
+    return a.index - b.index;
+  });
+
+  return candidates[0]?.id ?? null;
+}
+
 /**
  * Get props by item id
  *
@@ -141,6 +182,7 @@ export async function getEditorContext(editor, event) {
 
   const activeMarks = [];
   let trackedChangeId = null;
+  const trackedMarkCandidates = [];
 
   if (event && pos !== null) {
     const $pos = state.doc.resolve(pos);
@@ -149,11 +191,8 @@ export async function getEditorContext(editor, event) {
       if (!activeMarks.includes(mark.type.name)) {
         activeMarks.push(mark.type.name);
       }
-      if (
-        !trackedChangeId &&
-        (mark.type.name === 'trackInsert' || mark.type.name === 'trackDelete' || mark.type.name === 'trackFormat')
-      ) {
-        trackedChangeId = mark.attrs.id;
+      if (isTrackedChangeMark(mark)) {
+        trackedMarkCandidates.push(mark);
       }
     };
 
@@ -171,6 +210,7 @@ export async function getEditorContext(editor, event) {
     }
 
     state.storedMarks?.forEach(processMark);
+    trackedChangeId = choosePreferredTrackedChangeId(trackedMarkCandidates);
   } else {
     state.storedMarks?.forEach((mark) => activeMarks.push(mark.type.name));
     state.selection.$head.marks().forEach((mark) => activeMarks.push(mark.type.name));
@@ -458,4 +498,5 @@ export {
   isCollaborationEnabled as __isCollaborationEnabledForTest,
   getCellSelectionInfo as __getCellSelectionInfoForTest,
   resolveProofingContext as __resolveProofingContextForTest,
+  choosePreferredTrackedChangeId as __choosePreferredTrackedChangeIdForTest,
 };

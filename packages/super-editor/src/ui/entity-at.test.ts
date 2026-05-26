@@ -17,6 +17,8 @@ import type {
  */
 type ChainLayer = {
   trackChangeId?: string;
+  trackChangeIds?: string;
+  trackChangePreferredTargetId?: string;
   commentIds?: string;
   sdtId?: string;
   sdtType?: string;
@@ -26,6 +28,10 @@ type ChainLayer = {
 
 function applyLayer(el: HTMLElement, layer: ChainLayer): void {
   if (layer.trackChangeId) el.dataset.trackChangeId = layer.trackChangeId;
+  if (layer.trackChangeIds) el.dataset.trackChangeIds = layer.trackChangeIds;
+  if (layer.trackChangePreferredTargetId) {
+    el.dataset.trackChangePreferredTargetId = layer.trackChangePreferredTargetId;
+  }
   if (layer.commentIds) el.dataset.commentIds = layer.commentIds;
   if (layer.sdtId) el.dataset.sdtId = layer.sdtId;
   if (layer.sdtType) el.dataset.sdtType = layer.sdtType;
@@ -59,6 +65,40 @@ describe('collectEntityHitsFromChain', () => {
     ]);
   });
 
+  it('orders the preferred tracked-change target before remaining multi-layer ids', () => {
+    const inner = buildPaintedChain([
+      { trackChangeIds: 'ins-parent,del-child', trackChangePreferredTargetId: 'del-child' },
+    ]);
+
+    expect(collectEntityHitsFromChain(inner)).toEqual([
+      { type: 'trackedChange', id: 'del-child' },
+      { type: 'trackedChange', id: 'ins-parent' },
+    ]);
+  });
+
+  it('falls back to legacy single tracked-change id data attributes', () => {
+    const inner = buildPaintedChain([{ trackChangeId: 'legacy-tc' }]);
+
+    expect(collectEntityHitsFromChain(inner)).toEqual([{ type: 'trackedChange', id: 'legacy-tc' }]);
+  });
+
+  it('falls back to the legacy id when the multi-layer tracked-change list is empty', () => {
+    const inner = buildPaintedChain([{ trackChangeId: 'legacy-tc' }]);
+    inner.dataset.trackChangeIds = ',,';
+
+    expect(collectEntityHitsFromChain(inner)).toEqual([{ type: 'trackedChange', id: 'legacy-tc' }]);
+  });
+
+  it('skips empty tracked-change ids and deduplicates malformed comma lists across the chain', () => {
+    const inner = buildPaintedChain([{ trackChangeIds: ',tc-1,,tc-2,tc-1,' }, { trackChangeIds: 'tc-2,tc-3' }]);
+
+    expect(collectEntityHitsFromChain(inner)).toEqual([
+      { type: 'trackedChange', id: 'tc-1' },
+      { type: 'trackedChange', id: 'tc-2' },
+      { type: 'trackedChange', id: 'tc-3' },
+    ]);
+  });
+
   it('expands comma-separated comment ids into one hit per id', () => {
     const inner = buildPaintedChain([{ commentIds: 'c-1,c-2,c-3' }]);
 
@@ -82,6 +122,21 @@ describe('collectEntityHitsFromChain', () => {
       { type: 'trackedChange', id: 'tc-1' },
       { type: 'comment', id: 'c-inner' },
       { type: 'comment', id: 'c-outer' },
+    ]);
+  });
+
+  it('keeps inner multi-layer tracked changes before outer comments and content controls', () => {
+    const inner = buildPaintedChain([
+      { trackChangeIds: 'ins-parent,del-child', trackChangePreferredTargetId: 'del-child' },
+      { commentIds: 'c-outer' },
+      { sdtId: 'sdt-outer', sdtType: 'structuredContent', sdtScope: 'inline' },
+    ]);
+
+    expect(collectEntityHitsFromChain(inner)).toEqual([
+      { type: 'trackedChange', id: 'del-child' },
+      { type: 'trackedChange', id: 'ins-parent' },
+      { type: 'comment', id: 'c-outer' },
+      { type: 'contentControl', id: 'sdt-outer', scope: 'inline' },
     ]);
   });
 

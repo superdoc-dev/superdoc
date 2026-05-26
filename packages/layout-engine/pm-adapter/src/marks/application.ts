@@ -459,6 +459,10 @@ export const buildTrackedChangeMetaFromMark = (mark: PMMark, storyKey?: string):
     kind,
     id: deriveTrackedChangeId(kind, attrs),
   };
+  if (typeof attrs.overlapParentId === 'string' && attrs.overlapParentId) {
+    meta.overlapParentId = attrs.overlapParentId;
+    meta.relationship = 'child';
+  }
   if (typeof attrs.author === 'string' && attrs.author) {
     meta.author = attrs.author;
   }
@@ -502,36 +506,143 @@ export const selectTrackedChangeMeta = (
   return existing;
 };
 
+const trackedChangeLayerKey = (meta: TrackedChangeMeta): string => `${meta.kind}:${meta.id}`;
+
+const trackedChangeLayerIdentity = (meta: TrackedChangeMeta): string =>
+  [meta.kind, meta.id, meta.overlapParentId ?? ''].join(':');
+
+const compareTrackedChangeLayerStrings = (a: string, b: string): number => {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+};
+
+const trackedChangeContentRank = (meta: TrackedChangeMeta): number => (meta.kind === 'format' ? 1 : 0);
+
+const trackedChangeRelationshipRank = (meta: TrackedChangeMeta): number => {
+  if (meta.relationship === 'parent') return 0;
+  if (meta.relationship === 'child') return 2;
+  return 1;
+};
+
+const compareTrackedChangeLayers = (a: TrackedChangeMeta, b: TrackedChangeMeta): number => {
+  const aIsParentOfB = a.id === b.overlapParentId;
+  const bIsParentOfA = b.id === a.overlapParentId;
+  if (aIsParentOfB && !bIsParentOfA) return -1;
+  if (bIsParentOfA && !aIsParentOfB) return 1;
+
+  const contentRank = trackedChangeContentRank(a) - trackedChangeContentRank(b);
+  if (contentRank !== 0) return contentRank;
+
+  const relationshipRank = trackedChangeRelationshipRank(a) - trackedChangeRelationshipRank(b);
+  if (relationshipRank !== 0) return relationshipRank;
+
+  const idOrder = compareTrackedChangeLayerStrings(a.id, b.id);
+  if (idOrder !== 0) return idOrder;
+
+  const kindOrder = compareTrackedChangeLayerStrings(a.kind, b.kind);
+  if (kindOrder !== 0) return kindOrder;
+
+  const parentOrder = compareTrackedChangeLayerStrings(a.overlapParentId ?? '', b.overlapParentId ?? '');
+  if (parentOrder !== 0) return parentOrder;
+
+  return compareTrackedChangeLayerStrings(a.storyKey ?? '', b.storyKey ?? '');
+};
+
+const normalizeTrackedChangeLayerList = (layers: TrackedChangeMeta[]): TrackedChangeMeta[] => {
+  if (layers.length === 0) return [];
+
+  const uniqueLayers = new Map<string, TrackedChangeMeta>();
+  layers.forEach((layer) => {
+    const key = trackedChangeLayerKey(layer);
+    if (!uniqueLayers.has(key)) {
+      uniqueLayers.set(key, { ...layer });
+    }
+  });
+
+  const parentIds = new Set<string>();
+  uniqueLayers.forEach((layer) => {
+    if (layer.overlapParentId) {
+      parentIds.add(layer.overlapParentId);
+    }
+  });
+
+  return Array.from(uniqueLayers.values())
+    .map((layer) => {
+      const normalized = { ...layer };
+      if (normalized.overlapParentId) {
+        normalized.relationship = 'child';
+      } else if (parentIds.has(normalized.id)) {
+        normalized.relationship = 'parent';
+      } else {
+        delete normalized.relationship;
+      }
+      return normalized;
+    })
+    .sort(compareTrackedChangeLayers);
+};
+
+const normalizeTrackedChangeLayers = (run: TextRun): TrackedChangeMeta[] => {
+  if (Array.isArray(run.trackedChanges) && run.trackedChanges.length > 0) {
+    return normalizeTrackedChangeLayerList(run.trackedChanges);
+  }
+  return run.trackedChange ? normalizeTrackedChangeLayerList([run.trackedChange]) : [];
+};
+
+const appendTrackedChangeLayer = (run: TextRun, meta: TrackedChangeMeta): void => {
+  const layers = normalizeTrackedChangeLayers(run);
+  const key = trackedChangeLayerKey(meta);
+  if (!layers.some((layer) => trackedChangeLayerKey(layer) === key)) {
+    layers.push(meta);
+  }
+  const normalizedLayers = normalizeTrackedChangeLayerList(layers);
+  run.trackedChanges = normalizedLayers;
+  run.trackedChange = normalizedLayers[0];
+};
+
 /**
  * Checks if two text runs have compatible tracked change metadata for merging.
- * Runs are compatible if they have the same kind and ID, or both have no metadata.
+ * Runs are compatible if their normalized tracked-change layer identities match,
+ * or both have no metadata.
  *
  * @param a - First text run
  * @param b - Second text run
  * @returns true if runs can be merged, false otherwise
  */
 export const trackedChangesCompatible = (a: TextRun, b: TextRun): boolean => {
-  const aMeta = a.trackedChange;
-  const bMeta = b.trackedChange;
-  if (!aMeta && !bMeta) return true;
-  if (!aMeta || !bMeta) return false;
-  return aMeta.kind === bMeta.kind && aMeta.id === bMeta.id;
+  const aLayers = normalizeTrackedChangeLayers(a);
+  const bLayers = normalizeTrackedChangeLayers(b);
+  if (aLayers.length !== bLayers.length) return false;
+  return aLayers.every((aMeta, index) => {
+    const bMeta = bLayers[index];
+    return Boolean(bMeta && trackedChangeLayerIdentity(aMeta) === trackedChangeLayerIdentity(bMeta));
+  });
+};
+
+export const collectTrackedChangesFromMarks = (marks?: PMMark[], storyKey?: string): TrackedChangeMeta[] => {
+  if (!marks || !marks.length) return [];
+  const seen = new Set<string>();
+  const trackedChanges: TrackedChangeMeta[] = [];
+  marks.forEach((mark) => {
+    const meta = buildTrackedChangeMetaFromMark(mark, storyKey);
+    if (!meta) return;
+    const key = trackedChangeLayerKey(meta);
+    if (seen.has(key)) return;
+    seen.add(key);
+    trackedChanges.push(meta);
+  });
+  return normalizeTrackedChangeLayerList(trackedChanges);
 };
 
 /**
  * Collects and prioritizes tracked change metadata from an array of ProseMirror marks.
- * When multiple tracked change marks are present, returns the highest-priority one.
+ * When multiple tracked change marks are present, returns the first normalized layer.
  *
  * @param marks - Array of ProseMirror marks to process
- * @returns The highest-priority TrackedChangeMeta, or undefined if none found
+ * @returns The primary TrackedChangeMeta, or undefined if none found
  */
 export const collectTrackedChangeFromMarks = (marks?: PMMark[], storyKey?: string): TrackedChangeMeta | undefined => {
-  if (!marks || !marks.length) return undefined;
-  return marks.reduce<TrackedChangeMeta | undefined>((current, mark) => {
-    const meta = buildTrackedChangeMetaFromMark(mark, storyKey);
-    if (!meta) return current;
-    return selectTrackedChangeMeta(current, meta);
-  }, undefined);
+  return collectTrackedChangesFromMarks(marks, storyKey)[0];
 };
 
 /**
@@ -862,7 +973,7 @@ export const applyMarksToRun = (
           if (!isTabRun) {
             const tracked = buildTrackedChangeMetaFromMark(mark, storyKey);
             if (tracked) {
-              run.trackedChange = selectTrackedChangeMeta(run.trackedChange, tracked);
+              appendTrackedChangeLayer(run, tracked);
             }
           }
           break;

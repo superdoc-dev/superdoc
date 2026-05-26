@@ -66,11 +66,12 @@ function trackDeleteMark(
   id: string,
   author = 'Author',
   date = '2026-01-01T00:00:00Z',
+  attrs: Record<string, unknown> = {},
 ): {
   type: string;
   attrs: Record<string, unknown>;
 } {
-  return { type: 'trackDelete', attrs: { id, author, date } };
+  return { type: 'trackDelete', attrs: { id, author, date, ...attrs } };
 }
 
 function trackFormatMark(
@@ -479,6 +480,52 @@ describe('extract-adapter tracked-change spans', () => {
     }
   });
 
+  it('preserves overlapping insert + delete marks on a single span', async () => {
+    const parentInsertId = 'raw-overlap-ins';
+    const childDeleteId = 'raw-overlap-del';
+    const doc: SchemaDoc = {
+      type: 'doc',
+      content: [
+        paragraphRuns([
+          'plain ',
+          {
+            text: 'review',
+            marks: [
+              trackInsertMark(parentInsertId, 'Insert Author'),
+              trackDeleteMark(childDeleteId, 'Delete Author', '2026-01-01T00:00:00Z', {
+                overlapParentId: parentInsertId,
+              }),
+            ],
+          },
+          ' tail',
+        ]),
+      ],
+    };
+
+    const ctx = await makeEditor(doc);
+    editor = ctx.editor;
+
+    const result = extractAdapter(editor, {});
+    const block = result.blocks[0];
+
+    expect(block.text).toBe('plain review tail');
+    expect(block.textSpans).toBeDefined();
+    expect(block.textSpans!.map((s) => s.text).join('')).toBe(block.text);
+
+    const overlapSpan = block.textSpans!.find((s) => s.text === 'review');
+    expect(overlapSpan).toBeDefined();
+    expect(overlapSpan!.trackedChanges).toBeDefined();
+    expect(overlapSpan!.trackedChanges).toHaveLength(2);
+    expect(overlapSpan!.trackedChanges!.map((tc) => tc.type).sort()).toEqual(['delete', 'insert']);
+
+    const entityIds = new Set(overlapSpan!.trackedChanges!.map((tc) => tc.entityId));
+    expect(entityIds.size).toBe(2);
+    expect(result.trackedChanges.map((tc) => tc.type).sort()).toEqual(['delete', 'insert']);
+    for (const tc of result.trackedChanges) {
+      expect(tc.blockIds).toEqual([block.nodeId]);
+    }
+  });
+
   it('attaches spans inside table cells without breaking tableContext', async () => {
     const doc: SchemaDoc = {
       type: 'doc',
@@ -513,7 +560,7 @@ describe('extract-adapter tracked-change spans', () => {
     expect(result.trackedChanges[0].blockIds).toEqual([tagged.nodeId]);
   });
 
-  it('suppresses the aggregate excerpt for in-app paired replacements with no OOXML sourceId', async () => {
+  it('suppresses the paired replacement excerpt for in-app tracked replacements with no OOXML sourceId', async () => {
     // Reproduces the codex-bot finding on PR #2973: paired replacements
     // created via in-app tracked editing have no `sourceId` on the marks,
     // so `wordRevisionIds` is empty. Paired detection must come from the
@@ -538,6 +585,7 @@ describe('extract-adapter tracked-change spans', () => {
     expect(result.trackedChanges).toHaveLength(1);
 
     const entry = result.trackedChanges[0];
+    expect(entry.type).toBe('replacement');
     expect(entry.wordRevisionIds).toBeUndefined();
     // The whole point: even without OOXML provenance, the concatenated
     // excerpt is suppressed because the spans showed both insert and delete.

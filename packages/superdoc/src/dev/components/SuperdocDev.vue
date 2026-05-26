@@ -39,7 +39,17 @@ const wordBaselineServiceUrl = 'http://127.0.0.1:9185';
 const clampOpacity = (v) => Math.min(1, Math.max(0, v));
 const overlayOpacityFromUrl = Number.parseFloat(urlParams.get('wordOverlayOpacity') ?? '0.45');
 const isInternal = urlParams.has('internal');
-const testUserEmail = urlParams.get('email') || 'user@superdoc.com';
+const ensureStableDevTabId = () => {
+  const storageKey = 'superdoc-dev-tab-id';
+  const existingId = window.sessionStorage.getItem(storageKey);
+  if (existingId) return existingId;
+  const nextId = `dev-${crypto.randomUUID()}`;
+  window.sessionStorage.setItem(storageKey, nextId);
+  return nextId;
+};
+const stableDevTabId = ensureStableDevTabId();
+const testUserId = urlParams.get('userId') || urlParams.get('id') || stableDevTabId;
+const testUserEmail = urlParams.get('email') || `${stableDevTabId}@dev.superdoc`;
 const testUserName = urlParams.get('name') || `SuperDoc ${Math.floor(1000 + Math.random() * 9000)}`;
 const userRole = urlParams.get('role') || 'editor';
 const useLayoutEngine = ref(urlParams.get('layout') !== '0');
@@ -111,6 +121,7 @@ const handleLoadFromUrl = async () => {
 };
 
 const user = {
+  id: testUserId,
   name: testUserName,
   email: testUserEmail,
 };
@@ -1158,7 +1169,7 @@ onMounted(async () => {
     const ydoc = new Y.Doc();
     const provider = new WebsocketProvider(collabUrl, collabRoom, ydoc, {
       params: {
-        userId: user.email || user.name,
+        userId: user.id || user.email || user.name,
       },
     });
 

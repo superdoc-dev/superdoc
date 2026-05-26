@@ -4,6 +4,14 @@ import { normalizeYjsFragmentEventsForSchema, normalizeYjsFragmentForSchema } fr
 
 const NORMALIZE_ORIGIN = Symbol.for('superdoc/yjs-fragment-normalize');
 
+function buildRunWithText(value) {
+  const run = new XmlElement('run');
+  const text = new XmlText();
+  text.insert(0, value);
+  run.insert(0, [text]);
+  return { run, text };
+}
+
 describe('normalizeYjsFragmentForSchema', () => {
   it('ignores non-Yjs fragment test doubles', () => {
     expect(normalizeYjsFragmentForSchema({ fragment: true })).toBe(false);
@@ -50,15 +58,13 @@ describe('normalizeYjsFragmentForSchema', () => {
     const ydoc = new YDoc();
     const root = ydoc.getXmlFragment('supereditor');
     const crossReference = new XmlElement('crossReference');
-    const run = new XmlElement('run');
-    const text = new XmlText();
-    text.insert(0, '1');
-    run.insert(0, [text]);
+    const { run, text } = buildRunWithText('1');
     crossReference.insert(0, [run]);
     root.insert(0, [crossReference]);
 
     try {
       expect(normalizeYjsFragmentEventsForSchema([{ target: text }], root)).toBe(true);
+      expect(crossReference.getAttribute('resolvedText')).toBe('1');
       expect(crossReference.length).toBe(0);
     } finally {
       ydoc.destroy();
@@ -69,15 +75,89 @@ describe('normalizeYjsFragmentForSchema', () => {
     const ydoc = new YDoc();
     const root = ydoc.getXmlFragment('supereditor');
     const citation = new XmlElement('citation');
-    const run = new XmlElement('run');
-    const text = new XmlText();
-    text.insert(0, '(Smith, 2024)');
-    run.insert(0, [text]);
+    const { run, text } = buildRunWithText('(Smith, 2024)');
     citation.insert(0, [run]);
     root.insert(0, [citation]);
 
     try {
       expect(normalizeYjsFragmentEventsForSchema([{ target: text }], root)).toBe(true);
+      expect(citation.getAttribute('resolvedText')).toBe('(Smith, 2024)');
+      expect(citation.length).toBe(0);
+    } finally {
+      ydoc.destroy();
+    }
+  });
+
+  it('backfills empty citation resolvedText from nested cached result text before deleting children', () => {
+    const ydoc = new YDoc();
+    const root = ydoc.getXmlFragment('supereditor');
+    const citation = new XmlElement('citation');
+    citation.setAttribute('resolvedText', '');
+    const { run } = buildRunWithText(' \u200e(Mor, 2006) ');
+    citation.insert(0, [run]);
+    root.insert(0, [citation]);
+
+    try {
+      expect(normalizeYjsFragmentForSchema(root)).toBe(true);
+      expect(citation.getAttribute('resolvedText')).toBe(' \u200e(Mor, 2006) ');
+      expect(citation.length).toBe(0);
+    } finally {
+      ydoc.destroy();
+    }
+  });
+
+  it('backfills empty crossReference resolvedText from multiple cached result runs before deleting children', () => {
+    const ydoc = new YDoc();
+    const root = ydoc.getXmlFragment('supereditor');
+    const crossReference = new XmlElement('crossReference');
+    crossReference.setAttribute('resolvedText', '');
+    crossReference.setAttribute('target', '_Ref123');
+    const first = buildRunWithText('\u200eTarget ');
+    const second = buildRunWithText('Heading');
+    crossReference.insert(0, [first.run, second.run]);
+    root.insert(0, [crossReference]);
+
+    try {
+      expect(normalizeYjsFragmentForSchema(root)).toBe(true);
+      expect(crossReference.getAttribute('resolvedText')).toBe('\u200eTarget Heading');
+      expect(crossReference.length).toBe(0);
+    } finally {
+      ydoc.destroy();
+    }
+  });
+
+  it('backfills plain text from formatted XmlText without leaking Yjs XML tags', () => {
+    const ydoc = new YDoc();
+    const root = ydoc.getXmlFragment('supereditor');
+    const crossReference = new XmlElement('crossReference');
+    crossReference.setAttribute('resolvedText', '');
+    const { run, text } = buildRunWithText('Target Heading');
+    text.format(7, 7, { italic: {} });
+    crossReference.insert(0, [run]);
+    root.insert(0, [crossReference]);
+
+    try {
+      expect(normalizeYjsFragmentForSchema(root)).toBe(true);
+      expect(crossReference.getAttribute('resolvedText')).toBe('Target Heading');
+      expect(crossReference.getAttribute('resolvedText')).not.toContain('<');
+      expect(crossReference.length).toBe(0);
+    } finally {
+      ydoc.destroy();
+    }
+  });
+
+  it('does not overwrite non-empty resolvedText when deleting cached children', () => {
+    const ydoc = new YDoc();
+    const root = ydoc.getXmlFragment('supereditor');
+    const citation = new XmlElement('citation');
+    citation.setAttribute('resolvedText', '(Canonical, 2024)');
+    const { run } = buildRunWithText('(Stale, 2023)');
+    citation.insert(0, [run]);
+    root.insert(0, [citation]);
+
+    try {
+      expect(normalizeYjsFragmentForSchema(root)).toBe(true);
+      expect(citation.getAttribute('resolvedText')).toBe('(Canonical, 2024)');
       expect(citation.length).toBe(0);
     } finally {
       ydoc.destroy();

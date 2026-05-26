@@ -257,6 +257,8 @@ export type RunMark = {
 export type TrackedChangeMeta = {
   kind: TrackedChangeKind;
   id: string;
+  overlapParentId?: string;
+  relationship?: 'parent' | 'child' | 'standalone';
   /**
    * Internal story key identifying which content story owns this tracked
    * change (`'body'`, `'hf:part:…'`, `'fn:…'`, `'en:…'`).
@@ -356,6 +358,8 @@ export type TextRun = RunMarks & {
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;
+  /** All tracked-change layers on this run, preserving overlap order. */
+  trackedChanges?: TrackedChangeMeta[];
   /**
    * Run-level bidi signals preserved from the source DOCX (run rtl flag,
    * embedding/override directions). Direction-only - script formatting lives
@@ -497,6 +501,7 @@ export type BreakRun = {
   pmEnd?: number;
   sdt?: SdtMetadata;
   trackedChange?: TrackedChangeMeta;
+  trackedChanges?: TrackedChangeMeta[];
 };
 
 /**

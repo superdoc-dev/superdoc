@@ -1,8 +1,16 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import { Schema } from 'prosemirror-model';
+import { EditorState } from 'prosemirror-state';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import { registerBuiltInExecutors } from './register-executors.js';
-import { imagesScaleWrapper, imagesReplaceSourceWrapper, imagesSetAltTextWrapper } from './images-wrappers.js';
+import {
+  imagesListWrapper,
+  imagesMoveWrapper,
+  imagesScaleWrapper,
+  imagesReplaceSourceWrapper,
+  imagesSetAltTextWrapper,
+} from './images-wrappers.js';
 
 // Ensure the domain.command executor is registered for executeDomainCommand
 registerBuiltInExecutors();
@@ -141,6 +149,75 @@ function makeImageEditor(imageAttrs: Record<string, unknown> = {}): {
   };
 }
 
+function makeRealImageMoveEditor(options: { sourceText?: string } = {}): Editor {
+  const schema = new Schema({
+    nodes: {
+      doc: { content: 'block+' },
+      paragraph: {
+        group: 'block',
+        content: 'inline*',
+        attrs: {
+          paraId: { default: null },
+          sdBlockId: { default: null },
+          paragraphProperties: { default: null },
+        },
+      },
+      image: {
+        group: 'inline',
+        inline: true,
+        attrs: {
+          sdImageId: { default: null },
+          src: { default: null },
+          isAnchor: { default: false },
+          wrap: { default: null },
+          size: { default: null },
+        },
+      },
+      text: { group: 'inline' },
+    },
+  });
+
+  const sourceParagraphChildren = [];
+  if (options.sourceText) {
+    sourceParagraphChildren.push(schema.text(options.sourceText));
+  }
+  sourceParagraphChildren.push(
+    schema.nodes.image.create({
+      sdImageId: 'img-1',
+      src: 'data:image/png;base64,ABC',
+      isAnchor: false,
+      wrap: { type: 'Inline' },
+      size: { width: 200, height: 100 },
+    }),
+  );
+
+  const doc = schema.nodes.doc.create({}, [
+    schema.nodes.paragraph.create(
+      { paraId: 'p-source', sdBlockId: 'p-source', paragraphProperties: { styleId: 'Normal' } },
+      sourceParagraphChildren,
+    ),
+    schema.nodes.paragraph.create(
+      { paraId: 'p-target', sdBlockId: 'p-target', paragraphProperties: { styleId: 'Normal' } },
+      schema.text('Target paragraph'),
+    ),
+  ]);
+
+  let state = EditorState.create({ schema, doc });
+  const editor = {
+    get state() {
+      return state;
+    },
+    dispatch: vi.fn((tr: Parameters<Editor['dispatch']>[0]) => {
+      state = state.apply(tr as any);
+    }),
+    commands: {},
+    options: {},
+    on: () => {},
+  } as unknown as Editor;
+
+  return editor;
+}
+
 // ---------------------------------------------------------------------------
 // Regression: images.scale must not produce zero dimensions
 // ---------------------------------------------------------------------------
@@ -174,6 +251,34 @@ describe('imagesScaleWrapper', () => {
 
     expect(result.success).toBe(true);
     expect(capturedAttrs()?.size).toEqual({ width: 400, height: 200 });
+  });
+});
+
+describe('imagesListWrapper', () => {
+  it('projects the containing paragraph block id for a moved inline image', () => {
+    const editor = makeRealImageMoveEditor();
+
+    const moveResult = imagesMoveWrapper(
+      editor,
+      {
+        imageId: 'img-1',
+        to: {
+          kind: 'inParagraph',
+          target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-target' },
+          offset: 0,
+        },
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(moveResult.success).toBe(true);
+    const result = imagesListWrapper(editor, {});
+
+    expect(result.total).toBe(1);
+    expect(result.items[0]).toMatchObject({
+      sdImageId: 'img-1',
+      anchor: { blockId: 'p-target' },
+    });
   });
 });
 
@@ -265,6 +370,56 @@ describe('imagesSetAltTextWrapper', () => {
 
     expect(result.success).toBe(false);
     expect((result as any).failure?.code).toBe('NO_OP');
+  });
+});
+
+describe('imagesMoveWrapper', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('removes the now-empty top-level source paragraph when moving a sole image into another paragraph', () => {
+    const editor = makeRealImageMoveEditor();
+
+    const result = imagesMoveWrapper(
+      editor,
+      {
+        imageId: 'img-1',
+        to: {
+          kind: 'inParagraph',
+          target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-target' },
+          offset: 0,
+        },
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.childCount).toBe(1);
+    expect(editor.state.doc.child(0).attrs.paraId).toBe('p-target');
+    expect(editor.state.doc.child(0).childCount).toBe(2);
+    expect(editor.state.doc.child(0).child(0).type.name).toBe('image');
+    expect(editor.state.doc.child(0).child(0).attrs.sdImageId).toBe('img-1');
+  });
+
+  it('keeps the source paragraph when the image was not its only content', () => {
+    const editor = makeRealImageMoveEditor({ sourceText: 'Source text ' });
+
+    const result = imagesMoveWrapper(
+      editor,
+      {
+        imageId: 'img-1',
+        to: {
+          kind: 'inParagraph',
+          target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-target' },
+          offset: 0,
+        },
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.childCount).toBe(2);
+    expect(editor.state.doc.child(0).attrs.paraId).toBe('p-source');
+    expect(editor.state.doc.child(0).textContent).toBe('Source text ');
   });
 });
 

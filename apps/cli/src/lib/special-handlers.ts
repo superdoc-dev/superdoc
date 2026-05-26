@@ -8,7 +8,6 @@
  * capability should move into document-api.
  */
 
-import { createHash } from 'node:crypto';
 import { INLINE_PROPERTY_REGISTRY } from '@superdoc/document-api';
 import type { CliExposedOperationId } from '../cli/operation-set.js';
 import type { EditorWithDoc } from './document.js';
@@ -27,6 +26,7 @@ type PreInvokeHook = (input: unknown, context: HookContext) => unknown;
 type PostInvokeHook = (result: unknown, context: HookContext) => unknown;
 
 const FORMAT_RECEIPT_OPERATION_IDS: readonly CliExposedOperationId[] = [
+  'formatRange',
   'format.apply',
   ...INLINE_PROPERTY_REGISTRY.map((entry) => `format.${entry.key}` as CliExposedOperationId),
 ];
@@ -58,18 +58,45 @@ function asTrackChangeAddress(value: unknown): { kind: string; entityType: strin
   };
 }
 
-function stableTrackChangeSignature(change: TrackChangeLike): string {
-  const type = typeof change.type === 'string' ? change.type : '';
-  const author = typeof change.author === 'string' ? change.author : '';
-  const authorEmail = typeof change.authorEmail === 'string' ? change.authorEmail : '';
-  const date = typeof change.date === 'string' ? change.date : '';
-  const excerpt = typeof change.excerpt === 'string' ? change.excerpt : '';
-  return `${type}|${author}|${authorEmail}|${date}|${excerpt}`;
+function normalizeStableTrackChangeId(value: unknown, rawToStableId: ReadonlyMap<string, string>): unknown {
+  if (typeof value !== 'string' || value.length === 0) return value;
+  return rawToStableId.get(value) ?? value;
+}
+
+function normalizeOverlapLayer(value: unknown, rawToStableId: ReadonlyMap<string, string>): unknown {
+  const record = asRecord(value);
+  if (!record) return value;
+  return {
+    ...record,
+    id: normalizeStableTrackChangeId(record.id, rawToStableId),
+  };
+}
+
+function normalizeTrackChangeOverlap(value: unknown, rawToStableId: ReadonlyMap<string, string>): unknown {
+  const record = asRecord(value);
+  if (!record) return value;
+
+  const visualLayers = Array.isArray(record.visualLayers)
+    ? record.visualLayers.map((layer) => normalizeOverlapLayer(layer, rawToStableId))
+    : record.visualLayers;
+  const preferredContextTarget = record.preferredContextTarget
+    ? normalizeOverlapLayer(record.preferredContextTarget, rawToStableId)
+    : record.preferredContextTarget;
+
+  return {
+    ...record,
+    ...(Array.isArray(record.visualLayers) ? { visualLayers } : {}),
+    preferredContextTargetId: normalizeStableTrackChangeId(record.preferredContextTargetId, rawToStableId),
+    ...(record.preferredContextTarget ? { preferredContextTarget } : {}),
+  };
 }
 
 /**
  * Builds stable-ID ↔ raw-ID mappings from a track-changes list result.
- * The CLI uses SHA-1-based stable IDs instead of adapter raw IDs.
+ * The CLI preserves the adapter's logical ids when they are present.
+ * The mapping is still retained so pre-invoke hooks can translate ids from
+ * list/get payloads back into the exact raw/runtime ids that mutating
+ * adapters expect.
  */
 function buildStableIdMappings(rawListResult: unknown): {
   normalizedResult: unknown;
@@ -83,35 +110,37 @@ function buildStableIdMappings(rawListResult: unknown): {
 
   const stableToRawId = new Map<string, string>();
   const rawToStableId = new Map<string, string>();
-  const signatureCounts = new Map<string, number>();
 
-  const normalizedItems = asArray(record.items)
+  const entries = asArray(record.items)
     .map((entry) => asRecord(entry))
     .filter((entry): entry is Record<string, unknown> => Boolean(entry))
     .map((entry) => {
       const rawId =
         (typeof entry.id === 'string' && entry.id.length > 0 ? entry.id : undefined) ??
         asTrackChangeAddress(entry.address)?.entityId;
-      if (!rawId) return entry;
+      if (!rawId) return { entry };
 
-      const signature = stableTrackChangeSignature(entry);
-      const hash = createHash('sha1').update(signature).digest('hex').slice(0, 24);
-      const nextCount = (signatureCounts.get(hash) ?? 0) + 1;
-      signatureCounts.set(hash, nextCount);
-      const stableId = nextCount === 1 ? hash : `${hash}-${nextCount}`;
+      const stableId = rawId;
 
       stableToRawId.set(stableId, rawId);
       rawToStableId.set(rawId, stableId);
 
-      const normalizedAddress = asTrackChangeAddress(entry.address);
-      const handleRecord = asRecord(entry.handle);
-      return {
-        ...entry,
-        id: stableId,
-        address: normalizedAddress ? { ...normalizedAddress, entityId: stableId } : entry.address,
-        handle: handleRecord ? { ...handleRecord, ref: `tc:${stableId}` } : entry.handle,
-      };
+      return { entry, rawId, stableId };
     });
+
+  const normalizedItems = entries.map(({ entry, rawId, stableId }) => {
+    if (!rawId || !stableId) return entry;
+
+    const normalizedAddress = asTrackChangeAddress(entry.address);
+    const handleRecord = asRecord(entry.handle);
+    return {
+      ...entry,
+      id: stableId,
+      address: normalizedAddress ? { ...normalizedAddress, entityId: stableId } : entry.address,
+      handle: handleRecord ? { ...handleRecord, ref: `tc:${stableId}` } : entry.handle,
+      ...(entry.overlap !== undefined ? { overlap: normalizeTrackChangeOverlap(entry.overlap, rawToStableId) } : {}),
+    };
+  });
 
   return {
     normalizedResult: {
@@ -172,6 +201,31 @@ const resolveReviewDecideId: PreInvokeHook = (input, context) => {
   return { ...record, target: { ...target, id: rawId } };
 };
 
+/**
+ * Comment target shapes can carry trackedChangeId values copied from
+ * `trackChanges.list`, which the CLI normalizes to stable SHA-1 IDs. The
+ * adapter expects raw/runtime ids, so translate the target id before invoke.
+ */
+const resolveCommentTrackedChangeTargetId: PreInvokeHook = (input, context) => {
+  const record = asRecord(input);
+  if (!record) return input;
+
+  const target = asRecord(record.target);
+  if (!target) return input;
+
+  const stableId = typeof target.trackedChangeId === 'string' ? target.trackedChangeId : undefined;
+  if (!stableId) return input;
+
+  const listResult = context.editor.doc.invoke({
+    operationId: 'trackChanges.list' as const,
+    input: {},
+  });
+  const { stableToRawId } = buildStableIdMappings(listResult);
+  const rawId = stableToRawId.get(stableId) ?? stableId;
+
+  return { ...record, target: { ...target, trackedChangeId: rawId } };
+};
+
 // ---------------------------------------------------------------------------
 // Post-invoke hooks
 // ---------------------------------------------------------------------------
@@ -207,6 +261,7 @@ const normalizeTrackChangeGetId: PostInvokeHook = (result, context) => {
     ...record,
     id: stableId,
     address: normalizedAddress ? { ...normalizedAddress, entityId: stableId } : record.address,
+    ...(record.overlap !== undefined ? { overlap: normalizeTrackChangeOverlap(record.overlap, rawToStableId) } : {}),
   };
 };
 
@@ -242,6 +297,9 @@ export const PRE_INVOKE_HOOKS: Partial<Record<CliExposedOperationId, PreInvokeHo
   'trackChanges.get': resolveTrackChangeId,
   // trackChanges.decide needs stable-ID → raw-ID translation on target.id
   'trackChanges.decide': resolveReviewDecideId,
+  // comments target trackedChangeId can be copied from stable list output
+  'comments.create': resolveCommentTrackedChangeTargetId,
+  'comments.patch': resolveCommentTrackedChangeTargetId,
 };
 
 /** Post-invoke: transform the raw invoke() result before envelope wrapping. */

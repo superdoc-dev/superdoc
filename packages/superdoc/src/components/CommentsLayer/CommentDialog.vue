@@ -613,6 +613,7 @@ const handleReject = () => {
   // disappears from getFloatingComments — even when a custom handler is used (SD-2049).
   if (props.comment.trackedChange) {
     props.comment.resolveComment({
+      id: superdocStore.user.id,
       email: superdocStore.user.email,
       name: superdocStore.user.name,
       superdoc: proxy.$superdoc,
@@ -646,6 +647,7 @@ const handleResolve = () => {
   // Always resolve so resolvedTime is set and the bubble disappears
   // from getFloatingComments — even when a custom handler is used (SD-2049).
   props.comment.resolveComment({
+    id: superdocStore.user.id,
     email: superdocStore.user.email,
     name: superdocStore.user.name,
     superdoc: proxy.$superdoc,

@@ -26,8 +26,8 @@ Returns a ParagraphMutationResult; reports NO_OP if outline level already matche
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `outlineLevel` | integer \\| null | yes | One of: integer, null |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `outlineLevel` | integer \| null | yes | One of: integer, null |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Example request
 
@@ -49,9 +49,9 @@ Returns a ParagraphMutationResult; reports NO_OP if outline level already matche
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `resolution` | object | yes |  |
-| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 | `success` | `true` | yes | Constant: `true` |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 2 (success=false)
 
@@ -62,7 +62,7 @@ Returns a ParagraphMutationResult; reports NO_OP if outline level already matche
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `resolution` | object | no |  |
-| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 | `success` | `false` | yes | Constant: `false` |
 
 ### Example response

@@ -122,6 +122,8 @@ export interface FontConfig {
  * User information for collaboration
  */
 export interface User {
+  /** Stable actor id for authorship and ownership checks. */
+  id?: string | null;
   /** The user's name */
   name?: string;
 
@@ -376,6 +378,15 @@ export interface EditorOptions {
 
   /** Comment highlight configuration */
   comments?: CommentConfig;
+
+  /**
+   * Public SuperDoc module configuration accepted by direct/headless
+   * `Editor.open()` callers. SuperDoc app config normalizes this before it
+   * reaches the editor; CLI/SDK headless callers pass it directly.
+   */
+  modules?: {
+    trackChanges?: EditorOptions['trackedChanges'] | null;
+  };
 
   /**
    * Track-changes runtime configuration forwarded from the SuperDoc-level

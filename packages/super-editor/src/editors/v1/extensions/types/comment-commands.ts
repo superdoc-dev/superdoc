@@ -12,6 +12,8 @@ export type AddCommentOptions = {
   commentId?: string;
   /** Author name (defaults to user from editor config) */
   author?: string;
+  /** Stable actor id (defaults to user from editor config) */
+  authorId?: string;
   /** Author email (defaults to user from editor config) */
   authorEmail?: string;
   /** Author image URL (defaults to user from editor config) */
@@ -36,6 +38,8 @@ export type InsertCommentOptions = {
   commentText?: string;
   /** Comment creator name */
   creatorName?: string;
+  /** Comment creator actor id */
+  creatorId?: string;
   /** Comment creator email */
   creatorEmail?: string;
   /** Comment creator image URL */
@@ -135,6 +139,8 @@ export type AddCommentReplyOptions = {
   content?: string;
   /** Author name (defaults to user from editor config) */
   author?: string;
+  /** Stable actor id (defaults to user from editor config) */
+  authorId?: string;
   /** Author email (defaults to user from editor config) */
   authorEmail?: string;
   /** Author image URL (defaults to user from editor config) */

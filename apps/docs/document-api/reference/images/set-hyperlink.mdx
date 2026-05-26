@@ -28,7 +28,7 @@ Returns an ImagesMutationResult; reports NO_OP if unchanged.
 | --- | --- | --- | --- |
 | `imageId` | string | yes |  |
 | `tooltip` | string | no |  |
-| `url` | any | yes |  |
+| `url` | string \| null | yes |  |
 
 ### Example request
 
@@ -36,7 +36,7 @@ Returns an ImagesMutationResult; reports NO_OP if unchanged.
 {
   "imageId": "example",
   "tooltip": "example",
-  "url": {}
+  "url": "example"
 }
 ```
 

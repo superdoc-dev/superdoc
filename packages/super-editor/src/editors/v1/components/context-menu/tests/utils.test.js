@@ -65,6 +65,7 @@ import {
   __isCollaborationEnabledForTest,
   __getCellSelectionInfoForTest,
   __resolveProofingContextForTest,
+  __choosePreferredTrackedChangeIdForTest,
 } from '../utils.js';
 import { readFromClipboard } from '../../../core/utilities/clipboardUtils.js';
 import { selectionHasNodeOrMark } from '../../cursor-helpers.js';
@@ -114,6 +115,19 @@ describe('utils.js', () => {
   );
 
   describe('getEditorContext', () => {
+    it('prefers a child deletion as the context target for overlapping tracked marks', () => {
+      const parentInsert = {
+        type: { name: 'trackInsert' },
+        attrs: { id: 'parent-insert' },
+      };
+      const childDelete = {
+        type: { name: 'trackDelete' },
+        attrs: { id: 'child-delete', overlapParentId: 'parent-insert' },
+      };
+
+      expect(__choosePreferredTrackedChangeIdForTest([parentInsert, childDelete])).toBe('child-delete');
+    });
+
     it('should return comprehensive editor context', async () => {
       // Note: getEditorContext() no longer reads clipboard proactively.
       // Clipboard reading is deferred to paste action to avoid permission prompts.

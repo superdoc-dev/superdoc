@@ -15,6 +15,7 @@ export type DocOperationRequest = {
   operationId: CliExposedOperationId;
   input: Record<string, unknown>;
   context: CommandContext;
+  commandName?: string;
 };
 
 /**

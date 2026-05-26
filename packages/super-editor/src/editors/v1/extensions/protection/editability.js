@@ -171,12 +171,23 @@ export function buildAllowedIdentifierSetFromEditor(editor) {
     return new Set(principals.map((p) => (typeof p === 'string' ? p.trim().toLowerCase() : '')).filter(Boolean));
   }
 
-  // Fallback: derive from email only when permissionPrincipals is not set
+  // Fallback: derive from stable actor id when available, plus the legacy
+  // email-derived principal for documents that still use Word-style `ed`
+  // values. This lets embedders move to first-class actor ids without
+  // breaking older documents.
+  const identifiers = new Set();
+  const actorId = typeof user.id === 'string' ? user.id.trim().toLowerCase() : '';
+  if (actorId) identifiers.add(actorId);
+
   const email = typeof user.email === 'string' ? user.email.trim().toLowerCase() : '';
-  if (!email) return new Set();
-  const [localPart, domain] = email.split('@');
-  if (!localPart || !domain) return new Set();
-  return new Set([`${domain}\\${localPart}`]);
+  if (email) {
+    const [localPart, domain] = email.split('@');
+    if (localPart && domain) {
+      identifiers.add(`${domain}\\${localPart}`);
+    }
+  }
+
+  return identifiers;
 }
 
 /**

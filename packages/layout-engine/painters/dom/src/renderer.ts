@@ -138,6 +138,9 @@ import {
 } from './features/inline-direction/index.js';
 import { convertOmmlToMathml } from './features/math/index.js';
 
+const ACTIVE_HEADER_FOOTER_WATERMARK_PREVIEW_OPACITY = '1';
+const INACTIVE_HEADER_FOOTER_WATERMARK_PREVIEW_OPACITY = '0.5';
+
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
  * Extracted to avoid dependency on @superdoc/word-layout package.
@@ -279,6 +282,8 @@ export type PageDecorationPayload = {
   contentWidth?: number;
   headerFooterRefId?: string;
   sectionType?: string;
+  /** True while this rendered header/footer story is the active editing surface. */
+  isActiveHeaderFooter?: boolean;
   box?: { x: number; y: number; width: number; height: number };
   hitRegion?: { x: number; y: number; width: number; height: number };
 };
@@ -2720,6 +2725,7 @@ export class DomPainter {
         betweenBorderFlags.get(originalIndex),
         resolvedItem,
       );
+      this.applyHeaderFooterTextWatermarkPreviewOpacity(fragEl, data.isActiveHeaderFooter === true);
       const isPageRelative = this.isPageRelativeAnchoredFragment(fragment, resolvedItem);
 
       let pageY: number;
@@ -2751,6 +2757,7 @@ export class DomPainter {
         betweenBorderFlags.get(originalIndex),
         resolvedItem,
       );
+      this.applyHeaderFooterTextWatermarkPreviewOpacity(fragEl, data.isActiveHeaderFooter === true);
       const isPageRelative = this.isPageRelativeAnchoredFragment(fragment, resolvedItem);
 
       if (isPageRelative && kind === 'footer') {
@@ -3896,6 +3903,9 @@ export class DomPainter {
       }
       this.applySdtDataset(fragmentEl, block.attrs?.sdt);
       this.applyContainerSdtDataset(fragmentEl, block.attrs?.containerSdt);
+      if (this.isVmlTextWatermarkImage(block)) {
+        fragmentEl.dataset.vmlTextWatermark = 'true';
+      }
 
       // Add block ID for PM transaction targeting
       if (block.id) {
@@ -7258,16 +7268,24 @@ export class DomPainter {
   private shouldRenderBehindPageContent(
     fragment: ImageFragment | DrawingFragment,
     section: 'header' | 'footer',
-    resolvedItem?: ResolvedDrawingItem,
+    resolvedItem?: ResolvedImageItem | ResolvedDrawingItem,
   ): boolean {
     if (fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0)) {
       return true;
     }
 
-    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(resolvedItem?.block);
+    if (section !== 'header') {
+      return false;
+    }
+
+    if (fragment.kind === 'drawing') {
+      return this.isHeaderWordArtWatermark(resolvedItem?.block);
+    }
+
+    return this.isVmlTextWatermarkImage(resolvedItem?.block);
   }
 
-  private isHeaderWordArtWatermark(block: DrawingBlock | undefined): boolean {
+  private isHeaderWordArtWatermark(block: FlowBlock | undefined): block is DrawingBlock {
     if (!block || block.kind !== 'drawing' || block.drawingKind !== 'vectorShape') {
       return false;
     }
@@ -7286,6 +7304,20 @@ export class DomPainter {
       block.anchor.alignV === 'center' &&
       block.wrap?.type === 'None'
     );
+  }
+
+  private isVmlTextWatermarkImage(block: FlowBlock | undefined): block is ImageBlock {
+    return block?.kind === 'image' && block.attrs?.vmlTextWatermark === true;
+  }
+
+  private applyHeaderFooterTextWatermarkPreviewOpacity(el: HTMLElement, isActiveHeaderFooter: boolean): void {
+    if (el.dataset.vmlTextWatermark !== 'true') {
+      return;
+    }
+
+    el.style.opacity = isActiveHeaderFooter
+      ? ACTIVE_HEADER_FOOTER_WATERMARK_PREVIEW_OPACITY
+      : INACTIVE_HEADER_FOOTER_WATERMARK_PREVIEW_OPACITY;
   }
 
   /**

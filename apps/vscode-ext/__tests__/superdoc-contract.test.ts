@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
 
 const SUPERDOC_PKG = resolve(import.meta.dirname, '..', '..', '..', 'packages', 'superdoc');
 const SUPERDOC_SRC = resolve(SUPERDOC_PKG, 'src');
-const superdocClassSrc = readFileSync(resolve(SUPERDOC_SRC, 'core', 'SuperDoc.js'), 'utf-8');
+const superdocClassSrc = readFileSync(resolve(SUPERDOC_SRC, 'core', 'SuperDoc.ts'), 'utf-8');
 
 describe('SuperDoc API contract', () => {
   describe('package exports', () => {

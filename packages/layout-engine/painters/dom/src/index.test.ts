@@ -4434,6 +4434,107 @@ describe('DomPainter', () => {
     expect(watermarkText?.getAttribute('lengthAdjust')).toBe('spacingAndGlyphs');
   });
 
+  it('renders VML text watermark images behind page content and dims them outside header edit mode', () => {
+    const watermarkBlock: FlowBlock = {
+      kind: 'image',
+      id: 'header-vml-text-watermark',
+      src: 'data:image/svg+xml;base64,PHN2Zy8+',
+      width: 200,
+      height: 100,
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'page',
+      },
+      attrs: { vmlTextWatermark: true },
+    };
+    const watermarkMeasure: Measure = {
+      kind: 'image',
+      width: 200,
+      height: 100,
+    };
+    const watermarkFragment = {
+      kind: 'image' as const,
+      blockId: 'header-vml-text-watermark',
+      x: 40,
+      y: 180,
+      width: 200,
+      height: 100,
+      isAnchored: true,
+      behindDoc: false,
+    };
+
+    const painter = createTestPainter({
+      blocks: [block, watermarkBlock],
+      measures: [measure, watermarkMeasure],
+      headerProvider: () => ({
+        fragments: [watermarkFragment],
+        height: 40,
+        offset: 20,
+      }),
+    });
+
+    painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+    const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
+    const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement | null;
+    const behindDocWatermark = pageEl.querySelector(
+      '[data-behind-doc-section="header"][data-block-id="header-vml-text-watermark"]',
+    ) as HTMLElement | null;
+    const watermarkInHeader = headerEl?.querySelector('[data-block-id="header-vml-text-watermark"]');
+
+    expect(behindDocWatermark).toBeTruthy();
+    expect(watermarkInHeader).toBeNull();
+    expect(behindDocWatermark?.dataset.vmlTextWatermark).toBe('true');
+    expect(behindDocWatermark?.style.opacity).toBe('0.5');
+  });
+
+  it('renders active header VML text watermarks at full preview opacity', () => {
+    const watermarkBlock: FlowBlock = {
+      kind: 'image',
+      id: 'active-header-vml-text-watermark',
+      src: 'data:image/svg+xml;base64,PHN2Zy8+',
+      width: 200,
+      height: 100,
+      attrs: { vmlTextWatermark: true },
+    };
+    const watermarkMeasure: Measure = {
+      kind: 'image',
+      width: 200,
+      height: 100,
+    };
+    const watermarkFragment = {
+      kind: 'image' as const,
+      blockId: 'active-header-vml-text-watermark',
+      x: 40,
+      y: 180,
+      width: 200,
+      height: 100,
+      isAnchored: true,
+      behindDoc: true,
+    };
+
+    const painter = createTestPainter({
+      blocks: [block, watermarkBlock],
+      measures: [measure, watermarkMeasure],
+      headerProvider: () => ({
+        fragments: [watermarkFragment],
+        height: 40,
+        offset: 20,
+        isActiveHeaderFooter: true,
+      }),
+    });
+
+    painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+    const activeWatermark = mount.querySelector(
+      '[data-behind-doc-section="header"][data-block-id="active-header-vml-text-watermark"]',
+    ) as HTMLElement | null;
+
+    expect(activeWatermark).toBeTruthy();
+    expect(activeWatermark?.style.opacity).toBe('1');
+  });
+
   it('keeps non-WordArt page-relative header media in the header container', () => {
     const headerImageBlock: FlowBlock = {
       kind: 'image',

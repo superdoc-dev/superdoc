@@ -1,15 +1,15 @@
 {
   "generatedAt": "2026-05-19T11:33:50.546Z",
   "summary": {
-    "total": 200,
+    "total": 205,
     "byBucket": {
       "legacy-root": 60,
       "internal-candidate": 8,
-      "supported-root": 132
+      "supported-root": 137
     },
     "byConfidence": {
-      "high": 98,
-      "medium": 100,
+      "high": 102,
+      "medium": 101,
       "low": 2
     }
   },
@@ -40,6 +40,17 @@
       "name": "AwarenessState",
       "bucket": "supported-root",
       "rationale": "Collaboration/awareness type defined in core/types/index.ts. Customer-facing for collab-provider integrations (e.g., AwarenessState types the documented onAwarenessUpdate callback).",
+      "confidence": "medium",
+      "source": "collab",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "AwarenessUser",
+      "bucket": "supported-root",
+      "rationale": "Collaboration/awareness type defined in core/types/index.ts. Extends User with an optional `color` field for consumer-supplied awareness color; typed on Config.user so the runtime override in SuperDoc#assignUserColor() is consumer-typable.",
       "confidence": "medium",
       "source": "collab",
       "inDts": true,
@@ -754,7 +765,7 @@
     {
       "name": "FlowBlock",
       "bucket": "legacy-root",
-      "rationale": "In LayoutState.blocks. Layout-engine raw type that must not appear in public .d.ts per package-boundaries.md:64 — already leaks via PE closure.",
+      "rationale": "In LayoutState.blocks. Layout-engine raw type that must not appear in public .d.ts per package-boundaries.md:64 \u2014 already leaks via PE closure.",
       "confidence": "high",
       "source": "locked",
       "inDts": true,
@@ -842,7 +853,7 @@
     {
       "name": "Layout",
       "bucket": "legacy-root",
-      "rationale": "In PE.onLayoutUpdated payload (LayoutState & { layout: Layout; ... }). Layout-engine raw type that must not appear in public .d.ts per package-boundaries.md:64 — already leaks via PE legacy API.",
+      "rationale": "In PE.onLayoutUpdated payload (LayoutState & { layout: Layout; ... }). Layout-engine raw type that must not appear in public .d.ts per package-boundaries.md:64 \u2014 already leaks via PE legacy API.",
       "confidence": "high",
       "source": "locked",
       "inDts": true,
@@ -1641,6 +1652,50 @@
       "inDcts": true,
       "inEsm": true,
       "inCjs": true
+    },
+    {
+      "name": "SuperDocExceptionEditorPayload",
+      "bucket": "supported-root",
+      "rationale": "Member of the SuperDocExceptionPayload union; named so consumers can discriminate the editor-lifecycle shape. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocExceptionPayload",
+      "bucket": "supported-root",
+      "rationale": "Public Config.onException callback parameter. Union of the three runtime emit shapes. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocExceptionRestorePayload",
+      "bucket": "supported-root",
+      "rationale": "Member of the SuperDocExceptionPayload union; named so consumers can discriminate the restore-failure shape. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocExceptionStorePayload",
+      "bucket": "supported-root",
+      "rationale": "Member of the SuperDocExceptionPayload union; named so consumers can discriminate the store-init shape via `'stage' in payload`. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
     },
     {
       "name": "SuperDocLayoutEngineOptions",

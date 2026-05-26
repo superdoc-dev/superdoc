@@ -430,7 +430,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     onFocus: () => null,
     onBlur: () => null,
     onDestroy: () => null,
-    onContentError: ({ error }: { editor: Editor; error: Error }) => {
+    onContentError: ({ error }: { editor: Editor; error: unknown; disableCollaboration?: () => void }) => {
       throw error;
     },
     onTrackedChangesUpdate: () => null,

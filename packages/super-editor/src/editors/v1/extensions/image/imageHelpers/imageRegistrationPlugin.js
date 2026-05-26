@@ -25,6 +25,10 @@ export const needsImageRegistration = (node) => {
   const src = node.attrs?.src;
   if (typeof src !== 'string' || src.length === 0) return false;
 
+  // Imported VML text watermarks are already self-contained SVG previews with
+  // preserved VML attrs for export. Re-registering them strips that metadata.
+  if (node.attrs?.vmlTextWatermark) return false;
+
   // Already registered in DOCX media folder
   if (src.startsWith('word/media')) return false;
 

@@ -350,6 +350,8 @@ describe('HeaderFooterSessionManager', () => {
       defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
     });
 
+    const scheduleRerender = vi.fn();
+    const setPendingDocChange = vi.fn();
     manager.setDependencies({
       getLayoutOptions: vi.fn(() => ({ zoom: 1 })),
       getPageElement: vi.fn(() => pageElement),
@@ -359,8 +361,8 @@ describe('HeaderFooterSessionManager', () => {
       isViewLocked: vi.fn(() => false),
       getBodyPageHeight: vi.fn(() => 800),
       notifyInputBridgeTargetChanged: vi.fn(),
-      scheduleRerender: vi.fn(),
-      setPendingDocChange: vi.fn(),
+      scheduleRerender,
+      setPendingDocChange,
       getBodyPageCount: vi.fn(() => 3),
       getStorySessionManager: vi.fn(() => ({ activate, exit })),
     });
@@ -408,6 +410,8 @@ describe('HeaderFooterSessionManager', () => {
         }),
       }),
     );
+    expect(setPendingDocChange).toHaveBeenCalledTimes(1);
+    expect(scheduleRerender).toHaveBeenCalledTimes(1);
   });
 
   it('enters header edit mode in suggesting mode and enables tracked changes', async () => {

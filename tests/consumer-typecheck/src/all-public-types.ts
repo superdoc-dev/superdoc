@@ -101,6 +101,7 @@ import type {
   LinkPopoverResolution,
   LinkPopoverResolver,
   AwarenessState,
+  AwarenessUser,
   ListDefinitionsPayload,
   Measure,
   Modules,
@@ -156,6 +157,10 @@ import type {
   SelectionHandle,
   SelectionInfo,
   StoryLocator,
+  SuperDocExceptionEditorPayload,
+  SuperDocExceptionPayload,
+  SuperDocExceptionRestorePayload,
+  SuperDocExceptionStorePayload,
   SuperDocLayoutEngineOptions,
   SuperDocTelemetryConfig,
   SurfaceComponentProps,
@@ -269,6 +274,7 @@ const _real_LinkPopoverContext: AssertNotAny<LinkPopoverContext> = true;
 const _real_LinkPopoverResolution: AssertNotAny<LinkPopoverResolution> = true;
 const _real_LinkPopoverResolver: AssertNotAny<LinkPopoverResolver> = true;
 const _real_AwarenessState: AssertNotAny<AwarenessState> = true;
+const _real_AwarenessUser: AssertNotAny<AwarenessUser> = true;
 const _real_ListDefinitionsPayload: AssertNotAny<ListDefinitionsPayload> = true;
 const _real_Measure: AssertNotAny<Measure> = true;
 const _real_Modules: AssertNotAny<Modules> = true;
@@ -324,6 +330,10 @@ const _real_SelectionCurrentInput: AssertNotAny<SelectionCurrentInput> = true;
 const _real_SelectionHandle: AssertNotAny<SelectionHandle> = true;
 const _real_SelectionInfo: AssertNotAny<SelectionInfo> = true;
 const _real_StoryLocator: AssertNotAny<StoryLocator> = true;
+const _real_SuperDocExceptionEditorPayload: AssertNotAny<SuperDocExceptionEditorPayload> = true;
+const _real_SuperDocExceptionPayload: AssertNotAny<SuperDocExceptionPayload> = true;
+const _real_SuperDocExceptionRestorePayload: AssertNotAny<SuperDocExceptionRestorePayload> = true;
+const _real_SuperDocExceptionStorePayload: AssertNotAny<SuperDocExceptionStorePayload> = true;
 const _real_SuperDocLayoutEngineOptions: AssertNotAny<SuperDocLayoutEngineOptions> = true;
 const _real_SuperDocTelemetryConfig: AssertNotAny<SuperDocTelemetryConfig> = true;
 const _real_SurfaceComponentProps: AssertNotAny<SurfaceComponentProps> = true;

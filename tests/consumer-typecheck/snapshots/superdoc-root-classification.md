@@ -1,26 +1,27 @@
 # SD-3212 A1 — root classification
 
-Generated: 2026-05-19T11:33:50.546Z
-Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (200 names, locked baseline)
+Generated: 2026-05-25T00:00:00.000Z
+Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (205 names, locked baseline)
 
 ## Summary
 
 | Bucket | Count |
 |---|---|
-| supported-root | 132 |
+| supported-root | 137 |
 | legacy-root | 60 |
 | move-to-subpath | 0 |
 | internal-candidate | 8 |
 | NEEDS-REVIEW | 0 |
-| **total** | **200** |
+| **total** | **205** |
 
-Confidence: high=98, medium=100, needs-review=0.
+Confidence: high=102, medium=101, needs-review=0.
 
-## supported-root (132)
+## supported-root (137)
 
 | Name | Confidence | Source | Rationale |
 |---|---|---|---|
 | `AwarenessState` | medium | collab | Collaboration/awareness type defined in core/types/index.ts. Customer-facing for collab-provider integrations (e.g., AwarenessState types the documented onAwarenessUpdate callback). |
+| `AwarenessUser` | medium | collab | Collaboration/awareness type defined in core/types/index.ts. Extends User with an optional `color` field for consumer-supplied awareness color; typed on Config.user so the runtime override in SuperDoc#assignUserColor() is consumer-typable. |
 | `BinaryData` | high | locked | Shape of binary content used in documented import/export/open/save paths. Type-reachable through documented APIs. |
 | `BlockNavigationAddress` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `BlocksListResult` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |

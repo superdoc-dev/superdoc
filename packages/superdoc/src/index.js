@@ -1,3 +1,4 @@
+// @ts-check
 import {
   SuperConverter,
   Editor,
@@ -34,6 +35,8 @@ import {
   SlashMenu,
 } from '@superdoc/super-editor';
 import { DOCX, PDF, HTML, getFileObject, compareVersions } from '@superdoc/common';
+// @ts-expect-error Vite resolves DOCX asset URL imports; plain tsc does not.
+// Keep local suppression until URL asset imports can be typed without d.ts leaks.
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import { getSchemaIntrospection } from './helpers/schema-introspection.js';
 
@@ -234,7 +237,7 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
 
 // Public exports
 export { SuperDoc } from './core/SuperDoc.js';
-export { createTheme, buildTheme } from './core/theme/create-theme.ts';
+export { createTheme, buildTheme } from './core/theme/create-theme.js';
 export {
   BlankDOCX,
   getFileObject,

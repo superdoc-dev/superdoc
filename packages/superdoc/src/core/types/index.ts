@@ -29,6 +29,7 @@ import type {
   FontConfig,
   FontsResolvedPayload,
   ProofingProvider,
+  User,
 } from '@superdoc/super-editor';
 
 import type { SuperDoc as SuperDocClass } from '../SuperDoc.js';
@@ -47,32 +48,37 @@ export type NavigableAddress = SuperEditorNavigableAddress;
 /**
  * The current user of this superdoc.
  *
- * Every field is optional on input. `SuperDoc.#init` normalizes a missing
- * or partial `user` by spreading `DEFAULT_USER` over consumer input, so
- * `name` and `email` always have a value at runtime even when the
- * consumer omits them. The typedef stays open so consumers can pass
- * `{ name: 'Ada' }` without a typecheck failure.
+ * Re-exported directly from `@superdoc/super-editor` so the public
+ * consumer-facing `User` (re-exported again at `src/public/index.ts`)
+ * and the internal `User` referenced by SuperDoc method signatures
+ * (`addSharedUser(user: User)`, `removeSharedUser(...)`, etc.) are
+ * the same symbol — not two structurally-similar declarations.
  *
- * Kept structurally compatible with the publicly re-exported
- * `User` from `@superdoc/super-editor` (also optional name/email).
+ * Every field is optional on input. `SuperDoc.#init` normalizes a
+ * missing or partial `user` by spreading `DEFAULT_USER` over consumer
+ * input, so `name` and `email` always have a value at runtime even
+ * when the consumer omits them.
+ *
+ * `User` does NOT carry the collab-awareness `color` field; that is on
+ * the internal `AwarenessUser` (see below), assigned by SuperDoc's
+ * `#assignUserColor()` after `#init`.
  */
-export interface User {
-  /** The user's name. */
-  name?: string;
-  /**
-   * The user's email. May be `null` when the consumer did not provide an
-   * email and SuperDoc fell back to the built-in default user; the runtime
-   * has always exposed `null` here, so the typedef accepts it explicitly
-   * rather than narrowing to `string`. Consumers must narrow before
-   * performing string operations on this field.
-   */
-  email?: string | null;
-  /** The user's photo. */
-  image?: string | null;
+export type { User } from '@superdoc/super-editor';
+
+/**
+ * Internal post-`#init` shape of the active user. Extends the public
+ * `User` with the collab-awareness `color` field assigned by
+ * `SuperDoc.#assignUserColor()` and read by the presence system. Not
+ * part of the consumer-facing surface; consumers continue to pass
+ * `User` via `Config.user`, and SuperDoc widens to `AwarenessUser`
+ * internally once it has computed the color.
+ */
+export interface AwarenessUser extends User {
   /**
    * Awareness color for collaborative cursors. Auto-assigned from the
-   * configured palette (or a default palette) when omitted, derived from a
-   * hash of the user's identity so the assignment is stable across reloads.
+   * configured palette (or a default palette) by `#assignUserColor`,
+   * derived from a hash of the user's identity so the assignment is
+   * stable across reloads.
    */
   color?: string;
 }
@@ -96,9 +102,11 @@ export interface AwarenessState extends User {
   /** Yjs client identifier for the remote peer. */
   clientId?: number;
   /**
-   * Color assigned by SuperDoc's presence system. Overrides
-   * {@link User.color} when the presence system computes a stable
-   * palette assignment for the remote peer.
+   * Color assigned by SuperDoc's presence system. Spread onto the
+   * awareness entry after the user fields, so it takes precedence
+   * over any color the awareness user carried in (see
+   * {@link AwarenessUser.color}). Used when the presence system
+   * computes a stable palette assignment for the remote peer.
    */
   color?: string;
   /** Application-specific fields spread from the awareness provider. */
@@ -160,7 +168,7 @@ export interface RuntimeDocument extends Document {
    * silently replacing whatever was passed. SD-2872 removed this from
    * the public `Document` interface so consumers stop trying to use it
    * as a stable per-document override; it lives on `RuntimeDocument`
-   * only so internal SuperDoc.js callsites can type the assignment.
+   * only so internal SuperDoc callsites can type the assignment.
    */
   role?: 'editor' | 'viewer' | 'suggester';
   /**
@@ -181,12 +189,31 @@ export interface RuntimeDocument extends Document {
    * Use the Document API (`editor.doc`) instead.
    */
   getPresentationEditor?: () => SuperEditorPresentationEditor | null | undefined;
+  /**
+   * Runtime-only flag mirrored from `Config.rulers` per document by the
+   * Pinia store. SuperDoc writes this on each document during the
+   * setShowRulers flow; not part of consumer-supplied `Document`.
+   */
+  rulers?: boolean;
+  /**
+   * Runtime-only method attached by the comments composable on each
+   * document. Set after the comments store is ready; called during
+   * mode switches. Not part of consumer-supplied `Document`.
+   */
+  restoreComments?: () => void;
+  /**
+   * Runtime-only method attached by the comments composable on each
+   * document. Set after the comments store is ready; called during
+   * DOCX export when comments should be stripped. Not part of
+   * consumer-supplied `Document`.
+   */
+  removeComments?: () => void;
 }
 
 /** Collaboration module configuration. */
 export interface CollaborationConfig {
   /** External Yjs document (provider-agnostic mode). */
-  ydoc?: object;
+  ydoc?: YDoc;
   /** External collaboration provider (provider-agnostic mode). */
   provider?: CollaborationProvider;
   /** Internal provider type (deprecated). */
@@ -1287,6 +1314,65 @@ export interface SuperDocTelemetryConfig {
   licenseKey?: string;
 }
 
+/**
+ * Exception payload raised by the SuperDoc store during document
+ * initialization (empty entry, init failure, normalization error).
+ * Always carries `stage: 'document-init'` and the offending document
+ * config (`null`/`undefined` when the entry itself was empty).
+ *
+ * `error` is `unknown` because the catch path in `initializeDocuments`
+ * forwards the raw caught value (`catch (e) { emitException({ error: e,
+ * ... }) }`) and thrown values can be anything in JS. The other two
+ * emit sites construct `new Error(...)`, but consumers must narrow
+ * before reading `.message`.
+ */
+export interface SuperDocExceptionStorePayload {
+  error: unknown;
+  stage: 'document-init';
+  document: Document | null | undefined;
+}
+
+/**
+ * Exception payload raised when restoring SuperDoc state from a
+ * persisted source fails. Carries the document the runtime tried to
+ * restore.
+ */
+export interface SuperDocExceptionRestorePayload {
+  error: unknown;
+  document: Document;
+}
+
+/**
+ * Exception payload raised by the underlying editor lifecycle (load,
+ * encryption-prompt, command failures, etc.). `code` is set when the
+ * editor maps the failure to a known kind (e.g. `'password-required'`).
+ * `editor` is `Editor | null | undefined` because the password-prompt
+ * re-emit path forwards `originalException?.editor ?? null`, so
+ * consumers may receive `null` (not just `undefined`).
+ */
+export interface SuperDocExceptionEditorPayload {
+  error: unknown;
+  editor?: Editor | null;
+  code?: string;
+  documentId?: string | null;
+}
+
+/**
+ * Union of all `exception` event payloads SuperDoc emits at runtime.
+ * Consumers can narrow with `'stage' in payload` (store init) or
+ * `'code' in payload` (editor lifecycle).
+ *
+ * The union exists today because three independent emit sites
+ * (`initializeDocuments`, the restore path, and the editor lifecycle)
+ * pre-date a shared error contract. Normalizing them to a single
+ * payload shape is a separate follow-up; consumers can narrow with
+ * the `in` checks above in the meantime.
+ */
+export type SuperDocExceptionPayload =
+  | SuperDocExceptionStorePayload
+  | SuperDocExceptionRestorePayload
+  | SuperDocExceptionEditorPayload;
+
 export interface Config {
   /** The ID of the SuperDoc. */
   superdocId?: string;
@@ -1294,6 +1380,12 @@ export interface Config {
   selector: string | HTMLElement;
   /** The mode of the document (default: 'editing'). */
   documentMode?: DocumentMode;
+  /**
+   * When `documentMode` is `'viewing'`, allow the user to make text
+   * selections even though editing is disabled. Defaults to `false`.
+   * Forwarded to the underlying editor as `options.allowSelectionInViewMode`.
+   */
+  allowSelectionInViewMode?: boolean;
   /** The role of the user in this SuperDoc. */
   role?: 'editor' | 'viewer' | 'suggester';
   /**
@@ -1305,8 +1397,14 @@ export interface Config {
   password?: string;
   /** The documents to load → soon to be deprecated. */
   documents?: Document[];
-  /** The current user of this SuperDoc. */
-  user?: User;
+  /**
+   * The current user of this SuperDoc. Typed as `AwarenessUser` (an
+   * extension of `User` with the optional `color` field) so consumers
+   * can pass an explicit awareness color and have the runtime honor it
+   * as an override - `SuperDoc#assignUserColor()` skips its hash-based
+   * assignment when `user.color` is already set.
+   */
+  user?: AwarenessUser;
   /** All users of this SuperDoc (can be used for "@"-mentions). */
   users?: User[];
   /** Colors to use for user awareness. */
@@ -1362,8 +1460,21 @@ export interface Config {
   onTransaction?: (params: EditorTransactionEvent) => void;
   /** Callback after an editor is destroyed. */
   onEditorDestroy?: () => void;
-  /** Callback when there is an error in the content. */
-  onContentError?: (params: { error: object; editor: Editor; documentId: string; file: File }) => void;
+  /**
+   * Callback when an editor reports a content error (parse failure, doc
+   * import error, etc.). `error` is widened to `unknown` because the
+   * super-editor side mostly normalizes to `Error` but some emitters
+   * (e.g. `insertContentAt`) forward the original caught value. `file`
+   * matches `Document.data` (`File | Blob | null | undefined`) since
+   * the document can be loaded from any of those shapes. `documentId`
+   * is guaranteed at runtime by `#initDocuments`.
+   */
+  onContentError?: (params: {
+    error: unknown;
+    editor: Editor;
+    documentId: string;
+    file: File | Blob | null | undefined;
+  }) => void;
   /** Callback when the SuperDoc is ready. */
   onReady?: (editor: { superdoc: SuperDoc }) => void;
   /** Callback when comments are updated. */
@@ -1380,8 +1491,13 @@ export interface Config {
   onCollaborationReady?: (params: { editor: Editor }) => void;
   /** Callback when document is updated. */
   onEditorUpdate?: (params: EditorUpdateEvent) => void;
-  /** Callback when an exception is thrown. */
-  onException?: (params: { error: Error; editor?: Editor | null; code?: string }) => void;
+  /**
+   * Callback when SuperDoc emits an `exception` event. The payload is a
+   * union of three runtime shapes (store init, restore failure, editor
+   * lifecycle). Narrow with `'stage' in params` (store init) or `'code'
+   * in params` (editor) before reading shape-specific fields.
+   */
+  onException?: (params: SuperDocExceptionPayload) => void;
   /** Callback when the comments list is rendered. */
   onCommentsListChange?: (params: { isRendered: boolean }) => void;
   /**
@@ -1485,7 +1601,7 @@ export interface Config {
  * call sites cast `this.config` to this type so they can access these
  * invariants without per-site null guards.
  *
- * Use this from internal SuperDoc.js callsites that need the augmented shape
+ * Use this from internal SuperDoc callsites that need the augmented shape
  * (e.g. `/** @type {InternalConfig} *\/ (this.config).socket = ...`).
  */
 export interface InternalConfig extends Config {
@@ -1495,12 +1611,23 @@ export interface InternalConfig extends Config {
    * not part of the public Config surface.
    */
   socket?: HocuspocusProviderWebsocket;
-  /** Normalized to `[]` by `#init` if the consumer passes nothing or `undefined`. */
-  documents: Document[];
+  /**
+   * Normalized to `[]` by `#init` if the consumer passes nothing or
+   * `undefined`. Narrowed to `RuntimeDocument[]` because once `#init`
+   * runs, each entry has been augmented with the runtime-only fields
+   * (`role`, `getEditor`, `getPresentationEditor`, etc.). Consumers
+   * still pass `Document[]` via the public `Config` interface; this
+   * override only describes the post-init shape internal callsites see.
+   */
+  documents: RuntimeDocument[];
   /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
   modules: Modules;
-  /** Spread of `DEFAULT_USER` over consumer input by `#init`; `name` always present. */
-  user: User;
+  /**
+   * Spread of `DEFAULT_USER` over consumer input by `#init`; `name`
+   * always present. Widened to `AwarenessUser` because `#assignUserColor`
+   * runs synchronously during init and writes `color` into this object.
+   */
+  user: AwarenessUser;
   /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
   layoutEngineOptions: SuperDocLayoutEngineOptions;
 }

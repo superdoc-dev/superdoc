@@ -113,53 +113,23 @@ jobs:
       - name: Typecheck
         run: pnpm run type-check
 
-      - name: Public-contract checkJs (SD-2863)
-        # Gated subset of public-contract files run with `// @ts-check`. The
-        # script greps tsc output for errors in the curated file list and
-        # ignores the wider 1500+ errors from the broader super-editor source
-        # tree (those are tracked under SD-2863 follow-up tickets).
-        run: pnpm --filter superdoc run check:jsdoc
-
-      - name: Public-contract check (matrix + supported-root strict audit)
-        # SD-673 Phase 1: collapse the previous two CI steps
-        # ('Consumer typecheck (matrix)' + 'Deep public-type audit') into
-        # the single wrapper command. Same coverage:
-        #   - typecheck-matrix.mjs packs superdoc, installs the tarball
-        #     into the consumer fixture, runs every scenario.
-        #   - deep-type-audit.mjs --strict-supported-root reuses that
-        #     install and gates on the supported-root any allowlist
-        #     (SD-3213e). Broad inventory still printed for visibility.
-        # --skip-build because the Build step above already ran
-        # `pnpm run build` (which includes build:superdoc).
-        # Local equivalent: `pnpm check:public-contract` (with the build
-        # stage included).
-        run: pnpm check:public-contract --skip-build
-
-      - name: Package shape gates
-        # External package-shape linters (publint + attw) running against
-        # the packed tarball. Catches manifest issues that the in-repo
-        # consumer matrix does not see: condition ordering, masquerading
-        # ESM, missing CDN files, unpublished `source` paths.
-        run: node tests/consumer-typecheck/package-shape-gate.mjs
-
-      - name: Public surface no-growth snapshots (SD-3176, SD-3212)
-        # Unified entry point for the three snapshot families:
-        #   - super-editor-package: @superdoc/super-editor package.json#exports keys
-        #   - legacy: resolved exports for superdoc/* legacy subpaths
-        #   - root: 4-source inventory (types.import, types.require, import,
-        #     require) for the superdoc root entry. Cross-source mismatches
-        #     are reported in the companion .md but are not blockers on their
-        #     own.
-        # Runs after the matrix step so the packed-and-installed fixture is
-        # available. See tests/consumer-typecheck/snapshots/README.md.
-        run: node tests/consumer-typecheck/snapshot.mjs --all --check
-
-      - name: Root classification closure gate (SD-3212 PR A1b)
-        # Asserts the dependency-closure rule from the A1 classification:
-        # no supported-root or legacy-root exported root symbol may reference
-        # an internal-candidate root symbol in its public declared type.
-        # Catches the failure class behind Phase 4a's 31-failure dry-run.
-        run: node tests/consumer-typecheck/check-root-classification-closure.mjs
+      - name: SuperDoc public interface check
+        # Single wrapper covering all SuperDoc public-surface gates,
+        # ordered cheap-to-expensive:
+        #   - contract-tiers-test (pure validator unit tests)
+        #   - contract-tiers (package.json#exports vs publicContract)
+        #   - jsdoc-ratchet (checkJs gate + per-file ratchet)
+        #   - build (skipped here; the Build step above already ran it)
+        #   - consumer-typecheck-matrix (packs superdoc, runs every scenario)
+        #   - deep-type-audit-supported-root (any-leak gate)
+        #   - package-shape (publint + attw)
+        #   - export-snapshots (super-editor / legacy / root no-growth)
+        #   - root-classification-closure (SD-3212 A1b)
+        # Stages 5-9 share one packed-and-installed fixture; stage 5
+        # produces it, the rest reuse it. --skip-build skips stage 4
+        # because the Build step above already ran `pnpm run build`.
+        # Local equivalent: `pnpm check:public:superdoc` (with build).
+        run: pnpm check:public:superdoc --skip-build
 
   unit-tests:
     needs: build

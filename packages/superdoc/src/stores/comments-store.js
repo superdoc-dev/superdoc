@@ -105,7 +105,7 @@ export const useCommentsStore = defineStore('comments', () => {
    * Get a comment by either ID or imported ID
    *
    * @param {string} id The comment ID
-   * @returns {Object} The comment object
+   * @returns {Record<string, unknown> | null | undefined} The comment object, `null` if no id was provided, or `undefined` if not found.
    */
   const getComment = (id) => {
     if (id === undefined || id === null) return null;

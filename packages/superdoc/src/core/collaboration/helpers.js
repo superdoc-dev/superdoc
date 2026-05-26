@@ -105,11 +105,12 @@ export const initCollaborationComments = (superdoc) => {
 };
 
 /**
- * Initialize SuperDoc general Y.Doc for high level collaboration
- * Assigns superdoc.ydoc and superdoc.provider in place
+ * Initialize SuperDoc general Y.Doc for high level collaboration.
+ * Returns the pair the caller assigns to `superdoc.ydoc` / `superdoc.provider`,
+ * or `undefined` when there is no `superdocId` to scope the room on.
  *
  * @param {Object} superdoc The SuperDoc instance
- * @returns {void}
+ * @returns {{ ydoc: import('yjs').Doc, provider: import('../types/index.js').CollaborationProvider } | undefined}
  */
 export const initSuperdocYdoc = (superdoc) => {
   const { isInternal } = superdoc.config;

@@ -128,34 +128,17 @@ jobs:
       - name: Build packages
         run: pnpm run build
 
-      # Public-type contract gates: same gates as PR CI (ci-superdoc.yml).
+      # Public-type contract gate: same coverage as PR CI (ci-superdoc.yml).
       # Runs before publishing so a release cannot ship a regression that
       # bypassed PR CI (manual republish, hotfix branch, recovery flow).
-      - name: Consumer typecheck (matrix)
-        run: |
-          cd tests/consumer-typecheck
-          node typecheck-matrix.mjs
-
-      - name: Deep public-type audit (supported-root strict, SD-3213e)
-        # Same gate as PR CI. One invocation prints the broad inventory
-        # AND runs the supported-root strict gate against the committed
-        # allowlist. Catches releases that bypass PR CI.
-        run: node tests/consumer-typecheck/deep-type-audit.mjs --strict-supported-root
-
-      - name: Package shape gates
-        # External package-shape linters (publint + attw) running against
-        # the packed tarball. Same step as PR CI.
-        run: node tests/consumer-typecheck/package-shape-gate.mjs
-
-      - name: Public surface no-growth snapshots (SD-3176, SD-3212)
-        # Same gate as PR CI. Catches releases that bypass PR CI.
-        # Runs the unified entry point for all three snapshot families
-        # (super-editor-package, legacy, root).
-        run: node tests/consumer-typecheck/snapshot.mjs --all --check
-
-      - name: Root classification closure gate (SD-3212 PR A1b)
-        # Same gate as PR CI. Catches releases that bypass PR CI.
-        run: node tests/consumer-typecheck/check-root-classification-closure.mjs
+      - name: SuperDoc public interface check
+        # Wraps the nine wrapper stages: contract-tiers-test,
+        # contract-tiers, jsdoc-ratchet, build (skipped here),
+        # consumer-typecheck-matrix, deep-type-audit-supported-root,
+        # package-shape, export-snapshots, root-classification-closure.
+        # --skip-build because the Build step above already ran
+        # `pnpm run build` (which includes build:superdoc).
+        run: pnpm check:public:superdoc --skip-build
 
       # PR preview: publish with pr-<number> dist-tag
       - name: Publish PR preview

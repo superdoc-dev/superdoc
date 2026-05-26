@@ -2857,7 +2857,7 @@ describe('PresentationEditor', () => {
           y: 120,
         },
       ];
-      mockIncrementalLayout.mockResolvedValueOnce(layoutResult);
+      mockIncrementalLayout.mockResolvedValue(layoutResult);
       bookmarkResolverMocks.findAllBookmarksInDocument.mockReturnValueOnce([
         { name: 'body-bm', bookmarkId: '7', storyKey: 'body' },
       ]);

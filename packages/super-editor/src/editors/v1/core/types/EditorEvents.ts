@@ -158,8 +158,13 @@ export interface EditorEventMap extends DefaultEventMap {
   /** Called when editor is destroyed */
   destroy: [];
 
-  /** Called when there's a content error */
-  contentError: [{ editor: Editor; error: Error }];
+  /**
+   * Called when there's a content error. `error` is `unknown` because
+   * the emit sites do not normalize uniformly (see `EditorConfig.onContentError`).
+   * `disableCollaboration` is provided by the `insertContentAt` emit
+   * path and absent on `Editor.ts`'s emit.
+   */
+  contentError: [{ editor: Editor; error: unknown; disableCollaboration?: () => void }];
 
   /** Called when tracked changes update */
   trackedChangesUpdate: [{ changes: unknown }];

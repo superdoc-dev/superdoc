@@ -71,9 +71,17 @@ Do not hand-edit `COMMAND_CATALOG`, `OPERATION_MEMBER_PATH_MAP`, `OPERATION_REFE
 - `pnpm build` - build all packages
 - `pnpm test` - unit tests
 - `pnpm dev` - dev server from `examples/`
-- `pnpm run generate:all` - regenerate schemas, SDK clients, tool catalogs, reference docs
-- `pnpm check:public-contract` - validate the published public type contract: wraps build + consumer typecheck matrix + strict supported-root audit. ~3 min. Scoped to the public type surface, not a replacement for `pnpm test` or `pnpm build`. Also the single command CI runs (with `--skip-build` after its own Build step). SD-3256 / SD-673.
-- `pnpm report:public-contract` - print the public-contract tier metadata (supported / legacy / legacy-raw / asset / deprecated). Read-only. Source of truth: `packages/superdoc/scripts/type-surface.config.cjs` (`publicContract` export). SD-3256.
+- `pnpm check:types` - raw TS compile across all referenced projects (`tsc -b tsconfig.references.json`). Does NOT run the public-interface chain. Legacy alias: `pnpm run type-check`.
+- `pnpm check:public` - **canonical pre-merge command for typed public surfaces.** Validates both `superdoc` (tier discipline + jsdoc ratchet + public-method fixture coverage + vite build + postbuild chain + consumer typecheck matrix + deep-type audit + package-shape + snapshots + classification closure) and Document API (contract parity + output staleness + examples + overview). ~5 min. Non-mutating. Combines `check:public:superdoc` + `check:public:docapi`.
+- `pnpm check:public:superdoc` - SuperDoc public package surface only. Wraps ten stages in cheap-to-expensive order: `contract-tiers-test`, `contract-tiers`, `jsdoc-ratchet`, `public-method-coverage`, `build`, `consumer-typecheck-matrix`, `deep-type-audit-supported-root`, `package-shape`, `export-snapshots`, `root-classification-closure`. Legacy alias: `pnpm run check:public-contract`.
+- `pnpm check:public:docapi` - Document API public surface only. Wraps four stages: `contract-parity`, `contract-outputs`, `examples`, `overview-alignment`. Clean-checkout safe: gitignored generated artifacts are built in memory; tracked outputs (reference docs, overview block) are compared byte-for-byte. No mutation. Legacy alias: `pnpm run docapi:check`.
+- `pnpm generate:docapi` - regenerate Document API outputs after editing the contract (alias of `docapi:sync`). Writes gitignored Document API generated artifacts. Run only when you need the artifacts materialized locally (SDK builds, publishing); `check:public:docapi` does not require it.
+- `pnpm generate:all` - regenerate schemas, SDK clients, tool catalogs, reference docs.
+- `pnpm report:public:superdoc` - print public-contract tier metadata (supported / legacy / legacy-raw / asset / deprecated). Read-only, not a gate. Use `check:public:superdoc` (or its `contract-tiers` stage) to enforce. Source of truth: `packages/superdoc/scripts/type-surface.config.cjs`.
+
+Full system reference (script catalog, dataflow, CI vs local): `packages/superdoc/scripts/README.md`.
+
+Naming convention: `check:*` = non-mutating, safe in CI. `generate:*` = mutates files. `report:*` = read-only information, not a gate. Older command names (`check:public-contract`, `docapi:sync`, `report:public-contract`, etc.) remain as aliases.
 
 ## Testing
 

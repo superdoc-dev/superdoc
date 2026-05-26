@@ -1,0 +1,14 @@
+{
+  "$comment": "Auto-managed by tests/consumer-typecheck/check-public-method-coverage.mjs. Each entry is \"memberName:obligation\" where obligation is one of parameters | returns | call. Refresh with --write after adding fixtures.",
+  "knownUnmet": [
+    "canPerformPermission:parameters",
+    "canPerformPermission:returns",
+    "lockSuperdoc:parameters",
+    "lockSuperdoc:returns",
+    "setLocked:parameters",
+    "setLocked:returns",
+    "state:returns",
+    "upgradeToCollaboration:parameters",
+    "upgradeToCollaboration:returns"
+  ]
+}

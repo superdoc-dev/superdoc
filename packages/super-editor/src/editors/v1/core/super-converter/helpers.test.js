@@ -422,6 +422,17 @@ describe('dataUriToArrayBuffer', () => {
     expect(new TextDecoder().decode(result)).toBe(svg);
   });
 
+  it('does not double-encode malformed non-base64 SVG payloads', () => {
+    const result = dataUriToArrayBuffer('data:image/svg+xml,%');
+    expect(new TextDecoder().decode(result)).toBe('%');
+  });
+
+  it('rejects non-base64 raster data URI strings', () => {
+    expect(() => dataUriToArrayBuffer('data:image/png,not-base64')).toThrow(
+      'Unsupported non-base64 data URI media type',
+    );
+  });
+
   it('decodes a raw base64 string', () => {
     const bytes = new Uint8Array([55, 66, 77]);
     const base64 = Buffer.from(bytes).toString('base64');

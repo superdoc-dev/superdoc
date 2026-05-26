@@ -34,17 +34,7 @@ function base64ToUint8Array(base64) {
 }
 
 function stringToUtf8ArrayBuffer(value) {
-  const encoded = encodeURIComponent(value);
-  const bytes = [];
-  for (let i = 0; i < encoded.length; i++) {
-    if (encoded[i] === '%') {
-      bytes.push(parseInt(encoded.slice(i + 1, i + 3), 16));
-      i += 2;
-    } else {
-      bytes.push(encoded.charCodeAt(i));
-    }
-  }
-  return new Uint8Array(bytes).buffer;
+  return new globalThis.TextEncoder().encode(value).buffer;
 }
 
 /**
@@ -70,12 +60,17 @@ function dataUriToArrayBuffer(data) {
     }
     const meta = data.slice(0, commaIndex);
     const payload = data.substring(commaIndex + 1);
+    const mimeType = meta.slice(5).split(';')[0].toLowerCase();
     const isBase64 = meta
       .slice(5)
       .split(';')
       .some((part) => part.toLowerCase() === 'base64');
 
     if (!isBase64) {
+      if (mimeType !== 'image/svg+xml') {
+        throw new Error(`Unsupported non-base64 data URI media type: ${mimeType || 'unknown'}`);
+      }
+
       try {
         return stringToUtf8ArrayBuffer(decodeURIComponent(payload));
       } catch {

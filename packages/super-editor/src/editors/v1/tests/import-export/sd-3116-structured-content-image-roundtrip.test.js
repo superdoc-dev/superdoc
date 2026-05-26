@@ -9,6 +9,8 @@ import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpe
 const SIGNATURE_SRC = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=';
 const ENCODED_SIGNATURE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50" />';
 const ENCODED_SIGNATURE_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(ENCODED_SIGNATURE_SVG)}`;
+const PNG_SRC =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/Ur/9wAAAABJRU5ErkJggg==';
 
 const findFirstNodeByType = (node, typeName) => {
   let found = null;
@@ -29,6 +31,15 @@ const findNodeByTypeAndId = (node, typeName, id) => {
       found = child;
       return false;
     }
+    return true;
+  });
+  return found;
+};
+
+const collectNodesByType = (node, typeName) => {
+  const found = [];
+  node.descendants((child) => {
+    if (child.type.name === typeName) found.push(child);
     return true;
   });
   return found;
@@ -350,5 +361,93 @@ describe('SD-3116 structured content image round-trip', () => {
 
     expect(svgMediaEntry).toBeDefined();
     expect(Buffer.from(svgMediaEntry[1], 'base64').toString('utf8')).toBe(ENCODED_SIGNATURE_SVG);
+  });
+
+  it('round-trips two block SDTs with different preset image types in one document', async () => {
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('blank-doc.docx');
+    ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+    expect(
+      editor.commands.insertStructuredContentBlock({
+        attrs: {
+          id: '1299215863',
+          tag: 'svg_signature_sdt',
+          alias: 'SVG Signature',
+          lockMode: 'sdtLocked',
+        },
+        json: {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'image',
+              attrs: {
+                src: SIGNATURE_SRC,
+                alt: 'SVG Signature Example',
+                size: { width: 200, height: 50 },
+                wrap: { type: 'Inline' },
+              },
+            },
+          ],
+        },
+      }),
+    ).toBe(true);
+
+    expect(
+      editor.commands.insertStructuredContentBlock({
+        attrs: {
+          id: '1299215864',
+          tag: 'png_signature_sdt',
+          alias: 'PNG Signature',
+          lockMode: 'sdtLocked',
+        },
+        json: {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'image',
+              attrs: {
+                src: PNG_SRC,
+                alt: 'PNG Signature Example',
+                size: { width: 20, height: 10 },
+                wrap: { type: 'Inline' },
+              },
+            },
+          ],
+        },
+      }),
+    ).toBe(true);
+
+    const exported = await editor.exportDocx({ isFinalDoc: false });
+    const [roundTripDocx, roundTripMedia, roundTripMediaFiles, roundTripFonts] = await Editor.loadXmlData(
+      exported,
+      true,
+    );
+    ({ editor: reopened } = initTestEditor({
+      content: roundTripDocx,
+      media: roundTripMedia,
+      mediaFiles: roundTripMediaFiles,
+      fonts: roundTripFonts,
+      isNewFile: false,
+    }));
+
+    const reopenedSvgBlock = findNodeByTypeAndId(reopened.state.doc, 'structuredContentBlock', '1299215863');
+    const reopenedPngBlock = findNodeByTypeAndId(reopened.state.doc, 'structuredContentBlock', '1299215864');
+    const reopenedSvgImage = findFirstNodeByType(reopenedSvgBlock, 'image');
+    const reopenedPngImage = findFirstNodeByType(reopenedPngBlock, 'image');
+
+    expect(reopenedSvgImage?.attrs).toMatchObject({
+      alt: 'SVG Signature Example',
+      size: { width: 200, height: 50 },
+    });
+    expect(reopenedPngImage?.attrs).toMatchObject({
+      alt: 'PNG Signature Example',
+      size: { width: 20, height: 10 },
+    });
+    expect(reopenedSvgImage?.attrs.src).toMatch(/^word\/media\/.+\.svg$/);
+    expect(reopenedPngImage?.attrs.src).toMatch(/^word\/media\/.+\.png$/);
+    expect(
+      new Set(collectNodesByType(reopened.state.doc, 'image').map((node) => node.attrs.src)).size,
+    ).toBeGreaterThanOrEqual(2);
+    expect(Object.keys(roundTripMediaFiles).filter((path) => /\.(svg|png)$/.test(path))).toHaveLength(2);
   });
 });

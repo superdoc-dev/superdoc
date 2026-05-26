@@ -46,6 +46,8 @@ const binaryStringToBytes = (binaryString) => {
  */
 const extractBase64Meta = (dataUri) => {
   const metadata = getDataUriMetadata(dataUri);
+  if (!metadata?.hasPayloadSeparator) return null;
+
   const rawMimeType = metadata?.rawMimeType || '';
   const mimeType = rawMimeType || DEFAULT_MIME_TYPE;
   const isBase64 = Boolean(metadata?.isBase64);
@@ -59,12 +61,18 @@ const extractBase64Meta = (dataUri) => {
 };
 
 export const getBase64FileMeta = (dataUri) => {
-  const { mimeType, filename } = extractBase64Meta(dataUri);
+  const meta = extractBase64Meta(dataUri);
+  if (!meta) return { mimeType: DEFAULT_MIME_TYPE, filename: 'image-0.bin' };
+
+  const { mimeType, filename } = meta;
   return { mimeType, filename };
 };
 
 export const base64ToFile = (dataUri) => {
-  const { mimeType, binaryString, filename, isBase64 } = extractBase64Meta(dataUri);
+  const meta = extractBase64Meta(dataUri);
+  if (!meta) return null;
+
+  const { mimeType, binaryString, filename, isBase64 } = meta;
   const fileType = mimeType || DEFAULT_MIME_TYPE;
 
   const data = isBase64 ? binaryStringToBytes(binaryString) : binaryString;

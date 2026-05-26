@@ -78,12 +78,7 @@ import {
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
-import {
-  encodeTooltip,
-  IMAGE_DATA_URL_MIME_TYPES,
-  MAX_IMAGE_DATA_URL_LENGTH,
-  sanitizeHref,
-} from '@superdoc/url-validation';
+import { encodeTooltip, isValidImageDataUrl, sanitizeHref } from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from './constants.js';
 import { createChartElement as renderChartToElement } from './chart-renderer.js';
 import {
@@ -929,26 +924,6 @@ const MAX_HREF_LENGTH = 2048;
 
 const SAFE_ANCHOR_PATTERN = /^[A-Za-z0-9._-]+$/;
 
-function isValidImageDataUrl(src: string): boolean {
-  if (!src.startsWith('data:') || src.length > MAX_IMAGE_DATA_URL_LENGTH) {
-    return false;
-  }
-
-  const metadataEnd = src.indexOf(',');
-  if (metadataEnd === -1) {
-    return false;
-  }
-
-  const metadata = src.slice('data:'.length, metadataEnd);
-  const [rawMimeType = '', ...rawParameters] = metadata.split(';');
-  const mimeType = rawMimeType.toLowerCase();
-  if (!IMAGE_DATA_URL_MIME_TYPES.includes(mimeType)) {
-    return false;
-  }
-
-  const isBase64 = rawParameters.some((parameter) => parameter.toLowerCase() === 'base64');
-  return isBase64 || mimeType === 'image/svg+xml';
-}
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const WORDART_LINE_FILL_RATIO = 0.9;
 

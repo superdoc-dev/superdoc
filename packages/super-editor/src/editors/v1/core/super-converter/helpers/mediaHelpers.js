@@ -1,3 +1,5 @@
+import { getDataUriMetadata as getSharedDataUriMetadata, tryDecodeDataUriText } from '@superdoc/url-validation';
+
 export const sanitizeDocxMediaName = (value, fallback = 'image') => {
   if (!value) return fallback;
 
@@ -27,32 +29,16 @@ export const getImageExtensionFromMimeType = (mimeType) => {
 };
 
 export const getDataUriMetadata = (src = '') => {
-  if (typeof src !== 'string' || !src.startsWith('data:')) return null;
-
-  const commaIndex = src.indexOf(',');
-  const hasPayloadSeparator = commaIndex !== -1;
-  const metadata = src.slice(5, hasPayloadSeparator ? commaIndex : undefined);
-  const payload = hasPayloadSeparator ? src.slice(commaIndex + 1) : '';
-  const [rawMimeType = '', ...parameters] = metadata.split(';');
-  const mimeType = rawMimeType.toLowerCase();
+  const metadata = getSharedDataUriMetadata(src);
+  if (!metadata) return null;
 
   return {
-    hasPayloadSeparator,
-    payload,
-    rawMimeType,
-    mimeType,
-    isBase64: parameters.some((part) => part.toLowerCase() === 'base64'),
-    extension: getImageExtensionFromMimeType(mimeType),
+    ...metadata,
+    extension: getImageExtensionFromMimeType(metadata.mimeType),
   };
 };
 
-export const tryDecodeDataUriText = (payload = '') => {
-  try {
-    return decodeURIComponent(payload);
-  } catch {
-    return null;
-  }
-};
+export { tryDecodeDataUriText };
 
 export const getFallbackImageNameFromDataUri = (src = '', fallback = 'image') => {
   const extension = getDataUriMetadata(src)?.extension;

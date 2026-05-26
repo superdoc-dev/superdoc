@@ -7,6 +7,8 @@ import {
   isRelativeUrl,
   IMAGE_DATA_URL_MIME_TYPES,
   MAX_IMAGE_DATA_URL_LENGTH,
+  getDataUriMetadata,
+  isValidImageDataUrl,
 } from './index.js';
 
 describe('url-validation', () => {
@@ -15,6 +17,24 @@ describe('url-validation', () => {
       expect(IMAGE_DATA_URL_MIME_TYPES).toContain('image/svg+xml');
       expect(IMAGE_DATA_URL_MIME_TYPES).toContain('image/png');
       expect(MAX_IMAGE_DATA_URL_LENGTH).toBe(10 * 1024 * 1024);
+    });
+
+    it('parses data URI metadata once for shared consumers', () => {
+      expect(getDataUriMetadata('data:image/svg+xml;charset=utf-8;base64,PHN2Zy8+')).toEqual({
+        hasPayloadSeparator: true,
+        payload: 'PHN2Zy8+',
+        rawMimeType: 'image/svg+xml',
+        mimeType: 'image/svg+xml',
+        isBase64: true,
+      });
+    });
+
+    it('validates image data URLs with the shared renderer/export policy', () => {
+      expect(isValidImageDataUrl('data:image/png;base64,abc')).toBe(true);
+      expect(isValidImageDataUrl('data:image/svg+xml,%3Csvg%2F%3E')).toBe(true);
+      expect(isValidImageDataUrl('data:image/png,not-base64')).toBe(false);
+      expect(isValidImageDataUrl('data:text/html,%3Cp%3Ebad%3C%2Fp%3E')).toBe(false);
+      expect(isValidImageDataUrl('data:image/svg+xml,%')).toBe(false);
     });
   });
 

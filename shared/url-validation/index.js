@@ -86,6 +86,46 @@ export const IMAGE_DATA_URL_MIME_TYPES = Object.freeze([
   'image/tiff',
 ]);
 
+export const getDataUriMetadata = (src = '') => {
+  if (typeof src !== 'string' || !src.startsWith('data:')) return null;
+
+  const commaIndex = src.indexOf(',');
+  const hasPayloadSeparator = commaIndex !== -1;
+  const metadata = src.slice(5, hasPayloadSeparator ? commaIndex : undefined);
+  const payload = hasPayloadSeparator ? src.slice(commaIndex + 1) : '';
+  const [rawMimeType = '', ...parameters] = metadata.split(';');
+  const mimeType = rawMimeType.toLowerCase();
+
+  return {
+    hasPayloadSeparator,
+    payload,
+    rawMimeType,
+    mimeType,
+    isBase64: parameters.some((part) => part.toLowerCase() === 'base64'),
+  };
+};
+
+export const tryDecodeDataUriText = (payload = '') => {
+  try {
+    return decodeURIComponent(payload);
+  } catch {
+    return null;
+  }
+};
+
+export const isValidImageDataUrl = (src) => {
+  if (typeof src !== 'string' || !src.startsWith('data:') || src.length > MAX_IMAGE_DATA_URL_LENGTH) {
+    return false;
+  }
+
+  const metadata = getDataUriMetadata(src);
+  if (!metadata?.hasPayloadSeparator || !IMAGE_DATA_URL_MIME_TYPES.includes(metadata.mimeType)) return false;
+  if (metadata.isBase64) return true;
+  if (metadata.mimeType !== 'image/svg+xml') return false;
+
+  return tryDecodeDataUriText(metadata.payload) != null;
+};
+
 /**
  * Default maximum tooltip length in characters.
  *

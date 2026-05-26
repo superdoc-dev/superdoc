@@ -27,12 +27,19 @@ function titleTextOf(paragraphs: ReturnType<typeof buildTocEntryParagraphs>): Te
   return titleRun.content?.[0] ?? {};
 }
 
-/** Find the page-number text node (carries the tocPageNumber mark) inside any run. */
+/**
+ * Find the page-number text inside the entry's `pageReference` node — the
+ * builder now emits a real PAGEREF field instead of a `tocPageNumber` mark.
+ */
 function pageNumberTextOf(paragraphs: ReturnType<typeof buildTocEntryParagraphs>): TextLike {
-  const runs = paragraphs[0]!.content as Array<{ content?: TextLike[] }>;
-  for (const run of runs) {
-    const child = run.content?.find((c) => Array.isArray(c.marks) && c.marks.some((m) => m.type === 'tocPageNumber'));
-    if (child) return child;
+  const nodes = paragraphs[0]!.content as Array<{ type?: string; content?: TextLike[] }>;
+  for (const node of nodes) {
+    if (node.type !== 'pageReference') continue;
+    const innerRuns = (node.content ?? []) as Array<{ content?: TextLike[] }>;
+    for (const run of innerRuns) {
+      const text = run.content?.find((c) => c.type === 'text');
+      if (text) return text;
+    }
   }
   return {};
 }
@@ -125,22 +132,27 @@ describe('buildTocEntryParagraphs', () => {
       expect(linkMark?.attrs?.anchor).toBe(generateTocBookmarkName(BASE_SOURCE.sdBlockId));
     });
 
-    it('wraps each text run in a `run` node so wrapTextInRunsPlugin does not clobber marks', () => {
+    it('wraps text in `run` nodes and emits a real pageReference for the page number', () => {
       const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }));
-      const runs = paragraphs[0]!.content as Array<{ type: string }>;
-      // Title run + tab run + page-number run = 3 runs (no \p, no omit).
-      expect(runs.length).toBe(3);
-      runs.forEach((r) => expect(r.type).toBe('run'));
+      const nodes = paragraphs[0]!.content as Array<{ type: string }>;
+      // Title run + tab run + pageReference node = 3 children.
+      expect(nodes.map((n) => n.type)).toEqual(['run', 'run', 'pageReference']);
     });
 
-    it('carries allowed character marks (bold, italic, underline, color, highlight, fontFamily, textStyle.fontFamily) from the source heading', () => {
+    it("does not propagate the heading paragraph's character marks into the rebuilt entry (SD-3229)", () => {
+      // Per ECMA-376 §17.16.5.68, Word rebuilds heading-driven TOC entries
+      // (\o / \u / \t) from the heading text plus the linked TOC{n} style's
+      // typography. The heading's own bold/underline/font marks must NOT
+      // bleed through — otherwise the entry shows "ARTICLE 1 BASIC
+      // INFORMATION" in Heading1's bold/Times-New-Roman-Bold instead of the
+      // TOC1 style's lighter weight.
       const sourceWithMarks: TocSource = {
         ...BASE_SOURCE,
         segments: [
           {
             text: 'Heading',
             marks: [
-              { type: 'textStyle', attrs: { fontFamily: 'Aptos', fontSize: '24pt' } }, // fontSize must be scrubbed
+              { type: 'textStyle', attrs: { fontFamily: 'Aptos', fontSize: '24pt' } },
               { type: 'bold' },
               { type: 'italic' },
               { type: 'underline' },
@@ -153,22 +165,10 @@ describe('buildTocEntryParagraphs', () => {
       };
       const paragraphs = buildTocEntryParagraphs([sourceWithMarks], makeConfig({ hyperlinks: true }));
       const text = titleTextOf(paragraphs);
-      expect(text.marks!.map((m) => m.type)).toEqual([
-        'textStyle',
-        'bold',
-        'italic',
-        'underline',
-        'color',
-        'highlight',
-        'fontFamily',
-        'link',
-      ]);
-      // textStyle keeps fontFamily, drops fontSize.
-      const textStyleMark = text.marks!.find((m) => m.type === 'textStyle');
-      expect(textStyleMark!.attrs).toEqual({ fontFamily: 'Aptos' });
+      expect(text.marks!.map((m) => m.type)).toEqual(['link']);
     });
 
-    it('drops disallowed marks (fontSize, strike, link, comments, track-changes, tocPageNumber)', () => {
+    it('only the link mark is attached to heading-source title runs', () => {
       const sourceWithDisallowed: TocSource = {
         ...BASE_SOURCE,
         segments: [
@@ -188,11 +188,38 @@ describe('buildTocEntryParagraphs', () => {
       };
       const paragraphs = buildTocEntryParagraphs([sourceWithDisallowed], makeConfig({ hyperlinks: true }));
       const text = titleTextOf(paragraphs);
-      // Only the allowed `bold` survives, plus the rebuilt `link` to the source bookmark.
-      expect(text.marks!.map((m) => m.type)).toEqual(['bold', 'link']);
+      expect(text.marks!.map((m) => m.type)).toEqual(['link']);
       const linkMark = text.marks!.find((m) => m.type === 'link');
       expect(linkMark!.attrs!.anchor).toBe(generateTocBookmarkName(BASE_SOURCE.sdBlockId));
-      expect(linkMark!.attrs!.href).toBeUndefined();
+      // The rebuilt link points at the synthetic in-document anchor; the source's
+      // `href: "https://example.com"` is dropped (we route through the anchor).
+      expect(linkMark!.attrs!.href).toBe(`#${generateTocBookmarkName(BASE_SOURCE.sdBlockId)}`);
+    });
+
+    it('TC-field entries carry bold/italic/underline (but not textStyle) from the surrounding Heading2 (SD-3229)', () => {
+      // Word's update-field inherits character formatting from the body run
+      // that surrounds the TC field's title — but only the visible style
+      // marks (bold/italic/underline). Inheriting `textStyle` overrides the
+      // TOC2 paragraph style's font, which is wrong.
+      const tcSource: TocSource = {
+        text: 'Section 1.1\tCertain Basic Terms',
+        level: 2,
+        sdBlockId: 'h2-1',
+        kind: 'tcField',
+        titleMarks: [
+          { type: 'bold' },
+          { type: 'underline' },
+          { type: 'textStyle', attrs: { fontFamily: 'Times New Roman, serif' } },
+        ],
+      };
+      const paragraphs = buildTocEntryParagraphs([tcSource], makeConfig({ hyperlinks: true }));
+      // Section-number run (first run) — plain link only, no inherited marks.
+      const numberRun = paragraphs[0]!.content[0] as { content?: TextLike[] };
+      expect(numberRun.content?.[0]?.marks?.map((m) => m.type)).toEqual(['link']);
+      // Title run (third run, after number / tab) — bold + underline survive,
+      // textStyle is dropped so the TOC2 style picks the font.
+      const titleRun = paragraphs[0]!.content[2] as { content?: TextLike[] };
+      expect(titleRun.content?.[0]?.marks?.map((m) => m.type)).toEqual(['bold', 'underline', 'link']);
     });
   });
 
@@ -220,6 +247,7 @@ interface MockParagraph {
   text: string;
   styleId?: string;
   outlineLevel?: number;
+  listMarkerText?: string;
 }
 
 function mockDoc(paragraphs: MockParagraph[]) {
@@ -239,6 +267,7 @@ function mockDoc(paragraphs: MockParagraph[]) {
           ...(p.styleId ? { styleId: p.styleId } : {}),
           ...(p.outlineLevel !== undefined ? { outlineLevel: p.outlineLevel } : {}),
         },
+        ...(p.listMarkerText !== undefined ? { listRendering: { markerText: p.listMarkerText } } : {}),
       },
       isText: false,
       descendants: (cb: (node: unknown, pos: number) => boolean | void) => {
@@ -431,5 +460,83 @@ describe('collectTocSources', () => {
 
     expect(sources.map((s) => s.text)).toEqual(['Part 3', 'Part 4']);
     expect(sources[1].sdBlockId).toMatch(/^para-auto-/);
+  });
+
+  describe('custom-style mapping (\\t)', () => {
+    // SD-3229: a TOC whose instruction relies solely on \t (and \f with no
+    // imported TC nodes) used to rebuild as the "No table of contents entries
+    // found." placeholder because collectTocSources ignored \t mappings.
+    it('collects paragraphs whose styleId matches a \\t custom-style mapping', () => {
+      const doc = mockDoc([
+        { sdBlockId: 'p1', text: 'Article 1', styleId: 'Heading1' },
+        { sdBlockId: 'p2', text: 'Article 2', styleId: 'Heading1' },
+        { sdBlockId: 'p3', text: 'Body', styleId: 'Normal' },
+      ]);
+
+      const config: TocSwitchConfig = {
+        source: { tcFieldIdentifier: 'C' },
+        display: { hyperlinks: true },
+        // styleName "Heading 1" (with space) must match styleId "Heading1"
+        preserved: { customStyles: [{ styleName: 'Heading 1', level: 1 }] },
+      };
+
+      const sources = collectTocSources(doc, config);
+      expect(sources.map((s) => s.text)).toEqual(['Article 1', 'Article 2']);
+      expect(sources.every((s) => s.kind === 'customStyle')).toBe(true);
+      expect(sources.every((s) => s.level === 1)).toBe(true);
+    });
+
+    it('prefers \\o heading collection over \\t when both match the same paragraph', () => {
+      const doc = mockDoc([{ sdBlockId: 'p1', text: 'Intro', styleId: 'Heading1' }]);
+
+      const config: TocSwitchConfig = {
+        source: { outlineLevels: { from: 1, to: 3 } },
+        display: {},
+        preserved: { customStyles: [{ styleName: 'Heading 1', level: 2 }] },
+      };
+
+      const sources = collectTocSources(doc, config);
+      expect(sources).toHaveLength(1);
+      expect(sources[0].kind).toBe('heading');
+      expect(sources[0].level).toBe(1);
+    });
+
+    it('exposes the rendered list marker so the builder can emit it as its own run', () => {
+      // SD-3229 PSA repro: Heading1 paragraphs only contain "BASIC INFORMATION"
+      // / "PROPERTY" in their text content. The "ARTICLE 1" / "ARTICLE 2"
+      // prefix is auto-numbered by the Heading1 style (lvlText "ARTICLE %1")
+      // and surfaces on the paragraph as listRendering.markerText after layout.
+      const doc = mockDoc([
+        { sdBlockId: 'p1', text: 'BASIC INFORMATION', styleId: 'Heading1', listMarkerText: 'ARTICLE 1' },
+        { sdBlockId: 'p2', text: 'PROPERTY', styleId: 'Heading1', listMarkerText: 'ARTICLE 2' },
+      ]);
+
+      const config: TocSwitchConfig = {
+        source: { tcFieldIdentifier: 'C' },
+        display: { hyperlinks: true },
+        preserved: { customStyles: [{ styleName: 'Heading 1', level: 1 }] },
+      };
+
+      const sources = collectTocSources(doc, config);
+      expect(sources.map((s) => s.text)).toEqual(['BASIC INFORMATION', 'PROPERTY']);
+      // Marker is reported alongside the segments so the builder can wrap it
+      // in its own run (matching Word's two-run TOC1 shape) instead of
+      // smuggling the prefix into the heading text.
+      expect(sources.map((s) => s.markerText)).toEqual(['ARTICLE 1', 'ARTICLE 2']);
+    });
+
+    it('respects an explicit \\o range when filtering \\t matches', () => {
+      const doc = mockDoc([{ sdBlockId: 'p1', text: 'Article 1', styleId: 'CustomHeading' }]);
+
+      const config: TocSwitchConfig = {
+        source: { outlineLevels: { from: 1, to: 1 } },
+        display: {},
+        preserved: { customStyles: [{ styleName: 'CustomHeading', level: 2 }] },
+      };
+
+      // Mapping says level 2 but \o range is 1-1 → excluded.
+      const sources = collectTocSources(doc, config);
+      expect(sources).toHaveLength(0);
+    });
   });
 });

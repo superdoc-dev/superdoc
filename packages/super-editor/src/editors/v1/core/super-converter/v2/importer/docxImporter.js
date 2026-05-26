@@ -30,6 +30,7 @@ import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
 import { endnoteReferenceHandlerEntity } from './endnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
+import { tableOfContentsEntryEntity } from './tableOfContentsEntryImporter.js';
 import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
 import { bibliographyHandlerEntity } from './bibliographyImporter.js';
 import { preProcessNodesForFldChar } from '../../field-references';
@@ -257,6 +258,7 @@ export const defaultNodeListHandler = () => {
     tabNodeEntityHandler,
     noBreakHyphenNodeEntityHandler,
     tableOfContentsHandlerEntity,
+    tableOfContentsEntryEntity,
     indexHandlerEntity,
     bibliographyHandlerEntity,
     indexEntryHandlerEntity,

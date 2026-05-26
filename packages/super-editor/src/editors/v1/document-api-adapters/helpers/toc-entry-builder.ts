@@ -27,6 +27,13 @@ export interface TocSource {
    * plain string is available from the field instruction.
    */
   segments?: TocTextSegment[];
+  /**
+   * Auto-numbered marker prefix (e.g. "ARTICLE 1") resolved from the source
+   * paragraph's `listRendering.markerText`. Emitted as a separate run before
+   * the heading text so Word's two-run TOC1 shape is preserved on rebuild.
+   * Undefined for paragraphs without auto-numbering and for TC entries.
+   */
+  markerText?: string;
   /** TOC level (1-based). */
   level: number;
   /**
@@ -36,9 +43,24 @@ export interface TocSource {
    */
   sdBlockId: string;
   /** Source type for diagnostic purposes. */
-  kind: 'heading' | 'appliedOutline' | 'tcField';
+  kind: 'heading' | 'appliedOutline' | 'tcField' | 'customStyle';
   /** Whether to omit the page number for this specific entry (TC \n switch). */
   omitPageNumber?: boolean;
+  /**
+   * Existing `_Toc...` bookmark name on the source paragraph (when present).
+   * Reused as the rebuilt entry's link anchor so the rebuild does not invent
+   * synthetic bookmark names for headings/sections that Word has already
+   * tagged. Undefined when no such bookmark exists yet — in that case the
+   * entry builder falls back to a deterministic synthetic name.
+   */
+  bodyAnchor?: string;
+  /**
+   * Marks captured from the body source for the *title* portion of a TC
+   * entry (the text after the embedded `\t`). Lets the rebuilt section row
+   * inherit the bold/underline that Word applies in Heading2 paragraphs.
+   * Undefined for non-TC sources.
+   */
+  titleMarks?: EntryTextMark[];
 }
 
 /** A run of source text with its surviving character marks. */
@@ -94,12 +116,95 @@ function sanitizeSourceMark(mark: EntryTextMark): EntryTextMark | null {
 // Source collection
 // ---------------------------------------------------------------------------
 
+/** Normalises a style name/styleId for case- and whitespace-insensitive comparison. */
+function normalizeStyleKey(value: string | undefined | null): string {
+  return value ? value.replace(/\s+/g, '').toLowerCase() : '';
+}
+
+/**
+ * Cleans up the text inside a TC entry. The field preprocessor concatenates
+ * each `<w:instrText>` run with a trailing space, which leaves stray gaps
+ * around tabs and before punctuation (`" Section 1.1 \tCertain Basic Terms . "`).
+ * Tabs are meaningful (they separate the section number from the title) so
+ * we keep them; spaces collapse to a single space and trailing space before
+ * a `.` or `:` is removed.
+ */
+function normalizeTcEntryText(text: string): string {
+  return text
+    .replace(/ +\t/g, '\t')
+    .replace(/\t +/g, '\t')
+    .replace(/ {2,}/g, ' ')
+    .replace(/ +([.,;:!?])/g, '$1')
+    .trim();
+}
+
+/**
+ * Pulls the rendered list-marker (e.g. "ARTICLE 1") from a paragraph's
+ * `listRendering` attribute. The layout pass populates this with the resolved
+ * marker text so we don't have to re-evaluate the numbering definition here.
+ */
+function readListMarker(node: ProseMirrorNode): string | undefined {
+  const lr = (node.attrs as Record<string, unknown> | undefined)?.listRendering as
+    | { markerText?: string | null }
+    | null
+    | undefined;
+  const marker = lr?.markerText;
+  if (!marker) return undefined;
+  const trimmed = marker.replace(/\s+$/, '');
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * Returns the last `_Toc...` bookmark name attached to the given paragraph
+ * (scanning its descendants). Word emits a new TOC bookmark for each TOC
+ * regeneration and tends to leave the older one in the document, so the
+ * *last* one is the anchor the current TOC's hyperlinks point at.
+ */
+function findBodyTocAnchor(node: ProseMirrorNode): string | undefined {
+  let last: string | undefined;
+  node.descendants((child) => {
+    if (child.type.name === 'bookmarkStart') {
+      const name = (child.attrs as Record<string, unknown> | undefined)?.name as string | undefined;
+      if (name?.startsWith('_Toc')) last = name;
+    }
+    return true;
+  });
+  return last;
+}
+
+/**
+ * Inspects a paragraph for the character marks that should flow onto the
+ * "title" portion of a TC entry (i.e. the text after the embedded `\t`).
+ * Word's TC field doesn't carry character formatting in its instruction
+ * string — it inherits from the body run that surrounds the title.
+ * We capture the marks of the longest non-empty bold/italic/underline text
+ * node to keep the title visually consistent with how Word renders it.
+ */
+function findTitleMarksOnParagraph(node: ProseMirrorNode): EntryTextMark[] | undefined {
+  let best: { length: number; marks: EntryTextMark[] } | undefined;
+  node.descendants((child) => {
+    if (!child.isText || !child.text) return true;
+    const captured: EntryTextMark[] = [];
+    for (const mark of child.marks ?? []) {
+      const raw: EntryTextMark = { type: mark.type?.name ?? '' };
+      if (mark.attrs && Object.keys(mark.attrs).length > 0) raw.attrs = { ...mark.attrs };
+      const sanitized = sanitizeSourceMark(raw);
+      if (sanitized) captured.push(sanitized);
+    }
+    if (!captured.some((m) => m.type === 'bold' || m.type === 'italic' || m.type === 'underline')) return true;
+    if (!best || child.text.length > best.length) best = { length: child.text.length, marks: captured };
+    return true;
+  });
+  return best?.marks;
+}
+
 /**
  * Collects all document nodes that qualify as TOC entry sources.
  *
  * Sources are collected based on the instruction's active switches:
  * - \o (outlineLevels): heading nodes whose level falls within the range
  * - \u (useAppliedOutlineLevel): paragraph nodes with explicit outlineLevel
+ * - \t (customStyles): paragraph nodes whose styleId matches a custom-style mapping
  * - \f (tcFieldIdentifier): TC field nodes with matching identifier
  * - \l (tcFieldLevels): TC field nodes within the level range
  *
@@ -112,8 +217,20 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
   const useApplied = useAppliedOutlineLevel ?? false;
   const collectTcFields = tcFieldIdentifier !== undefined || tcFieldLevels !== undefined;
 
+  // Build a lookup from normalized custom-style name → TOC level. Word's \t
+  // switch matches against the style *name*, but the PM document only stores
+  // styleId. For built-in styles the two differ only by whitespace (e.g.
+  // styleId "Heading1" vs name "Heading 1"), so normalizing both sides handles
+  // the common case without needing a styles-table lookup.
+  const customStyleLevels = new Map<string, number>();
+  for (const mapping of config.preserved?.customStyles ?? []) {
+    const key = normalizeStyleKey(mapping.styleName);
+    if (key && Number.isFinite(mapping.level)) customStyleLevels.set(key, mapping.level);
+  }
+
   // Track the current paragraph context for TC field collection
   let currentParagraphSdBlockId: string | undefined;
+  let currentParagraphNode: ProseMirrorNode | undefined;
 
   doc.descendants((node, pos) => {
     // Skip TOC nodes themselves — don't collect entries from within a TOC
@@ -129,6 +246,7 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
       const sdBlockId =
         ((attrs?.sdBlockId ?? attrs?.paraId) as string | undefined) ?? buildFallbackBlockNodeId('paragraph', pos);
       currentParagraphSdBlockId = sdBlockId;
+      currentParagraphNode = node;
       if (!sdBlockId) return true;
 
       const text = flattenText(node);
@@ -136,11 +254,23 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
       // (page-break spacers, empty stubs).
       if (text.trim().length === 0) return true;
 
+      const markerText = readListMarker(node);
+      const bodyAnchor = findBodyTocAnchor(node);
+      const segments = extractTextSegments(node);
+
       // \o switch — heading-style level
       if (outlineLevels) {
         const headingLevel = getHeadingLevel(styleId);
         if (headingLevel != null && headingLevel >= outlineLevels.from && headingLevel <= outlineLevels.to) {
-          sources.push({ text, segments: extractTextSegments(node), level: headingLevel, sdBlockId, kind: 'heading' });
+          sources.push({
+            text,
+            segments,
+            markerText,
+            level: headingLevel,
+            sdBlockId,
+            kind: 'heading',
+            bodyAnchor,
+          });
           return true; // descend so TC fields inside this paragraph are still collected
         }
       }
@@ -154,10 +284,33 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
           if (tocLevel >= effectiveLevels.from && tocLevel <= effectiveLevels.to) {
             sources.push({
               text,
-              segments: extractTextSegments(node),
+              segments,
+              markerText,
               level: tocLevel,
               sdBlockId,
               kind: 'appliedOutline',
+              bodyAnchor,
+            });
+            return true;
+          }
+        }
+      }
+
+      // \t switch — custom-style mapping. Falls through after \o/\u so a
+      // heading-styled paragraph is preferred as a heading source.
+      if (customStyleLevels.size > 0) {
+        const tocLevel = customStyleLevels.get(normalizeStyleKey(styleId));
+        if (tocLevel != null) {
+          const effectiveLevels = outlineLevels ?? { from: 1, to: 9 };
+          if (tocLevel >= effectiveLevels.from && tocLevel <= effectiveLevels.to) {
+            sources.push({
+              text,
+              segments,
+              markerText,
+              level: tocLevel,
+              sdBlockId,
+              kind: 'customStyle',
+              bodyAnchor,
             });
             return true;
           }
@@ -184,12 +337,20 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
         }
       }
 
+      // The TC instruction lives inside the containing paragraph; reuse its
+      // bookmark + character marks so the rebuilt entry retains the same
+      // anchor and bold/underline that Word renders for the section title.
+      const bodyAnchor = currentParagraphNode ? findBodyTocAnchor(currentParagraphNode) : undefined;
+      const titleMarks = currentParagraphNode ? findTitleMarksOnParagraph(currentParagraphNode) : undefined;
+
       sources.push({
-        text: tcConfig.text,
+        text: normalizeTcEntryText(tcConfig.text),
         level: tcConfig.level,
         sdBlockId: currentParagraphSdBlockId,
         kind: 'tcField',
         omitPageNumber: tcConfig.omitPageNumber || undefined,
+        bodyAnchor,
+        titleMarks,
       });
 
       return false;
@@ -313,6 +474,155 @@ function asRun(children: Array<Record<string, unknown>>): Record<string, unknown
   return { type: 'run', content: children };
 }
 
+/**
+ * Builds a `pageReference` PM node mirroring what the OOXML importer emits
+ * for `<w:fldChar>PAGEREF</w:fldChar>` fields — an atom with `instruction`
+ * + a single result run carrying the resolved page number. Word's TOC
+ * entries reference the heading via `PAGEREF <anchor> \h`; we reproduce
+ * the same shape so updating the TOC keeps the field intact instead of
+ * downgrading it to a plain text run with a `tocPageNumber` mark.
+ */
+function buildPageReferenceNode(
+  anchor: string,
+  resolvedPage: number | undefined,
+  linkMark: EntryTextMark | undefined,
+): Record<string, unknown> {
+  const pageText = resolvedPage != null ? String(resolvedPage) : '0';
+  const marksAsAttrs = linkMark ? [{ type: 'link', attrs: { anchor, history: true, href: `#${anchor}` } }] : [];
+  return {
+    type: 'pageReference',
+    attrs: {
+      marksAsAttrs,
+      instruction: `PAGEREF ${anchor} \\h`,
+    },
+    content: [asRun([{ type: 'text', text: pageText }])],
+  };
+}
+
+/** Builds the link mark JSON used for every text/tab node in a TOC entry. */
+function buildLinkMark(anchor: string): EntryTextMark {
+  return {
+    type: 'link',
+    attrs: {
+      anchor,
+      history: true,
+      href: `#${anchor}`,
+      rel: 'noopener noreferrer nofollow',
+    },
+  };
+}
+
+/** Filters source segments through the allow-list at build time. */
+function sanitizeSegment(segment: TocTextSegment): EntryTextMark[] {
+  return (segment.marks ?? []).map((m) => sanitizeSourceMark(m)).filter((m): m is EntryTextMark => m !== null);
+}
+
+/**
+ * Marks Word's "Update field" propagates from the body source onto a TC
+ * entry's title run — bold / italic / underline only. Per ECMA-376
+ * §17.16.5.68 the TOC{n} paragraph style supplies typography (font family,
+ * size, weight defaults); we deliberately drop `textStyle` and any colour
+ * marks so the heading's Times-New-Roman text doesn't override the TOC2
+ * style's theme font.
+ */
+const TC_TITLE_INHERITED_MARK_TYPES = new Set(['bold', 'italic', 'underline']);
+
+function filterTitleMarks(marks: EntryTextMark[] | undefined): EntryTextMark[] {
+  if (!marks) return [];
+  return marks
+    .map((m) => sanitizeSourceMark(m))
+    .filter((m): m is EntryTextMark => m !== null && TC_TITLE_INHERITED_MARK_TYPES.has(m.type));
+}
+
+/**
+ * Builds the inline content for a non-TC entry (heading / customStyle /
+ * appliedOutline). When the source has an auto-numbered marker we split it
+ * into a marker run + a title run so the rebuild matches the two-run shape
+ * Word emits ("ARTICLE 1" + " BASIC INFORMATION").
+ *
+ * Per ECMA-376 §17.16.5.68, Word builds these entries by combining the
+ * heading paragraph's *text* with the linked TOC{n} style's typography —
+ * the heading's own character marks (bold/underline/font from Heading1,
+ * etc.) are not carried into the TOC entry. We mirror that behaviour by
+ * emitting plain text runs and letting the rebuilt paragraph's `styleId`
+ * drive font/weight via the style cascade.
+ */
+function buildHeadingContent(source: TocSource, linkMark: EntryTextMark | undefined): Array<Record<string, unknown>> {
+  const segments: TocTextSegment[] =
+    source.segments && source.segments.length > 0 ? source.segments : [{ text: source.text || ' ' }];
+
+  const wrapTextNode = (text: string): Record<string, unknown> => {
+    const marks = linkMark ? [linkMark] : [];
+    const node: Record<string, unknown> = { type: 'text', text };
+    if (marks.length > 0) node.marks = marks;
+    return node;
+  };
+
+  const runs: Array<Record<string, unknown>> = [];
+
+  if (source.markerText) {
+    runs.push(asRun([wrapTextNode(source.markerText)]));
+
+    // Heading body text — prefixed by a space matching Word's separator
+    // between the numbered marker and the heading text in the TOC entry.
+    const headingNodes: Array<Record<string, unknown>> = [];
+    let first = true;
+    for (const segment of segments) {
+      const text = first ? ` ${segment.text}` : segment.text;
+      headingNodes.push(wrapTextNode(text || ' '));
+      first = false;
+    }
+    runs.push(asRun(headingNodes));
+  } else {
+    runs.push(asRun(segments.map((segment) => wrapTextNode(segment.text || ' '))));
+  }
+
+  return runs;
+}
+
+/**
+ * Builds the inline content for a TC-field entry. Word emits the TC's
+ * instruction text split by an embedded tab — the part before the tab is
+ * the section number ("Section 1.1") and the part after is the title
+ * ("Certain Basic Terms"). We mirror that with three runs: number / tab /
+ * title (with bold/underline if the surrounding Heading2 carried those
+ * marks).
+ */
+function buildTcContent(source: TocSource, linkMark: EntryTextMark | undefined): Array<Record<string, unknown>> {
+  const text = source.text ?? '';
+  const tabIndex = text.indexOf('\t');
+  const wrapTextNode = (value: string, marks: EntryTextMark[]): Record<string, unknown> => {
+    const allMarks = linkMark ? [...marks, linkMark] : [...marks];
+    const node: Record<string, unknown> = { type: 'text', text: value };
+    if (allMarks.length > 0) node.marks = allMarks;
+    return node;
+  };
+  const wrapTabNode = (): Record<string, unknown> => {
+    const marks = linkMark ? [linkMark] : [];
+    const node: Record<string, unknown> = { type: 'tab' };
+    if (marks.length > 0) node.marks = marks;
+    return node;
+  };
+
+  if (tabIndex < 0) {
+    // No tab inside the TC instruction — single text run, no split.
+    return [asRun([wrapTextNode(text || ' ', [])])];
+  }
+
+  const numberPart = text.slice(0, tabIndex);
+  const titlePart = text.slice(tabIndex + 1);
+  // Inherit only bold/italic/underline from the Heading2 body — letting the
+  // body's `textStyle` (Times New Roman, etc.) flow into the TOC2 entry
+  // overrides whatever font the TOC2 paragraph style would otherwise provide.
+  const titleMarks = filterTitleMarks(source.titleMarks);
+
+  const runs: Array<Record<string, unknown>> = [];
+  runs.push(asRun([wrapTextNode(numberPart || ' ', [])]));
+  runs.push(asRun([wrapTabNode()]));
+  runs.push(asRun([wrapTextNode(titlePart || ' ', titleMarks)]));
+  return runs;
+}
+
 function buildEntryParagraph(
   source: TocSource,
   config: TocSwitchConfig,
@@ -320,37 +630,14 @@ function buildEntryParagraph(
 ): EntryParagraphJson {
   const { display } = config;
 
-  // Title text. Character-level marks (bold, italic, color, font…) are
-  // carried over from the *source heading* — never sampled from the existing
-  // TOC entry, which would leak entry-1's direct formatting onto every
-  // rebuilt entry (Word rebuilds entries from the linked TOC1, TOC2, …
-  // paragraph styles, plus character formatting from the source).
-  // Each text node is wrapped in a `run` so wrapTextInRunsPlugin does not
-  // re-wrap and merge the paragraph style's run properties via addToSet.
-  const linkMark: EntryTextMark | undefined = display.hyperlinks
-    ? { type: 'link', attrs: { anchor: generateTocBookmarkName(source.sdBlockId), rId: null, history: true } }
-    : undefined;
+  // Reuse an existing `_Toc...` body bookmark when present so navigation and
+  // round-trips with Word stay aligned. Fall back to a deterministic synthetic
+  // name only when the source paragraph has no TOC bookmark yet.
+  const anchor = source.bodyAnchor ?? generateTocBookmarkName(source.sdBlockId);
+  const linkMark: EntryTextMark | undefined = display.hyperlinks ? buildLinkMark(anchor) : undefined;
 
-  const segments: TocTextSegment[] =
-    source.segments && source.segments.length > 0 ? source.segments : [{ text: source.text || ' ' }];
-
-  const titleTextNodes: Array<Record<string, unknown>> = segments.map((segment) => {
-    // Re-apply the allowlist at build time so callers passing hand-built
-    // segments cannot smuggle in disallowed marks (font-size, link, comments,
-    // track-changes, etc.). collectTocSources also sanitizes, but the
-    // builder is the contract boundary that users of buildTocEntryParagraphs
-    // hit directly — defending here keeps the rule in one place.
-    const sourceMarks = (segment.marks ?? [])
-      .map((m) => sanitizeSourceMark(m))
-      .filter((m): m is EntryTextMark => m !== null);
-    const marks: EntryTextMark[] = [...sourceMarks];
-    if (linkMark) marks.push(linkMark);
-    const node: Record<string, unknown> = { type: 'text', text: segment.text || ' ' };
-    if (marks.length > 0) node.marks = marks;
-    return node;
-  });
-
-  const content: Array<Record<string, unknown>> = [asRun(titleTextNodes)];
+  const content: Array<Record<string, unknown>> =
+    source.kind === 'tcField' ? buildTcContent(source, linkMark) : buildHeadingContent(source, linkMark);
 
   // Determine whether to omit page number for this entry.
   const omitRange = display.omitPageNumberLevels;
@@ -359,22 +646,17 @@ function buildEntryParagraph(
   );
 
   if (!omitPageNumber) {
-    // Separator: custom \p text or default tab.
-    content.push(asRun([display.separator ? { type: 'text', text: display.separator } : { type: 'tab' }]));
+    // Tab separator before the page number — carries the link mark like the
+    // surrounding text runs so the entire entry is one hyperlink target.
+    const tabMarks = linkMark ? [linkMark] : [];
+    const tabNode: Record<string, unknown> = { type: 'tab' };
+    if (tabMarks.length > 0) tabNode.marks = tabMarks;
+    content.push(asRun([tabNode]));
 
-    // Page number — resolved from the page map when available; '0' placeholder
-    // otherwise (e.g. freshly-pasted heading whose synthetic id hasn't been
-    // seen by a layout cycle yet).
+    // Real PAGEREF field, matching what the importer materializes for the
+    // page-number column of a TOC entry.
     const resolvedPage = options.pageMap?.get(source.sdBlockId);
-    content.push(
-      asRun([
-        {
-          type: 'text',
-          text: resolvedPage != null ? String(resolvedPage) : '0',
-          marks: [{ type: 'tocPageNumber' }],
-        },
-      ]),
-    );
+    content.push(buildPageReferenceNode(anchor, resolvedPage, linkMark));
   }
 
   const paragraphProperties: Record<string, unknown> = { styleId: `TOC${source.level}` };
@@ -387,7 +669,11 @@ function buildEntryParagraph(
     const leader =
       display.tabLeader === 'none' ? undefined : (display.tabLeader && TAB_LEADER_MAP[display.tabLeader]) || 'dot';
     const pos = options.tabPos ?? DEFAULT_RIGHT_TAB_POS;
-    paragraphProperties.tabStops = [{ tab: { tabType: 'right', pos, ...(leader ? { leader } : {}) } }];
+    const rightStop: Record<string, unknown> = { tab: { tabType: 'right', pos, ...(leader ? { leader } : {}) } };
+    // TOC2+ entries in Word also carry a left tab at 1440 twips so the title
+    // column lines up. TOC1 doesn't (the article number sits at the margin).
+    paragraphProperties.tabStops =
+      source.level >= 2 ? [{ tab: { tabType: 'left', pos: 1440 } }, rightStop] : [rightStop];
   }
 
   return {

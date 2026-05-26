@@ -76,11 +76,20 @@ function encodeBlockId(input: string): string {
  * - All required bookmarks already exist
  * - The schema lacks bookmark node types (headless/test environments)
  */
-export function syncTocBookmarks(editor: Editor, sources: Array<{ sdBlockId: string }>): void {
+export function syncTocBookmarks(editor: Editor, sources: Array<{ sdBlockId: string; bodyAnchor?: string }>): void {
   const { schema, doc } = editor.state;
   if (!schema.nodes.bookmarkStart || !schema.nodes.bookmarkEnd) return;
 
-  const needed = deduplicateByBlockId(sources);
+  // SD-3229: when a source already has a `_Toc...` bookmark in the body
+  // (preserved by the importer), the rebuilder reuses that name as the
+  // entry's anchor. Generating a *new* synthetic bookmark on top would
+  // litter the document with duplicate `_Toc<uuid>` markers next to the
+  // original `_Toc230123326`, etc. Drop sources whose anchor is already
+  // satisfied by an existing body bookmark.
+  const sourcesNeedingSync = sources.filter((s) => !s.bodyAnchor);
+  if (sourcesNeedingSync.length === 0) return;
+
+  const needed = deduplicateByBlockId(sourcesNeedingSync);
   const existing = collectExistingTocBookmarkNames(doc);
   const missing = needed.filter((t) => !existing.has(t.bookmarkName));
   if (missing.length === 0) return;

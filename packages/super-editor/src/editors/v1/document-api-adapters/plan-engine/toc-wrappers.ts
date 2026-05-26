@@ -669,7 +669,10 @@ function tocUpdatePageNumbers(editor: Editor, input: TocUpdateInput, options?: M
 
 /**
  * Walks the TOC node's children and produces updated paragraph JSON where
- * tocPageNumber-marked text runs are replaced with resolved page numbers.
+ * `pageReference` nodes have their resolved page number refreshed from the
+ * layout's page map. Also still recognises the legacy `tocPageNumber` mark
+ * for backwards compatibility with TOCs rebuilt by an older code path that
+ * predates the pageReference rewrite (SD-3229).
  */
 function buildPageNumberUpdatedContent(
   tocNode: ProseMirrorNode,
@@ -691,27 +694,39 @@ function buildPageNumberUpdatedContent(
 
     let paragraphChanged = false;
 
-    // Walk recursively — the rebuilt paragraph wraps its runs in `run` nodes,
-    // so the tocPageNumber mark sits one level below the paragraph's direct
-    // children. A flat scan over `paragraph.content` would miss it and fall
-    // through to PAGE_NUMBERS_NOT_MATERIALIZED.
+    const replacePageNumberText = (node: Record<string, unknown>): Record<string, unknown> => {
+      if (!tocSourceId) return node;
+      const pageNumber = pageMap.get(tocSourceId);
+      const newText = pageNumber !== undefined ? String(pageNumber) : '??';
+      if (node.text !== newText) {
+        paragraphChanged = true;
+        return { ...node, text: newText };
+      }
+      return node;
+    };
+
     const visit = (node: Record<string, unknown>): Record<string, unknown> => {
+      // `pageReference` — the importer-compatible shape we emit since SD-3229.
+      // The resolved page number is the first text descendant inside the field.
+      if (node.type === 'pageReference') {
+        hasPageNumberMarks = true;
+        const inner = node.content as Array<Record<string, unknown>> | undefined;
+        if (!Array.isArray(inner) || inner.length === 0) return node;
+        const updatedInner = inner.map((c) => visit(c));
+        return updatedInner.some((next, idx) => next !== inner[idx]) ? { ...node, content: updatedInner } : node;
+      }
+
       const marks = node.marks as Array<{ type: string }> | undefined;
       const hasTocPageNumberMark = marks?.some((m) => m.type === 'tocPageNumber');
-
       if (hasTocPageNumberMark) {
         hasPageNumberMarks = true;
+        return replacePageNumberText(node);
+      }
 
-        if (!tocSourceId) return node;
-
-        const pageNumber = pageMap.get(tocSourceId);
-        const newText = pageNumber !== undefined ? String(pageNumber) : '??';
-
-        if (node.text !== newText) {
-          paragraphChanged = true;
-          return { ...node, text: newText };
-        }
-        return node;
+      // Inside a `pageReference`, the text descendant carries the page number
+      // without any mark — replace it once we're in that subtree.
+      if (node.type === 'text') {
+        return replacePageNumberText(node);
       }
 
       const nested = node.content as Array<Record<string, unknown>> | undefined;
@@ -721,7 +736,23 @@ function buildPageNumberUpdatedContent(
       return replaced ? { ...node, content: visited } : node;
     };
 
-    const updatedContentArray = (childJson.content ?? []).map(visit);
+    // Only enter a `pageReference` subtree from the top-level walk — a plain
+    // text node sitting in a title run must not be rewritten as a page number.
+    const visitTop = (node: Record<string, unknown>): Record<string, unknown> => {
+      if (node.type === 'pageReference') return visit(node);
+      const marks = node.marks as Array<{ type: string }> | undefined;
+      if (marks?.some((m) => m.type === 'tocPageNumber')) {
+        hasPageNumberMarks = true;
+        return replacePageNumberText(node);
+      }
+      const nested = node.content as Array<Record<string, unknown>> | undefined;
+      if (!Array.isArray(nested) || nested.length === 0) return node;
+      const visited = nested.map(visitTop);
+      const replaced = visited.some((next, idx) => next !== nested[idx]);
+      return replaced ? { ...node, content: visited } : node;
+    };
+
+    const updatedContentArray = (childJson.content ?? []).map(visitTop);
 
     if (paragraphChanged) {
       anyChanged = true;

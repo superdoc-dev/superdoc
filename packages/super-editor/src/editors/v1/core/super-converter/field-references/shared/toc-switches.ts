@@ -65,8 +65,14 @@ export const DEFAULT_TOC_INSTRUCTION = 'TOC \\o "1-3" \\u \\h \\z';
 // Parser
 // ---------------------------------------------------------------------------
 
-/** Regex to match a switch and its optional quoted argument. */
-const SWITCH_PATTERN = /\\([a-z])\s*(?:"([^"]*)")?/gi;
+/**
+ * Regex to match a switch and its optional argument. Word emits both quoted
+ * (`\t "Heading 1,1"`) and unquoted (`\f C`) forms — capture both so switches
+ * like `\f C` survive parsing instead of being read as bare flags.
+ *
+ * Group 2 = quoted arg, group 3 = unquoted arg.
+ */
+const SWITCH_PATTERN = /\\([a-z])(?:\s*(?:"([^"]*)"|([^\s\\]+)))?/gi;
 
 function parseLevelRange(value: string): { from: number; to: number } | undefined {
   const match = value.match(/^(\d+)-(\d+)$/);
@@ -132,7 +138,10 @@ export function parseTocInstruction(instruction: string): TocSwitchConfig {
   SWITCH_PATTERN.lastIndex = 0;
   while ((match = SWITCH_PATTERN.exec(instruction)) !== null) {
     const switchChar = match[1].toLowerCase();
-    const rawArg = match[2];
+    // Group 2 = quoted arg, group 3 = unquoted arg. Track which form was used
+    // so `\p ""` (an explicit empty arg) stays distinguishable from `\p`
+    // (the switch with no arg at all).
+    const rawArg = match[2] !== undefined ? match[2] : match[3];
     const arg = rawArg ?? '';
 
     switch (switchChar) {

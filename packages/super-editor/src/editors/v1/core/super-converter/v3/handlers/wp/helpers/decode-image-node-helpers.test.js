@@ -179,6 +179,25 @@ describe('translateImageNode', () => {
     expect(baseParams.media[`word/${baseParams.relationships[0].attributes.Target}`]).toBe(src);
   });
 
+  it('should not add duplicate relationships for repeated data URI image rIds', () => {
+    const src = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    baseParams.node.attrs = {
+      src,
+      rId: 'rIdExisting',
+      alt: 'Signature Example',
+      size: { width: 200, height: 50 },
+    };
+
+    translateImageNode(baseParams);
+    translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(1);
+    expect(baseParams.relationships[0].attributes).toMatchObject({
+      Id: 'rIdExisting',
+      Target: expect.stringMatching(/^media\/.+\.svg$/),
+    });
+  });
+
   it('should register raster data URI image media when rId is missing', () => {
     const src = 'data:image/png;base64,iVBORw0KGgo=';
     baseParams.node.attrs = {

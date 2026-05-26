@@ -46,6 +46,14 @@ function createMediaTargetForDataUri(params, src) {
   return relationshipTarget;
 }
 
+function getMediaTargetForImageSrc(params, src) {
+  return src?.startsWith('data:') ? createMediaTargetForDataUri(params, src) : src?.split('word/')[1];
+}
+
+function fallbackForMissingMediaTarget(params) {
+  return params.node.type === 'fieldAnnotation' ? prepareTextAnnotation(params) : null;
+}
+
 /**
  * Resolve the hyperlink relationship rId for an image, if applicable.
  * Called once so that both wp:docPr and pic:cNvPr share the same rId.
@@ -254,7 +262,9 @@ export const translateImageNode = (params) => {
   }
 
   if (imageId) {
-    const path = src?.startsWith('data:') ? createMediaTargetForDataUri(params, src) : src?.split('word/')[1];
+    const path = getMediaTargetForImageSrc(params, src);
+    if (src?.startsWith('data:') && !path) return fallbackForMissingMediaTarget(params);
+
     const relationships = params.isHeaderFooter ? params.existingRelationships : getDocumentRelationships(params);
     const existingRelation = findImageRelationship(relationships, {
       id: imageId,
@@ -267,7 +277,9 @@ export const translateImageNode = (params) => {
       addImageRelationshipForId(params, imageId, path);
     }
   } else if (params.node.type === 'image' && !imageId) {
-    const path = src?.startsWith('data:') ? createMediaTargetForDataUri(params, src) : src?.split('word/')[1];
+    const path = getMediaTargetForImageSrc(params, src);
+    if (src?.startsWith('data:') && !path) return fallbackForMissingMediaTarget(params);
+
     const existingRelation = findImageRelationship(params.relationships, { target: path });
     imageId = existingRelation?.attributes?.Id ?? addNewImageRelationship(params, path);
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {

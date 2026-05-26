@@ -179,6 +179,54 @@ describe('translateImageNode', () => {
     expect(baseParams.media[`word/${baseParams.relationships[0].attributes.Target}`]).toBe(src);
   });
 
+  it('should skip data URI image export when no media target can be created', () => {
+    baseParams.node.attrs = {
+      src: 'data:,payload',
+      size: { width: 200, height: 50 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(result).toBeNull();
+    expect(baseParams.relationships).toHaveLength(0);
+    expect(baseParams.media).toEqual({});
+  });
+
+  it('should not add an existing image rId relationship when data URI media target is invalid', () => {
+    baseParams.node.attrs = {
+      src: 'data:,payload',
+      rId: 'rIdInvalidData',
+      size: { width: 200, height: 50 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(result).toBeNull();
+    expect(baseParams.relationships).toHaveLength(0);
+    expect(baseParams.media).toEqual({});
+  });
+
+  it('should fall back to text for fieldAnnotation with rId and invalid data URI media target', () => {
+    const params = {
+      ...baseParams,
+      node: {
+        type: 'fieldAnnotation',
+        attrs: {
+          src: 'data:,payload',
+          rId: 'rIdInvalidData',
+          size: { width: 200, height: 50 },
+        },
+      },
+    };
+
+    const result = translateImageNode(params);
+
+    expect(annotationHelpers.prepareTextAnnotation).toHaveBeenCalledWith(params);
+    expect(result).toEqual({ type: 'text', text: 'annotation' });
+    expect(params.relationships).toHaveLength(0);
+    expect(params.media).toEqual({});
+  });
+
   it('should use clamped fallback size (1 EMU) when attrs.size is empty', () => {
     baseParams.node.attrs.size = {};
 

@@ -272,34 +272,14 @@ export const translateImageNode = (params) => {
     if (w && h) size = { w, h };
   }
 
-  if (imageId) {
+  if (imageId || params.node.type === 'image') {
     const path = getMediaTargetForImageSrc(params, src);
     if (!path) return fallbackForMissingMediaTarget(params);
 
-    const relationships = [
-      ...(params.relationships || []),
-      ...(params.isHeaderFooter ? params.existingRelationships || [] : getDocumentRelationships(params)),
-    ];
-    const existingRelation = findImageRelationship(relationships, {
+    imageId = resolveImageRelationshipId(params, {
       id: imageId,
-      target: path,
+      path,
     });
-
-    if (existingRelation) {
-      imageId = existingRelation.attributes.Id;
-    } else {
-      addImageRelationshipForId(params, imageId, path);
-    }
-  } else if (params.node.type === 'image' && !imageId) {
-    const path = getMediaTargetForImageSrc(params, src);
-    if (!path) return fallbackForMissingMediaTarget(params);
-
-    const relationships = [
-      ...(params.relationships || []),
-      ...(params.isHeaderFooter ? params.existingRelationships || [] : getDocumentRelationships(params)),
-    ];
-    const existingRelation = findImageRelationship(relationships, { target: path });
-    imageId = existingRelation?.attributes?.Id ?? addNewImageRelationship(params, path);
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
     // We already handled the no-type case above; here the type IS valid.
     const metadata = getDataUriMetadata(src);
@@ -580,12 +560,31 @@ function addImageRelationshipForId(params, id, imagePath) {
     },
   };
   params.relationships.push(newRel);
+  return id;
 }
 
 function getDocumentRelationships(params) {
   const docx = params.converter?.convertedXml || {};
   const rels = docx['word/_rels/document.xml.rels'];
   return rels?.elements?.find((el) => el.name === 'Relationships')?.elements ?? [];
+}
+
+function getImageRelationshipLookup(params) {
+  return [
+    ...(params.relationships || []),
+    ...(params.isHeaderFooter ? params.existingRelationships || [] : getDocumentRelationships(params)),
+  ];
+}
+
+function resolveImageRelationshipId(params, { id, path }) {
+  const existingRelation = findImageRelationship(getImageRelationshipLookup(params), {
+    ...(id ? { id } : {}),
+    target: path,
+  });
+
+  if (existingRelation) return existingRelation.attributes.Id;
+  if (id) return addImageRelationshipForId(params, id, path);
+  return addNewImageRelationship(params, path);
 }
 
 function findImageRelationship(relationships = [], { id, target }) {

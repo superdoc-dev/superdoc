@@ -3,30 +3,23 @@ import {
   getDataUriMetadata,
   getFallbackImageNameFromDataUri,
   sanitizeDocxMediaName,
-  tryDecodeDataUriText,
 } from '@converter/helpers/mediaHelpers.js';
 import { prepareTextAnnotation } from '@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js';
 import { wrapTextInRun } from '@converter/exporter.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
 import { readImageDimensionsFromDataUri } from '@converter/image-dimensions.js';
 import { simpleStringHash } from '@core/utilities/hash.js';
-import { IMAGE_DATA_URL_MIME_TYPES } from '@superdoc/url-validation';
+import { isValidImageDataUrl } from '@superdoc/url-validation';
 
 const DECORATIVE_EXT_URI = '{C183D7F6-B498-43B3-948B-1728B52AA6E4}';
 const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/decorative';
 const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const IMAGE_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
-function isExportableDataUriMetadata(metadata) {
-  if (!metadata?.hasPayloadSeparator || !IMAGE_DATA_URL_MIME_TYPES.includes(metadata.mimeType)) return false;
-  if (metadata.isBase64) return true;
-  if (metadata.mimeType !== 'image/svg+xml') return false;
-
-  return tryDecodeDataUriText(metadata.payload) != null;
-}
 
 function createMediaTargetForDataUri(params, src) {
+  if (!isValidImageDataUrl(src)) return null;
+
   const metadata = getDataUriMetadata(src);
-  if (!isExportableDataUriMetadata(metadata)) return null;
 
   const extension = metadata.extension;
   if (!extension) return null;
@@ -282,8 +275,9 @@ export const translateImageNode = (params) => {
     });
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
     // We already handled the no-type case above; here the type IS valid.
+    if (!isValidImageDataUrl(src)) return prepareTextAnnotation(params);
+
     const metadata = getDataUriMetadata(src);
-    if (!isExportableDataUriMetadata(metadata)) return prepareTextAnnotation(params);
 
     const type = metadata.extension;
 

@@ -3,10 +3,10 @@ import { Decoration, DecorationSet } from 'prosemirror-view';
 import { ReplaceStep, ReplaceAroundStep } from 'prosemirror-transform';
 import { base64ToFile, getBase64FileMeta } from './handleBase64';
 import { urlToFile, validateUrlAccessibility } from './handleUrl';
-import { checkAndProcessImage, uploadAndInsertImage } from './startImageUpload';
+import { checkAndProcessImage, MAX_IMAGE_FILE_BYTES, uploadAndInsertImage } from './startImageUpload';
 import { buildMediaPath, ensureUniqueFileName } from './fileNameUtils.js';
 import { addImageRelationship } from '@extensions/image/imageHelpers/startImageUpload.js';
-import { isRelativeUrl, isValidImageDataUrl, MAX_IMAGE_DATA_URL_LENGTH } from '@superdoc/url-validation';
+import { getDataUriMetadata, isRelativeUrl, isValidImageDataUrl, tryDecodeDataUriText } from '@superdoc/url-validation';
 const key = new PluginKey('ImageRegistration');
 
 /**
@@ -195,7 +195,28 @@ const hasFinitePositiveSize = (size) =>
 
 const isSvgFile = (file) => file?.type === 'image/svg+xml';
 
-const shouldRegisterInPlace = (node) => isValidImageDataUrl(node.attrs?.src) && hasFinitePositiveSize(node.attrs?.size);
+const getBase64PayloadByteLength = (payload = '') => {
+  const normalized = payload.replace(/\s/g, '');
+  if (!normalized) return 0;
+  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0;
+  return Math.floor((normalized.length * 3) / 4) - padding;
+};
+
+const getDataUriDecodedByteLength = (src) => {
+  const metadata = getDataUriMetadata(src);
+  if (!metadata?.hasPayloadSeparator) return null;
+
+  if (metadata.isBase64) return getBase64PayloadByteLength(metadata.payload);
+
+  const decoded = tryDecodeDataUriText(metadata.payload);
+  if (decoded == null) return null;
+  return new globalThis.TextEncoder().encode(decoded).byteLength;
+};
+
+const shouldRegisterInPlace = (node) =>
+  isValidImageDataUrl(node.attrs?.src) &&
+  hasFinitePositiveSize(node.attrs?.size) &&
+  getDataUriDecodedByteLength(node.attrs.src) <= MAX_IMAGE_FILE_BYTES;
 
 const getOrInitMediaStore = (editor) => {
   if (!editor?.storage?.image?.media) {
@@ -513,7 +534,7 @@ const registerImages = async (foundImages, editor, view) => {
     }
 
     try {
-      if (isSvgFile(file) && hasFinitePositiveSize(image.node.attrs?.size) && file.size <= MAX_IMAGE_DATA_URL_LENGTH) {
+      if (isSvgFile(file) && hasFinitePositiveSize(image.node.attrs?.size) && file.size <= MAX_IMAGE_FILE_BYTES) {
         await uploadAndInsertImage({ editor, view, file, size: image.node.attrs.size, id });
       } else {
         const process = await checkAndProcessImage({

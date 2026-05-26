@@ -54,6 +54,7 @@ vi.mock('./handleUrl', () => ({
 }));
 
 vi.mock('./startImageUpload', () => ({
+  MAX_IMAGE_FILE_BYTES: 5 * 1024 * 1024,
   checkAndProcessImage: vi.fn(),
   uploadAndInsertImage: vi.fn(),
   addImageRelationship: vi.fn(() => 'rId99'),
@@ -180,6 +181,30 @@ describe('handleBrowserPath', () => {
     });
   });
 
+  it('runs oversized sized raster data URI images through image validation', async () => {
+    const oversizedRasterDataUri = `data:image/png;base64,${'A'.repeat(7 * 1024 * 1024)}`;
+    const oversizedRasterFile = new File(['x'.repeat(5 * 1024 * 1024 + 1)], 'too-large.png', {
+      type: 'image/png',
+    });
+    const imageNode = createImageNode({
+      src: oversizedRasterDataUri,
+      size: { width: 20, height: 10 },
+    });
+    base64ToFile.mockReturnValueOnce(oversizedRasterFile);
+    checkAndProcessImage.mockResolvedValueOnce({ file: null, size: { width: 0, height: 0 } });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+    await flushPromises();
+
+    expect(Decoration.widget).toHaveBeenCalled();
+    expect(tr.delete).toHaveBeenCalledWith(20, 21);
+    expect(checkAndProcessImage).toHaveBeenCalledWith({
+      getMaxContentSize: expect.any(Function),
+      file: oversizedRasterFile,
+    });
+    expect(uploadAndInsertImage).not.toHaveBeenCalled();
+  });
+
   it('deletes non-relative image nodes in descending position order', () => {
     const foundImages = [
       { node: createImageNode({ src: 'https://a.com/1.png' }), pos: 5, id: {} },
@@ -268,9 +293,9 @@ describe('handleBrowserPath', () => {
     expect(tr.delete).toHaveBeenCalledWith(20, 21);
   });
 
-  it('runs oversized async SVG files through image validation before upload', async () => {
-    const oversizedSvgDataUri = `data:image/svg+xml;base64,${'A'.repeat(10 * 1024 * 1024 + 1)}`;
-    const oversizedSvgFile = new File(['x'.repeat(10 * 1024 * 1024 + 1)], 'too-large.svg', {
+  it('runs SVG files over the upload byte budget through image validation before upload', async () => {
+    const oversizedSvgDataUri = `data:image/svg+xml;base64,${'A'.repeat(7 * 1024 * 1024)}`;
+    const oversizedSvgFile = new File(['x'.repeat(5 * 1024 * 1024 + 1)], 'too-large.svg', {
       type: 'image/svg+xml',
     });
     const imageNode = createImageNode({

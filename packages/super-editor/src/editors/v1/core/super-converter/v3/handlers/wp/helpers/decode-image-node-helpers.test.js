@@ -292,6 +292,20 @@ describe('translateImageNode', () => {
     expect(baseParams.media).toEqual({});
   });
 
+  it('should not export malformed base64 image data URI media', () => {
+    baseParams.node.attrs = {
+      src: 'data:image/png;base64,%%%',
+      alt: 'Malformed Image',
+      size: { width: 20, height: 10 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(result).toBeNull();
+    expect(baseParams.relationships).toHaveLength(0);
+    expect(baseParams.media).toEqual({});
+  });
+
   it('should not export non-image data URI media', () => {
     baseParams.node.attrs = {
       src: 'data:text/html,%3Cscript%3Ealert(1)%3C%2Fscript%3E',

@@ -129,6 +129,23 @@ export const tryDecodeDataUriText = (payload = '') => {
   }
 };
 
+const BASE64_PAYLOAD_PATTERN = /^[A-Za-z0-9+/]+$/;
+
+const isValidBase64Payload = (payload = '') => {
+  const normalizedPayload = payload.replace(/\s/g, '');
+  if (!normalizedPayload || normalizedPayload.length % 4 === 1) return false;
+
+  const padding = normalizedPayload.match(/=+$/)?.[0] || '';
+  if (padding.length > 2) return false;
+
+  const body = padding ? normalizedPayload.slice(0, -padding.length) : normalizedPayload;
+  if (!body || !BASE64_PAYLOAD_PATTERN.test(body) || body.includes('=')) return false;
+  if (!padding) return true;
+  if (normalizedPayload.length % 4 !== 0) return false;
+
+  return body.length % 4 === (padding.length === 1 ? 3 : 2);
+};
+
 /**
  * Validate an image data URL for rendering and export.
  *
@@ -147,7 +164,7 @@ export const isValidImageDataUrl = (src) => {
 
   const metadata = getDataUriMetadata(src);
   if (!metadata?.hasPayloadSeparator || !IMAGE_DATA_URL_MIME_TYPES.includes(metadata.mimeType)) return false;
-  if (metadata.isBase64) return true;
+  if (metadata.isBase64) return isValidBase64Payload(metadata.payload);
   if (metadata.mimeType !== 'image/svg+xml') return false;
 
   return tryDecodeDataUriText(metadata.payload) != null;

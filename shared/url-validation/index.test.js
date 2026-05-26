@@ -37,6 +37,16 @@ describe('url-validation', () => {
       expect(isValidImageDataUrl('data:image/svg+xml,%')).toBe(false);
     });
 
+    it('rejects malformed base64 image data URL payloads before export', () => {
+      expect(isValidImageDataUrl('data:image/png;base64,%%%')).toBe(false);
+      expect(isValidImageDataUrl('data:image/png;base64,a')).toBe(false);
+      expect(isValidImageDataUrl('data:image/png;base64,')).toBe(false);
+      expect(isValidImageDataUrl('data:image/png;base64,ab=c')).toBe(false);
+      expect(isValidImageDataUrl('data:image/png;base64,==')).toBe(false);
+      expect(isValidImageDataUrl('data:image/png;base64,abc=')).toBe(true);
+      expect(isValidImageDataUrl('data:image/png;base64,YWJjZA==')).toBe(true);
+    });
+
     it('accepts image data URLs at the maximum length and rejects one byte over', () => {
       const prefix = 'data:image/svg+xml,';
       const payload = 'a'.repeat(MAX_IMAGE_DATA_URL_LENGTH - prefix.length);

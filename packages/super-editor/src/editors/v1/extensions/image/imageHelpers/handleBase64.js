@@ -1,4 +1,5 @@
 // @ts-check
+import { getDataUriMetadata } from '@converter/helpers/mediaHelpers.js';
 import { simpleStringHash } from '@core/utilities/hash.js';
 
 const DEFAULT_MIME_TYPE = 'application/octet-stream';
@@ -38,33 +39,20 @@ const binaryStringToBytes = (binaryString) => {
   return bytes;
 };
 
-const splitDataUri = (dataUri) => {
-  const separatorIndex = dataUri.indexOf(',');
-  if (separatorIndex === -1) {
-    return { meta: dataUri, payload: '' };
-  }
-
-  return {
-    meta: dataUri.slice(0, separatorIndex),
-    payload: dataUri.slice(separatorIndex + 1),
-  };
-};
-
 /**
  * Extract metadata from a data URI string.
  * @param {string} dataUri - The data URI string.
  * @returns {Object} An object containing mimeType, binaryString, and filename.
  */
 const extractBase64Meta = (dataUri) => {
-  const { meta = '', payload = '' } = splitDataUri(dataUri);
-  const metaParts = meta.startsWith('data:') ? meta.slice(5).split(';') : [];
-  const rawMimeType = metaParts[0] || '';
+  const metadata = getDataUriMetadata(dataUri);
+  const rawMimeType = metadata?.rawMimeType || '';
   const mimeType = rawMimeType || DEFAULT_MIME_TYPE;
-  const isBase64 = metaParts.some((part) => part.toLowerCase() === 'base64');
+  const isBase64 = Boolean(metadata?.isBase64);
+  const payload = metadata?.payload || '';
   const binaryString = isBase64 ? decodeBase64ToBinaryString(payload) : decodeDataUriText(payload);
   const hash = simpleStringHash(binaryString);
-  const normalizedMimeType = mimeType.toLowerCase();
-  const extension = normalizedMimeType === 'image/svg+xml' ? 'svg' : normalizedMimeType.split('/')[1] || 'bin';
+  const extension = metadata?.extension || 'bin';
   const filename = `image-${hash}.${extension}`;
 
   return { mimeType, binaryString, filename, isBase64 };

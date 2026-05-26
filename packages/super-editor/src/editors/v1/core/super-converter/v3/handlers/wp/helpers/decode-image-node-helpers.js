@@ -1,5 +1,9 @@
 import { emuToPixels, pixelsToEmu, degreesToRot } from '@converter/helpers.js';
-import { getFallbackImageNameFromDataUri, sanitizeDocxMediaName } from '@converter/helpers/mediaHelpers.js';
+import {
+  getDataUriMetadata,
+  getFallbackImageNameFromDataUri,
+  sanitizeDocxMediaName,
+} from '@converter/helpers/mediaHelpers.js';
 import { prepareTextAnnotation } from '@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js';
 import { wrapTextInRun } from '@converter/exporter.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
@@ -11,19 +15,8 @@ const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/d
 const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const IMAGE_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 
-function getImageExtensionFromDataUri(src) {
-  if (typeof src !== 'string' || !src.startsWith('data:')) return null;
-
-  const prefix = src.slice(5, src.indexOf(',') === -1 ? undefined : src.indexOf(','));
-  const mime = prefix.split(';')[0];
-  const [, subtype] = mime.split('/');
-  if (!subtype) return null;
-
-  return subtype.toLowerCase() === 'svg+xml' ? 'svg' : subtype.toLowerCase();
-}
-
 function createMediaTargetForDataUri(params, src) {
-  const extension = getImageExtensionFromDataUri(src);
+  const extension = getDataUriMetadata(src)?.extension;
   if (!extension) return null;
 
   if (!params.media) params.media = {};
@@ -223,7 +216,7 @@ export const translateImageNode = (params) => {
   // For fieldAnnotations without a recognizable MIME type, fall back to text
   // annotation before attempting size resolution (they have no image data).
   if (params.node.type === 'fieldAnnotation' && !imageId) {
-    const type = getImageExtensionFromDataUri(src) ?? src?.split(';')[0].split('/')[1];
+    const type = getDataUriMetadata(src)?.extension;
     if (!type) {
       return prepareTextAnnotation(params);
     }
@@ -284,7 +277,7 @@ export const translateImageNode = (params) => {
     imageId = existingRelation?.attributes?.Id ?? addNewImageRelationship(params, path);
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
     // We already handled the no-type case above; here the type IS valid.
-    const type = getImageExtensionFromDataUri(src) ?? src?.split(';')[0].split('/')[1];
+    const type = getDataUriMetadata(src)?.extension;
 
     const sanitizedHash = sanitizeDocxMediaName(attrs.hash, generateDocxRandomId(4));
     const fileName = `${imageName}_${sanitizedHash}.${type}`;

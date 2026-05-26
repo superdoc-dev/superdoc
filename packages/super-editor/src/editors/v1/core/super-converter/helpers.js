@@ -1,5 +1,6 @@
 import { parseSizeUnit } from '../utilities/index.js';
 import { xml2js } from 'xml-js';
+import { getDataUriMetadata } from './helpers/mediaHelpers.js';
 
 // --- Browser-compatible CRC32 (replaces buffer-crc32 to avoid Node.js Buffer dependency) ---
 const CRC32_TABLE = new Uint32Array(256);
@@ -54,31 +55,24 @@ function dataUriToArrayBuffer(data) {
 
   let base64 = data;
   if (data.startsWith('data:')) {
-    const commaIndex = data.indexOf(',');
-    if (commaIndex === -1) {
+    const metadata = getDataUriMetadata(data);
+    if (!metadata?.hasPayloadSeparator) {
       throw new Error('Invalid data URI: missing content');
     }
-    const meta = data.slice(0, commaIndex);
-    const payload = data.substring(commaIndex + 1);
-    const mimeType = meta.slice(5).split(';')[0].toLowerCase();
-    const isBase64 = meta
-      .slice(5)
-      .split(';')
-      .some((part) => part.toLowerCase() === 'base64');
 
-    if (!isBase64) {
-      if (mimeType !== 'image/svg+xml') {
-        throw new Error(`Unsupported non-base64 data URI media type: ${mimeType || 'unknown'}`);
+    if (!metadata.isBase64) {
+      if (metadata.mimeType !== 'image/svg+xml') {
+        throw new Error(`Unsupported non-base64 data URI media type: ${metadata.mimeType || 'unknown'}`);
       }
 
       try {
-        return stringToUtf8ArrayBuffer(decodeURIComponent(payload));
+        return stringToUtf8ArrayBuffer(decodeURIComponent(metadata.payload));
       } catch {
-        return stringToUtf8ArrayBuffer(payload);
+        return stringToUtf8ArrayBuffer(metadata.payload);
       }
     }
 
-    base64 = data.substring(commaIndex + 1);
+    base64 = metadata.payload;
   }
 
   return base64ToUint8Array(base64).buffer;

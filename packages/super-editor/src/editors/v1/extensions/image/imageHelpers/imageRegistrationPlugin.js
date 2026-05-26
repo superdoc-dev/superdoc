@@ -6,6 +6,7 @@ import { urlToFile, validateUrlAccessibility } from './handleUrl';
 import { checkAndProcessImage, uploadAndInsertImage } from './startImageUpload';
 import { buildMediaPath, ensureUniqueFileName } from './fileNameUtils.js';
 import { addImageRelationship } from '@extensions/image/imageHelpers/startImageUpload.js';
+import { getDataUriMetadata } from '@converter/helpers/mediaHelpers.js';
 import { isRelativeUrl } from '@superdoc/url-validation';
 const key = new PluginKey('ImageRegistration');
 const MAX_IN_PLACE_DATA_URL_LENGTH = 10 * 1024 * 1024;
@@ -201,12 +202,8 @@ const isValidSvgDataUri = (src) => {
     return false;
   }
 
-  const metadataEnd = src.indexOf(',');
-  if (metadataEnd === -1) return false;
-
-  const metadata = src.slice('data:'.length, metadataEnd);
-  const mimeType = metadata.split(';')[0].toLowerCase();
-  return mimeType === 'image/svg+xml';
+  const metadata = getDataUriMetadata(src);
+  return metadata?.hasPayloadSeparator === true && metadata.mimeType === 'image/svg+xml';
 };
 
 const shouldRegisterInPlace = (node) => isValidSvgDataUri(node.attrs?.src) && hasFinitePositiveSize(node.attrs?.size);

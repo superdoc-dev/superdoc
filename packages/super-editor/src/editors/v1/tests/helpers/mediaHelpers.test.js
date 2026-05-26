@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getDataUriMetadata,
   getFallbackImageNameFromDataUri,
   sanitizeDocxMediaName,
 } from '../../core/super-converter/helpers/mediaHelpers.js';
@@ -22,6 +23,35 @@ describe('sanitizeDocxMediaName', () => {
 
   it('replaces every invalid character even if it means all underscores', () => {
     expect(sanitizeDocxMediaName('!!!', 'default')).toBe('___');
+  });
+});
+
+describe('getDataUriMetadata', () => {
+  it('extracts MIME type, base64 flag, payload, and normalized extension', () => {
+    const result = getDataUriMetadata('data:image/svg+xml;charset=utf-8;base64,PHN2Zy8+');
+
+    expect(result).toMatchObject({
+      hasPayloadSeparator: true,
+      rawMimeType: 'image/svg+xml',
+      mimeType: 'image/svg+xml',
+      isBase64: true,
+      payload: 'PHN2Zy8+',
+      extension: 'svg',
+    });
+  });
+
+  it('handles no-parameter SVG data URIs without including the payload in the extension', () => {
+    const result = getDataUriMetadata('data:image/svg+xml,%3Csvg%2F%3E');
+
+    expect(result).toMatchObject({
+      mimeType: 'image/svg+xml',
+      payload: '%3Csvg%2F%3E',
+      extension: 'svg',
+    });
+  });
+
+  it('returns null for non-data URI input', () => {
+    expect(getDataUriMetadata('word/media/image.png')).toBeNull();
   });
 });
 

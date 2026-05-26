@@ -423,9 +423,8 @@ describe('dataUriToArrayBuffer', () => {
     expect(new TextDecoder().decode(result)).toBe(svg);
   });
 
-  it('does not double-encode malformed non-base64 SVG payloads', () => {
-    const result = dataUriToArrayBuffer('data:image/svg+xml,%');
-    expect(new TextDecoder().decode(result)).toBe('%');
+  it('rejects malformed non-base64 SVG payloads', () => {
+    expect(() => dataUriToArrayBuffer('data:image/svg+xml,%')).toThrow('Invalid non-base64 data URI payload');
   });
 
   it('rejects non-base64 raster data URI strings', () => {

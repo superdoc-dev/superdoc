@@ -68,7 +68,7 @@ function dataUriToArrayBuffer(data) {
       try {
         return stringToUtf8ArrayBuffer(decodeURIComponent(metadata.payload));
       } catch {
-        return stringToUtf8ArrayBuffer(metadata.payload);
+        throw new Error('Invalid non-base64 data URI payload');
       }
     }
 

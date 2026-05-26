@@ -422,7 +422,10 @@ const decode = (params, decodedAttrs = {}) => {
 
     if (!existingRunPropertyChanges.length && runTrackFormatMark) {
       const runPropertiesNode = getRunPropertiesNode(runNode);
-      appendTrackFormatChangeToRunProperties(runPropertiesNode, [runTrackFormatMark]);
+      appendTrackFormatChangeToRunProperties(runPropertiesNode, [runTrackFormatMark], {
+        wordIdAllocator: params?.converter?.wordIdAllocator || null,
+        partPath: params?.currentPartPath || 'word/document.xml',
+      });
     }
   };
 
@@ -486,9 +489,12 @@ const decode = (params, decodedAttrs = {}) => {
     runs.push(runWrapper);
   });
 
-  const trackedRuns = ensureTrackedWrapper(runs, trackingMarksByType);
+  const trackedRuns = ensureTrackedWrapper(runs, trackingMarksByType, { isFinalDoc: Boolean(params?.isFinalDoc) });
 
   if (!trackedRuns.length) {
+    if (params?.isFinalDoc) {
+      return trackedRuns;
+    }
     const emptyRun = { name: XML_NODE_NAME, elements: [] };
     applyBaseRunProps(emptyRun);
     trackedRuns.push(emptyRun);

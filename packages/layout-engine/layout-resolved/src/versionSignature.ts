@@ -18,6 +18,7 @@ import {
   type TableAttrs,
   type TableBlock,
   type TableCellAttrs,
+  type TrackedChangeMeta,
   type TextRun,
   type VectorShapeDrawing,
 } from '@superdoc/contracts';
@@ -53,6 +54,32 @@ const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string
   if (!metadata) return '';
   return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
 };
+
+const getTrackedChangeLayers = (run: TextRun): TrackedChangeMeta[] => {
+  if (Array.isArray(run.trackedChanges) && run.trackedChanges.length > 0) {
+    return run.trackedChanges;
+  }
+  return run.trackedChange ? [run.trackedChange] : [];
+};
+
+const trackedChangeVersion = (run: TextRun): string =>
+  getTrackedChangeLayers(run)
+    .map((trackedChange) =>
+      [
+        trackedChange.kind ?? '',
+        trackedChange.id ?? '',
+        trackedChange.storyKey ?? '',
+        trackedChange.overlapParentId ?? '',
+        trackedChange.relationship ?? '',
+        trackedChange.author ?? '',
+        trackedChange.authorEmail ?? '',
+        trackedChange.authorImage ?? '',
+        trackedChange.date ?? '',
+        trackedChange.before ? JSON.stringify(trackedChange.before) : '',
+        trackedChange.after ? JSON.stringify(trackedChange.after) : '',
+      ].join(':'),
+    )
+    .join('|');
 
 // ---------------------------------------------------------------------------
 // Clip path helpers
@@ -310,6 +337,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         }
 
         const textRun = run as TextRun;
+        const trackedVersion = trackedChangeVersion(textRun);
         return [
           textRun.text ?? '',
           textRun.fontFamily,
@@ -325,7 +353,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
           textRun.vertAlign ?? '',
           textRun.baselineShift != null ? textRun.baselineShift : '',
           textRun.token ?? '',
-          textRun.trackedChange ? 1 : 0,
+          trackedVersion,
           textRun.comments?.length ?? 0,
           // SD-3098: DomPainter reads run.bidi to apply dir + RLM injection; signature must include it.
           textRun.bidi ? JSON.stringify(textRun.bidi) : '',
@@ -512,6 +540,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
               // SD-3098: include run.bidi so rtl-only changes invalidate the cached block hash.
               const bidi = (run as { bidi?: unknown }).bidi;
               hash = hashString(hash, bidi ? JSON.stringify(bidi) : '');
+              hash = hashString(hash, trackedChangeVersion(run as TextRun));
             }
           } else if (cellBlock?.kind) {
             hash = hashString(hash, deriveBlockVersion(cellBlock as FlowBlock));

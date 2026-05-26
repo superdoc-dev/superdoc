@@ -1234,6 +1234,8 @@ export class HeaderFooterSessionManager {
       this.#emitModeChanged();
       this.#emitEditingContext(editor);
       this.#deps?.notifyInputBridgeTargetChanged();
+      this.#deps?.setPendingDocChange();
+      this.#deps?.scheduleRerender();
       return editor;
     } catch (error) {
       console.error('[HeaderFooterSessionManager] Unexpected error in enterMode:', error);
@@ -1361,6 +1363,18 @@ export class HeaderFooterSessionManager {
     this.#callbacks.onUpdateAwarenessSession?.(this.#session);
     this.#updateModeBanner();
     this.#syncActiveBorder();
+  }
+
+  #isActiveDecoration(kind: 'header' | 'footer', headerFooterRefId: string | undefined, pageNumber: number): boolean {
+    if (this.#session.mode !== kind) {
+      return false;
+    }
+
+    if (headerFooterRefId && this.#session.headerFooterRefId) {
+      return headerFooterRefId === this.#session.headerFooterRefId;
+    }
+
+    return this.#session.pageNumber === pageNumber;
   }
 
   #emitEditingContext(editor: Editor): void {
@@ -2444,6 +2458,7 @@ export class HeaderFooterSessionManager {
             const layoutMinY = rIdLayout.layout.minY ?? 0;
             const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
             const normalizedItems = normalizeDecorationItems(alignedItems, layoutMinY);
+            const isActiveHeaderFooter = this.#isActiveDecoration(kind, sectionRId, pageNumber);
 
             return {
               fragments: normalizedFragments,
@@ -2455,6 +2470,7 @@ export class HeaderFooterSessionManager {
               contentWidth: effectiveWidth,
               headerFooterRefId: sectionRId,
               sectionType: headerFooterType,
+              isActiveHeaderFooter,
               minY: layoutMinY,
               box: { x: box.x, y: metrics.offset, width: effectiveWidth, height: metrics.containerHeight },
               hitRegion: { x: box.x, y: metrics.offset, width: effectiveWidth, height: metrics.containerHeight },
@@ -2508,6 +2524,7 @@ export class HeaderFooterSessionManager {
       const layoutMinY = variant.layout.minY ?? 0;
       const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
       const normalizedItems = normalizeDecorationItems(alignedVariantItems, layoutMinY);
+      const isActiveHeaderFooter = this.#isActiveDecoration(kind, finalHeaderId, pageNumber);
 
       return {
         fragments: normalizedFragments,
@@ -2519,6 +2536,7 @@ export class HeaderFooterSessionManager {
         contentWidth: box.width,
         headerFooterRefId: finalHeaderId,
         sectionType: headerFooterType,
+        isActiveHeaderFooter,
         minY: layoutMinY,
         box: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },
         hitRegion: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },

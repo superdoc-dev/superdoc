@@ -114,26 +114,15 @@ jobs:
       # `latest` tag, so a regression that bypassed PR CI would otherwise
       # ship to every consumer pinned to `^1` or `latest`. Run identical
       # checks here so the stable lane cannot silently relax the gate.
-      - name: Consumer typecheck (matrix)
-        run: |
-          cd tests/consumer-typecheck
-          node typecheck-matrix.mjs
-
-      - name: Deep public-type audit (supported-root strict, SD-3213e)
-        # Single invocation: broad inventory + supported-root strict gate.
-        # Same gate as PR CI. Catches releases that bypass PR CI.
-        run: node tests/consumer-typecheck/deep-type-audit.mjs --strict-supported-root
-
-      - name: Package shape gates
-        run: node tests/consumer-typecheck/package-shape-gate.mjs
-
-      - name: Public surface no-growth snapshots (SD-3176, SD-3212)
-        # Unified entry point for all three snapshot families
-        # (super-editor-package, legacy, root). Same gate as PR CI.
-        run: node tests/consumer-typecheck/snapshot.mjs --all --check
-
-      - name: Root classification closure gate (SD-3212 PR A1b)
-        run: node tests/consumer-typecheck/check-root-classification-closure.mjs
+      - name: SuperDoc public interface check
+        # Wraps the nine wrapper stages: contract-tiers-test,
+        # contract-tiers, jsdoc-ratchet, build (skipped here),
+        # consumer-typecheck-matrix, deep-type-audit-supported-root,
+        # package-shape, export-snapshots, root-classification-closure.
+        # Same coverage as PR CI; runs before stable release so any
+        # bypass path (manual republish, hotfix) still catches
+        # regressions. --skip-build because Build above already ran.
+        run: pnpm check:public:superdoc --skip-build
 
       - name: Release stable packages (orchestrator)
         id: stable_release
@@ -153,40 +142,37 @@ jobs:
       # `git tag --points-at HEAD`. After CLI -> SDK -> MCP, HEAD lands on
       # MCP's version commit and the SDK tag is no longer at HEAD.
       #
-      # PyPI publish steps disabled: trusted-publisher config and per-project
-      # storage cap need to be sorted on the PyPI side before re-enabling.
-      # Restore by uncommenting once access is back.
-      # - name: Publish recovered SDK companion Python packages to PyPI
-      #   if: steps.stable_release.outputs.sdk_python_snapshot_companion_dir != ''
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   with:
-      #     packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_companion_dir }}
-      #     skip-existing: true
-      #
-      # - name: Publish recovered SDK main Python package to PyPI
-      #   if: steps.stable_release.outputs.sdk_python_snapshot_main_dir != ''
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   with:
-      #     packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_main_dir }}
-      #     skip-existing: true
+      - name: Publish recovered SDK companion Python packages to PyPI
+        if: steps.stable_release.outputs.sdk_python_snapshot_companion_dir != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_companion_dir }}
+          skip-existing: true
+
+      - name: Publish recovered SDK main Python package to PyPI
+        if: steps.stable_release.outputs.sdk_python_snapshot_main_dir != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_main_dir }}
+          skip-existing: true
 
       - name: Build and verify Python SDK
         if: steps.stable_release.outputs.sdk_release_present == 'true'
         run: node packages/sdk/scripts/build-python-sdk.mjs
 
-      # - name: Publish companion Python packages to PyPI
-      #   if: steps.stable_release.outputs.sdk_release_present == 'true'
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   with:
-      #     packages-dir: packages/sdk/langs/python/companion-dist/
-      #     skip-existing: true
-      #
-      # - name: Publish main Python SDK to PyPI
-      #   if: steps.stable_release.outputs.sdk_release_present == 'true'
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   with:
-      #     packages-dir: packages/sdk/langs/python/dist/
-      #     skip-existing: true
+      - name: Publish companion Python packages to PyPI
+        if: steps.stable_release.outputs.sdk_release_present == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/langs/python/companion-dist/
+          skip-existing: true
+
+      - name: Publish main Python SDK to PyPI
+        if: steps.stable_release.outputs.sdk_release_present == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/langs/python/dist/
+          skip-existing: true
       # Docs promotion lives in promote-stable-docs.yml. It triggers off this
       # workflow's completion and gates on whether a real superdoc v* tag was
       # created during the run, so tools-only releases leave docs-stable

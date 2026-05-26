@@ -162,6 +162,7 @@ export const textRunMergeSignature = (run: TextRun): string =>
     token: run.token ?? null,
     pageRefMetadata: run.pageRefMetadata ?? null,
     trackedChange: run.trackedChange ?? null,
+    trackedChanges: run.trackedChanges ?? null,
     sdt: run.sdt ?? null,
     link: run.link ?? null,
     comments: run.comments ?? null,

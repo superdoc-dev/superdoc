@@ -746,6 +746,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
+| `doc.formatRange` | `format-range` | Legacy root-level alias for inline range formatting. Routes to `format.apply` for compatibility with older callers. |
 | `doc.format.apply` | `format apply` | Apply inline run-property patch changes to the target range with explicit set/clear semantics. |
 | `doc.format.bold` | `format bold` | Set or clear the `bold` inline run property on the target text range. |
 | `doc.format.italic` | `format italic` | Set or clear the `italic` inline run property on the target text range. |
@@ -1006,7 +1007,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.trackChanges.list` | `track-changes list` | List all tracked changes in the document. |
 | `doc.trackChanges.get` | `track-changes get` | Retrieve a single tracked change by ID. |
-| `doc.trackChanges.decide` | `track-changes decide` | Accept or reject a tracked change (by ID or scope: all). |
+| `doc.trackChanges.decide` | `track-changes decide` | Accept or reject tracked changes by ID, range, or scope: all (optionally filtered by story). |
 
 #### History
 
@@ -1021,7 +1022,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `client.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
-| `doc.save` | `save` | Save the current session to the original file or a new path. |
+| `doc.save` | `save` | Save the current session to the original file or a new path. Supports explicit review-preserving and final export modes. |
 | `doc.close` | `close` | Close the active editing session and clean up resources. |
 
 #### Client
@@ -1224,6 +1225,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
+| `doc.format_range` | `format-range` | Legacy root-level alias for inline range formatting. Routes to `format.apply` for compatibility with older callers. |
 | `doc.format.apply` | `format apply` | Apply inline run-property patch changes to the target range with explicit set/clear semantics. |
 | `doc.format.bold` | `format bold` | Set or clear the `bold` inline run property on the target text range. |
 | `doc.format.italic` | `format italic` | Set or clear the `italic` inline run property on the target text range. |
@@ -1484,7 +1486,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.track_changes.list` | `track-changes list` | List all tracked changes in the document. |
 | `doc.track_changes.get` | `track-changes get` | Retrieve a single tracked change by ID. |
-| `doc.track_changes.decide` | `track-changes decide` | Accept or reject a tracked change (by ID or scope: all). |
+| `doc.track_changes.decide` | `track-changes decide` | Accept or reject tracked changes by ID, range, or scope: all (optionally filtered by story). |
 
 #### History
 
@@ -1499,7 +1501,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `client.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
-| `doc.save` | `save` | Save the current session to the original file or a new path. |
+| `doc.save` | `save` | Save the current session to the original file or a new path. Supports explicit review-preserving and final export modes. |
 | `doc.close` | `close` | Close the active editing session and clean up resources. |
 
 #### Client

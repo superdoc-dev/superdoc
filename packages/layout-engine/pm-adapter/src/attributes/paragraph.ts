@@ -391,6 +391,19 @@ export const computeParagraphAttrs = (
     directionContext,
   };
 
+  // SD-3269: w:vanish on the paragraph-mark rPr (w:pPr/w:rPr) suppresses the
+  // visible paragraph break. Word 16.0 fuses the next paragraph forward when
+  // this flag is set, regardless of w:specVanish. ECMA-376 §17.3.2.36 reads as
+  // if specVanish is the trigger, but the empirical Word-native matrix (F1
+  // vanish+specVanish, F2 vanish only, F3 specVanish only, F4 lvl rPr vanish)
+  // shows Word triggers on vanish alone, not specVanish.
+  if (
+    resolvedParagraphProperties.runProperties?.vanish === true ||
+    paragraphProperties.runProperties?.vanish === true
+  ) {
+    paragraphAttrs.suppressParagraphBreak = true;
+  }
+
   if (normalizedNumberingProperties && normalizedListRendering) {
     const markerRunProperties = resolveRunProperties(
       converterContext!,

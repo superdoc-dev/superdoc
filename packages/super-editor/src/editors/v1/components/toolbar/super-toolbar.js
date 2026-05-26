@@ -33,22 +33,27 @@ import { insertTableOfContentsAtSelection } from '@extensions/table-of-contents/
 
 /**
  * @typedef {Object} ToolbarConfig
- * @property {string} [selector] - CSS selector for the toolbar container
+ * @property {string | null} [selector] - CSS selector for the toolbar container, or `null` to skip mounting
  * @property {string[]} [toolbarGroups=['left', 'center', 'right']] - Groups to organize toolbar items
  * @property {string} [role='editor'] - Role of the toolbar ('editor' or 'viewer')
- * @property {Object} [icons] - Custom icons for toolbar items
- * @property {Object} [texts] - Custom texts for toolbar items
- * @property {import('../../core/types/EditorConfig.js').FontConfig[]} [fonts] - Font options for the font picker dropdown
+ * @property {object} [icons] - Custom icons for toolbar items
+ * @property {object} [texts] - Custom texts for toolbar items
+ * @property {import('../../core/types/EditorConfig.js').FontConfig[] | null} [fonts] - Font options for the font picker dropdown
  * @property {boolean} [hideButtons=true] - Whether to hide buttons when the editor is not focused
  * @property {boolean} [pagination=false] - Whether to show pagination controls
  * @property {string} [mode='docx'] - Editor mode
  * @property {string[]} [excludeItems=[]] - Items to exclude from the toolbar
- * @property {Object} [groups=null] - Custom groups configuration
- * @property {Object} [editor=null] - The editor instance
- * @property {string} [aiApiKey=null] - API key for AI integration
- * @property {string} [aiEndpoint=null] - Endpoint for AI integration
- * @property {ToolbarItem[]} [customButtons=[]] - Custom buttons to add to the toolbar
+ * @property {Record<string, string[]>} [groups] - Custom groups configuration
+ * @property {object} [editor=null] - The editor instance
+ * @property {string} [aiApiKey] - API key for AI integration
+ * @property {string} [aiEndpoint] - Endpoint for AI integration
+ * @property {Array<Record<string, unknown>> | ToolbarItem[]} [customButtons=[]] - Custom buttons to add to the toolbar. SuperDoc forwards the structural `Array<Record<string, unknown>>` shape from `Modules.toolbar.customButtons`; the runtime wraps each entry into a full `ToolbarItem` via `useToolbarItem`.
  * @property {boolean} [showFormattingMarksButton=false] - Show the formatting marks (pilcrow) button in the toolbar. Distinct from `layoutEngineOptions.showFormattingMarks`, which controls whether the marks render in the document.
+ * @property {boolean} [isDev] - Dev-mode flag forwarded from `SuperDoc.isDev`; gates debug tooltips and overlays.
+ * @property {object} [superdoc] - The owning SuperDoc instance. Set by SuperDoc when constructing the toolbar; the toolbar uses it to dispatch commands back through the parent.
+ * @property {boolean} [responsiveToContainer=false] - When `true`, the toolbar measures the container width instead of the document width when deciding which items to collapse.
+ * @property {string} [uiDisplayFallbackFont] - Forwarded from `Config.uiDisplayFallbackFont`; used as the default font for the toolbar's font picker when no explicit font is selected.
+ * @property {string} [documentMode] - Forwarded from `Config.documentMode`. Currently unused inside SuperToolbar (the toolbar reads the live mode via the `documentMode` toolbar item); kept on the type so SuperDoc's pass-through compiles cleanly.
  */
 
 /**

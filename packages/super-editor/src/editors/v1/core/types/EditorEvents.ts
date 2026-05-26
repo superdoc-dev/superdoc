@@ -46,10 +46,14 @@ export interface Comment {
   commentId: string;
   /** Timestamp when the comment was created (ms since epoch) */
   createdTime: number | null;
+  /** Stable actor id of the comment author */
+  creatorId?: string | null;
   /** Display name of the comment author */
   creatorName: string | null;
   /** Email address of the comment author */
   creatorEmail: string | null;
+  /** Stable actor id of the resolver */
+  resolvedById?: string | null;
   /** Avatar URL of the comment author */
   creatorImage?: string | null;
   /** Structured body content of the comment */
@@ -158,8 +162,13 @@ export interface EditorEventMap extends DefaultEventMap {
   /** Called when editor is destroyed */
   destroy: [];
 
-  /** Called when there's a content error */
-  contentError: [{ editor: Editor; error: Error }];
+  /**
+   * Called when there's a content error. `error` is `unknown` because
+   * the emit sites do not normalize uniformly (see `EditorConfig.onContentError`).
+   * `disableCollaboration` is provided by the `insertContentAt` emit
+   * path and absent on `Editor.ts`'s emit.
+   */
+  contentError: [{ editor: Editor; error: unknown; disableCollaboration?: () => void }];
 
   /** Called when tracked changes update */
   trackedChangesUpdate: [{ changes: unknown }];

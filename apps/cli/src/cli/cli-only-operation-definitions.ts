@@ -87,7 +87,8 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
   },
   save: {
     category: 'session',
-    description: 'Save the current session to the original file or a new path.',
+    description:
+      'Save the current session to the original file or a new path. Supports explicit review-preserving and final export modes.',
     requiresDocumentContext: false,
     sdkMetadata: { mutates: true, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
@@ -96,6 +97,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
         contextId: { type: 'string' },
         saved: { type: 'boolean' },
         inPlace: { type: 'boolean' },
+        mode: { type: 'string', enum: ['review-preserving', 'final'] },
         document: {
           type: 'object',
           properties: {

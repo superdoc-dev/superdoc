@@ -429,6 +429,57 @@ describe('w:r r-translator (node)', () => {
       }),
     );
   });
+
+  it('unwraps run-level tracked insertions in final-doc export mode', () => {
+    const result = translator.decode({
+      node: {
+        type: 'run',
+        attrs: {},
+        marks: [
+          {
+            type: 'trackInsert',
+            attrs: {
+              id: 'insert-1',
+              author: 'Missy Fox',
+              authorEmail: '',
+              date: '2026-01-07T20:24:39Z',
+            },
+          },
+        ],
+        content: [{ type: 'text', text: 'ABCXYZ', marks: [] }],
+      },
+      editor: { extensionService: { extensions: [] } },
+      isFinalDoc: true,
+    });
+
+    expect(result?.name).toBe('w:r');
+    expect(result?.elements?.some((element) => element?.name === 'w:t')).toBe(true);
+  });
+
+  it('drops run-level tracked deletions in final-doc export mode', () => {
+    const result = translator.decode({
+      node: {
+        type: 'run',
+        attrs: {},
+        marks: [
+          {
+            type: 'trackDelete',
+            attrs: {
+              id: 'delete-1',
+              author: 'Vivienne Salisbury',
+              authorEmail: '',
+              date: '2026-01-07T20:24:39Z',
+            },
+          },
+        ],
+        content: [{ type: 'text', text: 'HELLO', marks: [] }],
+      },
+      editor: { extensionService: { extensions: [] } },
+      isFinalDoc: true,
+    });
+
+    expect(result).toEqual([]);
+  });
 });
 
 describe('w:r r-translator decode (export only inline run properties)', () => {

@@ -1,7 +1,7 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
-import { exportSchemaToJson, processOutputMarks } from '../../../../exporter.js';
-import { buildInstructionElements } from '../shared/index.js';
+import { processOutputMarks } from '../../../../exporter.js';
+import { buildFieldResultRuns, buildInstructionElements } from '../shared/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'sd:crossReference';
@@ -45,7 +45,7 @@ const encode = (params) => {
 const decode = (params) => {
   const { node } = params;
   const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
-  const contentNodes = (node.content ?? []).flatMap((n) => exportSchemaToJson({ ...params, node: n }));
+  const contentNodes = buildFieldResultRuns(params, outputMarks);
   const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens);
 
   return [

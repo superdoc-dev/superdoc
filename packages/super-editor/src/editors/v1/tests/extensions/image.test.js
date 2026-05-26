@@ -172,6 +172,30 @@ describe('Image Extension DOM rendering', () => {
   });
 
   describe('editor integration', () => {
+    it('preserves VML text watermark metadata when creating image nodes', () => {
+      const watermarkData = {
+        text: 'SAMPLE',
+        fill: { color: 'silver', opacity: 1 },
+      };
+      const imageNode = imageType.create({
+        src: 'data:image/svg+xml;base64,PHN2Zy8+',
+        vmlWatermark: true,
+        vmlTextWatermark: true,
+        textWatermarkData: watermarkData,
+        vmlStyle: 'width:300pt;height:80pt;rotation:315',
+        vmlTextpathAttributes: { string: 'SAMPLE' },
+        vmlFillAttributes: { opacity: '1' },
+        vmlWrapAttributes: { anchorx: 'margin', anchory: 'margin' },
+      });
+
+      expect(imageNode.attrs.vmlTextWatermark).toBe(true);
+      expect(imageNode.attrs.textWatermarkData).toEqual(watermarkData);
+      expect(imageNode.attrs.vmlStyle).toBe('width:300pt;height:80pt;rotation:315');
+      expect(imageNode.attrs.vmlTextpathAttributes).toEqual({ string: 'SAMPLE' });
+      expect(imageNode.attrs.vmlFillAttributes).toEqual({ opacity: '1' });
+      expect(imageNode.attrs.vmlWrapAttributes).toEqual({ anchorx: 'margin', anchory: 'margin' });
+    });
+
     it('renders anchored rotation margins in the live DOM', () => {
       const {
         schema: { nodes },

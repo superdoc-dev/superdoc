@@ -36,6 +36,10 @@ interface OperationGroup {
   }>;
 }
 
+interface ExampleGenerationOptions {
+  preferNullForNullable?: boolean;
+}
+
 function formatMemberPath(memberPath: string): string {
   return `editor.doc.${memberPath}${memberPath === 'capabilities' ? '()' : '(...)'}`;
 }
@@ -176,6 +180,31 @@ function refName(schema: JsonSchema): string | undefined {
   return match ? match[1] : undefined;
 }
 
+function schemaTypeList(schema: JsonSchema): string[] {
+  if (typeof schema.type === 'string') return [schema.type];
+  if (Array.isArray(schema.type)) {
+    return schema.type.filter((entry): entry is string => typeof entry === 'string');
+  }
+  return [];
+}
+
+function schemaWithType(schema: JsonSchema, type: string | string[]): JsonSchema {
+  return {
+    ...schema,
+    type: Array.isArray(type) && type.length === 1 ? type[0] : type,
+  };
+}
+
+function schemaWithoutType(schema: JsonSchema, omittedType: string): JsonSchema {
+  const remainingTypes = schemaTypeList(schema).filter((type) => type !== omittedType);
+  if (remainingTypes.length === 0) {
+    const clone = { ...schema };
+    delete clone.type;
+    return clone;
+  }
+  return schemaWithType(schema, remainingTypes);
+}
+
 // ---------------------------------------------------------------------------
 // Field table rendering
 // ---------------------------------------------------------------------------
@@ -197,7 +226,7 @@ interface FieldSection {
  * Looks for a `const` property that acts as a type discriminator (e.g., `type: "text"`).
  */
 function objectDiscriminatorLabel(schema: JsonSchema): string | undefined {
-  if (schema.type !== 'object' || !schema.properties) return undefined;
+  if (!schemaTypeList(schema).includes('object') || !schema.properties) return undefined;
   const properties = schema.properties as Record<string, JsonSchema>;
   for (const [key, prop] of Object.entries(properties)) {
     if (prop.const !== undefined && typeof prop.const === 'string') {
@@ -212,6 +241,15 @@ function schemaTypeLabel(schema: JsonSchema, $defs: Defs): string {
   // $ref: show the def name
   const rn = refName(schema);
   if (rn) return rn;
+
+  const types = schemaTypeList(schema);
+  if (types.length > 1) {
+    const labels = types.map((type) => {
+      if (type === 'null') return 'null';
+      return schemaTypeLabel(schemaWithType(schema, type), $defs);
+    });
+    return [...new Set(labels)].join(' | ');
+  }
 
   // const
   if (schema.const !== undefined) return `\`${JSON.stringify(schema.const)}\``;
@@ -240,7 +278,7 @@ function schemaTypeLabel(schema: JsonSchema, $defs: Defs): string {
         }
         return base;
       });
-      return labels.join(' \\| ');
+      return labels.join(' | ');
     }
   }
 
@@ -262,7 +300,7 @@ function schemaTypeLabel(schema: JsonSchema, $defs: Defs): string {
   }
 
   // primitive
-  if (typeof schema.type === 'string') return schema.type as string;
+  if (types.length === 1) return types[0];
 
   return 'any';
 }
@@ -310,7 +348,7 @@ function collectConstDiscriminators(
   if (resolved.const !== undefined && prefix) {
     return [{ path: prefix.replace(/\.$/u, ''), value: resolved.const }];
   }
-  if (!properties || resolved.type !== 'object') return [];
+  if (!properties || !schemaTypeList(resolved).includes('object')) return [];
 
   const discriminators: Array<{ path: string; value: unknown }> = [];
   for (const key of Object.keys(properties)) {
@@ -411,7 +449,7 @@ function buildFieldRows(schema: JsonSchema, $defs: Defs, prefix = '', parentRequ
   const { resolved } = resolveRef(schema, $defs);
   const flat = flattenAllOf(resolved, $defs);
   const properties = flat.properties as Record<string, JsonSchema> | undefined;
-  if (!properties || flat.type !== 'object') return [];
+  if (!properties || !schemaTypeList(flat).includes('object')) return [];
 
   const requiredSet = new Set<string>(Array.isArray(flat.required) ? (flat.required as string[]) : []);
   const rows: FieldRow[] = [];
@@ -626,7 +664,13 @@ function applyNumericBounds(value: number, schema: JsonSchema, type: 'integer' |
  * Generate a deterministic example value from a JSON Schema node.
  * `fieldName` is used to pick contextual string/integer values.
  */
-function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, depth = 0): unknown {
+function generateExample(
+  schema: JsonSchema,
+  $defs: Defs,
+  fieldName?: string,
+  depth = 0,
+  options: ExampleGenerationOptions = {},
+): unknown {
   if (depth > 10) return {};
 
   // const value
@@ -635,18 +679,31 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
   // enum: first value
   if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum[0];
 
+  const types = schemaTypeList(schema);
+  if (types.length > 1) {
+    if (types.includes('null') && options.preferNullForNullable) {
+      return null;
+    }
+
+    if (types.includes('null')) {
+      return generateExample(schemaWithoutType(schema, 'null'), $defs, fieldName, depth, options);
+    }
+
+    return generateExample(schemaWithType(schema, types[0]), $defs, fieldName, depth, options);
+  }
+
   // $ref: resolve and recurse
   const rn = refName(schema);
   if (rn) {
     const { resolved } = resolveRef(schema, $defs);
-    return generateExample(resolved, $defs, fieldName, depth);
+    return generateExample(resolved, $defs, fieldName, depth, options);
   }
 
   // array: single item
   if (schema.type === 'array') {
     const items = schema.items as JsonSchema | undefined;
     if (schema.maxItems === 0) return [];
-    if (items) return [generateExample(items, $defs, undefined, depth + 1)];
+    if (items) return [generateExample(items, $defs, undefined, depth + 1, options)];
     return [];
   }
 
@@ -701,9 +758,15 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
     for (const key of keys) {
       if (excludedByVariant.has(key)) continue;
       if (requiredSet.has(key)) {
-        result[key] = generateExample(properties[key], $defs, key, depth + 1);
+        result[key] = generateExample(properties[key], $defs, key, depth + 1, {
+          ...options,
+          preferNullForNullable: false,
+        });
       } else if (optionalCount < 2) {
-        result[key] = generateExample(properties[key], $defs, key, depth + 1);
+        result[key] = generateExample(properties[key], $defs, key, depth + 1, {
+          ...options,
+          preferNullForNullable: true,
+        });
         optionalCount++;
       }
     }
@@ -717,7 +780,7 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
     const merged: Record<string, unknown> = {};
     for (const member of schema.allOf as JsonSchema[]) {
       const { resolved } = resolveRef(member, $defs);
-      const memberExample = generateExample(resolved, $defs, fieldName, depth + 1);
+      const memberExample = generateExample(resolved, $defs, fieldName, depth + 1, options);
       if (typeof memberExample === 'object' && memberExample !== null && !Array.isArray(memberExample)) {
         Object.assign(merged, memberExample as Record<string, unknown>);
       }
@@ -729,7 +792,7 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
   for (const keyword of ['oneOf', 'anyOf'] as const) {
     const variants = schema[keyword];
     if (Array.isArray(variants) && variants.length > 0) {
-      return generateExample(variants[0] as JsonSchema, $defs, fieldName, depth);
+      return generateExample(variants[0] as JsonSchema, $defs, fieldName, depth, options);
     }
   }
 
@@ -749,6 +812,63 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
   if (schema.type === 'boolean') return true;
 
   return {};
+}
+
+function compareReferenceDocPrimary(left: ContractOperationSnapshot, right: ContractOperationSnapshot): number {
+  const leftSkipRank = left.skipAsATool ? 1 : 0;
+  const rightSkipRank = right.skipAsATool ? 1 : 0;
+  if (leftSkipRank !== rightSkipRank) {
+    return leftSkipRank - rightSkipRank;
+  }
+
+  const leftMemberDepth = left.memberPath.split('.').length;
+  const rightMemberDepth = right.memberPath.split('.').length;
+  if (leftMemberDepth !== rightMemberDepth) {
+    return rightMemberDepth - leftMemberDepth;
+  }
+
+  return left.operationId.localeCompare(right.operationId);
+}
+
+function selectPrimaryOperationForDocPath(
+  docPath: string,
+  operations: ContractOperationSnapshot[],
+): ContractOperationSnapshot {
+  if (operations.length === 1) {
+    return operations[0];
+  }
+
+  const sorted = [...operations].sort(compareReferenceDocPrimary);
+  const [primary, secondary] = sorted;
+  if (secondary && compareReferenceDocPrimary(primary, secondary) === 0) {
+    throw new Error(
+      `Ambiguous reference doc path "${docPath}" shared by operations: ${sorted.map((entry) => entry.operationId).join(', ')}.`,
+    );
+  }
+
+  return primary;
+}
+
+function buildOperationDocFiles(
+  operations: ContractOperationSnapshot[],
+  snapshot: ReturnType<typeof buildContractSnapshot>,
+): GeneratedFile[] {
+  const operationsByPath = new Map<string, ContractOperationSnapshot[]>();
+
+  for (const operation of operations) {
+    const docPath = toOperationDocPath(operation.operationId);
+    const existing = operationsByPath.get(docPath);
+    if (existing) {
+      existing.push(operation);
+      continue;
+    }
+    operationsByPath.set(docPath, [operation]);
+  }
+
+  return [...operationsByPath.entries()].map(([path, entries]) => ({
+    path,
+    content: renderOperationPage(selectPrimaryOperationForDocPath(path, entries), snapshot),
+  }));
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
@@ -1320,10 +1440,7 @@ export function buildReferenceDocsArtifacts(): GeneratedFile[] {
   const snapshot = buildContractSnapshot();
   const groups = buildOperationGroups(snapshot.operations);
 
-  const operationFiles = snapshot.operations.map((operation) => ({
-    path: toOperationDocPath(operation.operationId),
-    content: renderOperationPage(operation, snapshot),
-  }));
+  const operationFiles = buildOperationDocFiles(snapshot.operations, snapshot);
 
   const groupFiles = groups.map((group) => ({
     path: group.pagePath,

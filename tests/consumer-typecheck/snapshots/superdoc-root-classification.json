@@ -1,15 +1,15 @@
 {
   "generatedAt": "2026-05-19T11:33:50.546Z",
   "summary": {
-    "total": 200,
+    "total": 214,
     "byBucket": {
       "legacy-root": 60,
       "internal-candidate": 8,
-      "supported-root": 132
+      "supported-root": 146
     },
     "byConfidence": {
-      "high": 98,
-      "medium": 100,
+      "high": 111,
+      "medium": 101,
       "low": 2
     }
   },
@@ -40,6 +40,17 @@
       "name": "AwarenessState",
       "bucket": "supported-root",
       "rationale": "Collaboration/awareness type defined in core/types/index.ts. Customer-facing for collab-provider integrations (e.g., AwarenessState types the documented onAwarenessUpdate callback).",
+      "confidence": "medium",
+      "source": "collab",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "AwarenessUser",
+      "bucket": "supported-root",
+      "rationale": "Collaboration/awareness type defined in core/types/index.ts. Extends User with an optional `color` field for consumer-supplied awareness color; typed on Config.user so the runtime override in SuperDoc#assignUserColor() is consumer-typable.",
       "confidence": "medium",
       "source": "collab",
       "inDts": true,
@@ -130,6 +141,17 @@
       "rationale": "Editor command typing infrastructure. editor.commands.* is deprecated; Document API (editor.doc.*) is the supported programmatic surface. Keep typed for compat.",
       "confidence": "high",
       "source": "commands",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "CanPerformPermissionParams",
+      "bucket": "supported-root",
+      "rationale": "Configuration type for a supported feature. Input shape for SuperDoc#canPerformPermission, promoted from an anonymous inline parameter to a named public type so consumers get IDE help and the contract is stable across migrations.",
+      "confidence": "high",
+      "source": "config-supported",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,
@@ -393,6 +415,17 @@
       "bucket": "supported-root",
       "rationale": "Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities.",
       "confidence": "medium",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "Document",
+      "bucket": "supported-root",
+      "rationale": "Customer-facing core API type or runtime export. Consumer-supplied document descriptor used in Config.documents and now SuperDocState.documents; the public counterpart to the internal RuntimeDocument (which carries runtime-only fields and stays internal).",
+      "confidence": "high",
       "source": "core",
       "inDts": true,
       "inDcts": true,
@@ -754,7 +787,7 @@
     {
       "name": "FlowBlock",
       "bucket": "legacy-root",
-      "rationale": "In LayoutState.blocks. Layout-engine raw type that must not appear in public .d.ts per package-boundaries.md:64 — already leaks via PE closure.",
+      "rationale": "In LayoutState.blocks. Layout-engine raw type that must not appear in public .d.ts per package-boundaries.md:64 \u2014 already leaks via PE closure.",
       "confidence": "high",
       "source": "locked",
       "inDts": true,
@@ -842,7 +875,7 @@
     {
       "name": "Layout",
       "bucket": "legacy-root",
-      "rationale": "In PE.onLayoutUpdated payload (LayoutState & { layout: Layout; ... }). Layout-engine raw type that must not appear in public .d.ts per package-boundaries.md:64 — already leaks via PE legacy API.",
+      "rationale": "In PE.onLayoutUpdated payload (LayoutState & { layout: Layout; ... }). Layout-engine raw type that must not appear in public .d.ts per package-boundaries.md:64 \u2014 already leaks via PE legacy API.",
       "confidence": "high",
       "source": "locked",
       "inDts": true,
@@ -1197,6 +1230,17 @@
       "rationale": "Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities.",
       "confidence": "medium",
       "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "PermissionResolverParams",
+      "bucket": "supported-root",
+      "rationale": "Payload passed to permission resolver callbacks registered via Config.permissionResolver or Modules.comments.permissionResolver; promoted from a non-exported helper to a named public type so resolver authors can import the contract.",
+      "confidence": "high",
+      "source": "config-supported",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,
@@ -1643,11 +1687,121 @@
       "inCjs": true
     },
     {
+      "name": "SuperDocAwarenessUpdatePayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the awareness-update event and passed to Config.onAwarenessUpdate; promoted to a named public type so callback signatures stop using inline shapes.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocCommentsUpdatePayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the comments-update event and passed to Config.onCommentsUpdate; promoted to a named public type so callback signatures stop using inline shapes.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocEditorPayload",
+      "bucket": "supported-root",
+      "rationale": "Wrapper payload emitted with editorBeforeCreate / editorCreate / collaboration-ready events; promoted to a named public type so callback signatures match the runtime wrapper instead of a bare Editor.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocExceptionEditorPayload",
+      "bucket": "supported-root",
+      "rationale": "Member of the SuperDocExceptionPayload union; named so consumers can discriminate the editor-lifecycle shape. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocExceptionPayload",
+      "bucket": "supported-root",
+      "rationale": "Public Config.onException callback parameter. Union of the three runtime emit shapes. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocExceptionRestorePayload",
+      "bucket": "supported-root",
+      "rationale": "Member of the SuperDocExceptionPayload union; named so consumers can discriminate the restore-failure shape. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocExceptionStorePayload",
+      "bucket": "supported-root",
+      "rationale": "Member of the SuperDocExceptionPayload union; named so consumers can discriminate the store-init shape via `'stage' in payload`. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
       "name": "SuperDocLayoutEngineOptions",
       "bucket": "supported-root",
       "rationale": "Types Config.layoutEngineOptions at core/types/index.ts:1350,1505. Documented Config field.",
       "confidence": "high",
       "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocLockedPayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the locked event and passed to Config.onLocked; promoted to a named public type so the lockedBy: User | null contract is consumer-typable.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocReadyPayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the ready event and passed to Config.onReady; promoted to a named public type for consistency with the other event payloads.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocState",
+      "bucket": "supported-root",
+      "rationale": "Public return shape of the SuperDoc#state getter; introduced to replace an inline anonymous return that leaked the internal RuntimeDocument type. Exposes `documents` as Document[] (the public view).",
+      "confidence": "high",
+      "source": "core",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,

@@ -42,10 +42,11 @@ import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
 import type { DeleteInput } from '../delete/delete.js';
 import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
-import type { FormatInlineAliasInput, StyleApplyInput } from '../format/format.js';
+import type { FormatInlineAliasInput, FormatRangeInput, StyleApplyInput } from '../format/format.js';
 import type { InlineRunPatchKey } from '../format/inline-run-patch.js';
 import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/index.js';
 import type {
+  CommentsCreateReceipt,
   CommentsCreateInput,
   CommentsPatchInput,
   CommentsDeleteInput,
@@ -571,6 +572,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   insert: { input: InsertInput; options: MutationOptions; output: SDMutationReceipt };
   replace: { input: ReplaceInput; options: MutationOptions; output: SDMutationReceipt };
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
+  formatRange: { input: FormatRangeInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- blocks.* ---
   'blocks.list': { input: BlocksListInput | undefined; options: never; output: BlocksListResult };
@@ -867,7 +869,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   };
 
   // --- comments.* ---
-  'comments.create': { input: CommentsCreateInput; options: RevisionGuardOptions; output: Receipt };
+  'comments.create': { input: CommentsCreateInput; options: RevisionGuardOptions; output: CommentsCreateReceipt };
   'comments.patch': { input: CommentsPatchInput; options: RevisionGuardOptions; output: Receipt };
   'comments.delete': { input: CommentsDeleteInput; options: RevisionGuardOptions; output: Receipt };
   'comments.get': { input: GetCommentInput; options: never; output: CommentInfo };
@@ -1646,13 +1648,24 @@ type _NoExtraRegistryKeys = Assert<keyof OperationRegistry extends OperationId ?
 
 /**
  * Typed invoke request. TypeScript narrows input and options based on operationId.
+ *
+ * When an operation has no options (`options: never` in the registry), the
+ * request shape forbids `options` via `options?: never` rather than via an
+ * intersection with `Record<string, never>` (which would also forbid
+ * `operationId` and `input`, making the typed overload unmatchable and
+ * silently falling through to the dynamic `unknown` return).
  */
-export type InvokeRequest<T extends OperationId> = {
-  operationId: T;
-  input: OperationRegistry[T]['input'];
-} & (OperationRegistry[T]['options'] extends never
-  ? Record<string, never>
-  : { options?: OperationRegistry[T]['options'] });
+export type InvokeRequest<T extends OperationId> = OperationRegistry[T]['options'] extends never
+  ? {
+      operationId: T;
+      input: OperationRegistry[T]['input'];
+      options?: never;
+    }
+  : {
+      operationId: T;
+      input: OperationRegistry[T]['input'];
+      options?: OperationRegistry[T]['options'];
+    };
 
 /**
  * Typed invoke result, narrowed by operationId.

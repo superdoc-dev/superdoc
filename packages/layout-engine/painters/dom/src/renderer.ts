@@ -5,9 +5,11 @@ import type {
   DrawingBlock,
   DrawingFragment,
   DrawingGeometry,
+  FlowBlock,
   FlowMode,
   Fragment,
   GradientFill,
+  ImageBlock,
   ImageFragment,
   ImageHyperlink,
   Line,
@@ -103,6 +105,9 @@ export type {
   PaintSnapshotStructuredContentInlineEntity,
 } from './sdt/snapshot.js';
 
+const ACTIVE_HEADER_FOOTER_WATERMARK_PREVIEW_OPACITY = '1';
+const INACTIVE_HEADER_FOOTER_WATERMARK_PREVIEW_OPACITY = '0.5';
+
 type LineEnd = {
   type?: string;
   width?: string;
@@ -181,6 +186,8 @@ export type PageDecorationPayload = {
   contentWidth?: number;
   headerFooterRefId?: string;
   sectionType?: string;
+  /** True while this rendered header/footer story is the active editing surface. */
+  isActiveHeaderFooter?: boolean;
   box?: { x: number; y: number; width: number; height: number };
   hitRegion?: { x: number; y: number; width: number; height: number };
 };
@@ -2107,6 +2114,7 @@ export class DomPainter {
         betweenBorderFlags.get(originalIndex),
         resolvedItem,
       );
+      this.applyHeaderFooterTextWatermarkPreviewOpacity(fragEl, data.isActiveHeaderFooter === true);
       const isPageRelative = this.isPageRelativeAnchoredFragment(fragment, resolvedItem);
 
       let pageY: number;
@@ -2138,6 +2146,7 @@ export class DomPainter {
         betweenBorderFlags.get(originalIndex),
         resolvedItem,
       );
+      this.applyHeaderFooterTextWatermarkPreviewOpacity(fragEl, data.isActiveHeaderFooter === true);
       const isPageRelative = this.isPageRelativeAnchoredFragment(fragment, resolvedItem);
 
       if (isPageRelative && kind === 'footer') {
@@ -2532,7 +2541,8 @@ export class DomPainter {
       applyStyles,
       applyResolvedFragmentFrame: (el, item, paraFragment) =>
         this.applyResolvedFragmentFrame(el, item, paraFragment, context.section, context.story),
-      applyFragmentFrame: (el, paraFragment) => this.applyFragmentFrame(el, paraFragment, context.section, context.story),
+      applyFragmentFrame: (el, paraFragment) =>
+        this.applyFragmentFrame(el, paraFragment, context.section, context.story),
       applySdtDataset,
       applyContainerSdtDataset,
       renderLine: ({
@@ -2603,7 +2613,7 @@ export class DomPainter {
     context: FragmentRenderContext,
     resolvedItem?: ResolvedImageItem,
   ): HTMLElement {
-    return renderImageFragmentElement({
+    const fragmentEl = renderImageFragmentElement({
       doc: this.doc,
       fragment,
       context,
@@ -2618,6 +2628,12 @@ export class DomPainter {
       buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
       createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
     });
+
+    if (this.isVmlTextWatermarkImage(resolvedItem?.block)) {
+      fragmentEl.dataset.vmlTextWatermark = 'true';
+    }
+
+    return fragmentEl;
   }
 
   /**
@@ -3904,16 +3920,24 @@ export class DomPainter {
   private shouldRenderBehindPageContent(
     fragment: ImageFragment | DrawingFragment,
     section: 'header' | 'footer',
-    resolvedItem?: ResolvedDrawingItem,
+    resolvedItem?: ResolvedImageItem | ResolvedDrawingItem,
   ): boolean {
     if (fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0)) {
       return true;
     }
 
-    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(resolvedItem?.block);
+    if (section !== 'header') {
+      return false;
+    }
+
+    if (fragment.kind === 'drawing') {
+      return this.isHeaderWordArtWatermark(resolvedItem?.block);
+    }
+
+    return this.isVmlTextWatermarkImage(resolvedItem?.block);
   }
 
-  private isHeaderWordArtWatermark(block: DrawingBlock | undefined): boolean {
+  private isHeaderWordArtWatermark(block: FlowBlock | undefined): block is DrawingBlock {
     if (!block || block.kind !== 'drawing' || block.drawingKind !== 'vectorShape') {
       return false;
     }
@@ -3932,6 +3956,20 @@ export class DomPainter {
       block.anchor.alignV === 'center' &&
       block.wrap?.type === 'None'
     );
+  }
+
+  private isVmlTextWatermarkImage(block: FlowBlock | undefined): block is ImageBlock {
+    return block?.kind === 'image' && block.attrs?.vmlTextWatermark === true;
+  }
+
+  private applyHeaderFooterTextWatermarkPreviewOpacity(el: HTMLElement, isActiveHeaderFooter: boolean): void {
+    if (el.dataset.vmlTextWatermark !== 'true') {
+      return;
+    }
+
+    el.style.opacity = isActiveHeaderFooter
+      ? ACTIVE_HEADER_FOOTER_WATERMARK_PREVIEW_OPACITY
+      : INACTIVE_HEADER_FOOTER_WATERMARK_PREVIEW_OPACITY;
   }
 
   /**

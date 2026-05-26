@@ -1,7 +1,7 @@
 ---
 title: Migrate to the Document API
 sidebarTitle: Migrate to Document API
-keywords: "migrate commands, document api migration, editor commands deprecated, prosemirror deprecated, editor.doc"
+keywords: 'migrate commands, document api migration, editor commands deprecated, prosemirror deprecated, editor.doc'
 ---
 
 `editor.commands`, `editor.state`, `editor.view`, and direct ProseMirror access are deprecated and will be removed in a future version. The [Document API](/document-api/overview) (`editor.doc`) is the replacement for all programmatic document operations.
@@ -101,8 +101,8 @@ editor.commands.rejectTrackedChange(changeId);
 
 // After
 editor.doc.trackChanges.list();
-editor.doc.trackChanges.decide({ id: changeId, decision: 'accept' });
-editor.doc.trackChanges.decide({ id: changeId, decision: 'reject' });
+editor.doc.trackChanges.decide({ decision: 'accept', target: { id: changeId } });
+editor.doc.trackChanges.decide({ decision: 'reject', target: { id: changeId } });
 ```
 
 ### Tables

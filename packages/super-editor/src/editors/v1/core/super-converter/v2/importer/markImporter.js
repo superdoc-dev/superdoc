@@ -3,6 +3,7 @@ import { TrackFormatMarkName } from '@extensions/track-changes/constants.js';
 import { getHexColorFromDocxSystem, isValidHexColor, twipsToInches, twipsToLines, twipsToPt } from '../../helpers.js';
 import { translator as wRPrTranslator } from '../../v3/handlers/w/rpr/index.js';
 import { encodeMarksFromRPr } from '@converter/styles.js';
+import { resolveTrackedChangeImportIds, stampImportTrackingAttrs } from './importTrackingContext.js';
 
 /**
  *
@@ -112,13 +113,21 @@ export function handleStyleChangeMarksV2(rPrChange, currentMarks, params) {
   }
 
   const attributes = rPrChange.attributes || {};
+  const { partPath, sourceId, logicalId } = resolveTrackedChangeImportIds(params, attributes['w:id']);
   const mappedAttributes = {
-    id: attributes['w:id'],
-    sourceId: attributes['w:id'],
+    id: logicalId,
+    sourceId,
     date: attributes['w:date'],
     author: attributes['w:author'],
     authorEmail: attributes['w:authorEmail'],
   };
+  stampImportTrackingAttrs({
+    params,
+    attrs: mappedAttributes,
+    side: 'formatting',
+    sourceId,
+    partPath,
+  });
   let submarks = [];
   const rPr = rPrChange.elements?.find((el) => el.name === 'w:rPr');
   if (rPr) {

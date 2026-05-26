@@ -35,11 +35,18 @@
  *   - `rule1Allowlist`: bare `@superdoc/*` specifiers permitted in
  *     published d.ts. Currently only the legacy public super-editor
  *     surface per RFC Decision 1.
+ *   - `publicContract`: SD-3256 Phase 2. Tier metadata for every
+ *     `package.json#exports` subpath. Describes what each subpath is
+ *     (supported / legacy / asset / deprecated), not yet enforced.
+ *     `scripts/report-public-contract.mjs` prints this for review.
  *
  * Adding a new relocation: append one entry to `relocations` with the
  * package specifier, the dist target the rewriter should point at, and
  * the source-include patterns vite + tsconfig need. Every consumer picks
  * up the new entry without further edits.
+ *
+ * Adding a new public subpath: append an entry to `publicContract` with
+ * the correct tier. Keep it in sync with `package.json#exports`.
  */
 
 const requiredEntryPoints = [
@@ -226,6 +233,65 @@ const rule1Allowlist = {
   '@superdoc/super-editor': 'legacy public surface (RFC Decision 1)',
 };
 
+/**
+ * SD-3256 Phase 2: tier metadata for every `package.json#exports`
+ * subpath. Describes what each entry is, not what CI enforces. No
+ * enforcement is wired up in this phase; the metadata exists so the
+ * team can review the classification before Phase 3 (./super-editor
+ * facade curation) and Phase 4 (ratchet against the tiers).
+ *
+ * Tier policies (target end state, not all enforced today):
+ *
+ *   - `supported`: fully typed, no `any`, no accidental internals;
+ *     supported-root strict gate hard-fails regressions. Routes
+ *     through `src/public/**`.
+ *   - `legacy`: must not grow accidentally; typed where supported;
+ *     can be deprecated or migrated over time; new APIs should not
+ *     be added here. Routes through `src/public/legacy/**`.
+ *   - `legacy-raw`: legacy public surface that does NOT yet route
+ *     through `src/public/legacy/**` (the export resolves directly
+ *     to a non-curated dist path). Only `./super-editor` today.
+ *     SD-3256 Phase 3 will curate this through
+ *     `src/public/legacy/super-editor.ts` after team alignment on
+ *     which exports stay public.
+ *   - `asset`: non-type asset (e.g. CSS). Not covered by the type
+ *     contract.
+ *   - `deprecated`: scheduled for removal. None today.
+ *
+ * The `internal` tier is implicit: anything not exported here is
+ * internal and not part of the consumer promise.
+ *
+ * Sync rule: keep this list aligned with `package.json#exports`.
+ * Adding a new export means adding an entry here too.
+ */
+const publicContract = {
+  supported: [
+    { subpath: '.', tier: 'supported', note: 'root facade; routes through src/public/index.ts' },
+    { subpath: './types', tier: 'supported', note: 'type-only facade; src/public/types.ts' },
+    { subpath: './ui', tier: 'supported', note: 'UI primitives; src/public/ui.ts' },
+    { subpath: './ui/react', tier: 'supported', note: 'React adapter; src/public/ui-react.ts' },
+  ],
+  legacy: [
+    { subpath: './converter', tier: 'legacy', note: 'src/public/legacy/converter.ts' },
+    { subpath: './docx-zipper', tier: 'legacy', note: 'src/public/legacy/docx-zipper.ts' },
+    { subpath: './file-zipper', tier: 'legacy', note: 'src/public/legacy/file-zipper.ts' },
+    { subpath: './headless-toolbar', tier: 'legacy', note: 'src/public/legacy/headless-toolbar.ts' },
+    { subpath: './headless-toolbar/react', tier: 'legacy', note: 'src/public/legacy/headless-toolbar-react.ts' },
+    { subpath: './headless-toolbar/vue', tier: 'legacy', note: 'src/public/legacy/headless-toolbar-vue.ts' },
+  ],
+  legacyRaw: [
+    {
+      subpath: './super-editor',
+      tier: 'legacy-raw',
+      note: 'resolves to dist/superdoc/src/super-editor.d.ts (not src/public/legacy/). SD-3256 Phase 3 will curate.',
+    },
+  ],
+  asset: [
+    { subpath: './style.css', tier: 'asset', note: 'CSS bundle; no types' },
+  ],
+  deprecated: [],
+};
+
 module.exports = {
   requiredEntryPoints,
   handwrittenDtsBlocklist,
@@ -235,4 +301,5 @@ module.exports = {
   relocationGuardPackages,
   unshimmedPrivateSpecifiers,
   rule1Allowlist,
+  publicContract,
 };

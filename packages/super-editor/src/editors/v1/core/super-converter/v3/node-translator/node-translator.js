@@ -33,6 +33,7 @@ export const TranslatorTypes = Object.freeze({
  * @property {any[]} [relationships]
  * @property {Comment[]} [comments]
  * @property {'external' | 'clean'} [commentsExportType]
+ * @property {boolean} [isFinalDoc]
  * @property {any[]} [exportedCommentDefs]
  * @property {Map<string, string>} [statFieldCacheMap]
  * @property {Record<string, any>} [extraParams]

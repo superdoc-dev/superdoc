@@ -266,7 +266,10 @@ import {
   findAllBookmarksInDocument,
   resolveBookmarkTarget,
 } from '../../document-api-adapters/helpers/bookmark-resolver.js';
-import { resolveTrackedChange } from '../../document-api-adapters/helpers/tracked-change-resolver.js';
+import {
+  resolveTrackedChange,
+  resolveTrackedChangeInStory,
+} from '../../document-api-adapters/helpers/tracked-change-resolver.js';
 import { makeTrackedChangeAnchorKey } from '../../document-api-adapters/helpers/tracked-change-runtime-ref.js';
 import { getTrackedChangeIndex } from '../../document-api-adapters/tracked-changes/tracked-change-index.js';
 import { normalizeVariant } from './header-footer/header-footer-variant.js';
@@ -307,6 +310,7 @@ import type {
   EditorViewWithScrollFlag,
   PotentiallyMockedFunction,
   ResolvedLayoutOptions,
+  AwarenessWithSetField,
 } from './types.js';
 
 // Re-export public types for backward compatibility
@@ -728,12 +732,18 @@ export class PresentationEditor extends EventEmitter {
     this.#selectionOverlay.appendChild(this.#localSelectionLayer);
     this.#viewportHost.appendChild(this.#selectionOverlay);
 
-    // Initialize remote cursor manager
+    // Initialize remote cursor manager. The cast widens the shared
+    // CollaborationProvider to the manager's internal CollaborationProviderLike
+    // shape, which asserts `awareness.setLocalStateField` exists. Runtime
+    // collaboration providers (HocuspocusProvider, y-websocket, etc.) expose
+    // it; the assertion documents the requirement at the boundary.
     this.#remoteCursorManager = new RemoteCursorManager({
       visibleHost: this.#visibleHost,
       remoteCursorOverlay: this.#remoteCursorOverlay,
       presence: validatedPresence,
-      collaborationProvider: options.collaborationProvider,
+      collaborationProvider: options.collaborationProvider as
+        | { awareness?: AwarenessWithSetField | null; disconnect?: () => void }
+        | undefined,
       fallbackColors: PresentationEditor.FALLBACK_COLORS,
       cursorStyles: PresentationEditor.CURSOR_STYLES,
       maxSelectionRectsPerUser: MAX_SELECTION_RECTS_PER_USER,
@@ -1084,8 +1094,12 @@ export class PresentationEditor extends EventEmitter {
     this.#options.collaborationProvider = collaborationProvider;
 
     // 2. Update RemoteCursorManager's provider reference so setup() reads
-    //    the correct provider when collaborationReady fires.
-    this.#remoteCursorManager?.setCollaborationProvider(collaborationProvider);
+    //    the correct provider when collaborationReady fires. The cast
+    //    matches the boundary assertion in the constructor: collaboration
+    //    providers expose `awareness.setLocalStateField` at runtime.
+    this.#remoteCursorManager?.setCollaborationProvider(
+      collaborationProvider as { awareness?: AwarenessWithSetField | null; disconnect?: () => void },
+    );
 
     // 3. Delegate to the backing Editor — triggers plugin reconfigure + Y.js observers.
     //    The collaborationReady event fires asynchronously (setTimeout in initSyncListener).
@@ -1096,7 +1110,9 @@ export class PresentationEditor extends EventEmitter {
     } catch (err) {
       // Editor attach failed and rolled back its own state. Restore ours too.
       this.#options.collaborationProvider = prevProvider;
-      this.#remoteCursorManager?.setCollaborationProvider(prevProvider ?? null);
+      this.#remoteCursorManager?.setCollaborationProvider(
+        (prevProvider ?? null) as { awareness?: AwarenessWithSetField | null; disconnect?: () => void } | null,
+      );
       throw err;
     }
   }
@@ -4924,7 +4940,6 @@ export class PresentationEditor extends EventEmitter {
    * This method encapsulates the common focus and blur logic used when
    * selecting both inline and block images.
    * @private
-   * @returns {void}
    */
   #focusEditorAfterImageSelection(): void {
     this.#shouldScrollSelectionIntoView = true;
@@ -6902,7 +6917,6 @@ export class PresentationEditor extends EventEmitter {
    * This method is called after layout completes to ensure cursor positioning
    * is based on stable layout data.
    *
-   * @returns {void}
    *
    * @remarks
    * Edge cases handled:
@@ -8550,33 +8564,54 @@ export class PresentationEditor extends EventEmitter {
 
     const behavior = options.behavior ?? 'auto';
     const block = options.block ?? 'center';
+    const navigationIds = this.#resolveTrackedChangeNavigationIds(entityId, storyKey);
 
     if (storyKey && storyKey !== BODY_STORY_KEY) {
-      if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
-        return true;
-      }
-
-      if (await this.#activateTrackedChangeStorySurface(entityId, storyKey, preferredPageIndex)) {
-        if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
+      for (const id of navigationIds) {
+        if (this.#navigateToActiveStoryTrackedChange(id, storyKey)) {
           return true;
         }
       }
 
-      return this.#scrollToRenderedTrackedChange(entityId, storyKey, preferredPageIndex, { behavior, block });
+      for (const id of navigationIds) {
+        if (await this.#activateTrackedChangeStorySurface(id, storyKey, preferredPageIndex)) {
+          for (const activeId of navigationIds) {
+            if (this.#navigateToActiveStoryTrackedChange(activeId, storyKey)) {
+              return true;
+            }
+          }
+        }
+      }
+
+      for (const id of navigationIds) {
+        if (await this.#scrollToRenderedTrackedChange(id, storyKey, preferredPageIndex, { behavior, block })) {
+          return true;
+        }
+      }
+      return false;
     }
 
     const setCursorById = editor.commands?.setCursorById;
 
     // Try direct cursor placement, then scroll to the new selection.
-    if (typeof setCursorById === 'function' && setCursorById(entityId, { preferredActiveThreadId: entityId })) {
-      await this.scrollToPositionAsync(editor.state.selection.from, { behavior, block });
-      return true;
+    if (typeof setCursorById === 'function') {
+      for (const id of navigationIds) {
+        if (setCursorById(id, { preferredActiveThreadId: id })) {
+          await this.scrollToPositionAsync(editor.state.selection.from, { behavior, block });
+          return true;
+        }
+      }
     }
 
     // Fall back to resolving the tracked change position and scrolling.
-    const resolved = resolveTrackedChange(editor, entityId);
+    const resolved = navigationIds.map((id) => resolveTrackedChange(editor, id)).find(Boolean);
     if (!resolved) {
-      return this.#scrollToRenderedTrackedChange(entityId, undefined, preferredPageIndex, { behavior, block });
+      for (const id of navigationIds) {
+        if (await this.#scrollToRenderedTrackedChange(id, undefined, preferredPageIndex, { behavior, block })) {
+          return true;
+        }
+      }
+      return false;
     }
 
     // Try with the raw ID (tracked changes may use a different internal ID).
@@ -8597,6 +8632,45 @@ export class PresentationEditor extends EventEmitter {
     editor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
     editor.view?.focus?.();
     return true;
+  }
+
+  #resolveTrackedChangeNavigationIds(entityId: string, storyKey?: string): string[] {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    const add = (value: unknown) => {
+      if (value === undefined || value === null) return;
+      const id = String(value).trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+
+    add(entityId);
+
+    let story: StoryLocator | undefined;
+    if (storyKey && storyKey !== BODY_STORY_KEY) {
+      try {
+        story = parseStoryKey(storyKey);
+      } catch {
+        story = undefined;
+      }
+    }
+
+    try {
+      const resolved = resolveTrackedChangeInStory(this.#editor, {
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId,
+        ...(story ? { story } : {}),
+      });
+      add(resolved?.change?.commandRawId);
+      add(resolved?.change?.rawId);
+      add(resolved?.change?.id);
+    } catch {
+      // Navigation still has direct-id and rendered-DOM fallbacks.
+    }
+
+    return ids;
   }
 
   async #activateTrackedChangeStorySurface(

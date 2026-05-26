@@ -8,10 +8,19 @@ This folder contains deterministic generator/check entry points for the Document
 - `check-*` scripts validate generated artifacts or docs and fail with non-zero exit code on drift.
 - Root `package.json` exposes three canonical entry points:
   - `pnpm run docapi:sync` — runs `generate-contract-outputs.ts`
-  - `pnpm run docapi:check` — runs `check-contract-parity.ts` + `check-contract-outputs.ts`
+  - `pnpm run docapi:check` — runs `check-contract-parity.ts` + `check-contract-outputs.ts` + `check-examples.ts`
   - `pnpm run docapi:sync:check` — sync then check
 - Pre-commit hook (`lefthook.yml`) auto-runs `docapi:sync` when contract or script sources are staged, and restages `reference/` and `overview.mdx`.
 - CI workflow (`ci-document-api.yml`) generates outputs, checks overview freshness, then runs `docapi:check` on PRs touching document-api paths.
+
+### Which checks run where (SD-673 Phase 2)
+
+Two buckets:
+
+| Bucket | Scripts | Notes |
+| --- | --- | --- |
+| **Per-PR (wired into `docapi:check`)** | `check-contract-parity`, `check-contract-outputs`, `check-examples`, `check-overview-alignment` | Run on every doc-api PR via `ci-document-api.yml`. |
+| **Focused / manual** | `check-stable-schemas`, `check-agent-artifacts`, `check-generated-reference-docs` | Targeted local-debug variants of `check-contract-outputs` (the per-PR superset). Useful when iterating on one artifact area without re-running the full superset. Not wired into CI by design. |
 
 ## Manual vs generated boundaries
 
@@ -40,8 +49,7 @@ Do not hand-edit generated output files. Regenerate instead.
 | `generate-agent-artifacts.ts` | generate | Regenerate agent artifacts (remediation/workflow/compatibility) | Contract snapshot | `packages/document-api/generated/agent/*` | Focused agent-artifact regeneration |
 | `check-generated-reference-docs.ts` | check | Validate generated reference docs and overview generated block drift | Contract snapshot + `apps/docs/document-api/reference` + overview | None | Focused docs generation check |
 | `generate-reference-docs.ts` | generate | Regenerate generated reference docs and overview generated block | Contract snapshot + overview markers | `apps/docs/document-api/reference/*`, generated block in `apps/docs/document-api/overview.mdx` | Focused docs regeneration |
-| `check-overview-alignment.ts` | check | Enforce overview quality rules (required copy/markers, forbidden placeholders, known API paths only) | `apps/docs/document-api/overview.mdx` + `DOCUMENT_API_MEMBER_PATHS` | None | Docs consistency gate |
-| `check-doc-coverage.ts` | check | Ensure every operation has a `### \`<operationId>\`` section in `src/README.md` | `packages/document-api/src/README.md` + `OPERATION_IDS` | None | Contract/docs coverage gate |
+| `check-overview-alignment.ts` | check | Enforce structural correctness of the overview page: reference link, generated section markers, no stale placeholders, only known `editor.doc.*` paths | `apps/docs/document-api/available-operations.mdx` + `DOCUMENT_API_MEMBER_PATHS` | None | Docs consistency gate |
 | `check-examples.ts` | check | Ensure required workflow example headings exist in `src/README.md` | `packages/document-api/src/README.md` | None | Docs workflow example gate |
 | `check-contract-parity.ts` | check | Enforce parity between operation IDs, command catalog, maps, and runtime API member paths | `packages/document-api/src/index.js` exports + runtime API shape | None | Contract surface integrity gate |
 | `generate-internal-schemas.ts` | generate | Generate internal-only operation schema snapshot | Contract snapshot + schema dialect | `packages/document-api/.generated-internal/contract-schemas/index.json` | Local tooling/debugging |

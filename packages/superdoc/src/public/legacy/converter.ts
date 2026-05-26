@@ -16,9 +16,9 @@
  * types both so Phase 4 can flip `package.json#exports` without
  * regressing JS consumers doing
  * `import { hasBodyNumberingReferences } from 'superdoc/converter'`.
- * Adding or removing an export here updates the `expectedNames` for
- * the `legacy/converter` entry in `FACADE_ENTRIES` inside
- * `packages/superdoc/scripts/verify-public-facade-emit.cjs` in the
+ * The postbuild gate `verify-public-facade-emit.cjs` parses this file
+ * and verifies that the emitted declarations expose exactly these
+ * named exports. No second hand-maintained list to keep in sync.
  * same PR.
  */
 export { SuperConverter, hasBodyNumberingReferences } from '@superdoc/super-editor/converter';

@@ -27,7 +27,7 @@ Returns a ListsMutateItemResult receipt.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `level` | integer | yes |  |
-| `restartAfterLevel` | any | yes |  |
+| `restartAfterLevel` | integer \| null | yes |  |
 | `scope` | enum | no | `"definition"`, `"instance"` |
 | `target` | ListItemAddress | yes | ListItemAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
@@ -39,7 +39,7 @@ Returns a ListsMutateItemResult receipt.
 ```json
 {
   "level": 1,
-  "restartAfterLevel": {},
+  "restartAfterLevel": 1,
   "scope": "definition",
   "target": {
     "kind": "block",

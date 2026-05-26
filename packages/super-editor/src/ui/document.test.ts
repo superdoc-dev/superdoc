@@ -416,6 +416,31 @@ describe('ui.document', () => {
     ui.destroy();
   });
 
+  it('replaceFile preserves the replacedFile flag when it re-emits commentsLoaded', async () => {
+    const { superdoc, editor } = makeStubs();
+    const replaceFile = vi.fn(async (_file: File) => undefined);
+    const emit = vi.fn();
+    (editor as unknown as { replaceFile: typeof replaceFile }).replaceFile = replaceFile;
+    (editor as unknown as { emit: typeof emit }).emit = emit;
+    (editor as unknown as { converter: { comments: unknown[] } }).converter = {
+      comments: [{ id: 'c1', text: 'imported' }],
+    };
+    editor.options.replacedFile = true;
+
+    const ui = createSuperDocUI({ superdoc });
+    const file = new File(['stub'], 'sample.docx');
+
+    await ui.document.replaceFile(file);
+
+    expect(emit).toHaveBeenCalledWith('commentsLoaded', {
+      editor,
+      replacedFile: true,
+      comments: [{ id: 'c1', text: 'imported' }],
+    });
+
+    ui.destroy();
+  });
+
   it('replaceFile rejects when activeEditor has no replaceFile', async () => {
     const { superdoc } = makeStubs();
     const ui = createSuperDocUI({ superdoc });

@@ -68,6 +68,26 @@ describe('resolveTextRangeInBlock', () => {
     expect(result).toEqual({ from: 2, to: 4 });
   });
 
+  it('resolves a non-collapsed range starting at an inline-wrapper boundary to the next text node', () => {
+    const prefix = createNode('run', [createNode('text', [], { text: 'The quick brown fox jumps over the ' })], {
+      isInline: true,
+      isLeaf: false,
+    });
+    const insertedRun = createNode('run', [createNode('text', [], { text: 'lazy ' })], {
+      isInline: true,
+      isLeaf: false,
+    });
+    const suffix = createNode('run', [createNode('text', [], { text: 'dog.' })], {
+      isInline: true,
+      isLeaf: false,
+    });
+    const paragraph = createNode('paragraph', [prefix, insertedRun, suffix], { isBlock: true, inlineContent: true });
+
+    const result = resolveTextRangeInBlock(paragraph, 0, { start: 35, end: 39 });
+
+    expect(result).toEqual({ from: 39, to: 43 });
+  });
+
   it('returns null for out-of-range offsets', () => {
     const textNode = createNode('text', [], { text: 'Hi' });
     const paragraph = createNode('paragraph', [textNode], { isBlock: true, inlineContent: true });

@@ -310,6 +310,32 @@ const TRACK_CHANGE_STYLES = `
   background-color: var(--sd-tracked-changes-delete-background-focused, #cb0e4744);
 }
 
+.superdoc-layout .track-overlap-insert-delete-dec.track-insert-dec.track-delete-dec.highlighted {
+  border-top: var(--sd-tracked-changes-insert-border-width, 1px) dashed var(--sd-tracked-changes-insert-border, #00853d);
+  border-bottom: var(--sd-tracked-changes-insert-border-width, 1px) dashed var(--sd-tracked-changes-insert-border, #00853d);
+  background-color: var(--sd-tracked-changes-insert-background, #399c7222);
+  color: var(--sd-tracked-changes-insert-text, currentColor);
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, #cb0e47)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px) !important;
+}
+
+.superdoc-layout .track-overlap-insert-delete-dec.track-insert-dec.track-delete-dec.highlighted.track-change-focused {
+  border-left: none;
+  border-right: none;
+  border-top-style: solid;
+  border-bottom-style: solid;
+  background-color: var(--sd-tracked-changes-insert-background-focused, #399c7244);
+  color: var(--sd-tracked-changes-insert-text, currentColor);
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, #cb0e47)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px) !important;
+}
+
 .superdoc-layout .track-format-dec.highlighted.track-change-focused {
   background-color: var(--sd-tracked-changes-format-background-focused, #ffd70033);
 }

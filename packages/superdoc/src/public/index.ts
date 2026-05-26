@@ -16,10 +16,12 @@
  *      tests/consumer-typecheck/check-root-classification-closure.mjs).
  *
  * Rules for this file:
- *   - AIDEV-NOTE: Named exports only. No `export *`. Changing the surface
- *     here updates the classification artifact and the
- *     verify-public-facade-emit.cjs FACADE_ENTRIES['root (./index)'].expectedNames
- *     in the same PR. Skipping either fails the postbuild gate or the
+ *   - AIDEV-NOTE: Named exports only. No `export *` (the postbuild gate
+ *     parses this file and rejects wildcards). This source export list
+ *     IS the facade contract; `verify-public-facade-emit.cjs` derives
+ *     the expected names from this file and asserts the emitted .d.ts /
+ *     .d.cts match. Changing the surface here also updates the
+ *     classification artifact in the same PR; skipping that fails the
  *     consumer-typecheck snapshot.
  *   - The CI closure gate enforces that no supported-root or legacy-root
  *     export references an internal-candidate root symbol in its declared
@@ -46,7 +48,8 @@ export { DOCX, PDF, HTML, getFileObject, compareVersions };
 // First-class public API. Documented, advertised, supported long-term.
 // =============================================================================
 
-// Source: ./core/SuperDoc.js
+// Source: ./core/SuperDoc.ts. The `.js` import specifier is intentional
+// for ESM output and resolves to the .ts source during TypeScript builds.
 export { SuperDoc } from '../core/SuperDoc.js';
 
 // Source: ./core/theme/create-theme.ts
@@ -55,14 +58,17 @@ export { createTheme } from '../core/theme/create-theme.js';
 
 // Type source: ./core/types/index.js
 export type { AwarenessState } from '../core/types/index.js';
+export type { AwarenessUser } from '../core/types/index.js';
 export type { BlockNavigationAddress } from '../core/types/index.js';
 export type { BookmarkAddress } from '../core/types/index.js';
+export type { CanPerformPermissionParams } from '../core/types/index.js';
 export type { CollaborationConfig } from '../core/types/index.js';
 export type { CommentAddress } from '../core/types/index.js';
 export type { CommentsType } from '../core/types/index.js';
 export type { Config } from '../core/types/index.js';
 export type { DirectSurfaceRequest } from '../core/types/index.js';
 export type { DocRange } from '../core/types/index.js';
+export type { Document } from '../core/types/index.js';
 export type { DocumentMode } from '../core/types/index.js';
 export type { EditorSurface } from '../core/types/index.js';
 export type { EditorTransactionEvent } from '../core/types/index.js';
@@ -84,11 +90,22 @@ export type { PasswordPromptContext } from '../core/types/index.js';
 export type { PasswordPromptHandle } from '../core/types/index.js';
 export type { PasswordPromptRenderContext } from '../core/types/index.js';
 export type { PasswordPromptResolution } from '../core/types/index.js';
+export type { PermissionResolverParams } from '../core/types/index.js';
 export type { ResolvedFindReplaceTexts } from '../core/types/index.js';
 export type { ResolvedPasswordPromptTexts } from '../core/types/index.js';
 export type { SearchMatch } from '../core/types/index.js';
 export type { StoryLocator } from '../core/types/index.js';
+export type { SuperDocAwarenessUpdatePayload } from '../core/types/index.js';
+export type { SuperDocCommentsUpdatePayload } from '../core/types/index.js';
+export type { SuperDocEditorPayload } from '../core/types/index.js';
+export type { SuperDocExceptionEditorPayload } from '../core/types/index.js';
+export type { SuperDocExceptionPayload } from '../core/types/index.js';
+export type { SuperDocExceptionRestorePayload } from '../core/types/index.js';
+export type { SuperDocExceptionStorePayload } from '../core/types/index.js';
 export type { SuperDocLayoutEngineOptions } from '../core/types/index.js';
+export type { SuperDocLockedPayload } from '../core/types/index.js';
+export type { SuperDocReadyPayload } from '../core/types/index.js';
+export type { SuperDocState } from '../core/types/index.js';
 export type { SuperDocTelemetryConfig } from '../core/types/index.js';
 export type { SurfaceComponentProps } from '../core/types/index.js';
 export type { SurfaceFloatingPlacement } from '../core/types/index.js';

@@ -26,6 +26,14 @@ function hasFieldCharType(node, fieldType) {
   );
 }
 
+function getRunText(node) {
+  return (node?.elements ?? [])
+    .filter((element) => element?.name === 'w:t')
+    .flatMap((element) => element?.elements ?? [])
+    .map((child) => child?.text ?? '')
+    .join('');
+}
+
 describe('crossReference export routing', () => {
   it('exports crossReference nodes as Word field-code runs', () => {
     const exported = exportSchemaToJson({
@@ -60,6 +68,16 @@ describe('crossReference export routing', () => {
     expect(exportedRuns.some((node) => hasFieldCharType(node, 'begin'))).toBe(true);
     expect(exportedRuns.some((node) => hasFieldCharType(node, 'separate'))).toBe(true);
     expect(exportedRuns.some((node) => hasFieldCharType(node, 'end'))).toBe(true);
+  });
+
+  it('exports resolvedText when collaborative hydration stripped cached content', () => {
+    const exported = exportSchemaToJson({
+      node: buildCrossReferenceNode({
+        attrs: { resolvedText: '\u200e1' },
+      }),
+    });
+
+    expect(exported.map(getRunText).join('')).toBe('\u200e1');
   });
 });
 

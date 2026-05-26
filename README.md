@@ -175,6 +175,7 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/shri-scale"><img src="https://github.com/shri-scale.png" width="50" height="50" alt="shri-scale" title="Shri H" /></a>
 <a href="https://github.com/msviderok"><img src="https://github.com/msviderok.png" width="50" height="50" alt="msviderok" title="Myroslav Sviderok" /></a>
 <a href="https://github.com/sergiogomes"><img src="https://github.com/sergiogomes.png" width="50" height="50" alt="sergiogomes" title="Sérgio Paulo Gomes" /></a>
+<a href="https://github.com/wookieb"><img src="https://github.com/wookieb.png" width="50" height="50" alt="wookieb" title="Łukasz Kużyński" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

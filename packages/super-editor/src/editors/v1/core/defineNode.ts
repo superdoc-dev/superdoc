@@ -28,12 +28,11 @@
  *
  * @example
  * ```javascript
- * // In a JavaScript file with JSDoc:
+ * // In a JavaScript file with JSDoc: alias ParagraphAttrs at the top of
+ * // the file via a standard `typedef` JSDoc block pointing at
+ * // '@extensions/types/node-attributes.js', then defineNode picks up the
+ * // attribute shape from there.
  * import { defineNode } from '@core/defineNode.js';
- *
- * /**
- *  * @typedef {import('@extensions/types/node-attributes.js').ParagraphAttrs} ParagraphAttrs
- *  *\/
  *
  * export const Paragraph = defineNode({
  *   name: 'paragraph',
@@ -49,11 +48,11 @@ import { Node, type NodeConfig } from './Node.js';
 /**
  * Type-safe factory for creating Node extensions.
  *
- * @template Options - Extension options type
- * @template Storage - Extension storage type
- * @template Attrs - Node attributes type
- * @param config - Node configuration object
- * @returns A new Node instance with the specified types
+ * @typeParam Options - Extension options type.
+ * @typeParam Storage - Extension storage type.
+ * @typeParam Attrs - Node attributes type.
+ * @param config - Node configuration object.
+ * @returns A new Node instance with the specified types.
  */
 export function defineNode<
   Options extends Record<string, unknown> = Record<string, never>,

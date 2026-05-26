@@ -1,4 +1,4 @@
-import type { ImageRun, ParagraphAttrs, ParagraphBlock, TextRun } from '@superdoc/contracts';
+import type { ImageRun, ParagraphAttrs, ParagraphBlock, TextRun, TrackedChangeMeta } from '@superdoc/contracts';
 import { getParagraphInlineDirection } from '@superdoc/contracts';
 import { hashParagraphBorders } from '../paragraph-hash-utils.js';
 import {
@@ -52,6 +52,32 @@ const hasListMarkerProperties = (
 
   return true;
 };
+
+const getTrackedChangeLayers = (run: TextRun): TrackedChangeMeta[] => {
+  if (Array.isArray(run.trackedChanges) && run.trackedChanges.length > 0) {
+    return run.trackedChanges;
+  }
+  return run.trackedChange ? [run.trackedChange] : [];
+};
+
+const trackedChangeVersion = (run: TextRun): string =>
+  getTrackedChangeLayers(run)
+    .map((trackedChange) =>
+      [
+        trackedChange.kind ?? '',
+        trackedChange.id ?? '',
+        trackedChange.storyKey ?? '',
+        trackedChange.overlapParentId ?? '',
+        trackedChange.relationship ?? '',
+        trackedChange.author ?? '',
+        trackedChange.authorEmail ?? '',
+        trackedChange.authorImage ?? '',
+        trackedChange.date ?? '',
+        trackedChange.before ? JSON.stringify(trackedChange.before) : '',
+        trackedChange.after ? JSON.stringify(trackedChange.after) : '',
+      ].join(':'),
+    )
+    .join('|');
 
 export const deriveParagraphBlockVersion = (
   block: ParagraphBlock,
@@ -120,19 +146,7 @@ export const deriveParagraphBlockVersion = (
       }
 
       const textRun = run as TextRun;
-      const trackedChangeVersion = textRun.trackedChange
-        ? [
-            textRun.trackedChange.kind ?? '',
-            textRun.trackedChange.id ?? '',
-            textRun.trackedChange.storyKey ?? '',
-            textRun.trackedChange.author ?? '',
-            textRun.trackedChange.authorEmail ?? '',
-            textRun.trackedChange.authorImage ?? '',
-            textRun.trackedChange.date ?? '',
-            textRun.trackedChange.before ? JSON.stringify(textRun.trackedChange.before) : '',
-            textRun.trackedChange.after ? JSON.stringify(textRun.trackedChange.after) : '',
-          ].join(':')
-        : '';
+      const trackedVersion = trackedChangeVersion(textRun);
       return [
         textRun.text ?? '',
         textRun.fontFamily,
@@ -148,7 +162,7 @@ export const deriveParagraphBlockVersion = (
         textRun.vertAlign ?? '',
         textRun.baselineShift != null ? textRun.baselineShift : '',
         textRun.token ?? '',
-        trackedChangeVersion,
+        trackedVersion,
         textRun.comments?.length ?? 0,
       ].join(',');
     })
@@ -224,6 +238,7 @@ export const hashParagraphBlockForTableVersion = (
     hash = hashString(hash, getRunBooleanProp(run, 'strike') ? '1' : '');
     hash = hashString(hash, getRunStringProp(run, 'vertAlign'));
     hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
+    hash = hashString(hash, trackedChangeVersion(run as TextRun));
   }
 
   return hash;

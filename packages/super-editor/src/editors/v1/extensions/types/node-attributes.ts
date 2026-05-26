@@ -488,6 +488,24 @@ export interface ImageAttrs extends ShapeNodeAttributes {
   anchorData?: Record<string, unknown> | null;
   /** @internal Whether image is anchored */
   isAnchor?: boolean;
+  /** @internal Whether this image is a generated preview for a VML text watermark. */
+  vmlTextWatermark?: boolean;
+  /** @internal Parsed VML text watermark data used for preview and round-trip export. */
+  textWatermarkData?: Record<string, unknown>;
+  /** @internal Raw VML style string from a text watermark shape. */
+  vmlStyle?: string;
+  /** @internal Raw VML shape attributes. */
+  vmlAttributes?: Record<string, unknown>;
+  /** @internal Raw VML textpath attributes. */
+  vmlTextpathAttributes?: Record<string, unknown>;
+  /** @internal Raw VML path attributes. */
+  vmlPathAttributes?: Record<string, unknown>;
+  /** @internal Raw VML fill attributes. */
+  vmlFillAttributes?: Record<string, unknown>;
+  /** @internal Raw VML stroke attributes. */
+  vmlStrokeAttributes?: Record<string, unknown>;
+  /** @internal Raw VML wrap attributes. */
+  vmlWrapAttributes?: Record<string, unknown>;
   /** @internal Simple positioning flag */
   simplePos?: boolean;
   /** @internal File extension */

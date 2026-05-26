@@ -20,14 +20,14 @@ Create a new comment thread (or reply when parentCommentId is given).
 
 ## Expected result
 
-Returns a Receipt confirming the comment was created; reports NO_OP if the anchor target is invalid.
+Returns a Receipt confirming the comment was created, including the new comment id; reports NO_OP if the anchor target is invalid.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `parentCommentId` | string | no |  |
-| `target` | TextAddress \\| TextTarget | no | One of: TextAddress, TextTarget |
+| `target` | TextAddress \| TextTarget \| SelectionTarget \| CommentTrackedChangeTarget | no | One of: TextAddress, TextTarget, SelectionTarget, CommentTrackedChangeTarget |
 | `text` | string | yes |  |
 
 ### Example request
@@ -53,6 +53,7 @@ Returns a Receipt confirming the comment was created; reports NO_OP if the ancho
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `id` | string | yes |  |
 | `inserted` | EntityAddress[] | no |  |
 | `removed` | EntityAddress[] | no |  |
 | `success` | `true` | yes | Constant: `true` |
@@ -72,6 +73,7 @@ Returns a Receipt confirming the comment was created; reports NO_OP if the ancho
 
 ```json
 {
+  "id": "id-001",
   "inserted": [
     {
       "entityId": "entity-789",
@@ -113,13 +115,19 @@ Returns a Receipt confirming the comment was created; reports NO_OP if the ancho
       "type": "string"
     },
     "target": {
-      "description": "Text range to anchor the comment. Accepts either a single-block TextAddress {kind:'text', blockId, range} or a multi-segment TextTarget {kind:'text', segments:[{blockId, range}, ...]} for selections that span blocks.",
+      "description": "Comment target. Accepts a TextAddress, TextTarget, SelectionTarget, or {trackedChangeId, kind?:'trackedChange'} to anchor directly on tracked content.",
       "oneOf": [
         {
           "$ref": "#/$defs/TextAddress"
         },
         {
           "$ref": "#/$defs/TextTarget"
+        },
+        {
+          "$ref": "#/$defs/SelectionTarget"
+        },
+        {
+          "$ref": "#/$defs/CommentTrackedChangeTarget"
         }
       ]
     },
@@ -141,7 +149,7 @@ Returns a Receipt confirming the comment was created; reports NO_OP if the ancho
 {
   "oneOf": [
     {
-      "$ref": "#/$defs/ReceiptSuccess"
+      "$ref": "#/$defs/CommentsCreateSuccess"
     },
     {
       "additionalProperties": false,
@@ -184,7 +192,7 @@ Returns a Receipt confirming the comment was created; reports NO_OP if the ancho
 <Accordion title="Raw success schema">
 ```json
 {
-  "$ref": "#/$defs/ReceiptSuccess"
+  "$ref": "#/$defs/CommentsCreateSuccess"
 }
 ```
 </Accordion>

@@ -18,8 +18,9 @@ vi.mock('../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js',
   getTrackChanges: vi.fn(),
 }));
 
-function makeEditor(): Editor {
+function makeEditor(options: Record<string, unknown> = { trackedChanges: {} }): Editor {
   return {
+    options,
     state: {
       doc: {
         content: { size: 100 },
@@ -55,8 +56,8 @@ describe('resolveTrackedChangeType', () => {
     expect(resolveTrackedChangeType({ hasInsert: true, hasDelete: true, hasFormat: true })).toBe('format');
   });
 
-  it('returns insert when both hasInsert and hasDelete are true (no format)', () => {
-    expect(resolveTrackedChangeType({ hasInsert: true, hasDelete: true, hasFormat: false })).toBe('insert');
+  it('returns replacement when both hasInsert and hasDelete are true (no format)', () => {
+    expect(resolveTrackedChangeType({ hasInsert: true, hasDelete: true, hasFormat: false })).toBe('replacement');
   });
 });
 
@@ -65,7 +66,7 @@ describe('groupTrackedChanges', () => {
     vi.clearAllMocks();
   });
 
-  it('groups marks by raw id', () => {
+  it('groups imported Word marks by source wrapper', () => {
     vi.mocked(getTrackChanges).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-1', { sourceId: '11' }), from: 1, to: 5 },
       { ...makeTrackMark(TrackDeleteMarkName, 'tc-1', { sourceId: '10' }), from: 5, to: 10 },
@@ -74,13 +75,36 @@ describe('groupTrackedChanges', () => {
     const editor = makeEditor();
     const grouped = groupTrackedChanges(editor);
 
+    expect(grouped).toHaveLength(2);
+    expect(grouped[0]?.rawId).toBe(`word:${TrackInsertMarkName}:11`);
+    expect(grouped[0]?.id).toBe(`word:${TrackInsertMarkName}:11`);
+    expect(grouped[0]?.commandRawId).toBe('tc-1');
+    expect(grouped[0]?.hasInsert).toBe(true);
+    expect(grouped[0]?.hasDelete).toBe(false);
+    expect(grouped[0]?.wordRevisionIds).toEqual({ insert: '11' });
+    expect(grouped[1]?.rawId).toBe(`word:${TrackDeleteMarkName}:10`);
+    expect(grouped[1]?.id).toBe(`word:${TrackDeleteMarkName}:10`);
+    expect(grouped[1]?.commandRawId).toBe('tc-1');
+    expect(grouped[1]?.hasInsert).toBe(false);
+    expect(grouped[1]?.hasDelete).toBe(true);
+    expect(grouped[1]?.wordRevisionIds).toEqual({ delete: '10' });
+  });
+
+  it('groups native marks by raw id', () => {
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 1, to: 5 },
+      { ...makeTrackMark(TrackDeleteMarkName, 'tc-1'), from: 5, to: 10 },
+    ] as never);
+
+    const grouped = groupTrackedChanges(makeEditor());
+
     expect(grouped).toHaveLength(1);
     expect(grouped[0]?.rawId).toBe('tc-1');
+    expect(grouped[0]?.id).toBe('tc-1');
     expect(grouped[0]?.from).toBe(1);
     expect(grouped[0]?.to).toBe(10);
     expect(grouped[0]?.hasInsert).toBe(true);
     expect(grouped[0]?.hasDelete).toBe(true);
-    expect(grouped[0]?.wordRevisionIds).toEqual({ insert: '11', delete: '10' });
   });
 
   it('keeps separate entries for different raw ids', () => {
@@ -93,7 +117,7 @@ describe('groupTrackedChanges', () => {
     expect(grouped).toHaveLength(2);
   });
 
-  it('generates deterministic stable ids', () => {
+  it('keeps stable ids tied to the logical grouped raw id', () => {
     vi.mocked(getTrackChanges).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-1', { author: 'Ada' }), from: 2, to: 5 },
     ] as never);
@@ -107,7 +131,8 @@ describe('groupTrackedChanges', () => {
     };
     const second = groupTrackedChanges(editor);
 
-    expect(first[0]?.id).toBe(second[0]?.id);
+    expect(first[0]?.id).toBe('tc-1');
+    expect(second[0]?.id).toBe('tc-1');
   });
 
   it('caches results by document reference', () => {
@@ -148,6 +173,102 @@ describe('groupTrackedChanges', () => {
     expect(grouped[0]?.wordRevisionIds).toEqual({ format: '22' });
   });
 
+  it('preserves empty parent Word wrappers when the only text belongs to a child deletion', () => {
+    const parent = makeTrackMark(TrackInsertMarkName, 'parent', { sourceId: '2', author: 'Missy Fox' });
+    const child = makeTrackMark(TrackDeleteMarkName, 'child', {
+      sourceId: '3',
+      author: 'Vivienne Salisbury',
+      overlapParentId: 'parent',
+    });
+    const node = { text: 'XYZ', marks: [parent.mark, child.mark] };
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...parent, node, from: 1, to: 4 },
+      { ...child, node, from: 1, to: 4 },
+    ] as never);
+
+    const grouped = groupTrackedChanges(makeEditor());
+    const parentChange = grouped.find((change) => change.wordRevisionIds?.insert === '2');
+    const childChange = grouped.find((change) => change.wordRevisionIds?.delete === '3');
+
+    expect(parentChange?.excerpt).toBe('');
+    expect(childChange?.excerpt).toBe('XYZ');
+  });
+
+  it('keeps live parent insertion text when a child deletion overlaps it', () => {
+    const parent = makeTrackMark(TrackInsertMarkName, 'parent', { author: 'Live Author' });
+    const child = makeTrackMark(TrackDeleteMarkName, 'child', {
+      author: 'Second Author',
+      overlapParentId: 'parent',
+    });
+    const node = { text: 'review', marks: [parent.mark, child.mark] };
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...parent, node, from: 1, to: 7 },
+      { ...child, node, from: 1, to: 7 },
+    ] as never);
+
+    const grouped = groupTrackedChanges(makeEditor());
+    const parentChange = grouped.find((change) => change.rawId === 'parent');
+    const childChange = grouped.find((change) => change.rawId === 'child');
+
+    expect(parentChange?.excerpt).toBe('review');
+    expect(childChange?.excerpt).toBe('review');
+  });
+
+  it('attaches overlap visual layers to the parent insertion with child deletion as the context target', () => {
+    const parent = makeTrackMark(TrackInsertMarkName, 'parent-overlap', { author: 'Insert Author' });
+    const child = makeTrackMark(TrackDeleteMarkName, 'child-overlap', {
+      author: 'Delete Author',
+      overlapParentId: 'parent-overlap',
+    });
+    const node = { text: 'review', marks: [parent.mark, child.mark] };
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...child, node, from: 1, to: 7 },
+      { ...parent, node, from: 1, to: 7 },
+    ] as never);
+
+    const grouped = groupTrackedChanges(makeEditor());
+    const parentChange = grouped.find((change) => change.rawId === 'parent-overlap');
+    const childChange = grouped.find((change) => change.rawId === 'child-overlap');
+
+    expect(parentChange).toBeDefined();
+    expect(childChange).toBeDefined();
+    expect(parentChange!.overlap?.visualLayers).toEqual([
+      {
+        id: parentChange!.id,
+        rawId: 'parent-overlap',
+        commandRawId: 'parent-overlap',
+        type: 'insert',
+        relationship: 'parent',
+      },
+      {
+        id: childChange!.id,
+        rawId: 'child-overlap',
+        commandRawId: 'child-overlap',
+        type: 'delete',
+        relationship: 'child',
+      },
+    ]);
+    expect(parentChange!.overlap?.preferredContextTargetId).toBe(childChange!.id);
+    expect(parentChange!.overlap?.preferredContextTarget).toEqual({
+      id: childChange!.id,
+      rawId: 'child-overlap',
+      commandRawId: 'child-overlap',
+      type: 'delete',
+      relationship: 'child',
+    });
+    expect(childChange!.overlap).toBeUndefined();
+  });
+
+  it('preserves significant Word revision whitespace in explicit excerpts', () => {
+    const mark = makeTrackMark(TrackDeleteMarkName, 'delete-with-space', { sourceId: '4' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...mark, node: { text: 'O ', marks: [mark.mark] }, from: 1, to: 3 },
+    ] as never);
+
+    const grouped = groupTrackedChanges(makeEditor());
+    expect(grouped[0]?.excerpt).toBe('O ');
+  });
+
   it('sorts results by from position', () => {
     vi.mocked(getTrackChanges).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-2'), from: 10, to: 15 },
@@ -164,7 +285,7 @@ describe('resolveTrackedChange', () => {
     vi.clearAllMocks();
   });
 
-  it('finds a grouped change by derived id', () => {
+  it('finds a grouped change by canonical id', () => {
     vi.mocked(getTrackChanges).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 1, to: 5 },
     ] as never);
@@ -189,7 +310,7 @@ describe('toCanonicalTrackedChangeId', () => {
     vi.clearAllMocks();
   });
 
-  it('maps a raw id to its canonical derived id', () => {
+  it('maps a raw id to its canonical stable id', () => {
     vi.mocked(getTrackChanges).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 1, to: 5 },
     ] as never);
@@ -197,7 +318,7 @@ describe('toCanonicalTrackedChangeId', () => {
     const editor = makeEditor();
     const canonical = toCanonicalTrackedChangeId(editor, 'tc-1');
     expect(typeof canonical).toBe('string');
-    expect(canonical).not.toBe('tc-1');
+    expect(canonical).toBe('tc-1');
   });
 
   it('returns null for unknown raw ids', () => {
@@ -223,6 +344,44 @@ describe('buildTrackedChangeCanonicalIdMap', () => {
 
     expect(map.get('tc-1')).toBe(canonicalId);
     expect(map.get(canonicalId!)).toBe(canonicalId);
+  });
+
+  it('does not map shared Word command ids as unique span aliases', () => {
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...makeTrackMark(TrackInsertMarkName, 'tc-1', { sourceId: '11' }), from: 1, to: 5 },
+      { ...makeTrackMark(TrackDeleteMarkName, 'tc-1', { sourceId: '10' }), from: 5, to: 10 },
+    ] as never);
+
+    const editor = makeEditor();
+    const map = buildTrackedChangeCanonicalIdMap(editor);
+    const grouped = groupTrackedChanges(editor);
+    const insertChange = grouped.find((change) => change.rawId === `word:${TrackInsertMarkName}:11`);
+    const deleteChange = grouped.find((change) => change.rawId === `word:${TrackDeleteMarkName}:10`);
+
+    expect(insertChange).toBeDefined();
+    expect(deleteChange).toBeDefined();
+    expect(map.get(`word:${TrackInsertMarkName}:11`)).toBe(insertChange!.id);
+    expect(map.get(`word:${TrackDeleteMarkName}:10`)).toBe(insertChange!.id);
+    expect(map.get('tc-1')).toBe(insertChange!.id);
+  });
+
+  it('keeps split replacement aliases separate in independent mode', () => {
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...makeTrackMark(TrackInsertMarkName, 'tc-1', { sourceId: '11' }), from: 1, to: 5 },
+      { ...makeTrackMark(TrackDeleteMarkName, 'tc-1', { sourceId: '10' }), from: 5, to: 10 },
+    ] as never);
+
+    const editor = makeEditor({ trackedChanges: { replacements: 'independent' } });
+    const map = buildTrackedChangeCanonicalIdMap(editor);
+    const grouped = groupTrackedChanges(editor);
+    const insertChange = grouped.find((change) => change.rawId === `word:${TrackInsertMarkName}:11`);
+    const deleteChange = grouped.find((change) => change.rawId === `word:${TrackDeleteMarkName}:10`);
+
+    expect(insertChange).toBeDefined();
+    expect(deleteChange).toBeDefined();
+    expect(map.get(`word:${TrackInsertMarkName}:11`)).toBe(insertChange!.id);
+    expect(map.get(`word:${TrackDeleteMarkName}:10`)).toBe(deleteChange!.id);
+    expect(map.get('tc-1')).toBe(deleteChange!.id);
   });
 
   it('returns empty map when no tracked changes exist', () => {

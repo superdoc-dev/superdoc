@@ -122,6 +122,8 @@ export interface FontConfig {
  * User information for collaboration
  */
 export interface User {
+  /** Stable actor id for authorship and ownership checks. */
+  id?: string | null;
   /** The user's name */
   name?: string;
 
@@ -378,6 +380,15 @@ export interface EditorOptions {
   comments?: CommentConfig;
 
   /**
+   * Public SuperDoc module configuration accepted by direct/headless
+   * `Editor.open()` callers. SuperDoc app config normalizes this before it
+   * reaches the editor; CLI/SDK headless callers pass it directly.
+   */
+  modules?: {
+    trackChanges?: EditorOptions['trackedChanges'] | null;
+  };
+
+  /**
    * Track-changes runtime configuration forwarded from the SuperDoc-level
    * `modules.trackChanges` config. Read by the TrackChanges extension and
    * by the SuperConverter during import. Fields are all optional; missing
@@ -533,8 +544,15 @@ export interface EditorOptions {
   /** Called when editor is destroyed */
   onDestroy?: () => void;
 
-  /** Called when there's a content error */
-  onContentError?: (params: { editor: Editor; error: Error }) => void;
+  /**
+   * Called when there's a content error. `error` is `unknown` because
+   * the emit sites do not normalize uniformly: `Editor.ts` wraps caught
+   * values in `Error`, but `insertContentAt` forwards the raw caught
+   * value. `disableCollaboration` is provided by the insertion path so
+   * callers can recover by detaching collaboration; absent on the
+   * Editor.ts emit.
+   */
+  onContentError?: (params: { editor: Editor; error: unknown; disableCollaboration?: () => void }) => void;
 
   /** Called when tracked changes update */
   onTrackedChangesUpdate?: (params: { changes: unknown }) => void;

@@ -65,6 +65,10 @@ const ENCRYPTED_FIXTURE_SOURCE = join(
   REPO_ROOT,
   'packages/super-editor/src/editors/v1/core/ooxml-encryption/fixtures/encrypted-advanced-text.docx',
 );
+const TRACKED_CHANGE_FIXTURE_SOURCE = join(
+  REPO_ROOT,
+  'packages/super-editor/src/editors/v1/tests/data/basic-tracked-change.docx',
+);
 const execFileAsync = promisify(execFile);
 const ZIP_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
@@ -2332,6 +2336,35 @@ describe('superdoc CLI', () => {
     expect(verifyResult.code).toBe(0);
     const verifyEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(verifyResult);
     expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
+  });
+
+  test('save --mode final exports accepted OOXML instead of copying review-preserving revisions', async () => {
+    const trackedSource = join(TEST_DIR, 'save-final-source.docx');
+    const savedOut = join(TEST_DIR, 'save-final-output.docx');
+    await copyFile(TRACKED_CHANGE_FIXTURE_SOURCE, trackedSource);
+
+    const openResult = await runCli(['open', trackedSource, '--session', 'final-export']);
+    expect(openResult.code).toBe(0);
+
+    const saveResult = await runCli([
+      'save',
+      '--session',
+      'final-export',
+      '--mode',
+      'final',
+      '--out',
+      savedOut,
+      '--force',
+    ]);
+    expect(saveResult.code).toBe(0);
+
+    const saveEnvelope = parseJsonOutput<SuccessEnvelope<{ mode: string; output: { path: string } }>>(saveResult);
+    expect(saveEnvelope.data.mode).toBe('final');
+    expect(saveEnvelope.data.output.path).toBe(savedOut);
+
+    const documentXml = await readDocxPart(savedOut, 'word/document.xml');
+    expect(documentXml).not.toContain('<w:ins');
+    expect(documentXml).not.toContain('<w:del');
   });
 
   test('save --in-place detects source drift unless forced', async () => {

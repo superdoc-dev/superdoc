@@ -39,6 +39,7 @@
  *
  * Adding a new facade file:
  *   - Create `packages/superdoc/src/public/<name>.ts` with named exports.
+ *     The source file IS the contract; no wildcard re-exports.
  *   - Wire it into `vite.config.js` (`rollupOptions.input`).
  *   - If the new entry is intended to ship with both ESM and CJS type
  *     declarations (i.e. `package.json#exports` will use a `types.import` /
@@ -48,7 +49,9 @@
  *     (matching the SD-3180 legacy leaf entries), leave `cjs: null` and
  *     the parity check is skipped. Phase 4 of SD-3175 owns the contract
  *     flip and decides per-entry which shape ships.
- *   - Append a `FACADE_ENTRIES` entry below with the expected symbol set.
+ *   - Append a `FACADE_ENTRIES` entry below pointing at the source file
+ *     and the emitted ESM/CJS paths. No expected-names list to maintain:
+ *     the verifier parses the source file directly.
  *   - If the new entry re-exports `EditorCommands`, set
  *     `runsCommandSignatureProbe: true`.
  *
@@ -62,6 +65,7 @@ const path = require('node:path');
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const distRoot = path.resolve(__dirname, '..', 'dist');
 const PUBLIC_DIST = path.join(distRoot, 'superdoc', 'src', 'public');
+const PUBLIC_SRC = path.resolve(__dirname, '..', 'src', 'public');
 
 let ts;
 try {
@@ -71,14 +75,18 @@ try {
   process.exit(1);
 }
 
-// AIDEV-NOTE: Adding or removing an export from a facade file in
-// `packages/superdoc/src/public/**` must update the matching
-// `expectedNames` list below in the same PR. Skipping that step fails
-// this gate. Link the PR to SD-3175 (path-as-contract umbrella) for
-// reviewer sign-off when growth is intentional.
+// AIDEV-NOTE: The facade source file under `packages/superdoc/src/public/**`
+// IS the export contract. The verifier parses it for named exports and
+// checks the emitted declarations match. No second hand-maintained list
+// to keep in sync. `export *` and `export * as X` are rejected in facade
+// sources so the contract stays explicit and reviewable.
+//
+// Source of truth: the .ts file at FACADE_ENTRIES[*].source.
+// What this script enforces: the emitted .d.ts / .d.cts match it.
+// What it does NOT enforce: no-growth (handled by snapshot.mjs + the
+// closure gate; see packages/superdoc/scripts/README.md).
 const FACADE_ENTRIES = [
-  // SD-3212: root facade re-curated from the classification artifact.
-  // expectedNames intentionally mirrors
+  // SD-3212: root facade re-curated from the classification artifact at
   // tests/consumer-typecheck/snapshots/superdoc-root-classification.json.
   // The root entry keeps supported public API, legacy public compatibility,
   // and internal-candidate compat names typed until a major-version cleanup.
@@ -90,208 +98,7 @@ const FACADE_ENTRIES = [
     name: 'root (./index)',
     esm: path.join(PUBLIC_DIST, 'index.d.ts'),
     cjs: path.join(PUBLIC_DIST, 'index.d.cts'),
-    expectedNames: [
-      'AIWriter',
-      'AnnotatorHelpers',
-      'assertNodeType',
-      'AwarenessState',
-      'BinaryData',
-      'BlankDOCX',
-      'BlockNavigationAddress',
-      'BlocksListResult',
-      'BookmarkAddress',
-      'BookmarkInfo',
-      'BoundingRect',
-      'buildTheme',
-      'CanObject',
-      'ChainableCommandObject',
-      'ChainedCommand',
-      'CollaborationConfig',
-      'CollaborationProvider',
-      'Command',
-      'CommandProps',
-      'Comment',
-      'CommentAddress',
-      'CommentConfig',
-      'CommentElement',
-      'CommentLocationsPayload',
-      'CommentsPayload',
-      'CommentsPluginKey',
-      'CommentsType',
-      'compareVersions',
-      'Config',
-      'ContextMenu',
-      'ContextMenuConfig',
-      'ContextMenuContext',
-      'ContextMenuItem',
-      'ContextMenuSection',
-      'CoreCommandMap',
-      'createTheme',
-      'createZip',
-      'defineMark',
-      'defineNode',
-      'DirectSurfaceRequest',
-      'DocRange',
-      'DocumentApi',
-      'DocumentMode',
-      'DocumentProtectionState',
-      'DOCX',
-      'DocxFileEntry',
-      'DocxZipper',
-      'Editor',
-      'EditorCommands',
-      'EditorEventMap',
-      'EditorExtension',
-      'EditorLifecycleState',
-      'EditorOptions',
-      'EditorState',
-      'EditorSurface',
-      'EditorTransactionEvent',
-      'EditorUpdateEvent',
-      'EditorView',
-      'EntityAddress',
-      'ExportDocxParams',
-      'ExportFormat',
-      'ExportOptions',
-      'ExportParams',
-      'ExportType',
-      'ExtensionCommandMap',
-      'Extensions',
-      'ExternalPopoverRenderContext',
-      'ExternalSurfaceRenderContext',
-      'fieldAnnotationHelpers',
-      'FieldValue',
-      'FindReplaceConfig',
-      'FindReplaceContext',
-      'FindReplaceHandle',
-      'FindReplaceRenderContext',
-      'FindReplaceResolution',
-      'FlowBlock',
-      'FlowMode',
-      'FontConfig',
-      'FontsResolvedPayload',
-      'getActiveFormatting',
-      'getAllowedImageDimensions',
-      'getFileObject',
-      'getMarksFromSelection',
-      'getRichTextExtensions',
-      'getSchemaIntrospection',
-      'getStarterExtensions',
-      'HTML',
-      'ImageDeselectedEvent',
-      'ImageSelectedEvent',
-      'IntentSurfaceRequest',
-      'isMarkType',
-      'isNodeType',
-      'Layout',
-      'LayoutEngineOptions',
-      'LayoutError',
-      'LayoutFragment',
-      'LayoutMetrics',
-      'LayoutMode',
-      'LayoutPage',
-      'LayoutState',
-      'LayoutUpdatePayload',
-      'LinkPopoverContext',
-      'LinkPopoverResolution',
-      'LinkPopoverResolver',
-      'ListDefinitionsPayload',
-      'Measure',
-      'Modules',
-      'NavigableAddress',
-      'OpenOptions',
-      'PageMargins',
-      'PageSize',
-      'PageStyles',
-      'PaginationPayload',
-      'PaintSnapshot',
-      'PartChangedEvent',
-      'PartId',
-      'PartSectionId',
-      'PasswordPromptAttemptResult',
-      'PasswordPromptConfig',
-      'PasswordPromptContext',
-      'PasswordPromptHandle',
-      'PasswordPromptRenderContext',
-      'PasswordPromptResolution',
-      'PDF',
-      'PermissionParams',
-      'PositionHit',
-      'PresenceOptions',
-      'PresentationEditor',
-      'PresentationEditorOptions',
-      'ProofingCapabilities',
-      'ProofingCheckRequest',
-      'ProofingCheckResult',
-      'ProofingConfig',
-      'ProofingError',
-      'ProofingIssue',
-      'ProofingIssueKind',
-      'ProofingProvider',
-      'ProofingSegment',
-      'ProofingSegmentMetadata',
-      'ProofingStatus',
-      'ProseMirrorJSON',
-      'ProtectionChangeSource',
-      'RangeRect',
-      'registeredHandlers',
-      'RemoteCursorsRenderPayload',
-      'RemoteCursorState',
-      'RemoteUserInfo',
-      'ResolvedFindReplaceTexts',
-      'ResolvedPasswordPromptTexts',
-      'ResolveRangeOutput',
-      'SaveOptions',
-      'Schema',
-      'ScrollIntoViewInput',
-      'ScrollIntoViewOutput',
-      'SearchMatch',
-      'SectionHelpers',
-      'SectionMetadata',
-      'SelectionApi',
-      'SelectionCommandContext',
-      'SelectionCurrentInput',
-      'SelectionHandle',
-      'SelectionInfo',
-      'SlashMenu',
-      'StoryLocator',
-      'SuperConverter',
-      'SuperDoc',
-      'SuperDocLayoutEngineOptions',
-      'SuperDocTelemetryConfig',
-      'SuperEditor',
-      'superEditorHelpers',
-      'SuperInput',
-      'SuperToolbar',
-      'SurfaceComponentProps',
-      'SurfaceFloatingPlacement',
-      'SurfaceHandle',
-      'SurfaceMode',
-      'SurfaceOutcome',
-      'SurfaceRequest',
-      'SurfaceResolution',
-      'SurfaceResolver',
-      'SurfacesModuleConfig',
-      'TelemetryEvent',
-      'TextAddress',
-      'TextSegment',
-      'TextTarget',
-      'Toolbar',
-      'TrackChangesBasePluginKey',
-      'trackChangesHelpers',
-      'TrackChangesModuleConfig',
-      'TrackedChangeAddress',
-      'TrackedChangesMode',
-      'TrackedChangesOverrides',
-      'Transaction',
-      'UnsupportedContentItem',
-      'UpgradeToCollaborationOptions',
-      'User',
-      'ViewingVisibilityConfig',
-      'ViewLayout',
-      'ViewOptions',
-      'VirtualizationOptions',
-    ],
+    source: path.join(PUBLIC_SRC, 'index.ts'),
     runsCommandSignatureProbe: true,
     ticket: 'SD-3212',
   },
@@ -299,24 +106,7 @@ const FACADE_ENTRIES = [
     name: 'legacy/headless-toolbar',
     esm: path.join(PUBLIC_DIST, 'legacy', 'headless-toolbar.d.ts'),
     cjs: path.join(PUBLIC_DIST, 'legacy', 'headless-toolbar.d.cts'),
-    expectedNames: [
-      'CreateHeadlessToolbarOptions',
-      'HeadlessToolbarController',
-      'HeadlessToolbarSuperdocHost',
-      'HeadlessToolbarSurface',
-      'PublicToolbarItemId',
-      'ToolbarCommandState',
-      'ToolbarCommandStates',
-      'ToolbarContext',
-      'ToolbarExecuteFn',
-      'ToolbarPayloadMap',
-      'ToolbarSnapshot',
-      'ToolbarTarget',
-      'ToolbarValueMap',
-      'createHeadlessToolbar',
-      'headlessToolbarConstants',
-      'headlessToolbarHelpers',
-    ],
+    source: path.join(PUBLIC_SRC, 'legacy', 'headless-toolbar.ts'),
     runsCommandSignatureProbe: false,
     ticket: 'SD-3179',
   },
@@ -327,7 +117,7 @@ const FACADE_ENTRIES = [
     name: 'legacy/headless-toolbar-react',
     esm: path.join(PUBLIC_DIST, 'legacy', 'headless-toolbar-react.d.ts'),
     cjs: path.join(PUBLIC_DIST, 'legacy', 'headless-toolbar-react.d.cts'),
-    expectedNames: ['useHeadlessToolbar'],
+    source: path.join(PUBLIC_SRC, 'legacy', 'headless-toolbar-react.ts'),
     runsCommandSignatureProbe: false,
     ticket: 'SD-3207',
   },
@@ -335,7 +125,7 @@ const FACADE_ENTRIES = [
     name: 'legacy/headless-toolbar-vue',
     esm: path.join(PUBLIC_DIST, 'legacy', 'headless-toolbar-vue.d.ts'),
     cjs: path.join(PUBLIC_DIST, 'legacy', 'headless-toolbar-vue.d.cts'),
-    expectedNames: ['useHeadlessToolbar'],
+    source: path.join(PUBLIC_SRC, 'legacy', 'headless-toolbar-vue.ts'),
     runsCommandSignatureProbe: false,
     ticket: 'SD-3207',
   },
@@ -353,7 +143,7 @@ const FACADE_ENTRIES = [
     // `packages/superdoc/dist/super-editor/converter.es.js`) but missing
     // from the existing types entry. The facade types both so Phase 4
     // can flip without regressing JS consumers.
-    expectedNames: ['SuperConverter', 'hasBodyNumberingReferences'],
+    source: path.join(PUBLIC_SRC, 'legacy', 'converter.ts'),
     runsCommandSignatureProbe: false,
     ticket: 'SD-3180',
   },
@@ -365,7 +155,7 @@ const FACADE_ENTRIES = [
     // is `import DocxZipper from 'superdoc/docx-zipper'`. The resolved
     // exported name is therefore `default`. Changing to a named export
     // would break consumers.
-    expectedNames: ['default'],
+    source: path.join(PUBLIC_SRC, 'legacy', 'docx-zipper.ts'),
     runsCommandSignatureProbe: false,
     ticket: 'SD-3180',
   },
@@ -373,7 +163,7 @@ const FACADE_ENTRIES = [
     name: 'legacy/file-zipper',
     esm: path.join(PUBLIC_DIST, 'legacy', 'file-zipper.d.ts'),
     cjs: null,
-    expectedNames: ['createZip'],
+    source: path.join(PUBLIC_SRC, 'legacy', 'file-zipper.ts'),
     runsCommandSignatureProbe: false,
     ticket: 'SD-3180',
   },
@@ -385,21 +175,7 @@ const FACADE_ENTRIES = [
     name: 'ui-react',
     esm: path.join(PUBLIC_DIST, 'ui-react.d.ts'),
     cjs: null,
-    expectedNames: [
-      'SuperDocHost',
-      'SuperDocUIProvider',
-      'useSetSuperDoc',
-      'useSuperDocCommand',
-      'useSuperDocComments',
-      'useSuperDocContentControls',
-      'useSuperDocDocument',
-      'useSuperDocHost',
-      'useSuperDocSelection',
-      'useSuperDocSlice',
-      'useSuperDocToolbar',
-      'useSuperDocTrackChanges',
-      'useSuperDocUI',
-    ],
+    source: path.join(PUBLIC_SRC, 'ui-react.ts'),
     runsCommandSignatureProbe: false,
     ticket: 'SD-3182',
   },
@@ -413,79 +189,7 @@ const FACADE_ENTRIES = [
     name: 'ui',
     esm: path.join(PUBLIC_DIST, 'ui.d.ts'),
     cjs: null,
-    expectedNames: [
-      'BUILT_IN_COMMAND_IDS',
-      'CommandHandle',
-      'CommandsHandle',
-      'CommentAddress',
-      'CommentInfo',
-      'CommentsHandle',
-      'CommentsListQuery',
-      'CommentsListResult',
-      'CommentsSlice',
-      'ContentControlViewportAddress',
-      'ContentControlsHandle',
-      'ContentControlsSlice',
-      'ContextMenuContribution',
-      'ContextMenuItem',
-      'ContextMenuWhenInput',
-      'CustomCommandHandle',
-      'CustomCommandHandleState',
-      'CustomCommandRegistration',
-      'CustomCommandRegistrationResult',
-      'DocumentExportInput',
-      'DocumentHandle',
-      'DocumentSlice',
-      'DynamicCommandHandle',
-      'EntityAddress',
-      'EqualityFn',
-      'MetadataHandle',
-      'Receipt',
-      'ScrollIntoViewInput',
-      'ScrollIntoViewOutput',
-      'SelectionAnchorRectOptions',
-      'SelectionCapture',
-      'SelectionHandle',
-      'SelectionInfo',
-      'SelectionPoint',
-      'SelectionRestoreResult',
-      'SelectionSlice',
-      'SelectionTarget',
-      'SelectorFn',
-      'Subscribable',
-      'SuperDocEditorLike',
-      'SuperDocLike',
-      'SuperDocUI',
-      'SuperDocUIOptions',
-      'SuperDocUIScope',
-      'SuperDocUIState',
-      'TextAddress',
-      'TextSegment',
-      'TextTarget',
-      'ToolbarCommandHandleState',
-      'ToolbarHandle',
-      'ToolbarSnapshotSlice',
-      'TrackChangeInfo',
-      'TrackChangesHandle',
-      'TrackChangesItem',
-      'TrackChangesListResult',
-      'TrackChangesSlice',
-      'TrackedChangeAddress',
-      'UIToolbarCommandState',
-      'ViewportContext',
-      'ViewportContextAtInput',
-      'ViewportEntityAddress',
-      'ViewportEntityAtInput',
-      'ViewportEntityHit',
-      'ViewportGetRectInput',
-      'ViewportHandle',
-      'ViewportPositionAtInput',
-      'ViewportPositionHit',
-      'ViewportRect',
-      'ViewportRectResult',
-      'createSuperDocUI',
-      'shallowEqual',
-    ],
+    source: path.join(PUBLIC_SRC, 'ui.ts'),
     runsCommandSignatureProbe: false,
     ticket: 'SD-3183',
   },
@@ -516,124 +220,7 @@ const FACADE_ENTRIES = [
     // provide). The verifier scans the emitted .d.cts and fails on
     // value declarations.
     typeOnly: true,
-    expectedNames: [
-      "BlockNodeAttributes",
-      "BoldAttrs",
-      "BookmarkEndAttrs",
-      "BookmarkStartAttrs",
-      "BorderSpec",
-      "CanCommand",
-      "CanObject",
-      "CellMargins",
-      "ChainableCommandObject",
-      "ChainedCommand",
-      "Command",
-      "CommandProps",
-      "CommentMarkAttrs",
-      "CommentRangeEndAttrs",
-      "CommentRangeStartAttrs",
-      "CommentReferenceAttrs",
-      "ContentBlockAttrs",
-      "ContentBlockMarginOffset",
-      "ContentBlockSize",
-      "CoreCommandMap",
-      "CoreCommands",
-      "DocumentAttrs",
-      "DocumentPartObjectAttrs",
-      "DocumentSectionAttrs",
-      "EditorCommands",
-      "ExtensionCommandMap",
-      "ExtensionCommands",
-      "FieldAnnotationAttrs",
-      "FieldAnnotationSize",
-      "HardBreakAttrs",
-      "HighlightAttrs",
-      "HighlightColor",
-      "ImageAttrs",
-      "ImagePadding",
-      "ImageSize",
-      "ImageTransformData",
-      "ImageWrap",
-      "IndentationProperties",
-      "InlineNodeAttributes",
-      "ItalicAttrs",
-      "LineBreakAttrs",
-      "LinkAttrs",
-      "ListRendering",
-      "MarkAttributesMap",
-      "MarkAttrs",
-      "MarkConfig",
-      "MarkName",
-      "MentionAttrs",
-      "NodeAttributesMap",
-      "NodeAttrs",
-      "NodeConfig",
-      "NodeName",
-      "NumberingProperties",
-      "OxmlNodeAttributes",
-      "OxmlNodeConfig",
-      "PageNumberAttrs",
-      "PageReferenceAttrs",
-      "ParagraphAttrs",
-      "ParagraphProperties",
-      "PassthroughBlockAttrs",
-      "PassthroughInlineAttrs",
-      "PermEndAttrs",
-      "PermStartAttrs",
-      "ProseMirrorJSON",
-      "ProseMirrorJSONMark",
-      "ProseMirrorJSONNode",
-      "RunAttrs",
-      "RunProperties",
-      "SectionMargins",
-      "ShadingProperties",
-      "ShapeContainerAttrs",
-      "ShapeGroupAttrs",
-      "ShapeGroupMarginOffset",
-      "ShapeGroupPadding",
-      "ShapeGroupSize",
-      "ShapeNodeAttributes",
-      "ShapeTextboxAttrs",
-      "SpacingProperties",
-      "StrikeAttrs",
-      "StructuredContentAttrs",
-      "StructuredContentBlockAttrs",
-      "TabAttrs",
-      "TableAttrs",
-      "TableBorders",
-      "TableCellAttrs",
-      "TableCellProperties",
-      "TableGrid",
-      "TableHeaderAttrs",
-      "TableLook",
-      "TableMeasurement",
-      "TableNodeAttributes",
-      "TableOfContentsAttrs",
-      "TableProperties",
-      "TableRowAttrs",
-      "TableRowProperties",
-      "TargetFrameOption",
-      "TextAttrs",
-      "TextContainerAttributes",
-      "TextStyleAttrs",
-      "ThemeColor",
-      "TotalPageCountAttrs",
-      "TrackDeleteAttrs",
-      "TrackFormatAttrs",
-      "TrackFormatEntry",
-      "TrackInsertAttrs",
-      "TypedMark",
-      "TypedNode",
-      "UnderlineAttrs",
-      "UnderlineStyle",
-      "VectorShapeAttrs",
-      "VectorShapeTextInsets",
-      "assertNodeType",
-      "defineMark",
-      "defineNode",
-      "isMarkType",
-      "isNodeType",
-    ],
+    source: path.join(PUBLIC_SRC, 'types.ts'),
     runsCommandSignatureProbe: false,
     ticket: 'SD-3184',
   },
@@ -654,6 +241,85 @@ function formatDiagnostic(diagnostic) {
   const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
   const relative = path.relative(repoRoot, diagnostic.file.fileName);
   return `${relative}:${line + 1}:${character + 1} ${message}`;
+}
+
+/**
+ * Parse a facade source file (a `.ts` under `packages/superdoc/src/public/**`)
+ * and return the sorted set of publicly exported names plus any rejected
+ * constructs. The facade contract is *explicit named exports only*; this
+ * function rejects `export *` / `export * as X` so the contract stays
+ * reviewable as source diff.
+ *
+ * Supported export shapes:
+ *   - `export { A, B } from '...'` / `export { A } from '...'`
+ *   - `export type { A, B } from '...'`
+ *   - `export { foo as bar }`             → publishes `bar`
+ *   - `export { default } from '...'`     → publishes `default`
+ *   - `export const X = ...`              → publishes `X`
+ *   - `export function/class/interface/type/enum X`
+ *   - `export default ...`                → publishes `default`
+ *
+ * Rejected:
+ *   - `export *` (bare or `export * from '...'`)
+ *   - `export * as Y from '...'`
+ */
+function parseFacadeSourceExports(filePath) {
+  const text = fs.readFileSync(filePath, 'utf8');
+  const src = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const names = new Set();
+  const rejections = [];
+  const reject = (msg, node) => {
+    const { line, character } = src.getLineAndCharacterOfPosition(node.getStart(src));
+    rejections.push(`${path.relative(repoRoot, filePath)}:${line + 1}:${character + 1} ${msg}`);
+  };
+  const hasModifier = (node, kind) =>
+    (node.modifiers ?? []).some((m) => m.kind === kind);
+
+  for (const stmt of src.statements) {
+    if (ts.isExportDeclaration(stmt)) {
+      const clause = stmt.exportClause;
+      if (clause === undefined) {
+        reject('`export *` is not allowed in a public facade source; list every name explicitly', stmt);
+        continue;
+      }
+      if (ts.isNamespaceExport(clause)) {
+        reject('`export * as ...` is not allowed in a public facade source; list every name explicitly', stmt);
+        continue;
+      }
+      if (ts.isNamedExports(clause)) {
+        for (const el of clause.elements) {
+          names.add(el.name.text);
+        }
+      }
+      continue;
+    }
+    if (ts.isExportAssignment(stmt)) {
+      names.add('default');
+      continue;
+    }
+    if (!hasModifier(stmt, ts.SyntaxKind.ExportKeyword)) continue;
+    if (hasModifier(stmt, ts.SyntaxKind.DefaultKeyword)) {
+      names.add('default');
+      continue;
+    }
+    if (
+      ts.isFunctionDeclaration(stmt) ||
+      ts.isClassDeclaration(stmt) ||
+      ts.isInterfaceDeclaration(stmt) ||
+      ts.isTypeAliasDeclaration(stmt) ||
+      ts.isEnumDeclaration(stmt)
+    ) {
+      if (stmt.name) names.add(stmt.name.text);
+      continue;
+    }
+    if (ts.isVariableStatement(stmt)) {
+      for (const d of stmt.declarationList.declarations) {
+        if (ts.isIdentifier(d.name)) names.add(d.name.text);
+      }
+      continue;
+    }
+  }
+  return { names: [...names].sort(), rejections };
 }
 
 function listExportedNames(entry, file) {
@@ -693,18 +359,32 @@ function listExportedNames(entry, file) {
 }
 
 function checkSymbolSet(entry) {
-  const expected = [...entry.expectedNames].sort();
+  if (!fs.existsSync(entry.source)) {
+    console.error(`[verify-public-facade-emit] ${entry.name}: facade source missing at ${path.relative(repoRoot, entry.source)}`);
+    return { ok: false, actual: [] };
+  }
+  const parsed = parseFacadeSourceExports(entry.source);
+  if (parsed.rejections.length > 0) {
+    console.error(`[verify-public-facade-emit] ${entry.name}: facade source uses constructs not allowed in a public facade:`);
+    for (const r of parsed.rejections) console.error('  - ' + r);
+    return { ok: false, actual: [] };
+  }
+  const expected = parsed.names;
   const result = listExportedNames(entry, entry.esm);
   if (!result.ok) return { ok: false, actual: result.names };
   const actual = result.names;
   if (JSON.stringify(actual) === JSON.stringify(expected)) {
     return { ok: true, actual };
   }
-  console.error(`[verify-public-facade-emit] ${entry.name}: facade exports drifted.`);
-  console.error('  expected: ' + expected.join(', '));
-  console.error('  actual:   ' + actual.join(', '));
-  console.error(`  If this addition is intentional, update FACADE_ENTRIES["${entry.name}"].expectedNames in this script and link`);
-  console.error(`  the PR to ${entry.ticket} / SD-3175 (path-as-contract umbrella) for reviewer sign-off.`);
+  const missingFromEmit = expected.filter((n) => !actual.includes(n));
+  const extraInEmit = actual.filter((n) => !expected.includes(n));
+  console.error(`[verify-public-facade-emit] ${entry.name}: emitted declarations drifted from facade source.`);
+  console.error(`  source: ${path.relative(repoRoot, entry.source)}`);
+  console.error(`  emit:   ${path.relative(repoRoot, entry.esm)}`);
+  if (missingFromEmit.length) console.error('  missing from emit: ' + missingFromEmit.join(', '));
+  if (extraInEmit.length) console.error('  extra in emit:     ' + extraInEmit.join(', '));
+  console.error(`  The facade source is the contract. Either fix the dts pipeline (ensure-types.cjs, tsconfig include, vite.config.js)`);
+  console.error(`  or update the source file under packages/superdoc/src/public/** to match the intended surface.`);
   return { ok: false, actual };
 }
 

@@ -228,18 +228,43 @@ pnpm run format   # Run Prettier
 
 ### Adding a public API
 
-If your PR adds a new public export from `superdoc` (a new entry in `packages/superdoc/src/public/index.ts`, a new value re-exported from a public subpath, or a new subpath in `package.json` `exports`), it must ship with a type test that exercises the new surface under strict mode.
+Any change that grows the public surface ships with explicit assertions for the shape consumers will see. The gates below catch missing surface but **do not catch wrong-but-explicit types** — a misannotated signature can compile, pass the consumer matrix, and still break consumer TypeScript builds. Be deliberate about what you assert.
 
-The canonical root contract is `packages/superdoc/src/public/index.ts` (per the SD-3175 path-as-contract umbrella, finalized in SD-3212 PR C). Several automated gates enforce consistency on every PR:
+Three kinds of public surface change, and what each requires:
 
-- **`verify-public-facade-emit.cjs`** -- verifies the curated `src/public/**` facade matches the emitted `.d.ts` for symbol set, ESM/CJS parity, leak grep, and command-signature compatibility. Adding a new export updates the corresponding `expectedNames` array in this script in the same PR.
-- **`snapshot.mjs --all --check`** -- unified entry point for the three snapshot families. The `root` family locks the root export inventory across the four `package.json#exports` sources (`types.import`, `types.require`, `import`, `require`); the `legacy` family locks `superdoc/*` subpath resolved exports; the `super-editor-package` family locks `@superdoc/super-editor`'s `package.json#exports` keys. Drift fails CI; run `snapshot.mjs --family <name> --write` to regenerate one family after an intentional change.
-- **`check-root-classification-closure.mjs`** -- enforces the dependency-closure rule: no `supported-root` or `legacy-root` export may reference an `internal-candidate` type in its declared public type. New exports require an entry in `tests/consumer-typecheck/snapshots/superdoc-root-classification.json`.
-- **`typecheck-matrix.mjs`** -- every typed public subpath has at least one matrix scenario. If you add a new subpath, add a fixture under `tests/consumer-typecheck/src/` and a corresponding entry in the matrix, and update the inventory in `docs/architecture/package-boundaries.md`.
-- **`check-all-public-types-fixture.mjs`** -- derives the expected type-only root export list from `superdoc-root-classification.json` (rows with `inDts && !inEsm && !inCjs`) and fails if `src/all-public-types.ts` is missing assertions or has stale ones. Runs before the matrix to catch fixture drift early.
-- **`src/all-public-types.ts`** -- the fixture exercised by the SD-2842 matrix scenarios to catch any-collapses on customer-facing types. When you add a new type-only root export, add a corresponding `import { X } from 'superdoc';` plus `const _real_X: AssertNotAny<X> = true;` line. The `check-all-public-types-fixture.mjs` gate fails CI if you forget.
+**A. New public method on `SuperDoc` / `DocumentApi` / a UI handle.** Add a consumer fixture under `tests/consumer-typecheck/src/` that asserts BOTH the parameter shape and the return shape. The pattern (see `search-match.ts` for a real example):
 
-The point of these gates is to keep customer TypeScript builds working. A new export that ships without a type test can collapse to `any` (or fail to resolve) for consumers without the team noticing.
+```ts
+declare const sd: SuperDoc;
+const _paramOk: AssertEqual<Parameters<SuperDoc['myMethod']>[0], MyParam> = true;
+const _returnOk: AssertEqual<ReturnType<SuperDoc['myMethod']>, MyReturn> = true;
+sd.myMethod(realRuntimeValue); // exercises the call site
+```
+
+Why both: a migration narrowed `SuperDoc.search` from `string | RegExp` to `string` and slipped past every existing gate because the return-type fixture was there but the parameter-type fixture was not.
+
+**B. New event in `SuperDocEventMap` or new `Config.on*` callback.** Add a consumer fixture that asserts the payload type:
+
+```ts
+sd.on('my-event', (payload) => {
+  const _payloadOk: AssertEqual<typeof payload, MyEventPayload> = true;
+});
+// @ts-expect-error: unknown event names must be rejected
+sd.on('my-evnt', () => {});
+```
+
+When the event fires from SuperDoc itself (not bridged from upstream), also add a runtime test in `SuperDoc.test.js` that registers a handler and asserts the emitted payload matches. Types prove consumer usability; runtime tests prove the value the runtime actually emits. They are not the same gate.
+
+**C. New public export from `superdoc` (a new entry in `packages/superdoc/src/public/index.ts`, a new value re-exported from a public subpath, or a new subpath in `package.json` `exports`).** The facade source IS the contract (SD-3175 path-as-contract, finalized in SD-3212 PR C). Gates enforce consistency on every PR:
+
+- **`verify-public-facade-emit.cjs`** -- parses each `src/public/**` facade source file directly and asserts the emitted `.d.ts` matches. No `expectedNames` allowlist to update; adding a named export to the facade source is the only action needed.
+- **`snapshot.mjs --all --check`** -- locks the three snapshot families. `root` covers the four `package.json#exports` sources (`types.import`, `types.require`, `import`, `require`); `legacy` covers `superdoc/*` subpath resolved exports; `super-editor-package` covers `@superdoc/super-editor`'s `package.json#exports` keys. Drift fails CI; run `snapshot.mjs --family <name> --write` to regenerate one family after an intentional change.
+- **`check-root-classification-closure.mjs`** -- no `supported-root` or `legacy-root` export may reference an `internal-candidate` type in its declared public type. New exports require an entry in `tests/consumer-typecheck/snapshots/superdoc-root-classification.json`.
+- **`typecheck-matrix.mjs`** -- every typed public subpath has at least one matrix scenario. New subpath = new fixture under `tests/consumer-typecheck/src/` + corresponding matrix entry + inventory line in `docs/architecture/package-boundaries.md`.
+- **`check-all-public-types-fixture.mjs`** -- derives the expected type-only root export list from `superdoc-root-classification.json` and fails if `src/all-public-types.ts` is missing assertions or has stale ones.
+- **`src/all-public-types.ts`** -- exercised by the SD-2842 matrix scenarios to catch any-collapses on customer-facing types. New type-only root export = add `import { X } from 'superdoc';` plus `const _real_X: AssertNotAny<X> = true;`.
+
+The point of these gates is to keep customer TypeScript builds working. A new public surface that ships without an explicit fixture can collapse to `any`, narrow silently, or fail to resolve for consumers without the team noticing until upgrade.
 
 ### Branch Naming
 
@@ -288,7 +313,7 @@ When you open a PR, the following checks run automatically:
 - [ ] Code is formatted (`pnpm run format:check`)
 - [ ] Commit messages follow conventional commits
 - [ ] PR description links to related issue
-- [ ] If you added a public API, the consumer-typecheck gates pass (see [Adding a public API](#adding-a-public-api))
+- [ ] If you added a public API: appropriate fixture from [Adding a public API](#adding-a-public-api) — public method (Parameters + ReturnType), public event/callback (payload type + runtime assertion where practical), or public export (the gate lists). `pnpm check:public` passes.
 
 ## Release Process
 

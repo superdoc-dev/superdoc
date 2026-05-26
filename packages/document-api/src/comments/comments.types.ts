@@ -1,7 +1,33 @@
-import type { CommentAddress, CommentStatus, TextTarget } from '../types/index.js';
+import type {
+  CommentAddress,
+  CommentStatus,
+  SelectionTarget,
+  StoryLocator,
+  TextAddress,
+  TextTarget,
+} from '../types/index.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
+import type { TrackChangeType } from '../types/track-changes.types.js';
 
 export type { CommentStatus } from '../types/index.js';
+
+export interface TrackedChangeCommentTarget {
+  kind?: 'trackedChange';
+  trackedChangeId: string;
+  story?: StoryLocator;
+}
+
+export type CommentTarget = TextAddress | TextTarget | SelectionTarget | TrackedChangeCommentTarget;
+
+export interface CommentTrackedChangeLink {
+  trackedChange: boolean;
+  trackedChangeType?: TrackChangeType;
+  trackedChangeDisplayType?: string | null;
+  trackedChangeStory?: StoryLocator | null;
+  trackedChangeAnchorKey?: string | null;
+  trackedChangeText?: string | null;
+  deletedText?: string | null;
+}
 
 export interface CommentInfo {
   address: CommentAddress;
@@ -16,6 +42,14 @@ export interface CommentInfo {
   createdTime?: number;
   creatorName?: string;
   creatorEmail?: string;
+  trackedChange?: boolean;
+  trackedChangeType?: TrackChangeType;
+  trackedChangeDisplayType?: string | null;
+  trackedChangeStory?: StoryLocator | null;
+  trackedChangeAnchorKey?: string | null;
+  trackedChangeText?: string | null;
+  deletedText?: string | null;
+  trackedChangeLink?: CommentTrackedChangeLink | null;
 }
 
 export interface CommentsListQuery {
@@ -42,6 +76,14 @@ export interface CommentDomain {
   createdTime?: number;
   creatorName?: string;
   creatorEmail?: string;
+  trackedChange?: boolean;
+  trackedChangeType?: TrackChangeType;
+  trackedChangeDisplayType?: string | null;
+  trackedChangeStory?: StoryLocator | null;
+  trackedChangeAnchorKey?: string | null;
+  trackedChangeText?: string | null;
+  deletedText?: string | null;
+  trackedChangeLink?: CommentTrackedChangeLink | null;
 }
 
 /**

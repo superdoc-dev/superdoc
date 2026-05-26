@@ -16,7 +16,7 @@
  * cast at the call site (no `any`).
  */
 import type { Plugin } from 'prosemirror-state';
-import type { Schema } from 'prosemirror-model';
+import type { Node as PmNode, Schema } from 'prosemirror-model';
 import type { NodeViewConstructor } from 'prosemirror-view';
 import type { EditorHelpers } from './EditorTypes.js';
 import type { Comment } from './EditorEvents.js';
@@ -47,7 +47,7 @@ export type HeaderFooterIdMap = Record<string, string | string[] | boolean | nul
 
 /** Item shape for `headerEditors` / `footerEditors` arrays. */
 export interface HeaderFooterEditorEntry {
-  editor?: { destroy?: () => void } & Record<string, unknown>;
+  editor?: { destroy?: () => void; state?: { doc?: PmNode } } & Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -67,6 +67,8 @@ export interface EditorConverterSurface {
   footerEditors: HeaderFooterEditorEntry[];
   footerIds: HeaderFooterIdMap;
   footers: Record<string, unknown>;
+  footnotes: unknown;
+  endnotes: unknown;
   footnoteProperties: unknown;
   headerEditors: HeaderFooterEditorEntry[];
   headerFooterModified: boolean;

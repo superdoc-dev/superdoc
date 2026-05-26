@@ -1,4 +1,10 @@
 import { getTrackChanges } from './trackChangesHelpers/getTrackChanges.js';
+import {
+  classifyOwnership,
+  isSameUserHighConfidence,
+  getCurrentUserIdentity,
+  getChangeAuthorIdentity,
+} from './review-model/identity.js';
 
 const PERMISSION_MAP = {
   accept: {
@@ -70,13 +76,15 @@ const derivePermissionKey = ({ action, isOwn }) => {
   return isOwn ? mapping.own : mapping.other;
 };
 
-const normalizeEmail = (value) => {
-  if (typeof value !== 'string') return '';
-  return value.trim().toLowerCase();
-};
-
 const resolveChanges = (editor) => {
-  if (!editor) return { role: 'editor', isInternal: false, currentUser: null, resolver: null };
+  if (!editor) {
+    return {
+      role: 'editor',
+      isInternal: false,
+      currentUser: null,
+      resolver: null,
+    };
+  }
   const role = editor.options?.role ?? 'editor';
   const isInternal = Boolean(editor.options?.isInternal);
   const currentUser = editor.options?.user ?? null;
@@ -95,14 +103,17 @@ const resolveChanges = (editor) => {
  */
 export const isTrackedChangeActionAllowed = ({ editor, action, trackedChanges }) => {
   if (!trackedChanges?.length) return true;
-  const { role, isInternal, currentUser, resolver } = resolveChanges(editor);
+  const { role, isInternal, resolver } = resolveChanges(editor);
   if (typeof resolver !== 'function') return true;
 
-  const currentEmail = normalizeEmail(currentUser?.email);
+  const currentIdentity = getCurrentUserIdentity(editor);
 
   return trackedChanges.every((change) => {
-    const authorEmail = normalizeEmail(change.attrs?.authorEmail);
-    const isOwn = !currentEmail || !authorEmail || currentEmail === authorEmail;
+    const classification = classifyOwnership({
+      currentUser: currentIdentity,
+      change: getChangeAuthorIdentity(change.attrs ?? change),
+    });
+    const isOwn = isSameUserHighConfidence(classification);
     const permission = derivePermissionKey({ action, isOwn });
 
     if (!permission) return true;

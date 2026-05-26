@@ -48,6 +48,21 @@ function classifySdkSurface(operationId: string): SdkSurface {
   return 'document';
 }
 
+/**
+ * Resolves the response envelope key for a doc-backed operation, failing closed
+ * on missing entries. Missing entries would otherwise be coerced to null and
+ * silently leak a `[undefined]: result` wrap from the CLI orchestrators.
+ */
+function resolveDocBackedEnvelopeKey(docApiId: string): string | null {
+  if (!Object.prototype.hasOwnProperty.call(RESPONSE_ENVELOPE_KEY, docApiId)) {
+    throw new Error(
+      `export-sdk-contract: doc-backed operation '${docApiId}' has no RESPONSE_ENVELOPE_KEY entry. ` +
+        `Add one in apps/cli/src/cli/operation-hints.ts before regenerating the contract.`,
+    );
+  }
+  return RESPONSE_ENVELOPE_KEY[docApiId as keyof typeof RESPONSE_ENVELOPE_KEY];
+}
+
 function buildParamSchema(param: CliOperationParamSpec): Record<string, unknown> {
   let schema: Record<string, unknown>;
 
@@ -144,7 +159,10 @@ function buildSdkContract() {
 
       // Response envelope key — tells SDKs which property to unwrap from the CLI response.
       // null means result is spread across top-level keys (no unwrapping needed).
-      responseEnvelopeKey: docApiId ? (RESPONSE_ENVELOPE_KEY[docApiId] ?? null) : null,
+      // Doc-backed ops must have an explicit entry in RESPONSE_ENVELOPE_KEY; missing entries
+      // would otherwise be coerced to null here and silently leak a `[undefined]: result`
+      // wrap from the CLI orchestrators.
+      responseEnvelopeKey: docApiId ? resolveDocBackedEnvelopeKey(docApiId) : null,
 
       // Transport plane
       params: metadata.params.map((p) => {

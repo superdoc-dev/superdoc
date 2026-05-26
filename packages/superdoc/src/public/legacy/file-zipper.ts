@@ -9,9 +9,9 @@
  * import `createZip` from `superdoc` directly.
  *
  * AIDEV-NOTE: Single-export facade. Growing this list ships a new public
- * symbol through a legacy compat path. Update `expectedNames` for the
- * `legacy/file-zipper` entry in `FACADE_ENTRIES` inside
- * `packages/superdoc/scripts/verify-public-facade-emit.cjs` in the
+ * The postbuild gate `verify-public-facade-emit.cjs` parses this file
+ * and verifies that the emitted declarations expose exactly these
+ * named exports. No second hand-maintained list to keep in sync.
  * same PR.
  */
 export { createZip } from '@superdoc/super-editor/file-zipper';

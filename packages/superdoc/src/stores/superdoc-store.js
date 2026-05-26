@@ -11,6 +11,7 @@ export const useSuperdocStore = defineStore('superdoc', () => {
   const currentConfig = ref(null);
   let exceptionHandler = null;
   const commentsStore = useCommentsStore();
+  /** @type {import('vue').Ref<import('@superdoc/core/types/index.js').RuntimeDocument[]>} */
   const documents = ref([]);
   const documentBounds = ref([]);
   const pages = reactive({});

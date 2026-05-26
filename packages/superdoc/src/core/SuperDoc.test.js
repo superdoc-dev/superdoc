@@ -260,6 +260,93 @@ describe('SuperDoc core', () => {
     expect(commentsStore.init).toHaveBeenCalledWith({});
   });
 
+  it('falls back to hidden comments when top-level comments config is null', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      comments: null,
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(instance.config.comments).toEqual({ visible: false });
+  });
+
+  it('relays store exception payloads through the public exception event', async () => {
+    const { superdocStore } = createAppHarness();
+    const onException = vi.fn();
+
+    new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException,
+    });
+    await flushMicrotasks();
+
+    const handler = superdocStore.setExceptionHandler.mock.calls[0][0];
+    const payload = { error: 'raw store failure', document: null, stage: 'document-init' };
+    handler(payload);
+
+    expect(onException).toHaveBeenCalledWith(payload);
+  });
+
+  it('forwards raw content errors with document id and source file', async () => {
+    const { superdocStore } = createAppHarness();
+    const onContentError = vi.fn();
+    const sourceFile = new Blob(['docx'], { type: DOCX });
+
+    superdocStore.documents = [{ id: 'doc-1', data: sourceFile }];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onContentError,
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const error = 'raw editor failure';
+    const editor = { options: { documentId: 'doc-1' } };
+    instance.onContentError({ error, editor });
+
+    expect(onContentError).toHaveBeenCalledWith({
+      error,
+      editor,
+      documentId: 'doc-1',
+      file: sourceFile,
+    });
+  });
+
+  it('keeps toolbarGroups separate from toolbar group item mappings', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: {
+        comments: {},
+        toolbar: {
+          groups: { custom: ['bold', 'italic'] },
+        },
+      },
+      toolbarGroups: ['left', 'custom'],
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(instance.toolbar.config.toolbarGroups).toEqual(['left', 'custom']);
+    expect(instance.toolbar.config.groups).toEqual({ custom: ['bold', 'italic'] });
+  });
+
   it('creates a default user when none is provided', async () => {
     createAppHarness();
 
@@ -268,6 +355,24 @@ describe('SuperDoc core', () => {
       document: 'https://example.com/doc.docx',
       documents: [],
       modules: { comments: {}, toolbar: {} },
+    });
+
+    await flushMicrotasks();
+
+    expect(instance.config.user).toEqual(expect.objectContaining({ name: 'Default SuperDoc user', email: null }));
+    expect(instance.user).toEqual(expect.objectContaining({ name: 'Default SuperDoc user', email: null }));
+  });
+
+  it('falls back to the default user when config.user is null', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      user: null,
+      onException: vi.fn(),
     });
 
     await flushMicrotasks();
@@ -635,6 +740,41 @@ describe('SuperDoc core', () => {
     expect(instance.ydoc).toBeDefined();
   });
 
+  it('uses a separate SuperDoc ydoc when internal/external comments sync is enabled', async () => {
+    createAppHarness();
+    const superdocYdoc = { destroy: vi.fn() };
+    const superdocProvider = { disconnect: vi.fn(), destroy: vi.fn(), on: vi.fn(), off: vi.fn() };
+    initSuperdocYdocMock.mockImplementationOnce(() => ({
+      ydoc: superdocYdoc,
+      provider: superdocProvider,
+    }));
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      superdocId: 'superdoc-room',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: {
+        comments: { useInternalExternalComments: true, suppressInternalExternalComments: false },
+        toolbar: {},
+        collaboration: {
+          providerType: 'hocuspocus',
+          url: 'wss://example.com',
+        },
+      },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(MockHocuspocusProviderWebsocket.instances).toHaveLength(1);
+    expect(instance.config.socket).toBe(MockHocuspocusProviderWebsocket.instances[0]);
+    expect(initSuperdocYdocMock).toHaveBeenCalledWith(instance);
+    expect(instance.ydoc).toBe(superdocYdoc);
+    expect(instance.provider).toBe(superdocProvider);
+  });
+
   // pagination legacy removed; togglePagination test removed
 
   it('broadcasts ready only when all editors resolved', async () => {
@@ -787,6 +927,37 @@ describe('SuperDoc core', () => {
 
     expect(exportDocxMock).toHaveBeenCalledTimes(1);
     expect(results).toEqual([originalBlob]);
+  });
+
+  it('drops non-DOCX fallback data when an editor export yields no blob', async () => {
+    const { superdocStore } = createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const exportDocxMock = vi.fn().mockResolvedValue(undefined);
+
+    instance.superdocStore.documents = [
+      {
+        id: 'doc-1',
+        type: DOCX,
+        data: new Blob(['pdf'], { type: PDF }),
+        getEditor: () => ({ exportDocx: exportDocxMock }),
+      },
+    ];
+
+    const results = await instance.exportEditorsToDOCX();
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([]);
   });
 
   it('passes comments: undefined when the UI store is unhydrated (modules.comments: false)', async () => {
@@ -1295,6 +1466,66 @@ describe('SuperDoc core', () => {
     expect(setDocumentMode).toHaveBeenLastCalledWith('editing');
   });
 
+  it('falls back to viewing mode when suggesting is requested without a role', async () => {
+    const { superdocStore } = createAppHarness();
+    const removeComments = vi.fn();
+    const setDocumentMode = vi.fn();
+    const docStub = {
+      removeComments,
+      restoreComments: vi.fn(),
+      getEditor: vi.fn(() => ({ setDocumentMode })),
+      getPresentationEditor: vi.fn(() => null),
+    };
+    superdocStore.documents = [docStub];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: undefined,
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    instance.setDocumentMode('suggesting');
+
+    expect(removeComments).toHaveBeenCalledTimes(1);
+    expect(setDocumentMode).toHaveBeenLastCalledWith('viewing');
+  });
+
+  it('applies suggesting mode when the role permits suggestions', async () => {
+    const { superdocStore } = createAppHarness();
+    const restoreComments = vi.fn();
+    const setDocumentMode = vi.fn();
+    const docStub = {
+      removeComments: vi.fn(),
+      restoreComments,
+      getEditor: vi.fn(() => ({ setDocumentMode })),
+      getPresentationEditor: vi.fn(() => null),
+    };
+    superdocStore.documents = [docStub];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    instance.setDocumentMode('suggesting');
+
+    expect(restoreComments).toHaveBeenCalledTimes(1);
+    expect(setDocumentMode).toHaveBeenLastCalledWith('suggesting');
+  });
+
   it('updates viewing comment options for presentation editors', async () => {
     const { superdocStore } = createAppHarness();
     const setViewingCommentOptions = vi.fn();
@@ -1455,6 +1686,57 @@ describe('SuperDoc core', () => {
     expect(setShowFormattingMarks).toHaveBeenLastCalledWith(true);
   });
 
+  it('propagates toggleRuler to all store documents after ready', async () => {
+    const { superdocStore } = createAppHarness();
+    const firstDoc = { rulers: false };
+    const secondDoc = { rulers: false };
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      rulers: false,
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    superdocStore.documents = [firstDoc, secondDoc];
+    instance.toggleRuler();
+
+    expect(instance.config.rulers).toBe(true);
+    expect(firstDoc.rulers).toBe(true);
+    expect(secondDoc.rulers).toBe(true);
+  });
+
+  it('renders comments list for non-viewer roles and emits the rendered callback', async () => {
+    createAppHarness();
+    const onCommentsListChange = vi.fn();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onCommentsListChange,
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const container = document.createElement('div');
+    instance.addCommentsList(container);
+
+    expect(instance.config.modules.comments.element).toBe(container);
+    expect(superCommentsConstructor).toHaveBeenCalledWith(instance.config.modules.comments, instance);
+    expect(instance.commentsList).toBeDefined();
+    expect(onCommentsListChange).toHaveBeenCalledWith({ isRendered: true });
+  });
+
   it('skips rendering comments list when role is viewer', async () => {
     createAppHarness();
 
@@ -1523,6 +1805,31 @@ describe('SuperDoc core', () => {
         // It should only be true when creating from blank template
         expect(instance.config.documents[0].isNewFile).toBeUndefined();
         expect(instance.config.documents[0].data).toBe(file);
+      });
+
+      it('handles File inputs through the native File branch when the File is not an uploader wrapper', async () => {
+        createAppHarness();
+
+        const file = new File(['content'], 'contract.docx', {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        });
+        const branchOnlyFile = new Proxy(file, {
+          ownKeys: () => [],
+        });
+
+        const instance = new SuperDoc({
+          selector: '#host',
+          document: branchOnlyFile,
+        });
+        await flushMicrotasks();
+
+        expect(instance.config.documents).toHaveLength(1);
+        expect(instance.config.documents[0]).toMatchObject({
+          id: expect.any(String),
+          type: DOCX,
+          name: 'contract.docx',
+          data: branchOnlyFile,
+        });
       });
 
       it('handles Blob from fetch response', async () => {
@@ -2338,6 +2645,199 @@ describe('SuperDoc core', () => {
       // The store returned a wrapper with `getValues()`; the method must
       // unwrap it before forwarding to the resolver.
       expect(resolver).toHaveBeenCalledWith(expect.objectContaining({ comment: unwrapped }));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // SD-2916 PR-A: safe field defaults for delayed-init fields
+  // ---------------------------------------------------------------------------
+  //
+  // These tests pin the "before ready" contract for the four fields PR-A
+  // initializes at the field declaration (or in the constructor body for
+  // `#surfaceManager`). The async `#init` overwrites some of these later,
+  // but consumers reading them immediately after `new SuperDoc(...)` and
+  // before the `ready` event must see a usable value, not `undefined`.
+
+  describe('SD-2916 PR-A: safe field defaults', () => {
+    it('initializes `whiteboard` to null immediately after construction', () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        user: { name: 'Jane', email: 'jane@example.com' },
+      });
+
+      // Whiteboard is constructed in `#initWhiteboard()` after the
+      // collaboration await; before that it must be a stable null.
+      expect(instance.whiteboard).toBeNull();
+    });
+
+    it('exposes `openSurface` immediately after construction (SurfaceManager constructed in ctor body)', () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        user: { name: 'Jane', email: 'jane@example.com' },
+      });
+
+      // The handle returned must be a real object with `id`, `result`,
+      // `close`, etc. — not throw `Cannot read properties of undefined`.
+      const handle = instance.openSurface({ mode: 'dialog', render: () => null });
+      expect(handle).toBeDefined();
+      expect(typeof handle.id).toBe('string');
+      expect(typeof handle.close).toBe('function');
+      expect(handle.result).toBeInstanceOf(Promise);
+      // Resolve the handle to keep the surface registry clean for other tests.
+      handle.close({ status: 'cancelled' });
+    });
+
+    it('`version` is the injected build-time constant, not the placeholder', () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        user: { name: 'Jane', email: 'jane@example.com' },
+      });
+
+      // The field declaration seeds `'0.0.0'` so the field is
+      // structurally assigned, then `#init` synchronously overwrites
+      // with `__APP_VERSION__` (vite injects this in both dev/test and
+      // build config). Assert the overwrite happened — a regression
+      // that drops the overwrite would leave the placeholder visible.
+      expect(typeof instance.version).toBe('string');
+      expect(instance.version).not.toBe('0.0.0');
+    });
+
+    it('skips the toolbar exception bridge when onException is explicitly undefined', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        onException: undefined,
+      });
+
+      await flushMicrotasks();
+
+      expect(instance.toolbar.listeners.exception).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // SD-2916 PR-B: lifecycle guards on ready-required methods
+  // ---------------------------------------------------------------------------
+  //
+  // PR-B types the remaining 5 delayed-init fields (superdocStore,
+  // commentsStore, highContrastModeStore, app, pinia) as `T | undefined`
+  // and adds `#requireSuperdocStore` / `#requireCommentsStore` /
+  // `#requireReady` helpers. Public methods that genuinely need the
+  // runtime to be ready (state, requiredNumberOfEditors, addSharedUser,
+  // removeSharedUser, focus, export*, setDocumentMode) now throw a
+  // clear "wait for the ready event" error instead of failing with a
+  // generic TypeError. Pre-ready safe paths (getComment,
+  // setHighContrastMode without an active editor, destroy()) still
+  // work without throwing.
+
+  describe('SD-2916 PR-B: lifecycle guards', () => {
+    const basePreReadyConfig = () => ({
+      selector: '#host',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+
+    it('addSharedUser before ready throws a clear lifecycle error', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      // No `await flushMicrotasks()`: fields populated by `#initVueApp`
+      // are still undefined here, so the `#requireReady` guard fires.
+      expect(() => instance.addSharedUser({ name: 'Bob', email: 'b@x.com' })).toThrow(
+        /SuperDoc: addSharedUser requires the instance to be ready/,
+      );
+    });
+
+    it('removeSharedUser before ready throws a clear lifecycle error', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      expect(() => instance.removeSharedUser('b@x.com')).toThrow(
+        /SuperDoc: removeSharedUser requires the instance to be ready/,
+      );
+    });
+
+    it('reading the `state` getter before ready throws a clear lifecycle error', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      expect(() => instance.state).toThrow(/SuperDoc: state requires the instance to be ready/);
+    });
+
+    it('reading `requiredNumberOfEditors` before ready throws a clear lifecycle error', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      expect(() => instance.requiredNumberOfEditors).toThrow(
+        /SuperDoc: requiredNumberOfEditors requires the instance to be ready/,
+      );
+    });
+
+    it('destroy() before ready does not throw (existing `if (this.app)` guard still applies)', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      // Pre-ready destroy is a valid usage path: a consumer who decides
+      // to tear down while async init is still in flight should not see
+      // a runtime error.
+      expect(() => instance.destroy()).not.toThrow();
+    });
+
+    it('getComment() before ready returns null (optional-chain path preserved)', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      // `getComment` already early-returns via `?.` on `commentsStore`,
+      // so a pre-ready call returns null instead of throwing.
+      expect(instance.getComment('any-id')).toBeNull();
+    });
+
+    it('setHighContrastMode() before ready no-ops (gated by activeEditor)', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      // The existing `if (!this.activeEditor) return` guard short-circuits
+      // before either `activeEditor.setHighContrastMode` or
+      // `highContrastModeStore.setHighContrastMode` is touched.
+      expect(() => instance.setHighContrastMode(true)).not.toThrow();
+    });
+
+    it('toggleRuler() before ready throws and leaves config.rulers unchanged', () => {
+      createAppHarness();
+      const instance = new SuperDoc({ ...basePreReadyConfig(), rulers: true });
+
+      // Guard fires before the `this.config.rulers = !this.config.rulers`
+      // mutation, so a failed pre-ready call must leave the config
+      // untouched (otherwise a consumer retry would see a flipped value).
+      const before = instance.config.rulers;
+      expect(() => instance.toggleRuler()).toThrow(/SuperDoc: toggleRuler requires the instance to be ready/);
+      expect(instance.config.rulers).toBe(before);
+    });
+
+    it("setDocumentMode('viewing') before ready throws and leaves config.documentMode unchanged", () => {
+      createAppHarness();
+      const instance = new SuperDoc({ ...basePreReadyConfig(), documentMode: 'editing' });
+
+      // Guard fires before `this.config.documentMode = type` and
+      // before `#syncViewingVisibility()` is invoked.
+      const before = instance.config.documentMode;
+      expect(() => instance.setDocumentMode('viewing')).toThrow(
+        /SuperDoc: setDocumentMode requires the instance to be ready/,
+      );
+      expect(instance.config.documentMode).toBe(before);
     });
   });
 });

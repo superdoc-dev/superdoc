@@ -173,8 +173,16 @@ export const Image = Node.create({
 
       isAnchor: { rendered: false },
       vmlWatermark: { rendered: false },
+      vmlTextWatermark: { rendered: false },
+      textWatermarkData: { rendered: false },
+      vmlStyle: { rendered: false },
       vmlAttributes: { rendered: false },
       vmlImagedata: { rendered: false },
+      vmlTextpathAttributes: { rendered: false },
+      vmlPathAttributes: { rendered: false },
+      vmlFillAttributes: { rendered: false },
+      vmlStrokeAttributes: { rendered: false },
+      vmlWrapAttributes: { rendered: false },
 
       /**
        * @category Attribute

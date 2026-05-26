@@ -132,8 +132,10 @@ superdoc.on('list-definitions-change', (payload) => {
 // --- Comments events -------------------------------------------------------
 
 superdoc.on('comments-update', (event) => {
-  // `type` is the closed `CommentEvent` union; switching on it lets
-  // consumers narrow per-case.
+  // `type` is `string` on the public payload; the runtime emits
+  // discrete update kinds (e.g. `'created'`, `'updated'`, `'deleted'`)
+  // but the type is intentionally open so consumers can match on
+  // current and future kinds without recompilation.
   const type: string = event.type;
   void type;
   if (event.comment) {

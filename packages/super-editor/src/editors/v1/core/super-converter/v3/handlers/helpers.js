@@ -25,7 +25,7 @@ export const findTrackFormatMark = (marks = []) =>
  * @param {Object|null|undefined} trackFormatMark
  * @returns {Object|undefined}
  */
-export const createRunPropertiesChangeElement = (trackFormatMark) => {
+export const createRunPropertiesChangeElement = (trackFormatMark, options = {}) => {
   if (!trackFormatMark) return undefined;
 
   const beforeMarks = Array.isArray(trackFormatMark.attrs?.before) ? trackFormatMark.attrs.before : [];
@@ -35,11 +35,20 @@ export const createRunPropertiesChangeElement = (trackFormatMark) => {
     elements: toRunPropertyElements(beforeMarks),
   };
 
+  // Phase 005 — if an allocator was passed in, mint a Word-native decimal
+  // `w:id`. Legacy callers (no `options.wordIdAllocator`) keep the prior
+  // `sourceId || id` behavior so the exported byte stream is unchanged.
+  const allocator = options?.wordIdAllocator || null;
+  const partPath = options?.partPath || 'word/document.xml';
+  const sourceId = trackFormatMark.attrs?.sourceId;
+  const logicalId = trackFormatMark.attrs?.id;
+  const wordId = allocator ? allocator.allocate({ partPath, sourceId, logicalId }) : sourceId || logicalId;
+
   return {
     type: 'element',
     name: 'w:rPrChange',
     attributes: {
-      'w:id': trackFormatMark.attrs?.sourceId || trackFormatMark.attrs?.id,
+      'w:id': wordId,
       'w:author': trackFormatMark.attrs?.author,
       'w:authorEmail': trackFormatMark.attrs?.authorEmail,
       'w:date': trackFormatMark.attrs?.date,
@@ -55,7 +64,7 @@ export const createRunPropertiesChangeElement = (trackFormatMark) => {
  * @param {Array} marks
  * @returns {Object|null|undefined}
  */
-export const appendTrackFormatChangeToRunProperties = (runPropertiesNode, marks = []) => {
+export const appendTrackFormatChangeToRunProperties = (runPropertiesNode, marks = [], options = {}) => {
   if (!runPropertiesNode) return runPropertiesNode;
 
   const trackFormatMark = findTrackFormatMark(marks);
@@ -68,7 +77,7 @@ export const appendTrackFormatChangeToRunProperties = (runPropertiesNode, marks 
   const hasExistingChange = runPropertiesNode.elements.some((element) => element?.name === 'w:rPrChange');
   if (hasExistingChange) return runPropertiesNode;
 
-  const changeElement = createRunPropertiesChangeElement(trackFormatMark);
+  const changeElement = createRunPropertiesChangeElement(trackFormatMark, options);
   if (changeElement) {
     runPropertiesNode.elements.push(changeElement);
   }

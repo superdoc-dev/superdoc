@@ -622,7 +622,11 @@ function testEditorEvents(editor: Editor) {
   });
 
   editor.on('contentError', ({ error, editor: ed }) => {
-    console.error(error.message);
+    // `error` is `unknown` (super-editor emits the raw caught value
+    // from `insertContentAt` and a normalized Error from `Editor.ts`).
+    // Consumers narrow before reading shape-specific fields.
+    if (error instanceof Error) console.error(error.message);
+    else console.error(String(error));
   });
 
   editor.on('documentModeChange', ({ documentMode, editor: ed }) => {

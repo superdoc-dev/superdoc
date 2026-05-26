@@ -33,6 +33,22 @@ new SuperDoc({ selector: '#editor', document: 'contract.docx' });
 
 Toolbar buttons, comments sidebar, dropdowns, context menu, search bar, dialog surfaces. Any chrome SuperDoc renders. The document content itself (paragraphs, headings, tables) renders with its own styles from the DOCX.
 
+## Optional layered stylesheet
+
+By default, you can keep using:
+
+```javascript
+import 'superdoc/style.css';
+```
+
+If your app uses cascade layers and you want SuperDoc styles in a named layer, use the optional layered entrypoint:
+
+```css
+@layer reset, superdoc, app;
+@import 'superdoc/style.layered.css';
+@import 'your-app.css' layer(app);
+```
+
 ## When to drop to CSS variables
 
 `createTheme()` covers the common case. For component-level overrides, use the `vars` option or set raw `--sd-*` variables in your stylesheet:

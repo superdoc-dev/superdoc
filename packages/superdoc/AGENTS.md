@@ -134,6 +134,21 @@ const theme = createTheme({
 document.documentElement.classList.add(theme);
 ```
 
+CSS entrypoints:
+
+- `superdoc/style.css` — standard stylesheet.
+- `superdoc/style.layered.css` — optional layered stylesheet wrapped in `@layer superdoc`.
+
+Recommended layered setup:
+
+```css
+@layer reset, superdoc, app;
+@import 'superdoc/style.layered.css';
+@import 'your-app.css' layer(app);
+```
+
+Do not place `@import` inside an `@layer { ... }` block.
+
 Docs: https://docs.superdoc.dev/getting-started/theming
 
 ## Document Engine — programmatic access

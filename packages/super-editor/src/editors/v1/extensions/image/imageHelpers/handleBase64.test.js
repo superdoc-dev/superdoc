@@ -103,6 +103,28 @@ describe('handleBase64', () => {
     await expect(file.text()).resolves.toBe(payload);
   });
 
+  it('falls back to raw data URI text when percent decoding fails', async () => {
+    const dataUri = 'data:image/svg+xml,%';
+
+    const file = base64ToFile(dataUri);
+
+    expect(file.name).toMatch(/^image-\d+\.svg$/);
+    expect(file.type).toBe('image/svg+xml');
+    await expect(file.text()).resolves.toBe('%');
+  });
+
+  it('handles data URIs without a comma as empty payloads', () => {
+    vi.stubGlobal('atob', (encoded) => Buffer.from(encoded, 'base64').toString('binary'));
+
+    const { filename, mimeType } = getBase64FileMeta('data:image/png;base64');
+    const file = base64ToFile('data:image/png;base64');
+
+    expect(mimeType).toBe('image/png');
+    expect(filename).toBe(file.name);
+    expect(file.name).toMatch(/^image-\d+\.png$/);
+    expect(file.size).toBe(0);
+  });
+
   it('defaults metadata when mime data is missing', () => {
     vi.stubGlobal('atob', (encoded) => Buffer.from(encoded, 'base64').toString('binary'));
 

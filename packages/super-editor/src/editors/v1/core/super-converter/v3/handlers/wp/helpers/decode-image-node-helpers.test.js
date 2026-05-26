@@ -179,6 +179,42 @@ describe('translateImageNode', () => {
     expect(baseParams.media[`word/${baseParams.relationships[0].attributes.Target}`]).toBe(src);
   });
 
+  it('should register raster data URI image media when rId is missing', () => {
+    const src = 'data:image/png;base64,iVBORw0KGgo=';
+    baseParams.node.attrs = {
+      src,
+      alt: 'Raster Example',
+      size: { width: 20, height: 10 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(1);
+    const target = baseParams.relationships[0].attributes.Target;
+    expect(target).toMatch(/^media\/image-\d+\.png$/);
+    expect(baseParams.media[`word/${target}`]).toBe(src);
+
+    const blip = result.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+    expect(blip.attributes['r:embed']).toBe(baseParams.relationships[0].attributes.Id);
+  });
+
+  it('should not create a corrupt relationship when image src is null', () => {
+    baseParams.node.attrs = {
+      src: null,
+      rId: 'rIdMissingSrc',
+      size: { width: 200, height: 50 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(result).toBeNull();
+    expect(baseParams.relationships).toHaveLength(0);
+    expect(baseParams.media).toEqual({});
+  });
+
   it('should skip data URI image export when no media target can be created', () => {
     baseParams.node.attrs = {
       src: 'data:,payload',

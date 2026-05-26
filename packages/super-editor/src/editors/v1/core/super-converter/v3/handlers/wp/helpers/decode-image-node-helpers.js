@@ -256,7 +256,7 @@ export const translateImageNode = (params) => {
 
   if (imageId) {
     const path = getMediaTargetForImageSrc(params, src);
-    if (src?.startsWith('data:') && !path) return fallbackForMissingMediaTarget(params);
+    if (!path) return fallbackForMissingMediaTarget(params);
 
     const relationships = params.isHeaderFooter ? params.existingRelationships : getDocumentRelationships(params);
     const existingRelation = findImageRelationship(relationships, {
@@ -271,7 +271,7 @@ export const translateImageNode = (params) => {
     }
   } else if (params.node.type === 'image' && !imageId) {
     const path = getMediaTargetForImageSrc(params, src);
-    if (src?.startsWith('data:') && !path) return fallbackForMissingMediaTarget(params);
+    if (!path) return fallbackForMissingMediaTarget(params);
 
     const existingRelation = findImageRelationship(params.relationships, { target: path });
     imageId = existingRelation?.attributes?.Id ?? addNewImageRelationship(params, path);

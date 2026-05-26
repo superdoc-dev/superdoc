@@ -283,7 +283,7 @@ const registerImagesInTransaction = (foundImages, editor, tr) => {
  * @param {Object} editor - The editor instance.
  * @param {import('prosemirror-view').EditorView} view - The editor view instance.
  * @param {import('prosemirror-state').EditorState} state - The current editor state.
- * @returns {import('prosemirror-state').Transaction} - The updated transaction with image nodes replaced by placeholders and registration process initiated.
+ * @returns {import('prosemirror-state').Transaction} - The updated transaction with in-place registrations and placeholders for images that require async processing.
  * @internal Exported for testing only.
  */
 export const handleBrowserPath = (foundImages, editor, view, state) => {
@@ -313,7 +313,7 @@ export const handleBrowserPath = (foundImages, editor, view, state) => {
   // Register the images. (async process).
   registerImages(imagesToProcess, editor, view);
 
-  // Remove all the images that were found. These will eventually be replaced by the updated images.
+  // Remove only images that require async processing. These will eventually be replaced by updated images.
 
   // We need to delete the image nodes and replace them with decorations. This will change their positions.
 

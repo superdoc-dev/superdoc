@@ -4,6 +4,8 @@ import {
   type BoundDocApi,
   type DocCloseBoundParams,
   type DocCloseResult,
+  type DocFormatApplyBoundParams,
+  type DocFormatApplyResult,
   type DocOpenParams as GeneratedDocOpenParams,
   type DocOpenResult,
   type DocSaveBoundParams,
@@ -56,6 +58,10 @@ class BoundRuntime implements RuntimeInvoker {
   markClosed(): void {
     this.closed = true;
   }
+}
+
+export interface DocFormatRangeBoundParams extends Omit<DocFormatApplyBoundParams, 'inline'> {
+  properties: NonNullable<DocFormatApplyBoundParams['inline']>;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +119,18 @@ class SuperDocDocumentCore {
   /** @internal */
   markClosed(): void {
     this.boundRuntime.markClosed();
+  }
+
+  async formatRange(params: DocFormatRangeBoundParams, options: InvokeOptions = {}): Promise<DocFormatApplyResult> {
+    const { properties, ...rest } = params;
+    return this.boundRuntime.invoke<DocFormatApplyResult>(
+      CONTRACT.operations['doc.format.apply'],
+      {
+        ...rest,
+        inline: properties,
+      },
+      options,
+    );
   }
 }
 

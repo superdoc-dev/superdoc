@@ -47,17 +47,17 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `content` | object \\| object[] | yes | One of: object, object[] |
+| `content` | object \| object[] | yes | One of: object, object[] |
 | `in` | StoryLocator | no | StoryLocator |
 | `nestingPolicy` | object | no |  |
 | `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
-| `target` | BlockNodeAddress \\| SelectionTarget | yes | One of: BlockNodeAddress, SelectionTarget |
+| `target` | BlockNodeAddress \| SelectionTarget | yes | One of: BlockNodeAddress, SelectionTarget |
 
 ### Variant 2.2 (required: ref, content)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `content` | object \\| object[] | yes | One of: object, object[] |
+| `content` | object \| object[] | yes | One of: object, object[] |
 | `in` | StoryLocator | no | StoryLocator |
 | `nestingPolicy` | object | no |  |
 | `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
@@ -101,7 +101,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 | `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
 | `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
 | `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
-| `resolution.target` | TextAddress \\| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
+| `resolution.target` | TextAddress \| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Variant 2 (success=false)
@@ -123,7 +123,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 | `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
 | `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
 | `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
-| `resolution.target` | TextAddress \\| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
+| `resolution.target` | TextAddress \| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `false` | yes | Constant: `false` |
 
 ### Example response

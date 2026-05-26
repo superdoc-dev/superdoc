@@ -1,5 +1,6 @@
 import { createProvider } from '../collaboration/collaboration';
 import useComment from '../../components/CommentsLayer/use-comment';
+import { actorIdentitiesMatch } from '@superdoc/common';
 
 import { addYComment, updateYComment, deleteYComment } from './collaboration-comments';
 
@@ -97,7 +98,7 @@ export const initCollaborationComments = (superdoc) => {
     const origin = event?.transaction?.origin;
     const { user = {} } = origin || {};
 
-    if (currentUser.name === user.name && currentUser.email === user.email) return;
+    if (actorIdentitiesMatch({ current: currentUser, other: user })) return;
 
     // Update conversations
     updateCommentsStore();

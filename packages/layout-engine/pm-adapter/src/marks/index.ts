@@ -27,6 +27,7 @@ export {
   selectTrackedChangeMeta,
   trackedChangesCompatible,
   collectTrackedChangeFromMarks,
+  collectTrackedChangesFromMarks,
   normalizeUnderlineStyle,
   applyTextStyleMark,
   applyMarksToRun,

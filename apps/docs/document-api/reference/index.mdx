@@ -24,7 +24,7 @@ This reference is sourced from `packages/document-api/src/contract/*`.
 | Capabilities | 1 | 0 | 1 | [Open](/document-api/reference/capabilities/index) |
 | Create | 6 | 0 | 6 | [Open](/document-api/reference/create/index) |
 | Sections | 18 | 0 | 18 | [Open](/document-api/reference/sections/index) |
-| Format | 44 | 1 | 45 | [Open](/document-api/reference/format/index) |
+| Format | 45 | 1 | 46 | [Open](/document-api/reference/format/index) |
 | Styles | 1 | 0 | 1 | [Open](/document-api/reference/styles/index) |
 | Lists | 39 | 0 | 39 | [Open](/document-api/reference/lists/index) |
 | Comments | 5 | 0 | 5 | [Open](/document-api/reference/comments/index) |
@@ -131,6 +131,7 @@ The tables below are grouped by namespace.
 
 | Operation | API member path | Description |
 | --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>formatRange</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.formatRange(...)</code></span> | Legacy root-level alias for inline range formatting. Routes to `format.apply` for compatibility with older callers. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.apply(...)</code></span> | Apply inline run-property patch changes to the target range with explicit set/clear semantics. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/bold"><code>format.bold</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.bold(...)</code></span> | Set or clear the `bold` inline run property on the target text range. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/italic"><code>format.italic</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.italic(...)</code></span> | Set or clear the `italic` inline run property on the target text range. |
@@ -243,7 +244,7 @@ The tables below are grouped by namespace.
 | --- | --- | --- |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/track-changes/list"><code>trackChanges.list</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.list(...)</code></span> | List all tracked changes in the document. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/track-changes/get"><code>trackChanges.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.get(...)</code></span> | Retrieve a single tracked change by ID. |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/track-changes/decide"><code>trackChanges.decide</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.decide(...)</code></span> | Accept or reject a tracked change (by ID or scope: all). |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/track-changes/decide"><code>trackChanges.decide</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.decide(...)</code></span> | Accept or reject tracked changes by ID, range, or scope: all (optionally filtered by story). |
 
 #### Query
 

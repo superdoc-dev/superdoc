@@ -29,7 +29,25 @@
  *                                      land without `// @ts-check` or
  *                                      when the allowlist carries
  *                                      empty/stale entries.
- *   4. public-method-coverage        - obligation-based ratchet over
+ *   4. jsdoc-hygiene-ts-test         - self-test suite for the
+ *                                      jsdoc-hygiene-ts scanner; 13
+ *                                      in-memory fixtures verifying
+ *                                      detector correctness. Runs
+ *                                      immediately before the scanner
+ *                                      stage so AST-shape drift surfaces
+ *                                      here, not as a silent zero-result
+ *                                      downstream.
+ *   5. jsdoc-hygiene-ts              - type-bearing JSDoc gate for .ts
+ *                                      source under packages/superdoc/src
+ *                                      and packages/super-editor/src.
+ *                                      Companion to jsdoc-ratchet on the
+ *                                      .ts side: enforces TS syntax as
+ *                                      the single source of truth for
+ *                                      shape. Grandfathers an existing
+ *                                      baseline; fails on net-new
+ *                                      type-bearing JSDoc. See
+ *                                      packages/superdoc/scripts/type-hygiene.md.
+ *   6. public-method-coverage        - obligation-based ratchet over
  *                                      public SuperDoc methods +
  *                                      getters. For each member the
  *                                      AST computes which obligations
@@ -42,7 +60,7 @@
  *                                      on their own — that's why
  *                                      `search(text: string)` shipped
  *                                      under v1 of this gate.
- *   5. build                         - vite build + the postbuild
+ *   7. build                         - vite build + the postbuild
  *                                      validator chain
  *                                      (check-tsconfig-type-surface,
  *                                      ensure-types, audit-bundle,
@@ -53,29 +71,29 @@
  *                                      Skipped when `--skip-build` is
  *                                      passed (CI calls `pnpm run build`
  *                                      separately in its own step).
- *   6. consumer-typecheck-matrix     - packs superdoc + installs the
+ *   8. consumer-typecheck-matrix     - packs superdoc + installs the
  *                                      tarball into
  *                                      tests/consumer-typecheck/
  *                                      node_modules/, then runs every
  *                                      consumer scenario.
- *   7. deep-type-audit-supported-root - strict gate on the supported-
+ *   9. deep-type-audit-supported-root - strict gate on the supported-
  *                                      root public surface; fails on any
  *                                      `any` leak. Reuses the install
- *                                      from stage 6.
- *   8. package-shape                 - publint + attw against the packed
+ *                                      from stage 8.
+ *  10. package-shape                 - publint + attw against the packed
  *                                      manifest. Reuses the tarball
- *                                      from stage 6.
- *   9. export-snapshots              - super-editor / legacy / root
+ *                                      from stage 8.
+ *  11. export-snapshots              - super-editor / legacy / root
  *                                      no-growth export snapshots.
  *                                      Reuses the install.
- *  10. root-classification-closure   - no supported-root or legacy-root
+ *  12. root-classification-closure   - no supported-root or legacy-root
  *                                      export references an internal-
  *                                      candidate type in its public
  *                                      declared shape (SD-3212 A1b).
  *
- * Why stage 6 runs before 7-10: stage 6 packs `superdoc.tgz` and
- * installs the tarball into the consumer fixture once. Stages 7, 9,
- * and 10 reuse the installed fixture; stage 8 reuses the packed tarball
+ * Why stage 8 runs before 9-12: stage 8 packs `superdoc.tgz` and
+ * installs the tarball into the consumer fixture once. Stages 9, 11,
+ * and 12 reuse the installed fixture; stage 10 reuses the packed tarball
  * directly. Without this ordering each downstream stage would `--pack`
  * separately and multiply the work.
  *
@@ -134,6 +152,32 @@ const stages = [
       'Per-file checkJs gate for the 6 hand-curated CHECKED_FILES + ratchet that ' +
       'fails when new public-reachable JSDoc files land without // @ts-check. ' +
       'Cheap; runs before the slow build so JSDoc drift fails fast.',
+  },
+  {
+    name: 'jsdoc-hygiene-ts-test',
+    cwd: REPO_ROOT,
+    cmd: 'node',
+    args: ['packages/superdoc/scripts/check-jsdoc-hygiene-ts-tests.cjs'],
+    blurb:
+      'Self-test suite for the jsdoc-hygiene-ts scanner. 13 in-memory ' +
+      'fixtures verifying detector correctness across negative control, ' +
+      'mixed-tag blocks, prose-vs-typed forms, and each tag class. ' +
+      'Fast-fails before the scanner runs so AST-shape drift or detector ' +
+      'logic bugs surface here rather than as silent zero-result ' +
+      'false-passes downstream.',
+  },
+  {
+    name: 'jsdoc-hygiene-ts',
+    cwd: REPO_ROOT,
+    cmd: 'node',
+    args: ['packages/superdoc/scripts/check-jsdoc-hygiene-ts.cjs'],
+    blurb:
+      'Type-bearing JSDoc gate for .ts source under packages/superdoc/src and ' +
+      'packages/super-editor/src. Grandfathers an existing baseline of violations ' +
+      'and fails on net-new type-bearing JSDoc tags (@param {T}, @returns {T}, ' +
+      '@type, @typedef, @template, etc.). See packages/superdoc/scripts/' +
+      'type-hygiene.md for the rule. Cheap; complements jsdoc-ratchet (which ' +
+      'covers .js files) by enforcing TS-as-single-source on the .ts side.',
   },
   {
     name: 'public-method-coverage',

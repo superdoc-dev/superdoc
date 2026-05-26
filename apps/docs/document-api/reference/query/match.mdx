@@ -32,7 +32,7 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
 | `mode` | enum | no | `"strict"`, `"candidates"` |
 | `offset` | integer | no |  |
 | `require` | enum | no | `"any"`, `"first"`, `"exactlyOne"`, `"all"` |
-| `select` | object(type="text") \\| object(type="node") | yes | One of: object(type="text"), object(type="node") |
+| `select` | object(type="text") \| object(type="node") | yes | One of: object(type="text"), object(type="node") |
 | `within` | BlockNodeAddress | no | BlockNodeAddress |
 | `within.kind` | `"block"` | no | Constant: `"block"` |
 | `within.nodeId` | string | no |  |
@@ -65,7 +65,7 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `evaluatedRevision` | string | yes |  |
-| `items` | object(matchKind="text") \\| object(matchKind="node")[] | yes |  |
+| `items` | object(matchKind="text") \| object(matchKind="node")[] | yes |  |
 | `meta` | object | yes |  |
 | `meta.effectiveResolved` | boolean | yes |  |
 | `page` | PageInfo | yes | PageInfo |

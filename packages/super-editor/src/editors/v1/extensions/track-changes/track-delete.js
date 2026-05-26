@@ -43,6 +43,11 @@ export const TrackDelete = Mark.create({
         },
       },
 
+      authorId: {
+        default: '',
+        rendered: false,
+      },
+
       authorEmail: {
         default: '',
         parseDOM: (elem) => elem.getAttribute('data-authoremail'),
@@ -82,6 +87,49 @@ export const TrackDelete = Mark.create({
       },
 
       importedAuthor: {
+        default: '',
+        rendered: false,
+      },
+
+      // Review graph metadata. See track-insert.js for the rationale —
+      // never DOM-rendered, optional, inferred for older marks.
+
+      revisionGroupId: {
+        default: '',
+        rendered: false,
+      },
+
+      splitFromId: {
+        default: '',
+        rendered: false,
+      },
+
+      changeType: {
+        default: '',
+        rendered: false,
+      },
+
+      replacementGroupId: {
+        default: '',
+        rendered: false,
+      },
+
+      replacementSideId: {
+        default: '',
+        rendered: false,
+      },
+
+      overlapParentId: {
+        default: '',
+        rendered: false,
+      },
+
+      sourceIds: {
+        default: null,
+        rendered: false,
+      },
+
+      origin: {
         default: '',
         rendered: false,
       },

@@ -30,6 +30,15 @@ const FAKE_FROM_CALLER = [
   },
 ];
 
+const FAKE_FROM_TEXT_ONLY = [
+  {
+    commentId: 'c-text-1',
+    creatorEmail: 'text@example.com',
+    creatorName: 'Text Only',
+    commentText: 'Hi from text only',
+  },
+];
+
 /**
  * Pins the engine-level contract that `SuperDoc.exportEditorsToDOCX`
  * relies on:
@@ -104,6 +113,34 @@ describe('Editor.exportDocx() comments fallback contract', () => {
       expect(passedComments[0]).toMatchObject({
         commentId: 'c-caller-1',
         creatorEmail: 'caller@example.com',
+      });
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('caller passes commentText without commentJSON/elements → engine synthesizes exportable comment JSON', async () => {
+    const editor = await buildEditorWithImports();
+    try {
+      const spy = vi.spyOn(editor.converter, 'exportToDocx').mockResolvedValue(Buffer.from(''));
+      await editor.exportDocx({ exportXmlOnly: true, comments: FAKE_FROM_TEXT_ONLY });
+      expect(spy).toHaveBeenCalledTimes(1);
+      const passedComments = spy.mock.calls[0][5];
+      expect(Array.isArray(passedComments)).toBe(true);
+      expect(passedComments[0]).toMatchObject({
+        commentId: 'c-text-1',
+        commentText: 'Hi from text only',
+        commentJSON: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'run',
+                content: [{ type: 'text', text: 'Hi from text only' }],
+              },
+            ],
+          },
+        ],
       });
     } finally {
       editor.destroy();

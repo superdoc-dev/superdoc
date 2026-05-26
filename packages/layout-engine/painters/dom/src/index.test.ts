@@ -16,6 +16,9 @@ import type {
   ResolvedLayout,
   TableBlock,
   TableMeasure,
+  TextRun,
+  TrackedChangeMeta,
+  TrackedChangesMode,
 } from '@superdoc/contracts';
 
 const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageGap: 0, pages: [] };
@@ -225,6 +228,39 @@ const buildSingleParagraphData = (blockId: string, runLength: number) => {
   };
 
   return { paragraphMeasure, paragraphLayout };
+};
+
+const createOverlapTrackedBlock = (mode: TrackedChangesMode): FlowBlock => {
+  const parentInsert: TrackedChangeMeta = {
+    kind: 'insert',
+    id: 'ins-parent',
+    relationship: 'parent',
+    author: 'Author 1',
+  };
+  const childDelete: TrackedChangeMeta = {
+    kind: 'delete',
+    id: 'del-child',
+    relationship: 'child',
+    overlapParentId: parentInsert.id,
+    author: 'Reviewer 2',
+  };
+  const run: TextRun = {
+    text: 'Overlapped text',
+    fontFamily: 'Arial',
+    fontSize: 16,
+    trackedChange: parentInsert,
+    trackedChanges: [parentInsert, childDelete],
+  };
+
+  return {
+    kind: 'paragraph',
+    id: `overlap-block-${mode}`,
+    runs: [run],
+    attrs: {
+      trackedChangesMode: mode,
+      trackedChangesEnabled: true,
+    },
+  };
 };
 
 const createResolvedTestLine = (textLength: number, overrides: Partial<Line> = {}): Line => ({
@@ -4684,6 +4720,93 @@ describe('DomPainter', () => {
     expect(span.dataset.trackChangeKind).toBe('insert');
     expect(span.dataset.trackChangeAuthor).toBe('Reviewer 1');
     expect(span.dataset.trackChangeAuthorEmail).toBe('reviewer@example.com');
+  });
+
+  it('renders overlapping parent insert and child delete as an insertion with delete strikethrough metadata', () => {
+    const overlapBlock = createOverlapTrackedBlock('review');
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      overlapBlock.id,
+      (overlapBlock.runs[0] as TextRun).text.length,
+    );
+
+    const painter = createTestPainter({ blocks: [overlapBlock], measures: [paragraphMeasure] });
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('[data-track-change-id="ins-parent"]') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.classList.contains('track-insert-dec')).toBe(true);
+    expect(span.classList.contains('track-delete-dec')).toBe(true);
+    expect(span.classList.contains('track-overlap-insert-delete-dec')).toBe(true);
+    expect(span.classList.contains('highlighted')).toBe(true);
+    expect(span.dataset.trackChangeKind).toBe('insert');
+    expect(span.dataset.trackChangeIds).toBe('ins-parent,del-child');
+    expect(span.dataset.trackChangeKinds).toBe('insert,delete');
+    expect(span.dataset.trackChangePreferredTargetId).toBe('del-child');
+
+    const styleEl = document.head.querySelector('[data-superdoc-track-change-styles="true"]') as HTMLStyleElement;
+    expect(styleEl).toBeTruthy();
+    const cssText = styleEl.textContent ?? '';
+    const deleteRuleIndex = cssText.indexOf('.superdoc-layout .track-delete-dec.highlighted');
+    const overlapRuleIndex = cssText.indexOf(
+      '.superdoc-layout .track-overlap-insert-delete-dec.track-insert-dec.track-delete-dec.highlighted',
+    );
+    expect(deleteRuleIndex).toBeGreaterThanOrEqual(0);
+    expect(overlapRuleIndex).toBeGreaterThan(deleteRuleIndex);
+
+    const overlapRule =
+      cssText.match(
+        /\.superdoc-layout \.track-overlap-insert-delete-dec\.track-insert-dec\.track-delete-dec\.highlighted\s*\{([\s\S]*?)\}/,
+      )?.[1] ?? '';
+    expect(overlapRule).toContain('var(--sd-tracked-changes-insert-border, #00853d)');
+    expect(overlapRule).toContain('background-color: var(--sd-tracked-changes-insert-background, #399c7222);');
+    expect(overlapRule).toContain('color: var(--sd-tracked-changes-insert-text, currentColor);');
+    expect(overlapRule).toMatch(
+      /text-decoration:\s*line-through\s+solid\s+var\(--sd-tracked-changes-delete-text,\s*#cb0e47\)\s+var\(--sd-tracked-changes-delete-decoration-thickness,\s*2px\)\s*!important;/,
+    );
+
+    const overlapFocusRule =
+      cssText.match(
+        /\.superdoc-layout \.track-overlap-insert-delete-dec\.track-insert-dec\.track-delete-dec\.highlighted\.track-change-focused\s*\{([\s\S]*?)\}/,
+      )?.[1] ?? '';
+    expect(overlapFocusRule).toContain(
+      'background-color: var(--sd-tracked-changes-insert-background-focused, #399c7244);',
+    );
+    expect(overlapFocusRule).toContain('border-top-style: solid;');
+    expect(overlapFocusRule).toContain('border-bottom-style: solid;');
+    expect(overlapFocusRule).toMatch(
+      /text-decoration:\s*line-through\s+solid\s+var\(--sd-tracked-changes-delete-text,\s*#cb0e47\)\s+var\(--sd-tracked-changes-delete-decoration-thickness,\s*2px\)\s*!important;/,
+    );
+  });
+
+  it('keeps overlap visibility driven by all revision layers', () => {
+    const originalBlock = createOverlapTrackedBlock('original');
+    const finalBlock = createOverlapTrackedBlock('final');
+    const { paragraphMeasure: originalMeasure, paragraphLayout: originalLayout } = buildSingleParagraphData(
+      originalBlock.id,
+      (originalBlock.runs[0] as TextRun).text.length,
+    );
+    const { paragraphMeasure: finalMeasure, paragraphLayout: finalLayout } = buildSingleParagraphData(
+      finalBlock.id,
+      (finalBlock.runs[0] as TextRun).text.length,
+    );
+
+    const painter = createTestPainter({ blocks: [originalBlock], measures: [originalMeasure] });
+    painter.paint(originalLayout, mount);
+
+    let span = mount.querySelector('[data-track-change-id="ins-parent"]') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.classList.contains('track-overlap-insert-delete-dec')).toBe(true);
+    expect(span.classList.contains('hidden')).toBe(true);
+
+    painter.setData([finalBlock], [finalMeasure]);
+    painter.paint(finalLayout, mount);
+
+    span = mount.querySelector('[data-track-change-id="ins-parent"]') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.classList.contains('track-overlap-insert-delete-dec')).toBe(true);
+    expect(span.classList.contains('normal')).toBe(true);
+    expect(span.classList.contains('hidden')).toBe(true);
+    expect(span.classList.contains('highlighted')).toBe(false);
   });
 
   it('stamps comment metadata on tracked-change text', () => {

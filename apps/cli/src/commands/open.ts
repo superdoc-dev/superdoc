@@ -27,7 +27,7 @@ const VALID_OVERRIDE_TYPES = new Set(['markdown', 'html', 'text']);
 const VALID_ON_MISSING = new Set(['seedFromDoc', 'blank', 'error']);
 
 export async function runOpen(tokens: string[], context: CommandContext): Promise<CommandExecution> {
-  const { parsed, help } = parseOperationArgs('doc.open', tokens, {
+  const { parsed, args, help } = parseOperationArgs('doc.open', tokens, {
     commandName: 'open',
     extraOptionSpecs: [{ name: 'collaboration-file', type: 'string' }],
   });
@@ -67,6 +67,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
   const bootstrapSettlingMs = getNumberOption(parsed, 'bootstrap-settling-ms');
   const userName = getStringOption(parsed, 'user-name');
   const userEmail = getStringOption(parsed, 'user-email');
+  const trackChanges = args.trackChanges as { replacements?: 'paired' | 'independent' } | undefined;
   const allowEnvFallback = context.executionMode !== 'host';
   const password = resolvePassword(getStringOption(parsed, 'password'), allowEnvFallback);
 
@@ -142,7 +143,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
   const user = userName != null || userEmail != null ? { name: userName ?? 'CLI', email: userEmail ?? '' } : undefined;
 
   // Build editor open options from override params and password.
-  const editorOpenOptions: EditorPassThroughOptions & Record<string, string | undefined> = {};
+  const editorOpenOptions: EditorPassThroughOptions & { markdown?: string; html?: string; plainText?: string } = {};
   if (contentOverride != null && overrideType) {
     if (overrideType === 'markdown') {
       editorOpenOptions.markdown = contentOverride;
@@ -156,6 +157,13 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
   }
   if (password != null) {
     editorOpenOptions.password = password;
+  }
+  if (trackChanges?.replacements != null) {
+    editorOpenOptions.modules = {
+      trackChanges: {
+        replacements: trackChanges.replacements,
+      },
+    };
   }
 
   return withContextLock(

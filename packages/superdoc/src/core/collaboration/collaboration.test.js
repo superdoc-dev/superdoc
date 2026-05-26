@@ -233,7 +233,7 @@ describe('collaboration helpers', () => {
     superdoc = {
       config: {
         superdocId: 'doc-123',
-        user: { name: 'Owner', email: 'owner@example.com' },
+        user: { id: 'owner-id', name: 'Owner', email: 'owner@example.com' },
         role: 'editor',
         isInternal: false,
         socket: { id: 'socket' },
@@ -291,6 +291,12 @@ describe('collaboration helpers', () => {
     // Event from same user should be ignored
     commentsArray.emit({ transaction: { origin: { user: superdoc.config.user } } });
     expect(useCommentMock).toHaveBeenCalledTimes(2);
+
+    // Same email but different actor id should not be ignored.
+    commentsArray.emit({
+      transaction: { origin: { user: { id: 'other-id', name: 'Other', email: superdoc.config.user.email } } },
+    });
+    expect(useCommentMock).toHaveBeenCalledTimes(4);
   });
 
   it('initCollaborationComments loads existing comments from ydoc on init', () => {

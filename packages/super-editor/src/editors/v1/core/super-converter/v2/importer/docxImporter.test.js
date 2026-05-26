@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  createDocumentJson,
   collapseWhitespaceNextToInlinePassthrough,
   defaultNodeListHandler,
   filterOutRootInlineNodes,
@@ -9,6 +10,92 @@ import {
 } from './docxImporter.js';
 
 const n = (type, attrs = {}) => ({ type, attrs, marks: [] });
+
+const makeCustomPropertyDocx = (propertyName, textValue) => ({
+  'word/document.xml': {
+    elements: [
+      {
+        name: 'w:document',
+        elements: [{ name: 'w:body', elements: [] }],
+      },
+    ],
+  },
+  'docProps/custom.xml': {
+    elements: [
+      {
+        name: 'Properties',
+        elements: [
+          {
+            name: 'property',
+            attributes: { name: propertyName },
+            elements: [
+              {
+                name: 'vt:lpwstr',
+                elements: [{ type: 'text', text: textValue }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+});
+
+const makeCustomPropertiesDocx = (properties) => ({
+  'word/document.xml': {
+    elements: [
+      {
+        name: 'w:document',
+        elements: [{ name: 'w:body', elements: [] }],
+      },
+    ],
+  },
+  'docProps/custom.xml': {
+    elements: [
+      {
+        name: 'Properties',
+        elements: Object.entries(properties).map(([propertyName, textValue]) => ({
+          name: 'property',
+          attributes: { name: propertyName },
+          elements: [
+            {
+              name: 'vt:lpwstr',
+              elements: [{ type: 'text', text: textValue }],
+            },
+          ],
+        })),
+      },
+    ],
+  },
+});
+
+const makeGoogleDocsLikeDocx = () => ({
+  'word/document.xml': {
+    elements: [
+      {
+        name: 'w:document',
+        elements: [{ name: 'w:body', elements: [] }],
+      },
+    ],
+  },
+  '_rels/.rels': {
+    elements: [
+      {
+        name: 'Relationships',
+        elements: [
+          {
+            name: 'Relationship',
+            attributes: {
+              Id: 'rId1',
+              Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
+              Target: 'word/document.xml',
+            },
+          },
+        ],
+      },
+    ],
+  },
+});
 
 describe('filterOutRootInlineNodes', () => {
   it('removes inline nodes at the root and keeps block nodes', () => {
@@ -110,6 +197,39 @@ describe('filterOutRootInlineNodes', () => {
     const types = result.map((x) => x.type);
     expect(types).toEqual(['passthroughBlock', 'paragraph', 'table']);
     expect(result[0].attrs.originalXml.attributes['w:id']).toBe('3');
+  });
+});
+
+describe('createDocumentJson document origin detection', () => {
+  it('prefers the stored SuperDoc document origin over the package-level SuperdocVersion marker', () => {
+    const converter = {};
+
+    createDocumentJson(
+      makeCustomPropertiesDocx({
+        SuperdocVersion: '1.2.3',
+        SuperdocDocumentOrigin: 'google-docs',
+      }),
+      converter,
+      undefined,
+    );
+
+    expect(converter.documentOrigin).toBe('google-docs');
+  });
+
+  it('classifies SuperDoc-authored packages via the stored SuperdocVersion custom property', () => {
+    const converter = {};
+
+    createDocumentJson(makeCustomPropertyDocx('SuperdocVersion', '1.2.3'), converter, undefined);
+
+    expect(converter.documentOrigin).toBe('superdoc');
+  });
+
+  it('classifies minimal Google Docs-like packages when the OPC root lacks metadata parts', () => {
+    const converter = {};
+
+    createDocumentJson(makeGoogleDocsLikeDocx(), converter, undefined);
+
+    expect(converter.documentOrigin).toBe('google-docs');
   });
 });
 

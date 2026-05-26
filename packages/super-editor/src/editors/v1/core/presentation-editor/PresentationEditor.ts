@@ -266,7 +266,10 @@ import {
   findAllBookmarksInDocument,
   resolveBookmarkTarget,
 } from '../../document-api-adapters/helpers/bookmark-resolver.js';
-import { resolveTrackedChange } from '../../document-api-adapters/helpers/tracked-change-resolver.js';
+import {
+  resolveTrackedChange,
+  resolveTrackedChangeInStory,
+} from '../../document-api-adapters/helpers/tracked-change-resolver.js';
 import { makeTrackedChangeAnchorKey } from '../../document-api-adapters/helpers/tracked-change-runtime-ref.js';
 import { getTrackedChangeIndex } from '../../document-api-adapters/tracked-changes/tracked-change-index.js';
 import { normalizeVariant } from './header-footer/header-footer-variant.js';
@@ -8563,33 +8566,54 @@ export class PresentationEditor extends EventEmitter {
 
     const behavior = options.behavior ?? 'auto';
     const block = options.block ?? 'center';
+    const navigationIds = this.#resolveTrackedChangeNavigationIds(entityId, storyKey);
 
     if (storyKey && storyKey !== BODY_STORY_KEY) {
-      if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
-        return true;
-      }
-
-      if (await this.#activateTrackedChangeStorySurface(entityId, storyKey, preferredPageIndex)) {
-        if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
+      for (const id of navigationIds) {
+        if (this.#navigateToActiveStoryTrackedChange(id, storyKey)) {
           return true;
         }
       }
 
-      return this.#scrollToRenderedTrackedChange(entityId, storyKey, preferredPageIndex, { behavior, block });
+      for (const id of navigationIds) {
+        if (await this.#activateTrackedChangeStorySurface(id, storyKey, preferredPageIndex)) {
+          for (const activeId of navigationIds) {
+            if (this.#navigateToActiveStoryTrackedChange(activeId, storyKey)) {
+              return true;
+            }
+          }
+        }
+      }
+
+      for (const id of navigationIds) {
+        if (await this.#scrollToRenderedTrackedChange(id, storyKey, preferredPageIndex, { behavior, block })) {
+          return true;
+        }
+      }
+      return false;
     }
 
     const setCursorById = editor.commands?.setCursorById;
 
     // Try direct cursor placement, then scroll to the new selection.
-    if (typeof setCursorById === 'function' && setCursorById(entityId, { preferredActiveThreadId: entityId })) {
-      await this.scrollToPositionAsync(editor.state.selection.from, { behavior, block });
-      return true;
+    if (typeof setCursorById === 'function') {
+      for (const id of navigationIds) {
+        if (setCursorById(id, { preferredActiveThreadId: id })) {
+          await this.scrollToPositionAsync(editor.state.selection.from, { behavior, block });
+          return true;
+        }
+      }
     }
 
     // Fall back to resolving the tracked change position and scrolling.
-    const resolved = resolveTrackedChange(editor, entityId);
+    const resolved = navigationIds.map((id) => resolveTrackedChange(editor, id)).find(Boolean);
     if (!resolved) {
-      return this.#scrollToRenderedTrackedChange(entityId, undefined, preferredPageIndex, { behavior, block });
+      for (const id of navigationIds) {
+        if (await this.#scrollToRenderedTrackedChange(id, undefined, preferredPageIndex, { behavior, block })) {
+          return true;
+        }
+      }
+      return false;
     }
 
     // Try with the raw ID (tracked changes may use a different internal ID).
@@ -8610,6 +8634,45 @@ export class PresentationEditor extends EventEmitter {
     editor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
     editor.view?.focus?.();
     return true;
+  }
+
+  #resolveTrackedChangeNavigationIds(entityId: string, storyKey?: string): string[] {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    const add = (value: unknown) => {
+      if (value === undefined || value === null) return;
+      const id = String(value).trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+
+    add(entityId);
+
+    let story: StoryLocator | undefined;
+    if (storyKey && storyKey !== BODY_STORY_KEY) {
+      try {
+        story = parseStoryKey(storyKey);
+      } catch {
+        story = undefined;
+      }
+    }
+
+    try {
+      const resolved = resolveTrackedChangeInStory(this.#editor, {
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId,
+        ...(story ? { story } : {}),
+      });
+      add(resolved?.change?.commandRawId);
+      add(resolved?.change?.rawId);
+      add(resolved?.change?.id);
+    } catch {
+      // Navigation still has direct-id and rendered-DOM fallbacks.
+    }
+
+    return ids;
   }
 
   async #activateTrackedChangeStorySurface(

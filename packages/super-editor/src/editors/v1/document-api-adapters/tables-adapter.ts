@@ -97,6 +97,7 @@ import { DocumentApiAdapterError } from './errors.js';
 import { toBlockAddress, findBlockById, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
 import { resolvePreferredNewTableStyleId, isKnownTableStyleId } from '@superdoc/style-engine/ooxml';
 import { generateDocxHexId } from '../utils/generateDocxHexId.js';
+import { Attribute, type AttributeValue } from '../core/Attribute.js';
 import {
   readSettingsRoot,
   ensureSettingsRoot,
@@ -2115,11 +2116,11 @@ export function tablesSplitAdapter(
       tr.delete(rp, rEnd);
     }
 
-    // Build the new table with the same attributes.
-    const newTableAttrs = { ...(tableNode.attrs as Record<string, unknown>) };
-    delete newTableAttrs.sdBlockId; // Each table needs a unique ID — let PM assign one.
-    delete newTableAttrs.paraId; // Never duplicate legacy/imported table paraIds across split tables.
-    delete newTableAttrs.textId; // Avoid duplicate w14:textId after split.
+    const newTableAttrs = Attribute.getSplittedAttributes(
+      editor.extensionService?.attributes ?? [],
+      tableNode.type.name,
+      tableNode.attrs as Record<string, AttributeValue>,
+    );
     const newTable = schema.nodes.table.create(newTableAttrs, secondTableRows);
     const separatorParagraph = createSeparatorParagraph(schema);
     if (!separatorParagraph) {

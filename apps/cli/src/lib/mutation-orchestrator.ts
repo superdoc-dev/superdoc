@@ -54,6 +54,7 @@ function invokeOperation(
   operationId: CliExposedOperationId,
   input: Record<string, unknown>,
   options?: Record<string, unknown>,
+  commandName?: string,
 ): unknown {
   const apiInput = extractInvokeInput(operationId, input);
   const preHook = PRE_INVOKE_HOOKS[operationId];
@@ -67,11 +68,11 @@ function invokeOperation(
       options,
     });
   } catch (error) {
-    throw mapInvokeError(operationId, error);
+    throw mapInvokeError(operationId, error, { commandName });
   }
 
   // Check for failed receipts (non-throwing failure path)
-  const failedReceiptError = mapFailedReceipt(operationId, result);
+  const failedReceiptError = mapFailedReceipt(operationId, result, { commandName });
   if (failedReceiptError) throw failedReceiptError;
 
   const postHook = POST_INVOKE_HOOKS[operationId];
@@ -120,7 +121,7 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
   const changeMode = readChangeMode(input);
   const force = readBoolean(input, 'force');
   const expectedRevision = readOptionalNumber(input, 'expectedRevision');
-  const commandName = deriveCommandName(operationId);
+  const commandName = request.commandName ?? deriveCommandName(operationId);
 
   const catalog = COMMAND_CATALOG[operationId];
   const invokeOptions: Record<string, unknown> = {};
@@ -152,7 +153,7 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
     const source = doc === '-' ? 'stdin' : 'path';
     const opened = await openDocument(doc, context.io);
     try {
-      const result = invokeOperation(opened.editor, operationId, input, invokeOptions);
+      const result = invokeOperation(opened.editor, operationId, input, invokeOptions, commandName);
       const document: DocumentPayload = {
         path: source === 'path' ? doc : undefined,
         source,
@@ -204,7 +205,7 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
       });
 
       try {
-        const result = invokeOperation(opened.editor, operationId, input, invokeOptions);
+        const result = invokeOperation(opened.editor, operationId, input, invokeOptions, commandName);
 
         if (dryRun) {
           const document: DocumentPayload = {

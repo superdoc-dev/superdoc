@@ -92,6 +92,21 @@ describe('tracked-changes', () => {
       expect(() => stripTrackedChangeFromRun(tabRun)).not.toThrow();
     });
 
+    it('should remove tracked change layers from BreakRun', () => {
+      const run: Run = {
+        kind: 'break',
+        trackedChange: { kind: 'insert', id: 'ins-1' },
+        trackedChanges: [
+          { kind: 'insert', id: 'ins-1' },
+          { kind: 'delete', id: 'del-1' },
+        ],
+      };
+
+      stripTrackedChangeFromRun(run);
+      expect(run.trackedChange).toBeUndefined();
+      expect(run.trackedChanges).toBeUndefined();
+    });
+
     it('should not error on TextRun without trackedChange', () => {
       const run: TextRun = {
         text: 'Hello',
@@ -885,6 +900,34 @@ describe('tracked-changes', () => {
       expect(result).toHaveLength(2);
       expect((result[0] as TextRun).text).toBe('Normal');
       expect((result[1] as TextRun).text).toBe('More');
+    });
+
+    it('should hide runs with overlapped child deletions in final mode', () => {
+      const runs: Run[] = [
+        {
+          text: 'HELLO',
+          fontFamily: 'Arial',
+          fontSize: 12,
+          trackedChange: { kind: 'insert', id: 'ins-parent' },
+          trackedChanges: [
+            { kind: 'insert', id: 'ins-parent', relationship: 'parent' },
+            {
+              kind: 'delete',
+              id: 'del-child',
+              overlapParentId: 'ins-parent',
+              relationship: 'child',
+            },
+          ],
+        },
+        { text: 'XYZ', fontFamily: 'Arial', fontSize: 12, trackedChange: { kind: 'insert', id: 'ins-2' } },
+      ];
+      const config: TrackedChangesConfig = { enabled: true, mode: 'final' };
+      const hyperlinkConfig: HyperlinkConfig = { enableRichHyperlinks: false };
+      const applyMarksToRun = vi.fn();
+
+      const result = applyTrackedChangesModeToRuns(runs, config, hyperlinkConfig, applyMarksToRun);
+      expect(result).toHaveLength(1);
+      expect((result[0] as TextRun).text).toBe('XYZ');
     });
 
     it('should strip metadata from remaining runs in final mode after filtering deletions', () => {

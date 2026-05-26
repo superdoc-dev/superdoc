@@ -1,8 +1,8 @@
 import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
-import { Transform } from 'prosemirror-transform';
+import { AddMarkStep, RemoveMarkStep, ReplaceAroundStep, ReplaceStep, Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
-import type { Node as PmNode, Schema } from 'prosemirror-model';
-import type { Doc as YDoc } from 'yjs';
+import type { Mark as PmMark, Node as PmNode, Schema } from 'prosemirror-model';
+import type { Doc as YDoc, XmlFragment as YXmlFragment } from 'yjs';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
 import type { EditorHelpers, ExtensionStorage, ProseMirrorJSON, PageStyles, Toolbar } from './types/EditorTypes.js';
 import type { ChainableCommandObject, CanObject, EditorCommands } from './types/ChainedCommands.js';
@@ -34,6 +34,12 @@ import {
 import { createDocument } from './helpers/createDocument.js';
 import { isActive } from './helpers/isActive.js';
 import { trackedTransaction } from '@extensions/track-changes/trackChangesHelpers/trackedTransaction.js';
+import {
+  createWordIdAllocator,
+  isDecimalWordId,
+  TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY,
+} from '@extensions/track-changes/review-model/word-id-allocator.js';
+import { TrackDeleteMarkName, TrackFormatMarkName, TrackInsertMarkName } from '@extensions/track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 import { getNecessaryMigrations } from '@core/migrations/index.js';
@@ -49,6 +55,7 @@ import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
 import { generateCollaborationData, cleanupCollaborationSideEffects } from '@extensions/collaboration/collaboration.js';
+import { normalizeYjsFragmentForSchema } from '@extensions/collaboration/normalize-yjs-fragment.js';
 import { seedPartsFromEditor } from '@extensions/collaboration/part-sync/seed-parts.js';
 import { onCollaborationProviderSynced } from './helpers/collaboration-provider-sync.js';
 import { useHighContrastMode } from '../composables/use-high-contrast-mode.js';
@@ -65,6 +72,7 @@ import { createDocFromMarkdown, createDocFromHTML } from '@core/helpers/index.js
 import { COMMENT_FILE_BASENAMES } from '@core/super-converter/constants.js';
 import { isHeadless } from '../utils/headless-helpers.js';
 import { canUseDOM } from '../utils/canUseDOM.js';
+import { buildCommentJsonFromText } from '../utils/comment-content.js';
 import { buildSchemaSummary } from './schema-summary.js';
 import type { PresentationEditor } from './presentation-editor/index.js';
 import type { EditorRenderer } from './renderers/EditorRenderer.js';
@@ -92,6 +100,31 @@ import { getViewModeSelectionWithoutStructuredContent } from './helpers/getViewM
 import { resolveMainBodyEditor } from '../document-api-adapters/helpers/word-statistics.js';
 import { commitLiveStorySessionRuntimes } from '../document-api-adapters/story-runtime/live-story-session-runtime-registry.js';
 
+type TrackChangesRuntimeConfig = NonNullable<EditorOptions['trackedChanges']>;
+
+function normalizeEditorTrackChangesOptions(options: Partial<EditorOptions>): Partial<EditorOptions> {
+  const canonical = options.modules?.trackChanges;
+  const legacy = options.trackedChanges;
+
+  if (!canonical && !legacy) return options;
+
+  const normalized: TrackChangesRuntimeConfig = {
+    ...(legacy ?? {}),
+    ...(canonical ?? {}),
+  };
+
+  return {
+    ...options,
+    trackedChanges: normalized,
+  };
+}
+
+type ConverterWithInternalWordIdAllocator = EditorConverterSurface & {
+  wordIdAllocator?: {
+    getSourceIdMap?: () => Record<string, Record<string, string>>;
+  } | null;
+};
+
 declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
 
@@ -104,6 +137,271 @@ const CURRENT_APP_VERSION =
 const PIXELS_PER_INCH = 96;
 const MAX_HEIGHT_BUFFER_PX = 50;
 const MAX_WIDTH_BUFFER_PX = 20;
+const TRACKED_REVIEW_MARK_NAMES = new Set([TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName]);
+
+const isTrackedReviewMark = (mark: { type?: { name?: string } } | null | undefined): boolean =>
+  Boolean(mark?.type?.name && TRACKED_REVIEW_MARK_NAMES.has(mark.type.name));
+
+const trackedReviewMarkKey = (mark: { type?: { name?: string }; attrs?: Record<string, unknown> }): string | null => {
+  if (!isTrackedReviewMark(mark)) return null;
+  const id = typeof mark.attrs?.id === 'string' ? mark.attrs.id : '';
+  return `${mark.type?.name ?? ''}:${id}`;
+};
+
+const trackedReviewMarkKeysForNode = (node: PmNode | null | undefined): Set<string> => {
+  const keys = new Set<string>();
+  if (!node) return keys;
+  for (const mark of node.marks ?? []) {
+    const key = trackedReviewMarkKey(mark);
+    if (key) keys.add(key);
+  }
+  return keys;
+};
+
+const inlineNodeHasTrackedReviewMark = (node: PmNode): boolean =>
+  Boolean(node.isInline && node.marks?.some(isTrackedReviewMark));
+
+const rangeHasTrackedReviewMark = (doc: PmNode, from: number, to: number): boolean => {
+  if (from >= to) return false;
+
+  const docStart = 0;
+  const docEnd = doc.content.size;
+  const clampedFrom = Math.max(docStart, Math.min(docEnd, from));
+  const clampedTo = Math.max(docStart, Math.min(docEnd, to));
+  if (clampedFrom >= clampedTo) return false;
+
+  let found = false;
+  doc.nodesBetween(clampedFrom, clampedTo, (node) => {
+    if (inlineNodeHasTrackedReviewMark(node)) {
+      found = true;
+      return false;
+    }
+    return undefined;
+  });
+  return found;
+};
+
+const rangeIsTrackedInsertionOnly = (doc: PmNode, from: number, to: number): boolean => {
+  if (from >= to) return false;
+
+  const docStart = 0;
+  const docEnd = doc.content.size;
+  const clampedFrom = Math.max(docStart, Math.min(docEnd, from));
+  const clampedTo = Math.max(docStart, Math.min(docEnd, to));
+  if (clampedFrom >= clampedTo) return false;
+
+  let sawTrackedInsertion = false;
+  let sawUntrackedInline = false;
+  let sawNonInsertionTrackedMark = false;
+
+  doc.nodesBetween(clampedFrom, clampedTo, (node, pos) => {
+    if (!node.isInline || !node.isLeaf) return;
+    if (pos + node.nodeSize <= clampedFrom || pos >= clampedTo) return;
+
+    const trackedMarks = (node.marks ?? []).filter(isTrackedReviewMark);
+    if (!trackedMarks.length) {
+      sawUntrackedInline = true;
+      return;
+    }
+
+    sawTrackedInsertion = true;
+    if (!trackedMarks.every((mark) => mark.type?.name === TrackInsertMarkName)) {
+      sawNonInsertionTrackedMark = true;
+    }
+  });
+
+  return sawTrackedInsertion && !sawUntrackedInline && !sawNonInsertionTrackedMark;
+};
+
+const getSingleTrackedInsertionMarkInRange = (doc: PmNode, from: number, to: number): PmMark | null => {
+  if (!rangeIsTrackedInsertionOnly(doc, from, to)) return null;
+
+  /** @type {import('prosemirror-model').Mark[]} */
+  const insertionMarks = [];
+  const seenIds = new Set<string>();
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isInline || !node.isLeaf) return;
+    if (pos + node.nodeSize <= from || pos >= to) return;
+
+    const insertionMark = (node.marks ?? []).find((mark) => mark.type?.name === TrackInsertMarkName);
+    const id = typeof insertionMark?.attrs?.id === 'string' ? insertionMark.attrs.id : null;
+    if (!insertionMark || !id || seenIds.has(id)) return;
+    seenIds.add(id);
+    insertionMarks.push(insertionMark);
+  });
+
+  return insertionMarks.length === 1 ? insertionMarks[0] : null;
+};
+
+const getSingleTrackedInsertionMarkAtCollapsedPosition = (doc: PmNode, pos: number): PmMark | null => {
+  const boundedPos = Math.max(0, Math.min(doc.content.size, pos));
+  const $pos = doc.resolve(boundedPos);
+  const beforeInsert = $pos.nodeBefore?.marks?.find((mark) => mark.type?.name === TrackInsertMarkName) ?? null;
+  const afterInsert = $pos.nodeAfter?.marks?.find((mark) => mark.type?.name === TrackInsertMarkName) ?? null;
+  const beforeId = typeof beforeInsert?.attrs?.id === 'string' ? beforeInsert.attrs.id : null;
+  const afterId = typeof afterInsert?.attrs?.id === 'string' ? afterInsert.attrs.id : null;
+  if (!beforeInsert || !afterInsert || !beforeId || beforeId !== afterId) return null;
+  return beforeInsert;
+};
+
+const resolveDirectInsertionMutationCommentMeta = (
+  state: EditorState,
+  tr: Transaction,
+): {
+  insertedMark: PmMark;
+  deletionMark: null;
+  formatMark: null;
+  deletionNodes: [];
+  step: ReplaceStep;
+  emitCommentEvent: true;
+} | null => {
+  if (!tr.docChanged || tr.steps.length !== 1) return null;
+
+  const [step] = tr.steps;
+  if (!(step instanceof ReplaceStep)) return null;
+
+  const docs = (tr as unknown as { docs?: PmNode[] }).docs ?? [];
+  const docBeforeStep = docs[0] ?? state.doc;
+  const insertedMark =
+    step.from !== step.to && step.slice.content.size === 0
+      ? getSingleTrackedInsertionMarkInRange(docBeforeStep, step.from, step.to)
+      : step.from === step.to && step.slice.content.size > 0
+        ? getSingleTrackedInsertionMarkAtCollapsedPosition(docBeforeStep, step.from)
+        : null;
+  if (!insertedMark) return null;
+
+  return {
+    insertedMark,
+    deletionMark: null,
+    formatMark: null,
+    deletionNodes: [],
+    step,
+    emitCommentEvent: true,
+  };
+};
+
+const collapsedPositionIsInsideTrackedReviewMark = (doc: PmNode, pos: number): boolean => {
+  const boundedPos = Math.max(0, Math.min(doc.content.size, pos));
+  const $pos = doc.resolve(boundedPos);
+  const beforeKeys = trackedReviewMarkKeysForNode($pos.nodeBefore);
+  if (!beforeKeys.size) return false;
+
+  const afterKeys = trackedReviewMarkKeysForNode($pos.nodeAfter);
+  for (const key of beforeKeys) {
+    if (afterKeys.has(key)) return true;
+  }
+  return false;
+};
+
+const fragmentHasTrackedReviewMark = (fragment: {
+  descendants?: (fn: (node: PmNode) => false | void) => void;
+}): boolean => {
+  let found = false;
+  fragment.descendants?.((node) => {
+    if (inlineNodeHasTrackedReviewMark(node)) {
+      found = true;
+      return false;
+    }
+    return undefined;
+  });
+  return found;
+};
+
+const collapsedInsertionExtendsTrackedInsertion = (
+  doc: PmNode,
+  pos: number,
+  slice: { content?: { descendants?: (fn: (node: PmNode) => false | void) => void } },
+): boolean => {
+  const enclosingInsert = getSingleTrackedInsertionMarkAtCollapsedPosition(doc, pos);
+  if (!enclosingInsert) return false;
+  if (!slice.content) return true;
+
+  const enclosingInsertId = typeof enclosingInsert.attrs?.id === 'string' ? enclosingInsert.attrs.id : null;
+  if (!enclosingInsertId) return false;
+
+  let compatible = true;
+  slice.content.descendants?.((node) => {
+    if (!compatible || !node.isInline) return compatible ? undefined : false;
+    const trackedMarks = (node.marks ?? []).filter(isTrackedReviewMark);
+    if (!trackedMarks.length) return;
+
+    const allMatchEnclosingInsertion = trackedMarks.every(
+      (mark) => mark.type?.name === TrackInsertMarkName && mark.attrs?.id === enclosingInsertId,
+    );
+    if (!allMatchEnclosingInsertion) {
+      compatible = false;
+      return false;
+    }
+    return undefined;
+  });
+
+  return compatible;
+};
+
+const collapsedInsertionExtendsTrackedReviewMark = (
+  doc: PmNode,
+  pos: number,
+  slice: { content?: { descendants?: (fn: (node: PmNode) => false | void) => void } },
+): boolean => {
+  if (!slice.content || !fragmentHasTrackedReviewMark(slice.content)) return false;
+  const boundedPos = Math.max(0, Math.min(doc.content.size, pos));
+  const $pos = doc.resolve(boundedPos);
+  return (
+    trackedReviewMarkKeysForNode($pos.nodeBefore).size > 0 || trackedReviewMarkKeysForNode($pos.nodeAfter).size > 0
+  );
+};
+
+const stepTouchesTrackedReviewState = (step: unknown, doc: PmNode): boolean => {
+  if (step instanceof ReplaceStep) {
+    // Direct deletes wholly inside an unresolved insertion mutate that
+    // insertion in place to match Word. They should not be rerouted into a
+    // synthetic tracked delete.
+    if (
+      step.from !== step.to &&
+      step.slice.content.size === 0 &&
+      rangeIsTrackedInsertionOnly(doc, step.from, step.to)
+    ) {
+      return false;
+    }
+    // Direct typing strictly inside a single unresolved insertion should
+    // extend that insertion in place. Re-routing through trackedTransaction
+    // would create a child insertion and split the parent suggestion.
+    if (
+      step.from === step.to &&
+      step.slice.content.size > 0 &&
+      collapsedInsertionExtendsTrackedInsertion(doc, step.from, step.slice)
+    ) {
+      return false;
+    }
+    if (rangeHasTrackedReviewMark(doc, step.from, step.to)) return true;
+    if (step.from === step.to && step.slice.content.size > 0) {
+      return (
+        collapsedPositionIsInsideTrackedReviewMark(doc, step.from) ||
+        collapsedInsertionExtendsTrackedReviewMark(doc, step.from, step.slice)
+      );
+    }
+    return false;
+  }
+
+  if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) {
+    return rangeHasTrackedReviewMark(doc, step.from, step.to);
+  }
+
+  if (step instanceof ReplaceAroundStep) {
+    return (
+      rangeHasTrackedReviewMark(doc, step.from, step.to) || rangeHasTrackedReviewMark(doc, step.gapFrom, step.gapTo)
+    );
+  }
+
+  return false;
+};
+
+const transactionTouchesTrackedReviewState = (state: EditorState, tr: Transaction): boolean => {
+  if (!tr.docChanged || !tr.steps.length) return false;
+
+  const docs = (tr as unknown as { docs?: PmNode[] }).docs ?? [];
+  return tr.steps.some((step, index) => stepTouchesTrackedReviewState(step, docs[index] ?? state.doc));
+};
 
 type ExtensionInstanceLike = {
   type?: string;
@@ -180,6 +478,9 @@ export interface OpenOptions {
 
   /** JSON content to initialize with */
   json?: ProseMirrorJSON | null;
+
+  /** Y.js XML fragment to hydrate from */
+  fragment?: YXmlFragment | null;
 
   /** Whether comments are enabled */
   isCommentsEnabled?: boolean;
@@ -379,6 +680,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #documentOpenTracked = false;
 
+  /**
+   * Fragment configured at construction time. This is reusable default config,
+   * unlike document-scoped fragments supplied to a single open() call.
+   */
+  #constructorFragment: YXmlFragment | null = null;
+
   options: EditorOptions = {
     element: null,
     selector: null,
@@ -502,7 +809,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   constructor(options: Partial<EditorOptions>) {
     super();
 
-    const resolvedOptions = { ...options };
+    const resolvedOptions = normalizeEditorTrackChangesOptions(options);
     const domAvailable = canUseDOM();
     const isHeadlessRequested = Boolean(resolvedOptions.isHeadless);
     const mountRequested = Boolean(resolvedOptions.element || resolvedOptions.selector);
@@ -534,6 +841,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
       resolvedOptions.element = null;
       resolvedOptions.selector = null;
     }
+
+    this.#constructorFragment = resolvedOptions.fragment ?? null;
 
     this.#checkHeadless(resolvedOptions);
     this.setOptions(resolvedOptions);
@@ -824,6 +1133,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // Merge options with defaults
       const resolvedMode = options?.mode ?? this.options.mode ?? 'docx';
       const explicitIsNewFile = options?.isNewFile;
+      const hasOpenFragment = Object.prototype.hasOwnProperty.call(options ?? {}, 'fragment');
       const resolvedOptions = {
         ...this.options,
         mode: resolvedMode,
@@ -833,6 +1143,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         html: options?.html,
         markdown: options?.markdown,
         jsonOverride: options?.json ?? null,
+        fragment: hasOpenFragment ? (options?.fragment ?? null) : (this.options.fragment ?? this.#constructorFragment),
       };
 
       // Password for encrypted .docx — threaded to loadXmlData, then cleared
@@ -1100,6 +1411,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.options.initialState = null;
     this.options.content = '';
     this.options.fileSource = null;
+    this.options.fragment = null;
 
     // Reset internal state
     this._state = undefined!;
@@ -2482,7 +2794,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
             });
           else if (this.options.jsonOverride) doc = this.schema.nodeFromJSON(this.options.jsonOverride);
 
-          if (fragment) doc = yXmlFragmentToProseMirrorRootNode(fragment, this.schema);
+          if (fragment) {
+            normalizeYjsFragmentForSchema(fragment);
+            doc = yXmlFragmentToProseMirrorRootNode(fragment, this.schema);
+          }
         }
       }
 
@@ -2765,17 +3080,34 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
       const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
+      const directInsertionMutationCommentMeta = resolveDirectInsertionMutationCommentMeta(
+        prevState,
+        transactionToApply,
+      );
+      const protectsExistingTrackedReviewState = transactionTouchesTrackedReviewState(prevState, transactionToApply);
+      if (protectsExistingTrackedReviewState && skipTrackChanges) {
+        transactionToApply.setMeta('protectTrackedReviewState', true);
+      }
 
-      const shouldTrack = (isTrackChangesActive || forceTrackChanges) && !skipTrackChanges;
+      const shouldTrack =
+        ((isTrackChangesActive || forceTrackChanges) && !skipTrackChanges) || protectsExistingTrackedReviewState;
+      if (
+        !shouldTrack &&
+        directInsertionMutationCommentMeta &&
+        !transactionToApply.getMeta(TrackChangesBasePluginKey)
+      ) {
+        transactionToApply.setMeta(TrackChangesBasePluginKey, directInsertionMutationCommentMeta);
+      }
       if (shouldTrack && forceTrackChanges && !this.options.user) {
         throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
       }
 
+      const trackedUser = this.options.user ?? {};
       transactionToApply = shouldTrack
         ? trackedTransaction({
             tr: transactionToApply,
             state: prevState,
-            user: this.options.user!,
+            user: trackedUser,
             replacements: this.options.trackedChanges?.replacements === 'independent' ? 'independent' : 'paired',
           })
         : transactionToApply;
@@ -3196,6 +3528,117 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
+   * Install a fresh Word revision id allocator on the converter. Walks the
+   * current document and reserves every decimal `sourceId` so newly minted ids
+   * never collide with imported revisions.
+   */
+  #installWordIdAllocatorIfNeeded(): void {
+    if (!this.converter) return;
+
+    const allocator = createWordIdAllocator();
+
+    const reserveAttrs = (attrs: { sourceId?: unknown } | undefined, path: string): void => {
+      const sourceId = attrs?.sourceId;
+      if (isDecimalWordId(sourceId)) {
+        allocator.reserve(path, sourceId as string | number);
+      }
+    };
+
+    const reserveFromDoc = (doc: PmNode | undefined | null, path: string): void => {
+      if (!doc) return;
+      doc.descendants((node) => {
+        if (!Array.isArray(node.marks)) return;
+        for (const mark of node.marks) {
+          const name = mark.type.name;
+          if (name !== 'trackInsert' && name !== 'trackDelete' && name !== 'trackFormat') continue;
+          reserveAttrs(mark.attrs as { sourceId?: unknown }, path);
+        }
+      });
+    };
+
+    const reserveFromJson = (node: unknown, path: string): void => {
+      if (!node || typeof node !== 'object') return;
+      const current = node as { marks?: Array<{ type?: string; attrs?: { sourceId?: unknown } }>; content?: unknown[] };
+      if (Array.isArray(current.marks)) {
+        for (const mark of current.marks) {
+          if (mark.type !== 'trackInsert' && mark.type !== 'trackDelete' && mark.type !== 'trackFormat') continue;
+          reserveAttrs(mark.attrs, path);
+        }
+      }
+      if (Array.isArray(current.content)) {
+        for (const child of current.content) reserveFromJson(child, path);
+      }
+    };
+
+    const wordPartPath = (target: unknown, fallback: string): string => {
+      if (typeof target !== 'string' || !target) return fallback;
+      const stripped = target.replace(/^\/+/, '');
+      return stripped.startsWith('word/') ? stripped : `word/${stripped}`;
+    };
+
+    const relsRoot = this.converter.convertedXml?.['word/_rels/document.xml.rels']?.elements?.find(
+      (node: { name?: string }) => node.name === 'Relationships',
+    );
+    const resolveRelationshipTarget = (relationshipId: string, fallback: string): string => {
+      const target = relsRoot?.elements?.find(
+        (node: { attributes?: { Id?: string; Target?: string } }) => node.attributes?.Id === relationshipId,
+      )?.attributes?.Target;
+      return wordPartPath(target, fallback);
+    };
+
+    reserveFromDoc(this.state?.doc as PmNode, 'word/document.xml');
+    for (const [id, header] of Object.entries(this.converter.headers || {})) {
+      const partPath = resolveRelationshipTarget(id, 'word/header1.xml');
+      const headerEditor = this.converter.headerEditors?.find((item: { id?: string }) => item.id === id);
+      reserveFromDoc(headerEditor?.editor?.state?.doc as PmNode | undefined, partPath);
+      reserveFromJson(header, partPath);
+    }
+    for (const [id, footer] of Object.entries(this.converter.footers || {})) {
+      const partPath = resolveRelationshipTarget(id, 'word/footer1.xml');
+      const footerEditor = this.converter.footerEditors?.find((item: { id?: string }) => item.id === id);
+      reserveFromDoc(footerEditor?.editor?.state?.doc as PmNode | undefined, partPath);
+      reserveFromJson(footer, partPath);
+    }
+    reserveFromJson(this.converter.footnotes, 'word/footnotes.xml');
+    reserveFromJson(this.converter.endnotes, 'word/endnotes.xml');
+
+    (this.converter as ConverterWithInternalWordIdAllocator).wordIdAllocator = allocator;
+  }
+
+  #persistTrackedChangeSourceIdMap(): void {
+    if (!this.converter) return;
+
+    const allocator = (this.converter as ConverterWithInternalWordIdAllocator).wordIdAllocator;
+    const sourceIdMap = allocator?.getSourceIdMap?.() ?? {};
+    if (Object.keys(sourceIdMap).length === 0 && !this.#hasTrackedChangeSourceIdMapProperty()) return;
+
+    const payload = JSON.stringify({ version: 1, parts: sourceIdMap });
+    SuperConverter.setStoredCustomProperty(
+      this.converter.convertedXml,
+      TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY,
+      payload,
+      false,
+    );
+  }
+
+  #hasTrackedChangeSourceIdMapProperty(): boolean {
+    const customXml = this.converter?.convertedXml?.['docProps/custom.xml'];
+    const properties = customXml?.elements?.find((node: { name?: string }) => {
+      const name = node?.name;
+      return name === 'Properties' || name?.endsWith(':Properties');
+    });
+    return Boolean(
+      properties?.elements?.some((node: { name?: string; attributes?: { name?: string } }) => {
+        const name = node?.name;
+        return (
+          (name === 'property' || name?.endsWith(':property')) &&
+          node.attributes?.name === TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY
+        );
+      }),
+    );
+  }
+
+  /**
    * Export the editor document to DOCX.
    *
    * Return type depends on flags:
@@ -3240,14 +3683,25 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // Normalize commentJSON property (imported comments provide `elements`)
       const preparedComments = effectiveComments.map((comment: Comment) => {
         const elements = Array.isArray(comment.elements) && comment.elements.length ? comment.elements : undefined;
+        const commentJson =
+          comment.commentJSON ??
+          elements ??
+          (typeof comment.commentText === 'string' ? buildCommentJsonFromText(comment.commentText) : undefined);
         return {
           ...comment,
-          commentJSON: comment.commentJSON ?? elements,
+          commentJSON: commentJson,
         };
       });
 
       // Pre-process the document state to prepare for export
       const json = this.#prepareDocumentForExport(preparedComments);
+
+      // Set up the Word revision id allocator on the converter so
+      // ins/del/rPrChange decoders can mint
+      // Word-compatible decimal `w:id` values without overwriting preserved
+      // imported `sourceId` values. The allocator is reset per export so the
+      // reserved set always reflects the current document state.
+      this.#installWordIdAllocatorIfNeeded();
 
       // Export the document to DOCX
       // GUID will be handled automatically in converter.exportToDocx if document was modified
@@ -3266,6 +3720,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
       this.#validateDocumentExport();
 
       if (exportXmlOnly || exportJsonOnly) return documentXml;
+
+      this.#persistTrackedChangeSourceIdMap();
 
       const customXml = this.converter.schemaToXml(this.converter.convertedXml['docProps/custom.xml'].elements[0]);
       const styles = this.converter.schemaToXml(this.converter.convertedXml['word/styles.xml'].elements[0]);
@@ -3569,6 +4025,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       html,
       markdown,
       json,
+      fragment,
       isCommentsEnabled,
       suppressDefaultDocxStyles,
       documentMode,
@@ -3586,6 +4043,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       html,
       markdown,
       json,
+      fragment,
       isCommentsEnabled,
       suppressDefaultDocxStyles,
       documentMode: documentMode as 'editing' | 'viewing' | 'suggesting' | undefined,

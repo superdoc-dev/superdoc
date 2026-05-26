@@ -104,6 +104,7 @@ it stopped running.
 | `verify-public-facade-emit.cjs` | postbuild | Per-facade expected symbol set + ESM/CJS parity + legacy command-signature compat. Derives the expected name set directly from the facade source file under `packages/superdoc/src/public/**`; rejects `export *` / `export * as X` in facade sources so the contract stays explicit. | Symbol set drift ships silently; CJS shims diverge from ESM; a wildcard re-export silently widens the public surface. |
 | `report-declaration-reachability.cjs` | postbuild | Instrumentation (not a gate): per-bucket reachability ratio of emitted declarations. | Loses visibility into unreachable emit (the SD-2952 trim target). |
 | `check-jsdoc.cjs` | wrapper stage 3 (`jsdoc-ratchet`) | Two gates: (a) per-file checkJs on the hand-curated `CHECKED_FILES` (currently 6 files; each must carry `// @ts-check` and stay clean against tsc); (b) ratchet over the public-reachable .js JSDoc surface — every file must be in `CHECKED_FILES`, carry `// @ts-check`, be on `jsdoc-allowlist.cjs` with a reason, or be in `jsdoc-debt-snapshot.json` as known pre-existing debt. New public JSDoc files that aren't accounted for fail with a clear "add @ts-check or allowlist" message. Stale snapshot entries (file gone, gained @ts-check, moved out of public surface) also fail. The allowlist contract is enforced too: every entry must carry a non-empty reason, point at an existing file, and still resolve to a public-reachable JSDoc file. Refresh the snapshot with `pnpm --filter superdoc run check:jsdoc -- --write`. Runs as stage 3 of `check:public:superdoc`. | New public-reachable JSDoc files could land without type coverage; existing ones could lose their `// @ts-check` directive without surfacing as a regression; the allowlist could grow silent / typo-shaped exemptions. |
+| `check-jsdoc-hygiene-ts.cjs` | wrapper stage 5 (`jsdoc-hygiene-ts`) | Companion to `check-jsdoc.cjs` for the `.ts` side. Walks every `.ts` file under `packages/superdoc/src/` and `packages/super-editor/src/` (excluding `*.d.ts`, `*.test.ts`, `*.spec.ts`, `dev/`, `__mocks__/`, `__fixtures__/`) and flags type-bearing JSDoc tags: `@type`, `@typedef`, `@callback`, `@template`, `@implements`, `@extends`, `@augments`, `@enum` always; `@param`, `@returns`, `@return`, `@this` only when `tag.typeExpression` is set (prose-only forms pass). AST-based via `ts.getJSDocTags`; not regex. Baseline at `jsdoc-hygiene-ts-baseline.json` uses the stable key `file::enclosingSymbol::tagName::class::occurrenceIndex` so line shifts don't churn entries. Self-tested via `check-jsdoc-hygiene-ts-tests.cjs` (13 in-memory fixtures; name avoids the `*.test.*` glob so vitest doesn't pick it up as a unit-test suite). The self-test suite runs as wrapper stage 4 (`jsdoc-hygiene-ts-test`) immediately before this gate. Policy at `type-hygiene.md`. Refresh with `node packages/superdoc/scripts/check-jsdoc-hygiene-ts.cjs --write`. | Type-bearing JSDoc in `.ts` files is documentation-only (TS ignores it), so duplicate type information drifts silently — `@param {Element}` while signature said `HTMLElement` is the canonical example. Without this gate, that class of drift ships. |
 
 The repo also has a top-level public-contract tier gate. One script,
 `scripts/report-public-contract.mjs`, with two modes:
@@ -146,12 +147,13 @@ what an actual consumer would see — not the workspace source.
 | `check-root-classification-closure.mjs` | Asserts no `supported-root` or `legacy-root` export references an `internal-candidate` symbol in its public declared type. | Closure rule from SD-3212. |
 | `check-public-method-coverage.mjs` | Obligation-based ratchet over public `SuperDoc` methods + getters. For each member the AST computes which obligations are meaningful (`parameters`, `returns`, or `call`); the gate fails when any required obligation is unsatisfied by a fixture under `src/` AND not on the debt snapshot. Catches the `search(text: string)` regression class — call sites do NOT satisfy `parameters`/`returns` on their own. | Snapshot at `public-method-coverage-debt-snapshot.json`; allowlist at `public-method-coverage-allowlist.cjs` (each entry validated: key must match a real member, value must be a non-empty reason). Refresh with `--write`. |
 
-Of these, six run as wrapper stages of `check:public:superdoc`
-after the cheap policy gates (`contract-tiers-test`,
-`contract-tiers`, `jsdoc-ratchet`, `public-method-coverage`) and
-`build`: `consumer-typecheck-matrix`,
-`deep-type-audit-supported-root`, `package-shape`,
-`export-snapshots`, `root-classification-closure`.
+Six of these run as wrapper stages of `check:public:superdoc`.
+`public-method-coverage` runs alongside the cheap policy gates
+(`contract-tiers-test`, `contract-tiers`, `jsdoc-ratchet`,
+`jsdoc-hygiene-ts-test`, `jsdoc-hygiene-ts`) before `build`. The other
+five run after `build`:
+`consumer-typecheck-matrix`, `deep-type-audit-supported-root`,
+`package-shape`, `export-snapshots`, `root-classification-closure`.
 `consumer-typecheck-matrix` packs `superdoc.tgz` and installs it into
 the consumer fixture. The rest reuse what matrix produced:
 `deep-type-audit-supported-root`, `export-snapshots`, and

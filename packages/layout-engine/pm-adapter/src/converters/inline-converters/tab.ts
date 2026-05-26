@@ -1,6 +1,6 @@
 import type { Run, TabRun, TabStop } from '@superdoc/contracts';
 import { applyMarksToRun } from '../../marks/index.js';
-import { type InlineConverterParams } from './common.js';
+import { applyInlineRunProperties, type InlineConverterParams } from './common.js';
 
 /**
  * Converts a tab PM node to a TabRun.
@@ -20,12 +20,15 @@ export function tabNodeToRun({
   paragraphAttrs,
   inheritedMarks,
   sdtMetadata,
+  runProperties,
+  converterContext,
+  inlineRunProperties,
 }: InlineConverterParams): Run | null {
   const pos = positions.get(node);
   if (!pos) return null;
   const tabStops: TabStop[] | undefined = paragraphAttrs.tabs;
   const indent = paragraphAttrs.indent;
-  const run: TabRun = {
+  let run: TabRun = {
     kind: 'tab',
     text: '\t',
     pmStart: pos.start,
@@ -38,6 +41,17 @@ export function tabNodeToRun({
 
   if (sdtMetadata) {
     run.sdt = sdtMetadata;
+  }
+
+  // Align tab formatting with text runs: hydrate from resolved runProperties first.
+  // This survives Yjs element-node mark loss; explicit marks below still override.
+  if (runProperties) {
+    run = applyInlineRunProperties(
+      run as any,
+      runProperties,
+      converterContext,
+      inlineRunProperties,
+    ) as unknown as TabRun;
   }
 
   // Apply marks (e.g., underline) to the tab run

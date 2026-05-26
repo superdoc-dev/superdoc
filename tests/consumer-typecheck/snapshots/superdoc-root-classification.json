@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-05-19T11:33:50.546Z",
   "summary": {
-    "total": 208,
+    "total": 214,
     "byBucket": {
       "legacy-root": 60,
       "internal-candidate": 8,
-      "supported-root": 140
+      "supported-root": 146
     },
     "byConfidence": {
-      "high": 105,
+      "high": 111,
       "medium": 101,
       "low": 2
     }
@@ -1236,6 +1236,17 @@
       "inCjs": false
     },
     {
+      "name": "PermissionResolverParams",
+      "bucket": "supported-root",
+      "rationale": "Payload passed to permission resolver callbacks registered via Config.permissionResolver or Modules.comments.permissionResolver; promoted from a non-exported helper to a named public type so resolver authors can import the contract.",
+      "confidence": "high",
+      "source": "config-supported",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
       "name": "PositionHit",
       "bucket": "legacy-root",
       "rationale": "PE positioning type. Legacy compat, no docs.",
@@ -1676,6 +1687,39 @@
       "inCjs": true
     },
     {
+      "name": "SuperDocAwarenessUpdatePayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the awareness-update event and passed to Config.onAwarenessUpdate; promoted to a named public type so callback signatures stop using inline shapes.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocCommentsUpdatePayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the comments-update event and passed to Config.onCommentsUpdate; promoted to a named public type so callback signatures stop using inline shapes.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocEditorPayload",
+      "bucket": "supported-root",
+      "rationale": "Wrapper payload emitted with editorBeforeCreate / editorCreate / collaboration-ready events; promoted to a named public type so callback signatures match the runtime wrapper instead of a bare Editor.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
       "name": "SuperDocExceptionEditorPayload",
       "bucket": "supported-root",
       "rationale": "Member of the SuperDocExceptionPayload union; named so consumers can discriminate the editor-lifecycle shape. SD-673 Phase 4D.",
@@ -1725,6 +1769,28 @@
       "rationale": "Types Config.layoutEngineOptions at core/types/index.ts:1350,1505. Documented Config field.",
       "confidence": "high",
       "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocLockedPayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the locked event and passed to Config.onLocked; promoted to a named public type so the lockedBy: User | null contract is consumer-typable.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocReadyPayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the ready event and passed to Config.onReady; promoted to a named public type for consistency with the other event payloads.",
+      "confidence": "high",
+      "source": "core",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,

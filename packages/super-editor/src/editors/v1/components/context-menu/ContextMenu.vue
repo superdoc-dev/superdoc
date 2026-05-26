@@ -559,20 +559,30 @@ onMounted(() => {
     // Prevent opening the menu in read-only mode
     const readOnly = !props.editor?.isEditable;
     if (readOnly) return;
-    isOpen.value = true;
-    menuPosition.value = event.menuPosition;
-    searchQuery.value = '';
+    let nextSections = sections.value;
     // Set sections and selectedId when menu opens
     if (!currentContext.value) {
       const context = await getEditorContext(props.editor);
       currentContext.value = context; // Store context for later use
-      sections.value = getItems({ ...context, trigger: 'slash' });
-      selectedId.value = flattenedItems.value[0]?.id || null;
+      nextSections = getItems({ ...context, trigger: 'slash' });
     } else if (sections.value.length === 0) {
       const trigger = currentContext.value.event?.type === 'contextmenu' ? 'click' : 'slash';
-      sections.value = getItems({ ...currentContext.value, trigger });
-      selectedId.value = flattenedItems.value[0]?.id || null;
+      nextSections = getItems({ ...currentContext.value, trigger });
     }
+
+    if (!nextSections.length) {
+      const state = props.editor?.state;
+      if (state) {
+        props.editor.dispatch(state.tr.setMeta(ContextMenuPluginKey, { type: 'close' }));
+      }
+      return;
+    }
+
+    sections.value = nextSections;
+    menuPosition.value = event.menuPosition;
+    searchQuery.value = '';
+    selectedId.value = flattenedItems.value[0]?.id || null;
+    isOpen.value = true;
   };
   props.editor.on('contextMenu:open', contextMenuOpenHandler);
 

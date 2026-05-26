@@ -4,6 +4,7 @@ export type Comment = {
   fileId: string;
   fileType: string;
   mentions: unknown[];
+  creatorId?: string | null;
   creatorName: string;
   creatorEmail?: string;
   createdTime: number;
@@ -25,6 +26,7 @@ export type Comment = {
   trackedChangeDisplayType?: 'hyperlinkAdded' | 'hyperlinkModified' | null;
   deletedText: string | null;
   resolvedTime: number | null;
+  resolvedById: string | null;
   resolvedByEmail: string | null;
   resolvedByName: string | null;
   commentJSON: CommentJSON;

@@ -185,10 +185,10 @@ export function readImageDimensionsFromDataUri(dataUri) {
     }
   }
 
+  if (!metadata.isBase64) return null;
+
   try {
-    const bytes = metadata.isBase64
-      ? base64ToUint8Array(metadata.payload)
-      : new globalThis.TextEncoder().encode(metadata.payload);
+    const bytes = base64ToUint8Array(metadata.payload);
     return readImageDimensions(bytes);
   } catch {
     return null;

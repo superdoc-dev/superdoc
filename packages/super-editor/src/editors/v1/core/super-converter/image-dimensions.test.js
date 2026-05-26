@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { readImageDimensions, readImageDimensionsFromDataUri } from './image-dimensions.js';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 // ---------------------------------------------------------------------------
 // Helpers to build minimal valid headers
@@ -220,6 +224,14 @@ describe('readImageDimensionsFromDataUri', () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50" />';
     const uri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     expect(readImageDimensionsFromDataUri(uri)).toEqual({ width: 200, height: 50 });
+  });
+
+  it('rejects non-base64 raster data URIs without encoding payload text as bytes', () => {
+    const textEncoderConstructor = vi.fn(() => ({ encode: vi.fn(() => new Uint8Array()) }));
+    vi.stubGlobal('TextEncoder', textEncoderConstructor);
+
+    expect(readImageDimensionsFromDataUri('data:image/png,not-base64')).toBeNull();
+    expect(textEncoderConstructor).not.toHaveBeenCalled();
   });
 
   it('returns null for non-data-URI string', () => {

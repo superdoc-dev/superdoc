@@ -69,6 +69,7 @@ describe('getFallbackImageNameFromDataUri', () => {
 
   it('returns fallback when type cannot be derived', () => {
     expect(getFallbackImageNameFromDataUri('data:,')).toBe('image');
+    expect(getFallbackImageNameFromDataUri('data:text/html,%3Cp%3Ebad%3C%2Fp%3E')).toBe('image');
     expect(getFallbackImageNameFromDataUri('', 'custom')).toBe('custom');
   });
 });

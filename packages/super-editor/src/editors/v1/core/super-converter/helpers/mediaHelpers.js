@@ -20,8 +20,8 @@ export const getImageExtensionFromMimeType = (mimeType) => {
   const normalizedMimeType = String(mimeType || '').toLowerCase();
   if (MIME_TYPE_TO_EXTENSION[normalizedMimeType]) return MIME_TYPE_TO_EXTENSION[normalizedMimeType];
 
-  const [, subtype] = normalizedMimeType.split('/');
-  if (!subtype) return null;
+  const [type, subtype] = normalizedMimeType.split('/');
+  if (type !== 'image' || !subtype) return null;
 
   return subtype;
 };

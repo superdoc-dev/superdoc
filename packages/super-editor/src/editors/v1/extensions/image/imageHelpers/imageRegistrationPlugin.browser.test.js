@@ -216,6 +216,20 @@ describe('handleBrowserPath', () => {
     });
   });
 
+  it('does not register malformed sized SVG data URI images in place', () => {
+    const imageNode = createImageNode({
+      src: 'data:image/svg+xml',
+      size: { width: 200, height: 50 },
+    });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+
+    expect(Object.keys(editor.storage.image.media)).toHaveLength(0);
+    expect(addImageRelationship).not.toHaveBeenCalled();
+    expect(tr.setNodeMarkup).not.toHaveBeenCalled();
+    expect(tr.delete).toHaveBeenCalledWith(20, 21);
+  });
+
   it('mirrors in-place SVG media to the parent editor media store', () => {
     const svgDataUri = 'data:image/svg+xml;base64,PHN2Zy8+';
     const parentEditor = { storage: { image: { media: {} } } };

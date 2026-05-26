@@ -8,6 +8,7 @@ import { buildMediaPath, ensureUniqueFileName } from './fileNameUtils.js';
 import { addImageRelationship } from '@extensions/image/imageHelpers/startImageUpload.js';
 import { isRelativeUrl } from '@superdoc/url-validation';
 const key = new PluginKey('ImageRegistration');
+const MAX_IN_PLACE_DATA_URL_LENGTH = 10 * 1024 * 1024;
 
 /**
  * Determines whether an image node still needs to go through the registration flow.
@@ -195,8 +196,20 @@ const hasFinitePositiveSize = (size) =>
 
 const isSvgFile = (file) => file?.type === 'image/svg+xml';
 
-const shouldRegisterInPlace = (node) =>
-  node.attrs?.src?.startsWith('data:image/svg+xml') && hasFinitePositiveSize(node.attrs?.size);
+const isValidSvgDataUri = (src) => {
+  if (typeof src !== 'string' || !src.startsWith('data:') || src.length > MAX_IN_PLACE_DATA_URL_LENGTH) {
+    return false;
+  }
+
+  const metadataEnd = src.indexOf(',');
+  if (metadataEnd === -1) return false;
+
+  const metadata = src.slice('data:'.length, metadataEnd);
+  const mimeType = metadata.split(';')[0].toLowerCase();
+  return mimeType === 'image/svg+xml';
+};
+
+const shouldRegisterInPlace = (node) => isValidSvgDataUri(node.attrs?.src) && hasFinitePositiveSize(node.attrs?.size);
 
 const getOrInitMediaStore = (editor) => {
   if (!editor?.storage?.image?.media) {

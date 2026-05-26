@@ -14,7 +14,12 @@ import {
   getParagraphInlineDirection,
 } from '@superdoc/contracts';
 import { resolveMarkerIndent, type MinimalWordLayout } from '@superdoc/common/list-marker-utils';
-import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
+import {
+  applySdtContainerChrome,
+  shouldRenderSdtContainerChrome,
+  type SdtAncestorOptions,
+  type SdtBoundaryOptions,
+} from '../sdt/container.js';
 import { createParagraphDecorationLayers, stampBetweenBorderDataset, type BetweenBorderInfo } from './borders/index.js';
 import {
   applyParagraphLineIndentation,
@@ -78,7 +83,11 @@ export type RenderParagraphContentParams = {
   betweenInfo?: BetweenBorderInfo;
   sdtBoundary?: SdtBoundaryOptions;
   spacingPolicy?: ParagraphSpacingPolicy;
-  shouldApplySdtContainerStyling?: (sdt?: SdtMetadata | null, containerSdt?: SdtMetadata | null) => boolean;
+  ancestorContainerKey?: string | null;
+  ancestorContainerSdt?: SdtMetadata | null;
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
+  onSdtContainerChrome?: () => void;
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   applyContainerSdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   renderLine: ParagraphRenderLine;
@@ -115,7 +124,11 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
     betweenInfo,
     sdtBoundary,
     spacingPolicy,
-    shouldApplySdtContainerStyling,
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
+    onSdtContainerChrome,
     applySdtDataset,
     applyContainerSdtDataset,
     renderDropCap,
@@ -135,9 +148,16 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
   applySdtDataset(frameEl, block.attrs?.sdt);
   applyContainerSdtDataset?.(frameEl, block.attrs?.containerSdt);
 
-  const applySdtChrome = shouldApplySdtContainerStyling?.(block.attrs?.sdt, block.attrs?.containerSdt) ?? true;
+  const applySdtChrome = shouldRenderSdtContainerChrome(block.attrs?.sdt, block.attrs?.containerSdt, {
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
+  });
   if (applySdtChrome) {
-    applySdtContainerStyling(doc, frameEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
+    if (applySdtContainerChrome(doc, frameEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary)) {
+      onSdtContainerChrome?.();
+    }
   }
 
   renderParagraphDropCap({

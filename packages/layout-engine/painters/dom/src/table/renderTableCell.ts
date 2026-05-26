@@ -1,9 +1,11 @@
 import type {
   CellBorders,
   DrawingBlock,
+  ImageDrawing,
   DrawingMeasure,
   Fragment,
   ImageBlock,
+  ImageHyperlink,
   ImageMeasure,
   Line,
   ParagraphBlock,
@@ -20,8 +22,14 @@ import { rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdo
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
-import { applyImageClipPath } from '../utils/image-clip-path.js';
-import { getSdtContainerConfig, getSdtContainerKey, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
+import { createBlockImageContent } from '../images/image-block.js';
+import { buildImageHyperlinkAnchor } from '../images/hyperlink.js';
+import {
+  getSdtContainerKeyForBlock,
+  getSdtSiblingBoundaries,
+  type SdtAncestorOptions,
+  type SdtBoundaryOptions,
+} from '../sdt/container.js';
 import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
@@ -222,6 +230,18 @@ type EmbeddedTableRenderParams = {
   toRow?: number;
   /** Partial row info for mid-row splits within the embedded table */
   partialRow?: PartialRowInfo;
+  /** Optional SDT boundary overrides for container styling */
+  sdtBoundary?: SdtBoundaryOptions;
+  /** Ancestor SDT key used to suppress duplicate container chrome in nested tables */
+  ancestorContainerKey?: string | null;
+  /** Ancestor SDT metadata used to suppress duplicate id-less container chrome in nested tables */
+  ancestorContainerSdt?: SdtMetadata | null;
+  /** Ancestor SDT keys used to suppress duplicate container chrome in nested tables */
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  /** Ancestor SDT metadata chain used to suppress duplicate id-less container chrome in nested tables */
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
+  /** Receives notification when this embedded table or its descendants render SDT chrome */
+  onSdtContainerChrome?: () => void;
 };
 
 /**
@@ -252,7 +272,9 @@ type EmbeddedTableRenderParams = {
  * cellContent.appendChild(tableEl);
  * ```
  */
-const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => {
+const renderEmbeddedTable = (
+  params: EmbeddedTableRenderParams,
+): { element: HTMLElement; hasSdtContainerChrome: boolean } => {
   const {
     doc,
     table,
@@ -266,6 +288,12 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     fromRow: paramFromRow,
     toRow: paramToRow,
     partialRow: paramPartialRow,
+    sdtBoundary,
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
+    onSdtContainerChrome,
   } = params;
 
   const effectiveFromRow = paramFromRow ?? 0;
@@ -301,7 +329,8 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     el.dataset.blockId = frag.blockId;
   };
 
-  return renderTableFragmentElement({
+  let hasSdtContainerChrome = false;
+  const tableEl = renderTableFragmentElement({
     doc,
     fragment,
     context,
@@ -315,7 +344,18 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     applyFragmentFrame,
     applySdtDataset,
     applyStyles: applyInlineStyles,
+    sdtBoundary,
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
+    onSdtContainerChrome: () => {
+      hasSdtContainerChrome = true;
+      onSdtContainerChrome?.();
+    },
   });
+
+  return { element: tableEl, hasSdtContainerChrome };
 };
 
 /**
@@ -338,7 +378,13 @@ function renderPartialEmbeddedTable(params: {
   captureLineSnapshot?: EmbeddedTableRenderParams['captureLineSnapshot'];
   renderDrawingContent?: EmbeddedTableRenderParams['renderDrawingContent'];
   applySdtDataset: EmbeddedTableRenderParams['applySdtDataset'];
-}): { element: HTMLElement | null; height: number; nextCumulativeLineCount: number } {
+  sdtBoundary?: SdtBoundaryOptions;
+  ancestorContainerKey?: string | null;
+  ancestorContainerSdt?: SdtMetadata | null;
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
+  onSdtContainerChrome?: () => void;
+}): { element: HTMLElement | null; height: number; nextCumulativeLineCount: number; hasSdtContainerChrome: boolean } {
   const {
     doc,
     block,
@@ -352,6 +398,12 @@ function renderPartialEmbeddedTable(params: {
     captureLineSnapshot,
     renderDrawingContent,
     applySdtDataset,
+    sdtBoundary,
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
+    onSdtContainerChrome,
   } = params;
 
   // Compute per-row segment counts (recursive, matching getCellLines/getEmbeddedRowLines).
@@ -364,7 +416,7 @@ function renderPartialEmbeddedTable(params: {
 
   // Skip entirely if no segments are in the visible range
   if (tableEndSegment <= globalFromLine || tableStartSegment >= globalToLine) {
-    return { element: null, height: 0, nextCumulativeLineCount };
+    return { element: null, height: 0, nextCumulativeLineCount, hasSdtContainerChrome: false };
   }
 
   // Map global line range to local segment range within this embedded table
@@ -423,10 +475,18 @@ function renderPartialEmbeddedTable(params: {
   }
 
   if (embeddedFromRow === -1) {
-    return { element: null, height: 0, nextCumulativeLineCount };
+    return { element: null, height: 0, nextCumulativeLineCount, hasSdtContainerChrome: false };
   }
 
   const visibleHeight = computeVisibleHeight(tableMeasure.rows, embeddedFromRow, embeddedToRow, partialRowInfo);
+  const effectiveSdtBoundary = sdtBoundary
+    ? {
+        ...sdtBoundary,
+        isStart: (sdtBoundary.isStart ?? true) && localFrom === 0,
+        isEnd: (sdtBoundary.isEnd ?? true) && localTo >= totalTableSegments,
+        showLabel: sdtBoundary.showLabel === undefined ? undefined : sdtBoundary.showLabel && localFrom === 0,
+      }
+    : undefined;
 
   const tableWrapper = doc.createElement('div');
   tableWrapper.style.position = 'relative';
@@ -435,7 +495,7 @@ function renderPartialEmbeddedTable(params: {
   tableWrapper.style.flexShrink = '0';
   tableWrapper.style.boxSizing = 'border-box';
 
-  const tableEl = renderEmbeddedTable({
+  const tableResult = renderEmbeddedTable({
     doc,
     table: block,
     measure: tableMeasure,
@@ -448,10 +508,21 @@ function renderPartialEmbeddedTable(params: {
     fromRow: embeddedFromRow,
     toRow: embeddedToRow,
     partialRow: partialRowInfo,
+    sdtBoundary: effectiveSdtBoundary,
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
+    onSdtContainerChrome,
   });
-  tableWrapper.appendChild(tableEl);
+  tableWrapper.appendChild(tableResult.element);
 
-  return { element: tableWrapper, height: visibleHeight, nextCumulativeLineCount };
+  return {
+    element: tableWrapper,
+    height: visibleHeight,
+    nextCumulativeLineCount,
+    hasSdtContainerChrome: tableResult.hasSdtContainerChrome,
+  };
 }
 
 /**
@@ -504,8 +575,16 @@ type TableCellRenderDependencies = {
   context: FragmentRenderContext;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  /** Table-level SDT metadata for suppressing duplicate container styling in cells */
-  tableSdt?: SdtMetadata | null;
+  /** Ancestor SDT container key for suppressing duplicate container styling in cells */
+  ancestorContainerKey?: string | null;
+  /** Ancestor SDT metadata for suppressing duplicate id-less container styling in cells */
+  ancestorContainerSdt?: SdtMetadata | null;
+  /** Ancestor SDT keys for suppressing duplicate container styling in cells */
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  /** Ancestor SDT metadata chain for suppressing duplicate id-less container styling in cells */
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
+  /** Receives notification when this cell or descendants render SDT container chrome */
+  onSdtContainerChrome?: () => void;
   /** Table indent in pixels (applied to table fragment positioning) */
   tableIndent?: number;
   /** Whether the table is visually right-to-left (w:bidiVisual, ECMA-376 §17.4.1) */
@@ -596,7 +675,11 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     renderDrawingContent,
     context,
     applySdtDataset,
-    tableSdt,
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
+    onSdtContainerChrome,
     tableIndent,
     isRtl,
     cellWidth,
@@ -606,6 +689,12 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
   const attrs = cell?.attrs;
   const padding = attrs?.padding || { top: 0, left: 4, right: 4, bottom: 0 };
+  const buildTableImageHyperlinkAnchor = (
+    imageEl: HTMLElement,
+    hyperlink: ImageHyperlink | undefined,
+    display: 'block' | 'inline-block',
+  ): HTMLElement => buildImageHyperlinkAnchor(doc, imageEl, hyperlink, display);
+
   // RTL: swap left↔right cell margins (ECMA-376 Part 4 §14.3.3–14.3.4, §14.3.7–14.3.8)
   const paddingLeft = isRtl ? (padding.right ?? 4) : (padding.left ?? 4);
   const paddingTop = padding.top ?? 0;
@@ -640,60 +729,11 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   // Support multi-block cells with backward compatibility
   const cellBlocks = cell?.blocks ?? (cell?.paragraph ? [cell.paragraph] : []);
   const blockMeasures = cellMeasure?.blocks ?? (cellMeasure?.paragraph ? [cellMeasure.paragraph] : []);
-  const sdtContainerKeys = cellBlocks.map((block) => {
-    if (block.kind !== 'paragraph') {
-      return null;
-    }
-    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
-    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
-  });
+  const sdtContainerKeys = cellBlocks.map((block) =>
+    block.kind === 'paragraph' || block.kind === 'table' ? getSdtContainerKeyForBlock(block) : null,
+  );
+  const sdtBoundaries = getSdtSiblingBoundaries(sdtContainerKeys);
 
-  const sdtBoundaries = sdtContainerKeys.map((key, index): SdtBoundaryOptions | undefined => {
-    if (!key) return undefined;
-    const prev = index > 0 ? sdtContainerKeys[index - 1] : null;
-    const next = index < sdtContainerKeys.length - 1 ? sdtContainerKeys[index + 1] : null;
-    return { isStart: key !== prev, isEnd: key !== next };
-  });
-  /**
-   * Determines if SDT container styling should be applied to a block.
-   *
-   * We skip styling when the block's SDT matches the table's SDT to prevent
-   * duplicate visual containers - the table already has the SDT container styling,
-   * so individual paragraphs inside it shouldn't also show container borders.
-   *
-   * @param sdt - The block's direct SDT metadata
-   * @param containerSdt - The block's inherited container SDT metadata
-   * @returns True if container styling should be applied
-   */
-  const tableSdtKey = tableSdt ? getSdtContainerKey(tableSdt, null) : null;
-  const shouldApplySdtContainerStyling = (
-    sdt?: SdtMetadata | null,
-    containerSdt?: SdtMetadata | null,
-    blockKey?: string | null,
-  ): boolean => {
-    const resolvedKey = blockKey ?? getSdtContainerKey(sdt, containerSdt);
-    // Skip if this SDT is the same as the table's SDT (already styled at table level)
-    if (tableSdtKey && resolvedKey && tableSdtKey === resolvedKey) {
-      return false;
-    }
-    if (tableSdt && (sdt === tableSdt || containerSdt === tableSdt)) {
-      return false;
-    }
-    return Boolean(getSdtContainerConfig(sdt) || getSdtContainerConfig(containerSdt));
-  };
-
-  // Check if any block in the cell has SDT container styling
-  const hasSdtContainer = cellBlocks.some((block, index) => {
-    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
-    const blockKey = sdtContainerKeys[index] ?? null;
-    return shouldApplySdtContainerStyling(attrs?.sdt, attrs?.containerSdt, blockKey);
-  });
-
-  // SDT containers display labels that extend above the content boundary.
-  // Change overflow to 'visible' so these labels aren't clipped by the cell.
-  if (hasSdtContainer) {
-    cellEl.style.overflow = 'visible';
-  }
   if (cellBlocks.length > 0 && blockMeasures.length > 0) {
     // Content is a child of the cell, positioned relative to it
     // Cell's overflow:hidden handles clipping, no explicit width needed
@@ -727,7 +767,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     const blockLineCounts: number[] = [];
     for (let i = 0; i < Math.min(blockMeasures.length, cellBlocks.length); i++) {
       const bm = blockMeasures[i];
-      const blk = cellBlocks[i];
       if (bm.kind === 'paragraph') {
         blockLineCounts.push((bm as ParagraphMeasure).lines?.length || 0);
       } else if (bm.kind === 'table') {
@@ -773,11 +812,20 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           captureLineSnapshot,
           renderDrawingContent,
           applySdtDataset,
+          sdtBoundary: sdtBoundaries[i],
+          ancestorContainerKey,
+          ancestorContainerSdt,
+          ancestorContainerKeys,
+          ancestorContainerSdts,
+          onSdtContainerChrome,
         });
         cumulativeLineCount = result.nextCumulativeLineCount;
         if (result.element) {
           content.appendChild(result.element);
           flowCursorY += result.height;
+        }
+        if (result.hasSdtContainerChrome) {
+          cellEl.style.overflow = 'visible';
         }
         continue;
       }
@@ -810,23 +858,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         imageWrapper.style.boxSizing = 'border-box';
         applySdtDataset(imageWrapper, (block as ImageBlock).attrs?.sdt);
 
-        const imgEl = doc.createElement('img');
-        imgEl.classList.add('superdoc-table-image');
-        if (block.src) {
-          imgEl.src = block.src;
-        }
-        imgEl.alt = block.alt ?? '';
-        imgEl.style.width = '100%';
-        imgEl.style.height = '100%';
-        imgEl.style.objectFit = block.objectFit ?? 'contain';
-        // MS Word anchors stretched images to top-left, clipping from right/bottom
-        if (block.objectFit === 'cover') {
-          imgEl.style.objectPosition = 'left top';
-        }
-        applyImageClipPath(imgEl, block.attrs?.clipPath, { clipContainer: imageWrapper });
-        imgEl.style.display = 'block';
-
-        imageWrapper.appendChild(imgEl);
+        imageWrapper.appendChild(
+          createBlockImageContent({
+            doc,
+            block,
+            className: 'superdoc-table-image',
+            clipContainer: imageWrapper,
+            imageDisplay: 'block',
+            buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+          }),
+        );
         content.appendChild(imageWrapper);
         flowCursorY += blockMeasure.height;
         continue;
@@ -870,19 +911,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         drawingInner.style.overflow = 'hidden';
 
         if (block.drawingKind === 'image' && 'src' in block && block.src) {
-          const img = doc.createElement('img');
-          img.classList.add('superdoc-drawing-image');
-          img.src = block.src;
-          img.alt = block.alt ?? '';
-          img.style.width = '100%';
-          img.style.height = '100%';
-          img.style.objectFit = block.objectFit ?? 'contain';
-          // MS Word anchors stretched images to top-left, clipping from right/bottom
-          if (block.objectFit === 'cover') {
-            img.style.objectPosition = 'left top';
-          }
-          applyImageClipPath(img, block.attrs?.clipPath, { clipContainer: drawingInner });
-          drawingInner.appendChild(img);
+          drawingInner.appendChild(
+            createBlockImageContent({
+              doc,
+              block: block as ImageDrawing,
+              className: 'superdoc-drawing-image',
+              clipContainer: drawingInner,
+              imageDisplay: 'block',
+              buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+            }),
+          );
         } else if (renderDrawingContent) {
           // Use the callback for other drawing types (vectorShape, shapeGroup, etc.)
           const drawingContent = renderDrawingContent(block as DrawingBlock);
@@ -941,8 +979,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         paraWrapper.style.position = 'relative';
         paraWrapper.style.left = '0';
         paraWrapper.style.width = '100%';
-        const sdtBoundary = sdtBoundaries[i];
-        const blockKey = sdtContainerKeys[i] ?? null;
+        const baseSdtBoundary = sdtBoundaries[i];
+        const sdtBoundary = baseSdtBoundary
+          ? {
+              ...baseSdtBoundary,
+              isStart: (baseSdtBoundary.isStart ?? true) && localStartLine === 0,
+              isEnd: (baseSdtBoundary.isEnd ?? true) && localEndLine >= blockLineCount,
+              showLabel:
+                baseSdtBoundary.showLabel === undefined ? undefined : baseSdtBoundary.showLabel && localStartLine === 0,
+            }
+          : undefined;
 
         content.appendChild(paraWrapper);
         const result = renderParagraphContent({
@@ -961,8 +1007,14 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
             paddingTop,
           },
           sdtBoundary,
-          shouldApplySdtContainerStyling: (sdt, containerSdt) =>
-            shouldApplySdtContainerStyling(sdt, containerSdt, blockKey),
+          ancestorContainerKey,
+          ancestorContainerSdt,
+          ancestorContainerKeys,
+          ancestorContainerSdts,
+          onSdtContainerChrome: () => {
+            cellEl.style.overflow = 'visible';
+            onSdtContainerChrome?.();
+          },
           applySdtDataset,
           renderLine: ({ block, line, lineIndex, isLastLine, resolvedListTextStartPx }) =>
             renderLine(block, line, { ...context, section: 'body' }, lineIndex, isLastLine, resolvedListTextStartPx),
@@ -1040,21 +1092,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         imageWrapper.style.zIndex = String(zIndex);
         applySdtDataset(imageWrapper, anchoredBlock.attrs?.sdt);
 
-        const imgEl = doc.createElement('img');
-        imgEl.classList.add('superdoc-table-image');
-        if (anchoredBlock.src) {
-          imgEl.src = anchoredBlock.src;
-        }
-        imgEl.alt = anchoredBlock.alt ?? '';
-        imgEl.style.width = '100%';
-        imgEl.style.height = '100%';
-        imgEl.style.objectFit = anchoredBlock.objectFit ?? 'contain';
-        if (anchoredBlock.objectFit === 'cover') {
-          imgEl.style.objectPosition = 'left top';
-        }
-        applyImageClipPath(imgEl, anchoredBlock.attrs?.clipPath, { clipContainer: imageWrapper });
-        imgEl.style.display = 'block';
-        imageWrapper.appendChild(imgEl);
+        imageWrapper.appendChild(
+          createBlockImageContent({
+            doc,
+            block: anchoredBlock,
+            className: 'superdoc-table-image',
+            clipContainer: imageWrapper,
+            imageDisplay: 'block',
+            buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+          }),
+        );
         content.appendChild(imageWrapper);
       } else {
         const drawingWrapper = doc.createElement('div');
@@ -1078,18 +1125,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         drawingInner.style.overflow = 'hidden';
 
         if (anchoredBlock.drawingKind === 'image' && 'src' in anchoredBlock && anchoredBlock.src) {
-          const img = doc.createElement('img');
-          img.classList.add('superdoc-drawing-image');
-          img.src = anchoredBlock.src;
-          img.alt = anchoredBlock.alt ?? '';
-          img.style.width = '100%';
-          img.style.height = '100%';
-          img.style.objectFit = anchoredBlock.objectFit ?? 'contain';
-          if (anchoredBlock.objectFit === 'cover') {
-            img.style.objectPosition = 'left top';
-          }
-          applyImageClipPath(img, anchoredBlock.attrs?.clipPath, { clipContainer: drawingInner });
-          drawingInner.appendChild(img);
+          drawingInner.appendChild(
+            createBlockImageContent({
+              doc,
+              block: anchoredBlock as ImageDrawing,
+              className: 'superdoc-drawing-image',
+              clipContainer: drawingInner,
+              imageDisplay: 'block',
+              buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+            }),
+          );
         } else if (renderDrawingContent) {
           const drawingContent = renderDrawingContent(anchoredBlock as DrawingBlock);
           drawingContent.style.width = '100%';

@@ -47,7 +47,7 @@ export type { RenderedLineInfo } from './runs/index.js';
 export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './runs/index.js';
 
 export { applySquareWrapExclusionsToLines } from './utils/anchor-helpers';
-export { buildImagePmSelector, buildInlineImagePmSelector } from './utils/image-selectors.js';
+export { buildImagePmSelector, buildInlineImagePmSelector } from './images/image-selectors.js';
 
 // Re-export PM position validation utilities
 export {

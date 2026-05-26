@@ -1,7 +1,7 @@
 import type { Run, SdtMetadata, TextRun } from '@superdoc/contracts';
 import { DOM_CLASS_NAMES } from '../constants.js';
-import { BROWSER_DEFAULT_FONT_SIZE } from './text-run.js';
-import type { RunRenderContext } from './types.js';
+import { BROWSER_DEFAULT_FONT_SIZE } from '../styles.js';
+import type { RunRenderContext } from '../runs/types.js';
 
 export const resolveRunSdtId = (run: Run): { sdtId: string; sdt: SdtMetadata } | null => {
   const sdt = (run as TextRun).sdt;
@@ -16,6 +16,13 @@ export const createInlineSdtWrapper = (sdt: SdtMetadata, context: RunRenderConte
   wrapper.className = DOM_CLASS_NAMES.INLINE_SDT_WRAPPER;
   wrapper.dataset.layoutEpoch = String(context.layoutEpoch);
   context.applySdtDataset(wrapper, sdt);
+
+  const appearance = sdt.type === 'structuredContent' ? (sdt as { appearance?: string }).appearance : undefined;
+  if (appearance === 'hidden') {
+    wrapper.dataset.appearance = 'hidden';
+    return wrapper;
+  }
+
   const alias = (sdt as { alias?: string })?.alias || 'Inline content';
   const labelEl = context.doc.createElement('span');
   labelEl.className = `${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}__label`;
@@ -25,8 +32,7 @@ export const createInlineSdtWrapper = (sdt: SdtMetadata, context: RunRenderConte
 };
 
 export const syncInlineSdtWrapperTypography = (wrapper: HTMLElement, runForSizing?: Run): void => {
-  // The line container sets fontSize:0 (strut fix). Keep wrapper typography
-  // synced with the current run so border height tracks text-size edits.
+  // The line container sets fontSize:0; keep wrapper chrome aligned with the run text size.
   const runFontSize =
     runForSizing && 'fontSize' in runForSizing && typeof runForSizing.fontSize === 'number'
       ? `${runForSizing.fontSize}px`

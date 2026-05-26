@@ -417,7 +417,7 @@ const FORMATTING_MARKS_STYLES = `
  *
  * **Implementation Note:**
  * These styles are injected once per document via ensureSdtContainerStyles() to avoid
- * duplication. The DOM painter applies corresponding classes via applySdtContainerStyling().
+ * duplication. The DOM painter applies corresponding classes via applySdtContainerChrome().
  */
 const SDT_CONTAINER_STYLES = `
 /* Document Section - Block-level container with gray border and hover tooltip */

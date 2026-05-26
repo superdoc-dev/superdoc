@@ -435,6 +435,50 @@ describe('translateImageNode', () => {
     expect(blip.attributes['r:embed']).toBe(baseParams.relationships[0].attributes.Id);
   });
 
+  it('should fall back to text for fieldAnnotation with non-base64 raster data URI', () => {
+    const params = {
+      ...baseParams,
+      node: {
+        type: 'fieldAnnotation',
+        attrs: {
+          fieldId: 'signatureField',
+          hash: 'signatureHash',
+          src: 'data:image/png,not-base64',
+          size: { width: 200, height: 50 },
+        },
+      },
+    };
+
+    const result = translateImageNode(params);
+
+    expect(annotationHelpers.prepareTextAnnotation).toHaveBeenCalledWith(params);
+    expect(result).toEqual({ type: 'text', text: 'annotation' });
+    expect(params.relationships).toHaveLength(0);
+    expect(params.media).toEqual({});
+  });
+
+  it('should fall back to text for fieldAnnotation with malformed non-base64 SVG data URI', () => {
+    const params = {
+      ...baseParams,
+      node: {
+        type: 'fieldAnnotation',
+        attrs: {
+          fieldId: 'signatureField',
+          hash: 'signatureHash',
+          src: 'data:image/svg+xml,%',
+          size: { width: 200, height: 50 },
+        },
+      },
+    };
+
+    const result = translateImageNode(params);
+
+    expect(annotationHelpers.prepareTextAnnotation).toHaveBeenCalledWith(params);
+    expect(result).toEqual({ type: 'text', text: 'annotation' });
+    expect(params.relationships).toHaveLength(0);
+    expect(params.media).toEqual({});
+  });
+
   it('should resize images inside tableCell to maxWidth', () => {
     baseParams.node.attrs.size = { width: 500, height: 500 };
     baseParams.tableCell = {

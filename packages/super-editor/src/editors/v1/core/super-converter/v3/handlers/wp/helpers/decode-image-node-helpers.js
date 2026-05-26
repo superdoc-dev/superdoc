@@ -27,10 +27,22 @@ const EXPORTABLE_IMAGE_DATA_URI_MIME_TYPES = new Set([
   'image/tiff',
 ]);
 
+function isExportableDataUriMetadata(metadata) {
+  if (!metadata?.hasPayloadSeparator || !EXPORTABLE_IMAGE_DATA_URI_MIME_TYPES.has(metadata.mimeType)) return false;
+  if (metadata.isBase64) return true;
+  if (metadata.mimeType !== 'image/svg+xml') return false;
+
+  try {
+    decodeURIComponent(metadata.payload);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function createMediaTargetForDataUri(params, src) {
   const metadata = getDataUriMetadata(src);
-  if (!metadata || !EXPORTABLE_IMAGE_DATA_URI_MIME_TYPES.has(metadata.mimeType)) return null;
-  if (!metadata.isBase64 && metadata.mimeType !== 'image/svg+xml') return null;
+  if (!isExportableDataUriMetadata(metadata)) return null;
 
   const extension = metadata.extension;
   if (!extension) return null;
@@ -302,7 +314,10 @@ export const translateImageNode = (params) => {
     imageId = existingRelation?.attributes?.Id ?? addNewImageRelationship(params, path);
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
     // We already handled the no-type case above; here the type IS valid.
-    const type = getDataUriMetadata(src)?.extension;
+    const metadata = getDataUriMetadata(src);
+    if (!isExportableDataUriMetadata(metadata)) return prepareTextAnnotation(params);
+
+    const type = metadata.extension;
 
     const sanitizedHash = sanitizeDocxMediaName(attrs.hash, generateDocxRandomId(4));
     const fileName = `${imageName}_${sanitizedHash}.${type}`;

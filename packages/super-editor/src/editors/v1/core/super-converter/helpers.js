@@ -39,8 +39,11 @@ function stringToUtf8ArrayBuffer(value) {
 }
 
 /**
- * Convert a base64 string or data URI to an ArrayBuffer.
- * Accepts ArrayBuffer, TypedArray, data URI, or raw base64 string.
+ * Convert media data to an ArrayBuffer for DOCX packaging.
+ *
+ * Accepts ArrayBuffer, TypedArray, raw base64 strings, base64 data URIs, and
+ * percent-encoded non-base64 SVG data URIs. Other non-base64 data URI MIME
+ * types are rejected, and malformed percent-encoded SVG payloads throw.
  *
  * @param {string|ArrayBuffer|Uint8Array} data
  * @returns {ArrayBuffer}

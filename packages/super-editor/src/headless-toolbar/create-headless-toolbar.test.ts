@@ -120,8 +120,9 @@ describe('createHeadlessToolbar', () => {
     const baseState = EditorState.create({ schema, doc });
     const state = baseState.apply(baseState.tr.setSelection(TextSelection.create(doc, 5)));
     const toggleBold = vi.fn(() => true);
+    const insertTable = vi.fn(() => true);
     const superdoc = createActiveEditorHost({
-      commands: { toggleBold },
+      commands: { toggleBold, insertTable },
       state,
     });
 
@@ -133,6 +134,8 @@ describe('createHeadlessToolbar', () => {
     expect(controller.getSnapshot().commands.bold?.disabled).toBe(true);
     expect(controller.execute?.('bold')).toBe(false);
     expect(toggleBold).not.toHaveBeenCalled();
+    expect(controller.execute?.('table-insert', { rows: 1, cols: 1 })).toBe(false);
+    expect(insertTable).not.toHaveBeenCalled();
 
     controller.destroy();
   });

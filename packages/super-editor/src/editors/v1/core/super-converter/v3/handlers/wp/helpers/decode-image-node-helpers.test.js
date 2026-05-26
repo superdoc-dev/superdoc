@@ -4,6 +4,7 @@ import {
 } from '@converter/v3/handlers/wp/helpers/decode-image-node-helpers.js';
 import * as helpers from '@converter/helpers.js';
 import * as annotationHelpers from '@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js';
+import * as coreHelpers from '@core/helpers/index.js';
 
 vi.mock('@converter/helpers.js', async (importOriginal) => {
   const actual = await importOriginal();
@@ -37,6 +38,10 @@ vi.mock(import('@core/helpers/index.js'), async (importOriginal) => {
     generateDocxRandomId: vi.fn(() => '123'),
   };
 });
+
+vi.mock('@core/utilities/hash.js', () => ({
+  simpleStringHash: vi.fn(() => '123'),
+}));
 
 describe('translateImageNode', () => {
   let baseParams;
@@ -157,6 +162,34 @@ describe('translateImageNode', () => {
       .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
       .elements.find((e) => e.name === 'a:blip');
     expect(secondBlip.attributes['r:embed']).toBe(firstBlip.attributes['r:embed']);
+  });
+
+  it('should reuse the same collision media target for repeated data URI payloads', () => {
+    const firstSrc = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    const collidingSrc = 'data:image/svg+xml;base64,PHN2ZyBpZD0iMiI+PC9zdmc+';
+    baseParams.node.attrs = {
+      src: firstSrc,
+      alt: 'First Image',
+      size: { width: 20, height: 10 },
+    };
+    translateImageNode(baseParams);
+
+    vi.mocked(coreHelpers.generateDocxRandomId).mockClear();
+    baseParams.node.attrs = {
+      src: collidingSrc,
+      alt: 'Colliding Image',
+      size: { width: 20, height: 10 },
+    };
+
+    translateImageNode(baseParams);
+    translateImageNode(baseParams);
+
+    expect(Object.keys(baseParams.media).sort()).toEqual(['word/media/image-123.svg', 'word/media/image-123_123.svg']);
+    expect(baseParams.relationships.map((rel) => rel.attributes.Target)).toEqual([
+      'media/image-123.svg',
+      'media/image-123_123.svg',
+    ]);
+    expect(vi.mocked(coreHelpers.generateDocxRandomId).mock.calls.filter(([length]) => length === 8)).toHaveLength(1);
   });
 
   it('should create a media target when a data URI image already has an rId', () => {

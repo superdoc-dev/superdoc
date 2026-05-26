@@ -25,11 +25,17 @@ function createMediaTargetForDataUri(params, src) {
   if (!extension) return null;
 
   if (!params.media) params.media = {};
+  if (!params.dataUriMediaTargets) params.dataUriMediaTargets = new Map();
+  const cachedPackagePath = params.dataUriMediaTargets.get(src);
+  if (cachedPackagePath && params.media[cachedPackagePath] === src) {
+    return cachedPackagePath.slice('word/'.length);
+  }
 
   const fileBaseName = sanitizeDocxMediaName(`image-${simpleStringHash(src)}`, 'image');
   let fileName = `${fileBaseName}.${extension}`;
   let packagePath = `word/media/${fileName}`;
   if (params.media[packagePath] === src) {
+    params.dataUriMediaTargets.set(src, packagePath);
     return `media/${fileName}`;
   }
 
@@ -40,6 +46,7 @@ function createMediaTargetForDataUri(params, src) {
   const relationshipTarget = `media/${fileName}`;
 
   params.media[packagePath] = src;
+  params.dataUriMediaTargets.set(src, packagePath);
 
   return relationshipTarget;
 }

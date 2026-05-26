@@ -528,7 +528,7 @@ const registerImages = async (foundImages, editor, view) => {
     }
 
     try {
-      if (isSvgFile(file) && hasFinitePositiveSize(image.node.attrs?.size)) {
+      if (isSvgFile(file) && hasFinitePositiveSize(image.node.attrs?.size) && file.size <= MAX_IMAGE_DATA_URL_LENGTH) {
         await uploadAndInsertImage({ editor, view, file, size: image.node.attrs.size, id });
       } else {
         const process = await checkAndProcessImage({

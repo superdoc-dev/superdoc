@@ -67,7 +67,7 @@ vi.mock('./fileNameUtils.js', () => ({
 // ── Imports (after mocks) ─────────────────────────────────────────────
 import { Decoration } from 'prosemirror-view';
 import { handleBrowserPath } from './imageRegistrationPlugin.js';
-import { getBase64FileMeta } from './handleBase64';
+import { base64ToFile, getBase64FileMeta } from './handleBase64';
 import { urlToFile, validateUrlAccessibility } from './handleUrl';
 import { addImageRelationship, checkAndProcessImage, uploadAndInsertImage } from './startImageUpload';
 
@@ -266,6 +266,29 @@ describe('handleBrowserPath', () => {
     expect(addImageRelationship).not.toHaveBeenCalled();
     expect(tr.setNodeMarkup).not.toHaveBeenCalled();
     expect(tr.delete).toHaveBeenCalledWith(20, 21);
+  });
+
+  it('runs oversized async SVG files through image validation before upload', async () => {
+    const oversizedSvgDataUri = `data:image/svg+xml;base64,${'A'.repeat(10 * 1024 * 1024 + 1)}`;
+    const oversizedSvgFile = new File(['x'.repeat(10 * 1024 * 1024 + 1)], 'too-large.svg', {
+      type: 'image/svg+xml',
+    });
+    const imageNode = createImageNode({
+      src: oversizedSvgDataUri,
+      size: { width: 200, height: 50 },
+    });
+    base64ToFile.mockReturnValueOnce(oversizedSvgFile);
+    checkAndProcessImage.mockResolvedValueOnce({ file: null, size: { width: 0, height: 0 } });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+    await flushPromises();
+
+    expect(checkAndProcessImage).toHaveBeenCalledWith({
+      getMaxContentSize: expect.any(Function),
+      file: oversizedSvgFile,
+    });
+    expect(uploadAndInsertImage).not.toHaveBeenCalled();
+    expect(view.dispatch).toHaveBeenCalled();
   });
 
   it('mirrors in-place SVG media to the parent editor media store', () => {

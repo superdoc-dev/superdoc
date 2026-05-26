@@ -8,7 +8,8 @@ export const sanitizeDocxMediaName = (value, fallback = 'image') => {
 export const getFallbackImageNameFromDataUri = (src = '', fallback = 'image') => {
   if (!src || typeof src !== 'string') return fallback;
 
-  const [prefix] = src.split(';');
+  const [metadata] = src.split(',');
+  const [prefix] = metadata.split(';');
   const [, maybeType] = prefix.split('/');
   const extension = maybeType?.toLowerCase() === 'svg+xml' ? 'svg' : maybeType?.toLowerCase();
 

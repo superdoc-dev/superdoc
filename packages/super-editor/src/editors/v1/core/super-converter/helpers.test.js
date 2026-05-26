@@ -11,6 +11,7 @@ import {
   detectImageType,
   eighthPointsToPixels,
 } from './helpers.js';
+import { getFallbackImageNameFromDataUri } from './helpers/mediaHelpers.js';
 
 describe('polygonToObj', () => {
   it('should return null for null input', () => {
@@ -447,6 +448,15 @@ describe('dataUriToArrayBuffer', () => {
   it('throws on unsupported data types', () => {
     expect(() => dataUriToArrayBuffer(12345)).toThrow('Unsupported data type');
     expect(() => dataUriToArrayBuffer({})).toThrow('Unsupported data type');
+  });
+});
+
+describe('getFallbackImageNameFromDataUri', () => {
+  it('normalizes SVG extension when the data URI has no parameters', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" />';
+    const dataUri = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+
+    expect(getFallbackImageNameFromDataUri(dataUri)).toBe('image.svg');
   });
 });
 

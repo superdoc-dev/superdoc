@@ -335,6 +335,15 @@ describe('getArrayBufferFromUrl', () => {
     expect(Array.from(new Uint8Array(result))).toEqual(Array.from(bytes));
   });
 
+  it('decodes non-base64 data URIs into an ArrayBuffer', async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" />';
+    const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+
+    const result = await getArrayBufferFromUrl(dataUri);
+
+    expect(new TextDecoder().decode(result)).toBe(svg);
+  });
+
   it('decodes bare base64 strings into an ArrayBuffer', async () => {
     const bytes = new Uint8Array([55, 66, 77]);
     const base64 = Buffer.from(bytes).toString('base64');
@@ -405,6 +414,12 @@ describe('dataUriToArrayBuffer', () => {
     const base64 = Buffer.from(bytes).toString('base64');
     const result = dataUriToArrayBuffer(`data:image/tiff;base64,${base64}`);
     expect(Array.from(new Uint8Array(result))).toEqual([11, 22, 33]);
+  });
+
+  it('decodes a non-base64 data URI string', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" />';
+    const result = dataUriToArrayBuffer(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+    expect(new TextDecoder().decode(result)).toBe(svg);
   });
 
   it('decodes a raw base64 string', () => {

@@ -33,6 +33,20 @@ function base64ToUint8Array(base64) {
   return bytes;
 }
 
+function stringToUtf8ArrayBuffer(value) {
+  const encoded = encodeURIComponent(value);
+  const bytes = [];
+  for (let i = 0; i < encoded.length; i++) {
+    if (encoded[i] === '%') {
+      bytes.push(parseInt(encoded.slice(i + 1, i + 3), 16));
+      i += 2;
+    } else {
+      bytes.push(encoded.charCodeAt(i));
+    }
+  }
+  return new Uint8Array(bytes).buffer;
+}
+
 /**
  * Convert a base64 string or data URI to an ArrayBuffer.
  * Accepts ArrayBuffer, TypedArray, data URI, or raw base64 string.
@@ -52,8 +66,23 @@ function dataUriToArrayBuffer(data) {
   if (data.startsWith('data:')) {
     const commaIndex = data.indexOf(',');
     if (commaIndex === -1) {
-      throw new Error('Invalid data URI: missing base64 content');
+      throw new Error('Invalid data URI: missing content');
     }
+    const meta = data.slice(0, commaIndex);
+    const payload = data.substring(commaIndex + 1);
+    const isBase64 = meta
+      .slice(5)
+      .split(';')
+      .some((part) => part.toLowerCase() === 'base64');
+
+    if (!isBase64) {
+      try {
+        return stringToUtf8ArrayBuffer(decodeURIComponent(payload));
+      } catch {
+        return stringToUtf8ArrayBuffer(payload);
+      }
+    }
+
     base64 = data.substring(commaIndex + 1);
   }
 
@@ -351,10 +380,11 @@ const getArrayBufferFromUrl = async (input) => {
     return await response.arrayBuffer();
   }
 
-  // If this is a data URI we need only the payload portion
-  const base64Payload = isDataUri ? trimmed.split(',', 2)[1] : trimmed.replace(/\s/g, '');
+  if (isDataUri) {
+    return dataUriToArrayBuffer(trimmed);
+  }
 
-  return base64ToUint8Array(base64Payload).buffer;
+  return base64ToUint8Array(trimmed.replace(/\s/g, '')).buffer;
 };
 
 const getContentTypesFromXml = (contentTypesXml) => {

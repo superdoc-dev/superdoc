@@ -230,6 +230,7 @@ describe('translateImageNode', () => {
   });
 
   it('should skip data URI image export when no media target can be created', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     baseParams.node.attrs = {
       src: 'data:,payload',
       size: { width: 200, height: 50 },
@@ -240,6 +241,11 @@ describe('translateImageNode', () => {
     expect(result).toBeNull();
     expect(baseParams.relationships).toHaveLength(0);
     expect(baseParams.media).toEqual({});
+    expect(warn).toHaveBeenCalledWith(
+      'Skipping image export because media target could not be resolved.',
+      expect.objectContaining({ nodeType: 'image', src: 'data:,payload' }),
+    );
+    warn.mockRestore();
   });
 
   it('should not add an existing image rId relationship when data URI media target is invalid', () => {

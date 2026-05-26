@@ -59,7 +59,13 @@ function getMediaTargetForImageSrc(params, src) {
 }
 
 function fallbackForMissingMediaTarget(params) {
-  return params.node.type === 'fieldAnnotation' ? prepareTextAnnotation(params) : null;
+  if (params.node.type === 'fieldAnnotation') return prepareTextAnnotation(params);
+
+  console.warn('Skipping image export because media target could not be resolved.', {
+    nodeType: params.node.type,
+    src: params.node.attrs?.src,
+  });
+  return null;
 }
 
 /**

@@ -27,7 +27,7 @@ const decodeDataUriText = (data) => {
   try {
     return decodeURIComponent(data);
   } catch {
-    return data;
+    return null;
   }
 };
 
@@ -53,6 +53,8 @@ const extractBase64Meta = (dataUri) => {
   const isBase64 = Boolean(metadata?.isBase64);
   const payload = metadata?.payload || '';
   const binaryString = isBase64 ? decodeBase64ToBinaryString(payload) : decodeDataUriText(payload);
+  if (binaryString == null) return null;
+
   const hash = simpleStringHash(binaryString);
   const extension = metadata?.extension || 'bin';
   const filename = `image-${hash}.${extension}`;

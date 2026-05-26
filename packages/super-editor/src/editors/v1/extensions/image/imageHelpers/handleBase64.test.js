@@ -103,14 +103,12 @@ describe('handleBase64', () => {
     await expect(file.text()).resolves.toBe(payload);
   });
 
-  it('falls back to raw data URI text when percent decoding fails', async () => {
+  it('returns null when non-base64 payload percent decoding fails', () => {
     const dataUri = 'data:image/svg+xml,%';
 
     const file = base64ToFile(dataUri);
 
-    expect(file.name).toMatch(/^image-\d+\.svg$/);
-    expect(file.type).toBe('image/svg+xml');
-    await expect(file.text()).resolves.toBe('%');
+    expect(file).toBeNull();
   });
 
   it('returns null for data URIs without a payload separator', () => {

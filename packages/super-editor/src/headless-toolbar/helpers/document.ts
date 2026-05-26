@@ -1,6 +1,6 @@
 import { undoDepth, redoDepth } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
-import { isCommandDisabled } from './general.js';
+import { isCommandDisabled, isMutationCommandDisabled } from './general.js';
 import { resolveStateEditor } from './context.js';
 import type { ToolbarCommandState, ToolbarContext } from '../types.js';
 
@@ -67,7 +67,7 @@ export const getCurrentRedoDepth = (context: ToolbarContext | null) => {
 export const createDocumentOperationCapabilityStateDeriver =
   (operationId: string) =>
   ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {
-    if (isCommandDisabled(context)) {
+    if (isMutationCommandDisabled(context)) {
       return {
         active: false,
         disabled: true,

@@ -1,13 +1,14 @@
 import type { FlowRunLink, Run, TextRun } from '@superdoc/contracts';
 import { normalizeBaselineShift, resolveBaseFontSizeForVerticalText } from '@superdoc/contracts';
 import { assertPmPositions } from '../pm-position-validation.js';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import { BROWSER_DEFAULT_FONT_SIZE } from '../styles.js';
 import type { RunRenderContext, TrackedChangesRenderConfig } from './types.js';
 import { applyRunDataAttributes } from './hash.js';
 import { applyLinkAttributes, applyLinkDataset, buildLinkRenderData, enhanceAccessibility } from './links.js';
 import { setTextContentWithFormattingSpaceMarks } from './formatting-marks.js';
 import { normalizeRtlDateTokenForWordParity, resolveRunDirectionAttribute } from '../features/inline-direction/index.js';
+import { applyTrackedChangeDecorations } from './tracked-changes.js';
 
 const DEFAULT_SUPERSCRIPT_RAISE_RATIO = 0.33;
 const DEFAULT_SUBSCRIPT_LOWER_RATIO = 0.14;
@@ -246,7 +247,7 @@ export const renderTextRun = (
   if (run.pmEnd != null) elem.dataset.pmEnd = String(run.pmEnd);
   elem.dataset.layoutEpoch = String(renderContext.layoutEpoch);
   if (trackedConfig) {
-    renderContext.applyTrackedChangeDecorations(elem, run, trackedConfig);
+    applyTrackedChangeDecorations(elem, run, trackedConfig);
   }
   renderContext.applySdtDataset(elem, run.sdt);
 

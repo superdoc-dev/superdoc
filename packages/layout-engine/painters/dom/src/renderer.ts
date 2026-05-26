@@ -6,7 +6,6 @@ import type {
   ImageFragment,
   ImageHyperlink,
   Line,
-  LineSegment,
   PageMargins,
   ParaFragment,
   ParagraphBlock,
@@ -50,13 +49,8 @@ import { tableFragmentKey } from './table/fragmentKey.js';
 import { getTableSnapshotFlags } from './table/snapshot.js';
 import { computeSdtBoundaries } from './sdt/boundaries.js';
 import { shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './sdt/container.js';
-import { applyContainerSdtDataset, applySdtDataset } from './sdt/dataset.js';
-import {
-  createInlineSdtWrapper,
-  expandSdtWrapperPmRange,
-  resolveRunSdtId,
-  syncInlineSdtWrapperTypography,
-} from './sdt/inline.js';
+import { applySdtDataset } from './sdt/dataset.js';
+import { createInlineSdtWrapper } from './sdt/inline.js';
 import {
   collectSdtSnapshotEntitiesFromDomRoot,
   type PaintSnapshotStructuredContentBlockEntity,
@@ -70,12 +64,10 @@ import type { RunRenderContext } from './runs/types.js';
 import { renderImageFragment as renderImageFragmentElement } from './images/image-fragment.js';
 import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './images/hyperlink.js';
 import { applyStyles } from './utils/apply-styles.js';
-import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
+import type { FragmentRenderContext } from './fragment-context.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
-import {
-  isHeaderWordArtWatermark,
-  renderDrawingFragment as renderDrawingFragmentElement,
-} from './drawings/renderDrawingFragment.js';
+import { renderDrawingFragment as renderDrawingFragmentElement } from './drawings/renderDrawingFragment.js';
+import { isWordArtTextboxWatermarkBlock } from './textbox/wordArtWatermark.js';
 import { applyNoteStoryFrameAttributes } from './notes/frame.js';
 import { isNonBodyStoryBlockId } from './notes/story.js';
 
@@ -205,25 +197,6 @@ type FragmentDomState = {
 type PageDomState = {
   element: HTMLElement;
   fragments: FragmentDomState[];
-};
-
-/**
- * Rendering context passed to fragment renderers containing page metadata.
- * Provides information about the current page position and section for dynamic content like page numbers.
- *
- * @typedef {Object} FragmentRenderContext
- * @property {number} pageNumber - Current page number (1-indexed)
- * @property {number} totalPages - Total number of pages in the document
- * @property {'body'|'header'|'footer'} section - Document section being rendered
- * @property {string} [pageNumberText] - Optional formatted page number text (e.g., "Page 1 of 10")
- */
-export type FragmentRenderContext = {
-  pageNumber: number;
-  totalPages: number;
-  section: 'body' | 'header' | 'footer';
-  story?: LayoutStoryLocator;
-  pageNumberText?: string;
-  pageIndex?: number;
 };
 
 export type PaintSnapshotLineStyle = {
@@ -689,28 +662,16 @@ const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
 
 /**
  * DOM-based document painter that renders layout fragments to HTML elements.
- * Manages page rendering, virtualization, headers/footers, and incremental updates.
+ * Manages page-level orchestration, virtualization, headers/footers, snapshots,
+ * providers, and incremental updates.
  *
  * @class DomPainter
  *
  * @remarks
- * The DomPainter is responsible for:
- * - Rendering layout fragments (paragraphs, lists, images, tables, drawings) to DOM elements
- * - Managing page-level DOM structure and styling
- * - Providing virtualization for large documents (vertical mode only)
- * - Handling headers and footers via PageDecorationProvider
- * - Incremental re-rendering when only specific blocks change
- * - Hyperlink rendering with security sanitization and accessibility
- *
- * @example
- * ```typescript
- * const painter = new DomPainter(blocks, measures, {
- *   layoutMode: 'vertical',
- *   pageStyles: { width: '8.5in', height: '11in' }
- * });
- * painter.mount(document.getElementById('editor-container'));
- * painter.render(layout);
- * ```
+ * Keep feature and content rendering in focused modules under `src/` (for
+ * example `paragraph/`, `table/`, `images/`, `drawings/`, `runs/`, `sdt/`,
+ * `notes/`, or `textbox/`). `renderer.ts` should dispatch to those modules
+ * instead of growing feature-specific rendering paths.
  */
 export class DomPainter {
   private readonly options: PainterOptions;
@@ -2505,8 +2466,6 @@ export class DomPainter {
       applyResolvedFragmentFrame: (el, item, paraFragment) =>
         this.applyResolvedFragmentFrame(el, item, paraFragment, context.section, context.story),
       applyFragmentFrame: (el, paraFragment) => this.applyFragmentFrame(el, paraFragment, context.section, context.story),
-      applySdtDataset,
-      applyContainerSdtDataset,
       renderLine: ({
         block,
         line,
@@ -2585,8 +2544,6 @@ export class DomPainter {
       applyFragmentFrame: (el, imageFragment, section) =>
         this.applyFragmentFrame(el, imageFragment, section, context.story),
       applyFragmentWrapperZIndex: this.applyFragmentWrapperZIndex.bind(this),
-      applySdtDataset,
-      applyContainerSdtDataset,
       buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
       createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
     });
@@ -2683,12 +2640,7 @@ export class DomPainter {
       buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(
         this,
       ) as RunRenderContext['buildImageHyperlinkAnchor'],
-      resolveTrackedChangesConfig,
-      applyTrackedChangeDecorations,
-      resolveRunSdtId,
       createInlineSdtWrapper: (sdt) => createInlineSdtWrapper(sdt, runContext),
-      syncInlineSdtWrapperTypography,
-      expandSdtWrapperPmRange,
     };
     return runContext;
   }
@@ -2791,7 +2743,7 @@ export class DomPainter {
       return true;
     }
 
-    return section === 'header' && fragment.kind === 'drawing' && isHeaderWordArtWatermark(resolvedItem?.block);
+    return section === 'header' && fragment.kind === 'drawing' && isWordArtTextboxWatermarkBlock(resolvedItem?.block);
   }
 
   /**

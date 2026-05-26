@@ -3320,7 +3320,10 @@ describe('paragraph converters', () => {
           converterContext,
         );
 
-        expect(vi.mocked(computeParagraphAttrs)).toHaveBeenCalledWith(para, converterContext, undefined);
+        expect(vi.mocked(computeParagraphAttrs)).toHaveBeenCalledWith(para, converterContext, undefined, {
+          listRenderingContext: undefined,
+          position: 0,
+        });
       });
 
       describe('previousParagraphFont', () => {

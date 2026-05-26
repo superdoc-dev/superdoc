@@ -24,8 +24,6 @@ export type SdtBoundaryOptions = {
 };
 
 export type SdtAncestorOptions = {
-  ancestorContainerKey?: string | null;
-  ancestorContainerSdt?: SdtMetadata | null;
   ancestorContainerKeys?: readonly (string | null | undefined)[];
   ancestorContainerSdts?: readonly (SdtMetadata | null | undefined)[];
 };
@@ -82,12 +80,12 @@ export function shouldRenderSdtContainerChrome(
   if (!metadata) return false;
 
   const containerKey = getSdtContainerKey(sdt, containerSdt);
-  const ancestorKeys = [options?.ancestorContainerKey, ...(options?.ancestorContainerKeys ?? [])];
+  const ancestorKeys = options?.ancestorContainerKeys ?? [];
   if (containerKey && ancestorKeys.includes(containerKey)) {
     return false;
   }
 
-  const ancestorSdts = [options?.ancestorContainerSdt, ...(options?.ancestorContainerSdts ?? [])];
+  const ancestorSdts = options?.ancestorContainerSdts ?? [];
   if (ancestorSdts.includes(metadata)) {
     return false;
   }
@@ -165,5 +163,20 @@ export function shouldRebuildForSdtBoundary(element: HTMLElement, boundary: SdtB
   if (startAttr === undefined || endAttr === undefined) {
     return true;
   }
-  return startAttr !== expectedStart || endAttr !== expectedEnd;
+  if (startAttr !== expectedStart || endAttr !== expectedEnd) {
+    return true;
+  }
+
+  const expectedShowLabel = boundary.showLabel ?? boundary.isStart ?? true;
+  const hasLabel =
+    element.querySelector('.superdoc-structured-content__label, .superdoc-document-section__tooltip') !== null;
+  if (hasLabel !== expectedShowLabel) {
+    return true;
+  }
+
+  const expectedPaddingBottom =
+    boundary.paddingBottomOverride != null && boundary.paddingBottomOverride > 0
+      ? `${boundary.paddingBottomOverride}px`
+      : '';
+  return element.style.paddingBottom !== expectedPaddingBottom;
 }

@@ -157,6 +157,72 @@ describe('toFlowBlocks', () => {
       expect(secondFont.fontFamily).toBe(firstFont.fontFamily);
       expect(secondFont.fontSize).toBe(firstFont.fontSize);
     });
+
+    it('can resolve missing listRendering from converter numbering without mutating PM JSON', () => {
+      const firstParagraph = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 1, ilvl: 0 },
+          },
+        },
+        content: [{ type: 'text', text: 'First' }],
+      };
+      const secondParagraph = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 1, ilvl: 0 },
+          },
+        },
+        content: [{ type: 'text', text: 'Second' }],
+      };
+      const pmDoc = {
+        type: 'doc',
+        content: [firstParagraph, secondParagraph],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, {
+        resolveListRendering: true,
+        converterContext: {
+          docx: {},
+          translatedLinkedStyles: {
+            docDefaults: {},
+            latentStyles: {},
+            styles: {},
+          },
+          translatedNumbering: {
+            definitions: {
+              1: { numId: 1, abstractNumId: 10 },
+            },
+            abstracts: {
+              10: {
+                abstractNumId: 10,
+                levels: {
+                  0: {
+                    ilvl: 0,
+                    start: 1,
+                    lvlText: '%1.',
+                    suff: 'tab',
+                    lvlJc: 'left',
+                    numFmt: { val: 'decimal' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      expect(
+        (blocks[0] as { attrs?: { wordLayout?: { marker?: { markerText?: string } } } }).attrs?.wordLayout?.marker,
+      ).toMatchObject({ markerText: '1.' });
+      expect(
+        (blocks[1] as { attrs?: { wordLayout?: { marker?: { markerText?: string } } } }).attrs?.wordLayout?.marker,
+      ).toMatchObject({ markerText: '2.' });
+      expect(firstParagraph.attrs).not.toHaveProperty('listRendering');
+      expect(secondParagraph.attrs).not.toHaveProperty('listRendering');
+    });
   });
 
   describe('mark mapping', () => {

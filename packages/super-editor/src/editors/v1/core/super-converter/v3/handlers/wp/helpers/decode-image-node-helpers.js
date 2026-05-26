@@ -36,14 +36,14 @@ function createMediaTargetForDataUri(params, src) {
   if (!extension) return null;
 
   if (!params.media) params.media = {};
-  const existingEntry = Object.entries(params.media).find(([, value]) => value === src);
-  if (existingEntry?.[0]?.startsWith('word/')) {
-    return existingEntry[0].slice(5);
-  }
 
   const fileBaseName = sanitizeDocxMediaName(`image-${simpleStringHash(src)}`, 'image');
   let fileName = `${fileBaseName}.${extension}`;
   let packagePath = `word/media/${fileName}`;
+  if (params.media[packagePath] === src) {
+    return `media/${fileName}`;
+  }
+
   if (params.media[packagePath] && params.media[packagePath] !== src) {
     fileName = `${fileBaseName}_${generateDocxRandomId(8)}.${extension}`;
     packagePath = `word/media/${fileName}`;

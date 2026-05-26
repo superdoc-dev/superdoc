@@ -14,9 +14,24 @@ const DECORATIVE_EXT_URI = '{C183D7F6-B498-43B3-948B-1728B52AA6E4}';
 const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/decorative';
 const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const IMAGE_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+const EXPORTABLE_IMAGE_DATA_URI_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/gif',
+  'image/svg+xml',
+  'image/webp',
+  'image/bmp',
+  'image/ico',
+  'image/tif',
+  'image/tiff',
+]);
 
 function createMediaTargetForDataUri(params, src) {
-  const extension = getDataUriMetadata(src)?.extension;
+  const metadata = getDataUriMetadata(src);
+  if (!metadata || !EXPORTABLE_IMAGE_DATA_URI_MIME_TYPES.has(metadata.mimeType)) return null;
+
+  const extension = metadata.extension;
   if (!extension) return null;
 
   if (!params.media) params.media = {};

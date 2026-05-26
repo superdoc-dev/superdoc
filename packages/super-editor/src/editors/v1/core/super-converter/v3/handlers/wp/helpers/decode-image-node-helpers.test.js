@@ -201,6 +201,20 @@ describe('translateImageNode', () => {
     expect(blip.attributes['r:embed']).toBe(baseParams.relationships[0].attributes.Id);
   });
 
+  it('should not export non-image data URI media', () => {
+    baseParams.node.attrs = {
+      src: 'data:text/html,%3Cscript%3Ealert(1)%3C%2Fscript%3E',
+      alt: 'HTML Example',
+      size: { width: 20, height: 10 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(result).toBeNull();
+    expect(baseParams.relationships).toHaveLength(0);
+    expect(baseParams.media).toEqual({});
+  });
+
   it('should not create a corrupt relationship when image src is null', () => {
     baseParams.node.attrs = {
       src: null,

@@ -39,6 +39,35 @@ async function clickRenderedTrackedChange(page: Page, locator: import('@playwrig
   );
 }
 
+async function clickNeutralDocumentArea(page: Page): Promise<void> {
+  const layers = page.locator('.superdoc__layers').first();
+  await layers.waitFor({ state: 'visible', timeout: 15_000 });
+  const box = await layers.boundingBox();
+  if (!box) throw new Error('Layers root is not clickable: no bounding box available.');
+
+  const candidates = [
+    { x: box.x + 12, y: box.y + 12 },
+    { x: box.x + 12, y: box.y + box.height * 0.5 },
+    { x: box.x + 12, y: box.y + Math.max(12, box.height - 12) },
+  ];
+
+  for (const point of candidates) {
+    const safe = await page.evaluate(({ x, y }) => {
+      const el = document.elementFromPoint(x, y);
+      if (!el) return false;
+      if (!el.closest('.superdoc__layers')) return false;
+      if (el.closest('.superdoc__compact-comment-popover')) return false;
+      if (el.closest('[data-track-change-id], .superdoc-comment-highlight, .sd-comment-anchor')) return false;
+      return true;
+    }, point);
+    if (!safe) continue;
+    await page.mouse.click(point.x, point.y);
+    return;
+  }
+
+  throw new Error('Unable to find a neutral document-area click point.');
+}
+
 for (const entry of STORY_CASES) {
   test(`${entry.surface} tracked-change text activates its bubble and a body click clears it`, async ({ superdoc }) => {
     await superdoc.loadDocument(STORY_ONLY_TRACKED_CHANGES_DOC_PATH);
@@ -61,9 +90,7 @@ for (const entry of STORY_CASES) {
     await superdoc.waitForStable();
     await expect.poll(() => getActiveCommentId(superdoc.page)).toBe(String(comment.commentId ?? comment.importedId));
 
-    const bodyLine = superdoc.page.locator('.superdoc-line').first();
-    await bodyLine.waitFor({ state: 'visible', timeout: 15_000 });
-    await bodyLine.click();
+    await clickNeutralDocumentArea(superdoc.page);
     await superdoc.waitForStable();
     await expect.poll(() => getActiveCommentId(superdoc.page)).toBeNull();
   });

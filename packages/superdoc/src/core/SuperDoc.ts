@@ -21,6 +21,7 @@ import { WhiteboardRenderer } from './whiteboard/WhiteboardRenderer';
 import { SurfaceManager } from './surface-manager.js';
 import { createDeprecatedEditorProxy } from '../helpers/deprecation.js';
 import { normalizeTrackChangesConfig } from './helpers/normalize-track-changes-config.js';
+import { normalizeCommentsUiPolicy } from '../helpers/comment-small-screen.js';
 
 const DEFAULT_USER = Object.freeze({
   name: 'Default SuperDoc user',
@@ -539,6 +540,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     if (!Object.prototype.hasOwnProperty.call(this.config.modules, 'comments')) {
       this.config.modules.comments = {};
     }
+    this.config.modules.comments = normalizeCommentsUiPolicy(this.config.modules.comments);
 
     this.config.colors = shuffleArray(this.config.colors as `#${string}`[]);
     this.userColorMap = new Map();

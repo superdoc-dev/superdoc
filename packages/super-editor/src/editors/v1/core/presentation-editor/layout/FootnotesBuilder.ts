@@ -40,6 +40,10 @@ export type { FootnoteReference, FootnotesLayoutInput };
 /** Minimal shape of a converter object containing footnote data. */
 export type ConverterLike = {
   footnotes?: Array<{ id?: unknown; content?: unknown[] }>;
+  numbering?: unknown;
+  translatedNumbering?: unknown;
+  translatedLinkedStyles?: unknown;
+  convertedXml?: unknown;
 };
 
 export type NoteRenderOverride = {
@@ -139,6 +143,7 @@ export function buildFootnotesInput(
         enableRichHyperlinks: true,
         themeColors: themeColors as never,
         converterContext: converterContext as never,
+        resolveListRendering: true,
       });
 
       if (result?.blocks?.length) {

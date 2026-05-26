@@ -15,8 +15,8 @@
  */
 
 // Group analysis
-export { computeBetweenBorderFlags } from './group-analysis.js';
-export type { BetweenBorderInfo } from './group-analysis.js';
+export { computeBetweenBorderContext, computeBetweenBorderFlags } from './group-analysis.js';
+export type { BetweenBorderInfo, ParagraphBorderGroupEntry } from './group-analysis.js';
 
 // DOM layers and CSS
 export {

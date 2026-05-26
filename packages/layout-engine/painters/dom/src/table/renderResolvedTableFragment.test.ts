@@ -8,7 +8,7 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import { renderDrawingContent } from '../drawings/renderDrawingContent.js';
 import { renderResolvedTableFragment } from './renderResolvedTableFragment.js';
 import { renderTableFragment } from './renderTableFragment.js';

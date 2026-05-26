@@ -57,3 +57,21 @@ Notes:
   a producer-completeness issue to fix in `layout-resolved`, not at paint
   time. Enforced by absence — any future regression to a `?? fragment.X`
   fallback fails review.
+
+## Code organization
+
+Keep `src/renderer.ts` focused on page-level orchestration: mount lifecycle,
+paint entrypoints, page containers, headers/footers, virtualization,
+incremental page state, active state, snapshots, and dispatching resolved
+paint items to focused renderers.
+
+Rendering logic belongs in concern-specific modules under `src/`:
+`paragraph/`, `runs/`, `table/`, `images/`, `drawings/`, `sdt/`, `notes/`,
+`textbox/`, `ruler/`, `features/`, or `utils/`. Prefer extending those modules
+over adding private helper blocks to `renderer.ts`.
+
+When adding visual behavior, keep container placement separate from content
+rendering. Body pages, table cells, headers/footers, notes, and textboxes can
+place content differently, but they should reuse shared content renderers for
+paragraphs, markers, images, drawings, SDT chrome, and nested tables. See
+`AGENTS.md` in this directory for detailed contributor guidance.

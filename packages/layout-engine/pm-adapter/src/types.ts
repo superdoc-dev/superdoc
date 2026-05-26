@@ -4,6 +4,7 @@
 
 import type { TrackedChangesMode, SectionMetadata, FlowBlock, TrackedChangeMeta } from '@superdoc/contracts';
 import type { StyleContext as StyleEngineContext, ComputedParagraphStyle } from '@superdoc/style-engine';
+import type { ParagraphProperties as OoxmlParagraphProperties } from '@superdoc/style-engine/ooxml';
 import type { SectionRange } from './sections/index.js';
 import type { ConverterContext } from './converter-context.js';
 import type { paragraphToFlowBlocks } from './converters/paragraph.js';
@@ -22,6 +23,23 @@ export type StyleContext = StyleEngineContext;
 export type { ComputedParagraphStyle };
 
 export type ThemeColorPalette = Record<string, string>;
+
+export type ResolvedListRendering = {
+  markerText: string;
+  suffix?: string;
+  justification?: string;
+  path: number[];
+  numberingType: string;
+  customFormat?: string;
+};
+
+export type ListRenderingContext = {
+  resolveListRendering: (
+    node: PMNode,
+    resolvedParagraphProperties: OoxmlParagraphProperties,
+    pos: number,
+  ) => ResolvedListRendering | null;
+};
 
 /**
  * ProseMirror node shape (simplified interface for what we need)
@@ -205,6 +223,11 @@ export interface AdapterOptions {
    * conversion settings change (tracked changes mode, comments enabled, etc.).
    */
   flowBlockCache?: import('./cache.js').FlowBlockCache;
+
+  /**
+   * When true, compute missing listRendering metadata during PM JSON to FlowBlock conversion.
+   */
+  resolveListRendering?: boolean;
 }
 
 /**
@@ -334,6 +357,7 @@ export interface NodeHandlerContext {
   trackedListMarkerOffsets?: Map<string, number>;
   // Last seen source ordinal per list key for restart detection
   trackedListLastOrdinals?: Map<string, number>;
+  listRenderingContext?: ListRenderingContext;
 }
 
 /**
@@ -363,6 +387,7 @@ export type ParagraphToFlowBlocksParams = {
   converters: NestedConverters;
   enableComments: boolean;
   converterContext: ConverterContext;
+  listRenderingContext?: ListRenderingContext;
   stableBlockId?: string;
   /** When set, used as default/marker font for list paragraphs that have no explicit run properties (e.g. new list item after Enter). */
   previousParagraphFont?: ParagraphFont;

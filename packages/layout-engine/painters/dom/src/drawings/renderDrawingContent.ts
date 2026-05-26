@@ -17,7 +17,7 @@ import { createChartElement as renderChartToElement } from '../chart-renderer.js
 import { createDrawingImageElement, createShapeGroupImageElement } from '../images/drawing-image.js';
 import type { BuildImageHyperlinkAnchor } from '../images/types.js';
 import { applyAlphaToSVG, applyGradientToSVG } from '../svg-utils.js';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import { hasShapeTextContent, renderTextboxContent } from '../textbox/renderTextboxContent.js';
 import { createDrawingPlaceholder } from './placeholder.js';
 

@@ -1,5 +1,5 @@
 import type { DrawingBlock, DrawingFragment, ResolvedDrawingItem } from '@superdoc/contracts';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { applyStyles } from '../utils/apply-styles.js';
 import type { BuildImageHyperlinkAnchor } from '../images/types.js';

@@ -4,7 +4,6 @@ import type {
   Line,
   ParagraphBlock,
   PartialRowInfo,
-  SdtMetadata,
   TableBlock,
   TableBorders,
   TableMeasure,
@@ -18,7 +17,7 @@ import {
   swapCellBordersLR,
 } from './border-utils.js';
 import { getTableCellGridBounds, type TableCellGridPosition } from './grid-geometry.js';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import type { SdtAncestorOptions } from '../sdt/container.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];
@@ -172,12 +171,6 @@ type TableRowRenderDependencies = {
   ) => void;
   /** Function to render non-image drawing content (shapes, charts, etc.) */
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
-  /** Function to apply SDT metadata as data attributes */
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  /** Ancestor SDT container key for suppressing duplicate container styling in cells */
-  ancestorContainerKey?: string | null;
-  /** Ancestor SDT metadata for suppressing duplicate id-less container styling in cells */
-  ancestorContainerSdt?: SdtMetadata | null;
   /** Ancestor SDT keys for suppressing duplicate container styling in cells */
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   /** Ancestor SDT metadata chain for suppressing duplicate id-less container styling in cells */
@@ -239,7 +232,6 @@ type TableRowRenderDependencies = {
  *   tableBorders,
  *   context,
  *   renderLine,
- *   applySdtDataset
  * });
  * // Appends all cell elements to container
  * ```
@@ -262,9 +254,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     renderLine,
     captureLineSnapshot,
     renderDrawingContent,
-    applySdtDataset,
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
@@ -438,9 +427,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       captureLineSnapshot,
       renderDrawingContent,
       context,
-      applySdtDataset,
-      ancestorContainerKey,
-      ancestorContainerSdt,
       ancestorContainerKeys,
       ancestorContainerSdts,
       onSdtContainerChrome,

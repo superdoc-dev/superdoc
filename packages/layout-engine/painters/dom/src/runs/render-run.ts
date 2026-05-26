@@ -1,5 +1,5 @@
 import type { FieldAnnotationRun, ImageRun, MathRun, Run, TextRun } from '@superdoc/contracts';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import type { RunRenderContext, TrackedChangesRenderConfig } from './types.js';
 import { renderFieldAnnotationRun } from './field-annotation-run.js';
 import { renderImageRun } from './image-run.js';

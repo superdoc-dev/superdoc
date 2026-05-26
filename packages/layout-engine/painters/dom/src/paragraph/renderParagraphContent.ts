@@ -5,7 +5,6 @@ import type {
   ParagraphMeasure,
   ResolvedParagraphContent,
   Run,
-  SdtMetadata,
   SourceAnchor,
 } from '@superdoc/contracts';
 import {
@@ -20,6 +19,7 @@ import {
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
+import { applyContainerSdtDataset, applySdtDataset } from '../sdt/dataset.js';
 import { createParagraphDecorationLayers, stampBetweenBorderDataset, type BetweenBorderInfo } from './borders/index.js';
 import {
   applyParagraphLineIndentation,
@@ -83,13 +83,9 @@ export type RenderParagraphContentParams = {
   betweenInfo?: BetweenBorderInfo;
   sdtBoundary?: SdtBoundaryOptions;
   spacingPolicy?: ParagraphSpacingPolicy;
-  ancestorContainerKey?: string | null;
-  ancestorContainerSdt?: SdtMetadata | null;
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   onSdtContainerChrome?: () => void;
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  applyContainerSdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   renderLine: ParagraphRenderLine;
   renderDropCap?: ParagraphRenderDropCap;
   captureLineSnapshot?: (
@@ -124,13 +120,9 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
     betweenInfo,
     sdtBoundary,
     spacingPolicy,
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
-    applySdtDataset,
-    applyContainerSdtDataset,
     renderDropCap,
     lineTopOffset = 0,
   } = params;
@@ -149,8 +141,6 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
   applyContainerSdtDataset?.(frameEl, block.attrs?.containerSdt);
 
   const applySdtChrome = shouldRenderSdtContainerChrome(block.attrs?.sdt, block.attrs?.containerSdt, {
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
   });

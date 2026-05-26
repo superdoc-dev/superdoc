@@ -426,7 +426,10 @@ const updateGhostListMarkerOffsets = (
     return;
   }
 
-  const { paragraphAttrs } = computeParagraphAttrs(node, context.converterContext);
+  const { paragraphAttrs } = computeParagraphAttrs(node, context.converterContext, undefined, {
+    listRenderingContext: context.listRenderingContext,
+    position: context.positions.get(node)?.start ?? 0,
+  });
   const key = getParagraphListKeyFromAttrs(paragraphAttrs);
   if (!key) {
     return;
@@ -440,7 +443,10 @@ const updateGhostListMarkerOffsets = (
 };
 
 const getNodeListKey = (node: PMNode, context: NodeHandlerContext): string | undefined => {
-  const { paragraphAttrs } = computeParagraphAttrs(node, context.converterContext);
+  const { paragraphAttrs } = computeParagraphAttrs(node, context.converterContext, undefined, {
+    listRenderingContext: context.listRenderingContext,
+    position: context.positions.get(node)?.start ?? 0,
+  });
   return getParagraphListKeyFromAttrs(paragraphAttrs);
 };
 
@@ -556,6 +562,7 @@ export function paragraphToFlowBlocks({
   themeColors,
   converters,
   converterContext,
+  listRenderingContext,
   enableComments = true,
   stableBlockId,
   previousParagraphFont,
@@ -578,6 +585,7 @@ export function paragraphToFlowBlocks({
     para,
     converterContext,
     previousParagraphFont,
+    { listRenderingContext, position: positions.get(para)?.start ?? 0 },
   );
 
   const blocks: FlowBlock[] = [];
@@ -1162,6 +1170,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       themeColors,
       converters,
       converterContext,
+      listRenderingContext: context.listRenderingContext,
       enableComments,
       stableBlockId: prefixedStableId,
       previousParagraphFont,
@@ -1191,6 +1200,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     themeColors,
     converters,
     converterContext,
+    listRenderingContext: context.listRenderingContext,
     enableComments,
     stableBlockId: prefixedStableId ?? undefined,
     previousParagraphFont,

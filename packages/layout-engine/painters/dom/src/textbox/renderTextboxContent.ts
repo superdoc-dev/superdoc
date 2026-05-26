@@ -1,6 +1,6 @@
 import type { ShapeTextContent } from '@superdoc/contracts';
 import { createShapeTextImageElement } from '../images/drawing-image.js';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import { validateHexColor } from '../svg-utils.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

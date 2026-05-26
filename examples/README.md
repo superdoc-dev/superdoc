@@ -119,6 +119,7 @@ Document editing through models and agents.
 | [bedrock](./ai/bedrock) | AWS Bedrock Converse API with tool use |
 | [streaming](./ai/streaming) | Stream model output into a visible editor |
 | [redlining](./ai/redlining) | LLM-driven tracked-change review (browser) |
+| [footnote-tool-agent](./ai/footnote-tool-agent) | Real LLM tool-use loop: model picks `addFootnoteCitation`, browser executes against `editor.doc` |
 
 ## Advanced
 

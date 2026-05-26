@@ -38,11 +38,9 @@ export const getDataUriMetadata = (src = '') => {
 
   return {
     hasPayloadSeparator,
-    metadata,
     payload,
     rawMimeType,
     mimeType,
-    parameters,
     isBase64: parameters.some((part) => part.toLowerCase() === 'base64'),
     extension: getImageExtensionFromMimeType(mimeType),
   };

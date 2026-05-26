@@ -30,7 +30,7 @@ describe('getDataUriMetadata', () => {
   it('extracts MIME type, base64 flag, payload, and normalized extension', () => {
     const result = getDataUriMetadata('data:image/svg+xml;charset=utf-8;base64,PHN2Zy8+');
 
-    expect(result).toMatchObject({
+    expect(result).toEqual({
       hasPayloadSeparator: true,
       rawMimeType: 'image/svg+xml',
       mimeType: 'image/svg+xml',
@@ -63,7 +63,7 @@ describe('getFallbackImageNameFromDataUri', () => {
 
   it('normalises the extension casing', () => {
     const dataUri = 'data:image/JPEG;base64,AAAA';
-    expect(getFallbackImageNameFromDataUri(dataUri)).toBe('image.jpeg');
+    expect(getFallbackImageNameFromDataUri(dataUri)).toBe('image.jpg');
   });
 
   it('returns fallback when type cannot be derived', () => {

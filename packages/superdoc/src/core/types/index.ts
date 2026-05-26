@@ -1145,6 +1145,12 @@ export interface Modules {
           /** Active border color for format change highlight. */
           formatBorder?: string;
         };
+        /** Comments/track-changes UI display policy. */
+        displayMode?: 'auto' | 'sidebar' | 'inline';
+        /** CSS selector for an explicit width measurement target in auto mode. */
+        compactMeasurementSelector?: string;
+        /** Optional fixed compact-mode breakpoint override in pixels. */
+        compactBreakpointPx?: number;
       } & Record<string, unknown>);
   /** AI module configuration. */
   ai?: {

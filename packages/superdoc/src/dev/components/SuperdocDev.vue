@@ -733,6 +733,9 @@ const init = async () => {
         // useInternalExternalComments: true,
         // suppressInternalExternal: true,
         permissionResolver: commentPermissionResolver,
+        displayMode: 'auto',
+        // compactMeasurementSelector: '#superdoc',
+        // compactBreakpointPx: 1400,
       },
       trackChanges: {
         visible: true,
@@ -1633,6 +1636,12 @@ if (scrollTestMode.value) {
 </style>
 
 <style scoped>
+#superdoc {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
 .temp-comment {
   margin: 5px;
   border: 1px solid black;
@@ -2152,6 +2161,7 @@ if (scrollTestMode.value) {
 .dev-app__view {
   display: flex;
   padding-top: 20px;
+  width: 100%;
 }
 
 .dev-app__content {
@@ -2162,7 +2172,8 @@ if (scrollTestMode.value) {
 }
 
 .dev-app__content-container {
-  width: auto;
+  width: 100%;
+  /* width: auto; */
 }
 
 /* Web layout mode: dev app container styling */

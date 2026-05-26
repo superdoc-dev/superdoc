@@ -93,6 +93,10 @@ const CLICK_OUTSIDE_HIT_SAMPLE_OFFSETS = [
 ];
 const CLICK_OUTSIDE_IGNORED_SELECTORS = [
   '.comments-dropdown__option-label',
+  '.comments-dropdown__menu',
+  '.comments-dropdown__option',
+  '.comments-dropdown__option-icon',
+  '.comments-dropdown__trigger',
   '.superdoc-comment-highlight',
   '.sd-editor-comment-highlight',
   '.sd-editor-tracked-change-highlight',

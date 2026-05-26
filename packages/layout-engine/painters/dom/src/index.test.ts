@@ -2269,6 +2269,49 @@ describe('DomPainter', () => {
     expect(annotation?.style.fontSize).toBe('14pt');
   });
 
+  it('renders field annotation images with non-base64 SVG data URLs', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10"/></svg>';
+    const imageSrc = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'fa-svg-image',
+      runs: [
+        {
+          kind: 'fieldAnnotation',
+          variant: 'signature',
+          displayLabel: 'Signature',
+          fieldId: 'F1',
+          fieldType: 'signer',
+          fieldColor: '#980043',
+          imageSrc,
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ],
+    };
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 100, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+    const testLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'fa-svg-image', fromLine: 0, toLine: 1, x: 10, y: 10, width: 200 }],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(testLayout, mount);
+
+    const img = mount.querySelector('.annotation img') as HTMLImageElement | null;
+    expect(img).toBeTruthy();
+    expect(img?.src).toBe(imageSrc);
+    expect(img?.alt).toBe('Signature');
+  });
+
   it('sets explicit fontSize on math run wrapper', () => {
     const block: FlowBlock = {
       kind: 'paragraph',
@@ -7527,6 +7570,49 @@ describe('DomPainter', () => {
       expect(img?.src).toContain('data:image/png;base64');
       expect(img?.width).toBe(100);
       expect(img?.height).toBe(100);
+    });
+
+    it('renders img element with non-base64 SVG data URL', () => {
+      const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><text x="0" y="20">Signature</text></svg>';
+      const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+
+      renderInlineImageRun({
+        kind: 'image',
+        src: svgDataUrl,
+        width: 100,
+        height: 50,
+      });
+
+      const img = mount.querySelector('img');
+      expect(img).toBeTruthy();
+      expect(img?.src).toBe(svgDataUrl);
+      expect(img?.width).toBe(100);
+      expect(img?.height).toBe(50);
+    });
+
+    it('rejects non-base64 raster data URLs', () => {
+      renderInlineImageRun({
+        kind: 'image',
+        src: 'data:image/png,not-base64',
+        width: 100,
+        height: 100,
+      });
+
+      const img = mount.querySelector('img');
+      expect(img).toBeNull();
+    });
+
+    it('rejects non-image data URLs without requiring base64', () => {
+      renderInlineImageRun({
+        kind: 'image',
+        src: 'data:text/html;charset=utf-8,%3Cscript%3Ealert(1)%3C%2Fscript%3E',
+        width: 100,
+        height: 100,
+      });
+
+      const img = mount.querySelector('img');
+      expect(img).toBeNull();
     });
 
     it('renders DrawingML luminance using percentage units', () => {

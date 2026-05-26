@@ -7,7 +7,7 @@ import { checkAndProcessImage, uploadAndInsertImage } from './startImageUpload';
 import { buildMediaPath, ensureUniqueFileName } from './fileNameUtils.js';
 import { addImageRelationship } from '@extensions/image/imageHelpers/startImageUpload.js';
 import { getDataUriMetadata, tryDecodeDataUriText } from '@converter/helpers/mediaHelpers.js';
-import { isRelativeUrl, MAX_IMAGE_DATA_URL_LENGTH } from '@superdoc/url-validation';
+import { IMAGE_DATA_URL_MIME_TYPES, isRelativeUrl, MAX_IMAGE_DATA_URL_LENGTH } from '@superdoc/url-validation';
 const key = new PluginKey('ImageRegistration');
 
 /**
@@ -196,19 +196,21 @@ const hasFinitePositiveSize = (size) =>
 
 const isSvgFile = (file) => file?.type === 'image/svg+xml';
 
-const isValidSvgDataUri = (src) => {
+const isValidInPlaceDataUri = (src) => {
   if (typeof src !== 'string' || !src.startsWith('data:') || src.length > MAX_IMAGE_DATA_URL_LENGTH) {
     return false;
   }
 
   const metadata = getDataUriMetadata(src);
-  if (metadata?.hasPayloadSeparator !== true || metadata.mimeType !== 'image/svg+xml') return false;
+  if (metadata?.hasPayloadSeparator !== true || !IMAGE_DATA_URL_MIME_TYPES.includes(metadata.mimeType)) return false;
   if (metadata.isBase64) return true;
+  if (metadata.mimeType !== 'image/svg+xml') return false;
 
   return tryDecodeDataUriText(metadata.payload) != null;
 };
 
-const shouldRegisterInPlace = (node) => isValidSvgDataUri(node.attrs?.src) && hasFinitePositiveSize(node.attrs?.size);
+const shouldRegisterInPlace = (node) =>
+  isValidInPlaceDataUri(node.attrs?.src) && hasFinitePositiveSize(node.attrs?.size);
 
 const getOrInitMediaStore = (editor) => {
   if (!editor?.storage?.image?.media) {

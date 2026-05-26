@@ -156,6 +156,30 @@ describe('handleBrowserPath', () => {
     expect(tr.delete).toHaveBeenCalledTimes(2);
   });
 
+  it('registers sized raster data URI images in place without placeholder deletion', () => {
+    const pngDataUri = 'data:image/png;base64,iVBORw0KGgo=';
+    const imageNode = createImageNode({
+      src: pngDataUri,
+      size: { width: 20, height: 10 },
+    });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+
+    expect(Decoration.widget).not.toHaveBeenCalled();
+    expect(tr.delete).not.toHaveBeenCalled();
+    expect(checkAndProcessImage).not.toHaveBeenCalled();
+    expect(uploadAndInsertImage).not.toHaveBeenCalled();
+    expect(addImageRelationship).toHaveBeenCalledWith({
+      editor,
+      path: expect.stringMatching(/^media\/image-\d+\.png$/),
+    });
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(20, undefined, {
+      ...imageNode.attrs,
+      src: expect.stringMatching(/^word\/media\/image-\d+\.png$/),
+      rId: 'rId99',
+    });
+  });
+
   it('deletes non-relative image nodes in descending position order', () => {
     const foundImages = [
       { node: createImageNode({ src: 'https://a.com/1.png' }), pos: 5, id: {} },

@@ -203,7 +203,15 @@ const isValidSvgDataUri = (src) => {
   }
 
   const metadata = getDataUriMetadata(src);
-  return metadata?.hasPayloadSeparator === true && metadata.mimeType === 'image/svg+xml';
+  if (metadata?.hasPayloadSeparator !== true || metadata.mimeType !== 'image/svg+xml') return false;
+  if (metadata.isBase64) return true;
+
+  try {
+    decodeURIComponent(metadata.payload);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 const shouldRegisterInPlace = (node) => isValidSvgDataUri(node.attrs?.src) && hasFinitePositiveSize(node.attrs?.size);

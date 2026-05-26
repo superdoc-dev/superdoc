@@ -1,7 +1,23 @@
 import { describe, expect, it, beforeEach, afterEach, spyOn } from 'bun:test';
-import { sanitizeHref, encodeTooltip, UrlValidationConstants, buildAllowedProtocols, isRelativeUrl } from './index.js';
+import {
+  sanitizeHref,
+  encodeTooltip,
+  UrlValidationConstants,
+  buildAllowedProtocols,
+  isRelativeUrl,
+  IMAGE_DATA_URL_MIME_TYPES,
+  MAX_IMAGE_DATA_URL_LENGTH,
+} from './index.js';
 
 describe('url-validation', () => {
+  describe('image data URL policy', () => {
+    it('exports the shared MIME allowlist and size cap', () => {
+      expect(IMAGE_DATA_URL_MIME_TYPES).toContain('image/svg+xml');
+      expect(IMAGE_DATA_URL_MIME_TYPES).toContain('image/png');
+      expect(MAX_IMAGE_DATA_URL_LENGTH).toBe(10 * 1024 * 1024);
+    });
+  });
+
   describe('sanitizeHref', () => {
     it('allows fully-qualified https URLs', () => {
       const result = sanitizeHref('https://example.com');

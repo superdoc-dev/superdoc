@@ -78,7 +78,12 @@ import {
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
-import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
+import {
+  encodeTooltip,
+  IMAGE_DATA_URL_MIME_TYPES,
+  MAX_IMAGE_DATA_URL_LENGTH,
+  sanitizeHref,
+} from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from './constants.js';
 import { createChartElement as renderChartToElement } from './chart-renderer.js';
 import {
@@ -924,27 +929,8 @@ const MAX_HREF_LENGTH = 2048;
 
 const SAFE_ANCHOR_PATTERN = /^[A-Za-z0-9._-]+$/;
 
-/**
- * Maximum allowed length for data URLs (10MB).
- * Prevents denial of service attacks from extremely large embedded images.
- */
-const MAX_DATA_URL_LENGTH = 10 * 1024 * 1024; // 10MB
-
-const VALID_IMAGE_DATA_URL_MIME_TYPES = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
-  'image/gif',
-  'image/svg+xml',
-  'image/webp',
-  'image/bmp',
-  'image/ico',
-  'image/tif',
-  'image/tiff',
-]);
-
 function isValidImageDataUrl(src: string): boolean {
-  if (!src.startsWith('data:') || src.length > MAX_DATA_URL_LENGTH) {
+  if (!src.startsWith('data:') || src.length > MAX_IMAGE_DATA_URL_LENGTH) {
     return false;
   }
 
@@ -956,7 +942,7 @@ function isValidImageDataUrl(src: string): boolean {
   const metadata = src.slice('data:'.length, metadataEnd);
   const [rawMimeType = '', ...rawParameters] = metadata.split(';');
   const mimeType = rawMimeType.toLowerCase();
-  if (!VALID_IMAGE_DATA_URL_MIME_TYPES.has(mimeType)) {
+  if (!IMAGE_DATA_URL_MIME_TYPES.includes(mimeType)) {
     return false;
   }
 
@@ -6001,7 +5987,7 @@ export class DomPainter {
    *
    * SECURITY NOTES:
    * - Data URLs are validated against an allowlist of image MIME types
-   * - Size limit (MAX_DATA_URL_LENGTH) prevents DoS attacks from extremely large images
+   * - Size limit prevents DoS attacks from extremely large images
    * - Only allows safe image MIME types; non-base64 data URLs are limited to SVG
    * - Non-data URLs are sanitized through sanitizeUrl to prevent XSS
    *

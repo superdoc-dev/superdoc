@@ -65,6 +65,28 @@ const BLOCKED_PROTOCOLS = ['javascript', 'data', 'vbscript', 'file', 'ssh', 'ws'
 const DEFAULT_MAX_LENGTH = 2048;
 
 /**
+ * Maximum allowed length for image data URLs.
+ * Prevents resource exhaustion from extremely large embedded images.
+ */
+export const MAX_IMAGE_DATA_URL_LENGTH = 10 * 1024 * 1024;
+
+/**
+ * Canonical set of image data URL MIME types supported by rendering and export.
+ */
+export const IMAGE_DATA_URL_MIME_TYPES = Object.freeze([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/gif',
+  'image/svg+xml',
+  'image/webp',
+  'image/bmp',
+  'image/ico',
+  'image/tif',
+  'image/tiff',
+]);
+
+/**
  * Default maximum tooltip length in characters.
  *
  * Prevents excessively long tooltips that degrade UX and accessibility.

@@ -9,26 +9,14 @@ import { wrapTextInRun } from '@converter/exporter.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
 import { readImageDimensionsFromDataUri } from '@converter/image-dimensions.js';
 import { simpleStringHash } from '@core/utilities/hash.js';
+import { IMAGE_DATA_URL_MIME_TYPES } from '@superdoc/url-validation';
 
 const DECORATIVE_EXT_URI = '{C183D7F6-B498-43B3-948B-1728B52AA6E4}';
 const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/decorative';
 const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const IMAGE_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
-const EXPORTABLE_IMAGE_DATA_URI_MIME_TYPES = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
-  'image/gif',
-  'image/svg+xml',
-  'image/webp',
-  'image/bmp',
-  'image/ico',
-  'image/tif',
-  'image/tiff',
-]);
-
 function isExportableDataUriMetadata(metadata) {
-  if (!metadata?.hasPayloadSeparator || !EXPORTABLE_IMAGE_DATA_URI_MIME_TYPES.has(metadata.mimeType)) return false;
+  if (!metadata?.hasPayloadSeparator || !IMAGE_DATA_URL_MIME_TYPES.includes(metadata.mimeType)) return false;
   if (metadata.isBase64) return true;
   if (metadata.mimeType !== 'image/svg+xml') return false;
 

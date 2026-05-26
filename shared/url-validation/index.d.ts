@@ -87,6 +87,10 @@ export function encodeTooltip(raw: string | null | undefined, maxLength?: number
 
 export const DEFAULT_TOOLTIP_MAX_LENGTH: number;
 
+export const MAX_IMAGE_DATA_URL_LENGTH: number;
+
+export const IMAGE_DATA_URL_MIME_TYPES: readonly string[];
+
 export const UrlValidationConstants: {
   DEFAULT_ALLOWED_PROTOCOLS: string[];
   OPTIONAL_PROTOCOLS: string[];

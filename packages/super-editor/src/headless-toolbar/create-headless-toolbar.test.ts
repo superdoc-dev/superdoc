@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { historyKey } from 'prosemirror-history';
-import { NodeSelection } from 'prosemirror-state';
+import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
+import { Schema } from 'prosemirror-model';
 
 const getActiveFormattingMock = vi.hoisted(() => vi.fn(() => []));
 
@@ -83,6 +84,55 @@ describe('createHeadlessToolbar', () => {
 
     expect(controller.execute?.('bold')).toBe(true);
     expect(toggleBold).toHaveBeenCalledTimes(1);
+
+    controller.destroy();
+  });
+
+  it('does not execute commands that are currently reported disabled', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: {
+          group: 'block',
+          content: 'inline*',
+          toDOM: () => ['p', 0],
+          parseDOM: [{ tag: 'p' }],
+        },
+        text: { group: 'inline' },
+        structuredContent: {
+          group: 'inline',
+          inline: true,
+          content: 'inline*',
+          attrs: {
+            lockMode: { default: 'unlocked' },
+          },
+          toDOM: () => ['span', 0],
+          parseDOM: [{ tag: 'span' }],
+        },
+      },
+    });
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [
+        schema.text('A '),
+        schema.node('structuredContent', { lockMode: 'contentLocked' }, [schema.text('Locked')]),
+      ]),
+    ]);
+    const baseState = EditorState.create({ schema, doc });
+    const state = baseState.apply(baseState.tr.setSelection(TextSelection.create(doc, 5)));
+    const toggleBold = vi.fn(() => true);
+    const superdoc = createActiveEditorHost({
+      commands: { toggleBold },
+      state,
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['bold'],
+    });
+
+    expect(controller.getSnapshot().commands.bold?.disabled).toBe(true);
+    expect(controller.execute?.('bold')).toBe(false);
+    expect(toggleBold).not.toHaveBeenCalled();
 
     controller.destroy();
   });

@@ -6,6 +6,7 @@ import type {
   ToolbarSubscriptionEvent,
 } from './types.js';
 import { createToolbarSnapshot } from './create-toolbar-snapshot.js';
+import { hasContentLockedStructuredContentSelection } from './helpers/context.js';
 import { subscribeToolbarEvents } from './subscribe-toolbar-events.js';
 import { createToolbarRegistry } from './toolbar-registry.js';
 import type { BuiltInToolbarRegistryEntry } from './internal-types.js';
@@ -107,6 +108,10 @@ export const createHeadlessToolbar = (options: CreateHeadlessToolbarOptions): He
     },
 
     execute(id: PublicToolbarItemId, payload?: unknown) {
+      if (snapshot.commands[id]?.disabled && hasContentLockedStructuredContentSelection(snapshot.context)) {
+        return false;
+      }
+
       const result = executeRegistryCommand(id, options.superdoc, snapshot, toolbarRegistry, payload);
       if (result && !destroyed) {
         refreshControllerState();

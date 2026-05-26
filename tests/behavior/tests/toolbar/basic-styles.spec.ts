@@ -28,7 +28,7 @@ test('bold button applies bold', async ({ superdoc }) => {
   await boldButton.click();
   await superdoc.waitForStable();
 
-  await expect(boldButton).toHaveClass(/active/);
+  await expect(boldButton).toHaveClass(/sd-active/);
   await superdoc.snapshot('bold applied');
 
   await superdoc.assertTextHasMarks('is a sentence', ['bold']);
@@ -42,7 +42,7 @@ test('italic button applies italic', async ({ superdoc }) => {
   await italicButton.click();
   await superdoc.waitForStable();
 
-  await expect(italicButton).toHaveClass(/active/);
+  await expect(italicButton).toHaveClass(/sd-active/);
   await superdoc.snapshot('italic applied');
 
   await superdoc.assertTextHasMarks('is a sentence', ['italic']);
@@ -56,7 +56,7 @@ test('underline button applies underline', async ({ superdoc }) => {
   await underlineButton.click();
   await superdoc.waitForStable();
 
-  await expect(underlineButton).toHaveClass(/active/);
+  await expect(underlineButton).toHaveClass(/sd-active/);
   await superdoc.snapshot('underline applied');
 
   await superdoc.assertTextHasMarks('is a sentence', ['underline']);
@@ -70,7 +70,7 @@ test('strikethrough button applies strike', async ({ superdoc }) => {
   await strikeButton.click();
   await superdoc.waitForStable();
 
-  await expect(strikeButton).toHaveClass(/active/);
+  await expect(strikeButton).toHaveClass(/sd-active/);
   await superdoc.snapshot('strikethrough applied');
 
   await superdoc.assertTextHasMarks('is a sentence', ['strike']);
@@ -92,7 +92,7 @@ test('font family dropdown changes font', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   // Assert the toolbar displays "Georgia"
-  await expect(fontButton.locator('.button-label')).toHaveText('Georgia');
+  await expect(fontButton.locator('.sd-button-label')).toHaveText('Georgia');
   await superdoc.snapshot('Georgia font applied');
 
   await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontFamily: 'Georgia' });
@@ -132,7 +132,7 @@ test('color dropdown changes text color', async ({ superdoc }) => {
   await superdoc.snapshot('color dropdown open');
 
   // Click the red color swatch (#D2003F)
-  const redSwatch = superdoc.page.locator('.option[aria-label="red"]').first();
+  const redSwatch = superdoc.page.locator('.sd-option[aria-label="red"]').first();
   await redSwatch.click();
   await superdoc.waitForStable();
 
@@ -155,7 +155,7 @@ test('highlight dropdown changes background color', async ({ superdoc }) => {
   await superdoc.snapshot('highlight dropdown open');
 
   // Click a highlight color swatch (#ECCF35)
-  const yellowSwatch = superdoc.page.locator('.option[aria-label="yellow"]').first();
+  const yellowSwatch = superdoc.page.locator('.sd-option[aria-label="yellow"]').first();
   await yellowSwatch.click();
   await superdoc.waitForStable();
 

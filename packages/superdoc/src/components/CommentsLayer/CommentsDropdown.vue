@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
           v-for="option in options"
           :key="option.key"
           class="comments-dropdown__option"
-          :class="{ disabled: option.disabled }"
+          :class="{ 'sd-disabled': option.disabled }"
           @click="onOptionClick(option)"
         >
           <span v-if="hasIcon(option)" class="comments-dropdown__option-icon">
@@ -201,7 +201,7 @@ onBeforeUnmount(() => {
   color: var(--sd-ui-comments-option-hover-text, #212121);
 }
 
-.comments-dropdown__option.disabled {
+.comments-dropdown__option.sd-disabled {
   opacity: 0.5;
   pointer-events: none;
 }

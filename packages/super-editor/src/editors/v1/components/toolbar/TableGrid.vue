@@ -35,9 +35,9 @@ const selectGridItems = (allItems, cols, rows) => {
     let itemsRows = parseInt(item.dataset.rows, 10);
 
     if (itemsCols <= cols && itemsRows <= rows) {
-      item.classList.add('selected');
+      item.classList.add('sd-selected');
     } else {
-      item.classList.remove('selected');
+      item.classList.remove('sd-selected');
     }
   }
 };
@@ -162,7 +162,7 @@ onMounted(() => {
     transition: all 0.15s;
   }
 
-  .toolbar-table-grid__item.selected {
+  .toolbar-table-grid__item.sd-selected {
     background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
   }
 
@@ -171,7 +171,7 @@ onMounted(() => {
       border-color: #000;
     }
 
-    .toolbar-table-grid__item.selected {
+    .toolbar-table-grid__item.sd-selected {
       background: #000;
     }
   }

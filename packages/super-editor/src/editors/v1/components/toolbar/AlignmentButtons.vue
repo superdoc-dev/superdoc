@@ -82,7 +82,7 @@ onMounted(() => {
     <div
       v-for="(button, index) in alignmentButtons"
       :key="button.key"
-      class="button-icon"
+      class="sd-button-icon"
       @click="select(button.key)"
       v-html="button.icon"
       data-item="btn-textAlign-option"
@@ -102,7 +102,7 @@ onMounted(() => {
   padding: 8px;
   box-sizing: border-box;
 
-  .button-icon {
+  .sd-button-icon {
     cursor: pointer;
     padding: 5px;
     font-size: var(--sd-ui-font-size-600, 16px);
@@ -129,7 +129,7 @@ onMounted(() => {
   }
 
   &.high-contrast {
-    .button-icon {
+    .sd-button-icon {
       &:hover {
         background-color: #000;
         color: #fff;

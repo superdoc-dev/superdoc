@@ -27,21 +27,21 @@ const hasColorBar = computed(() => {
 </script>
 
 <template>
-  <div class="toolbar-icon">
-    <div class="toolbar-icon__icon" :class="[`toolbar-icon__icon--${props.name}`]" v-html="icon"></div>
+  <div class="sd-toolbar-icon">
+    <div class="sd-toolbar-icon__icon" :class="[`sd-toolbar-icon__icon--${props.name}`]" v-html="icon"></div>
     <div class="color-bar" v-if="hasColorBar" :style="getBarColor"></div>
   </div>
 </template>
 
 <style scoped>
-.toolbar-icon {
+.sd-toolbar-icon {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.toolbar-icon__icon {
+.sd-toolbar-icon__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -54,12 +54,12 @@ const hasColorBar = computed(() => {
   }
 }
 
-.toolbar-icon__icon :deep(svg) {
+.sd-toolbar-icon__icon :deep(svg) {
   width: auto; /* needed for safari */
   max-height: 16px;
 }
 
-.toolbar-icon__icon--color :deep(svg) {
+.sd-toolbar-icon__icon--color :deep(svg) {
   max-height: 14px;
   margin-top: -3px;
 }

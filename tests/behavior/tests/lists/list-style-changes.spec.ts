@@ -73,8 +73,8 @@ test.describe('PR-2873 list style changes', () => {
       await superdoc.waitForStable();
       await placeCursorIn(superdoc, 'item');
 
-      await expect(superdoc.page.locator('[data-item="btn-list"]').first()).toHaveClass(/active/);
-      await expect(superdoc.page.locator('[data-item="btn-numberedlist"]').first()).not.toHaveClass(/active/);
+      await expect(superdoc.page.locator('[data-item="btn-list"]').first()).toHaveClass(/sd-active/);
+      await expect(superdoc.page.locator('[data-item="btn-numberedlist"]').first()).not.toHaveClass(/sd-active/);
     });
 
     test('numbered list button is active when caret is in an ordered list', async ({ superdoc }) => {
@@ -83,16 +83,16 @@ test.describe('PR-2873 list style changes', () => {
       await superdoc.waitForStable();
       await placeCursorIn(superdoc, 'item');
 
-      await expect(superdoc.page.locator('[data-item="btn-numberedlist"]').first()).toHaveClass(/active/);
-      await expect(superdoc.page.locator('[data-item="btn-list"]').first()).not.toHaveClass(/active/);
+      await expect(superdoc.page.locator('[data-item="btn-numberedlist"]').first()).toHaveClass(/sd-active/);
+      await expect(superdoc.page.locator('[data-item="btn-list"]').first()).not.toHaveClass(/sd-active/);
     });
 
     test('neither button is active when caret is on a plain paragraph', async ({ superdoc }) => {
       await superdoc.type('plain');
       await superdoc.waitForStable();
 
-      await expect(superdoc.page.locator('[data-item="btn-list"]').first()).not.toHaveClass(/active/);
-      await expect(superdoc.page.locator('[data-item="btn-numberedlist"]').first()).not.toHaveClass(/active/);
+      await expect(superdoc.page.locator('[data-item="btn-list"]').first()).not.toHaveClass(/sd-active/);
+      await expect(superdoc.page.locator('[data-item="btn-numberedlist"]').first()).not.toHaveClass(/sd-active/);
     });
   });
 

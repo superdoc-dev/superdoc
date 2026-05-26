@@ -140,7 +140,7 @@ test('link is not editable in viewing mode', async ({ superdoc }) => {
 
   // Link toolbar button should be disabled in viewing mode
   const linkButton = superdoc.page.locator('[data-item="btn-link"]');
-  await expect(linkButton).toHaveClass(/disabled/);
+  await expect(linkButton).toHaveClass(/sd-disabled/);
 
   // Stub window.open so we can assert navigation without depending on popup handling
   await superdoc.page.evaluate(() => {

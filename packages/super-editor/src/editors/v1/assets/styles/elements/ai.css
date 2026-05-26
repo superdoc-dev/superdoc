@@ -1,16 +1,16 @@
 /* Custom toolbar styling */
 
 /* AI button icon styling with gradient */
-.super-editor .toolbar-icon__icon--ai {
+.super-editor .sd-toolbar-icon__icon--ai {
   position: relative;
   z-index: 1;
 }
 
-.super-editor .toolbar-icon__icon--ai svg {
+.super-editor .sd-toolbar-icon__icon--ai svg {
   fill: transparent;
 }
 
-.super-editor .toolbar-icon__icon--ai::before {
+.super-editor .sd-toolbar-icon__icon--ai::before {
   content: '';
   position: absolute;
   top: 0;
@@ -33,7 +33,7 @@
   transition: filter 0.2s ease;
 }
 
-.super-editor .toolbar-icon__icon--ai:hover::before {
+.super-editor .sd-toolbar-icon__icon--ai:hover::before {
   filter: brightness(1.3);
 }
 

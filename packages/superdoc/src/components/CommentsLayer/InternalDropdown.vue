@@ -76,36 +76,36 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="internal-dropdown" :style="getStyle">
+  <div class="sd-internal-dropdown" :style="getStyle" data-sd-part="dropdown-trigger">
     <CommentsDropdown
       :options="options"
       @select="handleSelect($event)"
       :disabled="isDisabled"
       :content-style="{ fontFamily: uiFontFamily }"
     >
-      <div class="comment-option">
-        <div class="active-icon" v-html="activeIcon"></div>
-        <div class="option-state">{{ getState }}</div>
-        <div class="dropdown-caret" v-html="superdocIcons.caretDown"></div>
+      <div class="sd-comment-option">
+        <div class="sd-active-icon" v-html="activeIcon"></div>
+        <div class="sd-option-state">{{ getState }}</div>
+        <div class="sd-dropdown-caret" v-html="superdocIcons.caretDown"></div>
       </div>
     </CommentsDropdown>
   </div>
 </template>
 
 <style scoped>
-.comment-option {
+.sd-comment-option {
   display: flex;
   align-items: center;
   font-size: 11px;
 }
-.comment-option i {
+.sd-comment-option i {
   font-size: 11px;
 }
-.option-state {
+.sd-option-state {
   margin: 0 7px;
 }
 
-.active-icon {
+.sd-active-icon {
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -114,14 +114,14 @@ onMounted(() => {
   height: 16px;
 }
 
-.active-icon :deep(svg) {
+.sd-active-icon :deep(svg) {
   width: 100%;
   height: 100%;
   display: block;
   fill: currentColor;
 }
 
-.dropdown-caret {
+.sd-dropdown-caret {
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -130,21 +130,21 @@ onMounted(() => {
   height: 16px;
 }
 
-.dropdown-caret :deep(svg) {
+.sd-dropdown-caret :deep(svg) {
   width: 100%;
   height: 100%;
   display: block;
   fill: currentColor;
 }
 
-.internal-dropdown {
+.sd-internal-dropdown {
   transition: all 250ms ease;
   display: inline-flex;
   cursor: pointer;
   border-radius: 50px;
   padding: 2px 8px;
 }
-.internal-dropdown:hover {
+.sd-internal-dropdown:hover {
   background-color: #f3f3f5;
 }
 </style>

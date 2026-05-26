@@ -61,10 +61,10 @@ onMounted(() => {
 <template>
   <div class="document-mode" :class="{ 'high-contrast': isHighContrastMode }">
     <div
-      class="option-item"
+      class="sd-option-item"
       v-for="(option, index) in options"
       @click="handleClick(option)"
-      :class="{ disabled: option.disabled }"
+      :class="{ 'sd-disabled': option.disabled }"
       data-item="btn-documentMode-option"
       role="menuitem"
       ref="documentModeRefs"
@@ -100,7 +100,7 @@ onMounted(() => {
     fill: currentColor;
   }
 
-  .option-item {
+  .sd-option-item {
     display: flex;
     flex-direction: row;
     background-color: var(--sd-ui-dropdown-bg, #ffffff);
@@ -115,7 +115,7 @@ onMounted(() => {
   }
 
   &.high-contrast {
-    .option-item {
+    .sd-option-item {
       &:hover {
         background-color: #000;
         color: #fff;
@@ -135,7 +135,7 @@ onMounted(() => {
   }
 }
 
-.disabled {
+.sd-disabled {
   opacity: 0.5;
   cursor: not-allowed !important;
   pointer-events: none;

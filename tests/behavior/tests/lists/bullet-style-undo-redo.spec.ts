@@ -2,7 +2,7 @@ import { test, expect, type SuperDocFixture } from '../../fixtures/superdoc.js';
 
 test.use({ config: { toolbar: 'full' } });
 
-const BULLET_DROPDOWN_CARET = '[aria-label="Bullet list"] .dropdown-caret';
+const BULLET_DROPDOWN_CARET = '[aria-label="Bullet list"] .sd-dropdown-caret';
 const STYLE_OPTION = (label: string) => `.style-buttons-list [aria-label="${label}"]`;
 
 const STYLE_LABEL = {

@@ -13,11 +13,11 @@ async function clickBodySurface(page: Page) {
 
 async function expectToolbarButtonDisabledState(button: Locator, disabled: boolean) {
   if (disabled) {
-    await expect(button).toHaveClass(/disabled/);
+    await expect(button).toHaveClass(/sd-disabled/);
     return;
   }
 
-  await expect(button).not.toHaveClass(/disabled/);
+  await expect(button).not.toHaveClass(/sd-disabled/);
 }
 
 test('undo button removes last typed text', async ({ superdoc }) => {

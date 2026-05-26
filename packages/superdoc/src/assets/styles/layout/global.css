@@ -7,9 +7,9 @@
   box-sizing: border-box;
 }
 
-.superdoc .disabled,
-.super-editor .disabled,
-.superdoc-toolbar .disabled {
+.superdoc .sd-disabled,
+.super-editor .sd-disabled,
+.superdoc-toolbar .sd-disabled {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;

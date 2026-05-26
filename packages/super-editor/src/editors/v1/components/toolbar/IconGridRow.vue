@@ -107,9 +107,9 @@ const handleKeyDown = (event, rowIndex, optionIndex, option) => {
 };
 </script>
 <template>
-  <div class="option-row" v-for="(row, rowIndex) in icons" :key="rowIndex" role="group" ref="rowRefs">
+  <div class="sd-option-row" v-for="(row, rowIndex) in icons" :key="rowIndex" role="group" ref="rowRefs">
     <div
-      class="option"
+      class="sd-option"
       v-for="(option, optionIndex) in row"
       :key="optionIndex"
       :aria-label="option.label"
@@ -118,11 +118,11 @@ const handleKeyDown = (event, rowIndex, optionIndex, option) => {
       @click.stop.prevent="handleClick(option)"
       @keydown.prevent="(event) => handleKeyDown(event, rowIndex, optionIndex, option)"
     >
-      <div class="option__icon" v-html="option.icon" :style="option.style"></div>
+      <div class="sd-option__icon" v-html="option.icon" :style="option.style"></div>
 
       <div
         v-if="isActive(option)"
-        class="option__check"
+        class="sd-option__check"
         v-html="toolbarIcons.colorOptionCheck"
         :style="getCheckStyle(option.value, optionIndex)"
       ></div>
@@ -131,11 +131,11 @@ const handleKeyDown = (event, rowIndex, optionIndex, option) => {
 </template>
 
 <style scoped>
-.option-row {
+.sd-option-row {
   display: flex;
   flex-direction: row;
 }
-.option {
+.sd-option {
   border-radius: 50%;
   cursor: pointer;
   padding: 3px;
@@ -146,17 +146,17 @@ const handleKeyDown = (event, rowIndex, optionIndex, option) => {
   box-sizing: border-box;
 }
 
-.option:hover {
+.sd-option:hover {
   background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
 }
 
-.option__icon {
+.sd-option__icon {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
 }
 
-.option__check {
+.sd-option__check {
   width: 14px;
   height: 14px;
   flex-shrink: 0;

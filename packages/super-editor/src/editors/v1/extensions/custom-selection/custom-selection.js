@@ -144,7 +144,12 @@ const isToolbarInput = (target) => {
  * @returns {boolean} True if toolbar button
  */
 const isToolbarButton = (target) => {
-  return !!target?.closest('.toolbar-button') || target?.classList?.contains('toolbar-button');
+  return (
+    !!target?.closest('.sd-toolbar-button') ||
+    !!target?.closest('.toolbar-button') ||
+    target?.classList?.contains('sd-toolbar-button') ||
+    target?.classList?.contains('toolbar-button')
+  );
 };
 
 /**

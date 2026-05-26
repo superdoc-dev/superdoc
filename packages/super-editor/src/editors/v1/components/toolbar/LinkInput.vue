@@ -258,7 +258,7 @@ const navigateToAnchor = (url) => {
           type="text"
           name="link"
           placeholder="Type or paste a link"
-          :class="{ error: urlError }"
+          :class="{ 'sd-error': urlError }"
           v-model="rawUrl"
           :readonly="isViewingMode"
           @keydown.enter.stop.prevent="handleSubmit"
@@ -267,7 +267,7 @@ const navigateToAnchor = (url) => {
 
         <div
           class="open-link-icon"
-          :class="{ disabled: !validUrl }"
+          :class="{ 'sd-disabled': !validUrl }"
           v-html="toolbarIcons.openLink"
           @click="openLink"
           data-item="btn-link-open"
@@ -279,7 +279,7 @@ const navigateToAnchor = (url) => {
           Remove
         </button>
         <button
-          class="submit-btn"
+          class="sd-submit-btn"
           @click="handleSubmit"
           :class="{ 'disable-btn': isDisabled }"
           data-item="btn-link-apply"
@@ -406,7 +406,7 @@ const navigateToAnchor = (url) => {
   height: 15px;
 }
 
-.disabled {
+.sd-disabled {
   opacity: 0.6;
   cursor: not-allowed;
   pointer-events: none;
@@ -477,7 +477,7 @@ const navigateToAnchor = (url) => {
   background-color: var(--sd-ui-hover-bg, #dbdbdb);
 }
 
-.submit-btn {
+.sd-submit-btn {
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -500,12 +500,8 @@ const navigateToAnchor = (url) => {
   }
 }
 
-.error {
+.sd-error {
   border-color: red !important;
   background-color: #ff00001a;
-}
-
-.submit {
-  cursor: pointer;
 }
 </style>

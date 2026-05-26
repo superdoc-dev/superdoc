@@ -741,7 +741,7 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
 
       await nextTick();
 
-      expect(wrapper.find('.submit-btn').exists()).toBe(true);
+      expect(wrapper.find('.sd-submit-btn').exists()).toBe(true);
     });
 
     it('should show Remove button in editing mode when editing existing link', async () => {
@@ -787,7 +787,7 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
 
       const openLinkBtn = wrapper.find('.open-link-icon');
       expect(openLinkBtn.exists()).toBe(true);
-      expect(openLinkBtn.classes()).not.toContain('disabled');
+      expect(openLinkBtn.classes()).not.toContain('sd-disabled');
     });
 
     it('should handle submit in editing mode', async () => {
@@ -916,7 +916,7 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
       await nextTick();
 
       const openLinkBtn = wrapper.find('.open-link-icon');
-      expect(openLinkBtn.classes()).toContain('disabled');
+      expect(openLinkBtn.classes()).toContain('sd-disabled');
 
       wrapper.vm.handleSubmit();
       await openLinkBtn.trigger('click');

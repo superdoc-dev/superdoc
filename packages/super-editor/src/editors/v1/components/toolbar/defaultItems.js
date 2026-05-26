@@ -895,7 +895,7 @@ export const makeDefaultItems = ({
     disabled: role !== 'editor',
     attributes: {
       dropdownPosition: 'right',
-      className: 'toolbar-item--doc-mode',
+      className: 'sd-toolbar-item--doc-mode',
       ariaLabel: 'Document mode',
     },
     options: [
@@ -994,7 +994,7 @@ export const makeDefaultItems = ({
     suppressActiveHighlight: true,
     disabled: false,
     attributes: {
-      className: 'toolbar-item--linked-styles',
+      className: 'sd-toolbar-item--linked-styles',
       ariaLabel: 'Linked styles',
     },
     options: [
@@ -1091,14 +1091,14 @@ export const makeDefaultItems = ({
   if (shouldUseLgCompactStyles) {
     documentMode.attributes.value = {
       ...documentMode.attributes.value,
-      className: `${documentMode.attributes.value.className} toolbar-item--doc-mode-compact`,
+      className: `${documentMode.attributes.value.className} sd-toolbar-item--doc-mode-compact`,
     };
   }
 
   if (shouldUseLgCompactStyles) {
     linkedStyles.attributes.value = {
       ...linkedStyles.attributes.value,
-      className: `${linkedStyles.attributes.value.className} toolbar-item--linked-styles-compact`,
+      className: `${linkedStyles.attributes.value.className} sd-toolbar-item--linked-styles-compact`,
     };
   }
 

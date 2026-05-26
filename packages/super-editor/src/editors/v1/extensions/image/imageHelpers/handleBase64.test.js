@@ -74,6 +74,20 @@ describe('handleBase64', () => {
     expect(file.type).toBe('image/svg+xml');
   });
 
+  it('handles non-base64 svg data URI filenames', async () => {
+    const payload = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" />';
+    const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(payload)}`;
+
+    const { filename, mimeType } = getBase64FileMeta(dataUri);
+    const file = base64ToFile(dataUri);
+
+    expect(mimeType).toBe('image/svg+xml');
+    expect(filename).toBe(file.name);
+    expect(file.name).toMatch(/^image-\d+\.svg$/);
+    expect(file.type).toBe('image/svg+xml');
+    await expect(file.text()).resolves.toBe(payload);
+  });
+
   it('defaults metadata when mime data is missing', () => {
     vi.stubGlobal('atob', (encoded) => Buffer.from(encoded, 'base64').toString('binary'));
 

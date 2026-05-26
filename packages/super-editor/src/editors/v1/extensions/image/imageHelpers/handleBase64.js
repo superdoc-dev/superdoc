@@ -35,38 +35,63 @@ const decodeBase64ToBinaryString = (data) => {
   throw new Error('Unable to decode base64 payload in the current environment.');
 };
 
-/**
- * Extract metadata from a base64-encoded string.
- * @param {string} base64String - The base64-encoded string.
- * @returns {Object} An object containing mimeType, binaryString, and filename.
- */
-const extractBase64Meta = (base64String) => {
-  const [meta = '', payload = ''] = base64String.split(',');
-  const mimeMatch = meta.match(/:(.*?);/);
-  const rawMimeType = mimeMatch ? mimeMatch[1] : '';
-  const mimeType = rawMimeType || DEFAULT_MIME_TYPE;
-  const binaryString = decodeBase64ToBinaryString(payload);
-  const hash = simpleHash(binaryString);
-  const extension = mimeType === 'image/svg+xml' ? 'svg' : mimeType.split('/')[1] || 'bin';
-  const filename = `image-${hash}.${extension}`;
-
-  return { mimeType, binaryString, filename };
+const decodeDataUriText = (data) => {
+  try {
+    return decodeURIComponent(data);
+  } catch {
+    return data;
+  }
 };
 
-export const getBase64FileMeta = (base64String) => {
-  const { mimeType, filename } = extractBase64Meta(base64String);
-  return { mimeType, filename };
-};
-
-export const base64ToFile = (base64String) => {
-  const { mimeType, binaryString, filename } = extractBase64Meta(base64String);
-  const fileType = mimeType || DEFAULT_MIME_TYPE;
-
+const binaryStringToBytes = (binaryString) => {
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);
   }
+  return bytes;
+};
 
-  const blob = new Blob([bytes], { type: fileType });
+const splitDataUri = (dataUri) => {
+  const separatorIndex = dataUri.indexOf(',');
+  if (separatorIndex === -1) {
+    return { meta: dataUri, payload: '' };
+  }
+
+  return {
+    meta: dataUri.slice(0, separatorIndex),
+    payload: dataUri.slice(separatorIndex + 1),
+  };
+};
+
+/**
+ * Extract metadata from a data URI string.
+ * @param {string} dataUri - The data URI string.
+ * @returns {Object} An object containing mimeType, binaryString, and filename.
+ */
+const extractBase64Meta = (dataUri) => {
+  const { meta = '', payload = '' } = splitDataUri(dataUri);
+  const metaParts = meta.startsWith('data:') ? meta.slice(5).split(';') : [];
+  const rawMimeType = metaParts[0] || '';
+  const mimeType = rawMimeType || DEFAULT_MIME_TYPE;
+  const isBase64 = metaParts.some((part) => part.toLowerCase() === 'base64');
+  const binaryString = isBase64 ? decodeBase64ToBinaryString(payload) : decodeDataUriText(payload);
+  const hash = simpleHash(binaryString);
+  const extension = mimeType === 'image/svg+xml' ? 'svg' : mimeType.split('/')[1] || 'bin';
+  const filename = `image-${hash}.${extension}`;
+
+  return { mimeType, binaryString, filename, isBase64 };
+};
+
+export const getBase64FileMeta = (dataUri) => {
+  const { mimeType, filename } = extractBase64Meta(dataUri);
+  return { mimeType, filename };
+};
+
+export const base64ToFile = (dataUri) => {
+  const { mimeType, binaryString, filename, isBase64 } = extractBase64Meta(dataUri);
+  const fileType = mimeType || DEFAULT_MIME_TYPE;
+
+  const data = isBase64 ? binaryStringToBytes(binaryString) : binaryString;
+  const blob = new Blob([data], { type: fileType });
   return new File([blob], filename, { type: fileType });
 };

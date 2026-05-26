@@ -39,10 +39,14 @@ vi.mock('prosemirror-transform', () => ({
 }));
 
 // ── Image helper mocks ───────────────────────────────────────────────
-vi.mock('./handleBase64', () => ({
-  base64ToFile: vi.fn(() => null),
-  getBase64FileMeta: vi.fn(() => ({ filename: 'image.png' })),
-}));
+vi.mock('./handleBase64', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    base64ToFile: vi.fn(() => null),
+    getBase64FileMeta: vi.fn(actual.getBase64FileMeta),
+  };
+});
 
 vi.mock('./handleUrl', () => ({
   urlToFile: vi.fn(() => Promise.resolve(null)),
@@ -176,6 +180,28 @@ describe('handleBrowserPath', () => {
     getBase64FileMeta.mockReturnValueOnce({ filename: 'image-123.svg', mimeType: 'image/svg+xml' });
 
     handleBrowserPath([{ node: imageNode, pos: 20, id }], editor, view, state);
+
+    expect(checkAndProcessImage).not.toHaveBeenCalled();
+    expect(uploadAndInsertImage).not.toHaveBeenCalled();
+    expect(addImageRelationship).toHaveBeenCalledWith({
+      editor,
+      path: expect.stringMatching(/^media\/image-\d+\.svg$/),
+    });
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(20, undefined, {
+      ...imageNode.attrs,
+      src: expect.stringMatching(/^word\/media\/image-\d+\.svg$/),
+      rId: 'rId99',
+    });
+  });
+
+  it('registers sized non-base64 SVG data URI images in place', () => {
+    const svgDataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" />')}`;
+    const imageNode = createImageNode({
+      src: svgDataUri,
+      size: { width: 200, height: 50 },
+    });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
 
     expect(checkAndProcessImage).not.toHaveBeenCalled();
     expect(uploadAndInsertImage).not.toHaveBeenCalled();

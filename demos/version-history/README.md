@@ -42,11 +42,8 @@ A backend-first implementation of Google Docs-style version history using SuperD
 ```
 version-history/
 ├── backend/
-│   ├── src/              # REST API (Fastify + SuperDoc SDK)
-│   │   ├── routes/       # API endpoints
-│   │   ├── services/     # Document & version logic
-│   │   └── sdk/          # SuperDoc SDK wrapper
-│   ├── collab-server.js  # Hocuspocus WebSocket server
+│   ├── src/
+│   │   └── server.ts     # Single-file server (REST + WebSocket)
 │   └── package.json
 ├── client/
 │   ├── src/              # React frontend
@@ -64,9 +61,8 @@ pnpm install
 pnpm dev
 ```
 
-This starts three servers:
-- **REST API** on `http://localhost:3001`
-- **Collab server** on `ws://localhost:1234`
+This starts two servers:
+- **Backend** (REST + WebSocket) on `http://localhost:3001`
 - **Vite dev server** on `http://localhost:5173`
 
 Or run individually:
@@ -101,3 +97,37 @@ cd client && pnpm dev
 3. **Save Version**: Backend exports current doc state via SDK, stores as DOCX snapshot
 4. **View Version**: Client downloads DOCX blob and renders in preview
 5. **Revert**: Backend loads snapshot, replaces collab room state, syncs to all clients
+
+## Backend Overview
+
+The backend is implemented as a single-file Node.js server (`backend/src/server.ts`, ~740 lines) that combines both the REST API and WebSocket collaboration layer on a single port.
+
+### Server Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Fastify HTTP Server (PORT 3001)                       │
+│  ├── REST API (/api/documents, /api/.../versions)      │
+│  └── WebSocket upgrades → Hocuspocus (collaboration)   │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Code Organization
+
+The server is organized into namespaced modules to keep responsibilities clearly separated:
+
+| Namespace | Purpose |
+|-----------|---------|
+| `Config` | Port, paths, and limits (50 rooms, 10 versions per room) |
+| `SDK` | SuperDoc client lifecycle management (open, close, export) |
+| `Docs` | Document registry with LRU eviction |
+| `Versions` | Version storage with in-memory blob cache |
+| `Collab` | Hocuspocus WebSocket collaboration server |
+| `API` | HTTP route handlers |
+
+### Key Endpoints
+
+- `POST /api/documents` - Upload a document and receive a `documentId`
+- `POST /api/documents/:id/versions` - Save the current document state as a version
+- `GET /api/documents/:id/versions` - List all saved versions (polled by the client)
+- `POST /api/documents/:id/versions/:versionId/revert` - Restore the document to a previous version

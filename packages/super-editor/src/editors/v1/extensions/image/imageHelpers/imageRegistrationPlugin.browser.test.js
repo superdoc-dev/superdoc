@@ -215,6 +215,24 @@ describe('handleBrowserPath', () => {
       rId: 'rId99',
     });
   });
+
+  it('mirrors in-place SVG media to the parent editor media store', () => {
+    const svgDataUri = 'data:image/svg+xml;base64,PHN2Zy8+';
+    const parentEditor = { storage: { image: { media: {} } } };
+    editor.options.parentEditor = parentEditor;
+    editor.options.isHeaderOrFooter = true;
+    const imageNode = createImageNode({
+      src: svgDataUri,
+      size: { width: 200, height: 50 },
+    });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+
+    const mediaPath = Object.keys(editor.storage.image.media)[0];
+    expect(mediaPath).toMatch(/^word\/media\/image-\d+\.svg$/);
+    expect(editor.storage.image.media[mediaPath]).toBe(svgDataUri);
+    expect(parentEditor.storage.image.media[mediaPath]).toBe(svgDataUri);
+  });
 });
 
 describe('registerRelativeImages (via handleBrowserPath)', () => {

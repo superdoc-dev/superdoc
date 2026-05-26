@@ -19,11 +19,7 @@ export function structuredContentNodeToBlocks({
   const inlineMetadata = resolveNodeSdtMetadata(node, 'structuredContent');
   const nextSdt = inlineMetadata ?? sdtMetadata;
 
-  if (
-    inlineMetadata?.type === 'structuredContent' &&
-    inlineMetadata.scope === 'inline' &&
-    (!node.content || node.content.length === 0)
-  ) {
+  if (inlineMetadata?.scope === 'inline' && (!node.content || node.content.length === 0)) {
     const pos = positions.get(node);
     const contentPos = pos ? pos.start + 1 : undefined;
     const placeholder: TextRun = {

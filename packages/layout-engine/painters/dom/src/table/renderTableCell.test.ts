@@ -241,6 +241,111 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.height).toBe('40px');
   });
 
+  it('forces flowing image blocks to block display inside table cells', () => {
+    const imageBlock: ImageBlock = {
+      kind: 'image',
+      id: 'img-inline-display',
+      src: 'data:image/png;base64,AAA',
+      display: 'inline',
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [{ kind: 'image' as const, width: 50, height: 40 }],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-inline-display-image', blocks: [imageBlock], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.style.display).toBe('block');
+  });
+
+  it('applies top-level clipPath to flowing image blocks inside table cells', () => {
+    const imageBlock = {
+      kind: 'image',
+      id: 'img-clipped-flow',
+      src: 'data:image/png;base64,AAA',
+      clipPath: 'inset(10% 20% 30% 40%)',
+    } as ImageBlock;
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [{ kind: 'image' as const, width: 50, height: 40 }],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-clipped-flow', blocks: [imageBlock], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.style.clipPath).toBe('inset(10% 20% 30% 40%)');
+    expect(imgEl?.parentElement?.style.overflow).toBe('hidden');
+  });
+
+  it('applies filter styles to flowing image blocks inside table cells', () => {
+    const imageBlock: ImageBlock = {
+      kind: 'image',
+      id: 'img-filtered-flow',
+      src: 'data:image/png;base64,AAA',
+      grayscale: true,
+      gain: 2,
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [{ kind: 'image' as const, width: 50, height: 40 }],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-filtered-flow', blocks: [imageBlock], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.style.filter).toContain('grayscale(100%)');
+    expect(imgEl?.style.filter).toContain('contrast(2)');
+  });
+
+  it('wraps flowing image blocks with hyperlinks inside table cells', () => {
+    const imageBlock: ImageBlock = {
+      kind: 'image',
+      id: 'img-linked-flow',
+      src: 'data:image/png;base64,AAA',
+      hyperlink: { url: 'https://example.com/image', tooltip: 'Open image' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [{ kind: 'image' as const, width: 50, height: 40 }],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-linked-flow', blocks: [imageBlock], attrs: {} },
+    });
+
+    const anchor = cellElement.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+    expect(anchor).toBeTruthy();
+    expect(anchor?.href).toBe('https://example.com/image');
+    expect(anchor?.querySelector('img.superdoc-table-image')).toBeTruthy();
+  });
+
   it('absolutely positions anchored image blocks inside table cells', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',
@@ -290,6 +395,112 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.position).toBe('absolute');
     expect(imgEl?.parentElement?.style.left).toBe('10px');
     expect(imgEl?.parentElement?.style.top).toBe('5px');
+  });
+
+  it('applies top-level clipPath to anchored image blocks inside table cells', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor-clip',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchoredImage = {
+      kind: 'image',
+      id: 'img-clipped-anchor',
+      src: 'data:image/png;base64,AAA',
+      clipPath: 'inset(5% 10% 15% 20%)',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 10, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor-clip' },
+    } as ImageBlock;
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 30,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-clipped-anchor', blocks: [para, anchoredImage], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.style.clipPath).toBe('inset(5% 10% 15% 20%)');
+    expect(imgEl?.parentElement?.style.overflow).toBe('hidden');
+  });
+
+  it('applies filter styles to anchored image blocks inside table cells', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor-filter',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-filtered-anchor',
+      src: 'data:image/png;base64,AAA',
+      grayscale: true,
+      lum: { bright: 25000, contrast: -50000 },
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 10, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor-filter' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 30,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-filtered-anchor', blocks: [para, anchoredImage], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.style.filter).toContain('grayscale(100%)');
+    expect(imgEl?.style.filter).toContain('contrast(0.5)');
+    expect(imgEl?.style.filter).toContain('brightness(1.25)');
+  });
+
+  it('wraps anchored image blocks with hyperlinks inside table cells', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor-link',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-linked-anchor',
+      src: 'data:image/png;base64,AAA',
+      hyperlink: { url: 'https://example.com/anchored-image' },
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 10, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor-link' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 30,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-linked-anchor', blocks: [para, anchoredImage], attrs: {} },
+    });
+
+    const anchor = cellElement.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+    expect(anchor).toBeTruthy();
+    expect(anchor?.href).toBe('https://example.com/anchored-image');
+    expect(anchor?.parentElement?.style.position).toBe('absolute');
+    expect(anchor?.querySelector('img.superdoc-table-image')).toBeTruthy();
   });
 
   it('keeps partial-row segment indexing aligned when anchored blocks are between paragraphs', () => {

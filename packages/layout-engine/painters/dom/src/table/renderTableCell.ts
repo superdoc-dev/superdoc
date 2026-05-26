@@ -1,9 +1,11 @@
 import type {
   CellBorders,
   DrawingBlock,
+  ImageDrawing,
   DrawingMeasure,
   Fragment,
   ImageBlock,
+  ImageHyperlink,
   ImageMeasure,
   Line,
   ParagraphBlock,
@@ -20,7 +22,8 @@ import { rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdo
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
-import { applyImageClipPath } from '../utils/image-clip-path.js';
+import { createBlockImageContent } from '../images/image-block.js';
+import { buildImageHyperlinkAnchor } from '../images/hyperlink.js';
 import {
   getSdtContainerKeyForBlock,
   getSdtSiblingBoundaries,
@@ -686,6 +689,12 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
   const attrs = cell?.attrs;
   const padding = attrs?.padding || { top: 0, left: 4, right: 4, bottom: 0 };
+  const buildTableImageHyperlinkAnchor = (
+    imageEl: HTMLElement,
+    hyperlink: ImageHyperlink | undefined,
+    display: 'block' | 'inline-block',
+  ): HTMLElement => buildImageHyperlinkAnchor(doc, imageEl, hyperlink, display);
+
   // RTL: swap left↔right cell margins (ECMA-376 Part 4 §14.3.3–14.3.4, §14.3.7–14.3.8)
   const paddingLeft = isRtl ? (padding.right ?? 4) : (padding.left ?? 4);
   const paddingTop = padding.top ?? 0;
@@ -849,23 +858,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         imageWrapper.style.boxSizing = 'border-box';
         applySdtDataset(imageWrapper, (block as ImageBlock).attrs?.sdt);
 
-        const imgEl = doc.createElement('img');
-        imgEl.classList.add('superdoc-table-image');
-        if (block.src) {
-          imgEl.src = block.src;
-        }
-        imgEl.alt = block.alt ?? '';
-        imgEl.style.width = '100%';
-        imgEl.style.height = '100%';
-        imgEl.style.objectFit = block.objectFit ?? 'contain';
-        // MS Word anchors stretched images to top-left, clipping from right/bottom
-        if (block.objectFit === 'cover') {
-          imgEl.style.objectPosition = 'left top';
-        }
-        applyImageClipPath(imgEl, block.attrs?.clipPath, { clipContainer: imageWrapper });
-        imgEl.style.display = 'block';
-
-        imageWrapper.appendChild(imgEl);
+        imageWrapper.appendChild(
+          createBlockImageContent({
+            doc,
+            block,
+            className: 'superdoc-table-image',
+            clipContainer: imageWrapper,
+            imageDisplay: 'block',
+            buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+          }),
+        );
         content.appendChild(imageWrapper);
         flowCursorY += blockMeasure.height;
         continue;
@@ -909,19 +911,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         drawingInner.style.overflow = 'hidden';
 
         if (block.drawingKind === 'image' && 'src' in block && block.src) {
-          const img = doc.createElement('img');
-          img.classList.add('superdoc-drawing-image');
-          img.src = block.src;
-          img.alt = block.alt ?? '';
-          img.style.width = '100%';
-          img.style.height = '100%';
-          img.style.objectFit = block.objectFit ?? 'contain';
-          // MS Word anchors stretched images to top-left, clipping from right/bottom
-          if (block.objectFit === 'cover') {
-            img.style.objectPosition = 'left top';
-          }
-          applyImageClipPath(img, block.attrs?.clipPath, { clipContainer: drawingInner });
-          drawingInner.appendChild(img);
+          drawingInner.appendChild(
+            createBlockImageContent({
+              doc,
+              block: block as ImageDrawing,
+              className: 'superdoc-drawing-image',
+              clipContainer: drawingInner,
+              imageDisplay: 'block',
+              buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+            }),
+          );
         } else if (renderDrawingContent) {
           // Use the callback for other drawing types (vectorShape, shapeGroup, etc.)
           const drawingContent = renderDrawingContent(block as DrawingBlock);
@@ -1093,21 +1092,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         imageWrapper.style.zIndex = String(zIndex);
         applySdtDataset(imageWrapper, anchoredBlock.attrs?.sdt);
 
-        const imgEl = doc.createElement('img');
-        imgEl.classList.add('superdoc-table-image');
-        if (anchoredBlock.src) {
-          imgEl.src = anchoredBlock.src;
-        }
-        imgEl.alt = anchoredBlock.alt ?? '';
-        imgEl.style.width = '100%';
-        imgEl.style.height = '100%';
-        imgEl.style.objectFit = anchoredBlock.objectFit ?? 'contain';
-        if (anchoredBlock.objectFit === 'cover') {
-          imgEl.style.objectPosition = 'left top';
-        }
-        applyImageClipPath(imgEl, anchoredBlock.attrs?.clipPath, { clipContainer: imageWrapper });
-        imgEl.style.display = 'block';
-        imageWrapper.appendChild(imgEl);
+        imageWrapper.appendChild(
+          createBlockImageContent({
+            doc,
+            block: anchoredBlock,
+            className: 'superdoc-table-image',
+            clipContainer: imageWrapper,
+            imageDisplay: 'block',
+            buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+          }),
+        );
         content.appendChild(imageWrapper);
       } else {
         const drawingWrapper = doc.createElement('div');
@@ -1131,18 +1125,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         drawingInner.style.overflow = 'hidden';
 
         if (anchoredBlock.drawingKind === 'image' && 'src' in anchoredBlock && anchoredBlock.src) {
-          const img = doc.createElement('img');
-          img.classList.add('superdoc-drawing-image');
-          img.src = anchoredBlock.src;
-          img.alt = anchoredBlock.alt ?? '';
-          img.style.width = '100%';
-          img.style.height = '100%';
-          img.style.objectFit = anchoredBlock.objectFit ?? 'contain';
-          if (anchoredBlock.objectFit === 'cover') {
-            img.style.objectPosition = 'left top';
-          }
-          applyImageClipPath(img, anchoredBlock.attrs?.clipPath, { clipContainer: drawingInner });
-          drawingInner.appendChild(img);
+          drawingInner.appendChild(
+            createBlockImageContent({
+              doc,
+              block: anchoredBlock as ImageDrawing,
+              className: 'superdoc-drawing-image',
+              clipContainer: drawingInner,
+              imageDisplay: 'block',
+              buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+            }),
+          );
         } else if (renderDrawingContent) {
           const drawingContent = renderDrawingContent(anchoredBlock as DrawingBlock);
           drawingContent.style.width = '100%';

@@ -1,7 +1,7 @@
 import type { ImageBlock, ImageRun } from '@superdoc/contracts';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import { assertPmPositions } from '../pm-position-validation.js';
-import { applyImageClipPath } from '../utils/image-clip-path.js';
+import { applyImageClipPath, readImageClipPathValue } from '../images/image-clip-path.js';
 import type { RunRenderContext } from './types.js';
 import { applyRunDataAttributes } from './hash.js';
 import { sanitizeUrl } from './links.js';
@@ -110,17 +110,6 @@ export const buildImageFilters = (source: ImageFilterSource): string[] => {
   }
 
   return filters;
-};
-
-const CLIP_PATH_PREFIXES = ['inset(', 'polygon(', 'circle(', 'ellipse(', 'path(', 'rect('];
-
-const readClipPathValue = (value: unknown): string => {
-  if (typeof value !== 'string') return '';
-  const normalized = value.trim();
-  if (normalized.length === 0) return '';
-  const lower = normalized.toLowerCase();
-  if (!CLIP_PATH_PREFIXES.some((prefix) => lower.startsWith(prefix))) return '';
-  return normalized;
 };
 
 /**
@@ -341,7 +330,7 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
     applyRunDataAttributes(img, run.dataAttrs);
   }
 
-  const runClipPath = readClipPathValue((run as { clipPath?: unknown }).clipPath);
+  const runClipPath = readImageClipPathValue((run as { clipPath?: unknown }).clipPath);
   if (runClipPath) {
     img.style.clipPath = runClipPath;
     img.style.display = 'block';

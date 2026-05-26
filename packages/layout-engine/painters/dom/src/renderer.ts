@@ -5,12 +5,9 @@ import type {
   DrawingBlock,
   DrawingFragment,
   DrawingGeometry,
-  FlowBlock,
   FlowMode,
   Fragment,
   GradientFill,
-  ImageBlock,
-  ImageDrawing,
   ImageFragment,
   ImageHyperlink,
   Line,
@@ -25,9 +22,7 @@ import type {
   ShapeTextContent,
   SolidFillWithAlpha,
   SourceAnchor,
-  TableAttrs,
   TableBlock,
-  TableCellAttrs,
   TableFragment,
   TableMeasure,
   VectorShapeDrawing,
@@ -51,10 +46,8 @@ import {
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
-import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from './constants.js';
 import { createChartElement as renderChartToElement } from './chart-renderer.js';
-import { hashCellBorders, hashTableBorders } from './paragraph-hash-utils.js';
 import { createRulerElement, ensureRulerStyles, generateRulerDefinitionFromPx } from './ruler/index.js';
 import {
   CLASS_NAMES,
@@ -75,16 +68,9 @@ import {
 } from './styles.js';
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
-import { applyImageClipPath } from './utils/image-clip-path.js';
 import { computeSdtBoundaries } from './sdt/boundaries.js';
 import { shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './sdt/container.js';
-import {
-  applyContainerSdtDataset,
-  applySdtDataset,
-  getSdtMetadataId,
-  getSdtMetadataLockMode,
-  getSdtMetadataVersion,
-} from './sdt/dataset.js';
+import { applyContainerSdtDataset, applySdtDataset } from './sdt/dataset.js';
 import {
   createInlineSdtWrapper,
   expandSdtWrapperPmRange,
@@ -97,12 +83,18 @@ import {
   type PaintSnapshotStructuredContentInlineEntity,
 } from './sdt/snapshot.js';
 import { computeBetweenBorderFlags, type BetweenBorderInfo } from './paragraph/borders/index.js';
-import { deriveParagraphBlockVersion, hashParagraphBlockForTableVersion } from './paragraph/block-version.js';
 import { applyParagraphFragmentPmAttributes } from './paragraph/frame.js';
 import { renderParagraphFragment as renderParagraphFragmentElement } from './paragraph/renderParagraphFragment.js';
 import { renderLine as renderRunLine } from './runs/render-line.js';
 import type { RunRenderContext } from './runs/types.js';
-import { buildImageFilters } from './runs/image-run.js';
+import {
+  createDrawingImageElement,
+  createShapeGroupImageElement,
+  createShapeTextImageElement,
+} from './images/drawing-image.js';
+import { renderImageFragment as renderImageFragmentElement } from './images/image-fragment.js';
+import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './images/hyperlink.js';
+import { applyStyles } from './utils/apply-styles.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
 
@@ -2611,137 +2603,21 @@ export class DomPainter {
     context: FragmentRenderContext,
     resolvedItem?: ResolvedImageItem,
   ): HTMLElement {
-    try {
-      // Pre-extracted block from the resolved item.
-      if (resolvedItem?.block?.kind !== 'image') {
-        throw new Error(`DomPainter: missing resolved image block for fragment ${fragment.blockId}`);
-      }
-      const block = resolvedItem.block as ImageBlock;
-
-      if (!this.doc) {
-        throw new Error('DomPainter: document is not available');
-      }
-
-      const fragmentEl = this.doc.createElement('div');
-      fragmentEl.classList.add(CLASS_NAMES.fragment, DOM_CLASS_NAMES.IMAGE_FRAGMENT);
-      applyStyles(fragmentEl, fragmentStyles);
-      if (resolvedItem) {
-        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section, context.story);
-      } else {
-        this.applyFragmentFrame(fragmentEl, fragment, context.section, context.story);
-        fragmentEl.style.height = `${fragment.height}px`;
-        this.applyFragmentWrapperZIndex(fragmentEl, fragment);
-      }
-      applySdtDataset(fragmentEl, block.attrs?.sdt);
-      applyContainerSdtDataset(fragmentEl, block.attrs?.containerSdt);
-
-      // Add block ID for PM transaction targeting
-      if (block.id) {
-        fragmentEl.setAttribute('data-sd-block-id', block.id);
-      }
-
-      // Add PM position markers for transaction targeting
-      const imgPmStart = resolvedItem?.pmStart;
-      if (imgPmStart != null) {
-        fragmentEl.dataset.pmStart = String(imgPmStart);
-      }
-      const imgPmEnd = resolvedItem?.pmEnd;
-      if (imgPmEnd != null) {
-        fragmentEl.dataset.pmEnd = String(imgPmEnd);
-      }
-
-      // Add metadata for interactive image resizing (skip watermarks - they should not be interactive)
-      const imgMetadata = resolvedItem?.metadata;
-      if (imgMetadata && !block.attrs?.vmlWatermark) {
-        fragmentEl.setAttribute('data-image-metadata', JSON.stringify(imgMetadata));
-      }
-
-      // behindDoc images are supported via z-index; suppress noisy debug logs
-
-      const img = this.doc.createElement('img');
-      if (block.src) {
-        img.src = block.src;
-      }
-      img.alt = block.alt ?? '';
-      img.style.width = '100%';
-      img.style.height = '100%';
-      img.style.objectFit = block.objectFit ?? 'contain';
-      // MS Word anchors stretched images to top-left, clipping from right/bottom
-      if (block.objectFit === 'cover') {
-        img.style.objectPosition = 'left top';
-      }
-      const imageClipPath = resolveBlockClipPath(block);
-      applyImageClipPath(img, imageClipPath, { clipContainer: fragmentEl });
-      img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
-
-      // Keep srcRect crop/zoom transforms on the image element. Apply geometry transforms
-      // on the fragment wrapper so rotation/flip do not overwrite clip-path scaling.
-      this.applyImageGeometryTransform(fragmentEl, {
-        width: block.width ?? fragment.width,
-        height: block.height ?? fragment.height,
-        rotation: block.rotation,
-        flipH: block.flipH,
-        flipV: block.flipV,
-      });
-
-      const filters = buildImageFilters(block);
-      if (filters.length > 0) {
-        img.style.filter = filters.join(' ');
-      }
-
-      // Wrap in anchor when block has a DrawingML hyperlink (a:hlinkClick)
-      const imageChild = this.buildImageHyperlinkAnchor(img, block.hyperlink, 'block');
-      fragmentEl.appendChild(imageChild);
-
-      return fragmentEl;
-    } catch (error) {
-      console.error('[DomPainter] Image fragment rendering failed:', { fragment, error });
-      return this.createErrorPlaceholder(fragment.blockId, error);
-    }
-  }
-
-  private buildImageGeometryTransform(attrs: {
-    width: number;
-    height: number;
-    rotation?: number;
-    flipH?: boolean;
-    flipV?: boolean;
-  }): string {
-    const transforms: string[] = [];
-    if (attrs.rotation != null && attrs.rotation !== 0) {
-      const angleRad = (attrs.rotation * Math.PI) / 180;
-      const cosA = Math.cos(angleRad);
-      const sinA = Math.sin(angleRad);
-      const newTopLeftX = (attrs.width / 2) * (1 - cosA) + (attrs.height / 2) * sinA;
-      const newTopLeftY = (attrs.width / 2) * sinA + (attrs.height / 2) * (1 - cosA);
-      transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
-      transforms.push(`rotate(${attrs.rotation}deg)`);
-    }
-    if (attrs.flipH) {
-      transforms.push('scaleX(-1)');
-    }
-    if (attrs.flipV) {
-      transforms.push('scaleY(-1)');
-    }
-    return transforms.join(' ');
-  }
-
-  private applyImageGeometryTransform(
-    target: HTMLElement,
-    attrs: {
-      width: number;
-      height: number;
-      rotation?: number;
-      flipH?: boolean;
-      flipV?: boolean;
-    },
-  ): void {
-    const transform = this.buildImageGeometryTransform(attrs);
-    if (!transform) {
-      return;
-    }
-    target.style.transform = transform;
-    target.style.transformOrigin = 'center';
+    return renderImageFragmentElement({
+      doc: this.doc,
+      fragment,
+      context,
+      resolvedItem,
+      applyResolvedFragmentFrame: (el, item, imageFragment, section) =>
+        this.applyResolvedFragmentFrame(el, item, imageFragment, section, context.story),
+      applyFragmentFrame: (el, imageFragment, section) =>
+        this.applyFragmentFrame(el, imageFragment, section, context.story),
+      applyFragmentWrapperZIndex: this.applyFragmentWrapperZIndex.bind(this),
+      applySdtDataset,
+      applyContainerSdtDataset,
+      buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
+      createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
+    });
   }
 
   /**
@@ -2765,47 +2641,8 @@ export class DomPainter {
     hyperlink: ImageHyperlink | undefined,
     display: 'block' | 'inline-block',
   ): HTMLElement {
-    if (!hyperlink?.url || !this.doc) return imageEl;
-
-    const sanitized = sanitizeHref(hyperlink.url);
-    if (!sanitized?.href) return imageEl;
-
-    const anchor = this.doc.createElement('a');
-    anchor.href = sanitized.href;
-    anchor.classList.add('superdoc-link');
-
-    if (sanitized.protocol === 'http' || sanitized.protocol === 'https') {
-      anchor.target = '_blank';
-      anchor.rel = 'noopener noreferrer';
-    }
-
-    const tooltipSource =
-      typeof hyperlink.tooltip === 'string' && hyperlink.tooltip.trim().length > 0 ? hyperlink.tooltip : hyperlink.url;
-    const tooltipResult = encodeTooltip(tooltipSource);
-    if (tooltipResult?.text) {
-      anchor.title = tooltipResult.text;
-    }
-
-    for (const titledElement of [imageEl, ...Array.from(imageEl.querySelectorAll('[title]'))]) {
-      titledElement.removeAttribute('title');
-    }
-
-    // Accessibility: explicit role and keyboard focus (mirrors applyLinkAttributes for text links)
-    anchor.setAttribute('role', 'link');
-    anchor.setAttribute('tabindex', '0');
-
-    if (display === 'block') {
-      anchor.style.cssText = 'display: block; width: 100%; height: 100%; cursor: pointer;';
-    } else {
-      // inline-block preserves the image's layout box inside a paragraph line
-      anchor.style.display = 'inline-block';
-      anchor.style.lineHeight = '0';
-      anchor.style.cursor = 'pointer';
-      anchor.style.verticalAlign = imageEl.style.verticalAlign || 'bottom';
-    }
-
-    anchor.appendChild(imageEl);
-    return anchor;
+    if (!this.doc) return imageEl;
+    return buildSharedImageHyperlinkAnchor(this.doc, imageEl, hyperlink, display);
   }
 
   private renderDrawingFragment(
@@ -2871,7 +2708,7 @@ export class DomPainter {
       throw new Error('DomPainter: document is not available');
     }
     if (block.drawingKind === 'image') {
-      return this.createDrawingImageElement(block);
+      return createDrawingImageElement(this.doc, block, this.buildImageHyperlinkAnchor.bind(this));
     }
     if (block.drawingKind === 'vectorShape') {
       return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context);
@@ -2883,27 +2720,6 @@ export class DomPainter {
       return this.createChartElement(block);
     }
     return this.createDrawingPlaceholder();
-  }
-
-  private createDrawingImageElement(block: DrawingBlock): HTMLElement {
-    const drawing = block as ImageDrawing;
-    const img = this.doc!.createElement('img');
-    img.classList.add('superdoc-drawing-image');
-    if (drawing.src) {
-      img.src = drawing.src;
-    }
-    img.alt = drawing.alt ?? '';
-    img.style.width = '100%';
-    img.style.height = '100%';
-    img.style.objectFit = drawing.objectFit ?? 'contain';
-    // MS Word anchors stretched images to top-left, clipping from right/bottom
-    if (drawing.objectFit === 'cover') {
-      img.style.objectPosition = 'left top';
-    }
-    const imageClipPath = resolveBlockClipPath(drawing);
-    applyImageClipPath(img, imageClipPath);
-    img.style.display = 'block';
-    return img;
   }
 
   private createVectorShapeElement(
@@ -3304,20 +3120,7 @@ export class DomPainter {
           currentParagraph.style.minHeight = '1em';
         }
       } else if (part.kind === 'image' && part.src) {
-        // SD-2804: image part produced by the textbox importer for an
-        // inline w:drawing inside a textbox run. Render as <img> alongside
-        // sibling text spans so layout matches Word's inline flow. Match
-        // body inline images' baseline default (`vertical-align: bottom`)
-        // so an image and adjacent text line up the same way inside a
-        // textbox as outside.
-        const img = this.doc!.createElement('img');
-        img.src = part.src;
-        img.alt = part.alt ?? '';
-        if (typeof part.width === 'number') img.style.width = `${part.width}px`;
-        if (typeof part.height === 'number') img.style.height = `${part.height}px`;
-        img.style.display = 'inline-block';
-        img.style.verticalAlign = 'bottom';
-        currentParagraph.appendChild(img);
+        currentParagraph.appendChild(createShapeTextImageElement(this.doc!, part));
       } else {
         const span = this.doc!.createElement('span');
         span.textContent = this.resolveShapeTextPartText(part, context);
@@ -3785,19 +3588,7 @@ export class DomPainter {
       return this.createVectorShapeElement(vectorChild, childGeometry, false, groupScaleX, groupScaleY, context);
     }
     if (child.shapeType === 'image' && 'src' in child.attrs) {
-      // After this check, child should be ShapeGroupImageChild
-      const attrs = child.attrs as PositionedDrawingGeometry & {
-        src: string;
-        alt?: string;
-        clipPath?: string;
-      };
-      const img = this.doc!.createElement('img');
-      img.src = attrs.src;
-      img.alt = attrs.alt ?? '';
-      img.style.objectFit = 'contain';
-      img.style.display = 'block';
-      applyImageClipPath(img, attrs.clipPath);
-      return img;
+      return createShapeGroupImageElement(this.doc!, child);
     }
     return this.createDrawingPlaceholder();
   }
@@ -3901,7 +3692,7 @@ export class DomPainter {
        */
       const renderDrawingContentForTableCell = (block: DrawingBlock): HTMLElement => {
         if (block.drawingKind === 'image') {
-          return this.createDrawingImageElement(block);
+          return createDrawingImageElement(this.doc!, block, this.buildImageHyperlinkAnchor.bind(this));
         }
         if (block.drawingKind === 'shapeGroup') {
           return this.createShapeGroupElement(block, context);
@@ -4255,263 +4046,3 @@ const isNonBodyStoryBlockId = (blockId: string | undefined): boolean =>
     blockId.startsWith('endnote-') ||
     blockId.startsWith('__sd_semantic_footnote-') ||
     blockId.startsWith('__sd_semantic_endnote-'));
-
-/**
- * Derives a version string for a flow block based on its content and styling properties.
- *
- * This version string is used for cache invalidation - when any visual property of the block
- * changes, the version string changes, triggering a DOM rebuild instead of reusing cached elements.
- *
- * The version includes all properties that affect visual rendering:
- * - Text content
- * - Font properties (family, size, bold, italic)
- * - Text decorations (underline style/color, strike, highlight)
- * - Spacing (letterSpacing)
- * - Position markers (pmStart, pmEnd)
- * - Special tokens (page numbers, etc.)
- * - List marker properties (numId, ilvl, markerText) - for list indent changes
- * - Paragraph attributes (alignment, spacing, indent, borders, shading, direction, tabs)
- * - Table cell content and paragraph formatting within cells
- *
- * For table blocks, a deep hash is computed across all rows and cells, including:
- * - Cell block content (paragraph runs, text, formatting)
- * - Paragraph-level attributes in cells (alignment, spacing, line height, indent, borders, shading)
- * - Run-level formatting (color, highlight, bold, italic, fontSize, fontFamily, underline, strike)
- *
- * This ensures toolbar commands that modify paragraph or run formatting within tables
- * trigger proper DOM updates.
- *
- * @param block - The flow block to generate a version string for
- * @returns A pipe-delimited string representing all visual properties of the block.
- *          Changes to any included property will change the version string.
- */
-const deriveBlockVersion = (block: FlowBlock): string => {
-  if (block.kind === 'paragraph') {
-    return deriveParagraphBlockVersion(block, getSdtMetadataVersion, readClipPathValue);
-  }
-
-  if (block.kind === 'image') {
-    const imgSdt = (block as ImageBlock).attrs?.sdt;
-    const imgSdtVersion = getSdtMetadataVersion(imgSdt);
-    return [
-      block.src ?? '',
-      block.width ?? '',
-      block.height ?? '',
-      block.alt ?? '',
-      block.title ?? '',
-      resolveBlockClipPath(block),
-      imgSdtVersion,
-    ].join('|');
-  }
-
-  if (block.kind === 'drawing') {
-    if (block.drawingKind === 'image') {
-      // Type narrowing: block is ImageDrawing (not ImageBlock)
-      const imageLike = block as ImageDrawing;
-      return [
-        'drawing:image',
-        imageLike.src ?? '',
-        imageLike.width ?? '',
-        imageLike.height ?? '',
-        imageLike.alt ?? '',
-        resolveBlockClipPath(imageLike),
-      ].join('|');
-    }
-    if (block.drawingKind === 'vectorShape') {
-      const vector = block as VectorShapeDrawing;
-      return [
-        'drawing:vector',
-        vector.shapeKind ?? '',
-        vector.fillColor ?? '',
-        vector.strokeColor ?? '',
-        vector.strokeWidth ?? '',
-        vector.geometry.width,
-        vector.geometry.height,
-        vector.geometry.rotation ?? 0,
-        vector.geometry.flipH ? 1 : 0,
-        vector.geometry.flipV ? 1 : 0,
-      ].join('|');
-    }
-    if (block.drawingKind === 'shapeGroup') {
-      const group = block as ShapeGroupDrawing;
-      const childSignature = group.shapes
-        .map((child) => `${child.shapeType}:${JSON.stringify(child.attrs ?? {})}`)
-        .join(';');
-      return [
-        'drawing:group',
-        group.geometry.width,
-        group.geometry.height,
-        group.groupTransform ? JSON.stringify(group.groupTransform) : '',
-        childSignature,
-      ].join('|');
-    }
-    if (block.drawingKind === 'chart') {
-      return [
-        'drawing:chart',
-        block.chartData?.chartType ?? '',
-        block.chartData?.series?.length ?? 0,
-        block.geometry.width,
-        block.geometry.height,
-        block.chartRelId ?? '',
-      ].join('|');
-    }
-    // Exhaustiveness check: if a new drawingKind is added, TypeScript will error here
-    const _exhaustive: never = block;
-    return `drawing:unknown:${(block as DrawingBlock).id}`;
-  }
-
-  if (block.kind === 'table') {
-    const tableBlock = block as TableBlock;
-    /**
-     * Local hash function for strings using FNV-1a algorithm.
-     * Used to create a robust hash across all table rows/cells so deep edits invalidate version.
-     *
-     * @param seed - Initial hash value
-     * @param value - String value to hash
-     * @returns Updated hash value
-     */
-    const hashString = (seed: number, value: string): number => {
-      let hash = seed >>> 0;
-      for (let i = 0; i < value.length; i++) {
-        hash ^= value.charCodeAt(i);
-        hash = Math.imul(hash, 16777619); // FNV-style mix
-      }
-      return hash >>> 0;
-    };
-
-    /**
-     * Local hash function for numbers.
-     * Handles undefined/null values safely by treating them as 0.
-     *
-     * @param seed - Initial hash value
-     * @param value - Number value to hash (or undefined/null)
-     * @returns Updated hash value
-     */
-    const hashNumber = (seed: number, value: number | undefined | null): number => {
-      const n = Number.isFinite(value) ? (value as number) : 0;
-      let hash = seed ^ n;
-      hash = Math.imul(hash, 16777619);
-      hash ^= hash >>> 13;
-      return hash >>> 0;
-    };
-
-    let hash = 2166136261;
-    hash = hashString(hash, block.id);
-    hash = hashNumber(hash, tableBlock.rows.length);
-    hash = (tableBlock.columnWidths ?? []).reduce((acc, width) => hashNumber(acc, Math.round(width * 1000)), hash);
-
-    // Defensive guards: ensure rows array exists and iterate safely
-    const rows = tableBlock.rows ?? [];
-    for (const row of rows) {
-      if (!row || !Array.isArray(row.cells)) continue;
-      hash = hashNumber(hash, row.cells.length);
-      for (const cell of row.cells) {
-        if (!cell) continue;
-        const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
-        hash = hashNumber(hash, cellBlocks.length);
-        // Include cell attributes that affect rendering (rowSpan, colSpan, borders, etc.)
-        hash = hashNumber(hash, cell.rowSpan ?? 1);
-        hash = hashNumber(hash, cell.colSpan ?? 1);
-
-        // Include cell-level attributes (borders, padding, background) that affect rendering
-        // This ensures cache invalidation when cell formatting changes (e.g., remove borders).
-        if (cell.attrs) {
-          const cellAttrs = cell.attrs as TableCellAttrs;
-          if (cellAttrs.borders) {
-            hash = hashString(hash, hashCellBorders(cellAttrs.borders));
-          }
-          if (cellAttrs.padding) {
-            const p = cellAttrs.padding;
-            hash = hashNumber(hash, p.top ?? 0);
-            hash = hashNumber(hash, p.right ?? 0);
-            hash = hashNumber(hash, p.bottom ?? 0);
-            hash = hashNumber(hash, p.left ?? 0);
-          }
-          if (cellAttrs.verticalAlign) {
-            hash = hashString(hash, cellAttrs.verticalAlign);
-          }
-          if (cellAttrs.background) {
-            hash = hashString(hash, cellAttrs.background);
-          }
-        }
-
-        for (const cellBlock of cellBlocks) {
-          hash = hashString(hash, cellBlock?.kind ?? 'unknown');
-          if (cellBlock?.kind === 'paragraph') {
-            hash = hashParagraphBlockForTableVersion(hash, cellBlock as ParagraphBlock, { hashString, hashNumber });
-          } else if (cellBlock?.kind) {
-            // Non-paragraph cell blocks participate in the parent table version
-            // through their own block-level signatures. layout-bridge/cache.ts
-            // mirrors this policy so repaint and remeasure stay aligned for
-            // nested tables, images, drawings, and other embedded cell content.
-            hash = hashString(hash, deriveBlockVersion(cellBlock as FlowBlock));
-          }
-        }
-      }
-    }
-
-    // Include table-level attributes (borders, etc.) that affect rendering
-    // This ensures cache invalidation when table formatting changes (e.g., remove borders).
-    if (tableBlock.attrs) {
-      const tblAttrs = tableBlock.attrs as TableAttrs;
-      if (tblAttrs.borders) {
-        hash = hashString(hash, hashTableBorders(tblAttrs.borders));
-      }
-      if (tblAttrs.borderCollapse) {
-        hash = hashString(hash, tblAttrs.borderCollapse);
-      }
-      if (tblAttrs.cellSpacing !== undefined) {
-        const cs = tblAttrs.cellSpacing;
-        if (typeof cs === 'number') {
-          hash = hashNumber(hash, cs);
-        } else {
-          // Stable key: value and type only (avoid JSON.stringify key-order variance)
-          const v = (cs as { value?: number; type?: string }).value ?? 0;
-          const t = (cs as { value?: number; type?: string }).type ?? 'px';
-          hash = hashString(hash, `cs:${v}:${t}`);
-        }
-      }
-      // Include SDT metadata so lock-mode changes invalidate the cache.
-      if (tblAttrs.sdt) {
-        hash = hashString(hash, tblAttrs.sdt.type);
-        hash = hashString(hash, getSdtMetadataLockMode(tblAttrs.sdt));
-        hash = hashString(hash, getSdtMetadataId(tblAttrs.sdt));
-      }
-    }
-
-    return [block.id, tableBlock.rows.length, hash.toString(16)].join('|');
-  }
-
-  return block.id;
-};
-
-const CLIP_PATH_PREFIXES = ['inset(', 'polygon(', 'circle(', 'ellipse(', 'path(', 'rect('];
-
-const readClipPathValue = (value: unknown): string => {
-  if (typeof value !== 'string') return '';
-  const normalized = value.trim();
-  if (normalized.length === 0) return '';
-  const lower = normalized.toLowerCase();
-  if (!CLIP_PATH_PREFIXES.some((prefix) => lower.startsWith(prefix))) return '';
-  return normalized;
-};
-
-const resolveClipPathFromAttrs = (attrs: unknown): string => {
-  if (!attrs || typeof attrs !== 'object') return '';
-  const record = attrs as Record<string, unknown>;
-  return readClipPathValue(record.clipPath);
-};
-
-const resolveBlockClipPath = (block: unknown): string => {
-  if (!block || typeof block !== 'object') return '';
-  const record = block as Record<string, unknown>;
-  return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
-};
-
-const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
-  Object.entries(styles).forEach(([key, value]) => {
-    if (value != null && value !== '' && key in el.style) {
-      (el.style as unknown as Record<string, string>)[key] = String(value);
-    }
-  });
-};

@@ -1,0 +1,5 @@
+/* Hide TC bubbles in main editor (visible in preview modal) */
+#superdoc-editor .floating-comment,
+#superdoc-editor .sidebar-container {
+  display: none !important;
+}

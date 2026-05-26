@@ -4,21 +4,12 @@ import { prepareTextAnnotation } from '@converter/v3/handlers/w/sdt/helpers/tran
 import { wrapTextInRun } from '@converter/exporter.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
 import { readImageDimensionsFromDataUri } from '@converter/image-dimensions.js';
+import { simpleStringHash } from '@core/utilities/hash.js';
 
 const DECORATIVE_EXT_URI = '{C183D7F6-B498-43B3-948B-1728B52AA6E4}';
 const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/decorative';
 const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const IMAGE_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
-
-function simpleHash(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
-  }
-  return Math.abs(hash).toString();
-}
 
 function getImageExtensionFromDataUri(src) {
   if (typeof src !== 'string' || !src.startsWith('data:')) return null;
@@ -41,7 +32,7 @@ function createMediaTargetForDataUri(params, src) {
     return existingEntry[0].slice(5);
   }
 
-  const fileBaseName = sanitizeDocxMediaName(`image-${simpleHash(src)}`, 'image');
+  const fileBaseName = sanitizeDocxMediaName(`image-${simpleStringHash(src)}`, 'image');
   let fileName = `${fileBaseName}.${extension}`;
   let packagePath = `word/media/${fileName}`;
   if (params.media[packagePath] && params.media[packagePath] !== src) {

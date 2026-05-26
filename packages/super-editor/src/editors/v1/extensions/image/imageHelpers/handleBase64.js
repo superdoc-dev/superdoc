@@ -1,20 +1,7 @@
 // @ts-check
-const DEFAULT_MIME_TYPE = 'application/octet-stream';
+import { simpleStringHash } from '@core/utilities/hash.js';
 
-/**
- * Generates a simple hash from a string.
- * @param {string} str - The input string.
- * @returns {string} The generated hash.
- */
-const simpleHash = (str) => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return Math.abs(hash).toString();
-};
+const DEFAULT_MIME_TYPE = 'application/octet-stream';
 
 /**
  * Decodes a base64-encoded string into a binary string.
@@ -75,7 +62,7 @@ const extractBase64Meta = (dataUri) => {
   const mimeType = rawMimeType || DEFAULT_MIME_TYPE;
   const isBase64 = metaParts.some((part) => part.toLowerCase() === 'base64');
   const binaryString = isBase64 ? decodeBase64ToBinaryString(payload) : decodeDataUriText(payload);
-  const hash = simpleHash(binaryString);
+  const hash = simpleStringHash(binaryString);
   const normalizedMimeType = mimeType.toLowerCase();
   const extension = normalizedMimeType === 'image/svg+xml' ? 'svg' : normalizedMimeType.split('/')[1] || 'bin';
   const filename = `image-${hash}.${extension}`;

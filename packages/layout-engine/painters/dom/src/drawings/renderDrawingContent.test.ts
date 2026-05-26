@@ -29,6 +29,40 @@ describe('renderDrawingContent', () => {
     expect(el.querySelector('svg')).toBeTruthy();
   });
 
+  it('renders vector shape text through the textbox renderer', () => {
+    const doc = createDoc();
+    const block: DrawingBlock = {
+      kind: 'drawing',
+      id: 'shape-text-1',
+      drawingKind: 'vectorShape',
+      geometry: { width: 120, height: 60 },
+      shapeKind: 'rect',
+      fillColor: '#ffffff',
+      strokeColor: '#000000',
+      textAlign: 'left',
+      textVerticalAlign: 'center',
+      textInsets: { top: 2, right: 4, bottom: 6, left: 8 },
+      textContent: {
+        parts: [{ text: 'Shape text', formatting: { bold: true } }],
+      },
+    };
+
+    const el = renderDrawingContent({
+      doc,
+      block,
+      geometry: block.geometry,
+      buildImageHyperlinkAnchor: (imageEl) => imageEl,
+    });
+
+    const textOverlay = el.querySelector('div[style*="display: flex"]') as HTMLElement | null;
+    const span = textOverlay?.querySelector('span') as HTMLSpanElement | null;
+    expect(textOverlay).toBeTruthy();
+    expect(textOverlay?.style.justifyContent).toBe('center');
+    expect(textOverlay?.style.padding).toBe('2px 4px 6px 8px');
+    expect(span?.textContent).toBe('Shape text');
+    expect(span?.style.fontWeight).toBe('bold');
+  });
+
   it('renders shape groups and charts through the shared drawing content path', () => {
     const doc = createDoc();
     const shapeGroup: DrawingBlock = {

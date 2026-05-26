@@ -11,7 +11,7 @@ import type {
 import { getTableVisualDirection } from '@superdoc/contracts';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
-import type { FragmentRenderContext } from '../renderer.js';
+import type { FragmentRenderContext } from '../fragment-context.js';
 import { renderTableRow } from './renderTableRow.js';
 import {
   applySdtContainerChrome,
@@ -21,6 +21,7 @@ import {
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
+import { applyContainerSdtDataset, applySdtDataset } from '../sdt/dataset.js';
 import { applyBorder, borderValueToSpec, hasExplicitCellBorders } from './border-utils.js';
 import { getTableCellGridBounds } from './grid-geometry.js';
 
@@ -48,10 +49,6 @@ export type TableRenderDependencies = {
   effectiveColumnWidths: number[];
   /** Optional SDT boundary overrides for container styling */
   sdtBoundary?: SdtBoundaryOptions;
-  /** Ancestor SDT key used to suppress duplicate container chrome in nested tables */
-  ancestorContainerKey?: string | null;
-  /** Ancestor SDT metadata used to suppress duplicate id-less container chrome in nested tables */
-  ancestorContainerSdt?: SdtMetadata | null;
   /** Ancestor SDT keys used to suppress duplicate container chrome in nested tables */
   ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
   /** Ancestor SDT metadata chain used to suppress duplicate id-less container chrome in nested tables */
@@ -76,10 +73,6 @@ export type TableRenderDependencies = {
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply fragment positioning and dimensions */
   applyFragmentFrame: (el: HTMLElement, fragment: Fragment) => void;
-  /** Function to apply SDT metadata as data attributes */
-  applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  /** Function to apply container SDT metadata as data attributes */
-  applyContainerSdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Function to apply CSS styles to an element */
   applyStyles: ApplyStylesFn;
 };
@@ -144,7 +137,6 @@ export type TableRenderDependencies = {
  *   effectiveColumnWidths: tableMeasure.columnWidths,
  *   renderLine,
  *   applyFragmentFrame,
- *   applySdtDataset,
  *   applyStyles
  * });
  * container.appendChild(tableElement);
@@ -160,8 +152,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     effectiveColumnWidths,
     context,
     sdtBoundary,
-    ancestorContainerKey,
-    ancestorContainerSdt,
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
@@ -169,8 +159,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     captureLineSnapshot,
     renderDrawingContent,
     applyFragmentFrame,
-    applySdtDataset,
-    applyContainerSdtDataset,
     applyStyles,
   } = deps;
 
@@ -226,8 +214,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   // Apply SDT container styling (document sections, structured content blocks)
   if (
     applySdtContainerChrome(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary, {
-      ancestorContainerKey,
-      ancestorContainerSdt,
       ancestorContainerKeys,
       ancestorContainerSdts,
     })
@@ -238,19 +224,19 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const tableContainerKey = getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
   const nextAncestorContainerKeys = [
     ...(ancestorContainerKeys ?? []),
-    ancestorContainerKey,
     hasExplicitSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt) ? tableContainerKey : null,
   ].filter((key): key is string => Boolean(key));
-  const nextAncestorContainerSdts = [...(ancestorContainerSdts ?? []), ancestorContainerSdt, tableContainerSdt].filter(
+  const nextAncestorContainerSdts = [...(ancestorContainerSdts ?? []), tableContainerSdt].filter(
     (sdt): sdt is SdtMetadata => Boolean(sdt),
   );
-  const nextAncestorContainerKey = nextAncestorContainerKeys[nextAncestorContainerKeys.length - 1] ?? null;
-  const nextAncestorContainerSdt = nextAncestorContainerSdts[nextAncestorContainerSdts.length - 1] ?? null;
 
   // Add table-specific class for resize overlay targeting and click mapping
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
 
   // Cell spacing pre-computed by the resolver; no cross-stage import needed.
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
+  const drawsSeparateTop = borderCollapse !== 'separate' || fragment.continuesFromPrev !== true;
+  const drawsSeparateBottom = borderCollapse !== 'separate' || fragment.continuesOnNext !== true;
 
   // Add metadata for interactive table resizing
   if (fragment.metadata?.columnBoundaries) {
@@ -293,7 +279,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     // For each rendered row, determine which grid columns have cell boundaries
     // A boundary exists at column X if there's a cell that ENDS at column X (gridColumnStart + colSpan = X)
     // rowY includes outer spacing (before first row, between rows, after last) so segment positions match rendered cells
-    let rowY = cellSpacingPx;
+    let rowY = drawsSeparateTop ? cellSpacingPx : 0;
     for (let i = 0; i < renderedRows.length; i++) {
       const { rowIndex, height } = renderedRows[i];
       const rowMeasure = measure.rows[rowIndex];
@@ -338,7 +324,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         }
       }
 
-      rowY += height + cellSpacingPx;
+      rowY += height + (i === renderedRows.length - 1 && !drawsSeparateBottom ? 0 : cellSpacingPx);
     }
 
     const metadata: Record<string, unknown> = {
@@ -380,11 +366,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     container.setAttribute('data-sd-block-id', block.id);
   }
 
-  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
   if (borderCollapse === 'separate' && tableBorders) {
-    applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
+    if (drawsSeparateTop) applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
     applyBorder(container, 'Right', borderValueToSpec(isRtl ? tableBorders.left : tableBorders.right));
-    applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));
+    if (drawsSeparateBottom) applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));
     applyBorder(container, 'Left', borderValueToSpec(isRtl ? tableBorders.right : tableBorders.left));
   }
 
@@ -401,7 +386,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   });
 
   // First row starts after space before table content (space between table border and first row)
-  let y = cellSpacingPx;
+  let y = drawsSeparateTop ? cellSpacingPx : 0;
 
   // If this is a continuation fragment with repeated headers, render headers first.
   // NOTE: This header-then-body iteration must stay in sync with the metadata
@@ -427,9 +412,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         renderLine,
         captureLineSnapshot,
         renderDrawingContent,
-        applySdtDataset,
-        ancestorContainerKey: nextAncestorContainerKey,
-        ancestorContainerSdt: nextAncestorContainerSdt,
         ancestorContainerKeys: nextAncestorContainerKeys,
         ancestorContainerSdts: nextAncestorContainerSdts,
         onSdtContainerChrome,
@@ -439,7 +421,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         cellSpacingPx,
       });
       // Add row height + spacing after every row (including last) for outer spacing after last row
-      y += rowMeasure.height + cellSpacingPx;
+      const hasBodyRows = fragment.fromRow < fragment.toRow;
+      y +=
+        rowMeasure.height +
+        (r === fragment.repeatHeaderCount - 1 && !hasBodyRows && !drawsSeparateBottom ? 0 : cellSpacingPx);
     }
   }
 
@@ -593,9 +578,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       renderLine,
       captureLineSnapshot,
       renderDrawingContent,
-      applySdtDataset,
-      ancestorContainerKey: nextAncestorContainerKey,
-      ancestorContainerSdt: nextAncestorContainerSdt,
       ancestorContainerKeys: nextAncestorContainerKeys,
       ancestorContainerSdts: nextAncestorContainerSdts,
       onSdtContainerChrome,
@@ -608,7 +590,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       cellSpacingPx,
     });
     // Add row height + spacing after every row (including last) for outer spacing after last row
-    y += actualRowHeight + cellSpacingPx;
+    y += actualRowHeight + (isLastRenderedBodyRow && !drawsSeparateBottom ? 0 : cellSpacingPx);
   }
 
   return container;

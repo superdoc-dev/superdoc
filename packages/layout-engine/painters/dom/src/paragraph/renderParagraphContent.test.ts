@@ -40,7 +40,6 @@ describe('renderParagraphContent', () => {
       lineIndexOffset: 0,
       linesOverride: measure.lines.slice(0, 1),
       continuesOnNext: true,
-      applySdtDataset: () => {},
       renderLine: () => doc.createElement('div'),
     });
 
@@ -75,7 +74,6 @@ describe('renderParagraphContent', () => {
       localEndLine: 2,
       lineIndexOffset: 0,
       linesOverride: [line(0), line(1)],
-      applySdtDataset: () => {},
       renderLine: ({ lineIndex, isLastLine, skipJustify }) => {
         renderedLines.push({ lineIndex, isLastLine, skipJustify });
         return doc.createElement('div');
@@ -128,7 +126,6 @@ describe('renderParagraphContent', () => {
       localEndLine: 1,
       markerWidth: 10,
       markerTextWidth: 8,
-      applySdtDataset: () => {},
       renderLine: () => {
         lineEl = doc.createElement('div');
         return lineEl;
@@ -183,7 +180,6 @@ describe('renderParagraphContent', () => {
       localStartLine: 0,
       localEndLine: 1,
       resolvedContent,
-      applySdtDataset: () => {},
       renderLine: () => doc.createElement('div'),
     });
 
@@ -229,7 +225,6 @@ describe('renderParagraphContent', () => {
       localEndLine: 1,
       resolvedContent,
       convertFinalParagraphMark: true,
-      applySdtDataset: () => {},
       renderLine: () => {
         const lineEl = doc.createElement('div');
         const mark = doc.createElement('span');

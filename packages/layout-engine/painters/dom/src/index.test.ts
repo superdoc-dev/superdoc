@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { createDomPainter, sanitizeUrl, linkMetrics, applyRunDataAttributes } from './index.js';
+import { createDomPainter, sanitizeUrl, linkMetrics, applyRunDataAttributes, isNonBodyStoryBlockId } from './index.js';
 import { DomPainter } from './renderer.js';
 import { resolveLayout } from '@superdoc/layout-resolved';
 import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.js';
@@ -19,6 +19,12 @@ import type {
 } from '@superdoc/contracts';
 
 const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageGap: 0, pages: [] };
+
+describe('painter-dom exports', () => {
+  it('exports note story block detection for editor DOM indexing', () => {
+    expect(isNonBodyStoryBlockId('endnote-1-abc')).toBe(true);
+  });
+});
 
 /**
  * Test-only bridge: accepts old-style `{ blocks, measures, ...options }` and

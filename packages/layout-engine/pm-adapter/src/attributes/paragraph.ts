@@ -17,7 +17,7 @@ import {
   type ParagraphFrame,
   ParagraphDirectionContext,
 } from '@superdoc/contracts';
-import type { PMNode, ParagraphFont } from '../types.js';
+import type { ListRenderingContext, PMNode, ParagraphFont } from '../types.js';
 import type { ResolvedRunProperties } from '@superdoc/word-layout';
 import { computeWordParagraphLayout } from '@superdoc/word-layout';
 import { pickNumber, twipsToPx, isFiniteNumber, ptToPx } from '../utilities.js';
@@ -305,6 +305,7 @@ export const computeParagraphAttrs = (
   para: PMNode,
   converterContext?: ConverterContext,
   previousParagraphFont?: ParagraphFont,
+  options?: { listRenderingContext?: ListRenderingContext; position?: number },
 ): { paragraphAttrs: ParagraphAttrs; resolvedParagraphProperties: ParagraphProperties } => {
   const attrs = para.attrs ?? {};
   const paragraphProperties = (attrs.paragraphProperties ?? {}) as ParagraphProperties;
@@ -362,7 +363,8 @@ export const computeParagraphAttrs = (
   const floatAlignment = normalizedFramePr?.xAlign;
   const normalizedNumberingProperties = normalizeNumberingProperties(resolvedParagraphProperties.numberingProperties);
   const dropCapDescriptor = normalizeDropCap(resolvedParagraphProperties.framePr, para, converterContext);
-  const normalizedListRendering = attrs.listRendering as {
+  const normalizedListRendering = (attrs.listRendering ??
+    options?.listRenderingContext?.resolveListRendering(para, resolvedParagraphProperties, options.position ?? 0)) as {
     markerText: string;
     justification: 'left' | 'center' | 'right';
     path: number[];

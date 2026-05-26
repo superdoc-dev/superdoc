@@ -1,24 +1,38 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import type { EditorState } from 'prosemirror-state';
 import { buildFootnotesInput, type ConverterLike } from '../layout/FootnotesBuilder.js';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 
+const listMocks = vi.hoisted(() => ({
+  allDefinitions: {},
+  definitionDetailsByKey: new Map<string, Record<string, unknown>>(),
+}));
+
 // Mock toFlowBlocks
 vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
   return {
     ...actual,
-    toFlowBlocks: vi.fn((_doc: unknown, opts?: { blockIdPrefix?: string }) => {
+    toFlowBlocks: vi.fn((doc: unknown, opts?: { blockIdPrefix?: string; resolveListRendering?: boolean }) => {
       // Return mock blocks based on blockIdPrefix
       if (typeof opts?.blockIdPrefix === 'string') {
         const id = opts.blockIdPrefix.replace('footnote-', '').replace('-', '');
+        const firstParagraph = (doc as { content?: Array<{ type?: string; attrs?: Record<string, unknown> }> })
+          ?.content?.[0];
+        const listRendering = firstParagraph?.attrs?.listRendering as { markerText?: string } | undefined;
+        const numberingProperties = (
+          firstParagraph?.attrs?.paragraphProperties as { numberingProperties?: unknown } | undefined
+        )?.numberingProperties;
+        const markerText =
+          listRendering?.markerText ?? (opts.resolveListRendering && numberingProperties ? '1.' : undefined);
         return {
           blocks: [
             {
               kind: 'paragraph',
               runs: [{ kind: 'text', text: `Footnote ${id} text`, pmStart: 0, pmEnd: 10 }],
+              ...(markerText ? { attrs: { wordLayout: { marker: { markerText } } } } : {}),
             },
           ],
           bookmarks: new Map(),
@@ -28,6 +42,23 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
     }),
   };
 });
+
+vi.mock('@helpers/list-numbering-helpers.js', () => ({
+  ListHelpers: {
+    getAllListDefinitions: vi.fn(() => listMocks.allDefinitions),
+    getListDefinitionDetails: vi.fn(({ numId, level }) => listMocks.definitionDetailsByKey.get(`${numId}:${level}`)),
+  },
+}));
+
+vi.mock('@helpers/orderedListUtils.js', () => ({
+  generateOrderedListIndex: vi.fn(({ listLevel }) => `${listLevel.at(-1)}.`),
+}));
+
+vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({
+  docxNumberingHelpers: {
+    normalizeLvlTextChar: vi.fn(() => '•'),
+  },
+}));
 
 // =============================================================================
 // Test Helpers
@@ -51,6 +82,15 @@ function createMockConverter(footnotes: Array<{ id: string; content: unknown[] }
   return { footnotes };
 }
 
+function createMockConverterWithNumbering(footnotes: Array<{ id: string; content: unknown[] }>): ConverterLike {
+  return {
+    footnotes,
+    numbering: {},
+    translatedNumbering: {},
+    convertedXml: {},
+  };
+}
+
 function createMockConverterContext(footnoteNumberById: Record<string, number>): ConverterContext {
   return { footnoteNumberById } as ConverterContext;
 }
@@ -64,6 +104,12 @@ function blocksFromResult(result: ReturnType<typeof buildFootnotesInput>) {
 // =============================================================================
 
 describe('buildFootnotesInput', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listMocks.allDefinitions = {};
+    listMocks.definitionDetailsByKey = new Map();
+  });
+
   describe('null/undefined inputs', () => {
     it('returns null when editorState is null', () => {
       const converter = createMockConverter([{ id: '1', content: [{ type: 'paragraph' }] }]);
@@ -184,6 +230,69 @@ describe('buildFootnotesInput', () => {
         type: 'doc',
         content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Live note' }] }],
       });
+    });
+
+    it('asks the adapter to resolve footnote list rendering without mutating converter data', () => {
+      listMocks.allDefinitions = { 1: { 0: { start: '1' } } };
+      listMocks.definitionDetailsByKey.set('1:0', {
+        lvlText: '%1.',
+        listNumberingType: 'decimal',
+        suffix: 'tab',
+        justification: 'left',
+        abstractId: 'abstract-1',
+      });
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverterWithNumbering([
+        {
+          id: '1',
+          content: [
+            {
+              type: 'paragraph',
+              attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } },
+              content: [{ type: 'text', text: 'Listed note' }],
+            },
+          ],
+        },
+      ]);
+
+      buildFootnotesInput(editorState, converter, undefined, undefined);
+
+      const [docArg, options] =
+        (toFlowBlocks as unknown as { mock: { calls: Array<[any, Record<string, unknown>]> } }).mock.calls.at(-1) ?? [];
+      expect(docArg?.content?.[0]?.attrs?.listRendering).toBeUndefined();
+      expect(options?.resolveListRendering).toBe(true);
+      expect((converter.footnotes?.[0].content?.[0] as { attrs?: Record<string, unknown> })?.attrs?.listRendering).toBe(
+        undefined,
+      );
+    });
+
+    it('returns footnote list blocks with wordLayout marker text', () => {
+      listMocks.allDefinitions = { 1: { 0: { start: '1' } } };
+      listMocks.definitionDetailsByKey.set('1:0', {
+        lvlText: '%1.',
+        listNumberingType: 'decimal',
+        suffix: 'tab',
+        justification: 'left',
+        abstractId: 'abstract-1',
+      });
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverterWithNumbering([
+        {
+          id: '1',
+          content: [
+            {
+              type: 'paragraph',
+              attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } },
+              content: [{ type: 'text', text: 'Listed note' }],
+            },
+          ],
+        },
+      ]);
+
+      const result = buildFootnotesInput(editorState, converter, undefined, undefined);
+      const paragraphBlock = result?.blocksById.get('1')?.[0] as { attrs?: Record<string, any> };
+
+      expect(paragraphBlock?.attrs?.wordLayout?.marker?.markerText).toBe('1.');
     });
 
     it('only includes footnotes that are referenced in the document', () => {

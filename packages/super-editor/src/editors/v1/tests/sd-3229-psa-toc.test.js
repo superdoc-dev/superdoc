@@ -5,7 +5,7 @@ import { parseTocInstruction } from '@core/super-converter/field-references/shar
 import { collectTocSources, buildTocEntryParagraphs } from '../document-api-adapters/helpers/toc-entry-builder.ts';
 
 /**
- * SD-3229 end-to-end regression: loading the PSA_Anonymised TRUNCATED.docx
+ * SD-3229 end-to-end regression: loading the SD-3229.docx fixture
  * (a mixed-source TOC backed by `\t "Heading 1,1"` for articles and `\f C`
  * for sections) and rebuilding/installing the TOC content must mirror the
  * shape the importer emits — body-bookmark anchors (`_Toc230123326` …),
@@ -13,9 +13,9 @@ import { collectTocSources, buildTocEntryParagraphs } from '../document-api-adap
  * `tocPageNumber` marks. Re-installing the rebuilt content via the PM
  * command also verifies the encoder accepts the new shape.
  */
-describe('SD-3229 PSA mixed-source TOC repro', () => {
+describe('SD-3229 mixed-source TOC repro', () => {
   async function loadEditor() {
-    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('PSA_Anonymised TRUNCATED.docx');
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('SD-3229.docx');
     const converter = new SuperConverter({ docx, media, mediaFiles, fonts });
     const { editor } = initTestEditor({ converter, loadFromSchema: false });
     return editor;

@@ -1,4 +1,7 @@
-import { getDataUriMetadata as getSharedDataUriMetadata, tryDecodeDataUriText } from '@superdoc/url-validation';
+import {
+  getDataUriMetadata as getSharedDataUriMetadata,
+  tryDecodeDataUriText as tryDecodeSharedDataUriText,
+} from '@superdoc/url-validation';
 
 export const sanitizeDocxMediaName = (value, fallback = 'image') => {
   if (!value) return fallback;
@@ -38,7 +41,7 @@ export const getDataUriMetadata = (src = '') => {
   };
 };
 
-export { tryDecodeDataUriText };
+export const tryDecodeDataUriText = (payload) => tryDecodeSharedDataUriText(payload);
 
 export const getFallbackImageNameFromDataUri = (src = '', fallback = 'image') => {
   const extension = getDataUriMetadata(src)?.extension;

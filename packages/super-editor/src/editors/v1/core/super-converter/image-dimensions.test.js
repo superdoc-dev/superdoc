@@ -216,6 +216,12 @@ describe('readImageDimensionsFromDataUri', () => {
     expect(readImageDimensionsFromDataUri(uri)).toEqual({ width: 320, height: 240 });
   });
 
+  it('reads dimensions from non-base64 SVG data URI', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50" />';
+    const uri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    expect(readImageDimensionsFromDataUri(uri)).toEqual({ width: 200, height: 50 });
+  });
+
   it('returns null for non-data-URI string', () => {
     expect(readImageDimensionsFromDataUri('https://example.com/image.png')).toBeNull();
   });

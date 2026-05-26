@@ -216,8 +216,7 @@ const rangeIsTrackedInsertionOnly = (doc: PmNode, from: number, to: number): boo
 const getSingleTrackedInsertionMarkInRange = (doc: PmNode, from: number, to: number): PmMark | null => {
   if (!rangeIsTrackedInsertionOnly(doc, from, to)) return null;
 
-  /** @type {import('prosemirror-model').Mark[]} */
-  const insertionMarks = [];
+  const insertionMarks: PmMark[] = [];
   const seenIds = new Set<string>();
   doc.nodesBetween(from, to, (node, pos) => {
     if (!node.isInline || !node.isLeaf) return;

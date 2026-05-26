@@ -7,7 +7,7 @@ import {
   computeFullCellContentHeight,
   createCellSliceCursor,
   type CellRenderBlock,
-} from './table-cell-slice.js';
+} from '@superdoc/contracts';
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
 

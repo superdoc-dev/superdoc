@@ -78,6 +78,9 @@ type MarkerRunStyle = {
 const isMarkerSuffix = (suffix: unknown): suffix is 'tab' | 'space' | 'nothing' =>
   suffix === 'tab' || suffix === 'space' || suffix === 'nothing';
 
+const isMarkerJustification = (value: unknown): value is 'left' | 'center' | 'right' =>
+  value === 'left' || value === 'center' || value === 'right';
+
 export const createListMarkerElement = (
   doc: Document,
   markerText: string,
@@ -159,7 +162,7 @@ export const renderLegacyListMarker = (params: {
     : undefined;
 
   const anchorPoint = indentLeftPx - hangingIndentPx + firstLineIndentPx;
-  const markerJustification = markerLayout?.justification ?? 'left';
+  const markerJustification = isMarkerJustification(markerLayout?.justification) ? markerLayout.justification : 'left';
   let markerStartPos: number;
   let currentPos: number;
   if (markerJustification === 'left') {
@@ -190,43 +193,21 @@ export const renderLegacyListMarker = (params: {
     suffixWidthPx = 4;
   }
 
-  if (isRtl) {
-    lineEl.style.paddingRight = `${anchorPoint}px`;
-  } else {
-    lineEl.style.paddingLeft = `${anchorPoint}px`;
-  }
-
-  if ((markerLayout?.run as MarkerRunStyle | undefined)?.vanish) {
-    return;
-  }
-
-  const markerContainer = createListMarkerElement(
+  renderListMarkerFrame({
     doc,
-    markerLayout?.markerText ?? '',
-    markerLayout?.run ?? {},
+    lineEl,
+    markerText: markerLayout?.markerText ?? '',
+    run: markerLayout?.run ?? {},
     sourceAnchor,
-  );
-  markerContainer.style.position = 'relative';
-  if (markerJustification === 'right') {
-    markerContainer.style.position = 'absolute';
-    if (isRtl) {
-      markerContainer.style.right = `${markerStartPos}px`;
-    } else {
-      markerContainer.style.left = `${markerStartPos}px`;
-    }
-  } else if (markerJustification === 'center') {
-    markerContainer.style.position = 'absolute';
-    if (isRtl) {
-      markerContainer.style.right = `${markerStartPos - markerTextWidth / 2}px`;
-      lineEl.style.paddingRight = `${parseFloat(lineEl.style.paddingRight || '0') + markerTextWidth / 2}px`;
-    } else {
-      markerContainer.style.left = `${markerStartPos - markerTextWidth / 2}px`;
-      lineEl.style.paddingLeft = `${parseFloat(lineEl.style.paddingLeft || '0') + markerTextWidth / 2}px`;
-    }
-  }
-
-  prependMarkerSuffix(doc, lineEl, isMarkerSuffix(suffix) ? suffix : undefined, suffixWidthPx, markerLayout?.run?.fontSize);
-  lineEl.prepend(markerContainer);
+    firstLinePaddingPx: anchorPoint,
+    markerStartPx: markerJustification === 'center' ? markerStartPos - markerTextWidth / 2 : markerStartPos,
+    justification: markerJustification,
+    centerPaddingAdjustPx: markerJustification === 'center' ? markerTextWidth / 2 : 0,
+    suffix: isMarkerSuffix(suffix) ? suffix : undefined,
+    suffixWidthPx,
+    isRtl,
+    vanish: (markerLayout?.run as MarkerRunStyle | undefined)?.vanish,
+  });
 };
 
 export const renderResolvedListMarker = (params: {
@@ -237,38 +218,87 @@ export const renderResolvedListMarker = (params: {
   sourceAnchor?: SourceAnchor;
 }): void => {
   const { doc, lineEl, marker, isRtl, sourceAnchor } = params;
+  renderListMarkerFrame({
+    doc,
+    lineEl,
+    markerText: marker.text,
+    run: marker.run,
+    sourceAnchor: marker.sourceAnchor ?? sourceAnchor,
+    firstLinePaddingPx: marker.firstLinePaddingLeftPx,
+    markerStartPx:
+      marker.justification === 'center'
+        ? marker.markerStartPx - (marker.centerPaddingAdjustPx ?? 0)
+        : marker.markerStartPx,
+    justification: marker.justification,
+    centerPaddingAdjustPx: marker.justification === 'center' ? (marker.centerPaddingAdjustPx ?? 0) : 0,
+    suffix: marker.suffix,
+    suffixWidthPx: marker.suffixWidthPx,
+    isRtl,
+    vanish: marker.vanish,
+  });
+};
+
+const renderListMarkerFrame = (params: {
+  doc: Document;
+  lineEl: HTMLElement;
+  markerText: string;
+  run: MarkerRunStyle;
+  sourceAnchor?: SourceAnchor;
+  firstLinePaddingPx: number;
+  markerStartPx: number;
+  justification: 'left' | 'center' | 'right';
+  centerPaddingAdjustPx: number;
+  suffix: 'tab' | 'space' | 'nothing' | undefined;
+  suffixWidthPx: number;
+  isRtl?: boolean;
+  vanish?: boolean | null;
+}): void => {
+  const {
+    doc,
+    lineEl,
+    markerText,
+    run,
+    sourceAnchor,
+    firstLinePaddingPx,
+    markerStartPx,
+    justification,
+    centerPaddingAdjustPx,
+    suffix,
+    suffixWidthPx,
+    isRtl,
+    vanish,
+  } = params;
   if (isRtl) {
-    lineEl.style.paddingRight = `${marker.firstLinePaddingLeftPx}px`;
+    lineEl.style.paddingRight = `${firstLinePaddingPx}px`;
   } else {
-    lineEl.style.paddingLeft = `${marker.firstLinePaddingLeftPx}px`;
+    lineEl.style.paddingLeft = `${firstLinePaddingPx}px`;
   }
 
-  if (marker.vanish) {
+  if (vanish) {
     return;
   }
 
-  const markerContainer = createListMarkerElement(doc, marker.text, marker.run, marker.sourceAnchor ?? sourceAnchor);
+  const markerContainer = createListMarkerElement(doc, markerText, run, sourceAnchor);
   markerContainer.style.position = 'relative';
-  if (marker.justification === 'right') {
+  if (justification === 'right') {
     markerContainer.style.position = 'absolute';
     if (isRtl) {
-      markerContainer.style.right = `${marker.markerStartPx}px`;
+      markerContainer.style.right = `${markerStartPx}px`;
     } else {
-      markerContainer.style.left = `${marker.markerStartPx}px`;
+      markerContainer.style.left = `${markerStartPx}px`;
     }
-  } else if (marker.justification === 'center') {
+  } else if (justification === 'center') {
     markerContainer.style.position = 'absolute';
-    const paddingAdjust = marker.centerPaddingAdjustPx ?? 0;
     if (isRtl) {
-      markerContainer.style.right = `${marker.markerStartPx - paddingAdjust}px`;
-      lineEl.style.paddingRight = `${parseFloat(lineEl.style.paddingRight || '0') + paddingAdjust}px`;
+      markerContainer.style.right = `${markerStartPx}px`;
+      lineEl.style.paddingRight = `${parseFloat(lineEl.style.paddingRight || '0') + centerPaddingAdjustPx}px`;
     } else {
-      markerContainer.style.left = `${marker.markerStartPx - paddingAdjust}px`;
-      lineEl.style.paddingLeft = `${parseFloat(lineEl.style.paddingLeft || '0') + paddingAdjust}px`;
+      markerContainer.style.left = `${markerStartPx}px`;
+      lineEl.style.paddingLeft = `${parseFloat(lineEl.style.paddingLeft || '0') + centerPaddingAdjustPx}px`;
     }
   }
 
-  prependMarkerSuffix(doc, lineEl, marker.suffix, marker.suffixWidthPx, marker.run.fontSize);
+  prependMarkerSuffix(doc, lineEl, suffix, suffixWidthPx, run.fontSize ?? undefined);
   lineEl.prepend(markerContainer);
 };
 

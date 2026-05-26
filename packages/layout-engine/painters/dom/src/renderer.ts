@@ -1,26 +1,20 @@
 import type {
   ColumnLayout,
-  DrawingBlock,
   DrawingFragment,
   FlowMode,
   Fragment,
   ImageFragment,
   ImageHyperlink,
   Line,
-  LineSegment,
   PageMargins,
   ParaFragment,
   ParagraphBlock,
   Run,
   SourceAnchor,
-  TableBlock,
-  TableFragment,
-  TableMeasure,
   ResolvedLayout,
   ResolvedFragmentItem,
   ResolvedPage,
   ResolvedPaintItem,
-  ResolvedTableItem,
   ResolvedImageItem,
   ResolvedDrawingItem,
   LayoutSourceIdentity,
@@ -29,8 +23,6 @@ import type {
 import {
   LAYOUT_BOUNDARY_SCHEMA,
   buildLayoutSourceIdentityForFragment,
-  expandRunsForInlineNewlines,
-  getCellSpacingPx,
   normalizeColumnLayout,
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
@@ -52,16 +44,13 @@ import {
   spreadStyles,
   type PageStyles,
 } from './styles.js';
-import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
+import { renderResolvedTableFragment } from './table/renderResolvedTableFragment.js';
+import { tableFragmentKey } from './table/fragmentKey.js';
+import { getTableSnapshotFlags } from './table/snapshot.js';
 import { computeSdtBoundaries } from './sdt/boundaries.js';
 import { shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './sdt/container.js';
-import { applyContainerSdtDataset, applySdtDataset } from './sdt/dataset.js';
-import {
-  createInlineSdtWrapper,
-  expandSdtWrapperPmRange,
-  resolveRunSdtId,
-  syncInlineSdtWrapperTypography,
-} from './sdt/inline.js';
+import { applySdtDataset } from './sdt/dataset.js';
+import { createInlineSdtWrapper } from './sdt/inline.js';
 import {
   collectSdtSnapshotEntitiesFromDomRoot,
   type PaintSnapshotStructuredContentBlockEntity,
@@ -75,13 +64,12 @@ import type { RunRenderContext } from './runs/types.js';
 import { renderImageFragment as renderImageFragmentElement } from './images/image-fragment.js';
 import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './images/hyperlink.js';
 import { applyStyles } from './utils/apply-styles.js';
-import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
+import type { FragmentRenderContext } from './fragment-context.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
-import { renderDrawingContent as renderSharedDrawingContent } from './drawings/renderDrawingContent.js';
-import {
-  isHeaderWordArtWatermark,
-  renderDrawingFragment as renderDrawingFragmentElement,
-} from './drawings/renderDrawingFragment.js';
+import { renderDrawingFragment as renderDrawingFragmentElement } from './drawings/renderDrawingFragment.js';
+import { isWordArtTextboxWatermarkBlock } from './textbox/wordArtWatermark.js';
+import { applyNoteStoryFrameAttributes } from './notes/frame.js';
+import { isNonBodyStoryBlockId } from './notes/story.js';
 
 export type {
   PaintSnapshotStructuredContentBlockEntity,
@@ -211,25 +199,6 @@ type PageDomState = {
   fragments: FragmentDomState[];
 };
 
-/**
- * Rendering context passed to fragment renderers containing page metadata.
- * Provides information about the current page position and section for dynamic content like page numbers.
- *
- * @typedef {Object} FragmentRenderContext
- * @property {number} pageNumber - Current page number (1-indexed)
- * @property {number} totalPages - Total number of pages in the document
- * @property {'body'|'header'|'footer'} section - Document section being rendered
- * @property {string} [pageNumberText] - Optional formatted page number text (e.g., "Page 1 of 10")
- */
-export type FragmentRenderContext = {
-  pageNumber: number;
-  totalPages: number;
-  section: 'body' | 'header' | 'footer';
-  story?: LayoutStoryLocator;
-  pageNumberText?: string;
-  pageIndex?: number;
-};
-
 export type PaintSnapshotLineStyle = {
   paddingLeftPx?: number;
   paddingRightPx?: number;
@@ -345,6 +314,8 @@ type PaintSnapshotCaptureOptions = {
   wrapperEl?: HTMLElement;
   sourceAnchor?: SourceAnchor;
 };
+
+type ResolvedTablePaintItem = Extract<ResolvedPaintItem, { fragmentKind: 'table' }>;
 
 function roundSnapshotMetric(value: number): number | null {
   if (!Number.isFinite(value)) return null;
@@ -691,28 +662,16 @@ const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
 
 /**
  * DOM-based document painter that renders layout fragments to HTML elements.
- * Manages page rendering, virtualization, headers/footers, and incremental updates.
+ * Manages page-level orchestration, virtualization, headers/footers, snapshots,
+ * providers, and incremental updates.
  *
  * @class DomPainter
  *
  * @remarks
- * The DomPainter is responsible for:
- * - Rendering layout fragments (paragraphs, lists, images, tables, drawings) to DOM elements
- * - Managing page-level DOM structure and styling
- * - Providing virtualization for large documents (vertical mode only)
- * - Handling headers and footers via PageDecorationProvider
- * - Incremental re-rendering when only specific blocks change
- * - Hyperlink rendering with security sanitization and accessibility
- *
- * @example
- * ```typescript
- * const painter = new DomPainter(blocks, measures, {
- *   layoutMode: 'vertical',
- *   pageStyles: { width: '8.5in', height: '11in' }
- * });
- * painter.mount(document.getElementById('editor-container'));
- * painter.render(layout);
- * ```
+ * Keep feature and content rendering in focused modules under `src/` (for
+ * example `paragraph/`, `table/`, `images/`, `drawings/`, `runs/`, `sdt/`,
+ * `notes/`, or `textbox/`). `renderer.ts` should dispatch to those modules
+ * instead of growing feature-specific rendering paths.
  */
 export class DomPainter {
   private readonly options: PainterOptions;
@@ -1055,11 +1014,12 @@ export class DomPainter {
         tabCount += tabs.length;
         lineCount += 1;
 
+        const tableFlags = getTableSnapshotFlags(lineEl);
         lines.push(
           compactSnapshotObject({
             index: lineIndex,
-            inTableFragment: Boolean(lineEl.closest('.superdoc-table-fragment')),
-            inTableParagraph: Boolean(lineEl.closest('.superdoc-table-paragraph')),
+            inTableFragment: tableFlags.inTableFragment,
+            inTableParagraph: tableFlags.inTableParagraph,
             style: snapshotLineStyleFromElement(lineEl),
             markers,
             tabs,
@@ -2462,7 +2422,20 @@ export class DomPainter {
       return this.renderDrawingFragment(fragment, context, resolvedItem as ResolvedDrawingItem | undefined);
     }
     if (fragment.kind === 'table') {
-      return this.renderTableFragment(fragment, context, sdtBoundary, resolvedItem as ResolvedTableItem | undefined);
+      return renderResolvedTableFragment({
+        doc: this.doc,
+        fragment,
+        context,
+        sdtBoundary,
+        resolvedItem: resolvedItem as ResolvedTablePaintItem | undefined,
+        renderLine: this.renderLine.bind(this),
+        capturePaintSnapshotLine: this.capturePaintSnapshotLine.bind(this),
+        applyFragmentFrame: (el, tableFragment, section) =>
+          this.applyFragmentFrame(el, tableFragment, section, context.story),
+        applyResolvedFragmentFrame: (el, item, tableFragment, section) =>
+          this.applyResolvedFragmentFrame(el, item, tableFragment, section, context.story),
+        createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
+      });
     }
     throw new Error(`DomPainter: unsupported fragment kind ${(fragment as Fragment).kind}`);
   }
@@ -2493,8 +2466,6 @@ export class DomPainter {
       applyResolvedFragmentFrame: (el, item, paraFragment) =>
         this.applyResolvedFragmentFrame(el, item, paraFragment, context.section, context.story),
       applyFragmentFrame: (el, paraFragment) => this.applyFragmentFrame(el, paraFragment, context.section, context.story),
-      applySdtDataset,
-      applyContainerSdtDataset,
       renderLine: ({
         block,
         line,
@@ -2573,8 +2544,6 @@ export class DomPainter {
       applyFragmentFrame: (el, imageFragment, section) =>
         this.applyFragmentFrame(el, imageFragment, section, context.story),
       applyFragmentWrapperZIndex: this.applyFragmentWrapperZIndex.bind(this),
-      applySdtDataset,
-      applyContainerSdtDataset,
       buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
       createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
     });
@@ -2625,139 +2594,6 @@ export class DomPainter {
     });
   }
 
-  private resolveTableRenderData(
-    fragment: TableFragment,
-    resolvedItem?: ResolvedTableItem,
-  ): {
-    block: TableBlock;
-    measure: TableMeasure;
-    cellSpacingPx: number;
-    effectiveColumnWidths: number[];
-  } {
-    if (!resolvedItem) {
-      throw new Error(`DomPainter: missing resolved table item for fragment ${fragment.blockId}`);
-    }
-    return {
-      block: resolvedItem.block,
-      measure: resolvedItem.measure,
-      cellSpacingPx: resolvedItem.cellSpacingPx,
-      effectiveColumnWidths: resolvedItem.effectiveColumnWidths,
-    };
-  }
-
-  private renderTableFragment(
-    fragment: TableFragment,
-    context: FragmentRenderContext,
-    sdtBoundary?: SdtBoundaryOptions,
-    resolvedItem?: ResolvedTableItem,
-  ): HTMLElement {
-    try {
-      if (!this.doc) {
-        throw new Error('DomPainter: document is not available');
-      }
-
-      // Wrap applyFragmentFrame to capture section from context.
-      // Table cell inner fragments always stay on the legacy frame path for now.
-      const applyFragmentFrameWithSection = (el: HTMLElement, frag: Fragment): void => {
-        this.applyFragmentFrame(el, frag, context.section, context.story);
-      };
-
-      // Word justifies text inside table cells, but not the final line unless the
-      // paragraph ends with an explicit line break.
-      const tableCellExpandedRunsCache = new WeakMap<ParagraphBlock, Run[]>();
-      const renderLineForTableCell = (
-        block: ParagraphBlock,
-        line: Line,
-        ctx: FragmentRenderContext,
-        lineIndex: number,
-        isLastLine: boolean,
-        resolvedListTextStartPx?: number,
-      ): HTMLElement => {
-        const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
-        const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
-        const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
-
-        let expandedRuns = tableCellExpandedRunsCache.get(block);
-        if (!expandedRuns) {
-          expandedRuns = expandRunsForInlineNewlines(block.runs);
-          tableCellExpandedRunsCache.set(block, expandedRuns);
-        }
-
-        return this.renderLine(
-          block,
-          line,
-          ctx,
-          undefined,
-          lineIndex,
-          shouldSkipJustify,
-          expandedRuns,
-          resolvedListTextStartPx,
-        );
-      };
-
-      const buildTableImageHyperlinkAnchor = (
-        imageEl: HTMLElement,
-        hyperlink: ImageHyperlink | undefined,
-        display: 'block' | 'inline-block',
-      ): HTMLElement => buildSharedImageHyperlinkAnchor(this.doc!, imageEl, hyperlink, display);
-
-      const renderDrawingContentForTableCell = (
-        block: DrawingBlock,
-        options?: { clipContainer?: HTMLElement },
-      ): HTMLElement =>
-        renderSharedDrawingContent({
-          doc: this.doc!,
-          block,
-          geometry: 'geometry' in block ? block.geometry : undefined,
-          context,
-          clipContainer: options?.clipContainer,
-          buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
-        });
-
-      const tableRenderData = this.resolveTableRenderData(fragment, resolvedItem);
-
-      const el = renderTableFragmentElement({
-        doc: this.doc,
-        fragment,
-        context,
-        block: tableRenderData.block,
-        measure: tableRenderData.measure,
-        cellSpacingPx: tableRenderData.cellSpacingPx,
-        effectiveColumnWidths: tableRenderData.effectiveColumnWidths,
-        sdtBoundary,
-        renderLine: renderLineForTableCell,
-        captureLineSnapshot: (lineEl, lineContext, options) => {
-          this.capturePaintSnapshotLine(lineEl, lineContext, {
-            inTableFragment: true,
-            inTableParagraph: options?.inTableParagraph ?? false,
-            wrapperEl: options?.wrapperEl,
-          });
-        },
-        renderDrawingContent: renderDrawingContentForTableCell,
-        applyFragmentFrame: applyFragmentFrameWithSection,
-        applySdtDataset,
-        applyContainerSdtDataset,
-        applyStyles,
-      });
-
-      // Override outer wrapper positioning with resolved data when available.
-      // Inner cell fragments still use legacy applyFragmentFrame via deps closure.
-      if (resolvedItem) {
-        this.applyResolvedFragmentFrame(el, resolvedItem, fragment, context.section, context.story);
-        // Re-apply the SDT group width override after the resolved frame, so block-SDT
-        // containers can stretch table fragments to match sibling paragraph widths.
-        if (sdtBoundary?.widthOverride != null) {
-          el.style.width = `${sdtBoundary.widthOverride}px`;
-        }
-      }
-
-      return el;
-    } catch (error) {
-      console.error('[DomPainter] Table fragment rendering failed:', { fragment, error });
-      return this.createErrorPlaceholder(fragment.blockId, error);
-    }
-  }
-
   private renderLine(
     block: ParagraphBlock,
     line: Line,
@@ -2804,12 +2640,7 @@ export class DomPainter {
       buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(
         this,
       ) as RunRenderContext['buildImageHyperlinkAnchor'],
-      resolveTrackedChangesConfig,
-      applyTrackedChangeDecorations,
-      resolveRunSdtId,
       createInlineSdtWrapper: (sdt) => createInlineSdtWrapper(sdt, runContext),
-      syncInlineSdtWrapperTypography,
-      expandSdtWrapperPmRange,
     };
     return runContext;
   }
@@ -2870,10 +2701,7 @@ export class DomPainter {
     applySourceAnchorDataset(el, fragment.sourceAnchor);
     applyLayoutIdentityDataset(el, resolveOrBuildFragmentIdentity(fragment, story ?? resolveSectionStory(section)));
 
-    // Footnote content is read-only: prevent cursor placement and typing (blockId prefix from FootnotesBuilder)
-    if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
-      el.setAttribute('contenteditable', 'false');
-    }
+    applyNoteStoryFrameAttributes(el, fragment.blockId);
 
     if (fragment.kind === 'para') {
       applyParagraphFragmentPmAttributes(el, fragment, section);
@@ -2889,12 +2717,9 @@ export class DomPainter {
     el: HTMLElement,
     fragment: Fragment,
     section?: 'body' | 'header' | 'footer',
-    resolvedItem?: ResolvedFragmentItem | ResolvedTableItem | ResolvedImageItem | ResolvedDrawingItem,
+    resolvedItem?: ResolvedFragmentItem | ResolvedTablePaintItem | ResolvedImageItem | ResolvedDrawingItem,
   ): void {
-    // Footnote content is read-only: prevent cursor placement and typing
-    if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
-      el.setAttribute('contenteditable', 'false');
-    }
+    applyNoteStoryFrameAttributes(el, fragment.blockId);
 
     if (fragment.kind === 'para') {
       applyParagraphFragmentPmAttributes(el, fragment, section, resolvedItem as ResolvedFragmentItem | undefined);
@@ -2918,7 +2743,7 @@ export class DomPainter {
       return true;
     }
 
-    return section === 'header' && fragment.kind === 'drawing' && isHeaderWordArtWatermark(resolvedItem?.block);
+    return section === 'header' && fragment.kind === 'drawing' && isWordArtTextboxWatermarkBlock(resolvedItem?.block);
   }
 
   /**
@@ -2940,7 +2765,7 @@ export class DomPainter {
 
   private applyResolvedFragmentFrame(
     el: HTMLElement,
-    item: ResolvedFragmentItem | ResolvedTableItem | ResolvedImageItem | ResolvedDrawingItem,
+    item: ResolvedFragmentItem | ResolvedTablePaintItem | ResolvedImageItem | ResolvedDrawingItem,
     fragment: Fragment,
     section?: 'body' | 'header' | 'footer',
     story?: LayoutStoryLocator,
@@ -3002,14 +2827,8 @@ const fragmentKey = (fragment: Fragment): string => {
       return `image:${fragment.blockId}:${fragment.x}:${fragment.y}`;
     case 'drawing':
       return `drawing:${fragment.blockId}:${fragment.x}:${fragment.y}`;
-    case 'table': {
-      // Include row range and partial row info to uniquely identify table fragments
-      // This is critical for mid-row splitting where multiple fragments can exist for the same table
-      const partialKey = fragment.partialRow
-        ? `:${fragment.partialRow.fromLineByCell.join(',')}-${fragment.partialRow.toLineByCell.join(',')}`
-        : '';
-      return `table:${fragment.blockId}:${fragment.fromRow}:${fragment.toRow}${partialKey}`;
-    }
+    case 'table':
+      return tableFragmentKey(fragment);
     default: {
       const _exhaustiveCheck: never = fragment;
       return _exhaustiveCheck;
@@ -3026,10 +2845,3 @@ const hasFragmentGeometryChanged = (previous: Fragment, next: Fragment): boolean
     typeof previous.height === 'number' &&
     typeof next.height === 'number' &&
     previous.height !== next.height);
-
-const isNonBodyStoryBlockId = (blockId: string | undefined): boolean =>
-  typeof blockId === 'string' &&
-  (blockId.startsWith('footnote-') ||
-    blockId.startsWith('endnote-') ||
-    blockId.startsWith('__sd_semantic_footnote-') ||
-    blockId.startsWith('__sd_semantic_endnote-'));

@@ -1,10 +1,7 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { AddMarkStep, RemoveMarkStep, ReplaceStep, ReplaceAroundStep } from 'prosemirror-transform';
-import { createNumberingManager } from './NumberingManager.js';
-import { ListHelpers } from '@helpers/list-numbering-helpers.js';
-import { generateOrderedListIndex } from '@helpers/orderedListUtils.js';
-import { docxNumberingHelpers } from '@core/super-converter/v2/importer/listImporter.js';
 import { calculateResolvedParagraphProperties } from './resolvedPropertiesCache.js';
+import { createListRenderingSync } from './listRenderingSync.js';
 
 function blockRevIsFreshForSlicePaste(rev) {
   return rev === 0 || rev === '0';
@@ -25,32 +22,13 @@ function shouldPreserveSlicePastedListRendering(node, transactions) {
  * @returns {import('prosemirror-state').Plugin}
  */
 export function createNumberingPlugin(editor) {
-  const numberingManager = createNumberingManager();
-  let forceFullRecompute = false;
+  const listRenderingSync = createListRenderingSync(editor);
+  let forceFullRecompute = true;
 
-  // Helpers to initialize and refresh start settings from definitions
-  const applyStartSettingsFromDefinitions = (definitionsMap) => {
-    Object.entries(definitionsMap || {}).forEach(([numId, levels]) => {
-      Object.entries(levels || {}).forEach(([level, def]) => {
-        const start = parseInt(def?.start) || 1;
-        let restart = def?.restart;
-        if (restart != null) {
-          restart = parseInt(restart);
-        }
-        numberingManager.setStartSettings(numId, parseInt(level), start, restart, def.startOverridden);
-      });
-    });
-  };
-
-  // Callback to refresh start settings when definitions change
   const refreshStartSettings = () => {
-    const definitions = ListHelpers.getAllListDefinitions(editor);
-    applyStartSettingsFromDefinitions(definitions);
+    listRenderingSync.refreshStartSettings();
     forceFullRecompute = true;
   };
-
-  // Initial setup
-  refreshStartSettings();
 
   // Listen for definition changes
   if (typeof editor?.on === 'function') {
@@ -230,68 +208,14 @@ export function createNumberingPlugin(editor) {
         bumpBlockRev(node, pos);
       };
 
-      // Generate new list properties
-      numberingManager.enableCache();
-      try {
-        newState.doc.descendants((node, pos) => {
-          let resolvedProps = calculateResolvedParagraphProperties(editor, node, newState.doc.resolve(pos));
-          if (node.type.name !== 'paragraph' || !resolvedProps.numberingProperties) {
-            return;
-          }
-
-          // Lossless SuperDoc slice paste: keep markers/list type from the slice. Running
-          // definition lookup first would clear listRendering when numIds are absent in
-          // the target doc, or overwrite markers when the same doc continues counters.
-          if (shouldPreserveSlicePastedListRendering(node, transactions)) {
-            return false;
-          }
-
-          // Retrieving numbering definition from docx
-          const { numId, ilvl: level = 0 } = resolvedProps.numberingProperties;
-          const definitionDetails = ListHelpers.getListDefinitionDetails({ numId, level, editor });
-
-          if (!definitionDetails || Object.keys(definitionDetails).length === 0) {
-            // Treat as normal paragraph if definition is missing
-            updateListRenderingIfNeeded(node, pos, null);
-            return false;
-          }
-
-          let { lvlText, customFormat, listNumberingType, suffix, justification, abstractId } = definitionDetails;
-          // Defining the list marker
-          let markerText = '';
-          listNumberingType = listNumberingType || 'decimal';
-          const count = numberingManager.calculateCounter(numId, level, pos, abstractId);
-          numberingManager.setCounter(numId, level, pos, count, abstractId);
-          const path = numberingManager.calculatePath(numId, level, pos);
-          if (listNumberingType !== 'bullet') {
-            markerText =
-              generateOrderedListIndex({
-                listLevel: path,
-                lvlText: lvlText,
-                listNumberingType,
-                customFormat,
-              }) ?? '';
-          } else {
-            markerText = docxNumberingHelpers.normalizeLvlTextChar(lvlText) ?? '';
-          }
-
-          const newListRendering = {
-            markerText,
-            suffix,
-            justification,
-            path,
-            numberingType: listNumberingType,
-            ...(customFormat ? { customFormat } : {}),
-          };
-
-          // Updating rendering attrs for node view usage
-          updateListRenderingIfNeeded(node, pos, newListRendering);
-
-          return false; // no need to descend into a paragraph
-        });
-      } finally {
-        numberingManager.disableCache();
-      }
+      listRenderingSync.syncListRendering({
+        visitNodes: (visit) =>
+          newState.doc.descendants((node, pos) => visit(node, pos, { $pos: newState.doc.resolve(pos) })),
+        resolveParagraphProperties: (node, _pos, context) =>
+          calculateResolvedParagraphProperties(editor, node, context.$pos),
+        shouldPreserveParagraph: (node) => shouldPreserveSlicePastedListRendering(node, transactions),
+        updateListRendering: updateListRenderingIfNeeded,
+      });
       return tr.docChanged ? tr : null;
     },
   });

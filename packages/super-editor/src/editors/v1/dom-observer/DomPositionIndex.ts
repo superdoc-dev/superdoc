@@ -1,4 +1,4 @@
-import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
+import { DOM_CLASS_NAMES, isNonBodyStoryBlockId } from '@superdoc/dom-contract';
 import { sortedIndexBy } from 'lodash';
 import { debugLog, getSelectionDebugConfig } from '../core/presentation-editor/selection/SelectionDebug.js';
 
@@ -35,12 +35,7 @@ function isExcludedFromBodyDomIndex(node: HTMLElement): boolean {
   }
 
   const blockId = node.closest<HTMLElement>('[data-block-id]')?.dataset.blockId ?? '';
-  return (
-    blockId.startsWith('footnote-') ||
-    blockId.startsWith('__sd_semantic_footnote-') ||
-    blockId.startsWith('endnote-') ||
-    blockId.startsWith('__sd_semantic_endnote-')
-  );
+  return isNonBodyStoryBlockId(blockId);
 }
 
 /**

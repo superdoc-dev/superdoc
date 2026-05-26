@@ -15,11 +15,13 @@ import type {
 } from '@superdoc/contracts';
 import {
   adjustAvailableWidthForTextIndent,
+  computeCellSliceContentHeight,
+  describeCellRenderBlocks,
   computeLinePmRange as computeLinePmRangeUnified,
   effectiveTableCellSpacing,
   getFirstLineIndentOffset,
+  getEmbeddedRowLines,
 } from '@superdoc/contracts';
-import { describeCellRenderBlocks, computeCellSliceContentHeight, getEmbeddedRowLines } from '@superdoc/layout-engine';
 import { measureCharacterX } from './text-measurement.js';
 import { clickToPositionDom, findPageElement } from './dom-mapping.js';
 import {

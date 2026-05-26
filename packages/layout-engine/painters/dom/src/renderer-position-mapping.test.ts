@@ -23,17 +23,20 @@ const shiftByTwo = {
 };
 
 describe('DomPainter.updatePositionAttributes', () => {
-  it('does not remap footnote fragments with body transaction mappings', () => {
-    const painter = new DomPainter();
-    const { fragment, span } = makeFragment('footnote-1-abc', 2, 30);
+  it.each(['footnote-1-abc', 'endnote-1-abc', '__sd_semantic_footnote-1-abc', '__sd_semantic_endnote-1-abc'])(
+    'does not remap %s fragments with body transaction mappings',
+    (blockId) => {
+      const painter = new DomPainter();
+      const { fragment, span } = makeFragment(blockId, 2, 30);
 
-    (painter as any).updatePositionAttributes(fragment, shiftByTwo);
+      (painter as any).updatePositionAttributes(fragment, shiftByTwo);
 
-    expect(fragment.dataset.pmStart).toBe('2');
-    expect(fragment.dataset.pmEnd).toBe('30');
-    expect(span.dataset.pmStart).toBe('2');
-    expect(span.dataset.pmEnd).toBe('30');
-  });
+      expect(fragment.dataset.pmStart).toBe('2');
+      expect(fragment.dataset.pmEnd).toBe('30');
+      expect(span.dataset.pmStart).toBe('2');
+      expect(span.dataset.pmEnd).toBe('30');
+    },
+  );
 
   it('still remaps body fragments when the mapping applies', () => {
     const painter = new DomPainter();

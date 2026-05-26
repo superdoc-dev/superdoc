@@ -995,44 +995,6 @@ export class EditorInputManager {
     return calculateExtendedSelection(layoutState?.blocks ?? [], anchor, head, mode);
   }
 
-  /**
-   * When the drag anchor is outside an isolating node (table), prevent the head
-   * from resolving inside one. If the head is inside a table cell, clamp it to
-   * just before or after the table boundary (depending on drag direction).
-   *
-   * Selections that span PAST a table (anchor before, head after) are allowed —
-   * only positions resolving INSIDE the table are clamped.
-   */
-  #clampHeadAtIsolatingBoundary(doc: ProseMirrorNode, anchor: number, head: number): number {
-    const forward = head >= anchor;
-
-    try {
-      const $head = doc.resolve(head);
-      // Find the outermost isolating ancestor. Walk from innermost to outermost,
-      // tracking the shallowest isolating depth. Using the outermost ensures that
-      // we clamp to just before/after the entire table, not to a boundary between
-      // cells within the same table.
-      let isolatingDepth = -1;
-      for (let d = $head.depth; d > 0; d--) {
-        const node = $head.node(d);
-        if (node.type.spec.isolating || node.type.spec.tableRole === 'table') {
-          isolatingDepth = d;
-        }
-      }
-
-      if (isolatingDepth > 0) {
-        const boundary = forward ? $head.before(isolatingDepth) : $head.after(isolatingDepth);
-        const near = Selection.near(doc.resolve(boundary), forward ? -1 : 1);
-        if (near instanceof TextSelection) return near.head;
-        return anchor;
-      }
-    } catch {
-      /* position resolution failed */
-    }
-
-    return head;
-  }
-
   #shouldUseCellSelection(currentTableHit: TableHitResult | null): boolean {
     return shouldUseCellSelectionFromHelper(currentTableHit, this.#cellAnchor, this.#cellDragMode);
   }
@@ -2463,14 +2425,7 @@ export class EditorInputManager {
 
     // Text selection mode
     const anchor = this.#dragAnchor!;
-    let head = hit.pos;
-
-    // When the drag started outside a table, prevent the head from entering an isolating
-    // node (table). If the head resolves inside a table, ProseMirror-tables' appendTransaction
-    // converts the TextSelection into a CellSelection, causing the anchor to jump.
-    if (!this.#cellAnchor) {
-      head = this.#clampHeadAtIsolatingBoundary(doc, anchor, head);
-    }
+    const head = hit.pos;
 
     const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
 

@@ -1,5 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { DOMSerializer } from 'prosemirror-model';
+import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { createDomPainter } from '@superdoc/painter-dom';
+import { resolveLayout } from '@superdoc/layout-resolved';
 import { Editor } from '@core/Editor.js';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
@@ -43,18 +45,96 @@ const getChildElement = (node, name) => node?.elements?.find((child) => child.na
 
 const hasDescendantNamed = (node, name) => collectElementsByName(node, name).length > 0;
 
+const DEFAULT_CONVERTER_CONTEXT = {
+  docx: {},
+  translatedLinkedStyles: {
+    docDefaults: {},
+    latentStyles: {},
+    styles: {},
+  },
+  translatedNumbering: {
+    abstracts: {},
+    definitions: {},
+  },
+};
+
+const TEST_PAGE = {
+  pageSize: { w: 612, h: 792 },
+  margins: { top: 72, right: 72, bottom: 72, left: 72 },
+};
+
+const paintSavedModel = (pmDoc, mediaFiles) => {
+  const { blocks } = toFlowBlocks(pmDoc, {
+    converterContext: DEFAULT_CONVERTER_CONTEXT,
+    mediaFiles,
+  });
+  const contentWidth = TEST_PAGE.pageSize.w - TEST_PAGE.margins.left - TEST_PAGE.margins.right;
+  const measures = blocks.map((block) => {
+    const imageRun = block.runs?.find((run) => run.kind === 'image');
+    const lineHeight = imageRun?.height ?? 20;
+
+    return {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: Math.max((block.runs?.length ?? 1) - 1, 0),
+          toChar: 0,
+          width: imageRun?.width ?? contentWidth,
+          ascent: lineHeight,
+          descent: 0,
+          lineHeight,
+        },
+      ],
+      totalHeight: lineHeight,
+    };
+  });
+
+  let y = TEST_PAGE.margins.top;
+  const fragments = blocks.flatMap((block, index) => {
+    const measure = measures[index];
+    if (block.kind !== 'paragraph') return [];
+
+    const fragment = {
+      kind: 'para',
+      blockId: block.id,
+      fromLine: 0,
+      toLine: measure.lines?.length ?? 1,
+      x: TEST_PAGE.margins.left,
+      y,
+      width: contentWidth,
+    };
+    y += measure.totalHeight ?? 20;
+    return [fragment];
+  });
+
+  const layout = {
+    pageSize: TEST_PAGE.pageSize,
+    pages: [{ number: 1, fragments }],
+  };
+  const mount = document.createElement('div');
+  document.body.appendChild(mount);
+
+  const painter = createDomPainter({});
+  const resolvedLayout = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+  painter.paint({ resolvedLayout }, mount);
+
+  return { mount, blocks };
+};
+
 describe('SD-3116 structured content image round-trip', () => {
   let editor;
   let reopened;
-  let repainted;
+  let paintMount;
 
   afterEach(() => {
     editor?.destroy();
     reopened?.destroy();
-    repainted?.destroy();
+    paintMount?.remove();
     editor = null;
     reopened = null;
-    repainted = null;
+    paintMount = null;
   });
 
   it('exports and reopens a block SDT containing preset image content', async () => {
@@ -161,14 +241,17 @@ describe('SD-3116 structured content image round-trip', () => {
     expect(savedImage?.attrs.src).toMatch(/^word\/media\/image-\d+\.svg$/);
     expect(savedMedia[savedImage.attrs.src]).toBe(SIGNATURE_SRC);
 
-    ({ editor: repainted } = initTestEditor({ jsonOverride: savedModel }));
-    repainted.storage.image.media = { ...savedMedia };
+    const painted = paintSavedModel(savedModel, savedMedia);
+    paintMount = painted.mount;
 
-    const fragment = DOMSerializer.fromSchema(repainted.schema).serializeFragment(repainted.state.doc.content, {
-      document,
+    expect(painted.blocks).toHaveLength(1);
+    expect(painted.blocks[0].attrs?.sdt).toMatchObject({
+      type: 'structuredContent',
+      scope: 'block',
+      id: '1299215860',
     });
-    const img = fragment.querySelector('img');
 
+    const img = paintMount.querySelector('img');
     expect(img?.getAttribute('src')).toBe(SIGNATURE_SRC);
     expect(img?.getAttribute('alt')).toBe('Signature Example');
   });

@@ -457,6 +457,12 @@ describe('getFallbackImageNameFromDataUri', () => {
 
     expect(getFallbackImageNameFromDataUri(dataUri)).toBe('image.svg');
   });
+
+  it('normalizes MIME aliases to Word-compatible image extensions', () => {
+    expect(getFallbackImageNameFromDataUri('data:image/jpeg;base64,abc')).toBe('image.jpg');
+    expect(getFallbackImageNameFromDataUri('data:image/tiff;base64,abc')).toBe('image.tif');
+    expect(getFallbackImageNameFromDataUri('data:image/x-icon;base64,abc')).toBe('image.ico');
+  });
 });
 
 describe('detectImageType', () => {

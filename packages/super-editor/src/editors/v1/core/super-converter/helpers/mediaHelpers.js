@@ -5,11 +5,25 @@ export const sanitizeDocxMediaName = (value, fallback = 'image') => {
   return sanitized || fallback;
 };
 
+const MIME_TYPE_TO_EXTENSION = {
+  'image/svg+xml': 'svg',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/tiff': 'tif',
+  'image/tif': 'tif',
+  'image/x-icon': 'ico',
+  'image/vnd.microsoft.icon': 'ico',
+  'image/ico': 'ico',
+};
+
 export const getImageExtensionFromMimeType = (mimeType) => {
-  const [, subtype] = String(mimeType || '').split('/');
+  const normalizedMimeType = String(mimeType || '').toLowerCase();
+  if (MIME_TYPE_TO_EXTENSION[normalizedMimeType]) return MIME_TYPE_TO_EXTENSION[normalizedMimeType];
+
+  const [, subtype] = normalizedMimeType.split('/');
   if (!subtype) return null;
 
-  return subtype.toLowerCase() === 'svg+xml' ? 'svg' : subtype.toLowerCase();
+  return subtype;
 };
 
 export const getDataUriMetadata = (src = '') => {

@@ -86,6 +86,16 @@ export const IMAGE_DATA_URL_MIME_TYPES = Object.freeze([
   'image/tiff',
 ]);
 
+/**
+ * Parse a data URI into the MIME type, payload, and base64 flag used by image
+ * validation and DOCX export. Returns null for non-data URI strings.
+ *
+ * The payload separator is tracked separately so callers can reject malformed
+ * values like `data:image/svg+xml` instead of treating them as empty files.
+ *
+ * @param {string} src
+ * @returns {{hasPayloadSeparator: boolean, payload: string, rawMimeType: string, mimeType: string, isBase64: boolean}|null}
+ */
 export const getDataUriMetadata = (src = '') => {
   if (typeof src !== 'string' || !src.startsWith('data:')) return null;
 
@@ -105,6 +115,12 @@ export const getDataUriMetadata = (src = '') => {
   };
 };
 
+/**
+ * Percent-decode a non-base64 data URI payload.
+ *
+ * @param {string} payload
+ * @returns {string|null} Decoded text, or null when the payload has invalid percent escapes.
+ */
 export const tryDecodeDataUriText = (payload = '') => {
   try {
     return decodeURIComponent(payload);
@@ -113,6 +129,17 @@ export const tryDecodeDataUriText = (payload = '') => {
   }
 };
 
+/**
+ * Validate an image data URL for rendering and export.
+ *
+ * The URL must use a supported image MIME type, include a comma payload
+ * separator, and stay within MAX_IMAGE_DATA_URL_LENGTH. Base64 payloads are
+ * accepted for all supported image MIME types. Non-base64 payloads are accepted
+ * only for SVG, where the percent-encoded text must decode successfully.
+ *
+ * @param {unknown} src
+ * @returns {boolean}
+ */
 export const isValidImageDataUrl = (src) => {
   if (typeof src !== 'string' || !src.startsWith('data:') || src.length > MAX_IMAGE_DATA_URL_LENGTH) {
     return false;

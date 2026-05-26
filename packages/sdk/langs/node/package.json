@@ -22,6 +22,7 @@
   "scripts": {
     "build": "tsc && rollup -c rollup.cjs.config.mjs",
     "typecheck": "tsc --noEmit",
+    "smoke:product-recipe": "node scripts/product-recipe-smoke.mjs",
     "prepack": "rm -rf tools && cp -r ../../tools ./tools && rm -f ./tools/__init__.py",
     "postpack": "rm -rf tools && ln -s ../../tools tools"
   },

@@ -122,4 +122,50 @@ describe('dispatchSuperDocTool', () => {
       },
     ]);
   });
+
+  test('routes overlapping track-changes tool by profile', async () => {
+    const legacyCalls: unknown[] = [];
+    const workflowCalls: unknown[] = [];
+    const documentHandle = {
+      info: async () => ({
+        revision: '1',
+        counts: { paragraphs: 0, headings: 0, lists: 0, tables: 0, comments: 0, trackedChanges: 0 },
+        outline: [],
+      }),
+      blocks: {
+        list: async () => ({ blocks: [], total: 0, page: { limit: 250, offset: 0, returned: 0 } }),
+      },
+      lists: {
+        list: async () => ({ items: [], total: 0, page: { limit: 250, offset: 0, returned: 0 } }),
+      },
+      tables: {
+        list: async () => ({ tables: [], total: 0, page: { limit: 250, offset: 0, returned: 0 } }),
+      },
+      trackChanges: {
+        list: async (args: unknown) => {
+          if ((args as Record<string, unknown>).in === 'all') {
+            workflowCalls.push(args);
+            return { evaluatedRevision: '1', total: 0, items: [], page: { limit: 250, offset: 0, returned: 0 } };
+          }
+          legacyCalls.push(args);
+          return { evaluatedRevision: '1', total: 0, items: [], page: { limit: 250, offset: 0, returned: 0 } };
+        },
+      },
+    } as unknown as BoundDocApi;
+
+    await dispatchSuperDocTool(documentHandle, 'superdoc_track_changes', { action: 'list' });
+    const workflowResult = await dispatchSuperDocTool(
+      documentHandle,
+      'superdoc_track_changes',
+      { action: 'summary' },
+      { toolsetProfile: 'workflow-poc' },
+    );
+
+    expect(legacyCalls).toEqual([{}]);
+    expect(workflowCalls).toEqual([
+      { offset: 0, limit: 250, in: 'all' },
+      { offset: 0, limit: 250, in: 'all' },
+    ]);
+    expect((workflowResult as { execution?: { action?: string } }).execution?.action).toBe('summary');
+  });
 });

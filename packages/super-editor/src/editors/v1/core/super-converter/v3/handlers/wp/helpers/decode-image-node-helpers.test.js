@@ -220,6 +220,31 @@ describe('translateImageNode', () => {
     expect(blip.attributes['r:embed']).toBe(baseParams.relationships[0].attributes.Id);
   });
 
+  it('should reuse document relationship by target when image rId is missing', () => {
+    baseParams.node.attrs = {
+      src: 'word/media/test.png',
+      size: { width: 100, height: 50 },
+    };
+    baseParams.converter.convertedXml['word/_rels/document.xml.rels'].elements[0].elements.push({
+      type: 'element',
+      name: 'Relationship',
+      attributes: {
+        Id: 'rIdDocumentImage',
+        Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+        Target: 'media/test.png',
+      },
+    });
+
+    const result = translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(0);
+    const blip = result.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+    expect(blip.attributes['r:embed']).toBe('rIdDocumentImage');
+  });
+
   it('should not export non-base64 raster data URI media', () => {
     baseParams.node.attrs = {
       src: 'data:image/png,not-base64',

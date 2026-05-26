@@ -310,7 +310,11 @@ export const translateImageNode = (params) => {
     const path = getMediaTargetForImageSrc(params, src);
     if (!path) return fallbackForMissingMediaTarget(params);
 
-    const existingRelation = findImageRelationship(params.relationships, { target: path });
+    const relationships = [
+      ...(params.relationships || []),
+      ...(params.isHeaderFooter ? params.existingRelationships || [] : getDocumentRelationships(params)),
+    ];
+    const existingRelation = findImageRelationship(relationships, { target: path });
     imageId = existingRelation?.attributes?.Id ?? addNewImageRelationship(params, path);
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
     // We already handled the no-type case above; here the type IS valid.

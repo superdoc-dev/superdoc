@@ -790,6 +790,33 @@ describe('StructuredContentLockPlugin', () => {
         expect(finalState.doc.textContent).not.toBe(originalContent);
         expect(sdtNodeExists(finalState.doc, 'structuredContent')).toBe(true);
       });
+
+      it('sdtLocked: undo restores inline SDT content deleted by Backspace', () => {
+        const leadingRun = schema.nodes.run.create(null, schema.text('Lead '));
+        const sdtRun = schema.nodes.run.create(null, schema.text('inline value'));
+        const sdt = schema.nodes.structuredContent.create({ id: 'test-123', lockMode: 'sdtLocked' }, sdtRun);
+        const trailingRun = schema.nodes.run.create(null, schema.text('ail.'));
+        const paragraph = schema.nodes.paragraph.create(null, [leadingRun, sdt, trailingRun]);
+        const doc = schema.nodes.doc.create(null, [paragraph]);
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+
+        placeCaretAt(state, sdtInfo.end);
+        handleBackspace(editor);
+        handleBackspace(editor);
+
+        let sdtAfterDelete = findSDTNode(editor.state.doc, 'structuredContent');
+        expect(sdtAfterDelete).not.toBeNull();
+        expect(sdtAfterDelete.node.textContent).toBe('');
+
+        expect(editor.commands.undo()).toBe(true);
+
+        sdtAfterDelete = findSDTNode(editor.state.doc, 'structuredContent');
+        expect(sdtAfterDelete).not.toBeNull();
+        expect(sdtAfterDelete.node.attrs.lockMode).toBe('sdtLocked');
+        expect(sdtAfterDelete.node.textContent).toBe('inline value');
+        expect(editor.state.doc.textContent).toBe('Lead inline valueail.');
+      });
     });
   });
 

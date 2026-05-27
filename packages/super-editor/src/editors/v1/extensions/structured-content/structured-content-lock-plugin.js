@@ -229,6 +229,11 @@ export function createStructuredContentLockPlugin() {
         return true;
       }
 
+      const inputType = tr.getMeta?.('inputType');
+      if (inputType === 'historyUndo' || inputType === 'historyRedo') {
+        return true;
+      }
+
       if (tr.getMeta?.(BLOCK_NODE_METADATA_UPDATE_META)) {
         return true;
       }

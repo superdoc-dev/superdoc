@@ -167,6 +167,17 @@ describe('ensureSdtContainerStyles', () => {
     expect(viewingPlaceholderRule).toContain("content: '';");
   });
 
+  it('suppresses empty SDT placeholder text in print mode', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const printPlaceholderRule =
+      cssText.match(/@media print\s*\{[\s\S]*?\.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(printPlaceholderRule).toContain("content: '';");
+  });
+
   it('suppresses structured-content hover backgrounds in viewing mode, including grouped hover', () => {
     ensureSdtContainerStyles(document);
 

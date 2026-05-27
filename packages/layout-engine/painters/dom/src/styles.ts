@@ -848,6 +848,10 @@ const SDT_CONTAINER_STYLES = `
   .superdoc-structured-content-inline__label {
     display: none !important;
   }
+
+  .superdoc-empty-sdt-placeholder::before {
+    content: '';
+  }
 }
 `;
 

@@ -1,3 +1,5 @@
+import { normalizeFieldContentToParagraphs } from './normalize-field-content.js';
+
 /**
  * Processes an INDEX instruction and creates an `sd:index` node.
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine The nodes to combine.
@@ -15,7 +17,7 @@ export function preProcessIndexInstruction(nodesToCombine, instrText, _docx, ins
         instruction: instrText,
         ...(instructionTokens ? { instructionTokens } : {}),
       },
-      elements: nodesToCombine,
+      elements: normalizeFieldContentToParagraphs(nodesToCombine),
     },
   ];
 }

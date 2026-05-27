@@ -1,3 +1,5 @@
+import { normalizeFieldContentToParagraphs } from './normalize-field-content.js';
+
 /**
  * Processes a TOA (Table of Authorities) instruction and creates an `sd:tableOfAuthorities` node.
  *
@@ -18,7 +20,7 @@ export function preProcessToaInstruction(nodesToCombine, instrText, _docx, instr
         instruction: instrText,
         ...(instructionTokens ? { instructionTokens } : {}),
       },
-      elements: nodesToCombine,
+      elements: normalizeFieldContentToParagraphs(nodesToCombine),
     },
   ];
 }

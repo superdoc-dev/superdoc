@@ -151,6 +151,32 @@ describe('moveIntoBlockSdtAfterTextBlockEnd', () => {
     expect(dispatched.selection.to).toBe(targetPos);
   });
 
+  it('moves into the leading empty paragraph of a following block SDT', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [emptyParagraph(schema), paragraph(schema, 'Inner')]),
+      paragraph(schema, 'After'),
+    ]);
+    const beforeEnd = findTextPos(doc, 'Before', 6);
+    const targetPos = findEmptyParagraphTextPos(doc);
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, beforeEnd) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.steps).toHaveLength(0);
+    expect(dispatched.selection.from).toBe(targetPos);
+    expect(dispatched.selection.to).toBe(targetPos);
+  });
+
   it('returns false when inline atom content appears after the last text position', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [

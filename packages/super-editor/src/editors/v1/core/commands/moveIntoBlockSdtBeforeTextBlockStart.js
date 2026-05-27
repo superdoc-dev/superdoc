@@ -1,5 +1,5 @@
 import { Selection, TextSelection } from 'prosemirror-state';
-import { findFirstContentCursorPosInNode, findLastTextPosInNode } from './helpers/textPositions.js';
+import { findFirstContentCursorPosInNode, findLastContentCursorPosInNode } from './helpers/textPositions.js';
 
 function findAncestorDepth($pos, predicate) {
   for (let depth = $pos.depth; depth > 0; depth -= 1) {
@@ -34,7 +34,7 @@ export const moveIntoBlockSdtBeforeTextBlockStart =
     if (previousNode?.type.name !== 'structuredContentBlock') return false;
 
     const previousNodePos = textblockPos - previousNode.nodeSize;
-    const targetPos = findLastTextPosInNode(previousNode, previousNodePos);
+    const targetPos = findLastContentCursorPosInNode(previousNode, previousNodePos);
 
     if (dispatch) {
       const targetSelection =

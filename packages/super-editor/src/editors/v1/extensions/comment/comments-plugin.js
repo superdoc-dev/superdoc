@@ -102,27 +102,31 @@ export const CommentsPlugin = Extension.create({
 
           if (dispatch) dispatch(tr);
 
-          // Build and emit the comment payload
-          const commentPayload = normalizeCommentEventPayload({
-            conversation: {
-              commentId,
-              isInternal: resolvedInternal,
-              commentText: content,
-              creatorName: author ?? configUser.name,
-              creatorEmail: authorEmail ?? configUser.email,
-              creatorImage: authorImage ?? configUser.image,
-              createdTime: Date.now(),
-            },
-            editorOptions: editor.options,
-            fallbackCommentId: commentId,
-            fallbackInternal: resolvedInternal,
-          });
+          // Check if comment events should be emitted (config can suppress for external comment management)
+          const shouldEmitCommentEvent = editor.options.comments?.emitCommentEvents !== false;
+          if (shouldEmitCommentEvent) {
+            // Build and emit the comment payload
+            const commentPayload = normalizeCommentEventPayload({
+              conversation: {
+                commentId,
+                isInternal: resolvedInternal,
+                commentText: content,
+                creatorName: author ?? configUser.name,
+                creatorEmail: authorEmail ?? configUser.email,
+                creatorImage: authorImage ?? configUser.image,
+                createdTime: Date.now(),
+              },
+              editorOptions: editor.options,
+              fallbackCommentId: commentId,
+              fallbackInternal: resolvedInternal,
+            });
 
-          editor.emit('commentsUpdate', {
-            type: comments_module_events.ADD,
-            comment: commentPayload,
-            activeCommentId: commentId,
-          });
+            editor.emit('commentsUpdate', {
+              type: comments_module_events.ADD,
+              comment: commentPayload,
+              activeCommentId: commentId,
+            });
+          }
 
           return true;
         },
@@ -156,26 +160,30 @@ export const CommentsPlugin = Extension.create({
           const commentId = explicitCommentId ?? uuidv4();
           const configUser = editor.options?.user || {};
 
-          const commentPayload = normalizeCommentEventPayload({
-            conversation: {
-              commentId,
-              parentCommentId: parentId,
-              commentText: content,
-              creatorName: author ?? configUser.name,
-              creatorEmail: authorEmail ?? configUser.email,
-              creatorImage: authorImage ?? configUser.image,
-              createdTime: Date.now(),
-            },
-            editorOptions: editor.options,
-            fallbackCommentId: commentId,
-            fallbackInternal: false,
-          });
+          // Check if comment events should be emitted (config can suppress for external comment management)
+          const shouldEmitCommentEvent = editor.options.comments?.emitCommentEvents !== false;
+          if (shouldEmitCommentEvent) {
+            const commentPayload = normalizeCommentEventPayload({
+              conversation: {
+                commentId,
+                parentCommentId: parentId,
+                commentText: content,
+                creatorName: author ?? configUser.name,
+                creatorEmail: authorEmail ?? configUser.email,
+                creatorImage: authorImage ?? configUser.image,
+                createdTime: Date.now(),
+              },
+              editorOptions: editor.options,
+              fallbackCommentId: commentId,
+              fallbackInternal: false,
+            });
 
-          editor.emit('commentsUpdate', {
-            type: comments_module_events.ADD,
-            comment: commentPayload,
-            activeCommentId: commentId,
-          });
+            editor.emit('commentsUpdate', {
+              type: comments_module_events.ADD,
+              comment: commentPayload,
+              activeCommentId: commentId,
+            });
+          }
 
           return true;
         },
@@ -206,7 +214,9 @@ export const CommentsPlugin = Extension.create({
 
           if (dispatch) dispatch(tr);
 
-          const shouldEmit = !skipEmit && resolvedCommentId !== 'pending';
+          // Use explicit skipEmit value if provided, otherwise check config (inverted), then default to emit
+          const shouldSkipEmit = skipEmit ?? (this.editor.options.comments?.emitCommentEvents === false);
+          const shouldEmit = !shouldSkipEmit && resolvedCommentId !== 'pending';
           if (shouldEmit) {
             const commentPayload = normalizeCommentEventPayload({
               conversation,
@@ -870,7 +880,9 @@ const findTrackedMark = ({
 };
 
 const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEditorState, editor) => {
-  const { insertedMark, deletionMark, formatMark, deletionNodes, emitCommentEvent = true } = trackedChangeMeta;
+  const { insertedMark, deletionMark, formatMark, deletionNodes, emitCommentEvent } = trackedChangeMeta;
+  // Use explicit metadata value if provided, otherwise fall back to editor config, then default to true
+  const shouldEmitCommentEvent = emitCommentEvent ?? editor.options.trackedChanges?.emitCommentEvents ?? true;
 
   if (!insertedMark && !deletionMark && !formatMark) {
     return;
@@ -970,8 +982,8 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
           })
         : null;
 
-    if (emitCommentEvent && insertionPayload) editor.emit('commentsUpdate', insertionPayload);
-    if (emitCommentEvent && deletionPayload) editor.emit('commentsUpdate', deletionPayload);
+    if (shouldEmitCommentEvent && insertionPayload) editor.emit('commentsUpdate', insertionPayload);
+    if (shouldEmitCommentEvent && deletionPayload) editor.emit('commentsUpdate', deletionPayload);
     return newTrackedChanges;
   }
 
@@ -995,7 +1007,7 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
       })
     : null;
 
-  if (emitParams && emitCommentEvent) editor.emit('commentsUpdate', emitParams);
+  if (emitParams && shouldEmitCommentEvent) editor.emit('commentsUpdate', emitParams);
 
   return newTrackedChanges;
 };

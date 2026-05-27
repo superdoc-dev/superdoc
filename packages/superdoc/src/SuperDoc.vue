@@ -735,6 +735,7 @@ const editorOptions = (doc) => {
     comments: {
       highlightColors: commentsModuleConfig.value?.highlightColors,
       highlightOpacity: commentsModuleConfig.value?.highlightOpacity,
+      emitCommentEvents: commentsModuleConfig.value?.emitCommentEvents,
     },
     trackedChanges: proxy.$superdoc.config.modules?.trackChanges,
     editorCtor: useLayoutEngine ? PresentationEditor : undefined,

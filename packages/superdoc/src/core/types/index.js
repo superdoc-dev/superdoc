@@ -513,6 +513,7 @@
  * @property {string} [comments.trackChangeActiveHighlightColors.deleteBorder] Active border color for deleted text highlight
  * @property {string} [comments.trackChangeActiveHighlightColors.deleteBackground] Active background color for deleted text highlight
  * @property {string} [comments.trackChangeActiveHighlightColors.formatBorder] Active border color for format change highlight
+ * @property {boolean} [comments.emitCommentEvents=true] Whether comment insertions emit comment events (creating sidebar entries). When `false`, comment marks are still applied to the document but no corresponding sidebar entries are created. This affects both programmatic and manual comment insertions. Useful when managing comments in an external system.
  * @property {Object} [ai] AI module configuration
  * @property {string} [ai.apiKey] Harbour API key for AI features
  * @property {string} [ai.endpoint] Custom endpoint URL for AI services
@@ -547,6 +548,7 @@
  * @property {'paired' | 'independent'} [replacements='paired'] How a tracked replacement (adjacent insertion + deletion created by typing over selected text) surfaces in the UI and API.
  *   - `'paired'` (default, Google Docs model): the two halves share one id and resolve together with a single accept/reject click.
  *   - `'independent'` (Microsoft Word / ECMA-376 §17.13.5 model): each insertion and each deletion has its own id, is addressable on its own, and resolves independently.
+ * @property {boolean} [emitCommentEvents=true] Whether tracked changes emit comment events (creating sidebar bubbles). When `false`, track change marks are still applied to the document but no corresponding sidebar entries are created. This affects both programmatic and manual (user typing) tracked changes.
  */
 
 /**

@@ -1321,6 +1321,50 @@ export class SuperDoc extends EventEmitter {
     });
   }
 
+  /**
+   * Dynamically enable or disable comment event emission (sidebar bubbles).
+   * When disabled, comment marks are still added to the document but no sidebar
+   * entries or events are created.
+   *
+   * @param {boolean} enabled - Whether to emit comment events (default: true)
+   */
+  setCommentsEmitEvents(enabled) {
+    // Update config
+    if (!this.config.modules) this.config.modules = {};
+    if (!this.config.modules.comments) this.config.modules.comments = {};
+    this.config.modules.comments.emitCommentEvents = enabled;
+
+    // Propagate to active editors
+    this.superdocStore?.documents?.forEach((doc) => {
+      const editor = typeof doc.getEditor === 'function' ? doc.getEditor() : null;
+      if (editor?.options?.comments) {
+        editor.options.comments.emitCommentEvents = enabled;
+      }
+    });
+  }
+
+  /**
+   * Dynamically enable or disable tracked change comment event emission (sidebar bubbles).
+   * When disabled, track change marks are still applied to the document but no sidebar
+   * entries or events are created.
+   *
+   * @param {boolean} enabled - Whether to emit tracked change comment events (default: true)
+   */
+  setTrackChangesEmitEvents(enabled) {
+    // Update config
+    if (!this.config.modules) this.config.modules = {};
+    if (!this.config.modules.trackChanges) this.config.modules.trackChanges = {};
+    this.config.modules.trackChanges.emitCommentEvents = enabled;
+
+    // Propagate to active editors
+    this.superdocStore?.documents?.forEach((doc) => {
+      const editor = typeof doc.getEditor === 'function' ? doc.getEditor() : null;
+      if (editor?.options?.trackedChanges) {
+        editor.options.trackedChanges.emitCommentEvents = enabled;
+      }
+    });
+  }
+
   #setModeEditing() {
     if (this.config.role !== 'editor') return this.#setModeSuggesting();
     if (this.superdocStore.documents.length > 0) {

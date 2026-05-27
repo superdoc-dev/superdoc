@@ -720,6 +720,16 @@ export const useCommentsStore = defineStore('comments', () => {
   };
 
   const showAddComment = (superdoc, targetClientY = null) => {
+    // When emitCommentEvents is false, add the mark directly without sidebar UI flow
+    const shouldEmitCommentEvents = superdoc.config.modules?.comments?.emitCommentEvents !== false;
+    if (!shouldEmitCommentEvents) {
+      // Just add the mark without the pending comment flow
+      if (superdoc.activeEditor?.commands) {
+        superdoc.activeEditor.commands.insertComment({ skipEmit: true });
+      }
+      return;
+    }
+
     const event = { type: COMMENT_EVENTS.PENDING };
     superdoc.emit('comments-update', event);
 
@@ -944,6 +954,17 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const addComment = ({ superdoc, comment, skipEditorUpdate = false, broadcastChanges = true }) => {
+    const shouldEmitCommentEvents = superdoc.config.modules?.comments?.emitCommentEvents !== false;
+
+    // If emitCommentEvents is false, just add the mark without sidebar/event handling
+    if (!shouldEmitCommentEvents) {
+      if (!skipEditorUpdate && !comment.trackedChange && superdoc.activeEditor?.commands && !comment.parentCommentId) {
+        superdoc.activeEditor.commands.insertComment({ ...comment.getValues(), skipEmit: true });
+      }
+      removePendingComment(superdoc);
+      return;
+    }
+
     let parentComment = commentsList.value.find((c) => c.commentId === activeComment.value);
     if (!parentComment) parentComment = comment;
 

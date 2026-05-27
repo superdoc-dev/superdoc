@@ -823,7 +823,7 @@ const SDT_CONTAINER_STYLES = `
 }
 
 .presentation-editor--viewing .superdoc-empty-sdt-placeholder::before {
-  visibility: hidden;
+  content: '';
 }
 
 .presentation-editor--viewing .superdoc-structured-content__label,
@@ -852,7 +852,7 @@ const SDT_CONTAINER_STYLES = `
   }
 
   .superdoc-empty-sdt-placeholder::before {
-    visibility: hidden;
+    content: '';
   }
 }
 `;

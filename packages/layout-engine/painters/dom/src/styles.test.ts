@@ -164,8 +164,8 @@ describe('ensureSdtContainerStyles', () => {
     const viewingPlaceholderRule =
       cssText.match(/\.presentation-editor--viewing \.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
 
-    expect(viewingPlaceholderRule).toContain('visibility: hidden;');
-    expect(viewingPlaceholderRule).not.toContain('content:');
+    expect(viewingPlaceholderRule).toContain("content: '';");
+    expect(viewingPlaceholderRule).not.toContain('visibility: hidden;');
   });
 
   it('suppresses empty SDT placeholder text in print mode', () => {
@@ -176,8 +176,8 @@ describe('ensureSdtContainerStyles', () => {
     const printPlaceholderRule =
       cssText.match(/@media print\s*\{[\s\S]*?\.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
 
-    expect(printPlaceholderRule).toContain('visibility: hidden;');
-    expect(printPlaceholderRule).not.toContain('content:');
+    expect(printPlaceholderRule).toContain("content: '';");
+    expect(printPlaceholderRule).not.toContain('visibility: hidden;');
   });
 
   it('suppresses structured-content hover backgrounds in viewing mode, including grouped hover', () => {

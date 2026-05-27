@@ -84,8 +84,6 @@ function resolveInsertionBoundary(
   } catch {
     return null;
   }
-
-  return null;
 }
 
 export function createInternalNodeMoveTransaction(

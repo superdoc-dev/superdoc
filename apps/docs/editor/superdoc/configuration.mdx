@@ -184,6 +184,20 @@ new SuperDoc({
     <ParamField path="element" type="string | HTMLElement">
       DOM element for comments list
     </ParamField>
+    <ParamField path="displayMode" type="'sidebar' | 'inline' | 'auto'" default="'sidebar'">
+      Comments/track-changes bubble display policy.
+      - `'sidebar'`: always use the right sidebar.
+      - `'inline'`: always use compact inline popover mode.
+      - `'auto'`: switch between sidebar and compact inline mode based on available container width.
+    </ParamField>
+    <ParamField path="compactBreakpointPx" type="number">
+      Optional fixed compact-mode threshold override in pixels (used when `displayMode: 'auto'`).
+      When set, compact mode is active when measured available width is below this value.
+    </ParamField>
+    <ParamField path="compactMeasurementSelector" type="string">
+      Optional CSS selector for the element used to measure available width in `displayMode: 'auto'`.
+      Use this when SuperDoc is embedded in custom flex/grid shells and the default fallback target is not representative.
+    </ParamField>
     <ParamField path="allowResolve" type="boolean" default="true">
       Allow resolving comments
     </ParamField>

@@ -40,6 +40,12 @@ export class SuperConverter {
   });
 
   static getStoredSuperdocVersion(docx: readonly { readonly name: string; readonly content: string }[]): string | null;
+  static setStoredCustomProperty(
+    docx: unknown,
+    propertyName: string,
+    value: string | (() => string),
+    preserveExisting?: boolean,
+  ): string | null;
   // The setter accepts either shape (array of file entries or mutable map
   // keyed by package path); the underlying `setStoredCustomProperty` does
   // `docx[customLocation] = ...`, which works on both at runtime.

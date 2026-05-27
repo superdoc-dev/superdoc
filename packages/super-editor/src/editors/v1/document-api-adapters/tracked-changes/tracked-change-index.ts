@@ -12,7 +12,7 @@
  *   comments-store, navigation, and review surfaces can resync.
  */
 
-import type { StoryLocator } from '@superdoc/document-api';
+import type { StoryLocator, TrackChangeOverlapInfo, TrackChangeOverlapLayer } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import type { PartChangedEvent } from '../../core/parts/types.js';
 import { buildStoryKey, BODY_STORY_KEY, parseStoryKeyType } from '../story-runtime/story-key.js';
@@ -62,6 +62,73 @@ function buildTrackedChangeAddress(
     entityType: 'trackedChange',
     entityId: canonicalId,
     ...(storyKey === BODY_STORY_KEY ? {} : { story: locator }),
+  };
+}
+
+type OverlapLayerWithAliases = TrackChangeOverlapLayer & {
+  rawId?: string;
+  commandRawId?: string;
+};
+
+function addCanonicalAlias(map: Map<string, string>, alias: unknown, canonicalId: string): void {
+  const normalized = toNonEmptyString(alias);
+  if (!normalized || map.has(normalized)) return;
+  map.set(normalized, canonicalId);
+}
+
+function buildCanonicalIdByAlias(grouped: readonly GroupedTrackedChange[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const change of grouped) {
+    addCanonicalAlias(map, change.id, change.id);
+    addCanonicalAlias(map, change.rawId, change.id);
+    addCanonicalAlias(map, change.commandRawId, change.id);
+    addCanonicalAlias(map, change.attrs.id, change.id);
+    addCanonicalAlias(map, change.attrs.sourceId, change.id);
+  }
+  return map;
+}
+
+function resolveCanonicalId(alias: unknown, canonicalIdByAlias: ReadonlyMap<string, string>): string | undefined {
+  const normalized = toNonEmptyString(alias);
+  if (!normalized) return undefined;
+  return canonicalIdByAlias.get(normalized) ?? normalized;
+}
+
+function copyOverlapLayer(
+  layer: TrackChangeOverlapLayer,
+  canonicalIdByAlias: ReadonlyMap<string, string>,
+): TrackChangeOverlapLayer {
+  const layerWithAliases = layer as OverlapLayerWithAliases;
+  const id =
+    resolveCanonicalId(layerWithAliases.rawId, canonicalIdByAlias) ??
+    resolveCanonicalId(layerWithAliases.commandRawId, canonicalIdByAlias) ??
+    resolveCanonicalId(layerWithAliases.id, canonicalIdByAlias) ??
+    layer.id;
+
+  return {
+    id,
+    type: layer.type,
+    relationship: layer.relationship,
+  };
+}
+
+function copyOverlapInfo(
+  overlap: TrackChangeOverlapInfo | undefined,
+  canonicalIdByAlias: ReadonlyMap<string, string>,
+): TrackChangeOverlapInfo | undefined {
+  if (!overlap) return undefined;
+
+  const visualLayers = overlap.visualLayers?.map((layer) => copyOverlapLayer(layer, canonicalIdByAlias));
+  const preferredContextTarget = overlap.preferredContextTarget
+    ? copyOverlapLayer(overlap.preferredContextTarget, canonicalIdByAlias)
+    : undefined;
+  const preferredContextTargetId =
+    preferredContextTarget?.id ?? resolveCanonicalId(overlap.preferredContextTargetId, canonicalIdByAlias);
+
+  return {
+    ...(visualLayers && visualLayers.length > 0 ? { visualLayers } : {}),
+    ...(preferredContextTargetId ? { preferredContextTargetId } : {}),
+    ...(preferredContextTarget ? { preferredContextTarget } : {}),
   };
 }
 
@@ -180,8 +247,11 @@ class TrackedChangeIndexImpl implements TrackedChangeIndex {
 
     const storyKind = classifyStoryKind(locator);
     const storyLabel = describeStoryLocation(locator);
+    const canonicalIdByAlias = buildCanonicalIdByAlias(grouped);
 
-    return grouped.map((change) => this.#buildSnapshot(editor, change, storyKey, locator, storyKind, storyLabel));
+    return grouped.map((change) =>
+      this.#buildSnapshot(editor, change, storyKey, locator, storyKind, storyLabel, canonicalIdByAlias),
+    );
   }
 
   #buildSnapshot(
@@ -191,11 +261,14 @@ class TrackedChangeIndexImpl implements TrackedChangeIndex {
     locator: StoryLocator,
     storyKind: TrackedChangeSnapshot['storyKind'],
     storyLabel: string,
+    canonicalIdByAlias: ReadonlyMap<string, string>,
   ): TrackedChangeSnapshot {
     const runtimeRef: TrackedChangeRuntimeRef = { storyKey, rawId: change.rawId };
     const address = buildTrackedChangeAddress(locator, storyKey, change.id);
     const type = resolveTrackedChangeType(change);
-    const excerpt = normalizeExcerpt(editor.state.doc.textBetween(change.from, change.to, ' ', '\ufffc'));
+    const excerpt =
+      (change.excerpt !== undefined ? change.excerpt : undefined) ??
+      normalizeExcerpt(editor.state.doc.textBetween(change.from, change.to, ' ', '\ufffc'));
 
     return {
       address,
@@ -208,9 +281,18 @@ class TrackedChangeIndexImpl implements TrackedChangeIndex {
       date: toNonEmptyString(change.attrs.date),
       excerpt,
       wordRevisionIds: change.wordRevisionIds ? { ...change.wordRevisionIds } : undefined,
+      origin: toNonEmptyString(change.attrs.origin) as TrackedChangeSnapshot['origin'],
+      imported: Boolean(toNonEmptyString(change.attrs.sourceId)),
+      overlap: copyOverlapInfo(change.overlap, canonicalIdByAlias),
       storyLabel,
       storyKind,
       anchorKey: makeTrackedChangeAnchorKey(runtimeRef),
+      commandRawId: change.commandRawId,
+      replacementGroupId: toNonEmptyString(change.attrs.replacementGroupId),
+      replacementSideId: toNonEmptyString(change.attrs.replacementSideId),
+      hasInsert: change.hasInsert,
+      hasDelete: change.hasDelete,
+      hasFormat: change.hasFormat,
       range: { from: change.from, to: change.to },
     };
   }

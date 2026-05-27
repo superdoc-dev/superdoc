@@ -26,9 +26,12 @@ import type {
   TrackedChangeAddress as SuperEditorTrackedChangeAddress,
   NavigableAddress as SuperEditorNavigableAddress,
   CollaborationProvider as SuperEditorCollaborationProvider,
+  Comment,
   FontConfig,
   FontsResolvedPayload,
+  ListDefinitionsPayload,
   ProofingProvider,
+  User,
 } from '@superdoc/super-editor';
 
 import type { SuperDoc as SuperDocClass } from '../SuperDoc.js';
@@ -47,32 +50,37 @@ export type NavigableAddress = SuperEditorNavigableAddress;
 /**
  * The current user of this superdoc.
  *
- * Every field is optional on input. `SuperDoc.#init` normalizes a missing
- * or partial `user` by spreading `DEFAULT_USER` over consumer input, so
- * `name` and `email` always have a value at runtime even when the
- * consumer omits them. The typedef stays open so consumers can pass
- * `{ name: 'Ada' }` without a typecheck failure.
+ * Re-exported directly from `@superdoc/super-editor` so the public
+ * consumer-facing `User` (re-exported again at `src/public/index.ts`)
+ * and the internal `User` referenced by SuperDoc method signatures
+ * (`addSharedUser(user: User)`, `removeSharedUser(...)`, etc.) are
+ * the same symbol — not two structurally-similar declarations.
  *
- * Kept structurally compatible with the publicly re-exported
- * `User` from `@superdoc/super-editor` (also optional name/email).
+ * Every field is optional on input. `SuperDoc.#init` normalizes a
+ * missing or partial `user` by spreading `DEFAULT_USER` over consumer
+ * input, so `name` and `email` always have a value at runtime even
+ * when the consumer omits them.
+ *
+ * `User` does NOT carry the collab-awareness `color` field; that is on
+ * the internal `AwarenessUser` (see below), assigned by SuperDoc's
+ * `#assignUserColor()` after `#init`.
  */
-export interface User {
-  /** The user's name. */
-  name?: string;
-  /**
-   * The user's email. May be `null` when the consumer did not provide an
-   * email and SuperDoc fell back to the built-in default user; the runtime
-   * has always exposed `null` here, so the typedef accepts it explicitly
-   * rather than narrowing to `string`. Consumers must narrow before
-   * performing string operations on this field.
-   */
-  email?: string | null;
-  /** The user's photo. */
-  image?: string | null;
+export type { User } from '@superdoc/super-editor';
+
+/**
+ * Internal post-`#init` shape of the active user. Extends the public
+ * `User` with the collab-awareness `color` field assigned by
+ * `SuperDoc.#assignUserColor()` and read by the presence system. Not
+ * part of the consumer-facing surface; consumers continue to pass
+ * `User` via `Config.user`, and SuperDoc widens to `AwarenessUser`
+ * internally once it has computed the color.
+ */
+export interface AwarenessUser extends User {
   /**
    * Awareness color for collaborative cursors. Auto-assigned from the
-   * configured palette (or a default palette) when omitted, derived from a
-   * hash of the user's identity so the assignment is stable across reloads.
+   * configured palette (or a default palette) by `#assignUserColor`,
+   * derived from a hash of the user's identity so the assignment is
+   * stable across reloads.
    */
   color?: string;
 }
@@ -85,8 +93,8 @@ export interface User {
  * The runtime helper `awarenessStatesToArray` spreads each remote user
  * onto the top of the entry (`{ clientId, ...value.user, color }`), so
  * `User` fields like `name`, `email`, `image` appear at the top level
- * (not nested under a `user` property). Consumers should read
- * `state.name` / `state.email`, not `state.user.name`.
+ * (not nested under a `user` property). Consumers should read `state.id`,
+ * `state.name`, and `state.email`, not `state.user.name`.
  *
  * Application-specific fields attached to the awareness state by the
  * provider surface through the `[key: string]: unknown` index
@@ -96,9 +104,11 @@ export interface AwarenessState extends User {
   /** Yjs client identifier for the remote peer. */
   clientId?: number;
   /**
-   * Color assigned by SuperDoc's presence system. Overrides
-   * {@link User.color} when the presence system computes a stable
-   * palette assignment for the remote peer.
+   * Color assigned by SuperDoc's presence system. Spread onto the
+   * awareness entry after the user fields, so it takes precedence
+   * over any color the awareness user carried in (see
+   * {@link AwarenessUser.color}). Used when the presence system
+   * computes a stable palette assignment for the remote peer.
    */
   color?: string;
   /** Application-specific fields spread from the awareness provider. */
@@ -128,6 +138,25 @@ export interface Document {
    * Consumers needing Hocuspocus-specific members must narrow before use.
    */
   provider?: CollaborationProvider;
+}
+
+/**
+ * Public snapshot shape returned by `SuperDoc#state`. Always reflects
+ * the most recent values from the Pinia store; consumers must re-read
+ * on change rather than caching.
+ *
+ * `documents` is typed as the public `Document[]` view. Internally the
+ * runtime tracks `RuntimeDocument`, which adds runtime-only fields
+ * (`getEditor`, `getPresentationEditor`, `restoreComments`, etc.) for
+ * SuperDoc's own lifecycle plumbing. Those fields are not part of the
+ * supported surface; consumers using `state.documents` should treat
+ * each entry as `Document` and not rely on the richer runtime shape.
+ */
+export interface SuperDocState {
+  /** Documents tracked by the instance, in consumer-provided order. */
+  documents: Document[];
+  /** Shared users (drives presence + "@"-mention surfaces). */
+  users: User[];
 }
 
 /**
@@ -978,16 +1007,83 @@ export interface FindReplaceConfig {
 // Modules
 // ---------------------------------------------------------------------------
 
-/** Permission resolver shared by the top-level Config and the comments module. */
-type PermissionResolverParams = {
+/**
+ * Payload passed to a permission resolver callback. SuperDoc invokes
+ * the resolver when a consumer registers one via
+ * `Config.permissionResolver` or `Modules.comments.permissionResolver`,
+ * forwarding the in-flight check so the resolver can decide whether
+ * to override the built-in policy.
+ *
+ * Returning `boolean` from the resolver overrides the default;
+ * returning `undefined` (or any non-boolean) falls through to
+ * `defaultDecision`, which the resolver receives so it can mirror or
+ * branch off the built-in policy without re-deriving it.
+ *
+ * `comment` and `trackedChange` are typed as `object | null` because
+ * consumer comment / tracked-change shapes vary; resolvers that read
+ * fields on those payloads should narrow before use.
+ *
+ * Distinct from `CanPerformPermissionParams`, which is the input
+ * shape consumers pass _to_ `SuperDoc#canPerformPermission`. That
+ * input becomes part of this resolver payload after SuperDoc resolves
+ * `currentUser`, `superdoc`, and `defaultDecision`.
+ */
+export interface PermissionResolverParams {
+  /** The permission key being checked (e.g. `'comment.create'`). */
   permission: string;
+  /**
+   * The effective role (consumer-supplied or falling back to
+   * `Config.role`). The key is always present on the payload; the
+   * value is `undefined` when `Config.role` was never set.
+   */
+  role: string | undefined;
+  /**
+   * The effective internal/external flag (consumer-supplied or
+   * `Config.isInternal`). The key is always present; the value is
+   * `undefined` when `Config.isInternal` was never set.
+   */
+  isInternal: boolean | undefined;
+  /**
+   * What the built-in policy would return if the resolver does not
+   * override. Resolvers can return this value to defer to the
+   * default, or branch off it.
+   */
+  defaultDecision: boolean;
+  /** The comment object being acted on, if any. Shape is consumer-defined. */
+  comment: object | null;
+  /** The tracked-change payload (as emitted by the editor) being acted on, if any. */
+  trackedChange: object | null;
+  /** The active user performing the action; resolved from `Config.user`. */
+  currentUser: User | null;
+  /** The SuperDoc instance the check ran against. */
+  superdoc: SuperDoc | null;
+}
+
+/**
+ * Input shape for `SuperDoc#canPerformPermission`. All fields are
+ * optional; an empty payload short-circuits to `false`. `role` and
+ * `isInternal` fall back to `Config.role` / `Config.isInternal` when
+ * omitted. `comment` and `trackedChange` carry open index signatures
+ * because the runtime forwards the full payload to the resolver
+ * context, and consumer comment / tracked-change shapes vary; the
+ * named fields below are the ones the method itself reads. Distinct
+ * from `PermissionResolverParams`, which is the exported resolver
+ * callback payload SuperDoc passes to configured permission resolvers
+ * (with resolved `currentUser`, `superdoc`, and `defaultDecision`
+ * context attached).
+ */
+export interface CanPerformPermissionParams {
+  /** The permission key to check (e.g. `'comment.create'`). Required at runtime; omitting returns `false`. */
+  permission?: string;
+  /** Override `Config.role` for this check. */
   role?: string;
+  /** Override `Config.isInternal` for this check. */
   isInternal?: boolean;
-  comment?: object | null;
-  trackedChange?: object | null;
-  currentUser?: User | null;
-  superdoc?: SuperDoc | null;
-};
+  /** The comment object being acted on, if any. */
+  comment?: (object & Record<string, unknown>) | null;
+  /** The tracked-change payload (as emitted by the editor) being acted on, if any. */
+  trackedChange?: ({ id?: string; commentId?: string; comment?: unknown } & Record<string, unknown>) | null;
+}
 
 /** Modules registered with the SuperDoc instance. */
 export interface Modules {
@@ -1049,6 +1145,12 @@ export interface Modules {
           /** Active border color for format change highlight. */
           formatBorder?: string;
         };
+        /** Comments/track-changes UI display policy. */
+        displayMode?: 'auto' | 'sidebar' | 'inline';
+        /** CSS selector for an explicit width measurement target in auto mode. */
+        compactMeasurementSelector?: string;
+        /** Optional fixed compact-mode breakpoint override in pixels. */
+        compactBreakpointPx?: number;
       } & Record<string, unknown>);
   /** AI module configuration. */
   ai?: {
@@ -1228,16 +1330,87 @@ export interface ExportParams {
 export type EditorSurface = 'body' | 'header' | 'footer';
 
 export interface EditorUpdateEvent {
-  /** The primary editor associated with the update. For header/footer edits, this is the main body editor. */
-  editor: Editor;
+  /**
+   * The primary editor associated with the update. For header/footer
+   * edits, this is the main body editor. Optional because the runtime
+   * payload builder falls back to `sourceEditor` and emits `undefined`
+   * when neither is present (defensive in test/stub paths); consumers
+   * should narrow before use.
+   */
+  editor?: Editor;
   /** The editor instance that emitted the update. For body edits, this matches `editor`. */
-  sourceEditor: Editor;
+  sourceEditor?: Editor;
   /** The surface where the edit originated. */
   surface: EditorSurface;
-  /** Relationship ID for header/footer edits. */
-  headerId?: string | null;
-  /** Header/footer variant (`default`, `first`, `even`, `odd`) when available. */
-  sectionType?: string | null;
+  /**
+   * Relationship ID for header/footer edits. Always present (the
+   * runtime payload builder defaults to `null`); may be `null` for
+   * body edits.
+   */
+  headerId: string | null;
+  /**
+   * Header/footer variant (`default`, `first`, `even`, `odd`) when
+   * available. Always present (defaults to `null`); may be `null`.
+   */
+  sectionType: string | null;
+}
+
+/**
+ * Payload emitted with the `ready` event and passed to `Config.onReady`.
+ * Carries the live SuperDoc instance.
+ */
+export interface SuperDocReadyPayload {
+  superdoc: SuperDoc;
+}
+
+/**
+ * Payload emitted with the `editorCreate` / `editorBeforeCreate` /
+ * `collaboration-ready` events and passed to the matching `Config.onX`
+ * callbacks. The runtime always wraps the editor in this shape; bare
+ * `Editor` references in earlier callback typings were incorrect.
+ */
+export interface SuperDocEditorPayload {
+  editor: Editor;
+}
+
+/**
+ * Payload emitted with the `locked` event and passed to
+ * `Config.onLocked`. `lockedBy` is non-optional because the runtime
+ * always includes the key (`lockSuperdoc` defaults `lockedBy` to
+ * `null`); the value may be `User | null` because unlocking and
+ * unattributed locks both pass `null`.
+ */
+export interface SuperDocLockedPayload {
+  isLocked: boolean;
+  lockedBy: User | null;
+}
+
+/**
+ * Payload emitted with the `awareness-update` event and passed to
+ * `Config.onAwarenessUpdate`. Field set differs from older inline
+ * declarations: the runtime emits `superdoc` (not `context`) and
+ * includes `added` / `removed` client-id arrays alongside `states`.
+ */
+export interface SuperDocAwarenessUpdatePayload {
+  states: AwarenessState[];
+  added: number[];
+  removed: number[];
+  superdoc: SuperDoc;
+}
+
+/**
+ * Payload emitted with the `comments-update` event and passed to
+ * `Config.onCommentsUpdate`. Field set differs from older inline
+ * declarations: the runtime emits `comment?` and `changes?` (never a
+ * `data` field).
+ */
+export interface SuperDocCommentsUpdatePayload {
+  /** Update kind (e.g. `'created'`, `'updated'`, `'deleted'`); set by the comments store. */
+  type: string;
+  /** The comment object the update refers to, when applicable. */
+  comment?: Comment;
+  /** Per-field change set when the update is a mutation. */
+  changes?: Array<{ key: string; commentId: string; fileId?: string | null }>;
 }
 
 export interface EditorTransactionEvent {
@@ -1389,8 +1562,14 @@ export interface Config {
   password?: string;
   /** The documents to load → soon to be deprecated. */
   documents?: Document[];
-  /** The current user of this SuperDoc. */
-  user?: User;
+  /**
+   * The current user of this SuperDoc. Typed as `AwarenessUser` (an
+   * extension of `User` with the optional `color` field) so consumers
+   * can pass an explicit awareness color and have the runtime honor it
+   * as an override - `SuperDoc#assignUserColor()` skips its hash-based
+   * assignment when `user.color` is already set.
+   */
+  user?: AwarenessUser;
   /** All users of this SuperDoc (can be used for "@"-mentions). */
   users?: User[];
   /** Colors to use for user awareness. */
@@ -1438,10 +1617,10 @@ export interface Config {
    * routing.
    */
   experimental?: { unifiedHistory?: boolean };
-  /** Callback before an editor is created. */
-  onEditorBeforeCreate?: (editor: Editor) => void;
-  /** Callback after an editor is created. */
-  onEditorCreate?: (editor: Editor) => void;
+  /** Callback before an editor is created. Receives a wrapper carrying the editor. */
+  onEditorBeforeCreate?: (params: SuperDocEditorPayload) => void;
+  /** Callback after an editor is created. Receives a wrapper carrying the editor. */
+  onEditorCreate?: (params: SuperDocEditorPayload) => void;
   /** Callback when a transaction is made. */
   onTransaction?: (params: EditorTransactionEvent) => void;
   /** Callback after an editor is destroyed. */
@@ -1461,20 +1640,20 @@ export interface Config {
     documentId: string;
     file: File | Blob | null | undefined;
   }) => void;
-  /** Callback when the SuperDoc is ready. */
-  onReady?: (editor: { superdoc: SuperDoc }) => void;
+  /** Callback when the SuperDoc is ready. Receives a wrapper carrying the live SuperDoc instance. */
+  onReady?: (params: SuperDocReadyPayload) => void;
   /** Callback when comments are updated. */
-  onCommentsUpdate?: (params: { type: string; data: object }) => void;
+  onCommentsUpdate?: (params: SuperDocCommentsUpdatePayload) => void;
   /** Callback when awareness is updated. */
-  onAwarenessUpdate?: (params: { context: SuperDoc; states: AwarenessState[] }) => void;
-  /** Callback when the SuperDoc is locked. */
-  onLocked?: (params: { isLocked: boolean; lockedBy: User }) => void;
+  onAwarenessUpdate?: (params: SuperDocAwarenessUpdatePayload) => void;
+  /** Callback when the SuperDoc is locked or unlocked. */
+  onLocked?: (params: SuperDocLockedPayload) => void;
   /** Callback when the PDF document is ready. */
   onPdfDocumentReady?: () => void;
   /** Callback when the sidebar is toggled. */
   onSidebarToggle?: (isOpened: boolean) => void;
-  /** Callback when collaboration is ready. */
-  onCollaborationReady?: (params: { editor: Editor }) => void;
+  /** Callback when collaboration is ready. Receives a wrapper carrying the editor. */
+  onCollaborationReady?: (params: SuperDocEditorPayload) => void;
   /** Callback when document is updated. */
   onEditorUpdate?: (params: EditorUpdateEvent) => void;
   /**
@@ -1492,8 +1671,7 @@ export interface Config {
    */
   onPaginationUpdate?: (params: { totalPages: number; superdoc: SuperDoc }) => void;
   /** Callback when the list definitions change. */
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-  onListDefinitionsChange?: (params: {}) => void;
+  onListDefinitionsChange?: (params: ListDefinitionsPayload) => void;
   /** The format of the document (docx, pdf, html). */
   format?: string;
   /** The extensions to load for the editor. */
@@ -1587,8 +1765,8 @@ export interface Config {
  * call sites cast `this.config` to this type so they can access these
  * invariants without per-site null guards.
  *
- * Use this from internal SuperDoc callsites that need the augmented shape
- * (e.g. `/** @type {InternalConfig} *\/ (this.config).socket = ...`).
+ * Use this from internal SuperDoc callsites that need the augmented
+ * shape, e.g. `(this.config as InternalConfig).socket = ...`.
  */
 export interface InternalConfig extends Config {
   /**
@@ -1608,8 +1786,12 @@ export interface InternalConfig extends Config {
   documents: RuntimeDocument[];
   /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
   modules: Modules;
-  /** Spread of `DEFAULT_USER` over consumer input by `#init`; `name` always present. */
-  user: User;
+  /**
+   * Spread of `DEFAULT_USER` over consumer input by `#init`; `name`
+   * always present. Widened to `AwarenessUser` because `#assignUserColor`
+   * runs synchronously during init and writes `color` into this object.
+   */
+  user: AwarenessUser;
   /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
   layoutEngineOptions: SuperDocLayoutEngineOptions;
 }

@@ -10,8 +10,11 @@
 import type { Editor } from '../../core/Editor.js';
 import type {
   AddCommentInput,
+  CommentTarget,
   CommentInfo,
+  CommentTrackedChangeLink,
   CommentsAdapter,
+  CommentsCreateReceipt,
   CommentsListQuery,
   CommentsListResult,
   EditCommentInput,
@@ -24,32 +27,43 @@ import type {
   ReplyToCommentInput,
   ResolveCommentInput,
   RevisionGuardOptions,
+  SelectionTarget,
+  StoryLocator,
   SetCommentActiveInput,
   SetCommentInternalInput,
   TextSegment,
   TextTarget,
+  TrackChangeType,
 } from '@superdoc/document-api';
 import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
 import { TextSelection } from 'prosemirror-state';
 import { v4 as uuidv4 } from 'uuid';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand } from '../helpers/mutation-helpers.js';
-import { clearIndexCache } from '../helpers/index-cache.js';
-import { getRevision } from './revision-tracker.js';
+import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
+import { checkRevision, getRevision } from './revision-tracker.js';
 import { resolveTextTarget, paginate, validatePaginationInput } from '../helpers/adapter-utils.js';
 import { executeDomainCommand } from './plan-wrappers.js';
+import { getCachedProjectedTrackedChangeSnapshot, projectSnapshots } from './track-changes-wrappers.js';
 import {
   buildCommentJsonFromText,
   extractCommentText,
+  type CommentEntityRecord,
   findCommentEntity,
   getCommentEntityStore,
   isCommentResolved,
   removeCommentEntityTree,
+  restoreStashedCommentEntityTree,
   toCommentInfo,
   upsertCommentEntity,
 } from '../helpers/comment-entity-store.js';
 import { listCommentAnchors, resolveCommentAnchorsById } from '../helpers/comment-target-resolver.js';
 import { normalizeExcerpt, toNonEmptyString } from '../helpers/value-utils.js';
+import { getTrackedChangeIndex } from '../tracked-changes/tracked-change-index.js';
+import type { TrackedChangeSnapshot } from '../tracked-changes/tracked-change-snapshot.js';
+import { resolveSelectionTarget } from '../helpers/selection-target-resolver.js';
+import { resolveTrackedChangeInStory } from '../helpers/tracked-change-resolver.js';
+import { BODY_STORY_KEY, buildStoryKey } from '../story-runtime/story-key.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -59,6 +73,18 @@ type EditorUserIdentity = {
   name?: string;
   email?: string;
   image?: string;
+};
+
+type TrackedChangeCommentInfo = CommentInfo & {
+  story?: StoryLocator;
+  trackedChange?: boolean;
+  trackedChangeType?: TrackChangeType;
+  trackedChangeDisplayType?: string | null;
+  trackedChangeStory?: StoryLocator | null;
+  trackedChangeAnchorKey?: string;
+  trackedChangeText?: string;
+  deletedText?: string | null;
+  trackedChangeLink?: CommentTrackedChangeLink | null;
 };
 
 function toCommentAddress(commentId: string): { kind: 'entity'; entityType: 'comment'; entityId: string } {
@@ -73,13 +99,6 @@ function toNotFoundError(input: unknown): DocumentApiAdapterError {
   return new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Comment target could not be resolved.', {
     target: input,
   });
-}
-
-function isSameTarget(
-  left: { blockId: string; range: { start: number; end: number } },
-  right: { blockId: string; range: { start: number; end: number } },
-): boolean {
-  return left.blockId === right.blockId && left.range.start === right.range.start && left.range.end === right.range.end;
 }
 
 /**
@@ -128,15 +147,139 @@ function isTextTargetShape(target: unknown): target is TextTarget {
 }
 
 /**
- * Normalize a TextAddress | TextTarget comment target into an array of
+ * Normalize the text-addressable comment target shapes into an array of
  * segments. For TextAddress, the result is a single-entry array.
  */
-function targetToSegments(
-  target: { kind: 'text'; blockId: string; range: { start: number; end: number } } | TextTarget,
-): TextSegment[] | null {
+function targetToSegments(target: CommentTarget): TextSegment[] | null {
   if (isTextAddressShape(target)) return [{ blockId: target.blockId, range: target.range }];
   if (isTextTargetShape(target)) return [...target.segments];
   return null;
+}
+
+function isTrackedChangeCommentTargetShape(
+  target: unknown,
+): target is { trackedChangeId: string; story?: StoryLocator } {
+  if (!target || typeof target !== 'object') return false;
+  const value = target as { kind?: unknown; trackedChangeId?: unknown };
+  if (value.kind !== undefined && value.kind !== 'trackedChange') return false;
+  return typeof value.trackedChangeId === 'string' && value.trackedChangeId.length > 0;
+}
+
+function buildTrackedChangeLink(snapshot: TrackedChangeSnapshot): CommentTrackedChangeLink {
+  const { trackedChangeText, deletedText } = trackedChangeTextFields(snapshot);
+  return {
+    trackedChange: true,
+    trackedChangeType: snapshot.type,
+    trackedChangeDisplayType: null,
+    trackedChangeStory: snapshot.story,
+    trackedChangeAnchorKey: snapshot.anchorKey,
+    trackedChangeText,
+    deletedText,
+  };
+}
+
+function getTrackedChangeThreadingId(snapshot: TrackedChangeSnapshot): string | null {
+  return snapshot.commandRawId ?? snapshot.runtimeRef.rawId ?? snapshot.address.entityId ?? null;
+}
+
+function trackedChangeSnapshotAliases(snapshot: TrackedChangeSnapshot): string[] {
+  return Array.from(
+    new Set(
+      [
+        snapshot.address.entityId,
+        snapshot.runtimeRef.rawId,
+        snapshot.commandRawId,
+        snapshot.replacementGroupId,
+        snapshot.replacementSideId,
+        snapshot.anchorKey,
+      ].filter((value): value is string => typeof value === 'string' && value.length > 0),
+    ),
+  );
+}
+
+function overlapsTrackedChangeRange(snapshot: TrackedChangeSnapshot, from: number, to: number): boolean {
+  if (from === to) {
+    return snapshot.range.from <= from && snapshot.range.to >= to;
+  }
+  return snapshot.range.from < to && snapshot.range.to > from;
+}
+
+function trackedChangeTypePriority(type: TrackChangeType): number {
+  if (type === 'delete') return 0;
+  if (type === 'format') return 1;
+  return 2;
+}
+
+function choosePreferredTrackedChangeSnapshot(
+  snapshots: ReadonlyArray<TrackedChangeSnapshot>,
+  preferredId?: string,
+): TrackedChangeSnapshot | null {
+  if (snapshots.length === 0) return null;
+
+  const preferred = preferredId ? String(preferredId) : null;
+  const ordered = [...snapshots].sort((left, right) => {
+    const leftMatchesPreferred = preferred
+      ? trackedChangeSnapshotAliases(left).some((alias) => alias === preferred)
+      : false;
+    const rightMatchesPreferred = preferred
+      ? trackedChangeSnapshotAliases(right).some((alias) => alias === preferred)
+      : false;
+    if (leftMatchesPreferred !== rightMatchesPreferred) {
+      return leftMatchesPreferred ? -1 : 1;
+    }
+
+    const leftLength = Math.max(0, left.range.to - left.range.from);
+    const rightLength = Math.max(0, right.range.to - right.range.from);
+    if (leftLength !== rightLength) return leftLength - rightLength;
+
+    const typeDelta = trackedChangeTypePriority(left.type) - trackedChangeTypePriority(right.type);
+    if (typeDelta !== 0) return typeDelta;
+
+    if (left.range.from !== right.range.from) return left.range.from - right.range.from;
+    return left.address.entityId.localeCompare(right.address.entityId);
+  });
+
+  return ordered[0] ?? null;
+}
+
+function inferTrackedChangeSnapshotForRange(
+  editor: Editor,
+  from: number,
+  to: number,
+  preferredId?: string,
+): TrackedChangeSnapshot | null {
+  let snapshots: ReadonlyArray<TrackedChangeSnapshot>;
+  try {
+    snapshots = getTrackedChangeIndex(editor).getAll();
+  } catch {
+    return null;
+  }
+
+  const overlapping = snapshots.filter((snapshot) => overlapsTrackedChangeRange(snapshot, from, to));
+  return choosePreferredTrackedChangeSnapshot(overlapping, preferredId);
+}
+
+function assignTrackedChangeLink(info: TrackedChangeCommentInfo, link: CommentTrackedChangeLink | null): void {
+  if (!link) {
+    delete info.trackedChange;
+    delete info.trackedChangeType;
+    delete info.trackedChangeDisplayType;
+    delete info.trackedChangeStory;
+    delete info.trackedChangeAnchorKey;
+    delete info.trackedChangeText;
+    delete info.deletedText;
+    info.trackedChangeLink = null;
+    return;
+  }
+
+  info.trackedChange = true;
+  info.trackedChangeType = link.trackedChangeType;
+  info.trackedChangeDisplayType = link.trackedChangeDisplayType ?? undefined;
+  info.trackedChangeStory = link.trackedChangeStory ?? undefined;
+  info.trackedChangeAnchorKey = link.trackedChangeAnchorKey ?? undefined;
+  info.trackedChangeText = link.trackedChangeText ?? undefined;
+  info.deletedText = link.deletedText ?? undefined;
+  info.trackedChangeLink = link;
 }
 
 function listCommentAnchorsSafe(editor: Editor): ReturnType<typeof listCommentAnchors> {
@@ -168,6 +311,16 @@ function emitCommentLifecycleUpdate(
   const emitter = (editor as unknown as { emit?: (event: string, payload: unknown) => void }).emit;
   if (typeof emitter !== 'function') return;
   emitter.call(editor, 'commentsUpdate', { type, comment });
+}
+
+function emitCommentAdd(editor: Editor, comment: Record<string, unknown>, activeCommentId?: string): void {
+  const emitter = (editor as unknown as { emit?: (event: string, payload: unknown) => void }).emit;
+  if (typeof emitter !== 'function') return;
+  emitter.call(editor, 'commentsUpdate', {
+    type: 'add',
+    comment,
+    ...(activeCommentId ? { activeCommentId } : {}),
+  });
 }
 
 function applyTextSelection(editor: Editor, from: number, to: number): boolean {
@@ -250,6 +403,8 @@ type CanonicalAnchor = {
   pos: number;
   end: number;
 };
+
+type CanonicalAnchorMap = Map<string, CanonicalAnchor[]>;
 
 /**
  * Merges same-block adjacent/overlapping anchors into canonical segments.
@@ -348,8 +503,9 @@ function mergeAnchorData(
   editor: Editor,
   infosById: Map<string, CommentInfo>,
   anchors: ReturnType<typeof listCommentAnchors>,
-): void {
+): CanonicalAnchorMap {
   const grouped = new Map<string, typeof anchors>();
+  const canonicalByCommentId: CanonicalAnchorMap = new Map();
   for (const anchor of anchors) {
     const group = grouped.get(anchor.commentId) ?? [];
     group.push(anchor);
@@ -361,6 +517,7 @@ function mergeAnchorData(
     const firstAnchor = sorted[0];
     const status = sorted.every((anchor) => anchor.status === 'resolved') ? 'resolved' : 'open';
     const canonical = canonicalizeAnchors(sorted);
+    canonicalByCommentId.set(commentId, canonical);
     const target = buildTextTarget(canonical);
     const anchoredText = buildAnchoredText(editor, canonical);
     const existing = infosById.get(commentId);
@@ -391,11 +548,98 @@ function mergeAnchorData(
       ),
     );
   }
+
+  return canonicalByCommentId;
 }
 
-function buildCommentInfos(editor: Editor): CommentInfo[] {
+function parseCreatedTime(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function trackedChangeTextFields(
+  snapshot: TrackedChangeSnapshot,
+): Pick<TrackedChangeCommentInfo, 'trackedChangeText' | 'deletedText'> {
+  const excerpt = snapshot.excerpt ?? '';
+  if (snapshot.type === 'delete') {
+    return { trackedChangeText: '', deletedText: excerpt };
+  }
+  return { trackedChangeText: excerpt, deletedText: null };
+}
+
+function toTrackedChangeCommentInfo(snapshot: TrackedChangeSnapshot): TrackedChangeCommentInfo | null {
+  const commentId = toNonEmptyString(snapshot.address.entityId);
+  if (!commentId) return null;
+
+  const { trackedChangeText, deletedText } = trackedChangeTextFields(snapshot);
+  const trackedChangeLink = buildTrackedChangeLink(snapshot);
+
+  return {
+    address: toCommentAddress(commentId),
+    commentId,
+    text: trackedChangeText || deletedText || undefined,
+    status: 'open',
+    creatorName: snapshot.author,
+    creatorEmail: snapshot.authorEmail,
+    createdTime: parseCreatedTime(snapshot.date),
+    anchoredText: snapshot.excerpt,
+    story: snapshot.story,
+    trackedChange: true,
+    trackedChangeType: snapshot.type,
+    trackedChangeStory: snapshot.story,
+    trackedChangeAnchorKey: snapshot.anchorKey,
+    trackedChangeText,
+    deletedText,
+    trackedChangeLink,
+  };
+}
+
+function mergeTrackedChangeCommentInfos(editor: Editor, infosById: Map<string, TrackedChangeCommentInfo>): void {
+  let trackedChanges: ReadonlyArray<TrackedChangeSnapshot>;
+  try {
+    trackedChanges = getTrackedChangeIndex(editor).getAll();
+  } catch {
+    return;
+  }
+
+  for (const snapshot of trackedChanges) {
+    const trackedChangeComment = toTrackedChangeCommentInfo(snapshot);
+    if (!trackedChangeComment) continue;
+
+    const existing = infosById.get(trackedChangeComment.commentId);
+    if (!existing) {
+      if (snapshot.wordRevisionIds) continue;
+      infosById.set(trackedChangeComment.commentId, trackedChangeComment);
+      continue;
+    }
+
+    Object.assign(existing, {
+      story: trackedChangeComment.story,
+      trackedChange: true,
+      trackedChangeType: trackedChangeComment.trackedChangeType,
+      trackedChangeStory: trackedChangeComment.trackedChangeStory,
+      trackedChangeAnchorKey: trackedChangeComment.trackedChangeAnchorKey,
+      trackedChangeText: trackedChangeComment.trackedChangeText,
+      deletedText: trackedChangeComment.deletedText,
+      anchoredText: existing.anchoredText ?? trackedChangeComment.anchoredText,
+      creatorName: existing.creatorName ?? trackedChangeComment.creatorName,
+      creatorEmail: existing.creatorEmail ?? trackedChangeComment.creatorEmail,
+      createdTime: existing.createdTime ?? trackedChangeComment.createdTime,
+      trackedChangeLink: trackedChangeComment.trackedChangeLink,
+    });
+  }
+}
+
+function buildCommentInfos(editor: Editor): TrackedChangeCommentInfo[] {
+  const anchors = listCommentAnchorsSafe(editor);
+  const anchoredCommentIds = Array.from(new Set(anchors.map((anchor) => anchor.commentId)));
+  for (const commentId of anchoredCommentIds) {
+    restoreStashedCommentEntityTree(editor, commentId);
+  }
+
   const store = getCommentEntityStore(editor);
-  const infosById = new Map<string, CommentInfo>();
+  const infosById = new Map<string, TrackedChangeCommentInfo>();
 
   for (const entry of store) {
     const commentId = toNonEmptyString(entry.commentId) ?? toNonEmptyString(entry.importedId) ?? null;
@@ -403,12 +647,25 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
     infosById.set(commentId, toCommentInfo({ ...entry, commentId }));
   }
 
-  mergeAnchorData(editor, infosById, listCommentAnchorsSafe(editor));
+  const canonicalByCommentId = mergeAnchorData(editor, infosById, anchors);
+  mergeTrackedChangeCommentInfos(editor, infosById);
+
+  for (const [commentId, canonical] of canonicalByCommentId.entries()) {
+    const info = infosById.get(commentId);
+    if (!info || canonical.length === 0) continue;
+
+    const from = canonical[0]?.pos ?? 0;
+    const to = canonical[canonical.length - 1]?.end ?? from;
+    const preferredTrackedChangeId = toNonEmptyString(findCommentEntity(store, commentId)?.trackedChangeParentId);
+    const snapshot = inferTrackedChangeSnapshotForRange(editor, from, to, preferredTrackedChangeId);
+    assignTrackedChangeLink(info, snapshot ? buildTrackedChangeLink(snapshot) : null);
+  }
 
   // Inherit target + anchoredText from nearest anchored ancestor for replies.
   // Walks up the parent chain so deep threads resolve regardless of iteration order.
   for (const info of infosById.values()) {
-    if ((info.target != null && info.anchoredText != null) || !info.parentCommentId) continue;
+    if ((info.target != null && info.anchoredText != null && info.trackedChangeLink != null) || !info.parentCommentId)
+      continue;
     const visited = new Set<string>();
     let cursor: CommentInfo | undefined = info;
     while (cursor?.parentCommentId && !visited.has(cursor.parentCommentId)) {
@@ -417,6 +674,9 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
       if (ancestor?.target != null) {
         if (info.target == null) info.target = ancestor.target;
         if (info.anchoredText == null && ancestor.anchoredText != null) info.anchoredText = ancestor.anchoredText;
+        if (info.trackedChangeLink == null && ancestor.trackedChangeLink != null) {
+          assignTrackedChangeLink(info, ancestor.trackedChangeLink);
+        }
         break;
       }
       cursor = ancestor;
@@ -439,50 +699,283 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
   return infos;
 }
 
-// ---------------------------------------------------------------------------
-// Mutation handlers
-// ---------------------------------------------------------------------------
+type ResolvedCommentTarget = {
+  from: number;
+  to: number;
+  trackedChangeSnapshot: TrackedChangeSnapshot | null;
+};
 
-function addCommentHandler(editor: Editor, input: AddCommentInput, options?: RevisionGuardOptions): Receipt {
-  requireEditorCommand(editor.commands?.addComment, 'comments.create (addComment)');
+type CommentTargetResolution =
+  | { ok: true; value: ResolvedCommentTarget }
+  | { ok: false; failure: Extract<Receipt, { success: false }>['failure'] };
 
-  // The target can be either a single-block TextAddress or a multi-segment
-  // TextTarget. For a TextTarget, resolve each segment and require they
-  // cover a contiguous PM range in document order — out-of-order or
-  // disjoint segments would otherwise silently anchor the comment over
-  // intervening text the caller never selected.
-  const target = input.target;
-  if (!target) {
+function validateCommentTargetSegmentOrder(
+  editor: Editor,
+  segments: readonly TextSegment[],
+): { ok: true } | { ok: false; reason: 'document-order' | 'contiguous-blocks' } {
+  const orderedCandidates = [...getBlockIndex(editor).candidates].sort((left, right) => left.pos - right.pos);
+  const orderByBlockId = new Map<string, number>();
+
+  for (let i = 0; i < orderedCandidates.length; i += 1) {
+    const candidate = orderedCandidates[i];
+    if (!orderByBlockId.has(candidate.nodeId)) {
+      orderByBlockId.set(candidate.nodeId, i);
+    }
+  }
+
+  let lastOrder = -1;
+  for (const segment of segments) {
+    const currentOrder = orderByBlockId.get(segment.blockId);
+    if (currentOrder === undefined || currentOrder <= lastOrder) {
+      return { ok: false, reason: 'document-order' };
+    }
+    if (lastOrder >= 0 && currentOrder !== lastOrder + 1) {
+      return { ok: false, reason: 'contiguous-blocks' };
+    }
+    lastOrder = currentOrder;
+  }
+
+  return { ok: true };
+}
+
+function buildTrackedChangeEntityFields(snapshot: TrackedChangeSnapshot | null): Record<string, unknown> {
+  if (!snapshot) {
     return {
-      success: false,
-      failure: {
-        code: 'INVALID_TARGET',
-        message: 'Comment target is required.',
+      trackedChange: false,
+      trackedChangeParentId: null,
+      trackedChangeType: null,
+      trackedChangeDisplayType: null,
+      trackedChangeStory: null,
+      trackedChangeStoryKind: null,
+      trackedChangeStoryLabel: null,
+      trackedChangeAnchorKey: null,
+      trackedChangeText: null,
+      deletedText: null,
+    };
+  }
+
+  const link = buildTrackedChangeLink(snapshot);
+  return {
+    trackedChange: true,
+    trackedChangeParentId: getTrackedChangeThreadingId(snapshot),
+    trackedChangeType: link.trackedChangeType ?? null,
+    trackedChangeDisplayType: link.trackedChangeDisplayType ?? null,
+    trackedChangeStory: link.trackedChangeStory ?? null,
+    trackedChangeStoryKind: snapshot.storyKind,
+    trackedChangeStoryLabel: snapshot.storyLabel,
+    trackedChangeAnchorKey: link.trackedChangeAnchorKey ?? null,
+    trackedChangeText: link.trackedChangeText ?? null,
+    deletedText: link.deletedText ?? null,
+  };
+}
+
+function hasTrackedChangeEntityFields(record: CommentEntityRecord | undefined): boolean {
+  return Boolean(
+    record &&
+      (record.trackedChange === true ||
+        record.trackedChangeParentId != null ||
+        record.trackedChangeType != null ||
+        record.trackedChangeAnchorKey != null ||
+        record.trackedChangeText != null ||
+        record.deletedText != null),
+  );
+}
+
+function buildTrackedChangeEntityFieldsFromRecord(
+  record: CommentEntityRecord | undefined,
+): Record<string, unknown> | null {
+  if (!hasTrackedChangeEntityFields(record)) return null;
+  return {
+    trackedChange: record?.trackedChange === true,
+    trackedChangeParentId: record?.trackedChangeParentId ?? null,
+    trackedChangeType: record?.trackedChangeType ?? null,
+    trackedChangeDisplayType: record?.trackedChangeDisplayType ?? null,
+    trackedChangeStory: record?.trackedChangeStory ?? null,
+    trackedChangeStoryKind: record?.trackedChangeStoryKind ?? null,
+    trackedChangeStoryLabel: record?.trackedChangeStoryLabel ?? null,
+    trackedChangeAnchorKey: record?.trackedChangeAnchorKey ?? null,
+    trackedChangeText: record?.trackedChangeText ?? null,
+    deletedText: record?.deletedText ?? null,
+  };
+}
+
+function buildCommentLifecyclePayload(record: CommentEntityRecord): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    commentId: record.commentId,
+  };
+
+  if (record.importedId !== undefined) payload.importedId = record.importedId;
+  if (record.parentCommentId !== undefined) payload.parentCommentId = record.parentCommentId;
+  if (record.commentText !== undefined) {
+    payload.commentText = record.commentText;
+    payload.text = record.commentText;
+  }
+  if (record.commentJSON !== undefined) payload.commentJSON = record.commentJSON;
+  if (record.creatorName !== undefined) payload.creatorName = record.creatorName;
+  if (record.creatorEmail !== undefined) payload.creatorEmail = record.creatorEmail;
+  if (record.creatorImage !== undefined) payload.creatorImage = record.creatorImage;
+  if (record.createdTime !== undefined) payload.createdTime = record.createdTime;
+  if (record.isInternal !== undefined) payload.isInternal = record.isInternal;
+  if (record.isDone !== undefined) payload.isDone = record.isDone;
+  if (record.resolvedTime !== undefined) payload.resolvedTime = record.resolvedTime;
+  if (record.fileId !== undefined) payload.fileId = record.fileId;
+  if (record.documentId !== undefined) payload.documentId = record.documentId;
+  if (record.trackedChange !== undefined) payload.trackedChange = record.trackedChange;
+  if (record.trackedChangeParentId !== undefined) payload.trackedChangeParentId = record.trackedChangeParentId;
+  if (record.trackedChangeType !== undefined) payload.trackedChangeType = record.trackedChangeType;
+  if (record.trackedChangeDisplayType !== undefined) payload.trackedChangeDisplayType = record.trackedChangeDisplayType;
+  if (record.trackedChangeStory !== undefined) payload.trackedChangeStory = record.trackedChangeStory;
+  if (record.trackedChangeStoryKind !== undefined) payload.trackedChangeStoryKind = record.trackedChangeStoryKind;
+  if (record.trackedChangeStoryLabel !== undefined) payload.trackedChangeStoryLabel = record.trackedChangeStoryLabel;
+  if (record.trackedChangeAnchorKey !== undefined) payload.trackedChangeAnchorKey = record.trackedChangeAnchorKey;
+  if (record.trackedChangeText !== undefined) payload.trackedChangeText = record.trackedChangeText;
+  if (record.deletedText !== undefined) payload.deletedText = record.deletedText;
+
+  return payload;
+}
+
+function findTrackedChangeSnapshotByAlias(editor: Editor, alias: string): TrackedChangeSnapshot | null {
+  try {
+    const index = getTrackedChangeIndex(editor);
+    const bodyStory: StoryLocator = { kind: 'story', storyType: 'body' };
+    const bodySnapshots =
+      typeof index.get === 'function' ? Array.from(index.get(bodyStory)) : ([] as TrackedChangeSnapshot[]);
+    const candidateSets =
+      bodySnapshots.length > 0 ? [bodySnapshots, Array.from(index.getAll())] : [Array.from(index.getAll())];
+
+    for (const snapshots of candidateSets) {
+      const matching = snapshots.filter((snapshot) =>
+        trackedChangeSnapshotAliases(snapshot).some((value) => value === alias),
+      );
+      const directMatch = choosePreferredTrackedChangeSnapshot(matching, alias);
+      if (directMatch) return directMatch;
+
+      const projectedMatch = projectSnapshots(snapshots).find((row) => row.info.id === alias);
+      if (projectedMatch) return projectedMatch.snapshot;
+    }
+
+    return getCachedProjectedTrackedChangeSnapshot(editor, alias);
+  } catch {
+    return null;
+  }
+}
+
+function resolveCommentTrackedChangeSnapshot(editor: Editor, commentId: string): TrackedChangeSnapshot | null {
+  const store = getCommentEntityStore(editor);
+  const record = findCommentEntity(store, commentId);
+  const preferredId = toNonEmptyString(record?.trackedChangeParentId);
+  if (preferredId) {
+    const direct = findTrackedChangeSnapshotByAlias(editor, preferredId);
+    if (direct) return direct;
+  }
+
+  const info = buildCommentInfos(editor).find(
+    (candidate) => candidate.commentId === commentId || candidate.importedId === commentId,
+  );
+  if (!info?.target) return null;
+
+  const resolved = resolveCommentTarget(editor, info.target);
+  if (!resolved.ok) return null;
+  return resolved.value.trackedChangeSnapshot;
+}
+
+function resolveCommentTarget(editor: Editor, target: CommentTarget): CommentTargetResolution {
+  if (isTrackedChangeCommentTargetShape(target)) {
+    const resolved = resolveTrackedChangeInStory(editor, {
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: target.trackedChangeId,
+      ...(target.story ? { story: target.story } : {}),
+    });
+    const indexedSnapshot = resolved ? null : findTrackedChangeSnapshotByAlias(editor, target.trackedChangeId);
+    if (!resolved && !indexedSnapshot) {
+      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Comment target could not be resolved.', {
+        target,
+      });
+    }
+    if (resolved && resolved.editor !== editor) {
+      return {
+        ok: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message: 'Comment tracked-change targets outside the active story are not supported on this editor handle.',
+          details: { target },
+        },
+      };
+    }
+    if (indexedSnapshot && buildStoryKey(indexedSnapshot.story) !== BODY_STORY_KEY) {
+      return {
+        ok: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message: 'Comment tracked-change targets outside the active story are not supported on this editor handle.',
+          details: { target },
+        },
+      };
+    }
+
+    const from = resolved?.change.from ?? indexedSnapshot!.range.from;
+    const to = resolved?.change.to ?? indexedSnapshot!.range.to;
+    if (from === to) {
+      return {
+        ok: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message: 'Comment target range must be non-collapsed.',
+          details: { target },
+        },
+      };
+    }
+    const trackedChangeSnapshot =
+      indexedSnapshot ?? inferTrackedChangeSnapshotForRange(editor, from, to, target.trackedChangeId);
+    return {
+      ok: true,
+      value: {
+        from,
+        to,
+        trackedChangeSnapshot,
       },
     };
   }
+
+  if ((target as SelectionTarget | undefined)?.kind === 'selection') {
+    const resolved = resolveSelectionTarget(editor, target as SelectionTarget);
+    if (resolved.absFrom === resolved.absTo) {
+      return {
+        ok: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message: 'Comment target range must be non-collapsed.',
+          details: { target },
+        },
+      };
+    }
+    return {
+      ok: true,
+      value: {
+        from: resolved.absFrom,
+        to: resolved.absTo,
+        trackedChangeSnapshot: inferTrackedChangeSnapshotForRange(editor, resolved.absFrom, resolved.absTo),
+      },
+    };
+  }
+
   const segments = targetToSegments(target);
   if (!segments) {
     return {
-      success: false,
+      ok: false,
       failure: {
         code: 'INVALID_TARGET',
-        message: 'Comment target must be a TextAddress or TextTarget.',
+        message: 'Comment target must be a TextAddress, TextTarget, SelectionTarget, or tracked-change target.',
         details: { target },
       },
     };
   }
 
-  // Per-segment collapse check. Without this, two collapsed segments in
-  // different blocks (e.g. caret at end of p1 and caret at start of p2)
-  // pass the order + contiguity checks AND the spanning-range collapse
-  // check (because firstResolved.from < lastResolved.to across the block
-  // boundary), then silently anchor a comment over intervening content.
-  // Each individual segment must represent a non-empty range.
   for (const seg of segments) {
     if (seg.range.start === seg.range.end) {
       return {
-        success: false,
+        ok: false,
         failure: {
           code: 'INVALID_TARGET',
           message: 'Comment target range must be non-collapsed.',
@@ -501,37 +994,32 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
     });
   }
 
-  const docForGap = editor.state?.doc;
+  if (segments.length > 1) {
+    const segmentOrder = validateCommentTargetSegmentOrder(editor, segments);
+    if (segmentOrder.ok === false) {
+      return {
+        ok: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message:
+            segmentOrder.reason === 'document-order'
+              ? 'Comment target segments must be in document order.'
+              : 'Comment target segments must cover contiguous blocks in document order.',
+          details: { target },
+        },
+      };
+    }
+  }
+
   for (let i = 1; i < resolvedSegments.length; i += 1) {
     const prev = resolvedSegments[i - 1]!;
     const curr = resolvedSegments[i]!;
     if (prev.to > curr.from) {
       return {
-        success: false,
+        ok: false,
         failure: {
           code: 'INVALID_TARGET',
           message: 'Comment target segments must be in document order.',
-          details: { target },
-        },
-      };
-    }
-    // Detect content the caller didn't select sitting between segments.
-    // `textBetween(prev.to, curr.from, '')` returns:
-    //   - '' for true adjacency (same block) or pure block boundaries
-    //     (a legitimate multi-block selection between adjacent blocks);
-    //   - '<text>' if any text node sits in the gap.
-    // The `leafText` 4th argument lets us also surface inline atoms
-    // (images, math, etc) that PM otherwise omits from `textBetween`.
-    // We pass a sentinel for atoms only — keeping `blockSeparator: ''`
-    // so legitimate cross-block adjacency still produces an empty gap.
-    const gap = docForGap ? docForGap.textBetween(prev.to, curr.from, '', () => '\u0001') : '';
-    if (gap.length > 0) {
-      return {
-        success: false,
-        failure: {
-          code: 'INVALID_TARGET',
-          message:
-            'Comment target segments must be contiguous — non-selected text or atoms between segments is not supported.',
           details: { target },
         },
       };
@@ -540,18 +1028,56 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
 
   const firstResolved = resolvedSegments[0]!;
   const lastResolved = resolvedSegments[resolvedSegments.length - 1]!;
-  const resolved = { from: firstResolved.from, to: lastResolved.to };
-  if (resolved.from === resolved.to) {
+  if (firstResolved.from === lastResolved.to) {
+    return {
+      ok: false,
+      failure: { code: 'INVALID_TARGET', message: 'Comment target range must be non-collapsed.', details: { target } },
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      from: firstResolved.from,
+      to: lastResolved.to,
+      trackedChangeSnapshot: inferTrackedChangeSnapshotForRange(editor, firstResolved.from, lastResolved.to),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mutation handlers
+// ---------------------------------------------------------------------------
+
+function addCommentHandler(
+  editor: Editor,
+  input: AddCommentInput,
+  options?: RevisionGuardOptions,
+): CommentsCreateReceipt {
+  // The target can be either a single-block TextAddress or a multi-segment
+  // TextTarget. For a TextTarget, resolve each segment and require the
+  // segments to walk contiguous blocks in document order. The resulting
+  // comment span intentionally covers the full PM range between the first
+  // and last segment, matching SelectionTarget / Word-style multi-block
+  // anchors even when the boundary blocks contribute unselected text.
+  const target = input.target;
+  if (!target) {
     return {
       success: false,
       failure: {
         code: 'INVALID_TARGET',
-        message: 'Comment target range must be non-collapsed.',
+        message: 'Comment target is required.',
       },
     };
   }
+  const resolvedTarget = resolveCommentTarget(editor, target);
+  if (resolvedTarget.ok === false) {
+    return { success: false, failure: resolvedTarget.failure };
+  }
 
-  if (!applyTextSelection(editor, resolved.from, resolved.to)) {
+  requireEditorCommand(editor.commands?.addComment, 'comments.create (addComment)');
+
+  if (!applyTextSelection(editor, resolvedTarget.value.from, resolvedTarget.value.to)) {
     return {
       success: false,
       failure: {
@@ -563,6 +1089,7 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
   }
 
   const commentId = uuidv4();
+  let trackedPayload: Record<string, unknown> | null = null;
 
   const receipt = executeDomainCommand(
     editor,
@@ -587,7 +1114,12 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
           isInternal: false,
           fileId: editor.options?.documentId,
           documentId: editor.options?.documentId,
+          ...buildTrackedChangeEntityFields(resolvedTarget.value.trackedChangeSnapshot),
         });
+        const stored = findCommentEntity(store, commentId);
+        if (stored) {
+          trackedPayload = buildCommentLifecyclePayload(stored);
+        }
       }
       return didInsert;
     },
@@ -601,7 +1133,11 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
     };
   }
 
-  return { success: true, inserted: [toCommentAddress(commentId)] };
+  if (trackedPayload && resolvedTarget.value.trackedChangeSnapshot) {
+    emitCommentLifecycleUpdate(editor, 'update', trackedPayload);
+  }
+
+  return { success: true, id: commentId, inserted: [toCommentAddress(commentId)] };
 }
 
 function editCommentHandler(editor: Editor, input: EditCommentInput, options?: RevisionGuardOptions): Receipt {
@@ -648,7 +1184,11 @@ function editCommentHandler(editor: Editor, input: EditCommentInput, options?: R
   return { success: true, updated: [toCommentAddress(identity.commentId)] };
 }
 
-function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput, options?: RevisionGuardOptions): Receipt {
+function replyToCommentHandler(
+  editor: Editor,
+  input: ReplyToCommentInput,
+  options?: RevisionGuardOptions,
+): CommentsCreateReceipt {
   const addCommentReply = requireEditorCommand(editor.commands?.addCommentReply, 'comments.create (addCommentReply)');
 
   if (!input.parentCommentId) {
@@ -662,7 +1202,13 @@ function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput, optio
   }
 
   const parentIdentity = resolveCommentIdentity(editor, input.parentCommentId);
+  const store = getCommentEntityStore(editor);
+  const parentRecord = findCommentEntity(store, parentIdentity.commentId);
+  const inheritedTrackedFields =
+    buildTrackedChangeEntityFieldsFromRecord(parentRecord) ??
+    buildTrackedChangeEntityFields(resolveCommentTrackedChangeSnapshot(editor, parentIdentity.commentId));
   const replyId = uuidv4();
+  let trackedPayload: Record<string, unknown> | null = null;
 
   const receipt = executeDomainCommand(
     editor,
@@ -675,7 +1221,6 @@ function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput, optio
       if (didReply) {
         const now = Date.now();
         const user = (editor.options?.user ?? {}) as EditorUserIdentity;
-        const store = getCommentEntityStore(editor);
         upsertCommentEntity(store, replyId, {
           commentId: replyId,
           parentCommentId: parentIdentity.commentId,
@@ -689,7 +1234,12 @@ function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput, optio
           isInternal: false,
           fileId: editor.options?.documentId,
           documentId: editor.options?.documentId,
+          ...(inheritedTrackedFields ?? {}),
         });
+        const stored = findCommentEntity(store, replyId);
+        if (stored) {
+          trackedPayload = buildCommentLifecyclePayload(stored);
+        }
       }
       return Boolean(didReply);
     },
@@ -703,30 +1253,22 @@ function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput, optio
     };
   }
 
-  return { success: true, inserted: [toCommentAddress(replyId)] };
+  if (trackedPayload && inheritedTrackedFields) {
+    emitCommentLifecycleUpdate(editor, 'update', trackedPayload);
+  }
+
+  return { success: true, id: replyId, inserted: [toCommentAddress(replyId)] };
 }
 
 function moveCommentHandler(editor: Editor, input: MoveCommentInput, options?: RevisionGuardOptions): Receipt {
   const moveComment = requireEditorCommand(editor.commands?.moveComment, 'comments.patch (moveComment)');
 
-  if (input.target.range.start === input.target.range.end) {
-    return {
-      success: false,
-      failure: { code: 'INVALID_TARGET', message: 'Comment target range must be non-collapsed.' },
-    };
+  const resolvedTarget = resolveCommentTarget(editor, input.target);
+  if (resolvedTarget.ok === false) {
+    return { success: false, failure: resolvedTarget.failure };
   }
 
-  const resolved = resolveTextTarget(editor, input.target);
-  if (!resolved) {
-    throw toNotFoundError(input.target);
-  }
-  if (resolved.from === resolved.to) {
-    return {
-      success: false,
-      failure: { code: 'INVALID_TARGET', message: 'Comment target range must be non-collapsed.' },
-    };
-  }
-
+  const store = getCommentEntityStore(editor);
   const identity = resolveCommentIdentity(editor, input.commentId);
   if (!identity.anchors.length) {
     return {
@@ -745,17 +1287,37 @@ function moveCommentHandler(editor: Editor, input: MoveCommentInput, options?: R
     };
   }
 
-  const currentTarget = identity.anchors[0]?.target;
-  if (currentTarget && isSameTarget(currentTarget, input.target)) {
+  const currentAnchor = identity.anchors[0];
+  if (
+    currentAnchor &&
+    currentAnchor.pos === resolvedTarget.value.from &&
+    currentAnchor.end === resolvedTarget.value.to
+  ) {
     return {
       success: false,
       failure: { code: 'NO_OP', message: 'Comment move produced no change.' },
     };
   }
 
+  let trackedPayload: Record<string, unknown> | null = null;
   const receipt = executeDomainCommand(
     editor,
-    () => Boolean(moveComment({ commentId: identity.commentId, from: resolved.from, to: resolved.to })),
+    () => {
+      const didMove = Boolean(
+        moveComment({ commentId: identity.commentId, from: resolvedTarget.value.from, to: resolvedTarget.value.to }),
+      );
+      if (didMove) {
+        upsertCommentEntity(store, identity.commentId, {
+          importedId: identity.importedId,
+          ...buildTrackedChangeEntityFields(resolvedTarget.value.trackedChangeSnapshot),
+        });
+        const stored = findCommentEntity(store, identity.commentId);
+        if (stored) {
+          trackedPayload = buildCommentLifecyclePayload(stored);
+        }
+      }
+      return didMove;
+    },
     { expectedRevision: options?.expectedRevision },
   );
 
@@ -764,6 +1326,10 @@ function moveCommentHandler(editor: Editor, input: MoveCommentInput, options?: R
       success: false,
       failure: { code: 'NO_OP', message: 'Comment move produced no change.' },
     };
+  }
+
+  if (trackedPayload) {
+    emitCommentLifecycleUpdate(editor, 'update', trackedPayload);
   }
 
   return { success: true, updated: [toCommentAddress(identity.commentId)] };
@@ -1105,6 +1671,15 @@ function listCommentsHandler(editor: Editor, query?: CommentsListQuery): Comment
       creatorName,
       creatorEmail,
       address,
+      story,
+      trackedChange,
+      trackedChangeType,
+      trackedChangeDisplayType,
+      trackedChangeStory,
+      trackedChangeAnchorKey,
+      trackedChangeText,
+      deletedText,
+      trackedChangeLink,
     } = comment;
     return buildDiscoveryItem(comment.commentId, handle, {
       address,
@@ -1118,6 +1693,15 @@ function listCommentsHandler(editor: Editor, query?: CommentsListQuery): Comment
       createdTime,
       creatorName,
       creatorEmail,
+      story,
+      trackedChange,
+      trackedChangeType,
+      trackedChangeDisplayType,
+      trackedChangeStory,
+      trackedChangeAnchorKey,
+      trackedChangeText,
+      deletedText,
+      trackedChangeLink,
     });
   });
 

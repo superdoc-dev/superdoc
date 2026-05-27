@@ -10,7 +10,7 @@
  * - Normalize whitespace and handle empty paragraphs
  */
 
-import type { FlowBlock, ParagraphBlock } from '@superdoc/contracts';
+import type { FlowBlock, ParagraphAttrs, ParagraphBlock } from '@superdoc/contracts';
 import { resolveSectionDirection } from './direction/resolveSectionDirection.js';
 import { isValidTrackedMode } from './tracked-changes.js';
 import {
@@ -283,7 +283,11 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
   const hydratedBlocks = hydrateImageBlocks(blocks, options?.mediaFiles);
 
   // Post-process: Merge drop-cap paragraphs with their following text paragraphs
-  const mergedBlocks = mergeDropCapParagraphs(hydratedBlocks);
+  const dropCapMergedBlocks = mergeDropCapParagraphs(hydratedBlocks);
+
+  // Post-process: Fuse paragraphs whose paragraph-mark rPr has w:vanish into
+  // the next paragraph, matching Word's de-facto behaviour (SD-3269).
+  const mergedBlocks = mergeFusedParagraphs(dropCapMergedBlocks);
 
   // Commit cache cycle - swaps next to previous, retaining only blocks seen this render
   flowBlockCache?.commit();
@@ -370,6 +374,63 @@ function mergeDropCapParagraphs(blocks: FlowBlock[]): FlowBlock[] {
     // Not a drop-cap or no following paragraph - keep as-is
     result.push(block);
     i += 1;
+  }
+
+  return result;
+}
+
+/**
+ * Fuse paragraphs whose paragraph-mark rPr carries `w:vanish` into the next
+ * paragraph block. Word 16.0 treats the hidden paragraph-mark glyph as a
+ * suppressed visible break, so the next paragraph flows on the same line and
+ * its auto-generated numbering marker disappears with the absorbed block.
+ * Numbering counters still advance per OOXML paragraph, so subsequent items
+ * skip a slot (matches `pdftotext` extraction of Word's own PDF export).
+ *
+ * ECMA-376 §17.3.2.36 reads as if `w:specVanish` is the trigger, but the
+ * Word-native fixture matrix (vanish only / specVanish only) shows Word
+ * actually triggers on `w:vanish`. The matrix is documented in SD-3269.
+ *
+ * Strategy: keep the predecessor's block id, attrs, marker, and indent;
+ * concatenate `predecessor.runs ++ successor.runs`; drop the successor block.
+ * Chains collapse left-to-right.
+ *
+ * @param blocks - Array of flow blocks to process
+ * @returns New array with paragraph-mark-vanished paragraphs fused into their successors
+ */
+function mergeFusedParagraphs(blocks: FlowBlock[]): FlowBlock[] {
+  const result: FlowBlock[] = [];
+
+  for (const block of blocks) {
+    const prev = result.length > 0 ? result[result.length - 1] : undefined;
+    if (
+      block.kind === 'paragraph' &&
+      prev?.kind === 'paragraph' &&
+      (prev as ParagraphBlock).attrs?.suppressParagraphBreak
+    ) {
+      const head = prev as ParagraphBlock;
+      const tail = block as ParagraphBlock;
+      // Keep the predecessor's id/attrs (style, marker, indent) and append
+      // the successor's runs. The successor's marker is implicitly dropped
+      // because its block no longer exists. Carry the flag forward only when
+      // the successor itself sets it, so chains keep collapsing left-to-right.
+      const mergedAttrs: ParagraphAttrs = { ...head.attrs };
+      if (tail.attrs?.suppressParagraphBreak) {
+        mergedAttrs.suppressParagraphBreak = true;
+      } else {
+        delete (mergedAttrs as Record<string, unknown>).suppressParagraphBreak;
+      }
+      const merged: ParagraphBlock = {
+        kind: 'paragraph',
+        id: head.id,
+        runs: [...head.runs, ...tail.runs],
+        attrs: mergedAttrs,
+        ...(head.sourceAnchor ? { sourceAnchor: head.sourceAnchor } : {}),
+      };
+      result[result.length - 1] = merged;
+      continue;
+    }
+    result.push(block);
   }
 
   return result;

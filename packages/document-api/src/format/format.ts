@@ -68,6 +68,23 @@ export type StyleApplyInput = TargetLocator & {
 };
 
 /**
+ * Legacy root-level alias input for `doc.formatRange(...)`.
+ *
+ * Kept for SDK compatibility while routing through the canonical
+ * `format.apply` implementation.
+ */
+export type FormatRangeInput = TargetLocator & {
+  target?: SelectionTarget;
+  ref?: string;
+  properties: InlineRunPatch;
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
+  changeMode?: MutationOptions['changeMode'];
+  dryRun?: boolean;
+  expectedRevision?: string;
+};
+
+/**
  * Named alias for MutationOptions on format.apply.
  *
  * Exists as a distinct type so the styles system can add style-specific

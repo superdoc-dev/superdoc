@@ -41,7 +41,7 @@ test('typing inside an existing tracked replacement refreshes inserted text and 
   await superdoc.type('replacement');
   await superdoc.waitForStable();
 
-  await expect.poll(async () => (await listTrackChanges(superdoc.page, { type: 'insert' })).total).toBe(1);
+  await expect.poll(async () => (await listTrackChanges(superdoc.page, { type: 'replacement' })).total).toBe(1);
   await expect(insertedBubbleText(superdoc)).toContainText('replacement');
   await expect(deletedBubbleText(superdoc)).toContainText('original');
 

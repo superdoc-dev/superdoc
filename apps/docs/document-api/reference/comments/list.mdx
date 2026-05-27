@@ -143,6 +143,12 @@ Returns a CommentsListResult with an array of comment threads and total count.
           "creatorName": {
             "type": "string"
           },
+          "deletedText": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "handle": {
             "$ref": "#/$defs/ResolvedHandle"
           },
@@ -169,6 +175,55 @@ Returns a CommentsListResult with an array of comment threads and total count.
           },
           "text": {
             "type": "string"
+          },
+          "trackedChange": {
+            "type": "boolean"
+          },
+          "trackedChangeAnchorKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trackedChangeDisplayType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trackedChangeLink": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/CommentTrackedChangeLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trackedChangeStory": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/StoryLocator"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trackedChangeText": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trackedChangeType": {
+            "enum": [
+              "insert",
+              "delete",
+              "replacement",
+              "format"
+            ]
           }
         },
         "required": [

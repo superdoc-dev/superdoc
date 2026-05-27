@@ -1,14 +1,14 @@
 ---
 title: trackChanges.decide
 sidebarTitle: trackChanges.decide
-description: "Accept or reject a tracked change (by ID or scope: all)."
+description: "Accept or reject tracked changes by ID, range, or scope: all (optionally filtered by story)."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Accept or reject a tracked change (by ID or scope: all).
+Accept or reject tracked changes by ID, range, or scope: all (optionally filtered by story).
 
 - Operation ID: `trackChanges.decide`
 - API member path: `editor.doc.trackChanges.decide(...)`
@@ -20,14 +20,14 @@ Accept or reject a tracked change (by ID or scope: all).
 
 ## Expected result
 
-Returns a Receipt confirming the decision was applied; reports NO_OP if the change was already resolved.
+Returns a Receipt confirming the decision was applied; reports NO_OP if the change was already resolved and typed failures for unsupported or denied tracked-change decisions.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `decision` | enum | yes | `"accept"`, `"reject"` |
-| `target` | object \\| object | yes | One of: object, object |
+| `target` | object \| object(kind="range") \| object | yes | One of: object, object(kind="range"), object |
 
 ### Example request
 
@@ -60,7 +60,7 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"NO_OP"` |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"PERMISSION_DENIED"`, `"PRECONDITION_FAILED"`, `"COMMENT_CASCADE_PARTIAL"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
@@ -97,6 +97,12 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
 ## Non-applied failure codes
 
 - `NO_OP`
+- `INVALID_TARGET`
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `PERMISSION_DENIED`
+- `PRECONDITION_FAILED`
+- `COMMENT_CASCADE_PARTIAL`
 
 ## Raw schemas
 
@@ -131,9 +137,43 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
         {
           "additionalProperties": false,
           "properties": {
+            "kind": {
+              "const": "range"
+            },
+            "part": {
+              "description": "Optional part discriminator for the range target.",
+              "type": "string"
+            },
+            "range": {
+              "$ref": "#/$defs/TextTarget"
+            },
+            "story": {
+              "$ref": "#/$defs/StoryLocator"
+            }
+          },
+          "required": [
+            "kind",
+            "range"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "scope": {
               "enum": [
                 "all"
+              ]
+            },
+            "story": {
+              "description": "Optional explicit bulk filter. Omit or pass 'all' to target every revision-capable story, or pass a StoryLocator to scope the decision to one story.",
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/StoryLocator"
+                },
+                {
+                  "const": "all"
+                }
               ]
             }
           },
@@ -169,7 +209,13 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
           "properties": {
             "code": {
               "enum": [
-                "NO_OP"
+                "NO_OP",
+                "INVALID_TARGET",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE",
+                "PERMISSION_DENIED",
+                "PRECONDITION_FAILED",
+                "COMMENT_CASCADE_PARTIAL"
               ]
             },
             "details": {},
@@ -216,7 +262,13 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
       "properties": {
         "code": {
           "enum": [
-            "NO_OP"
+            "NO_OP",
+            "INVALID_TARGET",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE",
+            "PERMISSION_DENIED",
+            "PRECONDITION_FAILED",
+            "COMMENT_CASCADE_PARTIAL"
           ]
         },
         "details": {},

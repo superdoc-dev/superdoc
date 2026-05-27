@@ -22,7 +22,7 @@ import {
 
 /**
  * Resolves marker width using the already-measured glyph width from layout whenever possible.
- * Mirrors resolvePainterMarkerTextWidth from painters/dom/src/utils/marker-helpers.ts.
+ * Mirrors resolvePainterMarkerTextWidth from painters/dom/src/paragraph/list-marker.ts.
  */
 function resolveMarkerTextWidth(
   markerTextWidthPx: number | undefined,

@@ -22,12 +22,12 @@ import type {
   ParagraphMeasure,
   LayoutStoryLocator,
 } from '@superdoc/contracts';
+import { getSdtContainerKey } from '@superdoc/contracts';
 import { resolveParagraphContent } from './resolveParagraph.js';
 import { resolveTableItem } from './resolveTable.js';
 import { resolveImageItem } from './resolveImage.js';
 import { resolveDrawingItem } from './resolveDrawing.js';
 import type { BlockMapEntry } from './resolvedBlockLookup.js';
-import { computeSdtContainerKey } from './sdtContainerKey.js';
 import { hashParagraphBorders } from './paragraphBorderHash.js';
 import {
   deriveBlockVersion,
@@ -162,17 +162,17 @@ function resolveFragmentSdtContainerKey(fragment: Fragment, blockMap: Map<string
   const block = entry.block;
 
   if (fragment.kind === 'para' && block.kind === 'paragraph') {
-    return computeSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
+    return getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
   }
 
   if (fragment.kind === 'list-item' && block.kind === 'list') {
     const listBlock = block as ListBlock;
     const item = listBlock.items.find((listItem) => listItem.id === fragment.itemId);
-    return computeSdtContainerKey(item?.paragraph.attrs?.sdt, item?.paragraph.attrs?.containerSdt);
+    return getSdtContainerKey(item?.paragraph.attrs?.sdt, item?.paragraph.attrs?.containerSdt);
   }
 
   if (fragment.kind === 'table' && block.kind === 'table') {
-    return computeSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
+    return getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
   }
 
   // image, drawing — no SDT container keys

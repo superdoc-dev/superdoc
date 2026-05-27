@@ -56,7 +56,7 @@ Returns a HeaderFooterSlotEntry for the targeted section slot.
 | --- | --- | --- | --- |
 | `isExplicit` | boolean | yes |  |
 | `kind` | enum | yes | `"header"`, `"footer"` |
-| `refId` | any | no |  |
+| `refId` | string \| null | no |  |
 | `section` | SectionAddress | yes | SectionAddress |
 | `section.kind` | `"section"` | yes | Constant: `"section"` |
 | `section.sectionId` | string | yes |  |
@@ -69,7 +69,7 @@ Returns a HeaderFooterSlotEntry for the targeted section slot.
 {
   "isExplicit": true,
   "kind": "header",
-  "refId": {},
+  "refId": null,
   "section": {
     "kind": "section",
     "sectionId": "example"

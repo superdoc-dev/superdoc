@@ -8,6 +8,26 @@ import { PUBLIC_MUTATION_STEP_OP_IDS, STEP_OP_CATALOG } from './step-op-catalog.
 import { OPERATION_IDS, PRE_APPLY_THROW_CODES, isValidOperationIdFormat } from './types.js';
 import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from '../images/z-order.js';
 
+const TRACK_CHANGES_DECIDE_RECEIPT_FAILURE_CODES = [
+  'NO_OP',
+  'INVALID_TARGET',
+  'TARGET_NOT_FOUND',
+  'CAPABILITY_UNAVAILABLE',
+  'PERMISSION_DENIED',
+  'PRECONDITION_FAILED',
+  'COMMENT_CASCADE_PARTIAL',
+] as const;
+
+function expectArrayToIncludeValues(
+  actual: readonly string[] | undefined,
+  expected: readonly string[],
+  label: string,
+): void {
+  expect(Array.isArray(actual), `${label} should be an array`).toBe(true);
+  const missing = expected.filter((code) => !actual!.includes(code));
+  expect(missing, `${label} missing expected codes`).toEqual([]);
+}
+
 describe('document-api contract catalog', () => {
   it('keeps operation ids explicit and format-valid', () => {
     expect([...new Set(OPERATION_IDS)]).toHaveLength(OPERATION_IDS.length);
@@ -194,6 +214,98 @@ describe('document-api contract catalog', () => {
     }
   });
 
+  it('allows null trackedChangeLink on comment read models', () => {
+    const schemas = buildInternalContractSchemas();
+    const commentInfoSchema = schemas.operations['comments.get'].output as {
+      properties?: {
+        trackedChangeLink?: { oneOf?: Array<Record<string, unknown>> };
+      };
+    };
+    const commentsListSchema = schemas.operations['comments.list'].output as {
+      properties?: {
+        items?: {
+          items?: {
+            properties?: {
+              trackedChangeLink?: { oneOf?: Array<Record<string, unknown>> };
+            };
+          };
+        };
+      };
+    };
+
+    const getVariants = commentInfoSchema.properties?.trackedChangeLink?.oneOf ?? [];
+    const listVariants = commentsListSchema.properties?.items?.items?.properties?.trackedChangeLink?.oneOf ?? [];
+
+    expect(getVariants.some((variant) => variant.type === 'null')).toBe(true);
+    expect(listVariants.some((variant) => variant.type === 'null')).toBe(true);
+  });
+
+  it('publishes replacement in comment tracked-change enums for get/list and link defs', () => {
+    const schemas = buildInternalContractSchemas();
+    const commentInfoSchema = schemas.operations['comments.get'].output as {
+      properties?: {
+        trackedChangeType?: {
+          enum?: string[];
+        };
+      };
+    };
+    const commentsListSchema = schemas.operations['comments.list'].output as {
+      properties?: {
+        items?: {
+          items?: {
+            properties?: {
+              trackedChangeType?: {
+                enum?: string[];
+              };
+            };
+          };
+        };
+      };
+    };
+    const defs = schemas.$defs as Record<
+      string,
+      {
+        properties?: Record<
+          string,
+          {
+            enum?: string[];
+          }
+        >;
+      }
+    >;
+
+    expect(commentInfoSchema.properties?.trackedChangeType?.enum).toEqual(
+      expect.arrayContaining(['insert', 'delete', 'replacement', 'format']),
+    );
+    expect(commentsListSchema.properties?.items?.items?.properties?.trackedChangeType?.enum).toEqual(
+      expect.arrayContaining(['insert', 'delete', 'replacement', 'format']),
+    );
+    expect(defs.CommentTrackedChangeLink?.properties?.trackedChangeType?.enum).toEqual(
+      expect.arrayContaining(['insert', 'delete', 'replacement', 'format']),
+    );
+  });
+
+  it('requires id on comments.create success receipts', () => {
+    const schemas = buildInternalContractSchemas();
+    const createOutputSchema = schemas.operations['comments.create'].output as {
+      oneOf?: Array<{
+        $ref?: string;
+      }>;
+    };
+    const defs = schemas.$defs as Record<
+      string,
+      {
+        properties?: Record<string, unknown>;
+        required?: string[];
+      }
+    >;
+
+    const successSchema = createOutputSchema.oneOf?.[0];
+    expect(successSchema?.$ref).toBe('#/$defs/CommentsCreateSuccess');
+    expect(defs.CommentsCreateSuccess?.properties).toHaveProperty('id');
+    expect(defs.CommentsCreateSuccess?.required).toEqual(expect.arrayContaining(['success', 'id']));
+  });
+
   it('declares UNSUPPORTED_ENVIRONMENT for insert metadata and generated failure schema', () => {
     const schemas = buildInternalContractSchemas();
     const insertFailureSchema = schemas.operations.insert.failure as {
@@ -210,6 +322,106 @@ describe('document-api contract catalog', () => {
 
     expect(COMMAND_CATALOG.insert.possibleFailureCodes).toContain('UNSUPPORTED_ENVIRONMENT');
     expect(insertFailureSchema.properties?.failure?.properties?.code?.enum).toContain('UNSUPPORTED_ENVIRONMENT');
+  });
+
+  it('declares every trackChanges.decide receipt failure code in command metadata', () => {
+    expectArrayToIncludeValues(
+      COMMAND_CATALOG['trackChanges.decide'].possibleFailureCodes,
+      TRACK_CHANGES_DECIDE_RECEIPT_FAILURE_CODES,
+      'trackChanges.decide possibleFailureCodes',
+    );
+  });
+
+  it('includes every trackChanges.decide receipt failure code in the generated failure schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const decideFailureSchema = schemas.operations['trackChanges.decide'].failure as {
+      properties?: {
+        failure?: {
+          properties?: {
+            code?: {
+              enum?: string[];
+            };
+          };
+        };
+      };
+    };
+
+    expectArrayToIncludeValues(
+      decideFailureSchema.properties?.failure?.properties?.code?.enum,
+      TRACK_CHANGES_DECIDE_RECEIPT_FAILURE_CODES,
+      'trackChanges.decide failure schema code enum',
+    );
+  });
+
+  it('includes every trackChanges.decide receipt failure code in the generated output schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const decideOutputSchema = schemas.operations['trackChanges.decide'].output as {
+      oneOf?: Array<{
+        properties?: {
+          failure?: {
+            properties?: {
+              code?: {
+                enum?: string[];
+              };
+            };
+          };
+        };
+      }>;
+    };
+
+    expectArrayToIncludeValues(
+      decideOutputSchema.oneOf?.[1]?.properties?.failure?.properties?.code?.enum,
+      TRACK_CHANGES_DECIDE_RECEIPT_FAILURE_CODES,
+      'trackChanges.decide output schema failure code enum',
+    );
+  });
+
+  it('publishes replacement as a first-class tracked-change type in list/get/extract schemas', () => {
+    const schemas = buildInternalContractSchemas();
+    const trackChangesListInput = schemas.operations['trackChanges.list'].input as {
+      properties?: {
+        type?: {
+          enum?: string[];
+        };
+      };
+    };
+    const trackChangesGetOutput = schemas.operations['trackChanges.get'].output as {
+      properties?: {
+        type?: {
+          enum?: string[];
+        };
+        grouping?: {
+          enum?: string[];
+        };
+      };
+    };
+    const extractOutput = schemas.operations.extract.output as {
+      properties?: {
+        trackedChanges?: {
+          items?: {
+            properties?: {
+              type?: {
+                enum?: string[];
+              };
+            };
+          };
+        };
+      };
+    };
+
+    expect(trackChangesListInput.properties?.type?.enum).toEqual(
+      expect.arrayContaining(['insert', 'delete', 'replacement', 'format']),
+    );
+    expect(trackChangesGetOutput.properties?.type?.enum).toEqual(
+      expect.arrayContaining(['insert', 'delete', 'replacement', 'format']),
+    );
+    expect(trackChangesGetOutput.properties?.grouping?.enum).toEqual(
+      expect.arrayContaining(['standalone', 'replacement-pair', 'unknown']),
+    );
+    expect(trackChangesGetOutput.properties?.grouping?.enum).not.toContain('aggregate');
+    expect(extractOutput.properties?.trackedChanges?.items?.properties?.type?.enum).toEqual(
+      expect.arrayContaining(['insert', 'delete', 'replacement', 'format']),
+    );
   });
 
   it('includes global.history in capabilities.get output schema', () => {

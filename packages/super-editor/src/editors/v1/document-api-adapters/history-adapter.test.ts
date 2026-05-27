@@ -8,6 +8,11 @@ const { undoDepthMock, redoDepthMock, yGetStateMock } = vi.hoisted(() => ({
   yGetStateMock: vi.fn(() => undefined),
 }));
 
+const { listCommentAnchorsMock, reconcileCommentEntityStoreWithAnchorsMock } = vi.hoisted(() => ({
+  listCommentAnchorsMock: vi.fn(() => []),
+  reconcileCommentEntityStoreWithAnchorsMock: vi.fn(() => ({ restored: [], removed: [] })),
+}));
+
 vi.mock('prosemirror-history', () => ({
   undoDepth: undoDepthMock,
   redoDepth: redoDepthMock,
@@ -19,10 +24,19 @@ vi.mock('y-prosemirror', () => ({
   },
 }));
 
+vi.mock('./helpers/comment-target-resolver.js', () => ({
+  listCommentAnchors: listCommentAnchorsMock,
+}));
+
+vi.mock('./helpers/comment-entity-store.js', () => ({
+  reconcileCommentEntityStoreWithAnchors: reconcileCommentEntityStoreWithAnchorsMock,
+}));
+
 function makeEditor(overrides: Partial<Editor> = {}): Editor {
   return {
     options: {},
     state: { tr: {} } as Editor['state'],
+    emit: vi.fn(),
     commands: {
       undo: vi.fn(() => true),
       redo: vi.fn(() => true),
@@ -59,6 +73,8 @@ describe('createHistoryAdapter', () => {
     undoDepthMock.mockReturnValue(0);
     redoDepthMock.mockReturnValue(0);
     yGetStateMock.mockReturnValue(undefined);
+    listCommentAnchorsMock.mockReturnValue([]);
+    reconcileCommentEntityStoreWithAnchorsMock.mockReturnValue({ restored: [], removed: [] });
   });
 
   it('reads undo/redo depth from PM history in non-collab mode', () => {
@@ -224,6 +240,59 @@ describe('createHistoryAdapter', () => {
     expect(presentationOwner.redo).toHaveBeenCalledOnce();
     expect(rootEditor.commands.undo).not.toHaveBeenCalled();
     expect(rootEditor.commands.redo).not.toHaveBeenCalled();
+  });
+
+  it('emits deleted comment lifecycle events when undo prunes a just-created orphaned root comment', () => {
+    undoDepthMock.mockReturnValue(1);
+    reconcileCommentEntityStoreWithAnchorsMock.mockReturnValue({
+      restored: [],
+      removed: [{ commentId: 'c1', commentText: 'Root', documentId: 'doc-1' }],
+    });
+    const editor = makeEditor({ options: { documentId: 'doc-1' } as Editor['options'] });
+
+    const adapter = createHistoryAdapter(editor);
+    const result = adapter.undo();
+
+    expect(result.noop).toBe(false);
+    expect(listCommentAnchorsMock).toHaveBeenCalledWith(editor);
+    expect(reconcileCommentEntityStoreWithAnchorsMock).toHaveBeenCalledWith(editor, expect.any(Set));
+    expect(editor.emit as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('commentsUpdate', {
+      type: 'deleted',
+      comment: {
+        commentId: 'c1',
+        commentText: 'Root',
+        text: 'Root',
+        documentId: 'doc-1',
+      },
+    });
+  });
+
+  it('emits add comment lifecycle events when redo restores a stashed comment thread', () => {
+    redoDepthMock.mockReturnValue(1);
+    listCommentAnchorsMock.mockReturnValue([{ commentId: 'c1', importedId: 'imp-1' }]);
+    reconcileCommentEntityStoreWithAnchorsMock.mockReturnValue({
+      removed: [],
+      restored: [{ commentId: 'c1', importedId: 'imp-1', commentText: 'Restored root', createdTime: 123 }],
+    });
+    const editor = makeEditor();
+
+    const adapter = createHistoryAdapter(editor);
+    const result = adapter.redo();
+
+    expect(result.noop).toBe(false);
+    expect(reconcileCommentEntityStoreWithAnchorsMock).toHaveBeenCalledWith(editor, expect.any(Set));
+    const anchoredIds = reconcileCommentEntityStoreWithAnchorsMock.mock.calls[0]?.[1] as Set<string>;
+    expect(Array.from(anchoredIds).sort()).toEqual(['c1', 'imp-1']);
+    expect(editor.emit as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('commentsUpdate', {
+      type: 'add',
+      comment: {
+        commentId: 'c1',
+        importedId: 'imp-1',
+        commentText: 'Restored root',
+        text: 'Restored root',
+        createdTime: 123,
+      },
+    });
   });
 
   it('keeps sub-editor adapters surface-scoped even when a PresentationEditor exists', () => {

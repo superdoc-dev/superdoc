@@ -37,14 +37,14 @@ export async function runSessionSave(tokens: string[], context: CommandContext):
       command: 'session save',
       data: {
         usage: [
-          'superdoc session save <sessionId> [--in-place] [--out <path>] [--force]',
-          'superdoc session save --session <sessionId> [--in-place] [--out <path>] [--force]',
+          'superdoc session save <sessionId> [--mode <review-preserving|final>] [--in-place] [--out <path>] [--force]',
+          'superdoc session save --session <sessionId> [--mode <review-preserving|final>] [--in-place] [--out <path>] [--force]',
         ],
       },
       pretty: [
         'Usage:',
-        '  superdoc session save <sessionId> [--in-place] [--out <path>] [--force]',
-        '  superdoc session save --session <sessionId> [--in-place] [--out <path>] [--force]',
+        '  superdoc session save <sessionId> [--mode <review-preserving|final>] [--in-place] [--out <path>] [--force]',
+        '  superdoc session save --session <sessionId> [--mode <review-preserving|final>] [--in-place] [--out <path>] [--force]',
       ].join('\n'),
     };
   }

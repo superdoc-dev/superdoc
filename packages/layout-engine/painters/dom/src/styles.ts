@@ -310,6 +310,32 @@ const TRACK_CHANGE_STYLES = `
   background-color: var(--sd-tracked-changes-delete-background-focused, #cb0e4744);
 }
 
+.superdoc-layout .track-overlap-insert-delete-dec.track-insert-dec.track-delete-dec.highlighted {
+  border-top: var(--sd-tracked-changes-insert-border-width, 1px) dashed var(--sd-tracked-changes-insert-border, #00853d);
+  border-bottom: var(--sd-tracked-changes-insert-border-width, 1px) dashed var(--sd-tracked-changes-insert-border, #00853d);
+  background-color: var(--sd-tracked-changes-insert-background, #399c7222);
+  color: var(--sd-tracked-changes-insert-text, currentColor);
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, #cb0e47)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px) !important;
+}
+
+.superdoc-layout .track-overlap-insert-delete-dec.track-insert-dec.track-delete-dec.highlighted.track-change-focused {
+  border-left: none;
+  border-right: none;
+  border-top-style: solid;
+  border-bottom-style: solid;
+  background-color: var(--sd-tracked-changes-insert-background-focused, #399c7244);
+  color: var(--sd-tracked-changes-insert-text, currentColor);
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, #cb0e47)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px) !important;
+}
+
 .superdoc-layout .track-format-dec.highlighted.track-change-focused {
   background-color: var(--sd-tracked-changes-format-background-focused, #ffd70033);
 }
@@ -417,7 +443,7 @@ const FORMATTING_MARKS_STYLES = `
  *
  * **Implementation Note:**
  * These styles are injected once per document via ensureSdtContainerStyles() to avoid
- * duplication. The DOM painter applies corresponding classes via applySdtContainerStyling().
+ * duplication. The DOM painter applies corresponding classes via applySdtContainerChrome().
  */
 const SDT_CONTAINER_STYLES = `
 /* Document Section - Block-level container with gray border and hover tooltip */
@@ -501,6 +527,7 @@ const SDT_CONTAINER_STYLES = `
   box-sizing: border-box;
   border-radius: 4px;
   border: 1px solid transparent;
+  background-color: var(--sd-content-controls-block-bg, transparent);
   position: relative;
 }
 
@@ -596,6 +623,7 @@ const SDT_CONTAINER_STYLES = `
   box-sizing: border-box;
   border-radius: 4px;
   border: 1px solid transparent;
+  background-color: var(--sd-content-controls-inline-bg, transparent);
   position: relative;
   display: inline;
   font-size: initial;
@@ -651,6 +679,7 @@ const SDT_CONTAINER_STYLES = `
   padding: 0;
   border: none;
   border-radius: 0;
+  background-color: transparent;
 }
 .superdoc-structured-content-inline[data-appearance='hidden']:hover {
   background-color: transparent;

@@ -2857,7 +2857,7 @@ describe('PresentationEditor', () => {
           y: 120,
         },
       ];
-      mockIncrementalLayout.mockResolvedValueOnce(layoutResult);
+      mockIncrementalLayout.mockResolvedValue(layoutResult);
       bookmarkResolverMocks.findAllBookmarksInDocument.mockReturnValueOnce([
         { name: 'body-bm', bookmarkId: '7', storyKey: 'body' },
       ]);
@@ -3320,6 +3320,28 @@ describe('PresentationEditor', () => {
 
       expect(didNavigate).toBe(true);
       expect(setCursorById).toHaveBeenCalledWith('tc-note-1', { preferredActiveThreadId: 'tc-note-1' });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
+    });
+
+    it('uses the public Word tracked-change id during story navigation when the note session supports it', async () => {
+      const { sessionEditor } = await activateFootnoteSession();
+      const setCursorById = vi.fn((id: string) => id === 'word:trackInsert:101');
+      if (sessionEditor?.commands) {
+        sessionEditor.commands.setCursorById = setCursorById;
+      }
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'word:trackInsert:101',
+        story: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(setCursorById).toHaveBeenCalledTimes(1);
+      expect(setCursorById).toHaveBeenCalledWith('word:trackInsert:101', {
+        preferredActiveThreadId: 'word:trackInsert:101',
+      });
       expect(sessionEditor?.view.focus).toHaveBeenCalled();
     });
 

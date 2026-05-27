@@ -93,6 +93,10 @@ const CLICK_OUTSIDE_HIT_SAMPLE_OFFSETS = [
 ];
 const CLICK_OUTSIDE_IGNORED_SELECTORS = [
   '.comments-dropdown__option-label',
+  '.comments-dropdown__menu',
+  '.comments-dropdown__option',
+  '.comments-dropdown__option-icon',
+  '.comments-dropdown__trigger',
   '.superdoc-comment-highlight',
   '.sd-editor-comment-highlight',
   '.sd-editor-tracked-change-highlight',
@@ -609,6 +613,7 @@ const handleReject = () => {
   // disappears from getFloatingComments — even when a custom handler is used (SD-2049).
   if (props.comment.trackedChange) {
     props.comment.resolveComment({
+      id: superdocStore.user.id,
       email: superdocStore.user.email,
       name: superdocStore.user.name,
       superdoc: proxy.$superdoc,
@@ -642,6 +647,7 @@ const handleResolve = () => {
   // Always resolve so resolvedTime is set and the bubble disappears
   // from getFloatingComments — even when a custom handler is used (SD-2049).
   props.comment.resolveComment({
+    id: superdocStore.user.id,
     email: superdocStore.user.email,
     name: superdocStore.user.name,
     superdoc: proxy.$superdoc,

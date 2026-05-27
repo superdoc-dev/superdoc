@@ -2175,8 +2175,10 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       const emit = editor.emit;
       if (typeof emit === 'function') {
         try {
+          const replacedFile = editor.options?.replacedFile === true ? true : undefined;
           emit.call(editor, 'commentsLoaded', {
             editor,
+            ...(replacedFile ? { replacedFile } : {}),
             comments: editor.converter?.comments ?? [],
           });
         } catch (err) {

@@ -29,12 +29,11 @@
  *
  * @example
  * ```javascript
- * // In a JavaScript file with JSDoc:
+ * // In a JavaScript file with JSDoc: alias the BoldAttrs type at the top
+ * // of the file via a standard `typedef` JSDoc block pointing at
+ * // '@extensions/types/mark-attributes.js', then defineMark picks up the
+ * // attribute shape from there.
  * import { defineMark } from '@core/defineMark.js';
- *
- * /**
- *  * @typedef {import('@extensions/types/mark-attributes.js').BoldAttrs} BoldAttrs
- *  *\/
  *
  * export const Bold = defineMark({
  *   name: 'bold',
@@ -50,11 +49,11 @@ import { Mark, type MarkConfig } from './Mark.js';
 /**
  * Type-safe factory for creating Mark extensions.
  *
- * @template Options - Extension options type
- * @template Storage - Extension storage type
- * @template Attrs - Mark attributes type
- * @param config - Mark configuration object
- * @returns A new Mark instance with the specified types
+ * @typeParam Options - Extension options type.
+ * @typeParam Storage - Extension storage type.
+ * @typeParam Attrs - Mark attributes type.
+ * @param config - Mark configuration object.
+ * @returns A new Mark instance with the specified types.
  */
 export function defineMark<
   Options extends Record<string, unknown> = Record<string, never>,

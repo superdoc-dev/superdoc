@@ -293,5 +293,50 @@ describe('tabNodeToRun', () => {
 
       expect(applyMarksToRunMock).not.toHaveBeenCalled();
     });
+
+    it('hydrates underline from runProperties when tab marks are missing', () => {
+      const tabNode: PMNode = { type: 'tab' };
+      const paragraphAttrs: ParagraphAttrs = {};
+      const positions: PositionMap = new WeakMap();
+      positions.set(tabNode, { start: 0, end: 1 });
+
+      const result = tabNodeToRun({
+        node: tabNode,
+        positions,
+        tabOrdinal: 0,
+        paragraphAttrs,
+        runProperties: {
+          underline: {
+            'w:val': 'single',
+          },
+        } as any,
+      }) as TabRun;
+
+      expect(result.underline).toEqual({ style: 'single' });
+    });
+
+    it('keeps explicit tab mark precedence over runProperties fallback', () => {
+      const tabNode: PMNode = {
+        type: 'tab',
+        marks: [{ type: 'underline', attrs: { underlineType: 'none' } }],
+      };
+      const paragraphAttrs: ParagraphAttrs = {};
+      const positions: PositionMap = new WeakMap();
+      positions.set(tabNode, { start: 0, end: 1 });
+
+      const result = tabNodeToRun({
+        node: tabNode,
+        positions,
+        tabOrdinal: 0,
+        paragraphAttrs,
+        runProperties: {
+          underline: {
+            'w:val': 'single',
+          },
+        } as any,
+      }) as TabRun;
+
+      expect(result.underline).toBeUndefined();
+    });
   });
 });

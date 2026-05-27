@@ -29,28 +29,28 @@ Returns a ParagraphMutationResult; reports NO_OP if spacing already matches.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `before` | integer | yes |  |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 2 (required: after)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `after` | integer | yes |  |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 3 (required: line)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `line` | integer | yes |  |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 4 (required: lineRule)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `lineRule` | enum | yes | `"auto"`, `"exact"`, `"atLeast"` |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Example request
 
@@ -72,9 +72,9 @@ Returns a ParagraphMutationResult; reports NO_OP if spacing already matches.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `resolution` | object | yes |  |
-| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 | `success` | `true` | yes | Constant: `true` |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 2 (success=false)
 
@@ -85,7 +85,7 @@ Returns a ParagraphMutationResult; reports NO_OP if spacing already matches.
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `resolution` | object | no |  |
-| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 | `success` | `false` | yes | Constant: `false` |
 
 ### Example response

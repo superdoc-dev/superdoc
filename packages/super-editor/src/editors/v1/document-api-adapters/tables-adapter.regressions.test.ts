@@ -208,7 +208,6 @@ function makeTableEditor(options: TableEditorOptions = {}): Editor {
     attrs: {
       sdBlockId: 'table-1',
       tableProperties: {},
-      tableGrid: [5000, 5000],
       grid: [{ col: 1200 }, { col: 3000 }],
     },
     isBlock: true,
@@ -317,6 +316,15 @@ function makeTableEditor(options: TableEditorOptions = {}): Editor {
       },
     },
     dispatch: vi.fn(),
+    extensionService: {
+      attributes: [
+        { type: 'table', name: 'sdBlockId', attribute: { keepOnSplit: false } },
+        { type: 'table', name: 'paraId', attribute: { keepOnSplit: false } },
+        { type: 'table', name: 'textId', attribute: { keepOnSplit: false } },
+        { type: 'table', name: 'tableProperties', attribute: { keepOnSplit: true } },
+        { type: 'table', name: 'grid', attribute: { keepOnSplit: true } },
+      ],
+    },
     commands: {},
     can: vi.fn(() => ({})),
     schema: { marks: {}, nodes: {} },
@@ -380,6 +388,8 @@ describe('tables-adapter regressions', () => {
     const editor = makeTableEditor();
     const tr = editor.state.tr as unknown as { insert: ReturnType<typeof vi.fn> };
     const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    (tableNode.attrs as Record<string, unknown>).paraId = 'table-para-id';
+    (tableNode.attrs as Record<string, unknown>).textId = 'table-text-id';
     const expectedInsertPos = tableNode.nodeSize;
 
     const result = tablesSplitAdapter(editor, { nodeId: 'table-1', rowIndex: 1 });
@@ -395,6 +405,11 @@ describe('tables-adapter regressions', () => {
     expect(insertedSeparator.type.name).toBe('paragraph');
     expect(secondInsertCall[0]).toBe(expectedInsertPos + insertedSeparator.nodeSize);
     expect(insertedTable.type.name).toBe('table');
+    expect(insertedTable.attrs.tableProperties).toEqual({});
+    expect(insertedTable.attrs.grid).toEqual([{ col: 1200 }, { col: 3000 }]);
+    expect(insertedTable.attrs.sdBlockId).toBeUndefined();
+    expect(insertedTable.attrs.paraId).toBeUndefined();
+    expect(insertedTable.attrs.textId).toBeUndefined();
   });
 
   it('SD-2127: inserts a new cell in every row when appending a column to the right of the last column', () => {

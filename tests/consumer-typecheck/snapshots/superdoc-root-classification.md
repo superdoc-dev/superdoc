@@ -1,31 +1,33 @@
 # SD-3212 A1 — root classification
 
-Generated: 2026-05-19T11:33:50.546Z
-Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (200 names, locked baseline)
+Generated: 2026-05-25T00:00:00.000Z
+Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (205 names, locked baseline)
 
 ## Summary
 
 | Bucket | Count |
 |---|---|
-| supported-root | 132 |
+| supported-root | 146 |
 | legacy-root | 60 |
 | move-to-subpath | 0 |
 | internal-candidate | 8 |
 | NEEDS-REVIEW | 0 |
-| **total** | **200** |
+| **total** | **214** |
 
-Confidence: high=98, medium=100, needs-review=0.
+Confidence: high=111, medium=101, needs-review=0.
 
-## supported-root (132)
+## supported-root (146)
 
 | Name | Confidence | Source | Rationale |
 |---|---|---|---|
 | `AwarenessState` | medium | collab | Collaboration/awareness type defined in core/types/index.ts. Customer-facing for collab-provider integrations (e.g., AwarenessState types the documented onAwarenessUpdate callback). |
+| `AwarenessUser` | medium | collab | Collaboration/awareness type defined in core/types/index.ts. Extends User with an optional `color` field for consumer-supplied awareness color; typed on Config.user so the runtime override in SuperDoc#assignUserColor() is consumer-typable. |
 | `BinaryData` | high | locked | Shape of binary content used in documented import/export/open/save paths. Type-reachable through documented APIs. |
 | `BlockNavigationAddress` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `BlocksListResult` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `BookmarkAddress` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `BookmarkInfo` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
+| `CanPerformPermissionParams` | high | config-supported | Configuration type for a supported feature. Input shape for SuperDoc#canPerformPermission, promoted from an anonymous inline parameter to a named public type. |
 | `CollaborationConfig` | medium | config-supported | Configuration type for a supported feature. |
 | `CollaborationProvider` | medium | collab | Collaboration/awareness type defined in core/types/index.ts. Customer-facing for collab-provider integrations (e.g., AwarenessState types the documented onAwarenessUpdate callback). |
 | `Comment` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
@@ -39,6 +41,7 @@ Confidence: high=98, medium=100, needs-review=0.
 | `DOCX` | high | locked | Content-format constant. Heavily documented (133 doc mentions). Customer-facing. |
 | `DirectSurfaceRequest` | medium | surface | Headless Surface API type. Public extension surface for custom UI integrations. |
 | `DocRange` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
+| `Document` | high | core | Consumer-supplied document descriptor used in Config.documents and SuperDocState.documents; the public counterpart to the internal RuntimeDocument (which carries runtime-only fields and stays internal). |
 | `DocumentApi` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `DocumentMode` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
 | `DocumentProtectionState` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
@@ -87,6 +90,7 @@ Confidence: high=98, medium=100, needs-review=0.
 | `PasswordPromptRenderContext` | medium | password-prompt | PasswordPrompt surface API type. Public. |
 | `PasswordPromptResolution` | medium | password-prompt | PasswordPrompt surface API type. Public. |
 | `PermissionParams` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
+| `PermissionResolverParams` | high | config-supported | Payload passed to permission resolver callbacks registered via Config.permissionResolver or Modules.comments.permissionResolver; promoted from a non-exported helper to a named public type so resolver authors can import the contract. |
 | `ProofingCapabilities` | medium | proofing | Proofing module type. Public for proofing-provider integrations. |
 | `ProofingCheckRequest` | medium | proofing | Proofing module type. Public for proofing-provider integrations. |
 | `ProofingCheckResult` | medium | proofing | Proofing module type. Public for proofing-provider integrations. |
@@ -113,7 +117,13 @@ Confidence: high=98, medium=100, needs-review=0.
 | `SelectionInfo` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `StoryLocator` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `SuperDoc` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
+| `SuperDocAwarenessUpdatePayload` | high | core | Payload emitted with the awareness-update event and passed to Config.onAwarenessUpdate; promoted to a named public type so callback signatures stop using inline shapes. |
+| `SuperDocCommentsUpdatePayload` | high | core | Payload emitted with the comments-update event and passed to Config.onCommentsUpdate; promoted to a named public type so callback signatures stop using inline shapes. |
+| `SuperDocEditorPayload` | high | core | Wrapper payload emitted with editorBeforeCreate / editorCreate / collaboration-ready events; promoted to a named public type so callback signatures match the runtime wrapper instead of a bare Editor. |
 | `SuperDocLayoutEngineOptions` | high | locked | Types Config.layoutEngineOptions at core/types/index.ts:1350,1505. Documented Config field. |
+| `SuperDocLockedPayload` | high | core | Payload emitted with the locked event and passed to Config.onLocked; promoted to a named public type so the lockedBy: User \| null contract is consumer-typable. |
+| `SuperDocReadyPayload` | high | core | Payload emitted with the ready event and passed to Config.onReady; promoted to a named public type for consistency with the other event payloads. |
+| `SuperDocState` | high | core | Public return shape of the SuperDoc#state getter; introduced to replace an inline anonymous return that leaked the internal RuntimeDocument type. Exposes `documents` as Document[] (the public view). |
 | `SuperDocTelemetryConfig` | high | locked | Backs Config.telemetry; documented at apps/docs/resources/telemetry.mdx (enabled/endpoint/metadata/licenseKey). |
 | `SurfaceComponentProps` | medium | surface | Headless Surface API type. Public extension surface for custom UI integrations. |
 | `SurfaceFloatingPlacement` | medium | surface | Headless Surface API type. Public extension surface for custom UI integrations. |

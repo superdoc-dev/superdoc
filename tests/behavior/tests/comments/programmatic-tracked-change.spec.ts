@@ -16,7 +16,7 @@ test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true } })
 
 async function assertTrackChangeTypeCount(
   superdoc: { page: Page },
-  type: 'insert' | 'delete' | 'format',
+  type: 'insert' | 'delete' | 'replacement' | 'format',
   minimumCount = 1,
 ): Promise<void> {
   await expect
@@ -61,12 +61,12 @@ test('tracked replace via document-api', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   // word-diff (PR #2817) fragments multi-word tracked replacements into per-word
-  // insert/delete pairs, so "new fancy" appears as two separate inserts around
+  // replacement chunks, so "new fancy" appears as separate replacements around
   // the surviving space token. Assert both inserted words are present rather
   // than a contiguous substring, which was the pre-word-diff assumption.
   await expect.poll(() => getDocumentText(superdoc.page)).toContain('new');
   await expect.poll(() => getDocumentText(superdoc.page)).toContain('fancy');
-  await assertTrackChangeTypeCount(superdoc, 'insert');
+  await assertTrackChangeTypeCount(superdoc, 'replacement');
 
   await superdoc.snapshot('programmatic-tc-replaced');
 });

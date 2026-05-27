@@ -69,9 +69,10 @@ export type RenderDOMFn = (props: {
 
 /**
  * Configuration for Node extensions.
- * @template Options - Type for node options
- * @template Storage - Type for node storage
- * @template Attrs - Type for node attributes (optional, enables typed addAttributes)
+ *
+ * @typeParam Options - Type for node options.
+ * @typeParam Storage - Type for node storage.
+ * @typeParam Attrs - Type for node attributes (optional, enables typed addAttributes).
  */
 export interface NodeConfig<
   Options extends Record<string, unknown> = Record<string, never>,
@@ -189,9 +190,10 @@ export interface NodeConfig<
 
 /**
  * Node class is used to create Node extensions.
- * @template Options - Type for node options
- * @template Storage - Type for node storage
- * @template Attrs - Type for node attributes (enables typed attribute access)
+ *
+ * @typeParam Options - Type for node options.
+ * @typeParam Storage - Type for node storage.
+ * @typeParam Attrs - Type for node attributes (enables typed attribute access).
  */
 export class Node<
   Options extends Record<string, unknown> = Record<string, never>,

@@ -107,7 +107,7 @@ export interface SDCommentThread {
 
 export interface SDTrackedChange {
   id: string;
-  type: 'insert' | 'delete' | 'format';
+  type: 'insert' | 'delete' | 'replacement' | 'format';
   author?: string;
   date?: string;
   target?: SDAnchorRange;

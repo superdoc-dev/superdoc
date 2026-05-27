@@ -29,12 +29,7 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
 | `commentId` | string | yes |  |
 | `isInternal` | boolean | no |  |
 | `status` | enum | no | `"resolved"`, `"active"` |
-| `target` | TextAddress | no | TextAddress |
-| `target.blockId` | string | no |  |
-| `target.kind` | `"text"` | no | Constant: `"text"` |
-| `target.range` | Range | no | Range |
-| `target.range.end` | integer | no |  |
-| `target.range.start` | integer | no |  |
+| `target` | TextAddress \| TextTarget \| SelectionTarget \| CommentTrackedChangeTarget | no | One of: TextAddress, TextTarget, SelectionTarget, CommentTrackedChangeTarget |
 | `text` | string | no |  |
 
 ### Example request
@@ -131,7 +126,20 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
       ]
     },
     "target": {
-      "$ref": "#/$defs/TextAddress"
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TextAddress"
+        },
+        {
+          "$ref": "#/$defs/TextTarget"
+        },
+        {
+          "$ref": "#/$defs/SelectionTarget"
+        },
+        {
+          "$ref": "#/$defs/CommentTrackedChangeTarget"
+        }
+      ]
     },
     "text": {
       "description": "Updated comment text.",

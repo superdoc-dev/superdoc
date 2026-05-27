@@ -40,6 +40,15 @@ describe('ensureSdtContainerStyles', () => {
     );
     expect(cssText).toContain('background: none;');
   });
+
+  it('keeps hidden-appearance inline SDTs transparent at rest', () => {
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    expect(cssText).toContain(".superdoc-structured-content-inline[data-appearance='hidden'] {");
+    expect(cssText).toContain('background-color: transparent;');
+  });
 });
 
 describe('ensureTrackChangeStyles', () => {

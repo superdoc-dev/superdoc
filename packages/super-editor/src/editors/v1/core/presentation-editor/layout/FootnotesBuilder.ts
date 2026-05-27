@@ -125,6 +125,10 @@ export function buildFootnotesInput(
 
   if (refs.length === 0) return null;
 
+  // Resolve adapter once so missing registration fails loudly instead of being
+  // swallowed inside per-footnote conversion error handling.
+  const layoutAdapter = getLayoutDocumentAdapter();
+
   // Build blocks for each footnote
   const blocksById = new Map<string, FlowBlock[]>();
 
@@ -133,7 +137,7 @@ export function buildFootnotesInput(
       const footnoteDoc = resolveNoteDocJson(id, importedFootnotes, renderOverride);
       if (!footnoteDoc) return;
 
-      const result = getLayoutDocumentAdapter().toFlowBlocks(footnoteDoc, {
+      const result = layoutAdapter.toFlowBlocks(footnoteDoc, {
         blockIdPrefix: `footnote-${id}-`,
         storyKey: buildStoryKey({ kind: 'story', storyType: 'footnote', noteId: id }),
         enableRichHyperlinks: true,

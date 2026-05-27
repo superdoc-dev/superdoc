@@ -9,7 +9,7 @@ export function registerLayoutDocumentAdapter(adapter: LayoutDocumentAdapter): v
 export function getLayoutDocumentAdapter(): LayoutDocumentAdapter {
   if (!activeAdapter) {
     throw new Error(
-      'No layout document adapter registered. Import @superdoc/pm-adapter/register before using the layout pipeline.',
+      'No layout document adapter registered. Register one via registerLayoutDocumentAdapter(...) before using the layout pipeline.',
     );
   }
   return activeAdapter;

@@ -356,7 +356,14 @@ describe('architecture boundaries', () => {
   });
 
   describe('Guard H: layout runtime packages do not import concrete adapters (SD-3222)', () => {
-    const LAYOUT_RUNTIME_DIRS = ['layout-engine/src', 'layout-bridge/src', 'painters/dom/src', 'contracts/src'];
+    const LAYOUT_RUNTIME_DIRS = [
+      'layout-engine/src',
+      'layout-bridge/src',
+      'painters/dom/src',
+      'contracts/src',
+      'dom-contract/src',
+      'layout-resolved/src',
+    ];
 
     for (const dir of LAYOUT_RUNTIME_DIRS) {
       it(`${dir} does not import @superdoc/pm-adapter`, () => {

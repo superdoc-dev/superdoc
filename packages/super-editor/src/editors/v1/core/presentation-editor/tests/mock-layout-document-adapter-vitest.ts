@@ -1,15 +1,13 @@
 import { vi } from 'vitest';
 import { pmLayoutDocumentAdapter } from '@superdoc/pm-adapter/layout-document-adapter';
-import type { LayoutDocumentAdapter } from '@superdoc/layout-adapter';
-
-export type LayoutAdapterVitestOverrides = {
-  toFlowBlocks?: LayoutDocumentAdapter['toFlowBlocks'];
-  analyzeSectionRanges?: LayoutDocumentAdapter['analyzeSectionRanges'];
-  createFlowBlockCache?: NonNullable<LayoutDocumentAdapter['createFlowBlockCache']>;
+type LayoutAdapterVitestOverrides = {
+  toFlowBlocks?: (...args: unknown[]) => unknown;
+  analyzeSectionRanges?: (...args: unknown[]) => unknown;
+  createFlowBlockCache?: () => { clear(): void };
 };
 
 export async function buildLayoutDocumentAdapterVitestMock(
-  importOriginal: () => Promise<typeof import('@superdoc/layout-adapter')>,
+  importOriginal: () => Promise<Record<string, unknown>>,
   overrides: LayoutAdapterVitestOverrides = {},
 ) {
   const actual = await importOriginal();

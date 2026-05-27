@@ -9,7 +9,8 @@ import type {
   SectionsListResult,
 } from '@superdoc/document-api';
 import { buildDiscoveryItem, buildDiscoveryResult, buildResolvedHandle } from '@superdoc/document-api';
-import { getLayoutDocumentAdapter, SectionType, type SectionRange } from '@superdoc/layout-adapter';
+import { getLayoutDocumentAdapter } from '@superdoc/layout-adapter';
+import { SectionType, type SectionRange } from '@superdoc/pm-adapter/sections/types.js';
 import type { Editor } from '../../core/Editor.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { getRevision } from '../plan-engine/revision-tracker.js';

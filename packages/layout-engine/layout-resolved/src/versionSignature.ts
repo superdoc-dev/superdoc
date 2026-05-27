@@ -533,6 +533,17 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
     for (const row of rows) {
       if (!row || !Array.isArray(row.cells)) continue;
       hash = hashNumber(hash, row.cells.length);
+      // Row-level tracked change (block-level diff replay sets `trackedChange`
+      // on a tableRow). Without this, applyHunks-style transactions that only
+      // mutate the row's `trackChange` attr don't bump the block version, so
+      // the resolved-layout pipeline reuses cached entries and the painter
+      // never receives row data with `trackedChange` populated. Mirror of the
+      // fixes in renderer.ts and layout-bridge/cache.ts.
+      if (row.trackedChange) {
+        hash = hashString(hash, row.trackedChange.kind ?? '');
+        hash = hashString(hash, row.trackedChange.id ?? '');
+        hash = hashString(hash, row.trackedChange.operationId ?? '');
+      }
       for (const cell of row.cells) {
         if (!cell) continue;
         const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);

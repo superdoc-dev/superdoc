@@ -306,6 +306,18 @@ const hashRuns = (block: FlowBlock): string => {
         continue;
       }
 
+      // Row-level tracked change (block-level diff replay sets `trackedChange`
+      // on a tableRow). Without this, applyHunks-style transactions that only
+      // mutate the row's `trackChange` attr don't invalidate the measure
+      // cache, so the page is never re-measured and the visible cells never
+      // receive their `data-track-change` attribute. Mirror of the painter
+      // page-fingerprint fix in renderer.ts.
+      if (row.trackedChange) {
+        cellHashes.push(
+          `rtc:${row.trackedChange.kind ?? ''}:${row.trackedChange.id ?? ''}:${row.trackedChange.operationId ?? ''}`,
+        );
+      }
+
       for (const cell of row.cells) {
         // Include cell-level attributes that affect rendering (borders, padding, etc.)
         // This ensures cache invalidation when cell formatting changes (e.g., remove borders).

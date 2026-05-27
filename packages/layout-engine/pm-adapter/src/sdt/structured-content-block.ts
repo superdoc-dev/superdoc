@@ -119,10 +119,7 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
   }
 
   if (node.content.length === 1 && isEmptyParagraphNode(node.content[0])) {
-    if (isVanishedParagraphNode(node.content[0])) {
-      return;
-    }
-
+    const isVanishedParagraph = isVanishedParagraphNode(node.content[0]);
     const paragraphPos = positions.get(node.content[0]);
     const blockPos = positions.get(node);
     const contentPos = paragraphPos ? paragraphPos.start + 1 : blockPos ? blockPos.start + 1 : undefined;
@@ -152,8 +149,16 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
         });
         return;
       }
+      if (isVanishedParagraph) {
+        paragraphBlocks.forEach((block) => {
+          blocks.push(block);
+          recordBlockKind?.(block.kind);
+        });
+        return;
+      }
     }
 
+    if (isVanishedParagraph) return;
     emitPlaceholderBlock(contentPos);
     return;
   }

@@ -294,6 +294,59 @@ describe('structured-content-block', () => {
         expect(recordBlockKind).not.toHaveBeenCalled();
       });
 
+      it('should preserve non-paragraph converter output for a vanished empty paragraph child', () => {
+        const emptyParagraph: PMNode = {
+          type: 'paragraph',
+          attrs: {
+            pageBreakBefore: true,
+            paragraphProperties: {
+              runProperties: {
+                vanish: true,
+              },
+            },
+          },
+          content: [],
+        };
+        const node: PMNode = {
+          type: 'structuredContentBlock',
+          attrs: { id: 'scb-1' },
+          content: [emptyParagraph],
+        };
+
+        const pageBreakBlock: FlowBlock = {
+          kind: 'pageBreak',
+          id: 'page-break-before-hidden-paragraph',
+          attrs: { source: 'pageBreakBefore' },
+        };
+        const blocks: FlowBlock[] = [];
+        const recordBlockKind = vi.fn();
+
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(scbMetadata);
+        const paragraphToFlowBlocks = vi.fn().mockReturnValue([pageBreakBlock]);
+
+        const context: NodeHandlerContext = {
+          blocks,
+          recordBlockKind,
+          nextBlockId: mockBlockIdGenerator,
+          positions: mockPositionMap,
+          defaultFont: 'Arial',
+          defaultSize: 12,
+          trackedChangesConfig: mockTrackedChangesConfig,
+          bookmarks: mockBookmarks,
+          hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
+          converters: {
+            paragraphToFlowBlocks,
+          },
+        };
+
+        handleStructuredContentBlockNode(node, context);
+
+        expect(blocks).toEqual([pageBreakBlock]);
+        expect(recordBlockKind).toHaveBeenCalledWith('pageBreak');
+      });
+
       it('should process a single paragraph child', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',

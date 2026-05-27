@@ -1,4 +1,4 @@
-const ZERO_WIDTH_INLINE_MARKER_NODE_NAMES = new Set([
+const ZERO_WIDTH_MARKER_NODE_NAMES = new Set([
   'bookmarkStart',
   'bookmarkEnd',
   'commentRangeStart',
@@ -6,10 +6,12 @@ const ZERO_WIDTH_INLINE_MARKER_NODE_NAMES = new Set([
   'commentReference',
   'permStart',
   'permEnd',
+  'permStartBlock',
+  'permEndBlock',
 ]);
 
-function isZeroWidthInlineMarker(node) {
-  return node.isInline && ZERO_WIDTH_INLINE_MARKER_NODE_NAMES.has(node.type.name);
+function isZeroWidthMarker(node) {
+  return ZERO_WIDTH_MARKER_NODE_NAMES.has(node.type.name);
 }
 
 /**
@@ -39,7 +41,7 @@ export function findFirstTextPosInNode(node, nodePos) {
  * @returns {number | null}
  */
 export function findFirstContentCursorPosInNode(node, nodePos) {
-  if (isZeroWidthInlineMarker(node)) return null;
+  if (isZeroWidthMarker(node)) return null;
   if (node.isText || node.isAtom) return nodePos;
   if (node.isTextblock && node.childCount === 0) return nodePos + 1;
 
@@ -83,7 +85,7 @@ export function findLastTextPosInNode(node, nodePos) {
  * @returns {number | null}
  */
 export function findLastContentCursorPosInNode(node, nodePos) {
-  if (isZeroWidthInlineMarker(node)) return null;
+  if (isZeroWidthMarker(node)) return null;
   if (node.isText) return nodePos + (node.text?.length ?? 0);
   if (node.isAtom) return nodePos + node.nodeSize;
   if (node.isTextblock && node.childCount === 0) return nodePos + 1;

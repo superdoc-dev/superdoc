@@ -17,6 +17,7 @@ const makeSchema = () =>
           lockMode: { default: 'unlocked' },
         },
       },
+      permStartBlock: { group: 'block', atom: true },
       table: { group: 'block', content: 'tableRow+' },
       tableRow: { content: 'tableCell+' },
       tableCell: { content: 'block+' },
@@ -268,6 +269,33 @@ describe('moveIntoBlockSdtAfterTextBlockEnd', () => {
     expect(ok).toBe(true);
     expect(dispatched).toBeDefined();
     expect(dispatched.selection.from).toBe(targetPos);
+  });
+
+  it('skips leading hidden block markers when targeting a following block SDT', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [
+        schema.nodes.permStartBlock.create(),
+        paragraph(schema, 'Inner'),
+      ]),
+      paragraph(schema, 'After'),
+    ]);
+    const beforeEnd = findTextPos(doc, 'Before', 6);
+    const innerStart = findTextPos(doc, 'Inner');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, beforeEnd) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.selection.from).toBe(innerStart);
   });
 
   it('returns false when visible inline atom content appears after the last text position', () => {

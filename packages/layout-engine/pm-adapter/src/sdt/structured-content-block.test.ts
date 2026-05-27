@@ -393,6 +393,79 @@ describe('structured-content-block', () => {
         expect(recordBlockKind).toHaveBeenCalledWith('paragraph');
       });
 
+      it('should emit a placeholder paragraph when the empty paragraph only has permission range markers', () => {
+        const emptyParagraph: PMNode = {
+          type: 'paragraph',
+          content: [
+            { type: 'permStart', attrs: { id: 'perm-1', edGrp: 'everyone' } },
+            { type: 'permEnd', attrs: { id: 'perm-1' } },
+          ],
+        };
+        const node: PMNode = {
+          type: 'structuredContentBlock',
+          attrs: { id: 'scb-1' },
+          content: [emptyParagraph],
+        };
+
+        const blocks: FlowBlock[] = [];
+        const recordBlockKind = vi.fn();
+
+        mockPositionMap.set(node, { start: 10, end: 16 });
+        mockPositionMap.set(emptyParagraph, { start: 11, end: 15 });
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(scbMetadata);
+        const paragraphToFlowBlocks = vi.fn().mockReturnValue([
+          {
+            kind: 'paragraph',
+            id: 'converted-permission-only-paragraph',
+            attrs: { sdt: scbMetadata },
+            runs: [
+              {
+                text: '',
+                fontFamily: 'Aptos',
+                fontSize: 14,
+                pmStart: 12,
+                pmEnd: 12,
+              },
+            ],
+          },
+        ] satisfies ParagraphBlock[]);
+
+        const context: NodeHandlerContext = {
+          blocks,
+          recordBlockKind,
+          nextBlockId: mockBlockIdGenerator,
+          positions: mockPositionMap,
+          defaultFont: 'Arial',
+          defaultSize: 12,
+          trackedChangesConfig: mockTrackedChangesConfig,
+          bookmarks: mockBookmarks,
+          hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
+          converters: {
+            paragraphToFlowBlocks,
+          },
+        };
+
+        handleStructuredContentBlockNode(node, context);
+
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({
+          kind: 'paragraph',
+          attrs: { sdt: scbMetadata },
+          runs: [
+            {
+              text: '',
+              sdt: scbMetadata,
+              visualPlaceholder: 'emptyBlockSdt',
+              pmStart: 12,
+              pmEnd: 12,
+            },
+          ],
+        });
+        expect(recordBlockKind).toHaveBeenCalledWith('paragraph');
+      });
+
       it('should not emit a placeholder for a vanished empty paragraph child', () => {
         const emptyParagraph: PMNode = {
           type: 'paragraph',

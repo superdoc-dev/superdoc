@@ -177,6 +177,23 @@ describe('moveIntoBlockSdtAfterTextBlockEnd', () => {
     expect(dispatched.selection.to).toBe(targetPos);
   });
 
+  it('returns false for a following block SDT with no cursor target', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(),
+      paragraph(schema, 'After'),
+    ]);
+    const beforeEnd = findTextPos(doc, 'Before', 6);
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, beforeEnd) });
+    const dispatch = vi.fn();
+
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({ state, dispatch });
+
+    expect(ok).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it('moves into the leading empty paragraph of a following block SDT', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [

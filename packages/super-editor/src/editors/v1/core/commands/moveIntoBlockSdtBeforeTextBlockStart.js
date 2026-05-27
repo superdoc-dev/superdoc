@@ -57,13 +57,10 @@ export const moveIntoBlockSdtBeforeTextBlockStart =
 
     const previousNodePos = boundaryPos - previousNode.nodeSize;
     const targetPos = findLastContentCursorPosInNode(previousNode, previousNodePos);
+    if (targetPos == null) return false;
 
     if (dispatch) {
-      const targetSelection =
-        targetPos != null
-          ? createSelectionAtContentPos(state.doc, targetPos, -1)
-          : (Selection.findFrom(state.doc.resolve(textblockPos), -1, true) ??
-            Selection.near(state.doc.resolve(textblockPos), -1));
+      const targetSelection = createSelectionAtContentPos(state.doc, targetPos, -1);
       dispatch(state.tr.setSelection(targetSelection).scrollIntoView());
     }
 

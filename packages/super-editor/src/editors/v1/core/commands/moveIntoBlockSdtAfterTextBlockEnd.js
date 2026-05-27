@@ -57,13 +57,10 @@ export const moveIntoBlockSdtAfterTextBlockEnd =
     if (nextNode?.type.name !== 'structuredContentBlock') return false;
 
     const targetPos = findFirstContentCursorPosInNode(nextNode, nextNodePos);
+    if (targetPos == null) return false;
 
     if (dispatch) {
-      const targetSelection =
-        targetPos != null
-          ? createSelectionAtContentPos(state.doc, targetPos, 1)
-          : (Selection.findFrom(state.doc.resolve(boundaryPos), 1, true) ??
-            Selection.near(state.doc.resolve(boundaryPos), 1));
+      const targetSelection = createSelectionAtContentPos(state.doc, targetPos, 1);
       dispatch(state.tr.setSelection(targetSelection).scrollIntoView());
     }
 

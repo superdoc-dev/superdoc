@@ -39,10 +39,14 @@ vi.mock('prosemirror-transform', () => ({
 }));
 
 // ── Image helper mocks ───────────────────────────────────────────────
-vi.mock('./handleBase64', () => ({
-  base64ToFile: vi.fn(() => null),
-  getBase64FileMeta: vi.fn(() => ({ filename: 'image.png' })),
-}));
+vi.mock('./handleBase64', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    base64ToFile: vi.fn(() => null),
+    getBase64FileMeta: vi.fn(actual.getBase64FileMeta),
+  };
+});
 
 vi.mock('./handleUrl', () => ({
   urlToFile: vi.fn(() => Promise.resolve(null)),
@@ -50,6 +54,7 @@ vi.mock('./handleUrl', () => ({
 }));
 
 vi.mock('./startImageUpload', () => ({
+  MAX_IMAGE_FILE_BYTES: 5 * 1024 * 1024,
   checkAndProcessImage: vi.fn(),
   uploadAndInsertImage: vi.fn(),
   addImageRelationship: vi.fn(() => 'rId99'),
@@ -63,8 +68,9 @@ vi.mock('./fileNameUtils.js', () => ({
 // ── Imports (after mocks) ─────────────────────────────────────────────
 import { Decoration } from 'prosemirror-view';
 import { handleBrowserPath } from './imageRegistrationPlugin.js';
+import { base64ToFile, getBase64FileMeta } from './handleBase64';
 import { urlToFile, validateUrlAccessibility } from './handleUrl';
-import { addImageRelationship } from './startImageUpload';
+import { addImageRelationship, checkAndProcessImage, uploadAndInsertImage } from './startImageUpload';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 const createImageNode = (attrs) => ({
@@ -151,6 +157,54 @@ describe('handleBrowserPath', () => {
     expect(tr.delete).toHaveBeenCalledTimes(2);
   });
 
+  it('registers sized raster data URI images in place without placeholder deletion', () => {
+    const pngDataUri = 'data:image/png;base64,iVBORw0KGgo=';
+    const imageNode = createImageNode({
+      src: pngDataUri,
+      size: { width: 20, height: 10 },
+    });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+
+    expect(Decoration.widget).not.toHaveBeenCalled();
+    expect(tr.delete).not.toHaveBeenCalled();
+    expect(checkAndProcessImage).not.toHaveBeenCalled();
+    expect(uploadAndInsertImage).not.toHaveBeenCalled();
+    expect(addImageRelationship).toHaveBeenCalledWith({
+      editor,
+      path: expect.stringMatching(/^media\/image-\d+\.png$/),
+    });
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(20, undefined, {
+      ...imageNode.attrs,
+      src: expect.stringMatching(/^word\/media\/image-\d+\.png$/),
+      rId: 'rId99',
+    });
+  });
+
+  it('runs oversized sized raster data URI images through image validation', async () => {
+    const oversizedRasterDataUri = `data:image/png;base64,${'A'.repeat(7 * 1024 * 1024)}`;
+    const oversizedRasterFile = new File(['x'.repeat(5 * 1024 * 1024 + 1)], 'too-large.png', {
+      type: 'image/png',
+    });
+    const imageNode = createImageNode({
+      src: oversizedRasterDataUri,
+      size: { width: 20, height: 10 },
+    });
+    base64ToFile.mockReturnValueOnce(oversizedRasterFile);
+    checkAndProcessImage.mockResolvedValueOnce({ file: null, size: { width: 0, height: 0 } });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+    await flushPromises();
+
+    expect(Decoration.widget).toHaveBeenCalled();
+    expect(tr.delete).toHaveBeenCalledWith(20, 21);
+    expect(checkAndProcessImage).toHaveBeenCalledWith({
+      getMaxContentSize: expect.any(Function),
+      file: oversizedRasterFile,
+    });
+    expect(uploadAndInsertImage).not.toHaveBeenCalled();
+  });
+
   it('deletes non-relative image nodes in descending position order', () => {
     const foundImages = [
       { node: createImageNode({ src: 'https://a.com/1.png' }), pos: 5, id: {} },
@@ -163,6 +217,121 @@ describe('handleBrowserPath', () => {
     const [firstPos] = tr.delete.mock.calls[0];
     const [secondPos] = tr.delete.mock.calls[1];
     expect(firstPos).toBeGreaterThan(secondPos);
+  });
+
+  it('registers sized SVG data URI images in place without canvas processing', () => {
+    const svgDataUri = 'data:image/svg+xml;base64,PHN2Zy8+';
+    const id = {};
+    const imageNode = createImageNode({
+      src: svgDataUri,
+      size: { width: 200, height: 50 },
+    });
+    getBase64FileMeta.mockReturnValueOnce({ filename: 'image-123.svg', mimeType: 'image/svg+xml' });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id }], editor, view, state);
+
+    expect(checkAndProcessImage).not.toHaveBeenCalled();
+    expect(uploadAndInsertImage).not.toHaveBeenCalled();
+    expect(addImageRelationship).toHaveBeenCalledWith({
+      editor,
+      path: expect.stringMatching(/^media\/image-\d+\.svg$/),
+    });
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(20, undefined, {
+      ...imageNode.attrs,
+      src: expect.stringMatching(/^word\/media\/image-\d+\.svg$/),
+      rId: 'rId99',
+    });
+  });
+
+  it('registers sized non-base64 SVG data URI images in place', () => {
+    const svgDataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" />')}`;
+    const imageNode = createImageNode({
+      src: svgDataUri,
+      size: { width: 200, height: 50 },
+    });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+
+    expect(checkAndProcessImage).not.toHaveBeenCalled();
+    expect(uploadAndInsertImage).not.toHaveBeenCalled();
+    expect(addImageRelationship).toHaveBeenCalledWith({
+      editor,
+      path: expect.stringMatching(/^media\/image-\d+\.svg$/),
+    });
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(20, undefined, {
+      ...imageNode.attrs,
+      src: expect.stringMatching(/^word\/media\/image-\d+\.svg$/),
+      rId: 'rId99',
+    });
+  });
+
+  it('does not register malformed sized SVG data URI images in place', () => {
+    const imageNode = createImageNode({
+      src: 'data:image/svg+xml',
+      size: { width: 200, height: 50 },
+    });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+
+    expect(Object.keys(editor.storage.image.media)).toHaveLength(0);
+    expect(addImageRelationship).not.toHaveBeenCalled();
+    expect(tr.setNodeMarkup).not.toHaveBeenCalled();
+    expect(tr.delete).toHaveBeenCalledWith(20, 21);
+  });
+
+  it('does not register percent-malformed sized SVG data URI images in place', () => {
+    const imageNode = createImageNode({
+      src: 'data:image/svg+xml,%',
+      size: { width: 200, height: 50 },
+    });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+
+    expect(Object.keys(editor.storage.image.media)).toHaveLength(0);
+    expect(addImageRelationship).not.toHaveBeenCalled();
+    expect(tr.setNodeMarkup).not.toHaveBeenCalled();
+    expect(tr.delete).toHaveBeenCalledWith(20, 21);
+  });
+
+  it('runs SVG files over the upload byte budget through image validation before upload', async () => {
+    const oversizedSvgDataUri = `data:image/svg+xml;base64,${'A'.repeat(7 * 1024 * 1024)}`;
+    const oversizedSvgFile = new File(['x'.repeat(5 * 1024 * 1024 + 1)], 'too-large.svg', {
+      type: 'image/svg+xml',
+    });
+    const imageNode = createImageNode({
+      src: oversizedSvgDataUri,
+      size: { width: 200, height: 50 },
+    });
+    base64ToFile.mockReturnValueOnce(oversizedSvgFile);
+    checkAndProcessImage.mockResolvedValueOnce({ file: null, size: { width: 0, height: 0 } });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+    await flushPromises();
+
+    expect(checkAndProcessImage).toHaveBeenCalledWith({
+      getMaxContentSize: expect.any(Function),
+      file: oversizedSvgFile,
+    });
+    expect(uploadAndInsertImage).not.toHaveBeenCalled();
+    expect(view.dispatch).toHaveBeenCalled();
+  });
+
+  it('mirrors in-place SVG media to the parent editor media store', () => {
+    const svgDataUri = 'data:image/svg+xml;base64,PHN2Zy8+';
+    const parentEditor = { storage: { image: { media: {} } } };
+    editor.options.parentEditor = parentEditor;
+    editor.options.isHeaderOrFooter = true;
+    const imageNode = createImageNode({
+      src: svgDataUri,
+      size: { width: 200, height: 50 },
+    });
+
+    handleBrowserPath([{ node: imageNode, pos: 20, id: {} }], editor, view, state);
+
+    const mediaPath = Object.keys(editor.storage.image.media)[0];
+    expect(mediaPath).toMatch(/^word\/media\/image-\d+\.svg$/);
+    expect(editor.storage.image.media[mediaPath]).toBe(svgDataUri);
+    expect(parentEditor.storage.image.media[mediaPath]).toBe(svgDataUri);
   });
 });
 

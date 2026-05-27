@@ -1,4 +1,4 @@
-import { NodeSelection, Plugin, PluginKey } from 'prosemirror-state';
+import { NodeSelection, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { BLOCK_NODE_METADATA_UPDATE_META } from '../block-node/block-node.js';
 
@@ -122,6 +122,13 @@ export function createStructuredContentLockPlugin() {
               exactContentSDT.lockMode === 'contentLocked' || exactContentSDT.lockMode === 'sdtContentLocked';
             const isWrapperDeletable =
               exactContentSDT.lockMode !== 'sdtLocked' && exactContentSDT.lockMode !== 'sdtContentLocked';
+            const isFullyLocked = exactContentSDT.lockMode === 'sdtContentLocked';
+            if (isFullyLocked && exactContentSDT.type === 'structuredContent' && (isBackspace || isDelete)) {
+              const collapsePos = isBackspace ? exactContentSDT.pos : exactContentSDT.end;
+              view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, collapsePos)));
+              event.preventDefault();
+              return true;
+            }
             if (isContentLocked && isWrapperDeletable) {
               if (isCut) {
                 const tr = state.tr.setSelection(NodeSelection.create(state.doc, exactContentSDT.pos));
@@ -157,6 +164,26 @@ export function createStructuredContentLockPlugin() {
               view.dispatch(state.tr.delete(emptyInlineSDT.pos, emptyInlineSDT.end));
             }
             return true;
+          }
+
+          const inlineSdtAncestor = sdtNodes.find(
+            (s) => s.type === 'structuredContent' && from > s.pos && from < s.end,
+          );
+          const inlineSdtContentEditable =
+            inlineSdtAncestor &&
+            inlineSdtAncestor.lockMode !== 'contentLocked' &&
+            inlineSdtAncestor.lockMode !== 'sdtContentLocked';
+          if ((isBackspace || isDelete) && inlineSdtContentEditable && selection.$from.parent.type.name === 'run') {
+            const deleteFrom = isBackspace ? from - 1 : from;
+            const deleteTo = isBackspace ? from : from + 1;
+            const staysInsideInlineSdt = deleteFrom > inlineSdtAncestor.pos && deleteTo < inlineSdtAncestor.end;
+            const staysInsideRun = isBackspace ? from > selection.$from.start() : from < selection.$from.end();
+
+            if (staysInsideInlineSdt && staysInsideRun) {
+              view.dispatch(state.tr.delete(deleteFrom, deleteTo).scrollIntoView());
+              event.preventDefault();
+              return true;
+            }
           }
 
           if (isBackspace && from > 0) {
@@ -226,6 +253,11 @@ export function createStructuredContentLockPlugin() {
       // always be applied locally to keep every client converged, even if the
       // incoming step spans locked SDTs.
       if (tr.getMeta?.(ySyncPluginKey)) {
+        return true;
+      }
+
+      const inputType = tr.getMeta?.('inputType');
+      if (inputType === 'historyUndo' || inputType === 'historyRedo') {
         return true;
       }
 

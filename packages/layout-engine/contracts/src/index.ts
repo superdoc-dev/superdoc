@@ -290,6 +290,10 @@ export type FlowRunLink = {
   history?: boolean;
 };
 
+export const EMPTY_SDT_PLACEHOLDER_TEXT = 'Click or tap here to enter text';
+
+export type SdtVisualPlaceholder = 'emptyInlineSdt' | 'emptyBlockSdt';
+
 /**
  * Common formatting marks that can be applied to any run type.
  * Used by TextRun, TabRun, and other run types that support inline formatting.
@@ -343,7 +347,7 @@ export type TextRun = RunMarks & {
   dataAttrs?: Record<string, string>;
   sdt?: SdtMetadata;
   /** Layout-only placeholder for visual affordances that do not represent document text. */
-  visualPlaceholder?: 'emptyInlineSdt';
+  visualPlaceholder?: SdtVisualPlaceholder;
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
   token?: 'pageNumber' | 'totalPageCount' | 'pageReference';
@@ -2199,6 +2203,11 @@ export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from 
 
 // Pure transformations on inline-run shapes (used by pm-adapter, layout-bridge,
 // and painter-dom). Located in contracts to avoid reverse stage dependencies.
-export { expandRunsForInlineNewlines, isEmptyInlineSdtPlaceholderRun, sliceRunsForLine } from './run-helpers.js';
+export {
+  expandRunsForInlineNewlines,
+  isEmptyInlineSdtPlaceholderRun,
+  isEmptySdtPlaceholderRun,
+  sliceRunsForLine,
+} from './run-helpers.js';
 
 export * as Engines from './engines/index.js';

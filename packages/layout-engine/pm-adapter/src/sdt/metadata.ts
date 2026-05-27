@@ -6,9 +6,28 @@
  * document sections, TOC entries, structured content blocks, etc.
  */
 
-import type { FlowBlock, TableBlock, ListBlock, SdtMetadata } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  TableBlock,
+  ListBlock,
+  SdtMetadata,
+  FieldAnnotationMetadata,
+  StructuredContentMetadata,
+  DocumentSectionMetadata,
+  DocPartMetadata,
+} from '@superdoc/contracts';
 import type { PMNode } from '../types.js';
 import { resolveSdtMetadata } from '@superdoc/style-engine';
+
+type SdtMetadataForOverride<TOverride extends string | undefined> = TOverride extends 'fieldAnnotation'
+  ? FieldAnnotationMetadata
+  : TOverride extends 'structuredContent' | 'structuredContentBlock'
+    ? StructuredContentMetadata
+    : TOverride extends 'documentSection'
+      ? DocumentSectionMetadata
+      : TOverride extends 'docPartObject'
+        ? DocPartMetadata
+        : SdtMetadata;
 
 /**
  * Type guard to check if a node has instruction attribute.
@@ -57,7 +76,10 @@ export function getDocPartObjectId(node: PMNode): string | undefined {
  * @param overrideType - Optional type override (e.g., 'documentSection', 'docPartObject')
  * @returns Resolved SDT metadata, or undefined if none
  */
-export function resolveNodeSdtMetadata(node: PMNode, overrideType?: string): SdtMetadata | undefined {
+export function resolveNodeSdtMetadata<TOverride extends string | undefined = undefined>(
+  node: PMNode,
+  overrideType?: TOverride,
+): SdtMetadataForOverride<TOverride> | undefined {
   const attrs = node.attrs;
   if (!attrs) return undefined;
   const nodeType = overrideType ?? node.type;
@@ -74,7 +96,7 @@ export function resolveNodeSdtMetadata(node: PMNode, overrideType?: string): Sdt
     nodeType,
     attrs,
     cacheKey,
-  });
+  }) as SdtMetadataForOverride<TOverride> | undefined;
 }
 
 /**

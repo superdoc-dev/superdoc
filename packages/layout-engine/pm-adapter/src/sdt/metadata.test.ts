@@ -2,7 +2,7 @@
  * Tests for SDT Metadata Module
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import {
   hasInstruction,
   getNodeInstruction,
@@ -14,7 +14,16 @@ import {
   applySdtMetadataToListBlock,
 } from './metadata.js';
 import type { PMNode } from '../types.js';
-import type { ParagraphBlock, TableBlock, ListBlock, SdtMetadata } from '@superdoc/contracts';
+import type {
+  ParagraphBlock,
+  TableBlock,
+  ListBlock,
+  SdtMetadata,
+  FieldAnnotationMetadata,
+  StructuredContentMetadata,
+  DocumentSectionMetadata,
+  DocPartMetadata,
+} from '@superdoc/contracts';
 
 describe('metadata', () => {
   describe('hasInstruction', () => {
@@ -175,6 +184,25 @@ describe('metadata', () => {
       const result2 = resolveNodeSdtMetadata(node);
       // Both calls should return the same cached object
       expect(result1).toBe(result2);
+    });
+
+    it('narrows the return type when a literal override is provided', () => {
+      const node = { type: 'fieldAnnotation', attrs: { fieldId: 'field-1' } } as PMNode;
+
+      expectTypeOf(resolveNodeSdtMetadata(node)).toEqualTypeOf<SdtMetadata | undefined>();
+      expectTypeOf(resolveNodeSdtMetadata(node, 'fieldAnnotation')).toEqualTypeOf<
+        FieldAnnotationMetadata | undefined
+      >();
+      expectTypeOf(resolveNodeSdtMetadata(node, 'structuredContent')).toEqualTypeOf<
+        StructuredContentMetadata | undefined
+      >();
+      expectTypeOf(resolveNodeSdtMetadata(node, 'structuredContentBlock')).toEqualTypeOf<
+        StructuredContentMetadata | undefined
+      >();
+      expectTypeOf(resolveNodeSdtMetadata(node, 'documentSection')).toEqualTypeOf<
+        DocumentSectionMetadata | undefined
+      >();
+      expectTypeOf(resolveNodeSdtMetadata(node, 'docPartObject')).toEqualTypeOf<DocPartMetadata | undefined>();
     });
   });
 

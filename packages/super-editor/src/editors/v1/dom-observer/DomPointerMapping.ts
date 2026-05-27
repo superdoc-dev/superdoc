@@ -38,6 +38,7 @@ const CLASS = {
   line: DOM_CLASS_NAMES.LINE,
   tableFragment: DOM_CLASS_NAMES.TABLE_FRAGMENT,
   inlineSdtWrapper: DOM_CLASS_NAMES.INLINE_SDT_WRAPPER,
+  emptySdtPlaceholder: 'superdoc-empty-sdt-placeholder',
 } as const;
 
 /** Augmented Document type for the `elementsFromPoint` API. */
@@ -488,6 +489,11 @@ function resolvePositionInLine(
 
   const { start: spanStart, end: spanEnd } = readPmRange(targetEl);
   if (!Number.isFinite(spanStart) || !Number.isFinite(spanEnd)) return null;
+
+  if (targetEl.classList.contains(CLASS.emptySdtPlaceholder)) {
+    return spanStart;
+  }
+
   const rightCaretBoundary = resolveRightCaretBoundary(spanEls, targetIndex, spanStart, spanEnd);
 
   // Non-text or empty element → snap to nearest edge

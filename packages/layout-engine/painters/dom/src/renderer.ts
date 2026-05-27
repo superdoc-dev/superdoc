@@ -60,6 +60,7 @@ import type {
 } from '@superdoc/contracts';
 import {
   LAYOUT_BOUNDARY_SCHEMA,
+  EMPTY_SDT_PLACEHOLDER_TEXT,
   adjustAvailableWidthForTextIndent,
   buildLayoutSourceIdentityForFragment,
   calculateJustifySpacing,
@@ -68,6 +69,7 @@ import {
   getCellSpacingPx,
   getParagraphInlineDirection,
   isEmptyInlineSdtPlaceholderRun,
+  isEmptySdtPlaceholderRun,
   normalizeColumnLayout,
   normalizeBaselineShift,
   resolveBaseFontSizeForVerticalText,
@@ -78,7 +80,7 @@ import {
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
-import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
+import { encodeTooltip, isValidImageDataUrl, sanitizeHref } from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from './constants.js';
 import { createChartElement as renderChartToElement } from './chart-renderer.js';
 import {
@@ -924,18 +926,6 @@ const MAX_HREF_LENGTH = 2048;
 
 const SAFE_ANCHOR_PATTERN = /^[A-Za-z0-9._-]+$/;
 
-/**
- * Maximum allowed length for data URLs (10MB).
- * Prevents denial of service attacks from extremely large embedded images.
- */
-const MAX_DATA_URL_LENGTH = 10 * 1024 * 1024; // 10MB
-
-/**
- * Regular expression to validate data URL format for images.
- * Only allows common, safe image MIME types with base64 encoding.
- * Prevents XSS and malformed data URL attacks.
- */
-const VALID_IMAGE_DATA_URL = /^data:image\/(png|jpeg|jpg|gif|svg\+xml|webp|bmp|ico|tiff?);base64,/i;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const WORDART_LINE_FILL_RATIO = 0.9;
 
@@ -5547,6 +5537,10 @@ export class DomPainter {
       let hasVisibleContent = false;
       for (const run of runsForLine) {
         if (run.kind === 'lineBreak' || run.kind === 'break') continue;
+        if (isEmptySdtPlaceholderRun(run)) {
+          hasVisibleContent = true;
+          break;
+        }
         if ((run.kind === 'text' || run.kind === undefined) && 'text' in run) {
           if ((run.text ?? '').trim().length === 0) continue;
         }
@@ -5717,15 +5711,22 @@ export class DomPainter {
     }
   }
 
-  private renderEmptyInlineSdtPlaceholderRun(run: TextRun): HTMLElement | null {
+  private renderEmptySdtPlaceholderRun(run: TextRun): HTMLElement | null {
     if (!this.doc) return null;
     const elem = this.doc.createElement('span');
-    elem.classList.add('superdoc-empty-inline-sdt-placeholder');
+    elem.classList.add('superdoc-empty-sdt-placeholder');
+    if (run.visualPlaceholder === 'emptyInlineSdt') {
+      elem.classList.add('superdoc-empty-inline-sdt-placeholder');
+    } else if (run.visualPlaceholder === 'emptyBlockSdt') {
+      elem.classList.add('superdoc-empty-block-sdt-placeholder');
+    }
     elem.setAttribute('aria-hidden', 'true');
+    elem.dataset.placeholderText = EMPTY_SDT_PLACEHOLDER_TEXT;
     elem.dataset.layoutEpoch = String(this.layoutEpoch);
     if (run.pmStart != null) elem.dataset.pmStart = String(run.pmStart);
     if (run.pmEnd != null) elem.dataset.pmEnd = String(run.pmEnd);
     this.applySdtDataset(elem, run.sdt);
+    applyRunStyles(elem, run);
     return elem;
   }
 
@@ -5866,8 +5867,8 @@ export class DomPainter {
       return null;
     }
 
-    if (isEmptyInlineSdtPlaceholderRun(run)) {
-      return this.renderEmptyInlineSdtPlaceholderRun(run);
+    if (isEmptySdtPlaceholderRun(run)) {
+      return this.renderEmptySdtPlaceholderRun(run);
     }
 
     // Handle TextRun
@@ -5973,9 +5974,9 @@ export class DomPainter {
    * Renders an ImageRun as an inline <img> element.
    *
    * SECURITY NOTES:
-   * - Data URLs are validated against VALID_IMAGE_DATA_URL regex to ensure proper format
-   * - Size limit (MAX_DATA_URL_LENGTH) prevents DoS attacks from extremely large images
-   * - Only allows safe image MIME types (png, jpeg, gif, etc.) with base64 encoding
+   * - Data URLs are validated against an allowlist of image MIME types
+   * - Size limit prevents DoS attacks from extremely large images
+   * - Only allows safe image MIME types; non-base64 data URLs are limited to SVG
    * - Non-data URLs are sanitized through sanitizeUrl to prevent XSS
    *
    * METADATA ATTRIBUTE:
@@ -6023,13 +6024,8 @@ export class DomPainter {
     // but are safe for <img> elements when properly validated
     const isDataUrl = typeof run.src === 'string' && run.src.startsWith('data:');
     if (isDataUrl) {
-      // SECURITY: Validate data URL format and size
-      if (run.src.length > MAX_DATA_URL_LENGTH) {
-        // Reject data URLs that are too large (DoS prevention)
-        return null;
-      }
-      if (!VALID_IMAGE_DATA_URL.test(run.src)) {
-        // Reject data URLs with invalid MIME types or encoding
+      // SECURITY: Validate data URL MIME type, encoding, and size.
+      if (!isValidImageDataUrl(run.src)) {
         return null;
       }
       img.src = run.src;
@@ -6386,7 +6382,7 @@ export class DomPainter {
           // SECURITY: Validate data URLs
           const isDataUrl = run.imageSrc.startsWith('data:');
           if (isDataUrl) {
-            if (run.imageSrc.length <= MAX_DATA_URL_LENGTH && VALID_IMAGE_DATA_URL.test(run.imageSrc)) {
+            if (isValidImageDataUrl(run.imageSrc)) {
               img.src = run.imageSrc;
             } else {
               // Invalid data URL - fall back to displayLabel
@@ -7626,6 +7622,7 @@ export class DomPainter {
     'sdtScope',
     'sdtTag',
     'sdtAlias',
+    'appearance',
     'lockMode',
     'sdtSectionTitle',
     'sdtSectionType',
@@ -7756,6 +7753,7 @@ export class DomPainter {
       this.setDatasetString(el, 'sdtScope', metadata.scope);
       this.setDatasetString(el, 'sdtTag', metadata.tag);
       this.setDatasetString(el, 'sdtAlias', metadata.alias);
+      this.setDatasetString(el, 'appearance', metadata.appearance);
       // Always set lockMode (defaulting to 'unlocked') so CSS can target all SDTs uniformly.
       this.setDatasetString(el, 'lockMode', metadata.lockMode || 'unlocked');
     } else if (metadata.type === 'documentSection') {

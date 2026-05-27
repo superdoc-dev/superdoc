@@ -1,5 +1,6 @@
 import { parseSizeUnit } from '../utilities/index.js';
 import { xml2js } from 'xml-js';
+import { getDataUriMetadata, tryDecodeDataUriText } from './helpers/mediaHelpers.js';
 
 // --- Browser-compatible CRC32 (replaces buffer-crc32 to avoid Node.js Buffer dependency) ---
 const CRC32_TABLE = new Uint32Array(256);
@@ -33,9 +34,16 @@ function base64ToUint8Array(base64) {
   return bytes;
 }
 
+function stringToUtf8ArrayBuffer(value) {
+  return new globalThis.TextEncoder().encode(value).buffer;
+}
+
 /**
- * Convert a base64 string or data URI to an ArrayBuffer.
- * Accepts ArrayBuffer, TypedArray, data URI, or raw base64 string.
+ * Convert media data to an ArrayBuffer for DOCX packaging.
+ *
+ * Accepts ArrayBuffer, TypedArray, raw base64 strings, base64 data URIs, and
+ * percent-encoded non-base64 SVG data URIs. Other non-base64 data URI MIME
+ * types are rejected, and malformed percent-encoded SVG payloads throw.
  *
  * @param {string|ArrayBuffer|Uint8Array} data
  * @returns {ArrayBuffer}
@@ -50,11 +58,25 @@ function dataUriToArrayBuffer(data) {
 
   let base64 = data;
   if (data.startsWith('data:')) {
-    const commaIndex = data.indexOf(',');
-    if (commaIndex === -1) {
-      throw new Error('Invalid data URI: missing base64 content');
+    const metadata = getDataUriMetadata(data);
+    if (!metadata?.hasPayloadSeparator) {
+      throw new Error('Invalid data URI: missing content');
     }
-    base64 = data.substring(commaIndex + 1);
+
+    if (!metadata.isBase64) {
+      if (metadata.mimeType !== 'image/svg+xml') {
+        throw new Error(`Unsupported non-base64 data URI media type: ${metadata.mimeType || 'unknown'}`);
+      }
+
+      const decodedPayload = tryDecodeDataUriText(metadata.payload);
+      if (decodedPayload == null) {
+        throw new Error('Invalid non-base64 data URI payload');
+      }
+
+      return stringToUtf8ArrayBuffer(decodedPayload);
+    }
+
+    base64 = metadata.payload;
   }
 
   return base64ToUint8Array(base64).buffer;
@@ -351,10 +373,11 @@ const getArrayBufferFromUrl = async (input) => {
     return await response.arrayBuffer();
   }
 
-  // If this is a data URI we need only the payload portion
-  const base64Payload = isDataUri ? trimmed.split(',', 2)[1] : trimmed.replace(/\s/g, '');
+  if (isDataUri) {
+    return dataUriToArrayBuffer(trimmed);
+  }
 
-  return base64ToUint8Array(base64Payload).buffer;
+  return base64ToUint8Array(trimmed.replace(/\s/g, '')).buffer;
 };
 
 const getContentTypesFromXml = (contentTypesXml) => {

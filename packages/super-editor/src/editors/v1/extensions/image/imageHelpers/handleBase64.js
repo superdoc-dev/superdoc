@@ -1,20 +1,8 @@
 // @ts-check
-const DEFAULT_MIME_TYPE = 'application/octet-stream';
+import { getDataUriMetadata, tryDecodeDataUriText } from '@converter/helpers/mediaHelpers.js';
+import { simpleStringHash } from '@core/utilities/hash.js';
 
-/**
- * Generates a simple hash from a string.
- * @param {string} str - The input string.
- * @returns {string} The generated hash.
- */
-const simpleHash = (str) => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return Math.abs(hash).toString();
-};
+const DEFAULT_MIME_TYPE = 'application/octet-stream';
 
 /**
  * Decodes a base64-encoded string into a binary string.
@@ -35,38 +23,53 @@ const decodeBase64ToBinaryString = (data) => {
   throw new Error('Unable to decode base64 payload in the current environment.');
 };
 
-/**
- * Extract metadata from a base64-encoded string.
- * @param {string} base64String - The base64-encoded string.
- * @returns {Object} An object containing mimeType, binaryString, and filename.
- */
-const extractBase64Meta = (base64String) => {
-  const [meta = '', payload = ''] = base64String.split(',');
-  const mimeMatch = meta.match(/:(.*?);/);
-  const rawMimeType = mimeMatch ? mimeMatch[1] : '';
-  const mimeType = rawMimeType || DEFAULT_MIME_TYPE;
-  const binaryString = decodeBase64ToBinaryString(payload);
-  const hash = simpleHash(binaryString);
-  const extension = mimeType.split('/')[1] || 'bin';
-  const filename = `image-${hash}.${extension}`;
-
-  return { mimeType, binaryString, filename };
-};
-
-export const getBase64FileMeta = (base64String) => {
-  const { mimeType, filename } = extractBase64Meta(base64String);
-  return { mimeType, filename };
-};
-
-export const base64ToFile = (base64String) => {
-  const { mimeType, binaryString, filename } = extractBase64Meta(base64String);
-  const fileType = mimeType || DEFAULT_MIME_TYPE;
-
+const binaryStringToBytes = (binaryString) => {
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);
   }
+  return bytes;
+};
 
-  const blob = new Blob([bytes], { type: fileType });
+/**
+ * Extract metadata from a data URI string.
+ * @param {string} dataUri - The data URI string.
+ * @returns {Object} An object containing mimeType, binaryString, and filename.
+ */
+const extractBase64Meta = (dataUri) => {
+  const metadata = getDataUriMetadata(dataUri);
+  if (!metadata?.hasPayloadSeparator) return null;
+
+  const rawMimeType = metadata?.rawMimeType || '';
+  const mimeType = rawMimeType || DEFAULT_MIME_TYPE;
+  const isBase64 = Boolean(metadata?.isBase64);
+  const payload = metadata?.payload || '';
+  const binaryString = isBase64 ? decodeBase64ToBinaryString(payload) : tryDecodeDataUriText(payload);
+  if (binaryString == null) return null;
+
+  const hash = simpleStringHash(binaryString);
+  const extension = metadata?.extension || 'bin';
+  const filename = `image-${hash}.${extension}`;
+
+  return { mimeType, binaryString, filename, isBase64 };
+};
+
+export const getBase64FileMeta = (dataUri) => {
+  const meta = extractBase64Meta(dataUri);
+  if (!meta) return { mimeType: DEFAULT_MIME_TYPE, filename: 'image-0.bin' };
+
+  const { mimeType, filename } = meta;
+  return { mimeType, filename };
+};
+
+export const base64ToFile = (dataUri) => {
+  const meta = extractBase64Meta(dataUri);
+  if (!meta) return null;
+
+  const { mimeType, binaryString, filename, isBase64 } = meta;
+  const fileType = mimeType || DEFAULT_MIME_TYPE;
+
+  const data = isBase64 ? binaryStringToBytes(binaryString) : binaryString;
+  const blob = new Blob([data], { type: fileType });
   return new File([blob], filename, { type: fileType });
 };

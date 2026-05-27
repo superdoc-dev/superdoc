@@ -143,11 +143,11 @@ describe('ensureSdtContainerStyles', () => {
     const cssText = styleEl?.textContent ?? '';
     const hiddenPlaceholderRule =
       cssText.match(
-        /\.superdoc-structured-content-inline\[data-appearance='hidden'\] \.superdoc-empty-inline-sdt-placeholder,\s*\.superdoc-structured-content-block\[data-appearance='hidden'\] \.superdoc-empty-block-sdt-placeholder\s*\{([^}]*)\}/,
+        /\.superdoc-structured-content-inline\[data-appearance='hidden'\] \.superdoc-empty-inline-sdt-placeholder,\s*\.superdoc-structured-content-block\[data-appearance='hidden'\] \.superdoc-empty-block-sdt-placeholder,\s*\.superdoc-empty-sdt-placeholder\[data-appearance='hidden'\]\s*\{([^}]*)\}/,
       )?.[1] ?? '';
     const hiddenPlaceholderBeforeRule =
       cssText.match(
-        /\.superdoc-structured-content-inline\[data-appearance='hidden'\] \.superdoc-empty-inline-sdt-placeholder::before,\s*\.superdoc-structured-content-block\[data-appearance='hidden'\] \.superdoc-empty-block-sdt-placeholder::before\s*\{([^}]*)\}/,
+        /\.superdoc-structured-content-inline\[data-appearance='hidden'\] \.superdoc-empty-inline-sdt-placeholder::before,\s*\.superdoc-structured-content-block\[data-appearance='hidden'\] \.superdoc-empty-block-sdt-placeholder::before,\s*\.superdoc-empty-sdt-placeholder\[data-appearance='hidden'\]::before\s*\{([^}]*)\}/,
       )?.[1] ?? '';
 
     expect(hiddenPlaceholderRule).toContain('width: 0;');
@@ -164,7 +164,8 @@ describe('ensureSdtContainerStyles', () => {
     const viewingPlaceholderRule =
       cssText.match(/\.presentation-editor--viewing \.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
 
-    expect(viewingPlaceholderRule).toContain("content: '';");
+    expect(viewingPlaceholderRule).toContain('visibility: hidden;');
+    expect(viewingPlaceholderRule).not.toContain('content:');
   });
 
   it('suppresses empty SDT placeholder text in print mode', () => {
@@ -175,7 +176,8 @@ describe('ensureSdtContainerStyles', () => {
     const printPlaceholderRule =
       cssText.match(/@media print\s*\{[\s\S]*?\.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
 
-    expect(printPlaceholderRule).toContain("content: '';");
+    expect(printPlaceholderRule).toContain('visibility: hidden;');
+    expect(printPlaceholderRule).not.toContain('content:');
   });
 
   it('suppresses structured-content hover backgrounds in viewing mode, including grouped hover', () => {

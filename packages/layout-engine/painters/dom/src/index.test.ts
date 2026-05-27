@@ -3019,12 +3019,12 @@ describe('DomPainter', () => {
     const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
-    const fragment = mount.querySelector(
-      '.superdoc-structured-content-block[data-sdt-id="sc-block-hidden-empty-1"]',
-    ) as HTMLElement | null;
+    const fragment = mount.querySelector('[data-sdt-id="sc-block-hidden-empty-1"]') as HTMLElement | null;
 
     expect(fragment).toBeTruthy();
     expect(fragment?.dataset.appearance).toBe('hidden');
+    expect(fragment?.classList.contains('superdoc-structured-content-block')).toBe(false);
+    expect(fragment?.querySelector('.superdoc-structured-content__label')).toBeNull();
   });
 
   it('keeps inline SDT wrapper font-size in sync when run font-size changes', () => {

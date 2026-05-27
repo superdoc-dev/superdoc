@@ -156,6 +156,17 @@ describe('ensureSdtContainerStyles', () => {
     expect(hiddenPlaceholderBeforeRule).toContain("content: '';");
   });
 
+  it('suppresses empty SDT placeholder text in viewing mode', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const viewingPlaceholderRule =
+      cssText.match(/\.presentation-editor--viewing \.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(viewingPlaceholderRule).toContain("content: '';");
+  });
+
   it('suppresses structured-content hover backgrounds in viewing mode, including grouped hover', () => {
     ensureSdtContainerStyles(document);
 

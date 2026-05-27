@@ -1254,6 +1254,22 @@ const closeExportMenu = () => {
   showExportMenu.value = false;
 };
 
+// Bubble emit controls for testing SD-3281
+const bubblesEnabled = ref(true);
+const setBubblesEnabled = (enabled) => {
+  bubblesEnabled.value = enabled;
+  superdoc.value?.setCommentsEmitEvents(enabled);
+  superdoc.value?.setTrackChangesEmitEvents(enabled);
+};
+
+const insertCommentWithBubble = () => {
+  activeEditor.value?.commands?.insertComment({ skipEmit: false });
+};
+
+const insertCommentWithoutBubble = () => {
+  activeEditor.value?.commands?.insertComment({ skipEmit: true });
+};
+
 const sidebarOptions = [
   {
     id: 'off',
@@ -1416,6 +1432,23 @@ if (scrollTestMode.value) {
                 <option value="independent">Independent (Word)</option>
               </select>
             </label>
+            <label class="dev-app__theme-control" title="Toggle comment/track-change sidebar bubbles (SD-3281)">
+              <span>Bubbles</span>
+              <select
+                :value="bubblesEnabled ? 'on' : 'off'"
+                class="dev-app__theme-select"
+                @change="setBubblesEnabled($event.target.value === 'on')"
+              >
+                <option value="on">On</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+            <button class="dev-app__header-export-btn" title="Insert comment with bubble (SD-3281)" @click="insertCommentWithBubble">
+              Comment +bubble
+            </button>
+            <button class="dev-app__header-export-btn" title="Insert comment without bubble (SD-3281)" @click="insertCommentWithoutBubble">
+              Comment −bubble
+            </button>
             <div class="dev-app__dropdown" @mouseleave="closeSidebarMenu">
               <button
                 class="dev-app__header-export-btn dev-app__dropdown-trigger"

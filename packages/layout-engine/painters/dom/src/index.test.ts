@@ -2880,8 +2880,151 @@ describe('DomPainter', () => {
     expect(wrapper?.dataset.empty).toBe('true');
     expect(wrapper?.dataset.pmStart).toBe('8');
     expect(wrapper?.dataset.pmEnd).toBe('8');
-    expect(wrapper?.querySelector('.superdoc-empty-inline-sdt-placeholder')).toBeTruthy();
+    const placeholder = wrapper?.querySelector('.superdoc-empty-inline-sdt-placeholder') as HTMLElement | null;
+    expect(placeholder).toBeTruthy();
+    expect(placeholder?.classList.contains('superdoc-empty-sdt-placeholder')).toBe(true);
+    expect(placeholder?.dataset.placeholderText).toBe('Click or tap here to enter text');
     expect(wrapper?.textContent).not.toContain('old content');
+    expect(wrapper?.textContent).not.toContain('Click or tap here to enter text');
+  });
+
+  it('renders placeholder chrome for an empty block SDT without adding document text', () => {
+    const sdt = {
+      type: 'structuredContent',
+      scope: 'block',
+      id: 'sc-block-empty-1',
+      alias: 'Empty block',
+    } as const;
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'block-sc-empty',
+      runs: [
+        {
+          kind: 'text',
+          text: '',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 4,
+          pmEnd: 4,
+          visualPlaceholder: 'emptyBlockSdt',
+          sdt,
+        },
+      ],
+      attrs: { sdt },
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 220, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'block-sc-empty',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 3,
+              pmEnd: 5,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const fragment = mount.querySelector(
+      '.superdoc-structured-content-block[data-sdt-id="sc-block-empty-1"]',
+    ) as HTMLElement | null;
+    const placeholder = fragment?.querySelector('.superdoc-empty-block-sdt-placeholder') as HTMLElement | null;
+
+    expect(fragment).toBeTruthy();
+    expect(placeholder).toBeTruthy();
+    expect(placeholder?.classList.contains('superdoc-empty-sdt-placeholder')).toBe(true);
+    expect(placeholder?.dataset.placeholderText).toBe('Click or tap here to enter text');
+    expect(placeholder?.dataset.pmStart).toBe('4');
+    expect(placeholder?.dataset.pmEnd).toBe('4');
+    expect(placeholder?.style.fontFamily).toBe('Arial');
+    expect(placeholder?.style.fontSize).toBe('16px');
+    expect(fragment?.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('0px');
+    expect(fragment?.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('220px');
+    expect(fragment?.textContent).not.toContain('Click or tap here to enter text');
+  });
+
+  it('marks hidden empty block SDT wrappers so placeholder chrome can be suppressed', () => {
+    const sdt = {
+      type: 'structuredContent',
+      scope: 'block',
+      id: 'sc-block-hidden-empty-1',
+      alias: 'Hidden empty block',
+      appearance: 'hidden',
+    } as const;
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'block-sc-hidden-empty',
+      runs: [
+        {
+          kind: 'text',
+          text: '',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 4,
+          pmEnd: 4,
+          visualPlaceholder: 'emptyBlockSdt',
+          sdt,
+        },
+      ],
+      attrs: { sdt },
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 0, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'block-sc-hidden-empty',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 3,
+              pmEnd: 5,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const fragment = mount.querySelector('[data-sdt-id="sc-block-hidden-empty-1"]') as HTMLElement | null;
+
+    expect(fragment).toBeTruthy();
+    expect(fragment?.dataset.appearance).toBe('hidden');
+    expect(fragment?.classList.contains('superdoc-structured-content-block')).toBe(false);
+    expect(fragment?.querySelector('.superdoc-structured-content__label')).toBeNull();
   });
 
   it('keeps inline SDT wrapper font-size in sync when run font-size changes', () => {

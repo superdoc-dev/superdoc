@@ -65,6 +65,8 @@ type CoreCommandNames =
   | 'selectInlineSdtBeforeRunStart'
   | 'selectInlineSdtAfterRunEnd'
   | 'deleteBlockSdtAtTextBlockStart'
+  | 'moveIntoBlockSdtBeforeTextBlockStart'
+  | 'moveIntoBlockSdtAfterTextBlockEnd'
   | 'deleteSkipEmptyRun'
   | 'deleteNextToRun'
   | 'deleteAtomAfter'

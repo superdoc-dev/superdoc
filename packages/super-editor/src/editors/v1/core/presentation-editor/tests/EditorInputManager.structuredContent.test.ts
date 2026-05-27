@@ -58,7 +58,9 @@ function getPointerEventImpl(): typeof PointerEvent | typeof MouseEvent {
   );
 }
 
-function createMockDoc(mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary' | 'nestedInlineInBlock') {
+function createMockDoc(
+  mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary' | 'emptyInlineSdt' | 'nestedInlineInBlock',
+) {
   return {
     content: { size: 200 },
     nodeAt: vi.fn(() => ({ nodeSize: 20 })),
@@ -87,6 +89,19 @@ function createMockDoc(mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary
           before: (depth: number) => (depth === 2 ? 10 : 0),
           start: (depth: number) => (depth === 2 ? 11 : 1),
           end: (depth: number) => (depth === 2 ? 12 : 199),
+        };
+      }
+      if (mode === 'emptyInlineSdt') {
+        return {
+          depth: 2,
+          node: (depth: number) => {
+            if (depth === 2) return { type: { name: 'structuredContent' }, nodeSize: 2 };
+            if (depth === 1) return { type: { name: 'paragraph' } };
+            return { type: { name: 'doc' } };
+          },
+          before: (depth: number) => (depth === 2 ? 8 : 0),
+          start: (depth: number) => (depth === 2 ? 9 : 1),
+          end: (depth: number) => (depth === 2 ? 9 : 199),
         };
       }
       if (mode === 'nestedInlineInBlock') {
@@ -175,7 +190,9 @@ describe('EditorInputManager structured content clicks', () => {
   let getEditor: Mock;
   let mockHitTestTable: Mock;
 
-  function mountWithDoc(mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary' | 'nestedInlineInBlock') {
+  function mountWithDoc(
+    mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary' | 'emptyInlineSdt' | 'nestedInlineInBlock',
+  ) {
     mockEditor.state.doc = createMockDoc(mode);
   }
 
@@ -240,7 +257,7 @@ describe('EditorInputManager structured content clicks', () => {
       getEditor,
       getLayoutState: vi.fn(() => ({ layout: {} as any, blocks: [], measures: [] })),
       getEpochMapper: vi.fn(() => ({
-        mapPosFromLayoutToCurrentDetailed: vi.fn(() => ({ ok: true, pos: 12, toEpoch: 1 })),
+        mapPosFromLayoutToCurrentDetailed: vi.fn((pos: number) => ({ ok: true, pos, toEpoch: 1 })),
       })),
       getViewportHost: vi.fn(() => viewportHost),
       getVisibleHost: vi.fn(() => visibleHost),
@@ -368,6 +385,38 @@ describe('EditorInputManager structured content clicks', () => {
     expect(resolvePointerPositionHit as unknown as Mock).toHaveBeenCalled();
     expect(mockTextSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 13);
     expect(mockApplyEditableSlotAtInlineBoundary).toHaveBeenCalledWith(mockEditor.state.tr, 13, 'after');
+    expect(mockNodeSelectionCreate).not.toHaveBeenCalled();
+  });
+
+  it('keeps placeholder clicks inside an empty inline structured content node', () => {
+    mountWithDoc('emptyInlineSdt');
+    (resolvePointerPositionHit as unknown as Mock).mockReturnValueOnce({
+      pos: 9,
+      layoutEpoch: 1,
+      pageIndex: 0,
+      blockId: 'body-1',
+      column: 0,
+      lineIndex: 0,
+    });
+    const target = document.createElement('span');
+    target.className = 'superdoc-empty-sdt-placeholder superdoc-empty-inline-sdt-placeholder';
+    viewportHost.appendChild(target);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 28,
+        clientY: 28,
+      } as PointerEventInit),
+    );
+
+    expect(resolvePointerPositionHit as unknown as Mock).toHaveBeenCalled();
+    expect(mockTextSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 9);
+    expect(mockApplyEditableSlotAtInlineBoundary).not.toHaveBeenCalled();
     expect(mockNodeSelectionCreate).not.toHaveBeenCalled();
   });
 

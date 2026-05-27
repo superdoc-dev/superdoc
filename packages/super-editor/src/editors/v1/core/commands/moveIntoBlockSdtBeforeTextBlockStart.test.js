@@ -243,6 +243,33 @@ describe('moveIntoBlockSdtBeforeTextBlockStart', () => {
     expect(dispatched.selection.from).toBe(innerEnd);
   });
 
+  it('targets a marker-only trailing paragraph inside a previous block SDT', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [
+        paragraph(schema, 'Inner'),
+        schema.nodes.paragraph.create(null, [marker(schema, 'bookmarkEnd')]),
+      ]),
+      paragraph(schema, 'After'),
+    ]);
+    const afterStart = findTextPos(doc, 'After');
+    const targetPos = findNodePos(doc, 'bookmarkEnd');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, afterStart) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtBeforeTextBlockStart()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.selection.from).toBe(targetPos);
+  });
+
   it('returns false when visible inline atom content appears before the first text position', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [

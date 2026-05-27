@@ -51,6 +51,8 @@ export function findFirstContentCursorPosInNode(node, nodePos) {
     offset += child.nodeSize;
   }
 
+  if (node.isTextblock) return nodePos + 1;
+
   return null;
 }
 
@@ -93,6 +95,8 @@ export function findLastContentCursorPosInNode(node, nodePos) {
     const found = findLastContentCursorPosInNode(child, childPos);
     if (found != null) return found;
   }
+
+  if (node.isTextblock) return nodePos + 1;
 
   return null;
 }

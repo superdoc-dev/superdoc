@@ -822,10 +822,6 @@ const SDT_CONTAINER_STYLES = `
   border: none;
 }
 
-.presentation-editor--viewing .superdoc-empty-sdt-placeholder::before {
-  content: '';
-}
-
 .presentation-editor--viewing .superdoc-structured-content__label,
 .presentation-editor--viewing .superdoc-structured-content-inline__label {
   display: none !important;
@@ -849,10 +845,6 @@ const SDT_CONTAINER_STYLES = `
   .superdoc-structured-content__label,
   .superdoc-structured-content-inline__label {
     display: none !important;
-  }
-
-  .superdoc-empty-sdt-placeholder::before {
-    content: '';
   }
 }
 `;

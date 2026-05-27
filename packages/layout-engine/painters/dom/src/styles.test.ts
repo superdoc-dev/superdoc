@@ -156,7 +156,7 @@ describe('ensureSdtContainerStyles', () => {
     expect(hiddenPlaceholderBeforeRule).toContain("content: '';");
   });
 
-  it('suppresses empty SDT placeholder text in viewing mode', () => {
+  it('keeps empty SDT placeholder text visible in viewing mode', () => {
     ensureSdtContainerStyles(document);
 
     const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
@@ -164,11 +164,11 @@ describe('ensureSdtContainerStyles', () => {
     const viewingPlaceholderRule =
       cssText.match(/\.presentation-editor--viewing \.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
 
-    expect(viewingPlaceholderRule).toContain("content: '';");
+    expect(viewingPlaceholderRule).toBe('');
     expect(viewingPlaceholderRule).not.toContain('visibility: hidden;');
   });
 
-  it('suppresses empty SDT placeholder text in print mode', () => {
+  it('keeps empty SDT placeholder text visible in print mode', () => {
     ensureSdtContainerStyles(document);
 
     const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
@@ -176,7 +176,7 @@ describe('ensureSdtContainerStyles', () => {
     const printPlaceholderRule =
       cssText.match(/@media print\s*\{[\s\S]*?\.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
 
-    expect(printPlaceholderRule).toContain("content: '';");
+    expect(printPlaceholderRule).toBe('');
     expect(printPlaceholderRule).not.toContain('visibility: hidden;');
   });
 

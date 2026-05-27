@@ -7622,6 +7622,7 @@ export class DomPainter {
     'sdtScope',
     'sdtTag',
     'sdtAlias',
+    'appearance',
     'lockMode',
     'sdtSectionTitle',
     'sdtSectionType',
@@ -7752,6 +7753,7 @@ export class DomPainter {
       this.setDatasetString(el, 'sdtScope', metadata.scope);
       this.setDatasetString(el, 'sdtTag', metadata.tag);
       this.setDatasetString(el, 'sdtAlias', metadata.alias);
+      this.setDatasetString(el, 'appearance', metadata.appearance);
       // Always set lockMode (defaulting to 'unlocked') so CSS can target all SDTs uniformly.
       this.setDatasetString(el, 'lockMode', metadata.lockMode || 'unlocked');
     } else if (metadata.type === 'documentSection') {

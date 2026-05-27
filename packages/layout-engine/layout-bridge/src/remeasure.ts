@@ -1384,6 +1384,17 @@ export function remeasureParagraph(
       if (text.length > 0 && isTextRun(run)) {
         lineMaxTextFontSize = Math.max(lineMaxTextFontSize, run.fontSize ?? 16);
       }
+      if (isEmptySdtPlaceholderRun(run)) {
+        const placeholderWidth = text.length > 0 ? measureRunSliceWidth(run, 0, text.length) : 0;
+        if (width > 0 && width + placeholderWidth > effectiveMaxWidth - WIDTH_FUDGE_PX) {
+          didBreakInThisLine = true;
+          break;
+        }
+        width += placeholderWidth;
+        endRun = r;
+        endChar = text.length > 0 ? text.length : start + 1;
+        continue;
+      }
       for (let c = start; c < text.length; c += 1) {
         const ch = text[c];
         if (ch === '\t') {

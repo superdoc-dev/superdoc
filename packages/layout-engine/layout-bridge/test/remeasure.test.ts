@@ -230,6 +230,22 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[0].width).toBe(EMPTY_SDT_PLACEHOLDER_TEXT.length * CHAR_WIDTH);
     });
 
+    it('keeps a visible empty SDT placeholder atomic when it is wider than the line', () => {
+      const block = createBlock([
+        textRun('', {
+          kind: 'text',
+          visualPlaceholder: 'emptyBlockSdt',
+          sdt: { type: 'structuredContent', scope: 'block', id: 'narrow-empty-block-sdt' },
+        }),
+      ]);
+      const measure = remeasureParagraph(block, 60);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[0].width).toBe(EMPTY_SDT_PLACEHOLDER_TEXT.length * CHAR_WIDTH);
+    });
+
     it('keeps hidden empty SDT placeholders zero-width during remeasurement', () => {
       const block = createBlock([
         textRun('', {

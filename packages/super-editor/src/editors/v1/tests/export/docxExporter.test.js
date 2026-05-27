@@ -502,6 +502,45 @@ describe('DocxExporter', () => {
       expect(xml).toContain('REF _Ref258418237');
     });
 
+    it('preserves w:delInstrText when it remains inside w:del', () => {
+      const exporter = new DocxExporter(createConverterStub());
+
+      const data = {
+        name: 'w:document',
+        attributes: {},
+        elements: [
+          {
+            name: 'w:del',
+            attributes: { 'w:id': '1' },
+            elements: [
+              {
+                name: 'w:r',
+                attributes: {},
+                elements: [
+                  {
+                    name: 'w:delInstrText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [
+                      {
+                        type: 'text',
+                        text: ' PAGE   \\\\* MERGEFORMAT ',
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const xml = exporter.schemaToXml(data);
+
+      expect(xml).toContain('<w:delInstrText');
+      expect(xml).not.toContain('<w:instrText');
+      expect(xml).toContain('PAGE');
+    });
+
     it('handles special characters along with [[sdspace]] placeholders', () => {
       const exporter = new DocxExporter(createConverterStub());
 

@@ -254,26 +254,26 @@ describe('buildAutoFitWorkingGridInput', () => {
     expect(result).toMatchObject({ autoGridWidthBudget: 576 });
   });
 
-  it('records omitted table width as AutoFit width-budget semantics when a complete grid fits', () => {
+  it('does not create an AutoFit grid budget from fallback widths when tblW and tblGrid are omitted', () => {
     const block = createTableBlock({
       attrs: {},
-      columnWidths: [100, 100],
+      columnWidths: [312, 312],
       rows: [
         {
           id: 'row-1',
           cells: [
-            { id: 'cell-1', attrs: { tableCellProperties: { cellWidth: { value: 3000, type: 'dxa' } } } },
-            { id: 'cell-2', attrs: { tableCellProperties: { cellWidth: { value: 3000, type: 'dxa' } } } },
+            { id: 'cell-1', attrs: { tableCellProperties: { cellWidth: { value: 3885, type: 'dxa' } } } },
+            { id: 'cell-2', attrs: { tableCellProperties: { cellWidth: { value: 3900, type: 'dxa' } } } },
           ],
         },
       ],
     });
 
-    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 200 });
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 624 });
 
     expect(result.preferredTableWidth).toBeUndefined();
-    expect(result.preferredColumnWidths).toEqual([100, 100]);
-    expect(result).toMatchObject({ autoGridWidthBudget: 200 });
+    expect(result.preferredColumnWidths).toEqual([312, 312]);
+    expect(result.autoGridWidthBudget).toBeUndefined();
   });
 
   it('does not mark incomplete tblW auto grids as preferred AutoFit geometry', () => {

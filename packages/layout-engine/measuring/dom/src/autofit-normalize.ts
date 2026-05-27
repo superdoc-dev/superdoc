@@ -286,7 +286,7 @@ function resolveAutoGridWidthBudget(args: {
 }
 
 function hasAutoTableWidthSemantics(tableWidth: TableWidthAttr | undefined): boolean {
-  if (tableWidth == null) return true;
+  if (tableWidth == null) return false;
   if (typeof tableWidth !== 'object') return false;
   const type = typeof tableWidth.type === 'string' ? tableWidth.type.toLowerCase() : undefined;
   if (type !== 'auto') return false;

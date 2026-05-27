@@ -264,6 +264,39 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.totalWidth).toBeLessThanOrEqual(576);
   });
 
+  it('does not expand a narrower AutoFit table up to the grid budget', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: withAutoGridWidthBudget(
+          buildWorkingInput({
+            preferredTableWidth: undefined,
+            maxTableWidth: 624,
+            preferredColumnWidths: [312, 312],
+            gridColumnCount: 2,
+            rows: [buildAutoGridRow([259, 260])],
+          }),
+          624,
+        ),
+        fixedLayout: {
+          columnWidths: [259, 260],
+          totalWidth: 519,
+          gridColumnCount: 2,
+          preferredTableWidth: undefined,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 40, max: 120, preferredWidth: 259 },
+            { min: 40, max: 160, preferredWidth: 260 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.totalWidth).toBeCloseTo(519, 3);
+    expect(result.columnWidths[0]).toBeLessThan(312);
+    expect(result.columnWidths[1]).toBeLessThan(312);
+  });
+
   it('allows a tblW auto grid budget to grow only when content minimums require it', () => {
     const result = computeAutoFitColumnWidths(
       buildExplicitInput({

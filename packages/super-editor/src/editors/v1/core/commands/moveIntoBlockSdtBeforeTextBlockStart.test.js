@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Schema } from 'prosemirror-model';
-import { EditorState, TextSelection } from 'prosemirror-state';
+import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
 import { moveIntoBlockSdtBeforeTextBlockStart } from './moveIntoBlockSdtBeforeTextBlockStart.js';
 
 const makeSchema = () =>
@@ -25,6 +25,7 @@ const makeSchema = () =>
       bookmarkEnd: { inline: true, group: 'inline', atom: true },
       tableOfContentsEntry: { inline: true, group: 'inline', atom: true },
       passthroughBlock: { group: 'block', atom: true },
+      mathBlock: { group: 'block', atom: true },
       fieldAnnotation: {
         inline: true,
         group: 'inline',
@@ -306,6 +307,31 @@ describe('moveIntoBlockSdtBeforeTextBlockStart', () => {
     expect(dispatched.selection.from).toBe(innerEnd);
   });
 
+  it('skips hidden block markers between the previous block SDT and following paragraph', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [paragraph(schema, 'Inner')]),
+      schema.nodes.permEndBlock.create(),
+      paragraph(schema, 'After'),
+    ]);
+    const afterStart = findTextPos(doc, 'After');
+    const innerEnd = findTextPos(doc, 'Inner', 5);
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, afterStart) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtBeforeTextBlockStart()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.selection.from).toBe(innerEnd);
+  });
+
   it('ignores leading hidden metadata atoms when checking the following paragraph start', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [
@@ -355,6 +381,31 @@ describe('moveIntoBlockSdtBeforeTextBlockStart', () => {
     expect(ok).toBe(true);
     expect(dispatched).toBeDefined();
     expect(dispatched.selection.from).toBe(innerEnd);
+  });
+
+  it('selects a visible trailing block atom inside a previous block SDT', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [paragraph(schema, 'Inner'), schema.nodes.mathBlock.create()]),
+      paragraph(schema, 'After'),
+    ]);
+    const afterStart = findTextPos(doc, 'After');
+    const mathBlockStart = findNodePos(doc, 'mathBlock');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, afterStart) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtBeforeTextBlockStart()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.selection).toBeInstanceOf(NodeSelection);
+    expect(dispatched.selection.from).toBe(mathBlockStart);
   });
 
   it('ignores leading hidden field annotations when checking the following paragraph start', () => {

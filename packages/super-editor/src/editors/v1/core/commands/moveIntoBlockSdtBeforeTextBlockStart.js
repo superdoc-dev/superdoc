@@ -1,11 +1,34 @@
-import { Selection, TextSelection } from 'prosemirror-state';
-import { findFirstContentCursorPosInNode, findLastContentCursorPosInNode } from './helpers/textPositions.js';
+import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
+import {
+  findFirstContentCursorPosInNode,
+  findLastContentCursorPosInNode,
+  isZeroWidthMarker,
+} from './helpers/textPositions.js';
 
 function findAncestorDepth($pos, predicate) {
   for (let depth = $pos.depth; depth > 0; depth -= 1) {
     if (predicate($pos.node(depth))) return depth;
   }
   return null;
+}
+
+function findPreviousNodeBeforeHiddenMarkers(doc, pos) {
+  let currentPos = pos;
+  let node = doc.resolve(currentPos).nodeBefore;
+
+  while (node && isZeroWidthMarker(node)) {
+    currentPos -= node.nodeSize;
+    node = doc.resolve(currentPos).nodeBefore;
+  }
+
+  return { node, boundaryPos: currentPos };
+}
+
+function createSelectionAtContentPos(doc, pos, bias) {
+  const $pos = doc.resolve(pos);
+  if ($pos.parent.inlineContent) return TextSelection.create(doc, pos);
+  if ($pos.nodeAfter && NodeSelection.isSelectable($pos.nodeAfter)) return NodeSelection.create(doc, pos);
+  return Selection.near($pos, bias);
 }
 
 /**
@@ -29,17 +52,16 @@ export const moveIntoBlockSdtBeforeTextBlockStart =
     const firstContentPos = findFirstContentCursorPosInNode(textblock, textblockPos) ?? $from.start(textblockDepth);
     if (firstContentPos !== $from.pos) return false;
 
-    const boundary = state.doc.resolve(textblockPos);
-    const previousNode = boundary.nodeBefore;
+    const { node: previousNode, boundaryPos } = findPreviousNodeBeforeHiddenMarkers(state.doc, textblockPos);
     if (previousNode?.type.name !== 'structuredContentBlock') return false;
 
-    const previousNodePos = textblockPos - previousNode.nodeSize;
+    const previousNodePos = boundaryPos - previousNode.nodeSize;
     const targetPos = findLastContentCursorPosInNode(previousNode, previousNodePos);
 
     if (dispatch) {
       const targetSelection =
         targetPos != null
-          ? TextSelection.create(state.doc, targetPos)
+          ? createSelectionAtContentPos(state.doc, targetPos, -1)
           : (Selection.findFrom(state.doc.resolve(textblockPos), -1, true) ??
             Selection.near(state.doc.resolve(textblockPos), -1));
       dispatch(state.tr.setSelection(targetSelection).scrollIntoView());

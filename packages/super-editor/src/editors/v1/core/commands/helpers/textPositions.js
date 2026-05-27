@@ -15,7 +15,7 @@ const ZERO_WIDTH_MARKER_NODE_NAMES = new Set([
   'passthroughBlock',
 ]);
 
-function isZeroWidthMarker(node) {
+export function isZeroWidthMarker(node) {
   if (node.type.name === 'fieldAnnotation' && node.attrs?.hidden === true) return true;
   return ZERO_WIDTH_MARKER_NODE_NAMES.has(node.type.name);
 }
@@ -93,7 +93,7 @@ export function findLastTextPosInNode(node, nodePos) {
 export function findLastContentCursorPosInNode(node, nodePos) {
   if (isZeroWidthMarker(node)) return null;
   if (node.isText) return nodePos + (node.text?.length ?? 0);
-  if (node.isAtom) return nodePos + node.nodeSize;
+  if (node.isAtom) return node.isInline ? nodePos + node.nodeSize : nodePos;
   if (node.isTextblock && node.childCount === 0) return nodePos + 1;
 
   for (let index = node.childCount - 1, offset = node.content.size; index >= 0; index -= 1) {

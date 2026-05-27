@@ -247,6 +247,53 @@ describe('structured-content-block', () => {
         expect(recordBlockKind).toHaveBeenCalledWith('paragraph');
       });
 
+      it('should not emit a placeholder for a vanished empty paragraph child', () => {
+        const emptyParagraph: PMNode = {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: {
+              runProperties: {
+                vanish: true,
+              },
+            },
+          },
+          content: [],
+        };
+        const node: PMNode = {
+          type: 'structuredContentBlock',
+          attrs: { id: 'scb-1' },
+          content: [emptyParagraph],
+        };
+
+        const blocks: FlowBlock[] = [];
+        const recordBlockKind = vi.fn();
+
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(scbMetadata);
+        const paragraphToFlowBlocks = vi.fn().mockReturnValue([]);
+
+        const context: NodeHandlerContext = {
+          blocks,
+          recordBlockKind,
+          nextBlockId: mockBlockIdGenerator,
+          positions: mockPositionMap,
+          defaultFont: 'Arial',
+          defaultSize: 12,
+          trackedChangesConfig: mockTrackedChangesConfig,
+          bookmarks: mockBookmarks,
+          hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
+          converters: {
+            paragraphToFlowBlocks,
+          },
+        };
+
+        handleStructuredContentBlockNode(node, context);
+
+        expect(blocks).toHaveLength(0);
+        expect(recordBlockKind).not.toHaveBeenCalled();
+      });
+
       it('should process a single paragraph child', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',

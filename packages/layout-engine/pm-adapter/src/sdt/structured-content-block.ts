@@ -24,6 +24,16 @@ function isEmptyParagraphNode(node: PMNode): boolean {
   });
 }
 
+function isVanishedParagraphNode(node: PMNode): boolean {
+  const paragraphProperties = node.attrs?.paragraphProperties;
+  if (!paragraphProperties || typeof paragraphProperties !== 'object') return false;
+
+  const runProperties = (paragraphProperties as { runProperties?: unknown }).runProperties;
+  if (!runProperties || typeof runProperties !== 'object') return false;
+
+  return (runProperties as { vanish?: unknown }).vanish === true;
+}
+
 function asEmptyTextRun(run: unknown): TextRun | undefined {
   if (!run || typeof run !== 'object') return undefined;
   const candidate = run as TextRun;
@@ -109,6 +119,10 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
   }
 
   if (node.content.length === 1 && isEmptyParagraphNode(node.content[0])) {
+    if (isVanishedParagraphNode(node.content[0])) {
+      return;
+    }
+
     const paragraphPos = positions.get(node.content[0]);
     const blockPos = positions.get(node);
     const contentPos = paragraphPos ? paragraphPos.start + 1 : blockPos ? blockPos.start + 1 : undefined;

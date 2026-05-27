@@ -2,15 +2,18 @@ import type {
   DropCapDescriptor,
   Line,
   ParagraphBlock,
+  ParagraphIndent,
   ParagraphMeasure,
   ResolvedParagraphContent,
   Run,
   SdtMetadata,
   SourceAnchor,
+  TabStop,
 } from '@superdoc/contracts';
 import {
   effectiveTableCellSpacing,
   expandRunsForInlineNewlines,
+  expandRunsForInlineTabs,
   getParagraphInlineDirection,
 } from '@superdoc/contracts';
 import { resolveMarkerIndent, type MinimalWordLayout } from '@superdoc/common/list-marker-utils';
@@ -238,7 +241,13 @@ const renderResolvedLines = (
   } = params;
   const renderedLines: RenderedParagraphLineInfo[] = [];
   const resolvedMarker = content.marker;
-  const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
+  // SD-3266: chain expandRunsForInlineTabs so the painter's pre-expanded run
+  // array matches the measurer's Line.fromRun/toRun indexing contract.
+  const expandedRunsForBlock = expandRunsForInlineTabs(
+    expandRunsForInlineNewlines(block.runs),
+    block.attrs?.tabs as TabStop[] | undefined,
+    block.attrs?.indent as ParagraphIndent | undefined,
+  );
   const isRtl = getParagraphInlineDirection(block.attrs) === 'rtl';
   let renderedHeight = 0;
 
@@ -324,12 +333,19 @@ const renderMeasuredLines = (
   } = resolveMarkerIndent(paraIndent, isRtl);
   const wordLayoutIndentLeft = (wordLayout as { indentLeftPx?: number } | undefined)?.indentLeftPx;
   const tableMarkerIndentLeft =
-    measure.marker?.indentLeft ??
-    wordLayoutIndentLeft ??
-    (typeof paraIndent?.left === 'number' ? paraIndent.left : 0);
+    measure.marker?.indentLeft ?? wordLayoutIndentLeft ?? (typeof paraIndent?.left === 'number' ? paraIndent.left : 0);
   const suppressFirstLineIndent = block.attrs?.suppressFirstLineIndent === true;
   const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
-  const expandedRunsForBlock = containerKind === 'body-fragment' ? expandRunsForInlineNewlines(block.runs) : undefined;
+  // SD-3266: same chain as the resolved-content path above — the painter must
+  // see the same expansion the measurer used or Line.fromRun/toRun misalign.
+  const expandedRunsForBlock =
+    containerKind === 'body-fragment'
+      ? expandRunsForInlineTabs(
+          expandRunsForInlineNewlines(block.runs),
+          block.attrs?.tabs as TabStop[] | undefined,
+          block.attrs?.indent as ParagraphIndent | undefined,
+        )
+      : undefined;
   const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
   const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
   const markerLayout = wordLayout?.marker;

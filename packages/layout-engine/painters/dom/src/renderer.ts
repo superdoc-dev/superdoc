@@ -17,6 +17,7 @@ import type {
   PageMargins,
   ParaFragment,
   ParagraphBlock,
+  ParagraphIndent,
   PositionedDrawingGeometry,
   Run,
   ShapeGroupChild,
@@ -27,6 +28,7 @@ import type {
   TableBlock,
   TableFragment,
   TableMeasure,
+  TabStop,
   VectorShapeDrawing,
   VectorShapeStyle,
   ResolvedLayout,
@@ -43,6 +45,7 @@ import {
   LAYOUT_BOUNDARY_SCHEMA,
   buildLayoutSourceIdentityForFragment,
   expandRunsForInlineNewlines,
+  expandRunsForInlineTabs,
   getCellSpacingPx,
   normalizeColumnLayout,
 } from '@superdoc/contracts';
@@ -3686,7 +3689,13 @@ export class DomPainter {
 
         let expandedRuns = tableCellExpandedRunsCache.get(block);
         if (!expandedRuns) {
-          expandedRuns = expandRunsForInlineNewlines(block.runs);
+          // SD-3266: chain expandRunsForInlineTabs so the painter's run array
+          // matches the measurer's (Line.fromRun/toRun indexing contract).
+          expandedRuns = expandRunsForInlineTabs(
+            expandRunsForInlineNewlines(block.runs),
+            block.attrs?.tabs as TabStop[] | undefined,
+            block.attrs?.indent as ParagraphIndent | undefined,
+          );
           tableCellExpandedRunsCache.set(block, expandedRuns);
         }
 

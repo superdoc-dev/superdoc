@@ -1523,4 +1523,118 @@ describe('CommentDialog.vue', () => {
       expect(header.props('config')).toEqual({ readOnly: false });
     });
   });
+
+  /**
+   * SD-3266: the displayTrackedTextSegments() helper splits revision text on \t
+   * so each tab character is rendered inside a <span class="tracked-change-tab-arrow">
+   * (formatting-mark blue) while the surrounding bracket text keeps its
+   * red/green deletion/insertion color. The helper is a closure inside <script
+   * setup>; we test it through the rendered DOM, which is what the user sees.
+   */
+  describe('tab-character rendering inside revision balloons (SD-3266)', () => {
+    it('renders the deletion "[\\t]" as bracket + blue → arrow + bracket', async () => {
+      const { wrapper } = await mountDialog({
+        baseCommentOverrides: {
+          trackedChange: true,
+          trackedChangeType: 'trackDelete',
+          deletedText: '[\t]',
+        },
+      });
+
+      const trackedChange = wrapper.find('.tracked-change');
+      expect(trackedChange.text()).toContain('Deleted');
+      // textContent collapses the segment fragments back into "[→]"
+      expect(trackedChange.text()).toContain('[→]');
+      // and the arrow specifically lives inside the styled wrapper
+      const arrows = trackedChange.findAll('.tracked-change-tab-arrow');
+      expect(arrows).toHaveLength(1);
+      expect(arrows[0].text()).toBe('→');
+    });
+
+    it('renders multiple consecutive tabs as multiple arrow spans (e.g. "[\\t\\t]" → [→→])', async () => {
+      const { wrapper } = await mountDialog({
+        baseCommentOverrides: {
+          trackedChange: true,
+          trackedChangeType: 'trackDelete',
+          deletedText: 'a(n) [\t\t] ("Purchaser")',
+        },
+      });
+
+      const trackedChange = wrapper.find('.tracked-change');
+      expect(trackedChange.text()).toContain('a(n) [→→] ("Purchaser")');
+      // Each tab gets its own arrow span — the formatting-mark color is then
+      // applied per glyph, matching Word's reference image.
+      const arrows = trackedChange.findAll('.tracked-change-tab-arrow');
+      expect(arrows).toHaveLength(2);
+    });
+
+    it('renders a Replace bubble with arrows on the deleted side and plain text on the inserted side', async () => {
+      const { wrapper } = await mountDialog({
+        baseCommentOverrides: {
+          trackedChange: true,
+          trackedChangeType: 'both',
+          deletedText: '[\t]',
+          trackedChangeText: '[NTD: Effective Date]',
+        },
+      });
+
+      const trackedChange = wrapper.find('.tracked-change');
+      const text = trackedChange.text();
+      expect(text).toContain('Replaced');
+      expect(text).toContain('[→]');
+      expect(text).toContain('[NTD: Effective Date]');
+
+      // Only the deletion contains the arrow; the insertion text has no tabs,
+      // so the helper must return a single non-arrow segment for it.
+      const arrows = trackedChange.findAll('.tracked-change-tab-arrow');
+      expect(arrows).toHaveLength(1);
+    });
+
+    it('renders text without tabs as a single plain segment (no arrow spans)', async () => {
+      const { wrapper } = await mountDialog({
+        baseCommentOverrides: {
+          trackedChange: true,
+          trackedChangeType: 'trackDelete',
+          deletedText: 'plain deletion',
+        },
+      });
+
+      const trackedChange = wrapper.find('.tracked-change');
+      expect(trackedChange.text()).toContain('plain deletion');
+      const arrows = trackedChange.findAll('.tracked-change-tab-arrow');
+      expect(arrows).toHaveLength(0);
+    });
+
+    it('handles a tab at the very start and at the very end of the deletion text', async () => {
+      // Exercises both the leading-tab branch (cursor === i === 0, no preceding
+      // text segment to push) and the trailing-tab branch (no buffered text
+      // after the last tab, so the helper does not append a trailing segment).
+      const { wrapper } = await mountDialog({
+        baseCommentOverrides: {
+          trackedChange: true,
+          trackedChangeType: 'trackDelete',
+          deletedText: '\tmid\t',
+        },
+      });
+
+      const arrows = wrapper.findAll('.tracked-change .tracked-change-tab-arrow');
+      expect(arrows).toHaveLength(2);
+      expect(wrapper.find('.tracked-change').text()).toContain('→mid→');
+    });
+
+    it('renders insertion-only tabs (e.g. "[\\t]" trackInsert) with arrow span', async () => {
+      const { wrapper } = await mountDialog({
+        baseCommentOverrides: {
+          trackedChange: true,
+          trackedChangeType: 'trackInsert',
+          trackedChangeText: '[\t]',
+        },
+      });
+
+      const trackedChange = wrapper.find('.tracked-change');
+      expect(trackedChange.text()).toContain('Added');
+      expect(trackedChange.text()).toContain('[→]');
+      expect(trackedChange.findAll('.tracked-change-tab-arrow')).toHaveLength(1);
+    });
+  });
 });

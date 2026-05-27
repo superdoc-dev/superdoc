@@ -1,8 +1,17 @@
-import type { LineSegment, ParagraphAttrs, ParagraphBlock, Run, TextRun } from '@superdoc/contracts';
+import type {
+  LineSegment,
+  ParagraphAttrs,
+  ParagraphBlock,
+  ParagraphIndent,
+  Run,
+  TabStop,
+  TextRun,
+} from '@superdoc/contracts';
 import {
   calculateJustifySpacing,
   computeLinePmRange,
   expandRunsForInlineNewlines,
+  expandRunsForInlineTabs,
   shouldApplyJustify,
   sliceRunsForLine,
   SPACE_CHARS,
@@ -162,7 +171,19 @@ export const renderLine = ({
   paragraphMarkLeftOffsetOverride,
   runContext,
 }: RenderLineParams): HTMLElement => {
-  const expandedBlock = { ...block, runs: preExpandedRuns ?? expandRunsForInlineNewlines(block.runs) };
+  // SD-3266: chain expandRunsForInlineTabs after expandRunsForInlineNewlines so
+  // the painter sees the same expanded run array the measurer used to compute
+  // Line.fromRun/toRun. Otherwise indices misalign and slices drop content.
+  const expandedBlock = {
+    ...block,
+    runs:
+      preExpandedRuns ??
+      expandRunsForInlineTabs(
+        expandRunsForInlineNewlines(block.runs),
+        block.attrs?.tabs as TabStop[] | undefined,
+        block.attrs?.indent as ParagraphIndent | undefined,
+      ),
+  };
   const lineRange = computeLinePmRange(expandedBlock, line);
   let runsForLine = sliceRunsForLine(expandedBlock, line);
 
@@ -326,7 +347,8 @@ export const renderLine = ({
 
   if (shouldUseSegmentPositioning(hasExplicitPositioning ?? false, Boolean(line.segments), isRtl)) {
     renderExplicitlyPositionedRuns({
-      block,
+      // SD-3266: pass the expanded block — line.fromRun/toRun refer to expanded indices.
+      block: expandedBlock,
       line,
       context,
       el,
@@ -507,6 +529,8 @@ const renderExplicitlyPositionedRuns = ({
   };
 
   for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
+    // SD-3266: caller passes the already-expanded block — line.fromRun/toRun
+    // index into the expanded run array (see expandRunsForInlineTabs above).
     const baseRun = block.runs[runIndex];
     if (!baseRun) continue;
 
@@ -514,6 +538,10 @@ const renderExplicitlyPositionedRuns = ({
       // Find where the immediate next content begins (if it's right after this tab)
       const immediateNextSegment = findImmediateNextSegment(runIndex);
       const tabStartX = cumulativeX;
+      // SD-3266: forward the measurer-recorded segment width so literal-tab
+      // placeholders advance by exactly the 2-space glyph width.
+      const segmentList = segmentsByRun.get(runIndex);
+      const segmentWidth = segmentList?.[0]?.width;
       const {
         element: tabEl,
         tabEndX,
@@ -527,6 +555,8 @@ const renderExplicitlyPositionedRuns = ({
         indentOffset,
         immediateNextSegment,
         styleId,
+        trackedConfig,
+        segmentWidth,
       );
       appendToLineGeo(tabEl, baseRun, tabStartX + indentOffset, actualTabWidth);
 
@@ -707,7 +737,7 @@ const renderInlineRuns = ({
     // Special handling for TabRuns (e.g., signature lines with underlines)
     const elem =
       run.kind === 'tab'
-        ? renderInlineTabRun(run, line, runContext.doc, runContext.layoutEpoch, styleId)
+        ? renderInlineTabRun(run, line, runContext.doc, runContext.layoutEpoch, styleId, trackedConfig)
         : renderRun(run, context, runContext, trackedConfig);
 
     if (elem) {

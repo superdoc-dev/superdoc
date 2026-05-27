@@ -31,66 +31,66 @@
  */
 
 import {
-  Engines,
-  type FlowBlock,
-  type ParagraphBlock,
-  type ParagraphSpacing,
-  type ParagraphIndent,
-  type ImageBlock,
-  type ListBlock,
-  type Measure,
-  type Line,
-  type ParagraphMeasure,
-  type ImageMeasure,
-  type TableBlock,
-  type TableMeasure,
-  type TableRowMeasure,
-  type TableCellMeasure,
-  type ListMeasure,
-  type Run,
-  type TextRun,
-  type TabRun,
-  type ImageRun,
-  type LineBreakRun,
-  type FieldAnnotationRun,
-  type TabStop,
-  type DrawingBlock,
-  type DrawingMeasure,
-  type DrawingGeometry,
-  type DropCapDescriptor,
-  type CellSpacing,
-  type TableBorders,
-  type TableBorderValue,
-  effectiveTableCellSpacing,
-  LeaderDecoration,
-  resolveBaseFontSizeForVerticalText,
-} from '@superdoc/contracts';
-import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
-import {
-  LIST_MARKER_GAP,
-  MIN_MARKER_GUTTER,
+  DEFAULT_LIST_HANGING_PX as DEFAULT_LIST_HANGING,
   DEFAULT_LIST_INDENT_BASE_PX as DEFAULT_LIST_INDENT_BASE,
   DEFAULT_LIST_INDENT_STEP_PX as DEFAULT_LIST_INDENT_STEP,
-  DEFAULT_LIST_HANGING_PX as DEFAULT_LIST_HANGING,
+  LIST_MARKER_GAP,
+  MIN_MARKER_GUTTER,
 } from '@superdoc/common/layout-constants';
 import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
-import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
+import {
+  effectiveTableCellSpacing,
+  Engines,
+  expandRunsForInlineTabs,
+  getCellSpacingPx,
+  LeaderDecoration,
+  resolveBaseFontSizeForVerticalText,
+  type DrawingBlock,
+  type DrawingGeometry,
+  type DrawingMeasure,
+  type DropCapDescriptor,
+  type FieldAnnotationRun,
+  type FlowBlock,
+  type ImageBlock,
+  type ImageMeasure,
+  type ImageRun,
+  type Line,
+  type LineBreakRun,
+  type ListBlock,
+  type ListMeasure,
+  type Measure,
+  type ParagraphBlock,
+  type ParagraphIndent,
+  type ParagraphMeasure,
+  type ParagraphSpacing,
+  type Run,
+  type TableBlock,
+  type TableBorders,
+  type TableBorderValue,
+  type TableCellMeasure,
+  type TableMeasure,
+  type TableRowMeasure,
+  type TabRun,
+  type TabStop,
+  type TextRun,
+} from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
-export { installNodeCanvasPolyfill } from './setup.js';
-import { clearMeasurementCache, getMeasuredTextWidth, setCacheSize } from './measurementCache.js';
-import { getFontMetrics, clearFontMetricsCache, type FontInfo } from './fontMetricsCache.js';
+import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
+import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
 import { computeAutoFitColumnWidths } from './autofit-columns.js';
 import { buildAutoFitWorkingGridInput, type WorkingTableGridInput } from './autofit-normalize.js';
-import { computeFixedTableColumnWidths } from './fixed-table-columns.js';
 import type { FixedLayoutResult } from './fixed-table-columns.js';
+import { computeFixedTableColumnWidths } from './fixed-table-columns.js';
+import { clearFontMetricsCache, getFontMetrics, type FontInfo } from './fontMetricsCache.js';
+import { clearMeasurementCache, getMeasuredTextWidth, setCacheSize } from './measurementCache.js';
 import {
   buildAutoFitTableResultCacheKey,
-  buildTableCellContentMetricsCacheKey,
   getCachedAutoFitTableResult,
-  type TableAutoFitContentMetricsResult,
   measureTableAutoFitContentMetrics,
   setCachedAutoFitTableResult,
+  type TableAutoFitContentMetricsResult,
 } from './table-autofit-metrics.js';
+export { installNodeCanvasPolyfill } from './setup.js';
 
 export { clearFontMetricsCache };
 
@@ -164,7 +164,6 @@ const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
 
 // Canonical implementation moved to @superdoc/contracts; re-imported for local use and re-exported.
 export { getCellSpacingPx } from '@superdoc/contracts';
-import { getCellSpacingPx } from '@superdoc/contracts';
 
 /**
  * Returns the border width in pixels for a table border value (matches painter border-utils logic).
@@ -1296,57 +1295,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       runsToProcess.push(run as Run);
     }
   }
-  if (runsToProcess.some((run) => isTextRun(run) && typeof run.text === 'string' && run.text.includes('\t'))) {
-    const expandedRuns: Run[] = [];
-    for (const run of runsToProcess) {
-      if (!isTextRun(run) || typeof run.text !== 'string' || !run.text.includes('\t')) {
-        expandedRuns.push(run);
-        continue;
-      }
-      const textRun = run as TextRun;
-      let buffer = '';
-      let cursor = textRun.pmStart ?? 0;
-      const text = textRun.text;
-      for (let i = 0; i < text.length; i += 1) {
-        const char = text[i];
-        if (char === '\t') {
-          if (buffer.length > 0) {
-            expandedRuns.push({
-              ...textRun,
-              text: buffer,
-              pmStart: cursor - buffer.length,
-              pmEnd: cursor,
-            });
-            buffer = '';
-          }
-          const tabRun: TabRun = {
-            kind: 'tab',
-            text: '\t',
-            pmStart: cursor,
-            pmEnd: cursor + 1,
-            tabStops: block.attrs?.tabs as TabStop[] | undefined,
-            indent,
-            leader: (textRun as unknown as TabRun)?.leader ?? null,
-            sdt: textRun.sdt,
-          };
-          expandedRuns.push(tabRun);
-          cursor += 1;
-          continue;
-        }
-        buffer += char;
-        cursor += 1;
-      }
-      if (buffer.length > 0) {
-        expandedRuns.push({
-          ...textRun,
-          text: buffer,
-          pmStart: cursor - buffer.length,
-          pmEnd: cursor,
-        });
-      }
-    }
-    runsToProcess = expandedRuns;
-  }
+  // SD-3266: delegate to the shared helper so the painter (which calls the
+  // same helper) produces a matching expanded run array. Indices must align.
+  runsToProcess = expandRunsForInlineTabs(runsToProcess, block.attrs?.tabs as TabStop[] | undefined, indent);
   const totalTabRuns = runsToProcess.reduce((count, run) => (isTabRun(run) ? count + 1 : count), 0);
 
   /**
@@ -1567,6 +1518,33 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           segments: [],
           spaceCount: 0,
         };
+      }
+
+      // SD-3266: TabRuns produced by expandRunsForInlineTabs (literal U+0009 inside
+      // <w:t>/<w:delText>, almost always inside a `<w:del>` tracked-deletion placeholder)
+      // must NOT advance to the next tab stop. Word's body view treats them as a
+      // compact strut (cf. its "Deleted: [→]" balloon convention). Measure just the
+      // arrow glyph's width, contribute that to the line, leave tabStopCursor alone,
+      // and record the width on the run for the painter.
+      if ((run as TabRun).fromLiteralTab) {
+        // SD-3266: measure the width of two space glyphs — the painter renders
+        // each literal-tab as "  " (two literal spaces) inline so the placeholder
+        // is visually distinguishable from a regular single-space deletion, and
+        // consecutive tabs (e.g. "[\t\t]") expand to "[    ]" naturally.
+        const { font } = buildFontString(run as unknown as TextRun);
+        const glyphWidth = measureRunWidth('  ', font, ctx, run as unknown as Run);
+        const segStart = currentLine.toChar;
+        const segEnd = segStart + 1;
+        currentLine.toRun = runIndex;
+        currentLine.toChar = segEnd;
+        currentLine.width = roundValue(currentLine.width + glyphWidth);
+        currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lastFontSize);
+        appendSegment(currentLine.segments, runIndex, segStart, segEnd, glyphWidth);
+        (run as TabRun & { width?: number }).width = glyphWidth;
+        pendingRunSpacing = 0;
+        pendingTabAlignment = null;
+        pendingLeader = null;
+        continue;
       }
 
       // Advance to the appropriate tab stop (explicit alignment stops take precedence for trailing tabs)

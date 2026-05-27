@@ -327,6 +327,36 @@ const comments = computed(() => {
   });
 });
 
+/**
+ * SD-3266: display-only segmentation for tracked-change text. The comments
+ * store keeps raw text — including literal U+0009 (\t) from `<w:delText>[\t]`
+ * placeholders — so that round-trip export writes the original bytes back. For
+ * UI display we split the string on `\t` and emit each tab character as a
+ * separate "arrow" segment that the template renders with the SuperDoc
+ * formatting-mark blue (matching Word's revision-balloon convention of showing
+ * a light-blue → for tab characters while the surrounding deletion stays red).
+ *
+ * This is intentionally only applied at render time. Never feed the segments
+ * back into the store, the editor, or the exporter.
+ *
+ * @param {string|null|undefined} text
+ * @returns {{ kind: 'text' | 'arrow', value: string }[]}
+ */
+const displayTrackedTextSegments = (text) => {
+  if (typeof text !== 'string') return [{ kind: 'text', value: text == null ? '' : String(text) }];
+  if (text.indexOf('\t') === -1) return [{ kind: 'text', value: text }];
+  const segments = [];
+  let cursor = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] !== '\t') continue;
+    if (i > cursor) segments.push({ kind: 'text', value: text.slice(cursor, i) });
+    segments.push({ kind: 'arrow', value: '→' });
+    cursor = i + 1;
+  }
+  if (cursor < text.length) segments.push({ kind: 'text', value: text.slice(cursor) });
+  return segments;
+};
+
 /* ── Step 2: Text truncation ── */
 const textExpanded = ref(false);
 const parentBodyRef = ref(null);
@@ -858,29 +888,64 @@ watch(editingCommentId, (commentId) => {
           >
             <div v-if="comment.trackedChangeDisplayType === 'hyperlinkAdded'">
               <span class="change-type">Added hyperlink </span>
-              <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+              <span class="tracked-change-text is-inserted"
+                >"<template v-for="(seg, segIdx) in displayTrackedTextSegments(comment.trackedChangeText)" :key="segIdx"
+                  ><span v-if="seg.kind === 'arrow'" class="tracked-change-tab-arrow">{{ seg.value }}</span
+                  ><template v-else>{{ seg.value }}</template></template
+                >"</span
+              >
             </div>
             <div v-else-if="comment.trackedChangeDisplayType === 'hyperlinkModified'">
               <span class="change-type">Changed hyperlink to </span>
-              <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+              <span class="tracked-change-text is-inserted"
+                >"<template v-for="(seg, segIdx) in displayTrackedTextSegments(comment.trackedChangeText)" :key="segIdx"
+                  ><span v-if="seg.kind === 'arrow'" class="tracked-change-tab-arrow">{{ seg.value }}</span
+                  ><template v-else>{{ seg.value }}</template></template
+                >"</span
+              >
             </div>
             <div v-else-if="comment.trackedChangeType === 'trackFormat'">
               <span class="change-type">Format: </span>
-              <span class="tracked-change-text">{{ comment.trackedChangeText }}</span>
+              <span class="tracked-change-text"
+                ><template v-for="(seg, segIdx) in displayTrackedTextSegments(comment.trackedChangeText)" :key="segIdx"
+                  ><span v-if="seg.kind === 'arrow'" class="tracked-change-tab-arrow">{{ seg.value }}</span
+                  ><template v-else>{{ seg.value }}</template></template
+                ></span
+              >
             </div>
             <div v-else-if="comment.trackedChangeType === 'both'">
               <span class="change-type">Replaced </span>
-              <span class="tracked-change-text is-deleted">"{{ comment.deletedText }}"</span>
+              <span class="tracked-change-text is-deleted"
+                >"<template v-for="(seg, segIdx) in displayTrackedTextSegments(comment.deletedText)" :key="segIdx"
+                  ><span v-if="seg.kind === 'arrow'" class="tracked-change-tab-arrow">{{ seg.value }}</span
+                  ><template v-else>{{ seg.value }}</template></template
+                >"</span
+              >
               <span class="change-type"> with </span>
-              <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+              <span class="tracked-change-text is-inserted"
+                >"<template v-for="(seg, segIdx) in displayTrackedTextSegments(comment.trackedChangeText)" :key="segIdx"
+                  ><span v-if="seg.kind === 'arrow'" class="tracked-change-tab-arrow">{{ seg.value }}</span
+                  ><template v-else>{{ seg.value }}</template></template
+                >"</span
+              >
             </div>
             <div v-else-if="comment.deletedText">
               <span class="change-type">Deleted </span>
-              <span class="tracked-change-text is-deleted">"{{ comment.deletedText }}"</span>
+              <span class="tracked-change-text is-deleted"
+                >"<template v-for="(seg, segIdx) in displayTrackedTextSegments(comment.deletedText)" :key="segIdx"
+                  ><span v-if="seg.kind === 'arrow'" class="tracked-change-tab-arrow">{{ seg.value }}</span
+                  ><template v-else>{{ seg.value }}</template></template
+                >"</span
+              >
             </div>
             <div v-else-if="comment.trackedChangeText">
               <span class="change-type">Added </span>
-              <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+              <span class="tracked-change-text is-inserted"
+                >"<template v-for="(seg, segIdx) in displayTrackedTextSegments(comment.trackedChangeText)" :key="segIdx"
+                  ><span v-if="seg.kind === 'arrow'" class="tracked-change-tab-arrow">{{ seg.value }}</span
+                  ><template v-else>{{ seg.value }}</template></template
+                >"</span
+              >
             </div>
           </div>
           <div
@@ -1075,6 +1140,17 @@ watch(editingCommentId, (commentId) => {
 .tracked-change-text.is-inserted {
   color: var(--sd-ui-comments-insert-text, #00853d);
   font-weight: 500;
+}
+/*
+ * SD-3266: light-blue tab-arrow glyph inside a tracked-change balloon.
+ * Matches Word's revision-balloon convention — the deletion/insertion text
+ * stays red/green, but the "→" replacement for a literal `\t` is rendered
+ * in the formatting-mark blue. Falls back to the SuperDoc action color, then
+ * a Word-like blue, if no theme variable is set.
+ */
+.tracked-change-tab-arrow {
+  color: var(--sd-formatting-mark-color, var(--sd-ui-action, #4a86e8));
+  font-weight: normal;
 }
 
 /* ── Resolved badge ── */

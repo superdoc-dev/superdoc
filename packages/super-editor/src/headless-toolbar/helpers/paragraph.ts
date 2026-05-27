@@ -5,7 +5,7 @@ import { twipsToLines } from '../../editors/v1/core/super-converter/helpers.js';
 import { getQuickFormatList } from '../../editors/v1/extensions/linked-styles/index.js';
 import { mapStoredJustificationToDisplayAlignment } from '../../editors/v1/core/helpers/paragraph-alignment.js';
 import { getCurrentParagraphParent, getCurrentResolvedParagraphProperties, resolveStateEditor } from './context.js';
-import { createDirectCommandExecute, isMutationCommandDisabled } from './general.js';
+import { createDirectCommandExecute, isCommandDisabled, isMutationCommandDisabled } from './general.js';
 import type { ToolbarCommandState, ToolbarContext } from '../types.js';
 
 const getCurrentParagraphJustification = (context: ToolbarContext | null) => {
@@ -47,7 +47,7 @@ export const createParagraphDirectionExecute =
 export const createTextAlignStateDeriver =
   () =>
   ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {
-    const isDisabled = isMutationCommandDisabled(context);
+    const isDisabled = isCommandDisabled(context);
 
     if (isDisabled) {
       return {

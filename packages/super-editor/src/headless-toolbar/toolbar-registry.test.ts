@@ -1399,12 +1399,12 @@ describe('createToolbarRegistry', () => {
     ).toBe(false);
   });
 
-  it('disables mutation commands for a collapsed cursor inside a locked block SDT paragraph', () => {
+  it('keeps text-align available when mutation commands are disabled inside a locked block SDT paragraph', () => {
     const registry = createToolbarRegistry();
     const context = makeToolbarContextWithSelection(makeBlockSdtState('contentLocked'));
 
     expect(registry.bold?.state({ context, superdoc: {} })?.disabled).toBe(true);
-    expect(registry['text-align']?.state({ context, superdoc: {} })?.disabled).toBe(true);
+    expect(registry['text-align']?.state({ context, superdoc: {} })?.disabled).toBe(false);
   });
 
   it('disables mutation commands for a NodeSelection on a locked SDT', () => {

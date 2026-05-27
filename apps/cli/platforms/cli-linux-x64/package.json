@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/cli-linux-x64",
-  "version": "0.12.0",
+  "version": "0.13.1",
   "os": [
     "linux"
   ],

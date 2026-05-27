@@ -20,7 +20,8 @@ const makeSchema = () =>
       table: { group: 'block', content: 'tableRow+' },
       tableRow: { content: 'tableCell+' },
       tableCell: { content: 'block+' },
-      noBreakHyphen: { inline: true, group: 'inline', atom: true },
+      noBreakHyphen: { inline: true, group: 'inline', atom: true, leafText: () => '‑' },
+      bookmarkEnd: { inline: true, group: 'inline', atom: true },
       text: { group: 'inline' },
     },
     marks: {},
@@ -28,6 +29,7 @@ const makeSchema = () =>
 
 const run = (schema, text) => schema.nodes.run.create(null, schema.text(text));
 const atomRun = (schema, nodeName) => schema.nodes.run.create(null, schema.nodes[nodeName].create());
+const marker = (schema, nodeName) => schema.nodes[nodeName].create({ id: 'marker-id' });
 const paragraph = (schema, text) => schema.nodes.paragraph.create(null, run(schema, text));
 const emptyParagraph = (schema) => schema.nodes.paragraph.create();
 
@@ -175,6 +177,56 @@ describe('moveIntoBlockSdtAfterTextBlockEnd', () => {
     expect(dispatched.steps).toHaveLength(0);
     expect(dispatched.selection.from).toBe(targetPos);
     expect(dispatched.selection.to).toBe(targetPos);
+  });
+
+  it('ignores trailing inline markers when checking the preceding paragraph end', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.nodes.paragraph.create(null, [run(schema, 'Before'), marker(schema, 'bookmarkEnd')]),
+      schema.nodes.structuredContentBlock.create(null, [paragraph(schema, 'Inner')]),
+      paragraph(schema, 'After'),
+    ]);
+    const beforeEnd = findTextPos(doc, 'Before', 6);
+    const innerStart = findTextPos(doc, 'Inner');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, beforeEnd) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.selection.from).toBe(innerStart);
+  });
+
+  it('ignores leading inline markers when targeting a following block SDT', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [
+        schema.nodes.paragraph.create(null, [marker(schema, 'bookmarkEnd'), run(schema, 'Inner')]),
+      ]),
+      paragraph(schema, 'After'),
+    ]);
+    const beforeEnd = findTextPos(doc, 'Before', 6);
+    const innerStart = findTextPos(doc, 'Inner');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, beforeEnd) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.selection.from).toBe(innerStart);
   });
 
   it('returns false when inline atom content appears after the last text position', () => {

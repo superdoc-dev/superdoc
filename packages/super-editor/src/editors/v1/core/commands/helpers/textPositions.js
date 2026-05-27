@@ -25,6 +25,7 @@ export function findFirstTextPosInNode(node, nodePos) {
  * @returns {number | null}
  */
 export function findFirstContentCursorPosInNode(node, nodePos) {
+  if (node.isAtom && node.isInline && node.textContent === '') return null;
   if (node.isText || node.isAtom) return nodePos;
   if (node.isTextblock && node.childCount === 0) return nodePos + 1;
 
@@ -66,6 +67,7 @@ export function findLastTextPosInNode(node, nodePos) {
  * @returns {number | null}
  */
 export function findLastContentCursorPosInNode(node, nodePos) {
+  if (node.isAtom && node.isInline && node.textContent === '') return null;
   if (node.isText) return nodePos + (node.text?.length ?? 0);
   if (node.isAtom) return nodePos + node.nodeSize;
   if (node.isTextblock && node.childCount === 0) return nodePos + 1;

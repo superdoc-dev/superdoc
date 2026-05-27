@@ -347,6 +347,51 @@ describe('structured-content-block', () => {
         expect(recordBlockKind).toHaveBeenCalledWith('pageBreak');
       });
 
+      it('should not synthesize a placeholder when tracked-change filtering removes an empty paragraph child', () => {
+        const emptyParagraph: PMNode = {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: {
+              runProperties: {},
+            },
+          },
+          content: [],
+        };
+        const node: PMNode = {
+          type: 'structuredContentBlock',
+          attrs: { id: 'scb-1' },
+          content: [emptyParagraph],
+        };
+
+        const blocks: FlowBlock[] = [];
+        const recordBlockKind = vi.fn();
+
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(scbMetadata);
+        const paragraphToFlowBlocks = vi.fn().mockReturnValue([]);
+
+        const context: NodeHandlerContext = {
+          blocks,
+          recordBlockKind,
+          nextBlockId: mockBlockIdGenerator,
+          positions: mockPositionMap,
+          defaultFont: 'Arial',
+          defaultSize: 12,
+          trackedChangesConfig: { enabled: true, mode: 'final' },
+          bookmarks: mockBookmarks,
+          hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
+          converters: {
+            paragraphToFlowBlocks,
+          },
+        };
+
+        handleStructuredContentBlockNode(node, context);
+
+        expect(blocks).toHaveLength(0);
+        expect(recordBlockKind).not.toHaveBeenCalled();
+      });
+
       it('should process a single paragraph child', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',

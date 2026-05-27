@@ -149,13 +149,11 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
         });
         return;
       }
-      if (isVanishedParagraph) {
-        paragraphBlocks.forEach((block) => {
-          blocks.push(block);
-          recordBlockKind?.(block.kind);
-        });
-        return;
-      }
+      paragraphBlocks.forEach((block) => {
+        blocks.push(block);
+        recordBlockKind?.(block.kind);
+      });
+      return;
     }
 
     if (isVanishedParagraph) return;

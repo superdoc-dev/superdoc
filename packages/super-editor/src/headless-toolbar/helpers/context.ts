@@ -1,10 +1,9 @@
 import { findParentNode } from '../../editors/v1/core/helpers/findParentNode.js';
 import { calculateResolvedParagraphProperties } from '../../editors/v1/extensions/paragraph/resolvedPropertiesCache.js';
+import { isContentLockedMode } from '../../editors/v1/extensions/structured-content/lockModes.js';
+import { isStructuredContentNodeType } from '../../editors/v1/extensions/structured-content/nodeTypes.js';
 import { NodeSelection } from 'prosemirror-state';
 import type { ToolbarContext } from '../types.js';
-
-const STRUCTURED_CONTENT_NODE_TYPES = new Set(['structuredContent', 'structuredContentBlock']);
-const CONTENT_LOCK_MODES = new Set(['contentLocked', 'sdtContentLocked']);
 
 export const resolveStateEditor = (context: ToolbarContext | null) => {
   if (!context) return null;
@@ -37,7 +36,7 @@ export const isFieldAnnotationSelection = (context: ToolbarContext | null) => {
 };
 
 const isContentLockedStructuredContentNode = (node: any) => {
-  return STRUCTURED_CONTENT_NODE_TYPES.has(node?.type?.name) && CONTENT_LOCK_MODES.has(node?.attrs?.lockMode);
+  return isStructuredContentNodeType(node?.type?.name) && isContentLockedMode(node?.attrs?.lockMode);
 };
 
 const resolvedPositionHasContentLockedStructuredContent = ($pos: any) => {

@@ -578,9 +578,12 @@ export function computeDomCaretPageLocal(
     const elRect = targetEl.getBoundingClientRect();
     // For non-text elements (images, math), position caret at the right edge
     // when pos matches pmEnd (cursor after the element)
-    const isEmptyInlineSdtPlaceholder = targetEl.classList.contains('superdoc-empty-inline-sdt-placeholder');
-    const atEnd = isEmptyInlineSdtPlaceholder ? pos > entry.pmEnd : pos >= entry.pmEnd;
-    const lineEl = isEmptyInlineSdtPlaceholder ? (targetEl.closest('.superdoc-line') as HTMLElement | null) : null;
+    const isEmptySdtPlaceholder =
+      targetEl.classList.contains('superdoc-empty-sdt-placeholder') ||
+      targetEl.classList.contains('superdoc-empty-inline-sdt-placeholder') ||
+      targetEl.classList.contains('superdoc-empty-block-sdt-placeholder');
+    const atEnd = isEmptySdtPlaceholder ? pos > entry.pmEnd : pos >= entry.pmEnd;
+    const lineEl = isEmptySdtPlaceholder ? (targetEl.closest('.superdoc-line') as HTMLElement | null) : null;
     const yRect = lineEl?.getBoundingClientRect() ?? elRect;
     return {
       pageIndex: Number(page.dataset.pageIndex ?? '0'),

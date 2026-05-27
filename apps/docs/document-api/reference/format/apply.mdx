@@ -194,7 +194,7 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `resolution` | TextMutationResolution | yes | TextMutationResolution |
@@ -293,6 +293,7 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
+- `NO_OP`
 
 ## Raw schemas
 
@@ -1974,7 +1975,8 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
           "properties": {
             "code": {
               "enum": [
-                "INVALID_TARGET"
+                "INVALID_TARGET",
+                "NO_OP"
               ]
             },
             "details": {},
@@ -2025,7 +2027,8 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
       "properties": {
         "code": {
           "enum": [
-            "INVALID_TARGET"
+            "INVALID_TARGET",
+            "NO_OP"
           ]
         },
         "details": {},

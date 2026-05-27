@@ -25,6 +25,7 @@ export function createStructuredContentSelectPlugin(editor) {
         const isEditableSlotText = (text) => text.replace(/\u200B/g, '').length === 0;
 
         const resolveAdjacentEmptyInlineSdtEntry = () => {
+          if (event.key !== 'ArrowLeft') return null;
           if (!selection.empty) return null;
 
           let targetPos = null;

@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import { SELECT_INLINE_SDT_BEFORE_RUN_START_META } from '@core/commands/selectInlineSdtBeforeRunStart.js';
+import { createStructuredContentSelectPlugin } from './structured-content-select-plugin.js';
 
 function findNode(doc, nodeType) {
   let result = null;
@@ -310,6 +311,28 @@ describe('StructuredContentSelectPlugin', () => {
     expect(editor.state.selection.empty).toBe(true);
     expect(editor.state.selection.from).toBe(insideSdt);
     expect(editor.state.selection.to).toBe(insideSdt);
+  });
+
+  it('does not scan the document for empty inline SDT entry on ArrowRight', () => {
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' });
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('Lead '), inlineSdt, schema.text(' trail')]);
+    applyDoc(schema.nodes.doc.create(null, [paragraph]));
+
+    const sdt = findNode(editor.state.doc, 'structuredContent');
+    expect(sdt).not.toBeNull();
+
+    const afterSdt = sdt.pos + sdt.node.nodeSize;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, afterSdt)));
+
+    const descendants = editor.state.doc.descendants.bind(editor.state.doc);
+    const descendantsSpy = vi.fn(descendants);
+    editor.state.doc.descendants = descendantsSpy;
+
+    const plugin = createStructuredContentSelectPlugin(editor);
+    const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true });
+
+    expect(plugin.props.handleKeyDown(editor.view, event)).toBe(false);
+    expect(descendantsSpy).not.toHaveBeenCalled();
   });
 
   it('does not intercept Shift+ArrowRight near inline SDT boundary', () => {

@@ -656,6 +656,35 @@ describe('StructuredContentLockPlugin', () => {
         expect(editor.state.selection.empty).toBe(true);
         expect(editor.state.selection.from).toBe(nextSdtInfo.pos + 1);
       });
+
+      it('sdtLocked + collapsed Cmd+X inside typed inline SDT text does not delete content', () => {
+        const beforeText = schema.text('Before ');
+        const sdtRun = schema.nodes.run.create(null, schema.text('abc'));
+        const sdt = schema.nodes.structuredContent.create({ id: 'test-123', lockMode: 'sdtLocked' }, sdtRun);
+        const afterText = schema.text(' After');
+        const paragraph = schema.nodes.paragraph.create(null, [beforeText, sdt, afterText]);
+        const doc = schema.nodes.doc.create(null, [paragraph]);
+        const state = applyDocToEditor(doc);
+        const originalText = state.doc.textContent;
+
+        let runPos = null;
+        state.doc.descendants((node, pos) => {
+          if (node.type.name === 'run' && node.textContent === 'abc') {
+            runPos = pos;
+            return false;
+          }
+          return true;
+        });
+        expect(runPos).not.toBeNull();
+
+        placeCaretAt(state, runPos + 2);
+
+        const result = invokeLockHandleKeyDown('x', { metaKey: true });
+
+        expect(result.handled).toBe(false);
+        expect(result.prevented).toBe(false);
+        expect(editor.state.doc.textContent).toBe(originalText);
+      });
     });
 
     describe('Path 1 — selection covers SDT content (label selection / triple-click)', () => {

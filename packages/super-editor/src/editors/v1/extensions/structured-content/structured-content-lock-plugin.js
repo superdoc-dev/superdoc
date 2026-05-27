@@ -173,7 +173,7 @@ export function createStructuredContentLockPlugin() {
             inlineSdtAncestor &&
             inlineSdtAncestor.lockMode !== 'contentLocked' &&
             inlineSdtAncestor.lockMode !== 'sdtContentLocked';
-          if (inlineSdtContentEditable && selection.$from.parent.type.name === 'run') {
+          if ((isBackspace || isDelete) && inlineSdtContentEditable && selection.$from.parent.type.name === 'run') {
             const deleteFrom = isBackspace ? from - 1 : from;
             const deleteTo = isBackspace ? from : from + 1;
             const staysInsideInlineSdt = deleteFrom > inlineSdtAncestor.pos && deleteTo < inlineSdtAncestor.end;

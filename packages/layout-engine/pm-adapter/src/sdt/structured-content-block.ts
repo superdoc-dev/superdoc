@@ -9,19 +9,23 @@ import type { FlowBlock, ParagraphBlock, TableBlock, TextRun } from '@superdoc/c
 import type { PMNode, NodeHandlerContext } from '../types.js';
 import { resolveNodeSdtMetadata, applySdtMetadataToParagraphBlocks, applySdtMetadataToTableBlock } from './metadata.js';
 
+function isVisuallyEmptyInlineNode(node: PMNode): boolean {
+  if (node.type === 'text') {
+    return (node.text ?? '').length === 0;
+  }
+
+  if (node.type === 'run' || node.type === 'bookmarkStart') {
+    return !Array.isArray(node.content) || node.content.every(isVisuallyEmptyInlineNode);
+  }
+
+  return node.type === 'bookmarkEnd';
+}
+
 function isEmptyParagraphNode(node: PMNode): boolean {
   if (node.type !== 'paragraph') return false;
   if (!Array.isArray(node.content) || node.content.length === 0) return true;
 
-  return node.content.every((child) => {
-    if (child.type === 'run') {
-      return !Array.isArray(child.content) || child.content.length === 0;
-    }
-    if (child.type === 'text') {
-      return (child.text ?? '').length === 0;
-    }
-    return false;
-  });
+  return node.content.every(isVisuallyEmptyInlineNode);
 }
 
 function isVanishedParagraphNode(node: PMNode): boolean {

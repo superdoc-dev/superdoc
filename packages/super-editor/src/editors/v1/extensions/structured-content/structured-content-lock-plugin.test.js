@@ -650,6 +650,11 @@ describe('StructuredContentLockPlugin', () => {
 
           if (shouldDeleteWrapper) {
             expect(sdtNodeExists(editor.state.doc, 'structuredContent')).toBe(false);
+          } else if (lockMode === 'sdtContentLocked') {
+            const sel = editor.state.selection;
+            expect(sel).toBeInstanceOf(TextSelection);
+            expect(sel.empty).toBe(true);
+            expect(sel.from).toBe(sdtInfo.pos);
           } else {
             // No wrapper deletion: selection unchanged.
             const sel = editor.state.selection;
@@ -696,6 +701,36 @@ describe('StructuredContentLockPlugin', () => {
         expect(sdtNodeExists(editor.state.doc, 'structuredContent')).toBe(false);
       });
 
+      it('sdtContentLocked: exact content selection + Backspace collapses before inline SDT, then deletes preceding text', () => {
+        const leadingRun = schema.nodes.run.create(null, schema.text('Lead '));
+        const sdtRun = schema.nodes.run.create(null, schema.text('inline value'));
+        const sdt = schema.nodes.structuredContent.create({ id: 'test-123', lockMode: 'sdtContentLocked' }, sdtRun);
+        const trailingRun = schema.nodes.run.create(null, schema.text('ail.'));
+        const paragraph = schema.nodes.paragraph.create(null, [leadingRun, sdt, trailingRun]);
+        const doc = schema.nodes.doc.create(null, [paragraph]);
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+
+        setSelection(state, TextSelection.create(state.doc, sdtInfo.pos + 1, sdtInfo.end - 1));
+
+        const result = invokeLockHandleKeyDown('Backspace');
+
+        expect(result.handled).toBe(true);
+        expect(result.prevented).toBe(true);
+        expect(editor.state.selection).toBeInstanceOf(TextSelection);
+        expect(editor.state.selection.empty).toBe(true);
+        expect(editor.state.selection.from).toBe(sdtInfo.pos);
+        expect(findSDTNode(editor.state.doc, 'structuredContent').node.textContent).toBe('inline value');
+
+        handleBackspace(editor);
+
+        const sdtAfter = findSDTNode(editor.state.doc, 'structuredContent');
+        expect(sdtAfter).not.toBeNull();
+        expect(sdtAfter.node.attrs.lockMode).toBe('sdtContentLocked');
+        expect(sdtAfter.node.textContent).toBe('inline value');
+        expect(editor.state.doc.textContent).toBe('Leadinline valueail.');
+      });
+
       it.each([
         ['unlocked', false, true],
         ['sdtLocked', false, true],
@@ -719,6 +754,11 @@ describe('StructuredContentLockPlugin', () => {
           } else {
             expect(sdtAfter).not.toBeNull();
             expect(sdtAfter.node.textContent === '').toBe(deletesContent);
+            if (lockMode === 'sdtContentLocked') {
+              expect(editor.state.selection).toBeInstanceOf(TextSelection);
+              expect(editor.state.selection.empty).toBe(true);
+              expect(editor.state.selection.from).toBe(sdtAfter.end);
+            }
           }
         },
       );

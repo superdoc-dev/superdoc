@@ -1,4 +1,4 @@
-import { NodeSelection, Plugin, PluginKey } from 'prosemirror-state';
+import { NodeSelection, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { BLOCK_NODE_METADATA_UPDATE_META } from '../block-node/block-node.js';
 
@@ -122,6 +122,13 @@ export function createStructuredContentLockPlugin() {
               exactContentSDT.lockMode === 'contentLocked' || exactContentSDT.lockMode === 'sdtContentLocked';
             const isWrapperDeletable =
               exactContentSDT.lockMode !== 'sdtLocked' && exactContentSDT.lockMode !== 'sdtContentLocked';
+            const isFullyLocked = exactContentSDT.lockMode === 'sdtContentLocked';
+            if (isFullyLocked && exactContentSDT.type === 'structuredContent' && (isBackspace || isDelete)) {
+              const collapsePos = isBackspace ? exactContentSDT.pos : exactContentSDT.end;
+              view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, collapsePos)));
+              event.preventDefault();
+              return true;
+            }
             if (isContentLocked && isWrapperDeletable) {
               if (isCut) {
                 const tr = state.tr.setSelection(NodeSelection.create(state.doc, exactContentSDT.pos));

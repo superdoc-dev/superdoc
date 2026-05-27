@@ -2019,13 +2019,14 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
     if (isEmptySdtPlaceholderRun(run)) {
       const placeholderFont = buildFontString(run).font;
+      const placeholderText = applyTextTransform(EMPTY_SDT_PLACEHOLDER_TEXT, run);
       const measuredPlaceholderWidth = getMeasuredTextWidth(
-        EMPTY_SDT_PLACEHOLDER_TEXT,
+        placeholderText,
         placeholderFont,
         run.letterSpacing ?? 0,
         ctx,
       );
-      const fallbackPlaceholderWidth = EMPTY_SDT_PLACEHOLDER_TEXT.length * run.fontSize * 0.45;
+      const fallbackPlaceholderWidth = placeholderText.length * run.fontSize * 0.45;
       const placeholderWidth =
         run.sdt?.type === 'structuredContent' && run.sdt.appearance === 'hidden'
           ? 0

@@ -9,6 +9,7 @@ import type {
   DrawingBlock,
   TableMeasure,
 } from '@superdoc/contracts';
+import { EMPTY_SDT_PLACEHOLDER_TEXT } from '@superdoc/contracts';
 
 const expectParagraphMeasure = (measure: Measure): ParagraphMeasure => {
   expect(measure.kind).toBe('paragraph');
@@ -712,6 +713,39 @@ describe('measureBlock', () => {
       expect(measure.lines[0].segments).toHaveLength(1);
       expect(measure.lines[0].segments[0]).toMatchObject({ runIndex: 0, fromChar: 0, toChar: 0 });
       expect(measure.lines[0].segments[0].width).toBe(measure.lines[0].width);
+    });
+
+    it('applies textTransform when measuring empty SDT placeholder text', async () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      expect(ctx).not.toBeNull();
+      ctx!.font = '16px Arial';
+      const transformedPlaceholderText = EMPTY_SDT_PLACEHOLDER_TEXT.toUpperCase();
+      const transformedWidth = ctx!.measureText(transformedPlaceholderText).width;
+      const untransformedWidth = ctx!.measureText(EMPTY_SDT_PLACEHOLDER_TEXT).width;
+      expect(transformedWidth).not.toBeCloseTo(untransformedWidth, 2);
+
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-inline-sdt-uppercase',
+        runs: [
+          {
+            kind: 'text',
+            text: '',
+            fontFamily: 'Arial',
+            fontSize: 16,
+            textTransform: 'uppercase',
+            visualPlaceholder: 'emptyInlineSdt',
+            sdt: { type: 'structuredContent', scope: 'inline', id: 'sdt-empty-uppercase' },
+          },
+        ],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].width).toBeCloseTo(transformedWidth, 2);
     });
   });
 

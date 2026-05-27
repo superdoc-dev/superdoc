@@ -5,9 +5,55 @@
  * paragraphs and tables while preserving their content structure.
  */
 
-import type { ParagraphBlock, TableBlock, TextRun } from '@superdoc/contracts';
+import type { FlowBlock, ParagraphBlock, TableBlock, TextRun } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext } from '../types.js';
 import { resolveNodeSdtMetadata, applySdtMetadataToParagraphBlocks, applySdtMetadataToTableBlock } from './metadata.js';
+
+function isEmptyParagraphNode(node: PMNode): boolean {
+  if (node.type !== 'paragraph') return false;
+  if (!Array.isArray(node.content) || node.content.length === 0) return true;
+
+  return node.content.every((child) => {
+    if (child.type === 'run') {
+      return !Array.isArray(child.content) || child.content.length === 0;
+    }
+    if (child.type === 'text') {
+      return (child.text ?? '').length === 0;
+    }
+    return false;
+  });
+}
+
+function asEmptyTextRun(run: unknown): TextRun | undefined {
+  if (!run || typeof run !== 'object') return undefined;
+  const candidate = run as TextRun;
+  if (!('text' in candidate) || candidate.text !== '') return undefined;
+  const kind = (candidate as { kind?: unknown }).kind;
+  return kind == null || kind === 'text' ? candidate : undefined;
+}
+
+function applyPlaceholderToEmptyParagraphBlocks(
+  paragraphBlocks: FlowBlock[],
+  metadata: TextRun['sdt'],
+  contentPos?: number,
+): boolean {
+  let applied = false;
+  paragraphBlocks.forEach((block) => {
+    if (block.kind !== 'paragraph') return;
+    const run = block.runs.map(asEmptyTextRun).find(Boolean);
+    if (!run) return;
+    run.kind = 'text';
+    run.text = '';
+    run.sdt = metadata;
+    run.visualPlaceholder = 'emptyBlockSdt';
+    if (contentPos != null) {
+      run.pmStart = contentPos;
+      run.pmEnd = contentPos;
+    }
+    applied = true;
+  });
+  return applied;
+}
 
 /**
  * Handle structured content block nodes.
@@ -35,10 +81,8 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
   const structuredContentMetadata = resolveNodeSdtMetadata(node, 'structuredContentBlock');
   const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
 
-  if (!Array.isArray(node.content) || node.content.length === 0) {
+  const emitPlaceholderBlock = (contentPos?: number): void => {
     if (!structuredContentMetadata) return;
-    const pos = positions.get(node);
-    const contentPos = pos ? pos.start + 1 : undefined;
     const placeholderRun: TextRun = {
       kind: 'text',
       text: '',
@@ -56,6 +100,47 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
     };
     blocks.push(placeholderBlock);
     recordBlockKind?.(placeholderBlock.kind);
+  };
+
+  if (!Array.isArray(node.content) || node.content.length === 0) {
+    const pos = positions.get(node);
+    emitPlaceholderBlock(pos ? pos.start + 1 : undefined);
+    return;
+  }
+
+  if (node.content.length === 1 && isEmptyParagraphNode(node.content[0])) {
+    const paragraphPos = positions.get(node.content[0]);
+    const blockPos = positions.get(node);
+    const contentPos = paragraphPos ? paragraphPos.start + 1 : blockPos ? blockPos.start + 1 : undefined;
+
+    if (paragraphToFlowBlocks) {
+      const convertedBlocks = paragraphToFlowBlocks({
+        para: node.content[0],
+        nextBlockId,
+        positions,
+        trackedChangesConfig,
+        bookmarks,
+        hyperlinkConfig,
+        themeColors,
+        enableComments,
+        converters,
+        converterContext,
+      });
+      const paragraphBlocks = Array.isArray(convertedBlocks) ? convertedBlocks : [];
+      applySdtMetadataToParagraphBlocks(
+        paragraphBlocks.filter((b) => b.kind === 'paragraph') as ParagraphBlock[],
+        structuredContentMetadata,
+      );
+      if (applyPlaceholderToEmptyParagraphBlocks(paragraphBlocks, structuredContentMetadata, contentPos)) {
+        paragraphBlocks.forEach((block) => {
+          blocks.push(block);
+          recordBlockKind?.(block.kind);
+        });
+        return;
+      }
+    }
+
+    emitPlaceholderBlock(contentPos);
     return;
   }
 

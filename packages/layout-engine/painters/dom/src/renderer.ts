@@ -5722,6 +5722,7 @@ export class DomPainter {
     if (run.pmStart != null) elem.dataset.pmStart = String(run.pmStart);
     if (run.pmEnd != null) elem.dataset.pmEnd = String(run.pmEnd);
     this.applySdtDataset(elem, run.sdt);
+    applyRunStyles(elem, run);
     return elem;
   }
 

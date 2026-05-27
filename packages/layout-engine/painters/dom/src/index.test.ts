@@ -2955,6 +2955,8 @@ describe('DomPainter', () => {
     expect(placeholder?.dataset.placeholderText).toBe('Click or tap here to enter text');
     expect(placeholder?.dataset.pmStart).toBe('4');
     expect(placeholder?.dataset.pmEnd).toBe('4');
+    expect(placeholder?.style.fontFamily).toBe('Arial');
+    expect(placeholder?.style.fontSize).toBe('16px');
     expect(fragment?.textContent).not.toContain('Click or tap here to enter text');
   });
 

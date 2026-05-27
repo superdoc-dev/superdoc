@@ -35,6 +35,10 @@ describe('structured-content-block', () => {
       scope: 'block',
       id: 'scb-1',
     };
+    const nonEmptyParagraph = (text = 'Text'): PMNode => ({
+      type: 'paragraph',
+      content: [{ type: 'text', text }],
+    });
 
     beforeEach(() => {
       vi.clearAllMocks();
@@ -96,7 +100,7 @@ describe('structured-content-block', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
-          content: [{ type: 'paragraph', content: [] }],
+          content: [nonEmptyParagraph()],
         };
 
         const blocks: FlowBlock[] = [];
@@ -163,6 +167,83 @@ describe('structured-content-block', () => {
             },
           ],
         });
+        expect(recordBlockKind).toHaveBeenCalledWith('paragraph');
+      });
+
+      it('should emit a placeholder paragraph for a single empty paragraph child', () => {
+        const emptyParagraph: PMNode = { type: 'paragraph', content: [] };
+        const node: PMNode = {
+          type: 'structuredContentBlock',
+          attrs: { id: 'scb-1' },
+          content: [emptyParagraph],
+        };
+
+        const blocks: FlowBlock[] = [];
+        const recordBlockKind = vi.fn();
+
+        mockPositionMap.set(node, { start: 10, end: 14 });
+        mockPositionMap.set(emptyParagraph, { start: 11, end: 13 });
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(scbMetadata);
+        const paragraphToFlowBlocks = vi.fn().mockReturnValue([
+          {
+            kind: 'paragraph',
+            id: 'converted-empty-paragraph',
+            attrs: { sdt: scbMetadata },
+            runs: [
+              {
+                text: '',
+                fontFamily: 'Aptos',
+                fontSize: 14,
+                color: '#123456',
+                pmStart: 12,
+                pmEnd: 12,
+              },
+            ],
+          },
+        ] satisfies ParagraphBlock[]);
+
+        const context: NodeHandlerContext = {
+          blocks,
+          recordBlockKind,
+          nextBlockId: mockBlockIdGenerator,
+          positions: mockPositionMap,
+          defaultFont: 'Arial',
+          defaultSize: 12,
+          trackedChangesConfig: mockTrackedChangesConfig,
+          bookmarks: mockBookmarks,
+          hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
+          converters: {
+            paragraphToFlowBlocks,
+          },
+        };
+
+        handleStructuredContentBlockNode(node, context);
+
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({
+          kind: 'paragraph',
+          attrs: { sdt: scbMetadata },
+          runs: [
+            {
+              text: '',
+              sdt: scbMetadata,
+              visualPlaceholder: 'emptyBlockSdt',
+              fontFamily: 'Aptos',
+              fontSize: 14,
+              color: '#123456',
+              pmStart: 12,
+              pmEnd: 12,
+            },
+          ],
+        });
+        expect(paragraphToFlowBlocks).toHaveBeenCalledWith(
+          expect.objectContaining({
+            para: emptyParagraph,
+            positions: mockPositionMap,
+          }),
+        );
         expect(recordBlockKind).toHaveBeenCalledWith('paragraph');
       });
 
@@ -263,7 +344,7 @@ describe('structured-content-block', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
-          content: [{ type: 'paragraph', content: [] }],
+          content: [nonEmptyParagraph()],
         };
 
         const blocks: FlowBlock[] = [];
@@ -302,7 +383,7 @@ describe('structured-content-block', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
-          content: [{ type: 'paragraph', content: [] }],
+          content: [nonEmptyParagraph()],
         };
 
         const blocks: FlowBlock[] = [];
@@ -351,7 +432,7 @@ describe('structured-content-block', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
-          content: [{ type: 'paragraph', content: [] }],
+          content: [nonEmptyParagraph()],
         };
 
         const blocks: FlowBlock[] = [];
@@ -392,7 +473,7 @@ describe('structured-content-block', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
-          content: [{ type: 'paragraph', content: [] }],
+          content: [nonEmptyParagraph()],
         };
 
         const blocks: FlowBlock[] = [];
@@ -431,7 +512,7 @@ describe('structured-content-block', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
-          content: [{ type: 'paragraph', content: [] }],
+          content: [nonEmptyParagraph()],
         };
 
         const blocks: FlowBlock[] = [];
@@ -481,7 +562,7 @@ describe('structured-content-block', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
-          content: [{ type: 'paragraph', content: [] }],
+          content: [nonEmptyParagraph()],
         };
 
         const blocks: FlowBlock[] = [];
@@ -517,7 +598,7 @@ describe('structured-content-block', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: {},
-          content: [{ type: 'paragraph', content: [] }],
+          content: [nonEmptyParagraph()],
         };
 
         const blocks: FlowBlock[] = [];
@@ -723,7 +804,7 @@ describe('structured-content-block', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
-          content: [{ type: 'paragraph', content: [] }],
+          content: [nonEmptyParagraph()],
         };
 
         const blocks: FlowBlock[] = [];
@@ -806,7 +887,7 @@ describe('structured-content-block', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
-          content: [{ type: 'paragraph', content: [] }],
+          content: [nonEmptyParagraph()],
         };
 
         const blocks: FlowBlock[] = [];

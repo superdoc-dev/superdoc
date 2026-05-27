@@ -38,6 +38,7 @@ describe('handleBackspace chain ordering', () => {
       undoInputRule: make('undoInputRule'),
       deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
       selectInlineSdtBeforeRunStart: make('selectInlineSdtBeforeRunStart'),
+      moveIntoBlockSdtBeforeTextBlockStart: make('moveIntoBlockSdtBeforeTextBlockStart'),
       backspaceEmptyRunParagraph: make('backspaceEmptyRunParagraph'),
       backspaceSkipEmptyRun: make('backspaceSkipEmptyRun'),
       backspaceAtomBefore: make('backspaceAtomBefore'),
@@ -75,6 +76,7 @@ describe('handleBackspace chain ordering', () => {
       // step 2 sets inputType meta and returns false (no command call)
       'deleteBlockSdtAtTextBlockStart',
       'selectInlineSdtBeforeRunStart',
+      'moveIntoBlockSdtBeforeTextBlockStart',
       'backspaceEmptyRunParagraph',
       'backspaceSkipEmptyRun',
       'backspaceAtomBefore',
@@ -105,6 +107,7 @@ describe('handleBackspace chain ordering', () => {
     expect(callLog[0]).toBe('undoInputRule');
     expect(callLog[1]).toBe('deleteBlockSdtAtTextBlockStart');
     expect(callLog[2]).toBe('selectInlineSdtBeforeRunStart');
+    expect(callLog[3]).toBe('moveIntoBlockSdtBeforeTextBlockStart');
   });
 
   it('places mixedBidiBackspace after backspaceAcrossRuns and before deleteSelection', () => {

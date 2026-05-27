@@ -39,6 +39,7 @@ export const handleBackspace = (editor) => {
     },
     () => commands.deleteBlockSdtAtTextBlockStart(),
     () => commands.selectInlineSdtBeforeRunStart(),
+    () => commands.moveIntoBlockSdtBeforeTextBlockStart(),
     () => commands.backspaceEmptyRunParagraph(),
     () => commands.backspaceSkipEmptyRun(),
     () => commands.backspaceAtomBefore(),

@@ -11,5 +11,6 @@ describe('core command map types', () => {
 
     expect(declaration).toContain("| 'selectInlineSdtBeforeRunStart'");
     expect(declaration).toContain("| 'selectInlineSdtAfterRunEnd'");
+    expect(declaration).toContain("| 'moveIntoBlockSdtBeforeTextBlockStart'");
   });
 });

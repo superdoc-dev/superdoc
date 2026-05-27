@@ -265,6 +265,57 @@ async function isLabelVisible(page: Page, blockSelector: string): Promise<boolea
   );
 }
 
+async function loadBlockSdtTableBackspaceFixture(page: Page): Promise<{ afterStart: number; b2End: number }> {
+  return page.evaluate(() => {
+    const editor = (window as any).editor;
+    const { schema } = editor;
+    const paragraph = (text: string) =>
+      schema.nodes.paragraph.create(null, schema.nodes.run.create(null, schema.text(text)));
+    const cell = (text: string) => schema.nodes.tableCell.create(null, paragraph(text));
+
+    const blockSdt = schema.nodes.structuredContentBlock.create(
+      {
+        id: 'sd3237-block-table',
+        alias: 'Block With Table',
+        tag: 'block-table',
+        lockMode: 'unlocked',
+        controlType: 'richText',
+      },
+      [
+        schema.nodes.table.create(
+          {
+            tableLayout: 'fixed',
+            tableProperties: { tableLayout: 'fixed', tableWidth: { value: 0, type: 'auto' } },
+            grid: [{ col: 4680 }, { col: 4680 }],
+          },
+          [
+            schema.nodes.tableRow.create(null, [cell('A1'), cell('B1')]),
+            schema.nodes.tableRow.create(null, [cell('A2'), cell('B2')]),
+          ],
+        ),
+      ],
+    );
+
+    const doc = schema.nodes.doc.create(null, [paragraph('Before'), blockSdt, paragraph('After')]);
+    editor.view.dispatch(editor.state.tr.replaceWith(0, editor.state.doc.content.size, doc.content));
+
+    let afterStart: number | null = null;
+    let b2End: number | null = null;
+    editor.state.doc.descendants((node: any, pos: number) => {
+      if (!node.isText || !node.text) return true;
+      if (node.text === 'After') afterStart = pos;
+      if (node.text === 'B2') b2End = pos + node.text.length;
+      return true;
+    });
+
+    if (afterStart == null || b2End == null) {
+      throw new Error('Failed to build block SDT table fixture');
+    }
+
+    return { afterStart, b2End };
+  });
+}
+
 test.describe('SD-3237 structured content interactions', () => {
   test.beforeEach(async ({ superdoc }) => {
     await superdoc.loadDocument(DOC_PATH);
@@ -454,5 +505,41 @@ test.describe('SD-3237 structured content interactions', () => {
       from: inlineRange.pos,
       to: inlineRange.nodeEnd,
     });
+  });
+
+  test('Backspace at paragraph after block SDT table moves into SDT without deleting following text', async ({
+    superdoc,
+  }) => {
+    const { afterStart, b2End } = await loadBlockSdtTableBackspaceFixture(superdoc.page);
+    await superdoc.waitForStable();
+
+    await superdoc.setTextSelection(afterStart);
+    await superdoc.page.evaluate(() => (window as any).editor.view.focus());
+    await superdoc.press('Backspace');
+    await superdoc.waitForStable();
+
+    const result = await superdoc.page.evaluate(() => {
+      const { state } = (window as any).editor;
+      const { selection } = state;
+      const parentTypes: string[] = [];
+      for (let depth = selection.$from.depth; depth > 0; depth -= 1) {
+        parentTypes.push(selection.$from.node(depth).type.name);
+      }
+      return {
+        text: state.doc.textContent,
+        from: selection.from,
+        to: selection.to,
+        empty: selection.empty,
+        parentTypes,
+      };
+    });
+
+    expect(result).toMatchObject({
+      text: 'BeforeA1B1A2B2After',
+      from: b2End,
+      to: b2End,
+      empty: true,
+    });
+    expect(result.parentTypes).toContain('structuredContentBlock');
   });
 });

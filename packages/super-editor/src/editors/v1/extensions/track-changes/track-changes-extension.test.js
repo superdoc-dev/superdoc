@@ -2353,5 +2353,91 @@ describe('TrackChanges extension commands', () => {
         authorImage: undefined,
       });
     });
+
+    // Regression test for ALPMO-245: when text is inserted at a position
+    // where bare text can't live (e.g. at doc end past the last block), PM
+    // auto-wraps the text in the schema's required parents. The old
+    // implementation passed `insertedNode.nodeSize` as the mark `to`, which
+    // covered the wrapper open tokens instead of the trailing characters of
+    // the actual text — so the last char(s) escaped the trackInsert mark and
+    // survived reject as orphans.
+    it('marks the full inserted text when PM auto-wraps at end-of-doc insertion', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+      const insertAt = doc.content.size; // past the last block — triggers auto-wrap
+
+      let nextState;
+      const result = commands.insertTrackedChange({
+        from: insertAt,
+        to: insertAt,
+        text: 'World.',
+      })({
+        state,
+        dispatch: (tr) => {
+          nextState = state.apply(tr);
+        },
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(result).toBe(true);
+      expect(nextState).toBeDefined();
+      // The full inserted text — including the trailing '.' — must carry
+      // trackInsert; no character may sit in an unmarked text node.
+      expect(getMarkedText(nextState.doc, TrackInsertMarkName)).toBe('World.');
+      let unmarkedAppendedText = '';
+      nextState.doc.descendants((node) => {
+        if (!node.isText) return;
+        if (node.text === 'Hello') return; // pre-existing base content
+        const hasTrackMark = node.marks.some((m) => m.type.name === TrackInsertMarkName);
+        if (!hasTrackMark) unmarkedAppendedText += node.text ?? '';
+      });
+      expect(unmarkedAppendedText).toBe('');
+    });
+
+    it('rejectTrackedChangesBetween leaves no orphan chars after end-of-doc insertion', () => {
+      const doc = createDoc('Hello');
+      const state = createState(doc);
+      const insertAt = doc.content.size;
+
+      let nextState;
+      commands.insertTrackedChange({
+        from: insertAt,
+        to: insertAt,
+        text: 'World.',
+      })({
+        state,
+        dispatch: (tr) => {
+          nextState = state.apply(tr);
+        },
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      const afterInsert = nextState;
+      let afterReject;
+      commands.rejectTrackedChangesBetween(
+        0,
+        afterInsert.doc.content.size,
+      )({
+        state: afterInsert,
+        dispatch: (tr) => {
+          afterReject = afterInsert.apply(tr);
+        },
+        editor: {
+          options: { user: { name: 'Test', email: 'test@example.com' } },
+          commands: { addCommentReply: vi.fn() },
+        },
+      });
+
+      expect(afterReject).toBeDefined();
+      // Doc must be restored to just 'Hello' — no orphan '.' or 'd' or 'l'
+      // surviving in a new wrapper paragraph the AI-style insertion created.
+      expect(afterReject.doc.textContent).toBe('Hello');
+    });
   });
 });

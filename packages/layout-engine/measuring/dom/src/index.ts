@@ -2029,7 +2029,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       const placeholderWidth =
         run.sdt?.type === 'structuredContent' && run.sdt.appearance === 'hidden'
           ? 0
-          : Math.max(measuredPlaceholderWidth, fallbackPlaceholderWidth);
+          : measuredPlaceholderWidth > 0
+            ? measuredPlaceholderWidth
+            : fallbackPlaceholderWidth;
 
       if (!currentLine) {
         currentLine = {

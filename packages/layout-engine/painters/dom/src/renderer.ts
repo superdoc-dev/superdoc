@@ -5537,6 +5537,10 @@ export class DomPainter {
       let hasVisibleContent = false;
       for (const run of runsForLine) {
         if (run.kind === 'lineBreak' || run.kind === 'break') continue;
+        if (isEmptySdtPlaceholderRun(run)) {
+          hasVisibleContent = true;
+          break;
+        }
         if ((run.kind === 'text' || run.kind === undefined) && 'text' in run) {
           if ((run.text ?? '').trim().length === 0) continue;
         }

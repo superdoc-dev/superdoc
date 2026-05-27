@@ -2957,6 +2957,8 @@ describe('DomPainter', () => {
     expect(placeholder?.dataset.pmEnd).toBe('4');
     expect(placeholder?.style.fontFamily).toBe('Arial');
     expect(placeholder?.style.fontSize).toBe('16px');
+    expect(fragment?.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('0px');
+    expect(fragment?.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('220px');
     expect(fragment?.textContent).not.toContain('Click or tap here to enter text');
   });
 

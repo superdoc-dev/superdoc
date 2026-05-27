@@ -193,6 +193,89 @@ describe('buildAutoFitWorkingGridInput', () => {
     expect(result.gridColumnCount).toBe(4);
   });
 
+  it('records a fitting uniform tblW auto grid as the AutoFit width budget even when tcW preferences overflow it', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableWidth: { value: 0, type: 'auto' },
+      },
+      columnWidths: [144, 144, 144, 144],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [
+            { id: 'cell-1', attrs: { tableCellProperties: { cellWidth: { value: 3600, type: 'dxa' } } } },
+            { id: 'cell-2', attrs: { tableCellProperties: { cellWidth: { value: 1152, type: 'dxa' } } } },
+            { id: 'cell-3', attrs: { tableCellProperties: { cellWidth: { value: 2160, type: 'dxa' } } } },
+            { id: 'cell-4', attrs: { tableCellProperties: { cellWidth: { value: 4320, type: 'dxa' } } } },
+          ],
+        },
+        {
+          id: 'row-2',
+          cells: [
+            { id: 'cell-5', attrs: { tableCellProperties: { cellWidth: { value: 2160, type: 'dxa' } } } },
+            { id: 'cell-6', attrs: { tableCellProperties: { cellWidth: { value: 2160, type: 'dxa' } } } },
+            { id: 'cell-7', attrs: { tableCellProperties: { cellWidth: { value: 2160, type: 'dxa' } } } },
+            { id: 'cell-8', attrs: { tableCellProperties: { cellWidth: { value: 2160, type: 'dxa' } } } },
+          ],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 576 });
+
+    expect(result.preferredTableWidth).toBeUndefined();
+    expect(result.preferredColumnWidths).toEqual([144, 144, 144, 144]);
+    expect(result.preserveAutoGrid).toBeUndefined();
+    expect(result).toMatchObject({ autoGridWidthBudget: 576 });
+  });
+
+  it('records a fitting non-uniform tblW auto grid as the AutoFit width budget when tcW preferences overflow it', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableWidth: { value: 0, type: 'auto' },
+      },
+      columnWidths: [180, 120, 276],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [
+            { id: 'cell-1', attrs: { tableCellProperties: { cellWidth: { value: 3600, type: 'dxa' } } } },
+            { id: 'cell-2', attrs: { tableCellProperties: { cellWidth: { value: 2160, type: 'dxa' } } } },
+            { id: 'cell-3', attrs: { tableCellProperties: { cellWidth: { value: 5400, type: 'dxa' } } } },
+          ],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 576 });
+
+    expect(result.preserveAutoGrid).toBe(true);
+    expect(result.preferredColumnWidths).toEqual([180, 120, 276]);
+    expect(result).toMatchObject({ autoGridWidthBudget: 576 });
+  });
+
+  it('records omitted table width as AutoFit width-budget semantics when a complete grid fits', () => {
+    const block = createTableBlock({
+      attrs: {},
+      columnWidths: [100, 100],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [
+            { id: 'cell-1', attrs: { tableCellProperties: { cellWidth: { value: 3000, type: 'dxa' } } } },
+            { id: 'cell-2', attrs: { tableCellProperties: { cellWidth: { value: 3000, type: 'dxa' } } } },
+          ],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 200 });
+
+    expect(result.preferredTableWidth).toBeUndefined();
+    expect(result.preferredColumnWidths).toEqual([100, 100]);
+    expect(result).toMatchObject({ autoGridWidthBudget: 200 });
+  });
+
   it('does not mark incomplete tblW auto grids as preferred AutoFit geometry', () => {
     const block = createTableBlock({
       attrs: {

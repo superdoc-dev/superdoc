@@ -234,8 +234,10 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
     triggerCells.length > 0 ? collectNonProtectedColumns(triggerCells, gridColumnCount) : undefined;
   let resolvedWidths = currentWidths.slice();
   const preferredTableWidth = sanitizeOptionalWidth(workingInput.preferredTableWidth);
-  let targetTableWidth = preferredTableWidth ?? fixedLayout.totalWidth;
-  const canOverflowAvailableWidth = preferredTableWidth != null || hasCompleteAuthoredGrid(workingInput);
+  const autoGridWidthBudget = sanitizeOptionalWidth(workingInput.autoGridWidthBudget);
+  let targetTableWidth = preferredTableWidth ?? autoGridWidthBudget ?? fixedLayout.totalWidth;
+  const canOverflowAvailableWidth =
+    preferredTableWidth != null || (autoGridWidthBudget == null && hasCompleteAuthoredGrid(workingInput));
   const maxResolvedTableWidth = canOverflowAvailableWidth
     ? Math.max(workingInput.maxTableWidth, targetTableWidth)
     : workingInput.maxTableWidth;

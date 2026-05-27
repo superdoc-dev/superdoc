@@ -9,6 +9,8 @@ import type { FlowBlock, ParagraphBlock, TableBlock, TextRun } from '@superdoc/c
 import type { PMNode, NodeHandlerContext } from '../types.js';
 import { resolveNodeSdtMetadata, applySdtMetadataToParagraphBlocks, applySdtMetadataToTableBlock } from './metadata.js';
 
+const NON_RENDERED_STRUCTURAL_INLINE_TYPES = new Set(['bookmarkEnd', 'commentRangeStart', 'commentRangeEnd']);
+
 function isVisuallyEmptyInlineNode(node: PMNode): boolean {
   if (node.type === 'text') {
     return (node.text ?? '').length === 0;
@@ -18,7 +20,7 @@ function isVisuallyEmptyInlineNode(node: PMNode): boolean {
     return !Array.isArray(node.content) || node.content.every(isVisuallyEmptyInlineNode);
   }
 
-  return node.type === 'bookmarkEnd';
+  return NON_RENDERED_STRUCTURAL_INLINE_TYPES.has(node.type);
 }
 
 function isEmptyParagraphNode(node: PMNode): boolean {

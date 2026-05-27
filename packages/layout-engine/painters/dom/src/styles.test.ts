@@ -65,6 +65,51 @@ describe('ensureSdtContainerStyles', () => {
     expect(emptyRule).not.toContain('vertical-align');
   });
 
+  it('uses the same label box model for block and inline SDTs', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const sharedLabelRule =
+      cssText.match(
+        /\.superdoc-structured-content__label,\s*\.superdoc-structured-content-inline__label\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+    const inlineSelectedRule =
+      cssText.match(
+        /\.superdoc-structured-content-inline\.ProseMirror-selectednode \.superdoc-structured-content-inline__label\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+    const sharedLabelDragHandleRule =
+      cssText.match(
+        /\.superdoc-structured-content__label::before,\s*\.superdoc-structured-content-inline__label::before\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+    const inlineLabelRule =
+      [...cssText.matchAll(/\.superdoc-structured-content-inline__label\s*\{([^}]*)\}/g)]
+        .map((match) => match[1] ?? '')
+        .find((rule) => rule.includes('bottom: calc(100% + 1px);')) ?? '';
+    const blockLabelRule = cssText.match(/\.superdoc-structured-content__label\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(sharedLabelRule).toContain('height: 18px;');
+    expect(sharedLabelRule).toContain('padding: 0 4px;');
+    expect(sharedLabelRule).toContain('border: 1px solid var(--sd-content-controls-label-border, #629be7);');
+    expect(sharedLabelRule).toContain('box-sizing: border-box;');
+    expect(sharedLabelRule).toContain('align-items: center;');
+    expect(sharedLabelRule).toContain('justify-content: center;');
+    expect(sharedLabelDragHandleRule).toContain("content: '';");
+    expect(sharedLabelDragHandleRule).toContain('height: 8px;');
+    expect(sharedLabelDragHandleRule).toContain(
+      'radial-gradient(circle, currentColor 1px, transparent 1px) center 0 / 2px 2px no-repeat,',
+    );
+    expect(sharedLabelDragHandleRule).toContain('center 3px / 2px 2px no-repeat,');
+    expect(sharedLabelDragHandleRule).toContain('center 6px / 2px 2px no-repeat;');
+    expect(inlineSelectedRule).toContain('display: inline-flex;');
+    expect(inlineLabelRule).toContain('border-radius: 4px 4px 0 0;');
+    expect(blockLabelRule).toContain('white-space: nowrap;');
+    expect(blockLabelRule).toContain('top: -18px;');
+    expect(blockLabelRule).not.toContain('width:');
+    expect(blockLabelRule).not.toContain('max-width:');
+    expect(cssText).toContain('bottom: calc(100% + 1px);');
+  });
+
   it('reserves empty inline SDT width without adding line-box height', () => {
     ensureSdtContainerStyles(document);
 

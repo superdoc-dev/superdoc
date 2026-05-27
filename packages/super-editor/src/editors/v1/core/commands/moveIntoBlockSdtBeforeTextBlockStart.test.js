@@ -270,7 +270,7 @@ describe('moveIntoBlockSdtBeforeTextBlockStart', () => {
     expect(dispatched.selection.from).toBe(innerEnd);
   });
 
-  it('targets a marker-only trailing paragraph inside a previous block SDT', () => {
+  it('targets the end of a marker-only trailing paragraph inside a previous block SDT', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [
       paragraph(schema, 'Before'),
@@ -281,7 +281,7 @@ describe('moveIntoBlockSdtBeforeTextBlockStart', () => {
       paragraph(schema, 'After'),
     ]);
     const afterStart = findTextPos(doc, 'After');
-    const targetPos = findNodePos(doc, 'bookmarkEnd');
+    const targetPos = findNodePos(doc, 'bookmarkEnd') + schema.nodes.bookmarkEnd.create().nodeSize;
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, afterStart) });
 
     let dispatched;

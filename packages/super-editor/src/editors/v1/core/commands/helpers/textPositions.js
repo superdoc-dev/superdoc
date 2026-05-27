@@ -104,7 +104,7 @@ export function findLastContentCursorPosInNode(node, nodePos) {
     if (found != null) return found;
   }
 
-  if (node.isTextblock) return nodePos + 1;
+  if (node.isTextblock) return nodePos + node.nodeSize - 1;
 
   return null;
 }

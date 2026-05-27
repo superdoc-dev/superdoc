@@ -1719,6 +1719,23 @@ export async function incrementalLayout(
             // cluster (Word-like — last anchor also renders fully when room
             // exists). Body slicer may choose this when safe.
             let preferredReserve = 0;
+            // SD-2656 (post-Vivienne Carlsbad p22): Any continuation flowing
+            // INTO this page (from a prior page's spill) must also fit on this
+            // page — it can't move anywhere else. Include it in BOTH reserves
+            // so the scorer's preferred target is large enough to actually
+            // fit the full cluster alongside the carry-over content.
+            let continuationInHeight = 0;
+            for (const entry of continuationInForPage) {
+              continuationInHeight += entry.remainingHeightPx;
+            }
+            if (continuationInHeight > 0) {
+              mandatoryReserve += continuationInHeight;
+              preferredReserve += continuationInHeight;
+              if (idsOnPage.length > 0) {
+                mandatoryReserve += safeGap;
+                preferredReserve += safeGap;
+              }
+            }
             if (idsOnPage.length > 0) {
               for (let i = 0; i < idsOnPage.length; i += 1) {
                 const isLast = i === idsOnPage.length - 1;
@@ -1729,6 +1746,10 @@ export async function incrementalLayout(
                   preferredReserve += safeGap;
                 }
               }
+              mandatoryReserve += overheadBase;
+              preferredReserve += overheadBase;
+            } else if (continuationInHeight > 0) {
+              // Continuation-only page (no new anchors). Still needs overhead.
               mandatoryReserve += overheadBase;
               preferredReserve += overheadBase;
             }

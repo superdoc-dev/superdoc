@@ -81,13 +81,44 @@ export const isMandatoryOnlyFootnotePage = (
   );
 };
 
+/**
+ * SD-2656 (post-Vivienne-feedback): a page whose LAST anchor partially rendered
+ * but spilled to a later page. The user-visible bug is a footnote split across
+ * pages even when the preferred reserve would fit the whole anchor on the
+ * anchor page (Word does keep it together).
+ *
+ * The "mandatory-only" predicate catches first-line-only splits; this predicate
+ * catches partial splits (lastAnchorRenderedLines > 1 but the rest still spilled).
+ * Both feed into the same scorer trial. The scorer's accept criteria
+ * (no new cluster spills, no new mandatory-only pages, bounded dead-reserve
+ * growth, candidate rendered lines improved) still gates whether the bump
+ * actually lands.
+ */
+export const isSplitLastAnchorFootnotePage = (
+  ledger: FootnotePageLedger,
+  preferredDeltaThresholdPx = DEFAULT_PREFERRED_DELTA_THRESHOLD_PX,
+): boolean => {
+  if (ledger.anchorIds.length === 0) return false;
+  const lastAnchorId = ledger.anchorIds[ledger.anchorIds.length - 1];
+  const lastAnchorSpilled = ledger.continuationOut.some((entry) => entry.id === lastAnchorId);
+  if (!lastAnchorSpilled) return false;
+  return (
+    ledger.preferredReservePx - ledger.mandatoryReservePx > preferredDeltaThresholdPx &&
+    ledger.actualBandHeightPx < ledger.preferredReservePx - preferredDeltaThresholdPx
+  );
+};
+
 export const getPreferredReserveCandidates = (
   ledgers: FootnotePageLedger[],
   preferredDeltaThresholdPx = DEFAULT_PREFERRED_DELTA_THRESHOLD_PX,
   mandatoryOnlyTolerancePx = DEFAULT_MANDATORY_ONLY_TOLERANCE_PX,
 ): FootnotePreferredReserveCandidate[] => {
   return ledgers
-    .filter((ledger) => isMandatoryOnlyFootnotePage(ledger, preferredDeltaThresholdPx, mandatoryOnlyTolerancePx))
+    .filter(
+      (ledger) =>
+        isMandatoryOnlyFootnotePage(ledger, preferredDeltaThresholdPx, mandatoryOnlyTolerancePx) ||
+        isSplitLastAnchorFootnotePage(ledger, preferredDeltaThresholdPx),
+    )
     .map((ledger) => ({
       pageIndex: ledger.pageIndex,
       anchorIds: ledger.anchorIds.slice(),

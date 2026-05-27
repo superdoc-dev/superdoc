@@ -72,6 +72,56 @@ describe('SD-2656 footnote preferred-reserve scorer', () => {
     ]);
   });
 
+  it('also flags pages where the last anchor partially rendered but spilled (Vivienne feedback)', () => {
+    // SD-2656: a page is also a candidate when the last anchor rendered >1 line
+    // yet still spilled to the next page. The legacy filter (lastAnchorRenderedLines<=1)
+    // missed these "partial split" cases reported by Vivienne — footnotes splitting
+    // across pages even when preferred reserve would fit them on the anchor page.
+    const ledgers = [
+      // mandatory-only first-line case (legacy candidate) — should still match.
+      makeLedger(0, {
+        anchorIds: ['1'],
+        mandatoryReservePx: 36,
+        preferredReservePx: 121,
+        actualBandHeightPx: 36,
+        lastAnchorRenderedLines: 1,
+        continuationOut: [{ id: '1', remainingRangeCount: 1, remainingHeightPx: 80 }],
+      }),
+      // Vivienne b89cc7aa page 16 pattern: single anchor [4], mand=36, pref=82,
+      // actual=51, lastL=2, fn4 spilled. Old filter missed this (lastL>1).
+      makeLedger(1, {
+        anchorIds: ['4'],
+        mandatoryReservePx: 36,
+        preferredReservePx: 82,
+        actualBandHeightPx: 51,
+        lastAnchorRenderedLines: 2,
+        continuationOut: [{ id: '4', remainingRangeCount: 1, remainingHeightPx: 30 }],
+      }),
+      // Carlsbad page 26 pattern: single anchor [24], mand=42, pref=150, actual=116,
+      // lastL=5, fn24 spilled. Old filter missed this.
+      makeLedger(2, {
+        anchorIds: ['24'],
+        mandatoryReservePx: 42,
+        preferredReservePx: 150,
+        actualBandHeightPx: 116,
+        lastAnchorRenderedLines: 5,
+        continuationOut: [{ id: '24', remainingRangeCount: 2, remainingHeightPx: 30 }],
+      }),
+      // Counter-example: last anchor rendered fully (no spill). Must NOT be a candidate.
+      makeLedger(3, {
+        anchorIds: ['5'],
+        mandatoryReservePx: 36,
+        preferredReservePx: 96,
+        actualBandHeightPx: 96,
+        lastAnchorRenderedLines: 5,
+        continuationOut: [],
+      }),
+    ];
+
+    const candidates = getPreferredReserveCandidates(ledgers).map((c) => c.pageIndex);
+    expect(candidates).toEqual([0, 1, 2]);
+  });
+
   it('summarizes only the candidate page window', () => {
     const ledgers = [
       makeLedger(0, {

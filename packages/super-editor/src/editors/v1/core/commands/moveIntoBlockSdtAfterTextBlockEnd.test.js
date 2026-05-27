@@ -1,0 +1,117 @@
+import { describe, it, expect, vi } from 'vitest';
+import { Schema } from 'prosemirror-model';
+import { EditorState, TextSelection } from 'prosemirror-state';
+import { moveIntoBlockSdtAfterTextBlockEnd } from './moveIntoBlockSdtAfterTextBlockEnd.js';
+
+const makeSchema = () =>
+  new Schema({
+    nodes: {
+      doc: { content: 'block+' },
+      paragraph: { group: 'block', content: 'inline*' },
+      run: { inline: true, group: 'inline', content: 'inline*' },
+      structuredContentBlock: {
+        group: 'block',
+        content: 'block*',
+        isolating: true,
+        attrs: {
+          lockMode: { default: 'unlocked' },
+        },
+      },
+      table: { group: 'block', content: 'tableRow+' },
+      tableRow: { content: 'tableCell+' },
+      tableCell: { content: 'block+' },
+      text: { group: 'inline' },
+    },
+    marks: {},
+  });
+
+const run = (schema, text) => schema.nodes.run.create(null, schema.text(text));
+const paragraph = (schema, text) => schema.nodes.paragraph.create(null, run(schema, text));
+
+const makeDoc = (schema) =>
+  schema.node('doc', null, [
+    paragraph(schema, 'Before'),
+    schema.nodes.structuredContentBlock.create(null, [
+      schema.nodes.table.create(null, [
+        schema.nodes.tableRow.create(null, [
+          schema.nodes.tableCell.create(null, paragraph(schema, 'A1')),
+          schema.nodes.tableCell.create(null, paragraph(schema, 'B1')),
+        ]),
+        schema.nodes.tableRow.create(null, [
+          schema.nodes.tableCell.create(null, paragraph(schema, 'A2')),
+          schema.nodes.tableCell.create(null, paragraph(schema, 'B2')),
+        ]),
+      ]),
+    ]),
+    paragraph(schema, 'After'),
+  ]);
+
+const findTextPos = (doc, text, offset = 0) => {
+  let found = null;
+  doc.descendants((node, pos) => {
+    if (!node.isText || found != null) return found == null;
+    const index = node.text.indexOf(text);
+    if (index === -1) return true;
+    found = pos + index + offset;
+    return false;
+  });
+  expect(found).not.toBeNull();
+  return found;
+};
+
+describe('moveIntoBlockSdtAfterTextBlockEnd', () => {
+  it('moves from the end of the preceding paragraph to the first text position inside a following block SDT', () => {
+    const schema = makeSchema();
+    const doc = makeDoc(schema);
+    const beforeEnd = findTextPos(doc, 'Before', 6);
+    const a1Start = findTextPos(doc, 'A1');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, beforeEnd) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.doc.textContent).toBe('BeforeA1B1A2B2After');
+    expect(dispatched.steps).toHaveLength(0);
+    expect(dispatched.selection.from).toBe(a1Start);
+    expect(dispatched.selection.to).toBe(a1Start);
+  });
+
+  it('returns false when the caret is not at the visible textblock end', () => {
+    const schema = makeSchema();
+    const doc = makeDoc(schema);
+    const state = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, findTextPos(doc, 'Before', 5)),
+    });
+    const dispatch = vi.fn();
+
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({ state, dispatch });
+
+    expect(ok).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('returns false when the next sibling is not a block SDT', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [paragraph(schema, 'Before'), paragraph(schema, 'After')]);
+    const state = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, findTextPos(doc, 'Before', 6)),
+    });
+    const dispatch = vi.fn();
+
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({ state, dispatch });
+
+    expect(ok).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+});

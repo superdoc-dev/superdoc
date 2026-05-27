@@ -179,6 +179,7 @@ describe('handleDelete chain ordering', () => {
     const commands = {
       deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
       selectInlineSdtAfterRunEnd: make('selectInlineSdtAfterRunEnd'),
+      moveIntoBlockSdtAfterTextBlockEnd: make('moveIntoBlockSdtAfterTextBlockEnd'),
       deleteSkipEmptyRun: make('deleteSkipEmptyRun'),
       deleteAtomAfter: make('deleteAtomAfter'),
       deleteNextToRun: make('deleteNextToRun'),
@@ -211,6 +212,7 @@ describe('handleDelete chain ordering', () => {
     expect(callLog).toEqual([
       'deleteBlockSdtAtTextBlockStart',
       'selectInlineSdtAfterRunEnd',
+      'moveIntoBlockSdtAfterTextBlockEnd',
       'deleteSkipEmptyRun',
       'deleteAtomAfter',
       'deleteNextToRun',

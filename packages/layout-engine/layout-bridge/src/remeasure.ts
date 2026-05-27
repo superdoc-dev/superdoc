@@ -10,7 +10,7 @@ import type {
   ParagraphIndent,
   LeaderDecoration,
 } from '@superdoc/contracts';
-import { Engines } from '@superdoc/contracts';
+import { EMPTY_SDT_PLACEHOLDER_TEXT, Engines, isEmptySdtPlaceholderRun } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
 import {
   LIST_MARKER_GAP as _LIST_MARKER_GAP,
@@ -126,6 +126,10 @@ function fontString(run: Run): string {
  * @returns Text content of the run, or empty string for non-text runs
  */
 function runText(run: Run): string {
+  if (isEmptySdtPlaceholderRun(run)) {
+    return run.sdt?.type === 'structuredContent' && run.sdt.appearance === 'hidden' ? '' : EMPTY_SDT_PLACEHOLDER_TEXT;
+  }
+
   return 'src' in run ||
     run.kind === 'lineBreak' ||
     run.kind === 'break' ||

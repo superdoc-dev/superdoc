@@ -590,7 +590,7 @@ const SDT_CONTAINER_STYLES = `
   position: absolute;
   left: calc(var(--sd-sdt-chrome-left, 0px) + 2px);
   top: -18px;
-  width: calc(var(--sd-sdt-chrome-width, 100%) - 4px);
+  width: max-content;
   max-width: 130px;
   min-width: 0;
   border-bottom: none;
@@ -600,6 +600,9 @@ const SDT_CONTAINER_STYLES = `
 }
 
 .superdoc-structured-content__label span {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;

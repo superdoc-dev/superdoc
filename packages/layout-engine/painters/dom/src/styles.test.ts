@@ -105,9 +105,12 @@ describe('ensureSdtContainerStyles', () => {
     expect(inlineLabelRule).toContain('border-radius: 4px 4px 0 0;');
     expect(blockLabelRule).toContain('white-space: nowrap;');
     expect(blockLabelRule).toContain('top: -18px;');
-    expect(blockLabelRule).toContain('width: calc(var(--sd-sdt-chrome-width, 100%) - 4px);');
+    expect(blockLabelRule).toContain('width: max-content;');
     expect(blockLabelRule).toContain('max-width: 130px;');
     expect(blockLabelRule).toContain('min-width: 0;');
+    expect(blockLabelRule).not.toContain('width: calc(var(--sd-sdt-chrome-width, 100%) - 4px);');
+    expect(cssText).toContain('.superdoc-structured-content__label span');
+    expect(cssText).toContain('flex: 1 1 auto;');
     expect(cssText).toContain('bottom: calc(100% + 1px);');
   });
 

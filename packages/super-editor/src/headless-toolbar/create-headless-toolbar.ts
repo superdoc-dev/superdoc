@@ -55,18 +55,18 @@ const CONTENT_LOCK_EXECUTION_EXEMPT_IDS = new Set<PublicToolbarItemId>([
   'document-mode',
 ]);
 
-const isContentLockExecutionBlocked = (
+const isToolbarCommandExecutionDisabled = (
   id: PublicToolbarItemId,
   superdoc: CreateHeadlessToolbarOptions['superdoc'],
   snapshot: ToolbarSnapshot,
   toolbarRegistry: Partial<Record<PublicToolbarItemId, BuiltInToolbarRegistryEntry>>,
 ): boolean => {
+  const snapshotState = snapshot.commands[id];
+  if (snapshotState) return snapshotState.disabled;
+
   if (CONTENT_LOCK_EXECUTION_EXEMPT_IDS.has(id) || !hasContentLockedStructuredContentSelection(snapshot.context)) {
     return false;
   }
-
-  const snapshotState = snapshot.commands[id];
-  if (snapshotState) return snapshotState.disabled;
 
   const entry = toolbarRegistry[id];
   if (!entry) return false;
@@ -140,7 +140,7 @@ export const createHeadlessToolbar = (options: CreateHeadlessToolbarOptions): He
     },
 
     execute(id: PublicToolbarItemId, payload?: unknown) {
-      if (isContentLockExecutionBlocked(id, options.superdoc, snapshot, toolbarRegistry)) {
+      if (isToolbarCommandExecutionDisabled(id, options.superdoc, snapshot, toolbarRegistry)) {
         return false;
       }
 

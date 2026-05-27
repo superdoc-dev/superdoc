@@ -282,6 +282,40 @@ describe('DomPointerMapping', () => {
         }
       }
     });
+
+    it('maps clicks on empty SDT placeholder chrome to the SDT content position', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment" data-block-id="block1">
+            <div class="superdoc-line" data-pm-start="10" data-pm-end="12">
+              <span
+                class="superdoc-empty-sdt-placeholder superdoc-empty-inline-sdt-placeholder"
+                data-pm-start="11"
+                data-pm-end="11"
+                data-placeholder-text="Click or tap here to enter text"
+              ></span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const fragment = container.querySelector('.superdoc-fragment') as HTMLElement;
+      const line = container.querySelector('.superdoc-line') as HTMLElement;
+      const placeholder = container.querySelector('.superdoc-empty-sdt-placeholder') as HTMLElement;
+
+      mockRect(page, { left: 100, top: 10, width: 300, height: 30 });
+      mockRect(fragment, { left: 100, top: 10, width: 300, height: 30 });
+      mockRect(line, { left: 110, top: 10, width: 250, height: 20 });
+      mockRect(placeholder, { left: 110, top: 10, width: 220, height: 20 });
+
+      withMockedElementsFromPoint(
+        [placeholder, line, fragment, page, container, document.body, document.documentElement],
+        () => {
+          expect(clickToPositionDom(container, 310, 18)).toBe(11);
+        },
+      );
+    });
   });
 
   // -----------------------------------------------------------------------

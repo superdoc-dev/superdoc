@@ -105,25 +105,79 @@ describe('ensureSdtContainerStyles', () => {
     expect(inlineLabelRule).toContain('border-radius: 4px 4px 0 0;');
     expect(blockLabelRule).toContain('white-space: nowrap;');
     expect(blockLabelRule).toContain('top: -18px;');
-    expect(blockLabelRule).toContain('width: calc(var(--sd-sdt-chrome-width, 100%) - 4px);');
+    expect(blockLabelRule).toContain('width: max-content;');
     expect(blockLabelRule).toContain('max-width: 130px;');
     expect(blockLabelRule).toContain('min-width: 0;');
+    expect(blockLabelRule).not.toContain('width: calc(var(--sd-sdt-chrome-width, 100%) - 4px);');
+    expect(cssText).toContain('.superdoc-structured-content__label span');
+    expect(cssText).toContain('flex: 1 1 auto;');
     expect(cssText).toContain('bottom: calc(100% + 1px);');
   });
 
-  it('reserves empty inline SDT width without adding line-box height', () => {
+  it('renders empty SDT placeholder text and active selection styling', () => {
     ensureSdtContainerStyles(document);
 
     const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
     const cssText = styleEl?.textContent ?? '';
-    const placeholderRule = cssText.match(/\.superdoc-empty-inline-sdt-placeholder\s*\{([^}]*)\}/)?.[1] ?? '';
+    const placeholderRule = cssText.match(/\.superdoc-empty-sdt-placeholder\s*\{([^}]*)\}/)?.[1] ?? '';
+    const placeholderBeforeRule = cssText.match(/\.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
+    const selectedRule =
+      cssText.match(
+        /\.superdoc-structured-content-inline\.ProseMirror-selectednode \.superdoc-empty-sdt-placeholder::before,\s*\.superdoc-structured-content-block\.ProseMirror-selectednode \.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
 
     expect(placeholderRule).toContain('display: inline-block;');
-    expect(placeholderRule).toContain('width: 8px;');
-    expect(placeholderRule).toContain('height: 0;');
-    expect(placeholderRule).toContain('line-height: 0;');
+    expect(placeholderRule).toContain('line-height: normal;');
     expect(placeholderRule).toContain('vertical-align: baseline;');
-    expect(placeholderRule).not.toContain('height: 1em;');
+    expect(placeholderRule).toContain('white-space: nowrap;');
+    expect(placeholderBeforeRule).toContain('content: attr(data-placeholder-text);');
+    expect(placeholderBeforeRule).toContain('color: var(--sd-content-controls-placeholder-text, #a6a6a6);');
+    expect(selectedRule).toContain('background-color: var(--sd-content-controls-placeholder-selected-bg, Highlight);');
+    expect(selectedRule).not.toMatch(/(^|\n)\s*color\s*:/);
+  });
+
+  it('suppresses empty block SDT placeholder text when the SDT appearance is hidden', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const hiddenPlaceholderRule =
+      cssText.match(
+        /\.superdoc-structured-content-inline\[data-appearance='hidden'\] \.superdoc-empty-inline-sdt-placeholder,\s*\.superdoc-structured-content-block\[data-appearance='hidden'\] \.superdoc-empty-block-sdt-placeholder,\s*\.superdoc-empty-sdt-placeholder\[data-appearance='hidden'\]\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+    const hiddenPlaceholderBeforeRule =
+      cssText.match(
+        /\.superdoc-structured-content-inline\[data-appearance='hidden'\] \.superdoc-empty-inline-sdt-placeholder::before,\s*\.superdoc-structured-content-block\[data-appearance='hidden'\] \.superdoc-empty-block-sdt-placeholder::before,\s*\.superdoc-empty-sdt-placeholder\[data-appearance='hidden'\]::before\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+
+    expect(hiddenPlaceholderRule).toContain('width: 0;');
+    expect(hiddenPlaceholderRule).toContain('min-width: 0;');
+    expect(hiddenPlaceholderRule).toContain('overflow: hidden;');
+    expect(hiddenPlaceholderBeforeRule).toContain("content: '';");
+  });
+
+  it('keeps empty SDT placeholder text visible in viewing mode', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const viewingPlaceholderRule =
+      cssText.match(/\.presentation-editor--viewing \.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(viewingPlaceholderRule).toBe('');
+    expect(viewingPlaceholderRule).not.toContain('visibility: hidden;');
+  });
+
+  it('keeps empty SDT placeholder text visible in print mode', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const printPlaceholderRule =
+      cssText.match(/@media print\s*\{[\s\S]*?\.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(printPlaceholderRule).toBe('');
+    expect(printPlaceholderRule).not.toContain('visibility: hidden;');
   });
 
   it('suppresses structured-content hover backgrounds in viewing mode, including grouped hover', () => {

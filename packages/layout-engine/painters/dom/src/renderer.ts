@@ -60,6 +60,7 @@ import type {
 } from '@superdoc/contracts';
 import {
   LAYOUT_BOUNDARY_SCHEMA,
+  EMPTY_SDT_PLACEHOLDER_TEXT,
   adjustAvailableWidthForTextIndent,
   buildLayoutSourceIdentityForFragment,
   calculateJustifySpacing,
@@ -68,6 +69,7 @@ import {
   getCellSpacingPx,
   getParagraphInlineDirection,
   isEmptyInlineSdtPlaceholderRun,
+  isEmptySdtPlaceholderRun,
   normalizeColumnLayout,
   normalizeBaselineShift,
   resolveBaseFontSizeForVerticalText,
@@ -5535,6 +5537,10 @@ export class DomPainter {
       let hasVisibleContent = false;
       for (const run of runsForLine) {
         if (run.kind === 'lineBreak' || run.kind === 'break') continue;
+        if (isEmptySdtPlaceholderRun(run)) {
+          hasVisibleContent = true;
+          break;
+        }
         if ((run.kind === 'text' || run.kind === undefined) && 'text' in run) {
           if ((run.text ?? '').trim().length === 0) continue;
         }
@@ -5705,15 +5711,22 @@ export class DomPainter {
     }
   }
 
-  private renderEmptyInlineSdtPlaceholderRun(run: TextRun): HTMLElement | null {
+  private renderEmptySdtPlaceholderRun(run: TextRun): HTMLElement | null {
     if (!this.doc) return null;
     const elem = this.doc.createElement('span');
-    elem.classList.add('superdoc-empty-inline-sdt-placeholder');
+    elem.classList.add('superdoc-empty-sdt-placeholder');
+    if (run.visualPlaceholder === 'emptyInlineSdt') {
+      elem.classList.add('superdoc-empty-inline-sdt-placeholder');
+    } else if (run.visualPlaceholder === 'emptyBlockSdt') {
+      elem.classList.add('superdoc-empty-block-sdt-placeholder');
+    }
     elem.setAttribute('aria-hidden', 'true');
+    elem.dataset.placeholderText = EMPTY_SDT_PLACEHOLDER_TEXT;
     elem.dataset.layoutEpoch = String(this.layoutEpoch);
     if (run.pmStart != null) elem.dataset.pmStart = String(run.pmStart);
     if (run.pmEnd != null) elem.dataset.pmEnd = String(run.pmEnd);
     this.applySdtDataset(elem, run.sdt);
+    applyRunStyles(elem, run);
     return elem;
   }
 
@@ -5854,8 +5867,8 @@ export class DomPainter {
       return null;
     }
 
-    if (isEmptyInlineSdtPlaceholderRun(run)) {
-      return this.renderEmptyInlineSdtPlaceholderRun(run);
+    if (isEmptySdtPlaceholderRun(run)) {
+      return this.renderEmptySdtPlaceholderRun(run);
     }
 
     // Handle TextRun
@@ -7609,6 +7622,7 @@ export class DomPainter {
     'sdtScope',
     'sdtTag',
     'sdtAlias',
+    'appearance',
     'lockMode',
     'sdtSectionTitle',
     'sdtSectionType',
@@ -7739,6 +7753,7 @@ export class DomPainter {
       this.setDatasetString(el, 'sdtScope', metadata.scope);
       this.setDatasetString(el, 'sdtTag', metadata.tag);
       this.setDatasetString(el, 'sdtAlias', metadata.alias);
+      this.setDatasetString(el, 'appearance', metadata.appearance);
       // Always set lockMode (defaulting to 'unlocked') so CSS can target all SDTs uniformly.
       this.setDatasetString(el, 'lockMode', metadata.lockMode || 'unlocked');
     } else if (metadata.type === 'documentSection') {

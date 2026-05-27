@@ -590,7 +590,7 @@ const SDT_CONTAINER_STYLES = `
   position: absolute;
   left: calc(var(--sd-sdt-chrome-left, 0px) + 2px);
   top: -18px;
-  width: calc(var(--sd-sdt-chrome-width, 100%) - 4px);
+  width: max-content;
   max-width: 130px;
   min-width: 0;
   border-bottom: none;
@@ -600,6 +600,9 @@ const SDT_CONTAINER_STYLES = `
 }
 
 .superdoc-structured-content__label span {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
@@ -683,18 +686,35 @@ const SDT_CONTAINER_STYLES = `
   border-color: var(--sd-content-controls-inline-border, #629be7);
 }
 
-.superdoc-empty-inline-sdt-placeholder {
+.superdoc-empty-sdt-placeholder {
   display: inline-block;
-  width: 8px;
-  height: 0;
-  line-height: 0;
+  line-height: normal;
   vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.superdoc-empty-sdt-placeholder::before {
+  content: attr(data-placeholder-text);
+  color: var(--sd-content-controls-placeholder-text, #a6a6a6);
+}
+
+.superdoc-structured-content-inline.ProseMirror-selectednode .superdoc-empty-sdt-placeholder::before,
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-empty-sdt-placeholder::before {
+  background-color: var(--sd-content-controls-placeholder-selected-bg, Highlight);
+}
+
+.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder,
+.superdoc-structured-content-block[data-appearance='hidden'] .superdoc-empty-block-sdt-placeholder,
+.superdoc-empty-sdt-placeholder[data-appearance='hidden'] {
+  width: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
-.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder {
-  width: 0;
-  min-width: 0;
+.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder::before,
+.superdoc-structured-content-block[data-appearance='hidden'] .superdoc-empty-block-sdt-placeholder::before,
+.superdoc-empty-sdt-placeholder[data-appearance='hidden']::before {
+  content: '';
 }
 
 /* Inline structured content label - shown when active */

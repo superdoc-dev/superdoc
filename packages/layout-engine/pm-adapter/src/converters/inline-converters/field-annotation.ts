@@ -1,4 +1,4 @@
-import type { FieldAnnotationRun, FieldAnnotationMetadata } from '@superdoc/contracts';
+import type { FieldAnnotationRun } from '@superdoc/contracts';
 import type { PMNode } from '../../types.js';
 import { type InlineConverterParams } from './common';
 import { resolveNodeSdtMetadata } from '../../sdt/index.js';
@@ -16,7 +16,7 @@ import { resolveNodeSdtMetadata } from '../../sdt/index.js';
  * @returns FieldAnnotationRun object with all extracted properties
  */
 export function fieldAnnotationNodeToRun({ node, positions }: InlineConverterParams): FieldAnnotationRun {
-  const fieldMetadata = resolveNodeSdtMetadata(node, 'fieldAnnotation') as FieldAnnotationMetadata | null;
+  const fieldMetadata = resolveNodeSdtMetadata(node, 'fieldAnnotation');
 
   // If there's inner content, extract text to use as displayLabel override
   let contentText: string | undefined;

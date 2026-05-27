@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { FlowBlock, Line, ParagraphBlock, Run, TabRun, TextRun, TrackedChangeMeta } from './index.js';
-import { expandRunsForInlineNewlines, sliceRunsForLine } from './run-helpers.js';
+import { expandRunsForInlineNewlines, isEmptySdtPlaceholderRun, sliceRunsForLine } from './run-helpers.js';
 
 describe('expandRunsForInlineNewlines', () => {
   const makeRun = (text: string, pmStart = 0): TextRun => ({
@@ -152,5 +152,18 @@ describe('sliceRunsForLine', () => {
     const line = makeLine({ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0 });
 
     expect(sliceRunsForLine(block, line)).toEqual([run]);
+  });
+
+  it('recognizes block SDT visual placeholders', () => {
+    const run: TextRun = {
+      kind: 'text',
+      text: '',
+      fontFamily: 'Arial',
+      fontSize: 12,
+      visualPlaceholder: 'emptyBlockSdt',
+      sdt: { type: 'structuredContent', scope: 'block', id: 'sdt-block-1' },
+    };
+
+    expect(isEmptySdtPlaceholderRun(run)).toBe(true);
   });
 });

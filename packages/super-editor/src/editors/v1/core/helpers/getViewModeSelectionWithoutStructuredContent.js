@@ -1,11 +1,10 @@
 import { NodeSelection, Selection } from 'prosemirror-state';
-
-const STRUCTURED_CONTENT_NODE_TYPES = new Set(['structuredContent', 'structuredContentBlock']);
+import { isStructuredContentNodeType } from '../../extensions/structured-content/nodeTypes.js';
 
 function findEnclosingStructuredContentPosition($pos) {
   for (let depth = $pos.depth; depth > 0; depth--) {
     const node = $pos.node(depth);
-    if (STRUCTURED_CONTENT_NODE_TYPES.has(node.type.name)) {
+    if (isStructuredContentNodeType(node.type.name)) {
       return $pos.before(depth);
     }
   }
@@ -16,7 +15,7 @@ function findEnclosingStructuredContentPosition($pos) {
 export function getViewModeSelectionWithoutStructuredContent(state) {
   const { selection, doc } = state;
 
-  if (selection instanceof NodeSelection && STRUCTURED_CONTENT_NODE_TYPES.has(selection.node.type.name)) {
+  if (selection instanceof NodeSelection && isStructuredContentNodeType(selection.node.type.name)) {
     const candidate = Selection.near(doc.resolve(selection.from), -1);
     const candidatePos = findEnclosingStructuredContentPosition(candidate.$from);
     if (candidatePos !== null) return null;

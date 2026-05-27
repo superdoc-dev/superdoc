@@ -497,56 +497,112 @@ const SDT_CONTAINER_STYLES = `
 
 /* Structured Content Block - Blue border container */
 .superdoc-structured-content-block {
-  padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid transparent;
   position: relative;
+  --sd-sdt-chrome-left: 0px;
+  --sd-sdt-chrome-width: 100%;
 }
 
-.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
+.superdoc-structured-content-block::before {
+  content: '';
+  position: absolute;
+  left: var(--sd-sdt-chrome-left, 0px);
+  top: 0;
+  bottom: 0;
+  width: var(--sd-sdt-chrome-width, 100%);
+  border-radius: inherit;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.superdoc-structured-content-block::after {
+  content: '';
+  position: absolute;
+  left: var(--sd-sdt-chrome-left, 0px);
+  top: 0;
+  bottom: 0;
+  width: var(--sd-sdt-chrome-width, 100%);
+  border: 1px solid transparent;
+  border-radius: inherit;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover::before {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
+}
+
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover::after {
   border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 /* Group hover (JavaScript-coordinated via PresentationEditor) */
-.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) {
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode)::before {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
+}
+
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode)::after {
   border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 .superdoc-structured-content-block.ProseMirror-selectednode {
-  border-color: var(--sd-content-controls-block-border, #629be7);
   outline: none;
 }
 
-/* Structured content drag handle/label - positioned above */
-.superdoc-structured-content__label {
+.superdoc-structured-content-block.ProseMirror-selectednode::after {
+  border-color: var(--sd-content-controls-block-border, #629be7);
+}
+
+/* Structured content labels - shared box model; positioning differs by scope. */
+.superdoc-structured-content__label,
+.superdoc-structured-content-inline__label {
   font-size: 11px;
   align-items: center;
   justify-content: center;
-  position: absolute;
-  left: 2px;
-  top: -19px;
-  width: calc(100% - 4px);
-  max-width: 130px;
-  min-width: 0;
   height: 18px;
   padding: 0 4px;
   border: 1px solid var(--sd-content-controls-label-border, #629be7);
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
   background-color: var(--sd-content-controls-label-bg, #629be7ee);
   color: var(--sd-content-controls-label-text, #ffffff);
   box-sizing: border-box;
-  z-index: 10;
   display: none;
   pointer-events: auto;
   cursor: pointer;
   user-select: none;
 }
 
+.superdoc-structured-content__label::before,
+.superdoc-structured-content-inline__label::before {
+  content: '';
+  width: 2px;
+  height: 8px;
+  margin-right: 4px;
+  background:
+    radial-gradient(circle, currentColor 1px, transparent 1px) center 0 / 2px 2px no-repeat,
+    radial-gradient(circle, currentColor 1px, transparent 1px) center 3px / 2px 2px no-repeat,
+    radial-gradient(circle, currentColor 1px, transparent 1px) center 6px / 2px 2px no-repeat;
+  flex: 0 0 auto;
+}
+
+/* Structured content drag handle/label - positioned above */
+.superdoc-structured-content__label {
+  position: absolute;
+  left: calc(var(--sd-sdt-chrome-left, 0px) + 2px);
+  top: -18px;
+  width: max-content;
+  max-width: 130px;
+  min-width: 0;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  white-space: nowrap;
+  z-index: 10;
+}
+
 .superdoc-structured-content__label span {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
@@ -566,27 +622,39 @@ const SDT_CONTAINER_STYLES = `
 /* First fragment of a multi-fragment SDT: top corners, no bottom border */
 .superdoc-structured-content-block[data-sdt-container-start="true"]:not([data-sdt-container-end="true"]) {
   border-radius: 4px 4px 0 0;
+}
+
+.superdoc-structured-content-block[data-sdt-container-start="true"]:not([data-sdt-container-end="true"])::after {
   border-bottom: none;
 }
 
 /* Last fragment of a multi-fragment SDT: bottom corners, no top border */
 .superdoc-structured-content-block[data-sdt-container-end="true"]:not([data-sdt-container-start="true"]) {
   border-radius: 0 0 4px 4px;
+}
+
+.superdoc-structured-content-block[data-sdt-container-end="true"]:not([data-sdt-container-start="true"])::after {
   border-top: none;
 }
 
 /* Middle fragment (neither start nor end): no corners, no top/bottom borders */
 .superdoc-structured-content-block:not([data-sdt-container-start="true"]):not([data-sdt-container-end="true"]) {
   border-radius: 0;
+}
+
+.superdoc-structured-content-block:not([data-sdt-container-start="true"]):not([data-sdt-container-end="true"])::after {
   border-top: none;
   border-bottom: none;
 }
 
 /* Collapse double borders between adjacent SDT blocks */
 .superdoc-structured-content-block + .superdoc-structured-content-block {
-  border-top: none;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
+}
+
+.superdoc-structured-content-block + .superdoc-structured-content-block::after {
+  border-top: none;
 }
 
 /* Structured Content Inline - Inline wrapper with blue border */
@@ -618,42 +686,50 @@ const SDT_CONTAINER_STYLES = `
   border-color: var(--sd-content-controls-inline-border, #629be7);
 }
 
-.superdoc-empty-inline-sdt-placeholder {
+.superdoc-empty-sdt-placeholder {
   display: inline-block;
-  width: 8px;
-  height: 0;
-  line-height: 0;
+  line-height: normal;
   vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.superdoc-empty-sdt-placeholder::before {
+  content: attr(data-placeholder-text);
+  color: var(--sd-content-controls-placeholder-text, #a6a6a6);
+}
+
+.superdoc-structured-content-inline.ProseMirror-selectednode .superdoc-empty-sdt-placeholder::before,
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-empty-sdt-placeholder::before {
+  background-color: var(--sd-content-controls-placeholder-selected-bg, Highlight);
+}
+
+.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder,
+.superdoc-structured-content-block[data-appearance='hidden'] .superdoc-empty-block-sdt-placeholder,
+.superdoc-empty-sdt-placeholder[data-appearance='hidden'] {
+  width: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
-.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder {
-  width: 0;
-  min-width: 0;
+.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder::before,
+.superdoc-structured-content-block[data-appearance='hidden'] .superdoc-empty-block-sdt-placeholder::before,
+.superdoc-empty-sdt-placeholder[data-appearance='hidden']::before {
+  content: '';
 }
 
 /* Inline structured content label - shown when active */
 .superdoc-structured-content-inline__label {
   position: absolute;
-  bottom: calc(100% + 2px);
+  bottom: calc(100% + 1px);
   left: 50%;
   transform: translateX(-50%);
-  font-size: 11px;
-  padding: 0 4px;
-  border: 1px solid var(--sd-content-controls-label-border, #629be7);
-  background-color: var(--sd-content-controls-label-bg, #629be7ee);
-  color: var(--sd-content-controls-label-text, #ffffff);
-  border-radius: 4px;
+  border-radius: 4px 4px 0 0;
   white-space: nowrap;
   z-index: 100;
-  display: none;
-  pointer-events: auto;
-  cursor: pointer;
-  user-select: none;
 }
 
 .superdoc-structured-content-inline.ProseMirror-selectednode .superdoc-structured-content-inline__label {
-  display: block;
+  display: inline-flex;
 }
 
 .superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover .superdoc-structured-content-inline__label {
@@ -696,6 +772,14 @@ const SDT_CONTAINER_STYLES = `
   z-index: 9999999;
 }
 
+.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode) {
+  background-color: transparent;
+}
+
+.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode)::before {
+  background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
+}
+
 /* Viewing mode: remove structured content affordances */
 .presentation-editor--viewing .superdoc-structured-content-block,
 .presentation-editor--viewing .superdoc-structured-content-inline {
@@ -707,6 +791,19 @@ const SDT_CONTAINER_STYLES = `
 .presentation-editor--viewing .superdoc-structured-content-block:hover {
   background: none;
   border: none;
+}
+
+.presentation-editor--viewing .superdoc-structured-content-block::after,
+.presentation-editor--viewing .superdoc-structured-content-block:hover::after,
+.presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover::after,
+.presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-group-hover::after {
+  border: none;
+}
+
+.presentation-editor--viewing .superdoc-structured-content-block:hover::before,
+.presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover::before,
+.presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-group-hover::before {
+  background: none;
 }
 
 .presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover,
@@ -738,6 +835,10 @@ const SDT_CONTAINER_STYLES = `
     background: none;
     border: none;
     padding: 0;
+  }
+
+  .superdoc-structured-content-block::after {
+    border: none;
   }
 
   .superdoc-document-section__tooltip,

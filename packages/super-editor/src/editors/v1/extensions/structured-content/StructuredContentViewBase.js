@@ -1,5 +1,6 @@
 import { Attribute } from '@core/Attribute.js';
 import { NodeSelection } from 'prosemirror-state';
+import { isContentLockedMode, isSdtLockedMode } from './lockModes.js';
 
 export class StructuredContentViewBase {
   node;
@@ -197,13 +198,11 @@ export class StructuredContentViewBase {
   }
 
   isContentLocked() {
-    const lockMode = this.node.attrs.lockMode;
-    return lockMode === 'contentLocked' || lockMode === 'sdtContentLocked';
+    return isContentLockedMode(this.node.attrs.lockMode);
   }
 
   isSdtLocked() {
-    const lockMode = this.node.attrs.lockMode;
-    return lockMode === 'sdtLocked' || lockMode === 'sdtContentLocked';
+    return isSdtLockedMode(this.node.attrs.lockMode);
   }
 
   updateContentEditability() {

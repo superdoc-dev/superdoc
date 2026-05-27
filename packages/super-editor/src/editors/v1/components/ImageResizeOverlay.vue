@@ -22,6 +22,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { measureCache } from '@superdoc/layout-bridge';
+import { isContentLockedMode } from '../extensions/structured-content/lockModes.js';
 
 // Configuration constants
 const OVERLAY_EXPANSION_PX = 2000;
@@ -78,8 +79,16 @@ const resizeEditor = computed(() => {
   return typeof editor?.getActiveEditor === 'function' ? editor.getActiveEditor() : editor;
 });
 
+const isImageContentLocked = computed(() => {
+  const lockMode = resolveImageLockMode(props.imageElement);
+  return isContentLockedMode(lockMode);
+});
+
 const isResizeDisabled = computed(
-  () => resizeEditor.value?.options?.documentMode === 'viewing' || !resizeEditor.value?.isEditable,
+  () =>
+    resizeEditor.value?.options?.documentMode === 'viewing' ||
+    !resizeEditor.value?.isEditable ||
+    isImageContentLocked.value,
 );
 
 /**
@@ -106,6 +115,36 @@ const dragState = ref(null);
  * Flag to track forced cleanup (overlay hidden during drag)
  */
 const forcedCleanup = ref(false);
+
+function readLockMode(element) {
+  return element?.dataset?.lockMode || element?.getAttribute?.('data-lock-mode') || null;
+}
+
+function resolveImageLockMode(imageElement) {
+  if (!imageElement) return null;
+
+  const lockModes = [];
+  const directLockMode = readLockMode(imageElement);
+  if (directLockMode) lockModes.push(directLockMode);
+
+  imageElement.querySelectorAll?.('[data-lock-mode]').forEach((element) => {
+    const lockMode = readLockMode(element);
+    if (lockMode) lockModes.push(lockMode);
+  });
+
+  let sdtElement = imageElement.closest?.(
+    '.superdoc-structured-content-block[data-lock-mode], .superdoc-structured-content-inline[data-lock-mode]',
+  );
+  while (sdtElement) {
+    const lockMode = readLockMode(sdtElement);
+    if (lockMode) lockModes.push(lockMode);
+    sdtElement = sdtElement.parentElement?.closest?.(
+      '.superdoc-structured-content-block[data-lock-mode], .superdoc-structured-content-inline[data-lock-mode]',
+    );
+  }
+
+  return lockModes.find(isContentLockedMode) ?? lockModes[0] ?? null;
+}
 
 /**
  * Overlay position and size relative to image element.
@@ -536,7 +575,7 @@ function onDocumentMouseUp(event) {
  */
 function dispatchResizeTransaction(blockId, newWidth, newHeight) {
   const editor = resizeEditor.value;
-  if (!isValidEditor(editor) || !props.imageElement) {
+  if (!isValidEditor(editor) || !props.imageElement || isResizeDisabled.value) {
     return;
   }
 

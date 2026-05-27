@@ -5,7 +5,7 @@ import { twipsToLines } from '../../editors/v1/core/super-converter/helpers.js';
 import { getQuickFormatList } from '../../editors/v1/extensions/linked-styles/index.js';
 import { mapStoredJustificationToDisplayAlignment } from '../../editors/v1/core/helpers/paragraph-alignment.js';
 import { getCurrentParagraphParent, getCurrentResolvedParagraphProperties, resolveStateEditor } from './context.js';
-import { createDirectCommandExecute, isCommandDisabled } from './general.js';
+import { createDirectCommandExecute, isCommandDisabled, isMutationCommandDisabled } from './general.js';
 import type { ToolbarCommandState, ToolbarContext } from '../types.js';
 
 const getCurrentParagraphJustification = (context: ToolbarContext | null) => {
@@ -18,7 +18,7 @@ const getCurrentParagraphJustification = (context: ToolbarContext | null) => {
 export const createParagraphDirectionStateDeriver =
   (direction: 'ltr' | 'rtl') =>
   ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
     if (isDisabled) return { active: false, disabled: true, value: null };
 
     const rightToLeft = getCurrentResolvedParagraphProperties(context)?.rightToLeft;
@@ -69,7 +69,7 @@ export const createTextAlignStateDeriver =
 export const createLineHeightStateDeriver =
   () =>
   ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
 
     if (isDisabled) {
       return {
@@ -93,7 +93,7 @@ export const createLineHeightStateDeriver =
 export const createLinkedStyleStateDeriver =
   () =>
   ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
     const stateEditor = resolveStateEditor(context);
 
     if (isDisabled || !stateEditor) {
@@ -126,7 +126,7 @@ export const createLinkedStyleStateDeriver =
 export const createListStateDeriver =
   (numberingType: 'bullet' | 'ordered') =>
   ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
 
     if (isDisabled) {
       return {

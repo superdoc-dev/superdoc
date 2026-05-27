@@ -54,11 +54,13 @@ import type {
   ResolvedImageItem,
   ResolvedDrawingItem,
   ResolvedListMarkerItem,
+  ResolvedParagraphContent,
   LayoutSourceIdentity,
   LayoutStoryLocator,
 } from '@superdoc/contracts';
 import {
   LAYOUT_BOUNDARY_SCHEMA,
+  EMPTY_SDT_PLACEHOLDER_TEXT,
   adjustAvailableWidthForTextIndent,
   buildLayoutSourceIdentityForFragment,
   calculateJustifySpacing,
@@ -67,6 +69,7 @@ import {
   getCellSpacingPx,
   getParagraphInlineDirection,
   isEmptyInlineSdtPlaceholderRun,
+  isEmptySdtPlaceholderRun,
   normalizeColumnLayout,
   normalizeBaselineShift,
   resolveBaseFontSizeForVerticalText,
@@ -77,7 +80,7 @@ import {
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
-import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
+import { encodeTooltip, isValidImageDataUrl, sanitizeHref } from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from './constants.js';
 import { createChartElement as renderChartToElement } from './chart-renderer.js';
 import {
@@ -133,6 +136,7 @@ import {
 } from './features/paragraph-borders/index.js';
 import {
   applyRtlStyles,
+  resolveTextAlign,
   shouldUseSegmentPositioning,
   resolveRunDirectionAttribute,
   normalizeRtlDateTokenForWordParity,
@@ -922,18 +926,6 @@ const MAX_HREF_LENGTH = 2048;
 
 const SAFE_ANCHOR_PATTERN = /^[A-Za-z0-9._-]+$/;
 
-/**
- * Maximum allowed length for data URLs (10MB).
- * Prevents denial of service attacks from extremely large embedded images.
- */
-const MAX_DATA_URL_LENGTH = 10 * 1024 * 1024; // 10MB
-
-/**
- * Regular expression to validate data URL format for images.
- * Only allows common, safe image MIME types with base64 encoding.
- * Prevents XSS and malformed data URL attacks.
- */
-const VALID_IMAGE_DATA_URL = /^data:image\/(png|jpeg|jpg|gif|svg\+xml|webp|bmp|ico|tiff?);base64,/i;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const WORDART_LINE_FILL_RATIO = 0.9;
 
@@ -3231,6 +3223,15 @@ export class DomPainter {
 
       // Apply SDT container styling (document sections, structured content blocks)
       applySdtContainerStyling(this.doc, fragmentEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
+      this.applyBlockSdtChromeBounds(
+        fragmentEl,
+        block,
+        lines,
+        fragment.width,
+        fragment.fromLine,
+        paraContinuesOnNext,
+        content,
+      );
 
       // Render drop cap if present (only on the first fragment, not continuation)
       if (content?.dropCap) {
@@ -5502,6 +5503,187 @@ export class DomPainter {
     return wrapper;
   }
 
+  private alignNormalTextBesideInlineImage(element: HTMLElement, run: Run, lineContainsInlineImage: boolean): void {
+    if (!lineContainsInlineImage) return;
+    if ((run.kind !== 'text' && run.kind !== undefined) || !('text' in run)) return;
+
+    const textRun = run as TextRun;
+    if (normalizeBaselineShift(textRun.baselineShift) != null || textRun.vertAlign != null) return;
+
+    element.style.lineHeight = 'normal';
+    element.style.verticalAlign = 'bottom';
+  }
+
+  private applyBlockSdtChromeBounds(
+    element: HTMLElement,
+    block: ParagraphBlock,
+    lines: Line[],
+    fragmentWidth: number,
+    fragmentFromLine: number,
+    fragmentContinuesOnNext: boolean | undefined,
+    content?: ResolvedParagraphContent,
+  ): void {
+    const sdt = block.attrs?.sdt ?? block.attrs?.containerSdt;
+    if (sdt?.type !== 'structuredContent' || sdt.scope !== 'block') return;
+
+    const expandedBlock = { ...block, runs: expandRunsForInlineNewlines(block.runs) };
+    let contentLeft = Number.POSITIVE_INFINITY;
+    let contentRight = Number.NEGATIVE_INFINITY;
+
+    for (const [index, line] of lines.entries()) {
+      const runsForLine = sliceRunsForLine(expandedBlock, line);
+      if (runsForLine.length === 0) continue;
+
+      let hasVisibleContent = false;
+      for (const run of runsForLine) {
+        if (run.kind === 'lineBreak' || run.kind === 'break') continue;
+        if (isEmptySdtPlaceholderRun(run)) {
+          hasVisibleContent = true;
+          break;
+        }
+        if ((run.kind === 'text' || run.kind === undefined) && 'text' in run) {
+          if ((run.text ?? '').trim().length === 0) continue;
+        }
+        hasVisibleContent = true;
+        break;
+      }
+
+      if (!hasVisibleContent) continue;
+
+      const lineWidth = Math.max(0, line.naturalWidth ?? line.width ?? 0);
+      if (lineWidth <= 0) continue;
+
+      const resolvedLine = content?.lines[index];
+      const lineIndex = resolvedLine?.lineIndex ?? fragmentFromLine + index;
+      const lineOffset = this.resolveBlockSdtChromeLineOffset(block, line, resolvedLine, lineIndex);
+      const availableWidth = this.resolveBlockSdtChromeAvailableWidth(
+        block,
+        line,
+        fragmentWidth,
+        lineOffset,
+        resolvedLine,
+      );
+      const paintedLineWidth = this.resolveBlockSdtChromePaintedLineWidth(
+        block,
+        line,
+        lineWidth,
+        availableWidth,
+        index,
+        lines.length,
+        fragmentContinuesOnNext,
+        resolvedLine,
+        content,
+      );
+      const alignmentSlack = Math.max(0, availableWidth - paintedLineWidth);
+      const alignment = resolveTextAlign(block.attrs?.alignment, getParagraphInlineDirection(block.attrs) === 'rtl');
+      const lineLeft =
+        lineOffset + (alignment === 'center' ? alignmentSlack / 2 : alignment === 'right' ? alignmentSlack : 0);
+      contentLeft = Math.min(contentLeft, lineLeft);
+      contentRight = Math.max(contentRight, lineLeft + paintedLineWidth);
+    }
+
+    if (!Number.isFinite(contentLeft) || !Number.isFinite(contentRight)) return;
+
+    const chromeLeft = Math.max(0, contentLeft);
+    const chromeWidth = Math.max(0, Math.min(fragmentWidth, contentRight) - chromeLeft);
+    if (chromeWidth <= 0 || chromeWidth >= fragmentWidth) return;
+
+    element.style.setProperty('--sd-sdt-chrome-left', `${chromeLeft}px`);
+    element.style.setProperty('--sd-sdt-chrome-width', `${chromeWidth}px`);
+  }
+
+  private resolveBlockSdtChromeLineOffset(
+    block: ParagraphBlock,
+    line: Line,
+    resolvedLine: ResolvedParagraphContent['lines'][number] | undefined,
+    lineIndex: number,
+  ): number {
+    if (resolvedLine) {
+      if (resolvedLine.isListFirstLine) {
+        return resolvedLine.resolvedListTextStartPx ?? resolvedLine.indentOffset;
+      }
+      if (resolvedLine.hasExplicitSegmentPositioning) {
+        return resolvedLine.indentOffset;
+      }
+      return Math.max(0, resolvedLine.paddingLeftPx + resolvedLine.textIndentPx);
+    }
+
+    const paraIndent = block.attrs?.indent;
+    const indentLeft = paraIndent?.left ?? 0;
+    const firstLine = paraIndent?.firstLine ?? 0;
+    const hanging = paraIndent?.hanging ?? 0;
+    const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+    const firstLineOffset = suppressFirstLineIndent ? 0 : firstLine - hanging;
+    const isFirstLine = lineIndex === 0;
+    const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
+
+    if (hasExplicitSegmentPositioning) {
+      const effectiveLeftIndent = indentLeft < 0 ? 0 : indentLeft;
+      return Math.max(0, effectiveLeftIndent + (isFirstLine ? firstLineOffset : 0));
+    }
+
+    if (isFirstLine) {
+      return Math.max(0, indentLeft + firstLineOffset);
+    }
+    if (indentLeft > 0) {
+      return indentLeft;
+    }
+    if (hanging > 0 && indentLeft >= 0) {
+      return hanging;
+    }
+    return 0;
+  }
+
+  private resolveBlockSdtChromeAvailableWidth(
+    block: ParagraphBlock,
+    line: Line,
+    fragmentWidth: number,
+    lineOffset: number,
+    resolvedLine: ResolvedParagraphContent['lines'][number] | undefined,
+  ): number {
+    if (resolvedLine) {
+      return Math.max(0, resolvedLine.availableWidth);
+    }
+
+    const rightIndent = Math.max(0, block.attrs?.indent?.right ?? 0);
+    const fallbackAvailableWidth = Math.max(0, fragmentWidth - lineOffset - rightIndent);
+    if (line.maxWidth != null) {
+      return Math.min(line.maxWidth, fallbackAvailableWidth);
+    }
+    return fallbackAvailableWidth;
+  }
+
+  private resolveBlockSdtChromePaintedLineWidth(
+    block: ParagraphBlock,
+    line: Line,
+    lineWidth: number,
+    availableWidth: number,
+    fragmentLineIndex: number,
+    fragmentLineCount: number,
+    fragmentContinuesOnNext: boolean | undefined,
+    resolvedLine: ResolvedParagraphContent['lines'][number] | undefined,
+    content: ResolvedParagraphContent | undefined,
+  ): number {
+    const explicitPositionedSegmentCount = line.segments?.filter((segment) => segment.x !== undefined).length ?? 0;
+    const hasMultipleExplicitPositionedSegments = explicitPositionedSegmentCount > 1;
+    const paragraphEndsWithLineBreak =
+      content?.paragraphEndsWithLineBreak === true || block.runs[block.runs.length - 1]?.kind === 'lineBreak';
+    const isLastLineOfParagraph =
+      resolvedLine != null
+        ? resolvedLine.skipJustify
+        : fragmentLineIndex === fragmentLineCount - 1 && !fragmentContinuesOnNext;
+    const justifyShouldApply = shouldApplyJustify({
+      alignment: block.attrs?.alignment,
+      hasExplicitPositioning: line.segments?.some((segment) => segment.x !== undefined) === true,
+      hasExplicitTabStops: line.hasExplicitTabStops === true,
+      isLastLineOfParagraph,
+      paragraphEndsWithLineBreak,
+      skipJustifyOverride: (resolvedLine?.skipJustify ?? false) || hasMultipleExplicitPositionedSegments,
+    });
+
+    return justifyShouldApply ? Math.max(lineWidth, availableWidth) : lineWidth;
+  }
+
   private setTextContentWithFormattingSpaceMarks(element: HTMLElement, text: string): void {
     if (!this.showFormattingMarks || !text.includes(' ') || !this.doc) {
       element.textContent = text;
@@ -5529,15 +5711,22 @@ export class DomPainter {
     }
   }
 
-  private renderEmptyInlineSdtPlaceholderRun(run: TextRun): HTMLElement | null {
+  private renderEmptySdtPlaceholderRun(run: TextRun): HTMLElement | null {
     if (!this.doc) return null;
     const elem = this.doc.createElement('span');
-    elem.classList.add('superdoc-empty-inline-sdt-placeholder');
+    elem.classList.add('superdoc-empty-sdt-placeholder');
+    if (run.visualPlaceholder === 'emptyInlineSdt') {
+      elem.classList.add('superdoc-empty-inline-sdt-placeholder');
+    } else if (run.visualPlaceholder === 'emptyBlockSdt') {
+      elem.classList.add('superdoc-empty-block-sdt-placeholder');
+    }
     elem.setAttribute('aria-hidden', 'true');
+    elem.dataset.placeholderText = EMPTY_SDT_PLACEHOLDER_TEXT;
     elem.dataset.layoutEpoch = String(this.layoutEpoch);
     if (run.pmStart != null) elem.dataset.pmStart = String(run.pmStart);
     if (run.pmEnd != null) elem.dataset.pmEnd = String(run.pmEnd);
     this.applySdtDataset(elem, run.sdt);
+    applyRunStyles(elem, run);
     return elem;
   }
 
@@ -5678,8 +5867,8 @@ export class DomPainter {
       return null;
     }
 
-    if (isEmptyInlineSdtPlaceholderRun(run)) {
-      return this.renderEmptyInlineSdtPlaceholderRun(run);
+    if (isEmptySdtPlaceholderRun(run)) {
+      return this.renderEmptySdtPlaceholderRun(run);
     }
 
     // Handle TextRun
@@ -5785,9 +5974,9 @@ export class DomPainter {
    * Renders an ImageRun as an inline <img> element.
    *
    * SECURITY NOTES:
-   * - Data URLs are validated against VALID_IMAGE_DATA_URL regex to ensure proper format
-   * - Size limit (MAX_DATA_URL_LENGTH) prevents DoS attacks from extremely large images
-   * - Only allows safe image MIME types (png, jpeg, gif, etc.) with base64 encoding
+   * - Data URLs are validated against an allowlist of image MIME types
+   * - Size limit prevents DoS attacks from extremely large images
+   * - Only allows safe image MIME types; non-base64 data URLs are limited to SVG
    * - Non-data URLs are sanitized through sanitizeUrl to prevent XSS
    *
    * METADATA ATTRIBUTE:
@@ -5835,13 +6024,8 @@ export class DomPainter {
     // but are safe for <img> elements when properly validated
     const isDataUrl = typeof run.src === 'string' && run.src.startsWith('data:');
     if (isDataUrl) {
-      // SECURITY: Validate data URL format and size
-      if (run.src.length > MAX_DATA_URL_LENGTH) {
-        // Reject data URLs that are too large (DoS prevention)
-        return null;
-      }
-      if (!VALID_IMAGE_DATA_URL.test(run.src)) {
-        // Reject data URLs with invalid MIME types or encoding
+      // SECURITY: Validate data URL MIME type, encoding, and size.
+      if (!isValidImageDataUrl(run.src)) {
         return null;
       }
       img.src = run.src;
@@ -5907,8 +6091,7 @@ export class DomPainter {
     // When we don't use a wrapper (no clipPath, or clipPath with width/height 0), apply them on the img so layout is correct.
     const useWrapper = hasClipPath && run.width > 0 && run.height > 0;
     if (!useWrapper) {
-      // Apply vertical alignment (bottom-aligned to text baseline)
-      img.style.verticalAlign = run.verticalAlign ?? 'bottom';
+      img.style.verticalAlign = run.verticalAlign ?? 'top';
 
       // Apply spacing as CSS margins
       if (run.distTop) {
@@ -5985,7 +6168,7 @@ export class DomPainter {
       wrapper.style.height = `${run.height}px`;
       wrapper.style.boxSizing = 'border-box';
       wrapper.style.overflow = 'hidden';
-      wrapper.style.verticalAlign = run.verticalAlign ?? 'bottom';
+      wrapper.style.verticalAlign = run.verticalAlign ?? 'top';
       if (run.distTop) wrapper.style.marginTop = `${run.distTop}px`;
       if (run.distBottom) wrapper.style.marginBottom = `${run.distBottom}px`;
       if (run.distLeft) wrapper.style.marginLeft = `${run.distLeft}px`;
@@ -6035,7 +6218,7 @@ export class DomPainter {
       wrapper.style.display = 'inline-block';
       wrapper.style.width = `${run.width}px`;
       wrapper.style.height = `${run.height}px`;
-      wrapper.style.verticalAlign = run.verticalAlign ?? 'bottom';
+      wrapper.style.verticalAlign = run.verticalAlign ?? 'top';
       wrapper.style.position = 'relative';
       wrapper.style.zIndex = '1';
       if (run.distTop) wrapper.style.marginTop = `${run.distTop}px`;
@@ -6199,7 +6382,7 @@ export class DomPainter {
           // SECURITY: Validate data URLs
           const isDataUrl = run.imageSrc.startsWith('data:');
           if (isDataUrl) {
-            if (run.imageSrc.length <= MAX_DATA_URL_LENGTH && VALID_IMAGE_DATA_URL.test(run.imageSrc)) {
+            if (isValidImageDataUrl(run.imageSrc)) {
               img.src = run.imageSrc;
             } else {
               // Invalid data URL - fall back to displayLabel
@@ -6609,6 +6792,7 @@ export class DomPainter {
       spaceCount,
       shouldJustify: justifyShouldApply,
     });
+    const lineContainsInlineImage = runsForLine.some((run) => this.isImageRun(run));
     const resolveLineIndentOffset = (): number => {
       if (indentOffsetOverride != null) {
         return indentOffsetOverride;
@@ -6946,6 +7130,7 @@ export class DomPainter {
             if (styleId) {
               elem.setAttribute('styleid', styleId);
             }
+            this.alignNormalTextBesideInlineImage(elem, segmentRun, lineContainsInlineImage);
             // Determine X position for this segment
             // Layout positions are relative to content area start (0).
             // Add indentOffset to position content at the correct paragraph indent.
@@ -7045,6 +7230,7 @@ export class DomPainter {
           if (styleId) {
             elem.setAttribute('styleid', styleId);
           }
+          this.alignNormalTextBesideInlineImage(elem, run, lineContainsInlineImage);
 
           // If this run has inline SDT, add to or create wrapper
           if (resolved && this.doc) {
@@ -7436,6 +7622,7 @@ export class DomPainter {
     'sdtScope',
     'sdtTag',
     'sdtAlias',
+    'appearance',
     'lockMode',
     'sdtSectionTitle',
     'sdtSectionType',
@@ -7566,6 +7753,7 @@ export class DomPainter {
       this.setDatasetString(el, 'sdtScope', metadata.scope);
       this.setDatasetString(el, 'sdtTag', metadata.tag);
       this.setDatasetString(el, 'sdtAlias', metadata.alias);
+      this.setDatasetString(el, 'appearance', metadata.appearance);
       // Always set lockMode (defaulting to 'unlocked') so CSS can target all SDTs uniformly.
       this.setDatasetString(el, 'lockMode', metadata.lockMode || 'unlocked');
     } else if (metadata.type === 'documentSection') {
@@ -7755,6 +7943,26 @@ const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string
   return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
 };
 
+const stableSerializeEvidenceValue = (value: unknown): string => {
+  if (value === undefined) return '';
+  if (value === null) return 'null';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerializeEvidenceValue(item)).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .filter((key) => record[key] !== undefined)
+      .map((key) => `${JSON.stringify(key)}:${stableSerializeEvidenceValue(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(String(value));
+};
+
 /**
  * Type guard to validate list marker attributes structure.
  *
@@ -7857,6 +8065,17 @@ const deriveBlockVersion = (block: FlowBlock): string => {
             imgRun.distLeft ?? '',
             imgRun.distRight ?? '',
             readClipPathValue((imgRun as { clipPath?: unknown }).clipPath),
+            imgRun.verticalAlign ?? '',
+            imgRun.rotation ?? '',
+            imgRun.flipH ? 1 : 0,
+            imgRun.flipV ? 1 : 0,
+            imgRun.gain ?? '',
+            imgRun.blacklevel ?? '',
+            imgRun.grayscale ? 1 : 0,
+            stableSerializeEvidenceValue(imgRun.lum),
+            stableSerializeEvidenceValue(imgRun.hyperlink),
+            stableSerializeEvidenceValue(imgRun.sdt),
+            stableSerializeEvidenceValue(imgRun.dataAttrs),
             // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
           ].join(',');
         }

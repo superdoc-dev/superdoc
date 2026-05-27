@@ -72,6 +72,7 @@ const COMMENT_THREAD_HIT_TOLERANCE_PX = 3;
 const INLINE_SDT_LABEL_SELECTOR = `.${DOM_CLASS_NAMES.INLINE_SDT_LABEL}`;
 const BLOCK_SDT_LABEL_SELECTOR = `.${DOM_CLASS_NAMES.BLOCK_SDT_LABEL}`;
 const SDT_LABEL_SELECTOR = `${INLINE_SDT_LABEL_SELECTOR}, ${BLOCK_SDT_LABEL_SELECTOR}`;
+const EMPTY_SDT_PLACEHOLDER_SELECTOR = '.superdoc-empty-sdt-placeholder';
 const COMMENT_THREAD_HIT_SAMPLE_OFFSETS: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
   [-COMMENT_THREAD_HIT_TOLERANCE_PX, 0],
@@ -1719,13 +1720,14 @@ export class EditorInputManager {
         let nextSelection: Selection;
         let inlineSdtBoundaryPos: number | null = null;
         let inlineSdtBoundaryDirection: 'before' | 'after' | null = null;
+        const clickedEmptySdtPlaceholder = target?.closest?.(EMPTY_SDT_PLACEHOLDER_SELECTOR) != null;
         const inlineSdt = clickDepth === 1 ? findStructuredContentInlineAtPos(doc, hit.pos) : null;
-        if (inlineSdt && hit.pos >= inlineSdt.end) {
+        if (!clickedEmptySdtPlaceholder && inlineSdt && hit.pos >= inlineSdt.end) {
           const afterInlineSdt = inlineSdt.pos + inlineSdt.node.nodeSize;
           inlineSdtBoundaryPos = afterInlineSdt;
           inlineSdtBoundaryDirection = 'after';
           nextSelection = TextSelection.create(doc, afterInlineSdt);
-        } else if (inlineSdt && hit.pos <= inlineSdt.start) {
+        } else if (!clickedEmptySdtPlaceholder && inlineSdt && hit.pos <= inlineSdt.start) {
           inlineSdtBoundaryPos = inlineSdt.pos;
           inlineSdtBoundaryDirection = 'before';
           nextSelection = TextSelection.create(doc, inlineSdt.pos);

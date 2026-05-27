@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deriveBlockVersion, sourceAnchorSignature } from './versionSignature.js';
-import type { FlowBlock, SourceAnchor, TextRun } from '@superdoc/contracts';
+import type { FlowBlock, ImageRun, SourceAnchor, TextRun } from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
   it('is stable for equivalent source anchors with different object key order', () => {
@@ -64,5 +64,62 @@ describe('deriveBlockVersion - bidi', () => {
     const a = deriveBlockVersion(makeParagraph({ rtl: true }));
     const b = deriveBlockVersion(makeParagraph({ rtl: true }));
     expect(a).toBe(b);
+  });
+});
+
+describe('deriveBlockVersion - inline image runs', () => {
+  const makeParagraphWithImage = (overrides: Partial<ImageRun> = {}): FlowBlock => ({
+    kind: 'paragraph',
+    id: 'p-image',
+    runs: [
+      {
+        kind: 'image',
+        src: 'img.png',
+        width: 100,
+        height: 50,
+        ...overrides,
+      },
+    ],
+  });
+
+  it('produces a different version when inline image SDT metadata changes', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImage());
+    const locked = deriveBlockVersion(
+      makeParagraphWithImage({
+        sdt: {
+          type: 'structuredContent',
+          scope: 'inline',
+          id: 'image-sdt',
+          lockMode: 'contentLocked',
+        },
+      }),
+    );
+
+    expect(locked).not.toBe(plain);
+  });
+
+  it('produces a different version when inline image data attributes change', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImage());
+    const withDataAttrs = deriveBlockVersion(makeParagraphWithImage({ dataAttrs: { 'data-example': '1' } }));
+
+    expect(withDataAttrs).not.toBe(plain);
+  });
+
+  it('produces a different version when inline image paint metadata changes', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImage());
+    const withPaintMetadata = deriveBlockVersion(
+      makeParagraphWithImage({
+        verticalAlign: 'top',
+        rotation: 90,
+        flipH: true,
+        gain: '50000',
+        blacklevel: '20000',
+        grayscale: true,
+        lum: { bright: 10000, contrast: -10000 },
+        hyperlink: { url: 'https://example.com', tooltip: 'Example' },
+      }),
+    );
+
+    expect(withPaintMetadata).not.toBe(plain);
   });
 });

@@ -3962,7 +3962,7 @@ describe('paragraph converters', () => {
         distBottom: 20,
         distLeft: 5,
         distRight: 15,
-        verticalAlign: 'bottom',
+        verticalAlign: 'top',
         pmStart: 10,
         pmEnd: 11,
       });
@@ -4219,14 +4219,14 @@ describe('paragraph converters', () => {
       expect(result?.pmEnd).toBeUndefined();
     });
 
-    it('sets verticalAlign to bottom by default', () => {
+    it('sets verticalAlign to top by default', () => {
       const node: PMNode = {
         type: 'image',
         attrs: { src: 'image.png', inline: true },
       };
 
       const result = imageNodeToRun(buildImageParams(node, positions));
-      expect(result?.verticalAlign).toBe('bottom');
+      expect(result?.verticalAlign).toBe('top');
     });
 
     it('omits alt and title when not present', () => {

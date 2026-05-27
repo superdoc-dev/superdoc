@@ -11,7 +11,13 @@
  */
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { ParagraphBlock, Run, TabStop } from '@superdoc/contracts';
+import {
+  EMPTY_SDT_PLACEHOLDER_TEXT,
+  computeLinePmRange,
+  type ParagraphBlock,
+  type Run,
+  type TabStop,
+} from '@superdoc/contracts';
 import { remeasureParagraph } from '../src/remeasure.ts';
 
 /**
@@ -214,6 +220,53 @@ describe('remeasureParagraph', () => {
       expect(measure.kind).toBe('paragraph');
       expect(measure.lines).toHaveLength(0);
       expect(measure.totalHeight).toBe(0);
+    });
+
+    it('measures visible empty SDT placeholders using the placeholder prompt width', () => {
+      const block = createBlock([
+        textRun('', {
+          kind: 'text',
+          visualPlaceholder: 'emptyBlockSdt',
+          sdt: { type: 'structuredContent', scope: 'block', id: 'empty-block-sdt' },
+          pmStart: 12,
+          pmEnd: 12,
+        }),
+      ]);
+      const measure = remeasureParagraph(block, 500);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].width).toBe(EMPTY_SDT_PLACEHOLDER_TEXT.length * CHAR_WIDTH);
+      expect(computeLinePmRange(block, measure.lines[0])).toEqual({ pmStart: 12, pmEnd: 12 });
+    });
+
+    it('keeps a visible empty SDT placeholder atomic when it is wider than the line', () => {
+      const block = createBlock([
+        textRun('', {
+          kind: 'text',
+          visualPlaceholder: 'emptyBlockSdt',
+          sdt: { type: 'structuredContent', scope: 'block', id: 'narrow-empty-block-sdt' },
+        }),
+      ]);
+      const measure = remeasureParagraph(block, 60);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[0].width).toBe(EMPTY_SDT_PLACEHOLDER_TEXT.length * CHAR_WIDTH);
+    });
+
+    it('keeps hidden empty SDT placeholders zero-width during remeasurement', () => {
+      const block = createBlock([
+        textRun('', {
+          kind: 'text',
+          visualPlaceholder: 'emptyBlockSdt',
+          sdt: { type: 'structuredContent', scope: 'block', id: 'hidden-block-sdt', appearance: 'hidden' },
+        }),
+      ]);
+      const measure = remeasureParagraph(block, 500);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].width).toBe(0);
     });
 
     it('handles single character per line when maxWidth is very narrow', () => {

@@ -8,6 +8,11 @@ const ZERO_WIDTH_MARKER_NODE_NAMES = new Set([
   'permEnd',
   'permStartBlock',
   'permEndBlock',
+  'tableOfContentsEntry',
+  'indexEntry',
+  'authorityEntry',
+  'passthroughInline',
+  'passthroughBlock',
 ]);
 
 function isZeroWidthMarker(node) {

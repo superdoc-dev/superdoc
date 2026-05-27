@@ -23,6 +23,8 @@ const makeSchema = () =>
       tableCell: { content: 'block+' },
       noBreakHyphen: { inline: true, group: 'inline', atom: true, leafText: () => '-' },
       bookmarkEnd: { inline: true, group: 'inline', atom: true },
+      tableOfContentsEntry: { inline: true, group: 'inline', atom: true },
+      passthroughBlock: { group: 'block', atom: true },
       image: { inline: true, group: 'inline', atom: true },
       text: { group: 'inline' },
     },
@@ -277,6 +279,57 @@ describe('moveIntoBlockSdtAfterTextBlockEnd', () => {
       paragraph(schema, 'Before'),
       schema.nodes.structuredContentBlock.create(null, [
         schema.nodes.permStartBlock.create(),
+        paragraph(schema, 'Inner'),
+      ]),
+      paragraph(schema, 'After'),
+    ]);
+    const beforeEnd = findTextPos(doc, 'Before', 6);
+    const innerStart = findTextPos(doc, 'Inner');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, beforeEnd) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.selection.from).toBe(innerStart);
+  });
+
+  it('ignores trailing hidden metadata atoms when checking the preceding paragraph end', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.nodes.paragraph.create(null, [run(schema, 'Before'), schema.nodes.tableOfContentsEntry.create()]),
+      schema.nodes.structuredContentBlock.create(null, [paragraph(schema, 'Inner')]),
+      paragraph(schema, 'After'),
+    ]);
+    const beforeEnd = findTextPos(doc, 'Before', 6);
+    const innerStart = findTextPos(doc, 'Inner');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, beforeEnd) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.selection.from).toBe(innerStart);
+  });
+
+  it('skips leading hidden metadata atoms when targeting a following block SDT', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [
+        schema.nodes.passthroughBlock.create(),
         paragraph(schema, 'Inner'),
       ]),
       paragraph(schema, 'After'),

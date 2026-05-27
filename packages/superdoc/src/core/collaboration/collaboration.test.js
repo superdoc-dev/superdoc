@@ -192,6 +192,32 @@ describe('collaboration.createProvider', () => {
     );
   });
 
+  // SD-673: pin the exact key set of the awareness-update payload.
+  // SuperDocAwarenessUpdatePayload declares { states, added, removed,
+  // superdoc }; the objectContaining assertion above would not catch a
+  // dropped field or a regression to the older { context } shape.
+  it('awareness-update payload has exactly { states, added, removed, superdoc } (SD-673)', () => {
+    const context = { emit: vi.fn() };
+    const result = collaborationModule.createProvider({
+      config: { url: 'ws://test' },
+      user: { name: 'Sam', email: 'sam@example.com' },
+      documentId: 'doc-1',
+      superdocInstance: context,
+    });
+
+    awarenessStatesToArrayMock.mockReturnValueOnce([{ name: 'A' }, { name: 'B' }]);
+    result.provider.emitAwareness({ added: [3], removed: [7] }, new Map());
+
+    expect(context.emit).toHaveBeenCalledTimes(1);
+    const [eventName, payload] = context.emit.mock.calls[0];
+    expect(eventName).toBe('awareness-update');
+    expect(Object.keys(payload).sort()).toEqual(['added', 'removed', 'states', 'superdoc']);
+    expect(payload.states).toEqual([{ name: 'A' }, { name: 'B' }]);
+    expect(payload.added).toEqual([3]);
+    expect(payload.removed).toEqual([7]);
+    expect(payload.superdoc).toBe(context);
+  });
+
   it('creates hocuspocus provider and wires lifecycle callbacks', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const context = { emit: vi.fn() };

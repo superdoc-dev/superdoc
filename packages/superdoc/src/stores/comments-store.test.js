@@ -512,6 +512,15 @@ describe('comments-store', () => {
         comment: { commentId: 'change-1' },
       }),
     );
+
+    // SD-673: pin the exact key set of the comments-update payload.
+    // SuperDocCommentsUpdatePayload declares { type, comment?, changes? };
+    // the objectContaining assertion above would not catch a regression
+    // to the older { data: ... } shape or an extra field leaking in.
+    const [, payload] = superdoc.emit.mock.calls[0];
+    expect(Object.keys(payload).sort()).toEqual(['comment', 'type']);
+    expect(typeof payload.type).toBe('string');
+    expect(payload.comment).toEqual({ commentId: 'change-1' });
   });
 
   it('reopens resolved tracked change comments on update events', () => {
@@ -1382,6 +1391,20 @@ describe('comments-store', () => {
         comment: expect.objectContaining({ commentId: 'tc-stale' }),
       }),
     );
+
+    // SD-673: pin the DELETED variant of SuperDocCommentsUpdatePayload.
+    // This emit path produces the three-key shape { type, comment, changes }
+    // (changes carries the [{ key: 'deleted', commentId, fileId }] tuple).
+    // The objectContaining assertion above does not require `changes` to be
+    // present, so a regression that dropped it would not be caught.
+    const deletedCall = superdoc.emit.mock.calls.find(
+      ([name, payload]) => name === 'comments-update' && payload?.type === comments_module_events.DELETED,
+    );
+    expect(deletedCall).toBeDefined();
+    const [, deletedPayload] = deletedCall;
+    expect(Object.keys(deletedPayload).sort()).toEqual(['changes', 'comment', 'type']);
+    expect(Array.isArray(deletedPayload.changes)).toBe(true);
+    expect(deletedPayload.changes[0]).toMatchObject({ key: 'deleted' });
   });
 
   it('keeps tracked-change comments whose IDs are still present in marks', () => {

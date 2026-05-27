@@ -87,7 +87,10 @@ const BLOCK_LABEL = '.superdoc-structured-content-block__label';
 const LEGACY_BLOCK_LABEL = '.superdoc-structured-content__label';
 
 function buildColorRules(scope: string, selector: string, color: string): string {
-  const hoverFill = `color-mix(in srgb, ${color} 8%, transparent)`;
+  // Keep base/hover fills separate so we can tune resting vs hover opacity independently later.
+  // SD-2533: resting uses 8%, hover uses 12% for a slightly stronger interaction cue.
+  const baseFill = `color-mix(in srgb, ${color} 8%, transparent)`;
+  const hoverFill = `color-mix(in srgb, ${color} 12%, transparent)`;
   const labelFill = `color-mix(in srgb, ${color} 87%, transparent)`;
 
   return `
@@ -95,9 +98,11 @@ ${scope} ${SDT_INLINE}${selector},
 ${scope} ${SDT_BLOCK}${selector} {
   border-color: ${color};
   --sd-content-controls-inline-border: ${color};
+  --sd-content-controls-inline-bg: ${baseFill};
   --sd-content-controls-inline-hover-border: ${color};
   --sd-content-controls-inline-hover-bg: ${hoverFill};
   --sd-content-controls-block-border: ${color};
+  --sd-content-controls-block-bg: ${baseFill};
   --sd-content-controls-block-hover-border: ${color};
   --sd-content-controls-block-hover-bg: ${hoverFill};
   --sd-content-controls-lock-hover-bg: ${hoverFill};

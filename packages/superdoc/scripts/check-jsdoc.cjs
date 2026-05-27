@@ -46,7 +46,10 @@
  *
  * Adding a file to CHECKED_FILES:
  *   1. Add `// @ts-check` as the first line.
- *   2. Append the file's repo-relative path to CHECKED_FILES below.
+ *   2. Append the file's repo-relative path to the `CHECKED_FILES`
+ *      array in `./jsdoc-checked-files.cjs` (the shared source of
+ *      truth consumed by both this gate and
+ *      `report-js-contract-owners.cjs`).
  *   3. Run `pnpm --filter superdoc run check:jsdoc` and fix what
  *      surfaces. If the file was on the debt snapshot, also rerun
  *      with `--write` to drop the stale entry.
@@ -77,26 +80,17 @@ const tsconfigPath = path.join(packageDir, 'tsconfig.json');
 const DEBT_SNAPSHOT_PATH = path.join(__dirname, 'jsdoc-debt-snapshot.json');
 const ALLOWLIST_PATH = path.join(__dirname, 'jsdoc-allowlist.cjs');
 
-// Hand-curated set of files explicitly gated by this script. Each MUST
-// have `// @ts-check` at the top. Adding a file = committing to keep
-// it clean. The list is small on purpose; broader checkJs coverage is
-// gained one file at a time, not in a mass migration.
-const CHECKED_FILES = [
-  'packages/superdoc/src/helpers/schema-introspection.js',
-  'packages/superdoc/src/composables/use-find-replace.js',
-  'packages/superdoc/src/composables/use-password-prompt.js',
-  'packages/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/addMarkStep.js',
-  'packages/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markDeletion.js',
-  'packages/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markInsertion.js',
-];
+// Hand-curated set of files explicitly gated by this script lives in
+// `./jsdoc-checked-files.cjs` so it's shared with
+// `report-js-contract-owners.cjs` (which classifies these files as
+// `checked-files` rather than `unaccounted`). Keep both consumers
+// reading from one place; edits go in the shared module.
+const {
+  CHECKED_FILES,
+  REACHABILITY_EXEMPT_CHECKED_FILES: REACHABILITY_EXEMPT_LIST,
+} = require('./jsdoc-checked-files.cjs');
 
-const REACHABILITY_EXEMPT_CHECKED_FILES = new Set([
-  // These files predate SD-2833. They are kept under the gate because their
-  // typedefs feed exported SuperDoc configuration types, but they are reached
-  // through implementation imports rather than direct public barrel exports.
-  'packages/superdoc/src/composables/use-find-replace.js',
-  'packages/superdoc/src/composables/use-password-prompt.js',
-]);
+const REACHABILITY_EXEMPT_CHECKED_FILES = new Set(REACHABILITY_EXEMPT_LIST);
 
 // PUBLIC entry points used by the ratchet's public-surface walk. These
 // are the files consumers reach through `superdoc`, `superdoc/super-editor`,

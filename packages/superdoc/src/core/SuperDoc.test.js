@@ -2887,4 +2887,107 @@ describe('SuperDoc core', () => {
       expect(instance.config.documentMode).toBe(before);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // SD-673: runtime event payload shapes
+  // ---------------------------------------------------------------------------
+  //
+  // Pin the exact key set the runtime emits for each public event whose
+  // Config callback has a named payload type (SuperDoc{Ready,Editor,Locked}
+  // Payload). Existing tests use objectContaining({...}) which would not
+  // catch a missing or extra field; these assertions catch the bug class
+  // from #3503 where typed payloads silently drifted from what the runtime
+  // emits.
+  //
+  // Each test:
+  //   1. Registers superdoc.on(event, listener).
+  //   2. Triggers the runtime emit path (the broadcast/lock method).
+  //   3. Asserts Object.keys(payload).sort() matches the named type's
+  //      key set, and each value has the expected runtime type.
+
+  describe('SD-673: runtime event payload shapes', () => {
+    const baseConfig = () => ({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+
+    it("ready: payload key set is ['superdoc'] and value is the SuperDoc instance", async () => {
+      const { superdocStore } = createAppHarness();
+      superdocStore.documents = [{ type: DOCX, getEditor: vi.fn(() => ({})), setEditor: vi.fn() }];
+
+      const instance = new SuperDoc(baseConfig());
+      await flushMicrotasks();
+
+      const received = [];
+      instance.on('ready', (payload) => received.push(payload));
+
+      instance.broadcastEditorCreate({});
+
+      expect(received).toHaveLength(1);
+      expect(Object.keys(received[0]).sort()).toEqual(['superdoc']);
+      expect(received[0].superdoc).toBe(instance);
+    });
+
+    it("editorBeforeCreate: payload key set is ['editor']", async () => {
+      createAppHarness();
+      const instance = new SuperDoc(baseConfig());
+      await flushMicrotasks();
+
+      const received = [];
+      instance.on('editorBeforeCreate', (payload) => received.push(payload));
+
+      const editor = { id: 'editor-1' };
+      instance.broadcastEditorBeforeCreate(editor);
+
+      expect(received).toHaveLength(1);
+      expect(Object.keys(received[0]).sort()).toEqual(['editor']);
+      // editor is wrapped in createDeprecatedEditorProxy; the proxy is
+      // transparent for property access, so identity-by-property holds.
+      expect(received[0].editor.id).toBe('editor-1');
+    });
+
+    it("editorCreate: payload key set is ['editor']", async () => {
+      createAppHarness();
+      const instance = new SuperDoc(baseConfig());
+      await flushMicrotasks();
+
+      const received = [];
+      instance.on('editorCreate', (payload) => received.push(payload));
+
+      const editor = { id: 'editor-2' };
+      instance.broadcastEditorCreate(editor);
+
+      expect(received).toHaveLength(1);
+      expect(Object.keys(received[0]).sort()).toEqual(['editor']);
+      expect(received[0].editor.id).toBe('editor-2');
+    });
+
+    it("locked: payload key set is ['isLocked', 'lockedBy'] and lockedBy is User | null", async () => {
+      createAppHarness();
+      const instance = new SuperDoc(baseConfig());
+      await flushMicrotasks();
+      instance.config.documents = [];
+
+      const received = [];
+      instance.on('locked', (payload) => received.push(payload));
+
+      // Lock with a user.
+      instance.lockSuperdoc(true, { name: 'Admin', email: 'admin@x.com' });
+      // Unlock (lockedBy is the implicit `null` default).
+      instance.lockSuperdoc(false);
+
+      expect(received).toHaveLength(2);
+
+      expect(Object.keys(received[0]).sort()).toEqual(['isLocked', 'lockedBy']);
+      expect(received[0]).toEqual({ isLocked: true, lockedBy: { name: 'Admin', email: 'admin@x.com' } });
+
+      expect(Object.keys(received[1]).sort()).toEqual(['isLocked', 'lockedBy']);
+      expect(received[1]).toEqual({ isLocked: false, lockedBy: null });
+    });
+  });
 });

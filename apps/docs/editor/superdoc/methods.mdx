@@ -54,7 +54,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: async (superdoc) => {
+  onReady: async ({ superdoc }) => {
     const blob = await superdoc.export({
       isFinalDoc: true,
       commentsType: 'clean',
@@ -84,7 +84,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: async (superdoc) => {
+  onReady: async ({ superdoc }) => {
     await superdoc.save();
   },
 });
@@ -121,7 +121,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     const htmlArray = superdoc.getHTML();
     console.log(htmlArray);
   },
@@ -230,7 +230,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     superdoc.setDocumentMode('suggesting');
   },
 });
@@ -263,7 +263,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     superdoc.lockSuperdoc(true, {
       name: 'Jane Smith',
       email: 'jane@example.com',
@@ -295,7 +295,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     superdoc.setHighContrastMode(true);
   },
 });
@@ -323,13 +323,22 @@ superdoc.setActiveEditor(editor);
 import { SuperDoc } from 'superdoc';
 import 'superdoc/style.css';
 
+/** @type {Array<import('superdoc').Editor>} */
+const createdEditors = [];
+
 const superdoc = new SuperDoc({
   selector: '#editor',
   documents: [doc1, doc2],
-  onReady: (superdoc) => {
-    // Switch to the second editor
-    const editors = superdoc.state.documents;
-    superdoc.setActiveEditor(editors[1].editor);
+  onEditorCreate: ({ editor }) => {
+    // Each per-document editor reaches `onEditorCreate` in `documents` order.
+    createdEditors.push(editor);
+
+    // Switch to the second editor as soon as it exists.
+    if (createdEditors.length === 2) {
+      queueMicrotask(() => {
+        superdoc.setActiveEditor(editor);
+      });
+    }
   },
 });
 ```
@@ -357,7 +366,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     superdoc.setDisableContextMenu(true);
   },
 });
@@ -460,7 +469,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     superdoc.setTrackedChangesPreferences({ mode: 'final' });
   },
 });
@@ -485,7 +494,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     superdoc.toggleRuler();
   },
 });
@@ -518,7 +527,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     const zoom = superdoc.getZoom();
     console.log(`Current zoom: ${zoom}%`);
   },
@@ -548,7 +557,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     superdoc.setZoom(150);
 
     superdoc.on('zoomChange', ({ zoom }) => {
@@ -577,7 +586,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     superdoc.focus();
   },
 });
@@ -611,9 +620,11 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     const results = superdoc.search('contract');
-    console.log(`Found ${results.length} matches`);
+    if (results) {
+      console.log(`Found ${results.length} matches`);
+    }
 
     const regexResults = superdoc.search(/section \d+/gi);
   },
@@ -643,9 +654,9 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     const results = superdoc.search('contract');
-    if (results.length) {
+    if (results && results.length) {
       superdoc.goToSearchResult(results[0]);
     }
   },
@@ -664,14 +675,15 @@ const superdoc = new SuperDoc({
 
 Add a comments list to the specified element.
 
-<ParamField path="element" type="string | HTMLElement" required>
-  Container for comments list
+<ParamField path="element" type="HTMLElement" required>
+  Container element for the comments list
 </ParamField>
 
 <CodeGroup>
 
 ```javascript Usage
-superdoc.addCommentsList('#comments-sidebar');
+const sidebar = document.getElementById('comments-sidebar');
+if (sidebar) superdoc.addCommentsList(sidebar);
 ```
 
 ```javascript Full Example
@@ -681,8 +693,9 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
-    superdoc.addCommentsList('#comments-sidebar');
+  onReady: ({ superdoc }) => {
+    const sidebar = document.getElementById('comments-sidebar');
+    if (sidebar) superdoc.addCommentsList(sidebar);
   },
 });
 ```
@@ -706,7 +719,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     superdoc.removeCommentsList();
   },
 });
@@ -740,11 +753,11 @@ Scroll to a comment in the document and set it as active.
 
 ```javascript Usage
 // Get a comment ID from the document API
-const { items } = superdoc.editor.doc.comments.list();
-const commentId = items[0].id;
-
-// Scroll to it
-superdoc.scrollToComment(commentId);
+const editor = superdoc.activeEditor;
+if (editor) {
+  const { items } = editor.doc.comments.list();
+  if (items.length > 0) superdoc.scrollToComment(items[0].id);
+}
 ```
 
 ```javascript Full Example
@@ -755,8 +768,10 @@ const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
   modules: { comments: {} },
-  onReady: (superdoc) => {
-    const { items } = superdoc.editor.doc.comments.list();
+  onReady: ({ superdoc }) => {
+    const editor = superdoc.activeEditor;
+    if (!editor) return;
+    const { items } = editor.doc.comments.list();
     if (items.length > 0) {
       superdoc.scrollToComment(items[0].id, {
         behavior: 'smooth',
@@ -787,10 +802,10 @@ const result = editor.doc.query.match({
   select: { type: 'text', pattern: 'Introduction', mode: 'contains' },
   require: 'first',
 });
-const nodeId = result.items[0].address.nodeId;
-
-// Scroll to it: one call, any element type
-await superdoc.scrollToElement(nodeId);
+const first = result.items[0];
+if (first && first.address.kind === 'block') {
+  await superdoc.scrollToElement(first.address.nodeId);
+}
 ```
 
 ```javascript Full Example
@@ -801,26 +816,30 @@ const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
   modules: { comments: {} },
-  onReady: async (superdoc) => {
-    const editor = superdoc.editor;
+  onReady: async ({ superdoc }) => {
+    const editor = superdoc.activeEditor;
+    if (!editor) return;
 
-    // Navigate to a paragraph
+    // Navigate to a paragraph (block addresses carry `nodeId`; narrow first)
     const match = editor.doc.query.match({
       select: { type: 'text', pattern: 'Summary', mode: 'contains' },
       require: 'first',
     });
-    await superdoc.scrollToElement(match.items[0].address.nodeId);
+    const first = match.items[0];
+    if (first && first.address.kind === 'block') {
+      await superdoc.scrollToElement(first.address.nodeId);
+    }
 
     // Navigate to a comment
     const comments = editor.doc.comments.list();
     if (comments.items.length > 0) {
-      await superdoc.scrollToElement(comments.items[0].entityId);
+      await superdoc.scrollToElement(comments.items[0].id);
     }
 
     // Navigate to a tracked change
     const changes = editor.doc.trackChanges.list();
     if (changes.items.length > 0) {
-      await superdoc.scrollToElement(changes.items[0].entityId);
+      await superdoc.scrollToElement(changes.items[0].id);
     }
   },
 });
@@ -867,7 +886,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     superdoc.addSharedUser({
       name: 'Jane Smith',
       email: 'jane@example.com',
@@ -899,7 +918,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     superdoc.removeSharedUser('jane@example.com');
   },
 });
@@ -1013,6 +1032,7 @@ const superdoc = new SuperDoc({
   document: yourFile,
 });
 
+/** @param {import('superdoc').SuperDocReadyPayload} payload */
 const handler = ({ superdoc }) => {
   console.log('SuperDoc ready');
 };
@@ -1086,7 +1106,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     if (superdoc.activeEditor) {
       superdoc.activeEditor.commands.toggleBold();
     }

@@ -547,6 +547,28 @@ describe('SuperDoc.vue', () => {
     await nextTick();
     expect(superdocStoreStub.isReady.value).toBe(true);
 
+    // SD-673: pin the list-definitions-change bridge using the actual
+    // production payload shape. Both producers in super-editor's
+    // numbering-part-descriptor emit `{ editor, numbering }` (see
+    // packages/super-editor/src/editors/v1/core/parts/adapters/
+    // numbering-part-descriptor.ts:222,242). ListDefinitionsPayload
+    // itself marks all three fields optional, so this test pins the
+    // current production numbering variant + the SuperDoc.vue
+    // pass-through, not every possible ListDefinitionsPayload shape.
+    //
+    // Reference equality (.toBe) pins verbatim pass-through; the
+    // separate Object.keys snapshot pins the key set in case the
+    // bridge ever mutates the payload in place before forwarding (a
+    // deep-equal assertion against the same reference would pass
+    // trivially).
+    const listDefsPayload = { editor: editorMock, numbering: { nums: [] } };
+    options.onListDefinitionsChange(listDefsPayload);
+    const listDefsCall = superdocStub.emit.mock.calls.find(([name]) => name === 'list-definitions-change');
+    expect(listDefsCall).toBeDefined();
+    const [, emittedListDefsPayload] = listDefsCall;
+    expect(emittedListDefsPayload).toBe(listDefsPayload);
+    expect(Object.keys(emittedListDefsPayload).sort()).toEqual(['editor', 'numbering']);
+
     options.onDocumentLocked({ editor: editorMock, isLocked: true, lockedBy: { name: 'A' } });
     expect(superdocStub.lockSuperdoc).toHaveBeenCalledWith(true, { name: 'A' });
 

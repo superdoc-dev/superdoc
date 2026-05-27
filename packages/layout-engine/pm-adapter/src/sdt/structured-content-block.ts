@@ -5,7 +5,7 @@
  * paragraphs and tables while preserving their content structure.
  */
 
-import type { ParagraphBlock, TableBlock } from '@superdoc/contracts';
+import type { ParagraphBlock, TableBlock, TextRun } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext } from '../types.js';
 import { resolveNodeSdtMetadata, applySdtMetadataToParagraphBlocks, applySdtMetadataToTableBlock } from './metadata.js';
 
@@ -17,13 +17,13 @@ import { resolveNodeSdtMetadata, applySdtMetadataToParagraphBlocks, applySdtMeta
  * @param context - Shared handler context
  */
 export function handleStructuredContentBlockNode(node: PMNode, context: NodeHandlerContext): void {
-  if (!Array.isArray(node.content)) return;
-
   const {
     blocks,
     recordBlockKind,
     nextBlockId,
     positions,
+    defaultFont,
+    defaultSize,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -33,7 +33,31 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
     themeColors,
   } = context;
   const structuredContentMetadata = resolveNodeSdtMetadata(node, 'structuredContentBlock');
-  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
+  const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
+
+  if (!Array.isArray(node.content) || node.content.length === 0) {
+    if (!structuredContentMetadata) return;
+    const pos = positions.get(node);
+    const contentPos = pos ? pos.start + 1 : undefined;
+    const placeholderRun: TextRun = {
+      kind: 'text',
+      text: '',
+      fontFamily: defaultFont,
+      fontSize: defaultSize,
+      sdt: structuredContentMetadata,
+      visualPlaceholder: 'emptyBlockSdt',
+      ...(contentPos != null ? { pmStart: contentPos, pmEnd: contentPos } : {}),
+    };
+    const placeholderBlock: ParagraphBlock = {
+      kind: 'paragraph',
+      id: nextBlockId('paragraph'),
+      runs: [placeholderRun],
+      attrs: { sdt: structuredContentMetadata },
+    };
+    blocks.push(placeholderBlock);
+    recordBlockKind?.(placeholderBlock.kind);
+    return;
+  }
 
   // SD-1333: a documentPartObject is a transparent SDT wrapper. When it sits
   // as a direct child of a structuredContentBlock (e.g. a Signature SDT
@@ -42,6 +66,9 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
   // outer SDT metadata to them.
   const visitChild = (child: PMNode): void => {
     if (child.type === 'paragraph') {
+      if (!paragraphToFlowBlocks) {
+        throw new Error('paragraphToFlowBlocks converter is required for structuredContentBlock paragraphs');
+      }
       const paragraphBlocks = paragraphToFlowBlocks({
         para: child,
         nextBlockId,

@@ -166,6 +166,26 @@ export function createStructuredContentLockPlugin() {
             return true;
           }
 
+          const inlineSdtAncestor = sdtNodes.find(
+            (s) => s.type === 'structuredContent' && from > s.pos && from < s.end,
+          );
+          const inlineSdtContentEditable =
+            inlineSdtAncestor &&
+            inlineSdtAncestor.lockMode !== 'contentLocked' &&
+            inlineSdtAncestor.lockMode !== 'sdtContentLocked';
+          if (inlineSdtContentEditable && selection.$from.parent.type.name === 'run') {
+            const deleteFrom = isBackspace ? from - 1 : from;
+            const deleteTo = isBackspace ? from : from + 1;
+            const staysInsideInlineSdt = deleteFrom > inlineSdtAncestor.pos && deleteTo < inlineSdtAncestor.end;
+            const staysInsideRun = isBackspace ? from > selection.$from.start() : from < selection.$from.end();
+
+            if (staysInsideInlineSdt && staysInsideRun) {
+              view.dispatch(state.tr.delete(deleteFrom, deleteTo).scrollIntoView());
+              event.preventDefault();
+              return true;
+            }
+          }
+
           if (isBackspace && from > 0) {
             affectedFrom = from - 1;
             // Path 2 — caret is exactly at the trailing wrapper boundary of an

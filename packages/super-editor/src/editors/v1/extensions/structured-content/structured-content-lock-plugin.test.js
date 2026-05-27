@@ -621,6 +621,41 @@ describe('StructuredContentLockPlugin', () => {
         expect(result.prevented).toBe(true);
         expect(sdtNodeExists(editor.state.doc, 'structuredContent')).toBe(!shouldDeleteWrapper);
       });
+
+      it('sdtLocked + Delete before typed inline SDT text deletes the text and preserves the wrapper', () => {
+        const beforeText = schema.text('Before ');
+        const sdtRun = schema.nodes.run.create(null, schema.text('a'));
+        const sdt = schema.nodes.structuredContent.create({ id: 'test-123', lockMode: 'sdtLocked' }, sdtRun);
+        const afterText = schema.text(' After');
+        const paragraph = schema.nodes.paragraph.create(null, [beforeText, sdt, afterText]);
+        const doc = schema.nodes.doc.create(null, [paragraph]);
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+
+        let runPos = null;
+        state.doc.descendants((node, pos) => {
+          if (node.type.name === 'run' && node.textContent === 'a') {
+            runPos = pos;
+            return false;
+          }
+          return true;
+        });
+        expect(sdtInfo).not.toBeNull();
+        expect(runPos).not.toBeNull();
+
+        placeCaretAt(state, runPos + 1);
+
+        const result = invokeLockHandleKeyDown('Delete');
+
+        expect(result.handled).toBe(true);
+        expect(result.prevented).toBe(true);
+        const nextSdtInfo = findSDTNode(editor.state.doc, 'structuredContent');
+        expect(nextSdtInfo).not.toBeNull();
+        expect(nextSdtInfo.node.textContent).toBe('');
+        expect(editor.state.doc.textContent).toBe('Before  After');
+        expect(editor.state.selection.empty).toBe(true);
+        expect(editor.state.selection.from).toBe(nextSdtInfo.pos + 1);
+      });
     });
 
     describe('Path 1 — selection covers SDT content (label selection / triple-click)', () => {

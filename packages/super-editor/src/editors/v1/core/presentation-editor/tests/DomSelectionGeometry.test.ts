@@ -1651,6 +1651,40 @@ describe('computeDomCaretPageLocal', () => {
         y: 20,
       });
     });
+
+    it('positions caret at the right edge when it is after an empty inline SDT placeholder', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="2" data-pm-end="7">Lead </span>
+            <span class="superdoc-structured-content-inline" data-pm-start="9" data-pm-end="9" data-empty="true">
+              <span class="superdoc-empty-inline-sdt-placeholder" data-pm-start="9" data-pm-end="9"></span>
+            </span>
+            <span data-pm-start="14" data-pm-end="20"> trail.</span>
+          </div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const lineEl = painterHost.querySelector('.superdoc-line') as HTMLElement;
+      const placeholderEl = painterHost.querySelector('.superdoc-empty-inline-sdt-placeholder') as HTMLElement;
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      lineEl.getBoundingClientRect = vi.fn(() => createRect(10, 20, 250, 16));
+      placeholderEl.getBoundingClientRect = vi.fn(() => createRect(60, 20, 205, 16));
+
+      const options = createCaretOptions();
+      const caret = computeDomCaretPageLocal(options, 10);
+
+      expect(caret).not.toBe(null);
+      expect(caret).toMatchObject({
+        pageIndex: 0,
+        x: 265,
+        y: 20,
+      });
+    });
   });
 
   describe('index rebuild for disconnected elements', () => {

@@ -31,17 +31,19 @@ describe('structured-content-block', () => {
     const mockConverterContext = { docx: {} } as never;
 
     const scbMetadata: SdtMetadata = {
-      type: 'structuredContentBlock',
+      type: 'structuredContent',
+      scope: 'block',
       id: 'scb-1',
     };
 
     beforeEach(() => {
       vi.clearAllMocks();
+      mockPositionMap.clear();
     });
 
     // ==================== Basic Functionality Tests ====================
     describe('Basic functionality', () => {
-      it('should return early if node.content is not an array', () => {
+      it('should emit a placeholder paragraph if node.content is not an array', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
@@ -50,6 +52,8 @@ describe('structured-content-block', () => {
 
         const blocks: FlowBlock[] = [];
         const recordBlockKind = vi.fn();
+        mockPositionMap.set(node, { start: 10, end: 12 });
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(scbMetadata);
 
         const context: NodeHandlerContext = {
           blocks,
@@ -70,8 +74,22 @@ describe('structured-content-block', () => {
 
         handleStructuredContentBlockNode(node, context);
 
-        expect(blocks).toHaveLength(0);
-        expect(recordBlockKind).not.toHaveBeenCalled();
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({
+          kind: 'paragraph',
+          id: 'paragraph-test-id',
+          attrs: { sdt: scbMetadata },
+          runs: [
+            {
+              text: '',
+              sdt: scbMetadata,
+              visualPlaceholder: 'emptyBlockSdt',
+              pmStart: 11,
+              pmEnd: 11,
+            },
+          ],
+        });
+        expect(recordBlockKind).toHaveBeenCalledWith('paragraph');
       });
 
       it('should throw if paragraphToFlowBlocks is not provided', () => {
@@ -102,7 +120,7 @@ describe('structured-content-block', () => {
         expect(() => handleStructuredContentBlockNode(node, context)).toThrow();
       });
 
-      it('should handle empty children array', () => {
+      it('should emit a placeholder paragraph for empty children array', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
@@ -133,8 +151,19 @@ describe('structured-content-block', () => {
 
         handleStructuredContentBlockNode(node, context);
 
-        expect(blocks).toHaveLength(0);
-        expect(recordBlockKind).not.toHaveBeenCalled();
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({
+          kind: 'paragraph',
+          attrs: { sdt: scbMetadata },
+          runs: [
+            {
+              text: '',
+              sdt: scbMetadata,
+              visualPlaceholder: 'emptyBlockSdt',
+            },
+          ],
+        });
+        expect(recordBlockKind).toHaveBeenCalledWith('paragraph');
       });
 
       it('should process a single paragraph child', () => {
@@ -735,7 +764,7 @@ describe('structured-content-block', () => {
 
     // ==================== Edge Cases ====================
     describe('Edge cases', () => {
-      it('should handle node with null content', () => {
+      it('should emit a placeholder paragraph for null content', () => {
         const node: PMNode = {
           type: 'structuredContentBlock',
           attrs: { id: 'scb-1' },
@@ -744,6 +773,7 @@ describe('structured-content-block', () => {
 
         const blocks: FlowBlock[] = [];
         const recordBlockKind = vi.fn();
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(scbMetadata);
 
         const context: NodeHandlerContext = {
           blocks,
@@ -764,7 +794,12 @@ describe('structured-content-block', () => {
 
         handleStructuredContentBlockNode(node, context);
 
-        expect(blocks).toHaveLength(0);
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({
+          kind: 'paragraph',
+          attrs: { sdt: scbMetadata },
+          runs: [{ visualPlaceholder: 'emptyBlockSdt', sdt: scbMetadata }],
+        });
       });
 
       it('should handle converter returning empty array', () => {

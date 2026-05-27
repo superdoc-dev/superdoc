@@ -1,4 +1,4 @@
-import { Plugin } from 'prosemirror-state';
+import { Plugin, TextSelection } from 'prosemirror-state';
 
 import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
 import { SELECT_INLINE_SDT_BEFORE_RUN_START_META } from '@core/commands/selectInlineSdtBeforeRunStart.js';
@@ -23,6 +23,25 @@ export function createStructuredContentSelectPlugin(editor) {
         const { state } = view;
         const { selection } = state;
         const isEditableSlotText = (text) => text.replace(/\u200B/g, '').length === 0;
+
+        const resolveAdjacentEmptyInlineSdtEntry = () => {
+          if (!selection.empty) return null;
+
+          let targetPos = null;
+          state.doc.descendants((node, pos) => {
+            if (node.type.name !== 'structuredContent') return true;
+            if (node.content.size !== 0) return true;
+
+            if (event.key === 'ArrowLeft' && selection.from === pos + node.nodeSize) {
+              targetPos = pos + 1;
+              return false;
+            }
+
+            return true;
+          });
+
+          return targetPos;
+        };
 
         const resolveBoundaryExit = ($pos) => {
           for (let depth = $pos.depth; depth > 0; depth -= 1) {
@@ -61,6 +80,17 @@ export function createStructuredContentSelectPlugin(editor) {
           }
           return null;
         };
+
+        const adjacentEmptySdtEntry = resolveAdjacentEmptyInlineSdtEntry();
+        if (adjacentEmptySdtEntry != null) {
+          try {
+            view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, adjacentEmptySdtEntry)));
+            event.preventDefault();
+            return true;
+          } catch {
+            return false;
+          }
+        }
 
         const nextPos = resolveBoundaryExit(selection.$from);
         if (nextPos == null) return false;

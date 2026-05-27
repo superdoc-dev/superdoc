@@ -61,8 +61,9 @@ import {
   type CellSpacing,
   type TableBorders,
   type TableBorderValue,
+  EMPTY_SDT_PLACEHOLDER_TEXT,
   effectiveTableCellSpacing,
-  isEmptyInlineSdtPlaceholderRun,
+  isEmptySdtPlaceholderRun,
   LeaderDecoration,
   resolveBaseFontSizeForVerticalText,
 } from '@superdoc/contracts';
@@ -209,8 +210,6 @@ const FIELD_ANNOTATION_VERTICAL_PADDING = 6; // Vertical padding/border for pill
 const DEFAULT_FIELD_ANNOTATION_FONT_SIZE = 16; // Default font size for field annotations
 const DEFAULT_PARAGRAPH_FONT_SIZE = 12;
 const DEFAULT_PARAGRAPH_FONT_FAMILY = 'Arial';
-const EMPTY_INLINE_SDT_PLACEHOLDER_WIDTH = 8;
-
 const isValidFontSize = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
 
@@ -1036,7 +1035,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   const emptyParagraphRun =
     normalizedRuns.length === 1 &&
     isEmptyTextRun(normalizedRuns[0] as Run) &&
-    !isEmptyInlineSdtPlaceholderRun(normalizedRuns[0] as Run)
+    !isEmptySdtPlaceholderRun(normalizedRuns[0] as Run)
       ? (normalizedRuns[0] as TextRun)
       : null;
   if (emptyParagraphRun) {
@@ -2018,11 +2017,19 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       continue;
     }
 
-    if (isEmptyInlineSdtPlaceholderRun(run)) {
+    if (isEmptySdtPlaceholderRun(run)) {
+      const placeholderFont = buildFontString(run).font;
+      const measuredPlaceholderWidth = getMeasuredTextWidth(
+        EMPTY_SDT_PLACEHOLDER_TEXT,
+        placeholderFont,
+        run.letterSpacing ?? 0,
+        ctx,
+      );
+      const fallbackPlaceholderWidth = EMPTY_SDT_PLACEHOLDER_TEXT.length * run.fontSize * 0.45;
       const placeholderWidth =
         run.sdt?.type === 'structuredContent' && run.sdt.appearance === 'hidden'
           ? 0
-          : EMPTY_INLINE_SDT_PLACEHOLDER_WIDTH;
+          : Math.max(measuredPlaceholderWidth, fallbackPlaceholderWidth);
 
       if (!currentLine) {
         currentLine = {

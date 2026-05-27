@@ -111,19 +111,26 @@ describe('ensureSdtContainerStyles', () => {
     expect(cssText).toContain('bottom: calc(100% + 1px);');
   });
 
-  it('reserves empty inline SDT width without adding line-box height', () => {
+  it('renders empty SDT placeholder text and active selection styling', () => {
     ensureSdtContainerStyles(document);
 
     const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
     const cssText = styleEl?.textContent ?? '';
-    const placeholderRule = cssText.match(/\.superdoc-empty-inline-sdt-placeholder\s*\{([^}]*)\}/)?.[1] ?? '';
+    const placeholderRule = cssText.match(/\.superdoc-empty-sdt-placeholder\s*\{([^}]*)\}/)?.[1] ?? '';
+    const placeholderBeforeRule = cssText.match(/\.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/)?.[1] ?? '';
+    const selectedRule =
+      cssText.match(
+        /\.superdoc-structured-content-inline\.ProseMirror-selectednode \.superdoc-empty-sdt-placeholder::before,\s*\.superdoc-structured-content-block\.ProseMirror-selectednode \.superdoc-empty-sdt-placeholder::before\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
 
     expect(placeholderRule).toContain('display: inline-block;');
-    expect(placeholderRule).toContain('width: 8px;');
-    expect(placeholderRule).toContain('height: 0;');
-    expect(placeholderRule).toContain('line-height: 0;');
+    expect(placeholderRule).toContain('line-height: normal;');
     expect(placeholderRule).toContain('vertical-align: baseline;');
-    expect(placeholderRule).not.toContain('height: 1em;');
+    expect(placeholderRule).toContain('white-space: nowrap;');
+    expect(placeholderBeforeRule).toContain('content: attr(data-placeholder-text);');
+    expect(placeholderBeforeRule).toContain('color: var(--sd-content-controls-placeholder-text, #a6a6a6);');
+    expect(selectedRule).toContain('background-color: var(--sd-content-controls-placeholder-selected-bg, Highlight);');
+    expect(selectedRule).not.toMatch(/(^|\n)\s*color\s*:/);
   });
 
   it('suppresses structured-content hover backgrounds in viewing mode, including grouped hover', () => {

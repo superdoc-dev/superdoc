@@ -685,7 +685,7 @@ describe('measureBlock', () => {
       });
     });
 
-    it('measures empty inline SDT placeholders as a small inline box', async () => {
+    it('measures empty inline SDT placeholders using the visible placeholder text width', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',
         id: 'empty-inline-sdt',
@@ -707,14 +707,11 @@ describe('measureBlock', () => {
       const measure = expectParagraphMeasure(await measureBlock(block, 1000));
 
       expect(measure.lines).toHaveLength(1);
-      expect(measure.lines[0]).toMatchObject({
-        fromRun: 0,
-        fromChar: 0,
-        toRun: 0,
-        toChar: 0,
-        width: 8,
-        segments: [{ runIndex: 0, fromChar: 0, toChar: 0, width: 8 }],
-      });
+      expect(measure.lines[0]).toMatchObject({ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0 });
+      expect(measure.lines[0].width).toBeGreaterThan(8);
+      expect(measure.lines[0].segments).toHaveLength(1);
+      expect(measure.lines[0].segments[0]).toMatchObject({ runIndex: 0, fromChar: 0, toChar: 0 });
+      expect(measure.lines[0].segments[0].width).toBe(measure.lines[0].width);
     });
   });
 

@@ -292,6 +292,26 @@ describe('StructuredContentSelectPlugin', () => {
     expect(editor.state.selection.from).toBeGreaterThanOrEqual(sdt.pos + 1);
   });
 
+  it('moves back inside an empty inline SDT with ArrowLeft from its trailing boundary', () => {
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' });
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('Lead '), inlineSdt, schema.text(' trail')]);
+    applyDoc(schema.nodes.doc.create(null, [paragraph]));
+
+    const sdt = findNode(editor.state.doc, 'structuredContent');
+    expect(sdt).not.toBeNull();
+
+    const insideSdt = sdt.pos + 1;
+    const afterSdt = sdt.pos + sdt.node.nodeSize;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, afterSdt)));
+
+    const handled = pressArrow('ArrowLeft');
+
+    expect(handled).toBe(true);
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.state.selection.from).toBe(insideSdt);
+    expect(editor.state.selection.to).toBe(insideSdt);
+  });
+
   it('does not intercept Shift+ArrowRight near inline SDT boundary', () => {
     const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
     const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);

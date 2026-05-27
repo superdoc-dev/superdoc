@@ -683,18 +683,31 @@ const SDT_CONTAINER_STYLES = `
   border-color: var(--sd-content-controls-inline-border, #629be7);
 }
 
-.superdoc-empty-inline-sdt-placeholder {
+.superdoc-empty-sdt-placeholder {
   display: inline-block;
-  width: 8px;
-  height: 0;
-  line-height: 0;
+  line-height: normal;
   vertical-align: baseline;
-  overflow: hidden;
+  white-space: nowrap;
+}
+
+.superdoc-empty-sdt-placeholder::before {
+  content: attr(data-placeholder-text);
+  color: var(--sd-content-controls-placeholder-text, #a6a6a6);
+}
+
+.superdoc-structured-content-inline.ProseMirror-selectednode .superdoc-empty-sdt-placeholder::before,
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-empty-sdt-placeholder::before {
+  background-color: var(--sd-content-controls-placeholder-selected-bg, Highlight);
 }
 
 .superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder {
   width: 0;
   min-width: 0;
+  overflow: hidden;
+}
+
+.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder::before {
+  content: '';
 }
 
 /* Inline structured content label - shown when active */

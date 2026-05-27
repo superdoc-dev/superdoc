@@ -590,6 +590,9 @@ const SDT_CONTAINER_STYLES = `
   position: absolute;
   left: calc(var(--sd-sdt-chrome-left, 0px) + 2px);
   top: -18px;
+  width: calc(var(--sd-sdt-chrome-width, 100%) - 4px);
+  max-width: 130px;
+  min-width: 0;
   border-bottom: none;
   border-radius: 6px 6px 0 0;
   white-space: nowrap;

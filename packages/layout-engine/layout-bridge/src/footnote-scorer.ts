@@ -365,13 +365,22 @@ export const scoreFootnoteWindow = (input: FootnoteWindowScoreInput): FootnoteWi
   if (hasNewId(afterDocumentDiagnostics.mandatoryOnlyAnchorIds, beforeDocumentDiagnostics.mandatoryOnlyAnchorIds)) {
     return { accept: false, reason: 'new-mandatory-only', before, after };
   }
-  if (after.deadReserveSum > before.deadReserveSum + deadReserveBloatThresholdPx) {
+  // SD-2656 (Vivienne feedback): a trial that ELIMINATES a cluster split is a
+  // direct user-visible win. Trade a larger dead-reserve growth for fewer
+  // footnotes splitting across pages. Without this relaxation the scorer
+  // accepts a smaller partial bump that improves mandatory-only count but
+  // leaves the split intact — the user sees no change.
+  const eliminatesSplitInWindow = beforeWindowDiagnostics.clusterSplitCount > afterWindowDiagnostics.clusterSplitCount;
+  const eliminatesSplitInDoc = beforeDocumentDiagnostics.clusterSplitCount > afterDocumentDiagnostics.clusterSplitCount;
+  const windowDeadAllowance = eliminatesSplitInWindow ? deadReserveBloatThresholdPx * 2 : deadReserveBloatThresholdPx;
+  const docDeadAllowance = eliminatesSplitInDoc
+    ? wholeDocumentDeadReserveBloatThresholdPx * 2
+    : wholeDocumentDeadReserveBloatThresholdPx;
+
+  if (after.deadReserveSum > before.deadReserveSum + windowDeadAllowance) {
     return { accept: false, reason: 'dead-reserve-bloat', before, after };
   }
-  if (
-    afterDocumentDiagnostics.deadReserveSum >
-    beforeDocumentDiagnostics.deadReserveSum + wholeDocumentDeadReserveBloatThresholdPx
-  ) {
+  if (afterDocumentDiagnostics.deadReserveSum > beforeDocumentDiagnostics.deadReserveSum + docDeadAllowance) {
     return { accept: false, reason: 'dead-reserve-bloat', before, after };
   }
   if (!candidateRenderedLinesImproved(before, after)) {

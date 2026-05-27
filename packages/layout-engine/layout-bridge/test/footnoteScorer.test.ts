@@ -235,6 +235,58 @@ describe('SD-2656 footnote preferred-reserve scorer', () => {
     expect(result.reason).toBe('page-count-grew');
   });
 
+  it('allows extra dead-reserve growth when the trial eliminates a cluster split (Vivienne feedback)', () => {
+    // SD-2656: a trial that removes a footnote-spanning split is a direct
+    // user-visible win, so the scorer trades up to 2x the normal dead-reserve
+    // growth allowance. Without this, the scorer rejected the full preferred
+    // bump on b89cc7aa page 9 (148 px doc-wide dead-reserve > 128 threshold)
+    // and accepted a smaller partial bump that left the split intact.
+    const beforeLedger = [
+      makeLedger(0, {
+        anchorIds: ['2', '3'],
+        mandatoryReservePx: 53,
+        preferredReservePx: 130,
+        actualBandHeightPx: 115,
+        deadReservePx: 0,
+        lastAnchorRenderedLines: 5,
+        continuationOut: [{ id: '3', remainingRangeCount: 1, remainingHeightPx: 30 }],
+      }),
+      makeLedger(1, {
+        anchorIds: [],
+        deadReservePx: 0,
+        continuationIn: [{ id: '3', remainingRangeCount: 1, remainingHeightPx: 30 }],
+      }),
+    ];
+    // After bumping page 0 to preferred: fn3 fully renders, split eliminated,
+    // but 148 px of dead reserve appears doc-wide (over the 128 default).
+    const afterLedger = [
+      makeLedger(0, {
+        anchorIds: ['2', '3'],
+        mandatoryReservePx: 53,
+        preferredReservePx: 130,
+        actualBandHeightPx: 130,
+        deadReservePx: 0,
+        lastAnchorRenderedLines: 7,
+      }),
+      makeLedger(1, {
+        anchorIds: [],
+        deadReservePx: 148,
+      }),
+    ];
+
+    const result = scoreFootnoteWindow({
+      beforeLayout: makeLayout(2, beforeLedger),
+      afterLayout: makeLayout(2, afterLedger),
+      candidatePageIndex: 0,
+      candidateAnchorId: '3',
+      beforeLedger,
+      afterLedger,
+    });
+
+    expect(result.accept).toBe(true);
+    expect(result.reason).toBe('globally-safe');
+  });
+
   it('accepts a direct candidate-line improvement without requiring unrelated pages to change', () => {
     const beforeLedger = [
       makeLedger(0, {

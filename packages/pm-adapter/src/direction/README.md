@@ -187,7 +187,7 @@ Use these searches before adding a new direction-aware path:
 ```bash
 # Suspicious: upstream table-side pre-mirroring.
 rg "rightToLeft.*\\?.*'(left|right)'|rightToLeft.*\\?.*\\\"(left|right)\\\"" \
-  packages/layout-engine/pm-adapter/src packages/super-editor/src/editors/v1/core/super-converter
+  packages/pm-adapter/src packages/super-editor/src/editors/v1/core/super-converter
 
 # Review: downstream consumers reading raw direction fields.
 rg "sectionDirection|rightToLeft" \

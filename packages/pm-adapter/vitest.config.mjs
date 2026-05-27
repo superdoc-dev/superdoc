@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';
-import baseConfig from '../../../vitest.baseConfig';
+import baseConfig from '../../vitest.baseConfig';
 
 export default defineConfig({
   ...baseConfig,

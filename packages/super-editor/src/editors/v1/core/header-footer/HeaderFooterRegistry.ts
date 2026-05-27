@@ -1,4 +1,4 @@
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { getLayoutDocumentAdapter } from '@superdoc/layout-adapter';
 import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from '../presentation-editor/utils/SchemaNodeTypes.js';
 import type { FlowBlock, TrackedChangesMode } from '@superdoc/contracts';
 import type { HeaderFooterBatch } from '@superdoc/layout-bridge';
@@ -1354,7 +1354,7 @@ export class HeaderFooterLayoutAdapter {
     // Convert pt to px: 1pt = 96/72 px ≈ 1.333px
     const defaultSize = docDefaults?.fontSizePt != null ? docDefaults.fontSizePt * (96 / 72) : undefined;
 
-    const result = toFlowBlocks(doc as object, {
+    const result = getLayoutDocumentAdapter().toFlowBlocks(doc as object, {
       mediaFiles,
       blockIdPrefix,
       converterContext,

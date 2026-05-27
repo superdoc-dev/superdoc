@@ -84,7 +84,7 @@ tests/visual/            Visual regression tests (Playwright)
 |--------------------------|---------------|
 | How something looks (visual rendering) | `layout-engine/painters/dom/` |
 | Style resolution (fonts, colors, borders) | `layout-engine/style-engine/` |
-| Data flowing from editor to renderer | `layout-engine/pm-adapter/` |
+| Data flowing from editor to renderer | `packages/pm-adapter/` |
 | Editing behavior (keyboard, commands) | `super-editor/src/editors/v1/extensions/` |
 | DOCX import/export | `super-editor/src/editors/v1/core/super-converter/` |
 | React integration | `packages/react/` |

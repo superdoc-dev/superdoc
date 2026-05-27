@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { toFlowBlocks } from './test-helpers/to-flow-blocks.js';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { measureBlocks } from './test-helpers/section-test-utils.js';
 import type { FlowBlock, PMNode, SectionBreakBlock } from '@superdoc/contracts';

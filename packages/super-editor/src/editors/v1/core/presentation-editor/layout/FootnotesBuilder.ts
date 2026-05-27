@@ -20,7 +20,7 @@
 
 import type { EditorState } from 'prosemirror-state';
 import type { FlowBlock } from '@superdoc/contracts';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { getLayoutDocumentAdapter } from '@superdoc/layout-adapter';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 
@@ -133,7 +133,7 @@ export function buildFootnotesInput(
       const footnoteDoc = resolveNoteDocJson(id, importedFootnotes, renderOverride);
       if (!footnoteDoc) return;
 
-      const result = toFlowBlocks(footnoteDoc, {
+      const result = getLayoutDocumentAdapter().toFlowBlocks(footnoteDoc, {
         blockIdPrefix: `footnote-${id}-`,
         storyKey: buildStoryKey({ kind: 'story', storyType: 'footnote', noteId: id }),
         enableRichHyperlinks: true,

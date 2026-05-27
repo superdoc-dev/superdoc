@@ -13,7 +13,7 @@ ProseMirror Doc → pm-adapter → FlowBlock[] → layout-engine → Layout[] �
 | Package | Purpose | Key Entry |
 |---------|---------|-----------|
 | `contracts/` | Shared types (FlowBlock, Layout, etc.) | `src/index.ts` |
-| `pm-adapter/` | PM document → FlowBlocks conversion | `src/internal.ts` |
+| `packages/pm-adapter` (`@superdoc/pm-adapter`) | PM document → FlowBlocks conversion | `src/internal.ts` |
 | `layout-engine/` | Pagination algorithms | `src/index.ts` |
 | `layout-bridge/` | Layout orchestration & bridge utilities | `src/incrementalLayout.ts` |
 | `painters/dom/` | DOM rendering | `src/renderer.ts` |

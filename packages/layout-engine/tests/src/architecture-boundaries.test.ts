@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const LAYOUT_ENGINE_ROOT = path.resolve(__dirname, '../../');
+const PM_ADAPTER_ROOT = path.resolve(__dirname, '../../../pm-adapter');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -155,12 +156,12 @@ describe('architecture boundaries', () => {
 
   describe('Guard B: painter-dom internals are not imported by pm-adapter', () => {
     it('pm-adapter runtime src does not import @superdoc/painter-dom', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
+      const srcDir = path.join(PM_ADAPTER_ROOT, 'src');
       expectNoViolations(findImportViolations(srcDir, '@superdoc/painter-dom'));
     });
 
     it('pm-adapter runtime src does not import relative painter paths', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
+      const srcDir = path.join(PM_ADAPTER_ROOT, 'src');
       // Catch any relative import reaching into painters/ directory
       expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*painters\//));
     });
@@ -168,22 +169,22 @@ describe('architecture boundaries', () => {
 
   describe('Guard C: data flows one direction — pm-adapter does not import downstream', () => {
     it('pm-adapter runtime src does not import @superdoc/layout-bridge', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
+      const srcDir = path.join(PM_ADAPTER_ROOT, 'src');
       expectNoViolations(findImportViolations(srcDir, '@superdoc/layout-bridge'));
     });
 
     it('pm-adapter runtime src does not import @superdoc/layout-engine', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
+      const srcDir = path.join(PM_ADAPTER_ROOT, 'src');
       expectNoViolations(findImportViolations(srcDir, '@superdoc/layout-engine'));
     });
 
     it('pm-adapter runtime src does not import relative layout-bridge paths', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
+      const srcDir = path.join(PM_ADAPTER_ROOT, 'src');
       expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*layout-bridge\//));
     });
 
     it('pm-adapter runtime src does not import relative layout-engine paths', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
+      const srcDir = path.join(PM_ADAPTER_ROOT, 'src');
       expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*layout-engine\//));
     });
   });
@@ -352,5 +353,21 @@ describe('architecture boundaries', () => {
         );
       }
     });
+  });
+
+  describe('Guard H: layout runtime packages do not import concrete adapters (SD-3222)', () => {
+    const LAYOUT_RUNTIME_DIRS = ['layout-engine/src', 'layout-bridge/src', 'painters/dom/src', 'contracts/src'];
+
+    for (const dir of LAYOUT_RUNTIME_DIRS) {
+      it(`${dir} does not import @superdoc/pm-adapter`, () => {
+        const srcDir = path.join(LAYOUT_ENGINE_ROOT, dir);
+        expectNoViolations(findImportViolations(srcDir, '@superdoc/pm-adapter'));
+      });
+
+      it(`${dir} does not import relative pm-adapter paths`, () => {
+        const srcDir = path.join(LAYOUT_ENGINE_ROOT, dir);
+        expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*pm-adapter\//));
+      });
+    }
   });
 });

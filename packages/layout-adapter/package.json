@@ -1,0 +1,41 @@
+{
+  "name": "@superdoc/layout-adapter",
+  "version": "0.0.0",
+  "description": "Adapter-agnostic contract between document sources and the SuperDoc layout pipeline.",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./sections": {
+      "types": "./src/sections.ts",
+      "source": "./src/sections.ts",
+      "default": "./src/sections.ts"
+    },
+    "./*.js": {
+      "types": "./src/*.ts",
+      "source": "./src/*.ts",
+      "default": "./src/*.ts"
+    },
+    "./*": {
+      "types": "./src/*",
+      "source": "./src/*",
+      "default": "./src/*"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --noEmit",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@superdoc/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}

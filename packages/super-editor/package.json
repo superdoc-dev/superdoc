@@ -118,6 +118,7 @@
     "@superdoc/contracts": "workspace:*",
     "@superdoc/dom-contract": "workspace:*",
     "@superdoc/document-api": "workspace:*",
+    "@superdoc/layout-adapter": "workspace:*",
     "@superdoc/layout-bridge": "workspace:*",
     "@superdoc/layout-resolved": "workspace:*",
     "@superdoc/measuring-dom": "workspace:*",

@@ -65,7 +65,7 @@ For any entry classified as legacy public:
 | `packages/layout-engine/dom-contract` | `@superdoc/dom-contract` | Internal implementation | DOM rendering contracts |
 | `packages/layout-engine/painters/dom` | `@superdoc/painter-dom` | Internal implementation | DOM rendering pipeline |
 | `packages/layout-engine/measuring/dom` | `@superdoc/measuring-dom` | Internal implementation | Measurement pipeline |
-| `packages/layout-engine/pm-adapter` | `@superdoc/pm-adapter` | Internal implementation | ProseMirror to FlowBlock bridge |
+| `packages/pm-adapter` | `@superdoc/pm-adapter` | Internal implementation | ProseMirror to FlowBlock bridge |
 | `packages/layout-engine/style-engine` | `@superdoc/style-engine` | Internal implementation | OOXML cascade resolution |
 | `packages/layout-engine/layout-bridge` | `@superdoc/layout-bridge` | Internal implementation | Pipeline orchestration |
 | `packages/layout-engine/layout-engine` | `@superdoc/layout-engine` | Internal implementation | Pagination algorithms |

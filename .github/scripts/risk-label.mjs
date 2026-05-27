@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 const CRITICAL_PATHS = [
   'packages/layout-engine/style-engine/',
   'packages/layout-engine/layout-engine/',
-  'packages/layout-engine/pm-adapter/',
+  'packages/pm-adapter/',
   'packages/layout-engine/layout-bridge/',
   'packages/layout-engine/measuring/',
   'packages/layout-engine/painters/',

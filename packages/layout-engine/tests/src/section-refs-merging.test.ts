@@ -13,7 +13,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { PMNode, FlowBlock, SectionBreakBlock } from '@superdoc/contracts';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { toFlowBlocks } from './test-helpers/to-flow-blocks.js';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { measureBlock } from '@superdoc/measuring-dom';
 import { DEFAULT_CONVERTER_CONTEXT, resetBlockIdCounter, PAGE_SIZES } from './test-helpers/section-test-utils.js';

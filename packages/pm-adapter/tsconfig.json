@@ -1,5 +1,5 @@
 {
-  "extends": "../tsconfig.base.json",
+  "extends": "../layout-engine/tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
     "declaration": true,
@@ -8,9 +8,9 @@
     "baseUrl": ".",
     "paths": {
       "@superdoc/super-editor/converter/internal/*.js": [
-        "../../super-editor/dist/src/editors/v1/core/super-converter/*.d.ts"
+        "../super-editor/dist/src/editors/v1/core/super-converter/*.d.ts"
       ],
-      "@translator": ["../../super-editor/dist/src/editors/v1/core/super-converter/v3/node-translator/index.d.ts"]
+      "@translator": ["../super-editor/dist/src/editors/v1/core/super-converter/v3/node-translator/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/fixtures/**/*.json"]

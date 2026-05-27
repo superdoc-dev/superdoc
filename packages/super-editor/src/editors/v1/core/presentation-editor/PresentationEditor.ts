@@ -108,7 +108,9 @@ import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/r
 import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
-import { toFlowBlocks, FlowBlockCache } from '@superdoc/pm-adapter';
+import '@superdoc/pm-adapter/register';
+import { getLayoutDocumentAdapter } from '@superdoc/layout-adapter';
+import type { FlowBlockCacheLike } from '@superdoc/layout-adapter';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
@@ -456,7 +458,9 @@ export class PresentationEditor extends EventEmitter {
   #layoutLookupBlocks: FlowBlock[] = [];
   #layoutLookupMeasures: Measure[] = [];
   /** Cache for incremental toFlowBlocks conversion */
-  #flowBlockCache: FlowBlockCache = new FlowBlockCache();
+  #flowBlockCache: FlowBlockCacheLike = getLayoutDocumentAdapter().createFlowBlockCache?.() ?? {
+    clear() {},
+  };
   #footnoteNumberSignature: string | null = null;
   #endnoteNumberSignature: string | null = null;
   #painterAdapter = new PresentationPainterAdapter();
@@ -4461,7 +4465,7 @@ export class PresentationEditor extends EventEmitter {
           transaction.docChanged &&
           (ySyncMeta?.isChangeOrigin || inputType === 'historyUndo' || inputType === 'historyRedo');
         if (shouldBypassFastRevision) {
-          this.#flowBlockCache?.setHasExternalChanges(true);
+          this.#flowBlockCache?.setHasExternalChanges?.(true);
         }
       }
       if (trackedChangesChanged || transaction?.docChanged) {
@@ -4592,7 +4596,7 @@ export class PresentationEditor extends EventEmitter {
     // These modify the OOXML part and derived cache but don't change the PM document,
     // so the normal 'update' event won't trigger a layout refresh.
     const handleNotesPartChanged = (event?: { source?: unknown }) => {
-      this.#flowBlockCache.setHasExternalChanges(true);
+      this.#flowBlockCache.setHasExternalChanges?.(true);
       this.#pendingDocChange = true;
       this.#selectionSync.onLayoutStart();
       this.#scheduleRerender();
@@ -5196,7 +5200,7 @@ export class PresentationEditor extends EventEmitter {
             refId: headerId,
           });
           this.#headerFooterSession?.invalidateLayoutForRefs([headerId]);
-          this.#flowBlockCache.setHasExternalChanges(true);
+          this.#flowBlockCache.setHasExternalChanges?.(true);
           this.#pendingDocChange = true;
           this.#selectionSync.onLayoutStart();
           this.#scheduleRerender();
@@ -6035,7 +6039,7 @@ export class PresentationEditor extends EventEmitter {
    */
   #refreshHeaderFooterStructureThenRerender(options?: { purgeCachedEditors?: boolean }): void {
     this.#headerFooterSession?.refreshStructure(options);
-    this.#flowBlockCache.setHasExternalChanges(true);
+    this.#flowBlockCache.setHasExternalChanges?.(true);
     this.#pendingDocChange = true;
     this.#selectionSync.onLayoutStart();
     this.#scheduleRerender();
@@ -6224,7 +6228,7 @@ export class PresentationEditor extends EventEmitter {
         const commentsEnabled =
           this.#documentMode !== 'viewing' || this.#layoutOptions.enableCommentsInViewing === true;
         const toFlowBlocksStart = perfNow();
-        const result = toFlowBlocks(docJson, {
+        const result = getLayoutDocumentAdapter().toFlowBlocks(docJson, {
           mediaFiles: (this.#editor?.storage?.image as { media?: Record<string, string> })?.media,
           emitSectionBreaks: true,
           sectionMetadata,

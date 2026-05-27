@@ -1,3 +1,4 @@
+import './setup-layout-adapter.js';
 import type { DocumentApiAdapters } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { getAdapter } from './get-adapter.js';

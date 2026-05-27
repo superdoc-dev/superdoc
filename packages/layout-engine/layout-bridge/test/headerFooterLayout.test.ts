@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FlowBlock, Measure } from '@superdoc/contracts';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import '@superdoc/pm-adapter/register';
+import { getLayoutDocumentAdapter } from '@superdoc/layout-adapter';
 import { layoutHeaderFooterWithCache, HeaderFooterLayoutCache } from '../src/layoutHeaderFooter';
 
 const makeBlock = (id: string, text = 'Hello'): FlowBlock => ({
@@ -142,8 +143,9 @@ describe('layoutHeaderFooterWithCache', () => {
       };
 
       // 2. Convert PM JSON to FlowBlocks using PM adapter
-      const { blocks: headerBlocks } = toFlowBlocks(headerPmDoc, { blockIdPrefix: 'header-default-' });
-      const { blocks: footerBlocks } = toFlowBlocks(footerPmDoc, { blockIdPrefix: 'footer-default-' });
+      const adapter = getLayoutDocumentAdapter();
+      const { blocks: headerBlocks } = adapter.toFlowBlocks(headerPmDoc, { blockIdPrefix: 'header-default-' });
+      const { blocks: footerBlocks } = adapter.toFlowBlocks(footerPmDoc, { blockIdPrefix: 'footer-default-' });
 
       // Verify tokens are present in runs
       expect(headerBlocks[0].runs[1].token).toBe('pageNumber');

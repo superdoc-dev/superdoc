@@ -481,7 +481,7 @@ importers:
         version: link:../../packages/document-api
       '@superdoc/pm-adapter':
         specifier: workspace:*
-        version: link:../../packages/layout-engine/pm-adapter
+        version: link:../../packages/pm-adapter
       '@superdoc/super-editor':
         specifier: workspace:*
         version: link:../../packages/super-editor
@@ -2563,6 +2563,16 @@ importers:
         specifier: ^4.19.2
         version: 4.22.1
 
+  packages/layout-adapter:
+    dependencies:
+      '@superdoc/contracts':
+        specifier: workspace:*
+        version: link:../layout-engine/contracts
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/layout-engine: {}
 
   packages/layout-engine/contracts: {}
@@ -2603,6 +2613,9 @@ importers:
         specifier: workspace:*
         version: link:../../word-layout
     devDependencies:
+      '@superdoc/layout-adapter':
+        specifier: workspace:*
+        version: link:../../layout-adapter
       '@superdoc/layout-resolved':
         specifier: workspace:*
         version: link:../layout-resolved
@@ -2611,7 +2624,7 @@ importers:
         version: link:../painters/dom
       '@superdoc/pm-adapter':
         specifier: workspace:*
-        version: link:../pm-adapter
+        version: link:../../pm-adapter
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.2
@@ -2702,49 +2715,6 @@ importers:
         specifier: 'catalog:'
         version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@25.6.0)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
-  packages/layout-engine/pm-adapter:
-    dependencies:
-      '@superdoc/common':
-        specifier: workspace:*
-        version: link:../../../shared/common
-      '@superdoc/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@superdoc/font-utils':
-        specifier: workspace:*
-        version: link:../../../shared/font-utils
-      '@superdoc/locale-utils':
-        specifier: workspace:*
-        version: link:../../../shared/locale-utils
-      '@superdoc/measuring-dom':
-        specifier: workspace:*
-        version: link:../measuring/dom
-      '@superdoc/style-engine':
-        specifier: workspace:*
-        version: link:../style-engine
-      '@superdoc/super-editor':
-        specifier: workspace:*
-        version: link:../../super-editor
-      '@superdoc/url-validation':
-        specifier: workspace:*
-        version: link:../../../shared/url-validation
-      '@superdoc/word-layout':
-        specifier: workspace:*
-        version: link:../../word-layout
-    devDependencies:
-      '@superdoc/layout-engine':
-        specifier: workspace:*
-        version: link:../layout-engine
-      '@superdoc/layout-resolved':
-        specifier: workspace:*
-        version: link:../layout-resolved
-      '@superdoc/painter-dom':
-        specifier: workspace:*
-        version: link:../painters/dom
-      vitest:
-        specifier: 'catalog:'
-        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@25.6.0)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
   packages/layout-engine/style-engine:
     dependencies:
       '@superdoc/contracts':
@@ -2772,6 +2742,9 @@ importers:
       '@superdoc/geometry-utils':
         specifier: workspace:*
         version: link:../geometry-utils
+      '@superdoc/layout-adapter':
+        specifier: workspace:*
+        version: link:../../layout-adapter
       '@superdoc/layout-engine':
         specifier: workspace:*
         version: link:../layout-engine
@@ -2780,7 +2753,7 @@ importers:
         version: link:../measuring/dom
       '@superdoc/pm-adapter':
         specifier: workspace:*
-        version: link:../pm-adapter
+        version: link:../../pm-adapter
     devDependencies:
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
@@ -2791,6 +2764,52 @@ importers:
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
+
+  packages/pm-adapter:
+    dependencies:
+      '@superdoc/common':
+        specifier: workspace:*
+        version: link:../../shared/common
+      '@superdoc/contracts':
+        specifier: workspace:*
+        version: link:../layout-engine/contracts
+      '@superdoc/font-utils':
+        specifier: workspace:*
+        version: link:../../shared/font-utils
+      '@superdoc/layout-adapter':
+        specifier: workspace:*
+        version: link:../layout-adapter
+      '@superdoc/locale-utils':
+        specifier: workspace:*
+        version: link:../../shared/locale-utils
+      '@superdoc/measuring-dom':
+        specifier: workspace:*
+        version: link:../layout-engine/measuring/dom
+      '@superdoc/style-engine':
+        specifier: workspace:*
+        version: link:../layout-engine/style-engine
+      '@superdoc/super-editor':
+        specifier: workspace:*
+        version: link:../super-editor
+      '@superdoc/url-validation':
+        specifier: workspace:*
+        version: link:../../shared/url-validation
+      '@superdoc/word-layout':
+        specifier: workspace:*
+        version: link:../word-layout
+    devDependencies:
+      '@superdoc/layout-engine':
+        specifier: workspace:*
+        version: link:../layout-engine/layout-engine
+      '@superdoc/layout-resolved':
+        specifier: workspace:*
+        version: link:../layout-engine/layout-resolved
+      '@superdoc/painter-dom':
+        specifier: workspace:*
+        version: link:../layout-engine/painters/dom
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@25.6.0)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/preset-geometry: {}
 
@@ -2905,6 +2924,9 @@ importers:
       '@superdoc/dom-contract':
         specifier: workspace:*
         version: link:../layout-engine/dom-contract
+      '@superdoc/layout-adapter':
+        specifier: workspace:*
+        version: link:../layout-adapter
       '@superdoc/layout-bridge':
         specifier: workspace:*
         version: link:../layout-engine/layout-bridge
@@ -2919,7 +2941,7 @@ importers:
         version: link:../layout-engine/painters/dom
       '@superdoc/pm-adapter':
         specifier: workspace:*
-        version: link:../layout-engine/pm-adapter
+        version: link:../pm-adapter
       '@superdoc/preset-geometry':
         specifier: workspace:*
         version: link:../preset-geometry
@@ -46771,7 +46793,7 @@ snapshots:
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       terser: 5.46.1
-      webpack: 5.105.4(esbuild@0.27.7)(webpack-cli@5.1.4)
+      webpack: 5.105.4(esbuild@0.27.7)(webpack-cli@6.0.1)
     optionalDependencies:
       esbuild: 0.27.7
 
@@ -48267,7 +48289,7 @@ snapshots:
       std-env: 3.10.0
       tinybench: 2.9.0
       tinyexec: 0.3.2
-      tinyglobby: 0.2.15
+      tinyglobby: 0.2.16
       tinypool: 1.1.1
       tinyrainbow: 2.0.0
       vite: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.25.12)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
@@ -48313,7 +48335,7 @@ snapshots:
       std-env: 3.10.0
       tinybench: 2.9.0
       tinyexec: 0.3.2
-      tinyglobby: 0.2.15
+      tinyglobby: 0.2.16
       tinypool: 1.1.1
       tinyrainbow: 2.0.0
       vite: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.27.4)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
@@ -48359,7 +48381,7 @@ snapshots:
       std-env: 3.10.0
       tinybench: 2.9.0
       tinyexec: 0.3.2
-      tinyglobby: 0.2.15
+      tinyglobby: 0.2.16
       tinypool: 1.1.1
       tinyrainbow: 2.0.0
       vite: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
@@ -48405,7 +48427,7 @@ snapshots:
       std-env: 3.10.0
       tinybench: 2.9.0
       tinyexec: 0.3.2
-      tinyglobby: 0.2.15
+      tinyglobby: 0.2.16
       tinypool: 1.1.1
       tinyrainbow: 2.0.0
       vite: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)

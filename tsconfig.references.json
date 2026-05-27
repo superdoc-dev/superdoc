@@ -6,6 +6,8 @@
     { "path": "packages/layout-engine/contracts/tsconfig.json" },
     { "path": "packages/layout-engine/dom-contract/tsconfig.json" },
     { "path": "packages/layout-engine/layout-resolved/tsconfig.json" },
+    { "path": "packages/layout-adapter/tsconfig.json" },
+    { "path": "packages/pm-adapter/tsconfig.json" },
     { "path": "packages/layout-engine/geometry-utils/tsconfig.json" },
     { "path": "packages/layout-engine/layout-engine/tsconfig.json" },
     { "path": "packages/layout-engine/layout-bridge/tsconfig.types.json" },

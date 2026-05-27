@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { toFlowBlocks } from './test-helpers/to-flow-blocks.js';
 import type { FlowBlock, PMNode } from '@superdoc/contracts';
 import fs from 'fs';
 import path from 'path';

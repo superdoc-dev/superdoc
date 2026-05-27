@@ -1,3 +1,4 @@
+import '@superdoc/pm-adapter/register';
 import { resolveCanvas } from '@superdoc/measuring-dom/canvas-resolver';
 import { installNodeCanvasPolyfill } from '@superdoc/measuring-dom';
 

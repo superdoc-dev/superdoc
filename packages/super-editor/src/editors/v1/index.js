@@ -1,4 +1,5 @@
 import './style.css';
+import '@superdoc/pm-adapter/register';
 
 // Load type augmentations (side-effect import for command/attribute types)
 import './extensions/types/index.js';

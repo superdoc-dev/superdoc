@@ -1,4 +1,5 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import '../setup-layout-adapter.js';
 import type {
   SectionAddress,
   SectionDomain,
@@ -8,8 +9,7 @@ import type {
   SectionsListResult,
 } from '@superdoc/document-api';
 import { buildDiscoveryItem, buildDiscoveryResult, buildResolvedHandle } from '@superdoc/document-api';
-import { analyzeSectionRanges } from '@superdoc/pm-adapter/sections/analysis.js';
-import { SectionType, type SectionRange } from '@superdoc/pm-adapter/sections/types.js';
+import { getLayoutDocumentAdapter, SectionType, type SectionRange } from '@superdoc/layout-adapter';
 import type { Editor } from '../../core/Editor.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { getRevision } from '../plan-engine/revision-tracker.js';
@@ -117,7 +117,7 @@ function collectParagraphSnapshots(editor: Editor): ParagraphSnapshot[] {
   return snapshots;
 }
 
-function buildAnalysisDocFromParagraphs(paragraphs: ParagraphSnapshot[]): Parameters<typeof analyzeSectionRanges>[0] {
+function buildAnalysisDocFromParagraphs(paragraphs: ParagraphSnapshot[]): unknown {
   return {
     type: 'doc',
     content: paragraphs.map((paragraph) => ({
@@ -127,10 +127,7 @@ function buildAnalysisDocFromParagraphs(paragraphs: ParagraphSnapshot[]): Parame
   };
 }
 
-function resolveAnalysisDoc(
-  editor: Editor,
-  paragraphs: ParagraphSnapshot[],
-): Parameters<typeof analyzeSectionRanges>[0] {
+function resolveAnalysisDoc(editor: Editor, paragraphs: ParagraphSnapshot[]): unknown {
   const maybeJsonDoc = (editor.state.doc as unknown as { toJSON?: () => unknown }).toJSON?.();
   if (
     maybeJsonDoc &&
@@ -138,7 +135,7 @@ function resolveAnalysisDoc(
     typeof (maybeJsonDoc as { type?: unknown }).type === 'string' &&
     Array.isArray((maybeJsonDoc as { content?: unknown[] }).content)
   ) {
-    return maybeJsonDoc as Parameters<typeof analyzeSectionRanges>[0];
+    return maybeJsonDoc;
   }
 
   return buildAnalysisDocFromParagraphs(paragraphs);
@@ -320,7 +317,7 @@ export function resolveSectionProjections(editor: Editor): SectionProjection[] {
   const bodySectPr = getBodySectPrFromEditor(editor);
   const oddEvenHeadersFooters = readOddEvenHeadersFlag(editor);
   const analysisDoc = resolveAnalysisDoc(editor, paragraphs);
-  const analyzed = analyzeSectionRanges(analysisDoc, bodySectPr ?? undefined);
+  const analyzed = getLayoutDocumentAdapter().analyzeSectionRanges(analysisDoc, bodySectPr ?? undefined);
   const ranges = analyzed.length > 0 ? analyzed : [createSyntheticRange(bodySectPr, paragraphs.length)];
 
   return ranges.map((range, index) => {

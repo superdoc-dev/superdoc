@@ -27,7 +27,7 @@ SuperDoc uses its own rendering pipeline. ProseMirror stores document state; it 
 | DOCX import/export | `super-editor/src/editors/v1/core/super-converter/` | Parse and preserve OOXML, style refs, inline properties. Do not bake resolved formatting into direct attrs. |
 | Style cascade | `layout-engine/style-engine/` | Single source of truth for defaults, styles, conditional formatting, inline overrides. |
 | Static document visuals | `pm-adapter/` data + `layout-engine/painters/dom/` rendering | Feed typed data into DomPainter. Do not style static content with PM decorations. |
-| Direction-aware properties | `layout-engine/painters/dom/` | DomPainter mirrors at paint time for `w:bidiVisual`. pm-adapter stores logical sides LTR-default. Pre-mirroring upstream is a double-swap. See `packages/layout-engine/pm-adapter/src/direction/README.md`. |
+| Direction-aware properties | `layout-engine/painters/dom/` | DomPainter mirrors at paint time for `w:bidiVisual`. pm-adapter stores logical sides LTR-default. Pre-mirroring upstream is a double-swap. See `packages/pm-adapter/src/direction/README.md`. |
 | Editing behavior | `super-editor/src/editors/v1/extensions/` | Commands, keybindings, editor plugins. Do not duplicate cascade or render document visuals here. |
 | Final DOM rendering | `layout-engine/painters/dom/` | Render `ResolvedLayout`. Paint-time transforms (e.g. RTL mirror) live here. |
 | New doc-api operation | `packages/document-api/src/contract/operation-definitions.ts` | Contract-first; touches 4 files. See `packages/document-api/README.md`. |

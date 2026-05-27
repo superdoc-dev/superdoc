@@ -137,17 +137,17 @@ const relocations = [
   // and other internal packages that would re-expand the shim list.
   {
     pkg: '@superdoc/pm-adapter/converter-context.js',
-    distEntry: 'layout-engine/pm-adapter/src/converter-context.d.ts',
+    distEntry: 'pm-adapter/src/converter-context.d.ts',
     matchSubpaths: false,
-    viteIncludes: ['../layout-engine/pm-adapter/src/converter-context.ts'],
-    tsconfigIncludes: ['../layout-engine/pm-adapter/src/converter-context.ts'],
+    viteIncludes: ['../pm-adapter/src/converter-context.ts'],
+    tsconfigIncludes: ['../pm-adapter/src/converter-context.ts'],
   },
   {
     pkg: '@superdoc/pm-adapter/sections/types.js',
-    distEntry: 'layout-engine/pm-adapter/src/sections/types.d.ts',
+    distEntry: 'pm-adapter/src/sections/types.d.ts',
     matchSubpaths: false,
-    viteIncludes: ['../layout-engine/pm-adapter/src/sections/types.ts'],
-    tsconfigIncludes: ['../layout-engine/pm-adapter/src/sections/types.ts'],
+    viteIncludes: ['../pm-adapter/src/sections/types.ts'],
+    tsconfigIncludes: ['../pm-adapter/src/sections/types.ts'],
   },
   // style-engine/ooxml: subpath-only. Includes the ooxml subtree plus the
   // sibling cascade.ts dependency it imports.

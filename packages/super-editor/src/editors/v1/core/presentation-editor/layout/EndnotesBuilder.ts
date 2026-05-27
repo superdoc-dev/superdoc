@@ -1,6 +1,6 @@
 import type { EditorState } from 'prosemirror-state';
 import type { FlowBlock, Run as LayoutRun, TextRun } from '@superdoc/contracts';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { getLayoutDocumentAdapter } from '@superdoc/layout-adapter';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 
@@ -58,7 +58,7 @@ export function buildEndnoteBlocks(
       const endnoteDoc = resolveEndnoteDocJson(id, importedEndnotes, renderOverride);
       if (!endnoteDoc) return;
 
-      const result = toFlowBlocks(endnoteDoc, {
+      const result = getLayoutDocumentAdapter().toFlowBlocks(endnoteDoc, {
         blockIdPrefix: `endnote-${id}-`,
         storyKey: buildStoryKey({ kind: 'story', storyType: 'endnote', noteId: id }),
         enableRichHyperlinks: true,

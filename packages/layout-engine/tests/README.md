@@ -70,5 +70,5 @@ If tests fail after SDT schema changes:
 
 - Layout engine contracts: `packages/layout-engine/contracts/src/index.ts`
 - Style engine SDT parsing: `packages/layout-engine/style-engine/src/index.ts`
-- PM adapter SDT handling: `packages/layout-engine/pm-adapter/src/index.ts` (search for `resolveNodeSdtMetadata`)
+- PM adapter SDT handling: `packages/pm-adapter/src/index.ts` (search for `resolveNodeSdtMetadata`)
 - Planning docs: `packages/layout-engine/plan/fields-annotations-*.md`

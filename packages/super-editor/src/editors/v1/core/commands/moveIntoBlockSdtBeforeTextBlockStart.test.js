@@ -20,12 +20,14 @@ const makeSchema = () =>
       table: { group: 'block', content: 'tableRow+' },
       tableRow: { content: 'tableCell+' },
       tableCell: { content: 'block+' },
+      noBreakHyphen: { inline: true, group: 'inline', atom: true },
       text: { group: 'inline' },
     },
     marks: {},
   });
 
 const run = (schema, text) => schema.nodes.run.create(null, schema.text(text));
+const atomRun = (schema, nodeName) => schema.nodes.run.create(null, schema.nodes[nodeName].create());
 const paragraph = (schema, text) => schema.nodes.paragraph.create(null, run(schema, text));
 const emptyParagraph = (schema) => schema.nodes.paragraph.create();
 
@@ -147,6 +149,22 @@ describe('moveIntoBlockSdtBeforeTextBlockStart', () => {
     expect(dispatched.steps).toHaveLength(0);
     expect(dispatched.selection.from).toBe(targetPos);
     expect(dispatched.selection.to).toBe(targetPos);
+  });
+
+  it('returns false when inline atom content appears before the first text position', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [paragraph(schema, 'Inner')]),
+      schema.nodes.paragraph.create(null, [atomRun(schema, 'noBreakHyphen'), run(schema, 'After')]),
+    ]);
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, findTextPos(doc, 'After')) });
+    const dispatch = vi.fn();
+
+    const ok = moveIntoBlockSdtBeforeTextBlockStart()({ state, dispatch });
+
+    expect(ok).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('returns false when the caret is not at the visible textblock start', () => {

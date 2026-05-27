@@ -19,6 +19,26 @@ export function findFirstTextPosInNode(node, nodePos) {
 }
 
 /**
+ * Finds the first cursor position for visible content inside a node.
+ * @param {import('prosemirror-model').Node} node
+ * @param {number} nodePos
+ * @returns {number | null}
+ */
+export function findFirstContentCursorPosInNode(node, nodePos) {
+  if (node.isText || node.isAtom) return nodePos;
+
+  for (let index = 0, offset = 0; index < node.childCount; index += 1) {
+    const child = node.child(index);
+    const childPos = nodePos + 1 + offset;
+    const found = findFirstContentCursorPosInNode(child, childPos);
+    if (found != null) return found;
+    offset += child.nodeSize;
+  }
+
+  return null;
+}
+
+/**
  * Finds the last text cursor position inside a node.
  * @param {import('prosemirror-model').Node} node
  * @param {number} nodePos
@@ -32,6 +52,27 @@ export function findLastTextPosInNode(node, nodePos) {
     offset -= child.nodeSize;
     const childPos = nodePos + 1 + offset;
     const found = findLastTextPosInNode(child, childPos);
+    if (found != null) return found;
+  }
+
+  return null;
+}
+
+/**
+ * Finds the last cursor position for visible content inside a node.
+ * @param {import('prosemirror-model').Node} node
+ * @param {number} nodePos
+ * @returns {number | null}
+ */
+export function findLastContentCursorPosInNode(node, nodePos) {
+  if (node.isText) return nodePos + (node.text?.length ?? 0);
+  if (node.isAtom) return nodePos + node.nodeSize;
+
+  for (let index = node.childCount - 1, offset = node.content.size; index >= 0; index -= 1) {
+    const child = node.child(index);
+    offset -= child.nodeSize;
+    const childPos = nodePos + 1 + offset;
+    const found = findLastContentCursorPosInNode(child, childPos);
     if (found != null) return found;
   }
 

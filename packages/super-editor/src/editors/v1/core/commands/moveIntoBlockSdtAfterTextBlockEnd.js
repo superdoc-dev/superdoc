@@ -1,5 +1,5 @@
 import { Selection, TextSelection } from 'prosemirror-state';
-import { findFirstTextPosInNode, findLastTextPosInNode } from './helpers/textPositions.js';
+import { findFirstTextPosInNode, findLastContentCursorPosInNode } from './helpers/textPositions.js';
 
 function findAncestorDepth($pos, predicate) {
   for (let depth = $pos.depth; depth > 0; depth -= 1) {
@@ -26,8 +26,8 @@ export const moveIntoBlockSdtAfterTextBlockEnd =
 
     const textblock = $from.node(textblockDepth);
     const textblockPos = $from.before(textblockDepth);
-    const lastTextPos = findLastTextPosInNode(textblock, textblockPos) ?? $from.end(textblockDepth);
-    if (lastTextPos !== $from.pos) return false;
+    const lastContentPos = findLastContentCursorPosInNode(textblock, textblockPos) ?? $from.end(textblockDepth);
+    if (lastContentPos !== $from.pos) return false;
 
     const boundaryPos = $from.after(textblockDepth);
     const boundary = state.doc.resolve(boundaryPos);

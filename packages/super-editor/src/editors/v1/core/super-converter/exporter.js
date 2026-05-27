@@ -701,9 +701,11 @@ export class DocxExporter {
     let { name } = node;
     const { elements, attributes } = node;
 
-    // Normalize w:delInstrText → w:instrText only when the field instruction is
-    // no longer inside a surviving w:del wrapper. Inside w:del, ECMA-376 expects
-    // w:delInstrText to remain intact.
+    // Normalize w:delInstrText → w:instrText. During import, w:del wrappers around
+    // field character runs lose their trackDelete marks (only text content gets marked),
+    // so on export the w:del wrapper is absent. Per ECMA-376 §17.16.13, w:delInstrText
+    // outside w:del is non-conformant — renaming to w:instrText keeps the field valid.
+    // Inside a surviving w:del wrapper, ECMA-376 expects w:delInstrText to remain intact.
     if (name === 'w:delInstrText' && !insideDeletion) {
       name = 'w:instrText';
     }

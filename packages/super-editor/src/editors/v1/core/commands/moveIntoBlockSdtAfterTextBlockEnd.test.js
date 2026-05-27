@@ -151,6 +151,33 @@ describe('moveIntoBlockSdtAfterTextBlockEnd', () => {
     expect(dispatched.selection.to).toBe(innerStart);
   });
 
+  it('moves from a nested preceding paragraph to a sibling block SDT inside the same parent SDT', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.nodes.structuredContentBlock.create(null, [
+        paragraph(schema, 'Before'),
+        schema.nodes.structuredContentBlock.create(null, [paragraph(schema, 'Inner')]),
+      ]),
+    ]);
+    const beforeEnd = findTextPos(doc, 'Before', 6);
+    const innerStart = findTextPos(doc, 'Inner');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, beforeEnd) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.steps).toHaveLength(0);
+    expect(dispatched.selection.from).toBe(innerStart);
+    expect(dispatched.selection.to).toBe(innerStart);
+  });
+
   it('moves into a following block SDT that only contains an empty paragraph', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [

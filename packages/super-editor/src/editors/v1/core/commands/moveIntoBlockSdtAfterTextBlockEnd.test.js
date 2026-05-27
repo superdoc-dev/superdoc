@@ -20,8 +20,9 @@ const makeSchema = () =>
       table: { group: 'block', content: 'tableRow+' },
       tableRow: { content: 'tableCell+' },
       tableCell: { content: 'block+' },
-      noBreakHyphen: { inline: true, group: 'inline', atom: true, leafText: () => '‑' },
+      noBreakHyphen: { inline: true, group: 'inline', atom: true, leafText: () => '-' },
       bookmarkEnd: { inline: true, group: 'inline', atom: true },
+      image: { inline: true, group: 'inline', atom: true },
       text: { group: 'inline' },
     },
     marks: {},
@@ -69,6 +70,19 @@ const findEmptyParagraphTextPos = (doc) => {
   doc.descendants((node, pos) => {
     if (node.type.name === 'paragraph' && node.childCount === 0 && found == null) {
       found = pos + 1;
+      return false;
+    }
+    return true;
+  });
+  expect(found).not.toBeNull();
+  return found;
+};
+
+const findNodePos = (doc, nodeName) => {
+  let found = null;
+  doc.descendants((node, pos) => {
+    if (node.type.name === nodeName && found == null) {
+      found = pos;
       return false;
     }
     return true;
@@ -227,6 +241,52 @@ describe('moveIntoBlockSdtAfterTextBlockEnd', () => {
     expect(ok).toBe(true);
     expect(dispatched).toBeDefined();
     expect(dispatched.selection.from).toBe(innerStart);
+  });
+
+  it('returns false when visible inline atom content appears after the last text position', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.nodes.paragraph.create(null, [run(schema, 'Before'), schema.nodes.image.create()]),
+      schema.nodes.structuredContentBlock.create(null, [paragraph(schema, 'Inner')]),
+      paragraph(schema, 'After'),
+    ]);
+    const state = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, findTextPos(doc, 'Before', 6)),
+    });
+    const dispatch = vi.fn();
+
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({ state, dispatch });
+
+    expect(ok).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('targets a visible leading inline atom inside a following block SDT', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [
+        schema.nodes.paragraph.create(null, [schema.nodes.image.create(), run(schema, 'Inner')]),
+      ]),
+      paragraph(schema, 'After'),
+    ]);
+    const beforeEnd = findTextPos(doc, 'Before', 6);
+    const imageStart = findNodePos(doc, 'image');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, beforeEnd) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtAfterTextBlockEnd()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.selection.from).toBe(imageStart);
   });
 
   it('returns false when inline atom content appears after the last text position', () => {

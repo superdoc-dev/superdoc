@@ -1,3 +1,17 @@
+const ZERO_WIDTH_INLINE_MARKER_NODE_NAMES = new Set([
+  'bookmarkStart',
+  'bookmarkEnd',
+  'commentRangeStart',
+  'commentRangeEnd',
+  'commentReference',
+  'permStart',
+  'permEnd',
+]);
+
+function isZeroWidthInlineMarker(node) {
+  return node.isInline && ZERO_WIDTH_INLINE_MARKER_NODE_NAMES.has(node.type.name);
+}
+
 /**
  * Finds the first text cursor position inside a node.
  * @param {import('prosemirror-model').Node} node
@@ -25,7 +39,7 @@ export function findFirstTextPosInNode(node, nodePos) {
  * @returns {number | null}
  */
 export function findFirstContentCursorPosInNode(node, nodePos) {
-  if (node.isAtom && node.isInline && node.textContent === '') return null;
+  if (isZeroWidthInlineMarker(node)) return null;
   if (node.isText || node.isAtom) return nodePos;
   if (node.isTextblock && node.childCount === 0) return nodePos + 1;
 
@@ -67,7 +81,7 @@ export function findLastTextPosInNode(node, nodePos) {
  * @returns {number | null}
  */
 export function findLastContentCursorPosInNode(node, nodePos) {
-  if (node.isAtom && node.isInline && node.textContent === '') return null;
+  if (isZeroWidthInlineMarker(node)) return null;
   if (node.isText) return nodePos + (node.text?.length ?? 0);
   if (node.isAtom) return nodePos + node.nodeSize;
   if (node.isTextblock && node.childCount === 0) return nodePos + 1;

@@ -97,13 +97,20 @@ describe('expandRunsForInlineTabs (SD-3266)', () => {
     expect(result[2]).toMatchObject({ text: ']', pmStart: 2, pmEnd: 3 });
   });
 
-  it('still splits non-revision text containing "\\t" but WITHOUT fromLiteralTab so the layout treats it as a real tab stop', () => {
-    // TOC-style "Chapter 1\t42" — the tab must advance to a tab stop, not collapse.
+  it('splits non-revision text containing "\\t" and sets fromLiteralTab but NOT trackedChange', () => {
+    // TOC-style "Chapter 1\t42" / signature-line "Sign:____\t".
+    // `fromLiteralTab` is the load-bearing signal for the measurer→painter
+    // width handoff (synthesized TabRuns are fresh on each helper call, so
+    // `run.width` mutation isn't visible to the painter — the measurer also
+    // emits a LineSegment, which the painter reads back via segmentsByRun).
+    // `trackedChange` stays undefined for non-revision tabs so the painter
+    // applies real tab-stop advance + signature underline (vs. the compact
+    // 2-space strut used for revision placeholders).
     const result = expandRunsForInlineTabs([makeRun('Chapter 1\t42', 0)]);
     expect(result).toHaveLength(3);
     const tab = result[1] as TabRun;
     expect(tab.kind).toBe('tab');
-    expect(tab.fromLiteralTab).toBeUndefined();
+    expect(tab.fromLiteralTab).toBe(true);
     expect(tab.trackedChange).toBeUndefined();
   });
 

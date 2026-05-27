@@ -102,11 +102,23 @@ export function expandRunsForInlineTabs(runs: Run[], tabStops?: TabStop[], inden
           });
           buffer = '';
         }
-        // SD-3266: Compact ("fromLiteralTab") rendering applies only when the
-        // originating run carries a tracked-change mark. TOC-style runs that
-        // use literal "\t" as a real tab stop (e.g. "Chapter 1\t42") still
-        // expect tab-stop advance + leader behavior; only revision-marked
-        // placeholders like `<w:del>[\t]</w:del>` should collapse to a glyph.
+        // SD-3266: `fromLiteralTab` marks a TabRun synthesized from a literal
+        // U+0009 in run text — independently of revision context. The flag is
+        // load-bearing for two distinct downstream needs:
+        //   1) Compact rendering ([  ] strut, no tab-stop advance) applies
+        //      only when the originating run ALSO carried a tracked-change
+        //      mark. TOC-style runs (e.g. "Chapter 1\t42") still expect a real
+        //      tab-stop advance + leader behavior.
+        //   2) The measurer→painter width handoff: synthesized TabRuns are
+        //      fresh object instances on each `expandRunsForInlineTabs` call
+        //      (measurer and painter each call the helper), so the measurer's
+        //      `run.width` mutation is NOT visible to the painter. By tagging
+        //      every synthesized tab we let the measurer emit a LineSegment
+        //      that the painter reads back via segmentsByRun — preventing the
+        //      width-collapse bug for trailing/standalone literal `\t` tabs
+        //      (e.g. signature-line "Sign:____\t"). Real `<w:tab/>` PM nodes
+        //      don't carry the flag, so existing tab-stop logic stays intact
+        //      and the same object instance flows through unmodified.
         const isInRevision = textRun.trackedChange != null;
         // SD-3266: carry typography (fontFamily, fontSize, bold/italic, color,
         // underline, strike, ...) from the source text run onto the synthesized
@@ -152,9 +164,9 @@ export function expandRunsForInlineTabs(runs: Run[], tabStops?: TabStop[], inden
           ...(letterSpacing != null ? { letterSpacing } : {}),
           ...(vertAlign != null ? { vertAlign } : {}),
           ...(baselineShift != null ? { baselineShift } : {}),
+          fromLiteralTab: true,
           ...(isInRevision
             ? {
-                fromLiteralTab: true,
                 // Propagate tracked-change metadata so the painter can paint
                 // the strikethrough/underline across the synthesized glyph.
                 trackedChange: textRun.trackedChange,

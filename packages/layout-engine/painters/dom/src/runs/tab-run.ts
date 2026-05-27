@@ -5,13 +5,15 @@ import type { TrackedChangesRenderConfig } from './types.js';
 /**
  * SD-3266: render a synthesized literal-tab span (the kind produced by
  * `expandRunsForInlineTabs` when a `<w:t>`/`<w:delText>` contained a literal
- * U+0009). These are NOT tab-stop advances — Word treats them as compact
- * placeholders and so do we. textContent is two literal spaces, typography is
- * carried over from the source text run (the line container uses
- * `font-size: 0` for whitespace control, so we must declare these here), and
- * the `.superdoc-tab` class participates in SD-2939's existing
+ * U+0009). textContent is two literal spaces; typography is carried over from
+ * the source text run (the line container uses `font-size: 0` for whitespace
+ * control, so we must declare these here), and the `.superdoc-tab` class
+ * participates in SD-2939's existing
  * `.superdoc-show-formatting-marks .superdoc-tab::after { content: "→" }`
  * overlay automatically.
+ *
+ * Underline (signature-line use case) is applied here too so a non-revision
+ * literal `\t` in `Sign:____\t` keeps its underline through the placeholder.
  */
 const renderFromLiteralTabSpan = (
   run: TabRun,
@@ -29,6 +31,7 @@ const renderFromLiteralTabSpan = (
   if (run.bold) tabEl.style.fontWeight = 'bold';
   if (run.italic) tabEl.style.fontStyle = 'italic';
   if (run.color) tabEl.style.color = run.color;
+  applyTabUnderline(tabEl, run);
   // Apply trackedChange decorations (strikethrough for delete, underline for
   // insert) so the placeholder reads as part of the revision in the body.
   if (trackedConfig && run.trackedChange) {
@@ -90,17 +93,32 @@ export const renderPositionedTabRun = (
   trackedConfig?: TrackedChangesRenderConfig,
   segmentWidth?: number,
 ): { element: HTMLElement; tabEndX: number; actualTabWidth: number } => {
-  // SD-3266: literal-tab placeholder — compact 2-space strut, absolutely
-  // positioned at cumulativeX with the glyph width the measurer recorded on
-  // the line segment. Tab-stop advance logic is skipped.
+  // SD-3266: literal-tab placeholder. Two flavors flow through here:
+  //   (a) revision tabs (run.trackedChange set) — measurer emits a 2-glyph
+  //       segment, so segmentWidth ≈ the two-space placeholder. We just
+  //       position it at cumulativeX.
+  //   (b) plain literal tabs (no revision) — measurer emits a segment whose
+  //       width is the real tab-stop advance (signature line "Sign:____\t" can
+  //       be hundreds of px). We must set the span's box width to that advance
+  //       so following content lines up, AND so an inherited `underline` mark
+  //       paints a visible signature underline across the full gap.
   if (run.fromLiteralTab) {
-    const glyphWidth = segmentWidth ?? run.width ?? 0;
+    const measuredAdvance = segmentWidth ?? run.width ?? 0;
     const tabEl = renderFromLiteralTabSpan(run, doc, layoutEpoch, trackedConfig, styleId);
     tabEl.style.position = 'absolute';
     tabEl.style.left = `${tabStartX + indentOffset}px`;
     tabEl.style.top = '0px';
     tabEl.style.lineHeight = `${line.lineHeight}px`;
-    return { element: tabEl, tabEndX: tabStartX + glyphWidth, actualTabWidth: glyphWidth };
+    // For non-revision literal tabs the measured advance is the source of
+    // truth for the layout box. Setting an explicit width preserves alignment
+    // for trailing/standalone tabs whose visible content (two spaces) is
+    // narrower than the advance.
+    if (!run.trackedChange && measuredAdvance > 0) {
+      tabEl.style.display = 'inline-block';
+      tabEl.style.width = `${measuredAdvance}px`;
+      tabEl.style.height = `${line.lineHeight}px`;
+    }
+    return { element: tabEl, tabEndX: tabStartX + measuredAdvance, actualTabWidth: measuredAdvance };
   }
 
   // The tab should span from where previous content ended to where next content begins.

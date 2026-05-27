@@ -2278,6 +2278,33 @@ describe('measureBlock', () => {
       expect(measure.lines[0].lineHeight).toBeGreaterThan(0);
       expect(measure.lines[0].maxFontSize).toBeGreaterThan(0);
     });
+
+    it('SD-3266: publishes measured width via a LineSegment for non-revision literal tabs', async () => {
+      // Signature-line pattern: text + trailing literal `\t` outside any
+      // tracked-change. The measurer's `run.width` mutation is invisible to
+      // the painter because the painter expands the run array independently
+      // and gets a fresh TabRun. The measured advance must therefore be
+      // published as a LineSegment so segmentsByRun.get(runIndex) carries the
+      // width across the measurer→painter boundary.
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'sig-line',
+        runs: [{ text: 'Sign:____\t', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 10 }],
+        attrs: {
+          tabs: [{ pos: 360, val: 'left' }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+      expect(measure.lines).toHaveLength(1);
+      const line = measure.lines[0];
+      // expandRunsForInlineTabs splits the source TextRun into [text, tab]
+      // — the synthesized tab lives at runIndex 1 on the expanded array
+      // the line.segments index into.
+      const tabSegments = (line.segments ?? []).filter((s) => s.runIndex === 1);
+      expect(tabSegments).toHaveLength(1);
+      expect(tabSegments[0].width).toBeGreaterThan(0);
+    });
   });
 
   describe('space-only runs', () => {

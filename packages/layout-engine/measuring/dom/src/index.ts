@@ -158,7 +158,6 @@ const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5 inch in twips
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96; // Standard CSS/DOM DPI
 const TWIPS_PER_PX = TWIPS_PER_INCH / PX_PER_INCH; // 15 twips per pixel
-const _PX_PER_PT = 96 / 72; // Reserved for future pt↔px conversions
 const twipsToPx = (twips: number): number => twips / TWIPS_PER_PX;
 const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
 
@@ -1520,17 +1519,23 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         };
       }
 
-      // SD-3266: TabRuns produced by expandRunsForInlineTabs (literal U+0009 inside
-      // <w:t>/<w:delText>, almost always inside a `<w:del>` tracked-deletion placeholder)
-      // must NOT advance to the next tab stop. Word's body view treats them as a
-      // compact strut (cf. its "Deleted: [→]" balloon convention). Measure just the
-      // arrow glyph's width, contribute that to the line, leave tabStopCursor alone,
-      // and record the width on the run for the painter.
-      if ((run as TabRun).fromLiteralTab) {
-        // SD-3266: measure the width of two space glyphs — the painter renders
-        // each literal-tab as "  " (two literal spaces) inline so the placeholder
-        // is visually distinguishable from a regular single-space deletion, and
-        // consecutive tabs (e.g. "[\t\t]") expand to "[    ]" naturally.
+      // SD-3266: TabRuns synthesized by expandRunsForInlineTabs from a literal
+      // U+0009 inside `<w:t>`/`<w:delText>`. Two cases:
+      //
+      //  a) tracked-change-marked literal tab (deletion/insertion placeholder
+      //     like `<w:del>[\t]</w:del>`): render as a compact 2-space strut
+      //     (Word's "Deleted: [→]" balloon convention). No tab-stop advance.
+      //
+      //  b) plain literal tab (not in a revision): retain real tab-stop
+      //     advance semantics (signature-line "Sign:____\t", arbitrary "\t" in
+      //     text content). We still need to publish the measured width to the
+      //     painter — synthesized TabRuns are fresh object instances on each
+      //     `expandRunsForInlineTabs` call, so the `run.width = tabAdvance`
+      //     mutation below is invisible to the painter. Emit a LineSegment so
+      //     the painter can read width back via segmentsByRun, preventing the
+      //     trailing-tab width-collapse bug for non-revision literal tabs.
+      if ((run as TabRun).fromLiteralTab && (run as TabRun).trackedChange) {
+        // SD-3266 case (a): compact 2-space placeholder.
         const { font } = buildFontString(run as unknown as TextRun);
         const glyphWidth = measureRunWidth('  ', font, ctx, run as unknown as Run);
         const segStart = currentLine.toChar;
@@ -1592,6 +1597,20 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       }
       // Persist measured tab width on the TabRun for downstream consumers/tests
       (run as TabRun & { width?: number }).width = tabAdvance;
+
+      // SD-3266: For literal-`\t` tabs synthesized by `expandRunsForInlineTabs`,
+      // the painter re-runs that helper independently and gets a FRESH TabRun
+      // instance — so the `run.width` mutation above is invisible to it.
+      // Emit a LineSegment carrying the measured advance so the painter can
+      // read it back via `segmentsByRun` and avoid the trailing-tab width
+      // collapse bug for non-revision literal tabs (e.g. signature-line
+      // "Sign:____\t"). Real `<w:tab/>` PM-node tabs don't carry the flag, so
+      // they don't pay this cost.
+      if ((run as TabRun).fromLiteralTab) {
+        const segStart = currentLine.toChar;
+        const segEnd = segStart + 1;
+        appendSegment(currentLine.segments, runIndex, segStart, segEnd, tabAdvance);
+      }
 
       currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lastFontSize);
       currentLine.toRun = runIndex;

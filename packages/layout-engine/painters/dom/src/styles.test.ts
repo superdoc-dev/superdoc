@@ -136,6 +136,26 @@ describe('ensureSdtContainerStyles', () => {
     expect(selectedRule).not.toMatch(/(^|\n)\s*color\s*:/);
   });
 
+  it('suppresses empty block SDT placeholder text when the SDT appearance is hidden', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const hiddenPlaceholderRule =
+      cssText.match(
+        /\.superdoc-structured-content-inline\[data-appearance='hidden'\] \.superdoc-empty-inline-sdt-placeholder,\s*\.superdoc-structured-content-block\[data-appearance='hidden'\] \.superdoc-empty-block-sdt-placeholder\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+    const hiddenPlaceholderBeforeRule =
+      cssText.match(
+        /\.superdoc-structured-content-inline\[data-appearance='hidden'\] \.superdoc-empty-inline-sdt-placeholder::before,\s*\.superdoc-structured-content-block\[data-appearance='hidden'\] \.superdoc-empty-block-sdt-placeholder::before\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+
+    expect(hiddenPlaceholderRule).toContain('width: 0;');
+    expect(hiddenPlaceholderRule).toContain('min-width: 0;');
+    expect(hiddenPlaceholderRule).toContain('overflow: hidden;');
+    expect(hiddenPlaceholderBeforeRule).toContain("content: '';");
+  });
+
   it('suppresses structured-content hover backgrounds in viewing mode, including grouped hover', () => {
     ensureSdtContainerStyles(document);
 

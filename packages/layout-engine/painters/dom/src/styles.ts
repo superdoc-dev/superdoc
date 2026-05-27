@@ -703,13 +703,15 @@ const SDT_CONTAINER_STYLES = `
   background-color: var(--sd-content-controls-placeholder-selected-bg, Highlight);
 }
 
-.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder {
+.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder,
+.superdoc-structured-content-block[data-appearance='hidden'] .superdoc-empty-block-sdt-placeholder {
   width: 0;
   min-width: 0;
   overflow: hidden;
 }
 
-.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder::before {
+.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder::before,
+.superdoc-structured-content-block[data-appearance='hidden'] .superdoc-empty-block-sdt-placeholder::before {
   content: '';
 }
 

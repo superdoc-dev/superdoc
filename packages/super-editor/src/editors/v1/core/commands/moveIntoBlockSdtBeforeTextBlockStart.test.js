@@ -25,6 +25,12 @@ const makeSchema = () =>
       bookmarkEnd: { inline: true, group: 'inline', atom: true },
       tableOfContentsEntry: { inline: true, group: 'inline', atom: true },
       passthroughBlock: { group: 'block', atom: true },
+      fieldAnnotation: {
+        inline: true,
+        group: 'inline',
+        atom: true,
+        attrs: { hidden: { default: false } },
+      },
       image: { inline: true, group: 'inline', atom: true },
       text: { group: 'inline' },
     },
@@ -349,6 +355,81 @@ describe('moveIntoBlockSdtBeforeTextBlockStart', () => {
     expect(ok).toBe(true);
     expect(dispatched).toBeDefined();
     expect(dispatched.selection.from).toBe(innerEnd);
+  });
+
+  it('ignores leading hidden field annotations when checking the following paragraph start', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [paragraph(schema, 'Inner')]),
+      schema.nodes.paragraph.create(null, [
+        schema.nodes.fieldAnnotation.create({ hidden: true }),
+        run(schema, 'After'),
+      ]),
+    ]);
+    const afterStart = findTextPos(doc, 'After');
+    const innerEnd = findTextPos(doc, 'Inner', 5);
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, afterStart) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtBeforeTextBlockStart()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.selection.from).toBe(innerEnd);
+  });
+
+  it('targets text before a hidden trailing field annotation inside a previous block SDT', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [
+        schema.nodes.paragraph.create(null, [
+          run(schema, 'Inner'),
+          schema.nodes.fieldAnnotation.create({ hidden: true }),
+        ]),
+      ]),
+      paragraph(schema, 'After'),
+    ]);
+    const afterStart = findTextPos(doc, 'After');
+    const innerEnd = findTextPos(doc, 'Inner', 5);
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, afterStart) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtBeforeTextBlockStart()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.selection.from).toBe(innerEnd);
+  });
+
+  it('returns false when visible field annotation content appears before the first text position', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [paragraph(schema, 'Inner')]),
+      schema.nodes.paragraph.create(null, [
+        schema.nodes.fieldAnnotation.create({ hidden: false }),
+        run(schema, 'After'),
+      ]),
+    ]);
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, findTextPos(doc, 'After')) });
+    const dispatch = vi.fn();
+
+    const ok = moveIntoBlockSdtBeforeTextBlockStart()({ state, dispatch });
+
+    expect(ok).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('returns false when visible inline atom content appears before the first text position', () => {

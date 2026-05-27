@@ -16,6 +16,7 @@ const ZERO_WIDTH_MARKER_NODE_NAMES = new Set([
 ]);
 
 function isZeroWidthMarker(node) {
+  if (node.type.name === 'fieldAnnotation' && node.attrs?.hidden === true) return true;
   return ZERO_WIDTH_MARKER_NODE_NAMES.has(node.type.name);
 }
 

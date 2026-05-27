@@ -27,6 +27,7 @@ const makeSchema = () =>
 
 const run = (schema, text) => schema.nodes.run.create(null, schema.text(text));
 const paragraph = (schema, text) => schema.nodes.paragraph.create(null, run(schema, text));
+const emptyParagraph = (schema) => schema.nodes.paragraph.create();
 
 const makeDoc = (schema) =>
   schema.node('doc', null, [
@@ -59,6 +60,19 @@ const findTextPos = (doc, text, offset = 0) => {
   return found;
 };
 
+const findEmptyParagraphTextPos = (doc) => {
+  let found = null;
+  doc.descendants((node, pos) => {
+    if (node.type.name === 'paragraph' && node.childCount === 0 && found == null) {
+      found = pos + 1;
+      return false;
+    }
+    return true;
+  });
+  expect(found).not.toBeNull();
+  return found;
+};
+
 describe('moveIntoBlockSdtBeforeTextBlockStart', () => {
   it('moves from the start of the following paragraph to the last text position inside a previous block SDT', () => {
     const schema = makeSchema();
@@ -81,6 +95,58 @@ describe('moveIntoBlockSdtBeforeTextBlockStart', () => {
     expect(dispatched.steps).toHaveLength(0);
     expect(dispatched.selection.from).toBe(b2End);
     expect(dispatched.selection.to).toBe(b2End);
+  });
+
+  it('moves from an empty following paragraph to the last text position inside a previous block SDT', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [paragraph(schema, 'Inner')]),
+      emptyParagraph(schema),
+    ]);
+    const afterStart = findEmptyParagraphTextPos(doc);
+    const innerEnd = findTextPos(doc, 'Inner', 5);
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, afterStart) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtBeforeTextBlockStart()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.steps).toHaveLength(0);
+    expect(dispatched.selection.from).toBe(innerEnd);
+    expect(dispatched.selection.to).toBe(innerEnd);
+  });
+
+  it('moves into a previous block SDT that only contains an empty paragraph', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      paragraph(schema, 'Before'),
+      schema.nodes.structuredContentBlock.create(null, [emptyParagraph(schema)]),
+      paragraph(schema, 'After'),
+    ]);
+    const afterStart = findTextPos(doc, 'After');
+    const targetPos = findEmptyParagraphTextPos(doc);
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, afterStart) });
+
+    let dispatched;
+    const ok = moveIntoBlockSdtBeforeTextBlockStart()({
+      state,
+      dispatch: (tr) => {
+        dispatched = tr;
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(dispatched).toBeDefined();
+    expect(dispatched.steps).toHaveLength(0);
+    expect(dispatched.selection.from).toBe(targetPos);
+    expect(dispatched.selection.to).toBe(targetPos);
   });
 
   it('returns false when the caret is not at the visible textblock start', () => {

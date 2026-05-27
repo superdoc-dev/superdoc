@@ -224,6 +224,12 @@ export function applySdtContainerStyling(
     config = getSdtContainerConfig(containerSdt);
   }
   if (!config) return;
+  if (
+    (isStructuredContentMetadata(sdt) && sdt.appearance === 'hidden') ||
+    (isStructuredContentMetadata(containerSdt) && containerSdt.appearance === 'hidden')
+  ) {
+    return;
+  }
 
   const isStart = boundaryOptions?.isStart ?? config.isStart;
   const isEnd = boundaryOptions?.isEnd ?? config.isEnd;

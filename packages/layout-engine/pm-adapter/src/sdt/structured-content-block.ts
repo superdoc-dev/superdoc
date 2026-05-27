@@ -5,9 +5,77 @@
  * paragraphs and tables while preserving their content structure.
  */
 
-import type { ParagraphBlock, TableBlock } from '@superdoc/contracts';
+import type { FlowBlock, ParagraphBlock, TableBlock, TextRun } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext } from '../types.js';
 import { resolveNodeSdtMetadata, applySdtMetadataToParagraphBlocks, applySdtMetadataToTableBlock } from './metadata.js';
+
+const NON_RENDERED_STRUCTURAL_INLINE_TYPES = new Set([
+  'bookmarkEnd',
+  'commentRangeStart',
+  'commentRangeEnd',
+  'permStart',
+  'permEnd',
+]);
+
+function isVisuallyEmptyInlineNode(node: PMNode): boolean {
+  if (node.type === 'text') {
+    return (node.text ?? '').length === 0;
+  }
+
+  if (node.type === 'run' || node.type === 'bookmarkStart') {
+    return !Array.isArray(node.content) || node.content.every(isVisuallyEmptyInlineNode);
+  }
+
+  return NON_RENDERED_STRUCTURAL_INLINE_TYPES.has(node.type);
+}
+
+function isEmptyParagraphNode(node: PMNode): boolean {
+  if (node.type !== 'paragraph') return false;
+  if (!Array.isArray(node.content) || node.content.length === 0) return true;
+
+  return node.content.every(isVisuallyEmptyInlineNode);
+}
+
+function isVanishedParagraphNode(node: PMNode): boolean {
+  const paragraphProperties = node.attrs?.paragraphProperties;
+  if (!paragraphProperties || typeof paragraphProperties !== 'object') return false;
+
+  const runProperties = (paragraphProperties as { runProperties?: unknown }).runProperties;
+  if (!runProperties || typeof runProperties !== 'object') return false;
+
+  return (runProperties as { vanish?: unknown }).vanish === true;
+}
+
+function asEmptyTextRun(run: unknown): TextRun | undefined {
+  if (!run || typeof run !== 'object') return undefined;
+  const candidate = run as TextRun;
+  if (!('text' in candidate) || candidate.text !== '') return undefined;
+  const kind = (candidate as { kind?: unknown }).kind;
+  return kind == null || kind === 'text' ? candidate : undefined;
+}
+
+function applyPlaceholderToEmptyParagraphBlocks(
+  paragraphBlocks: FlowBlock[],
+  metadata: TextRun['sdt'],
+  contentPos?: number,
+): boolean {
+  let applied = false;
+  paragraphBlocks.forEach((block) => {
+    if (block.kind !== 'paragraph') return;
+    const run = block.runs.map(asEmptyTextRun).find(Boolean);
+    if (!run) return;
+    run.kind = 'text';
+    run.text = '';
+    run.sdt = metadata;
+    run.visualPlaceholder = 'emptyBlockSdt';
+    if (contentPos != null) {
+      run.pmStart = contentPos;
+      run.pmEnd = contentPos;
+    }
+    applied = true;
+  });
+  return applied;
+}
 
 /**
  * Handle structured content block nodes.
@@ -17,13 +85,13 @@ import { resolveNodeSdtMetadata, applySdtMetadataToParagraphBlocks, applySdtMeta
  * @param context - Shared handler context
  */
 export function handleStructuredContentBlockNode(node: PMNode, context: NodeHandlerContext): void {
-  if (!Array.isArray(node.content)) return;
-
   const {
     blocks,
     recordBlockKind,
     nextBlockId,
     positions,
+    defaultFont,
+    defaultSize,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -33,7 +101,77 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
     themeColors,
   } = context;
   const structuredContentMetadata = resolveNodeSdtMetadata(node, 'structuredContentBlock');
-  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
+  const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
+
+  const emitPlaceholderBlock = (contentPos?: number): void => {
+    if (!structuredContentMetadata) return;
+    const placeholderRun: TextRun = {
+      kind: 'text',
+      text: '',
+      fontFamily: defaultFont,
+      fontSize: defaultSize,
+      sdt: structuredContentMetadata,
+      visualPlaceholder: 'emptyBlockSdt',
+      ...(contentPos != null ? { pmStart: contentPos, pmEnd: contentPos } : {}),
+    };
+    const placeholderBlock: ParagraphBlock = {
+      kind: 'paragraph',
+      id: nextBlockId('paragraph'),
+      runs: [placeholderRun],
+      attrs: { sdt: structuredContentMetadata },
+    };
+    blocks.push(placeholderBlock);
+    recordBlockKind?.(placeholderBlock.kind);
+  };
+
+  if (!Array.isArray(node.content) || node.content.length === 0) {
+    const pos = positions.get(node);
+    emitPlaceholderBlock(pos ? pos.start + 1 : undefined);
+    return;
+  }
+
+  if (node.content.length === 1 && isEmptyParagraphNode(node.content[0])) {
+    const isVanishedParagraph = isVanishedParagraphNode(node.content[0]);
+    const paragraphPos = positions.get(node.content[0]);
+    const blockPos = positions.get(node);
+    const contentPos = paragraphPos ? paragraphPos.start + 1 : blockPos ? blockPos.start + 1 : undefined;
+
+    if (paragraphToFlowBlocks) {
+      const convertedBlocks = paragraphToFlowBlocks({
+        para: node.content[0],
+        nextBlockId,
+        positions,
+        trackedChangesConfig,
+        bookmarks,
+        hyperlinkConfig,
+        themeColors,
+        enableComments,
+        converters,
+        converterContext,
+      });
+      const paragraphBlocks = Array.isArray(convertedBlocks) ? convertedBlocks : [];
+      applySdtMetadataToParagraphBlocks(
+        paragraphBlocks.filter((b) => b.kind === 'paragraph') as ParagraphBlock[],
+        structuredContentMetadata,
+      );
+      if (applyPlaceholderToEmptyParagraphBlocks(paragraphBlocks, structuredContentMetadata, contentPos)) {
+        paragraphBlocks.forEach((block) => {
+          blocks.push(block);
+          recordBlockKind?.(block.kind);
+        });
+        return;
+      }
+      paragraphBlocks.forEach((block) => {
+        blocks.push(block);
+        recordBlockKind?.(block.kind);
+      });
+      return;
+    }
+
+    if (isVanishedParagraph) return;
+    emitPlaceholderBlock(contentPos);
+    return;
+  }
 
   // SD-1333: a documentPartObject is a transparent SDT wrapper. When it sits
   // as a direct child of a structuredContentBlock (e.g. a Signature SDT
@@ -42,6 +180,9 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
   // outer SDT metadata to them.
   const visitChild = (child: PMNode): void => {
     if (child.type === 'paragraph') {
+      if (!paragraphToFlowBlocks) {
+        throw new Error('paragraphToFlowBlocks converter is required for structuredContentBlock paragraphs');
+      }
       const paragraphBlocks = paragraphToFlowBlocks({
         para: child,
         nextBlockId,

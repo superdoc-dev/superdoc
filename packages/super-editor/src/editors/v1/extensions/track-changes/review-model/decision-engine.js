@@ -461,7 +461,7 @@ const buildMutationPlan = ({ state, graph, selections, decision, replacements })
     } else if (change.type === CanonicalChangeType.Deletion) {
       planDeletionDecision({ ops, change, selection, decision, removedRanges, retired });
     } else if (change.type === CanonicalChangeType.Replacement) {
-      const repResult = planReplacementDecision({ ops, change, decision, removedRanges, retired });
+      const repResult = planReplacementDecision({ ops, graph, change, decision, removedRanges, retired });
       if (!repResult.ok) return { ok: false, failure: repResult.failure };
     } else if (change.type === CanonicalChangeType.Formatting) {
       planFormattingDecision({ ops, change, decision, retired });
@@ -590,7 +590,7 @@ const planDeletionDecision = ({ ops, change, selection, decision, removedRanges,
   if (isFull) retired.add(change.id);
 };
 
-const planReplacementDecision = ({ ops, change, decision, removedRanges, retired }) => {
+const planReplacementDecision = ({ ops, graph, change, decision, removedRanges, retired }) => {
   const inserted = change.insertedSegments;
   const deleted = change.deletedSegments;
   if (!inserted.length || !deleted.length) {
@@ -618,6 +618,7 @@ const planReplacementDecision = ({ ops, change, decision, removedRanges, retired
       ops.push({ kind: 'removeContent', from: seg.from, to: seg.to, changeId: change.id, side: SegmentSide.Inserted });
       removedRanges.push({ from: seg.from, to: seg.to, cause: `reject-replacement-inserted:${change.id}` });
     }
+    const parentRestore = getParentRestoreContext({ graph, change });
     for (const seg of deleted) {
       pushRemoveMarkOpsForSegment({
         ops,
@@ -625,10 +626,95 @@ const planReplacementDecision = ({ ops, change, decision, removedRanges, retired
         changeId: change.id,
         side: SegmentSide.Deleted,
       });
+      if (parentRestore?.mark) {
+        pushAddMarkOpsForSegment({
+          ops,
+          segment: seg,
+          changeId: parentRestore.mark.attrs?.id || change.parent || change.id,
+          side: parentRestore.mark.type.name === TrackInsertMarkName ? SegmentSide.Inserted : SegmentSide.Deleted,
+          mark: parentRestore.mark,
+        });
+      }
+    }
+    for (const sibling of parentRestore?.siblingSegments ?? []) {
+      pushRemoveMarkOpsForSegment({
+        ops,
+        segment: sibling,
+        changeId: sibling.changeId,
+        side: sibling.side,
+      });
+      pushAddMarkOpsForSegment({
+        ops,
+        segment: sibling,
+        changeId: parentRestore.mark.attrs?.id || sibling.changeId,
+        side: parentRestore.mark.type.name === TrackInsertMarkName ? SegmentSide.Inserted : SegmentSide.Deleted,
+        mark: parentRestore.mark,
+      });
+      retired.add(sibling.changeId);
     }
   }
   retired.add(change.id);
   return { ok: true };
+};
+
+const getParentRestoreContext = ({ graph, change }) => {
+  const explicit = getExplicitParentRestoreContext({ graph, change });
+  if (explicit) return explicit;
+  return inferAdjacentParentRestoreContext({ graph, change });
+};
+
+const getExplicitParentRestoreContext = ({ graph, change }) => {
+  if (!change.parent) return null;
+  const parent = graph.changes.get(change.parent);
+  if (!parent) return null;
+  if (parent.type === CanonicalChangeType.Insertion) {
+    const mark = parent.insertedSegments[0]?.mark ?? null;
+    return mark ? { mark, siblingSegments: [] } : null;
+  }
+  if (parent.type === CanonicalChangeType.Deletion) {
+    const mark = parent.deletedSegments[0]?.mark ?? null;
+    return mark ? { mark, siblingSegments: [] } : null;
+  }
+  return null;
+};
+
+const inferAdjacentParentRestoreContext = ({ graph, change }) => {
+  if (!change.deletedSegments.length || !change.segments.length) return null;
+  const from = Math.min(...change.segments.map((segment) => segment.from));
+  const to = Math.max(...change.segments.map((segment) => segment.to));
+  const before = nearestSegmentBefore({ graph, change, from });
+  const after = nearestSegmentAfter({ graph, change, to });
+  if (!before || !after) return null;
+  if (!areParentRestorePeers(before, after)) return null;
+
+  return {
+    mark: before.mark,
+    siblingSegments: after.changeId === before.changeId ? [] : [after],
+  };
+};
+
+const nearestSegmentBefore = ({ graph, change, from }) => {
+  return graph.segments
+    .filter((segment) => segment.changeId !== change.id && segment.to <= from)
+    .sort((a, b) => b.to - a.to || b.from - a.from)[0];
+};
+
+const nearestSegmentAfter = ({ graph, change, to }) => {
+  return graph.segments
+    .filter((segment) => segment.changeId !== change.id && segment.from >= to)
+    .sort((a, b) => a.from - b.from || a.to - b.to)[0];
+};
+
+const areParentRestorePeers = (left, right) => {
+  if (!left || !right) return false;
+  if (left.side !== right.side) return false;
+  if (left.side !== SegmentSide.Inserted && left.side !== SegmentSide.Deleted) return false;
+  if (left.markType !== right.markType) return false;
+  return (
+    left.attrs.author === right.attrs.author &&
+    left.attrs.authorEmail === right.attrs.authorEmail &&
+    left.attrs.date === right.attrs.date
+  );
 };
 
 const planFormattingDecision = ({ ops, change, decision, retired }) => {
@@ -744,6 +830,22 @@ const pushRemoveMarkOpsForSegment = ({ ops, segment, changeId, side, from = segm
       changeId,
       side,
       mark: run.mark,
+    });
+  }
+};
+
+const pushAddMarkOpsForSegment = ({ ops, segment, changeId, side, mark, from = segment.from, to = segment.to }) => {
+  for (const run of getSegmentMarkRuns(segment)) {
+    const clippedFrom = Math.max(from, run.from);
+    const clippedTo = Math.min(to, run.to);
+    if (clippedFrom >= clippedTo) continue;
+    ops.push({
+      kind: 'addMark',
+      from: clippedFrom,
+      to: clippedTo,
+      changeId,
+      side,
+      mark,
     });
   }
 };

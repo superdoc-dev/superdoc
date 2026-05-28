@@ -880,12 +880,10 @@ const compileTextReplace = (ctx, intent) => {
  * @returns {TrackedEditResult}
  */
 const compileOrdinaryTextReplace = (ctx, intent, sanitizedSlice, replacementParentId) => {
-  // In paired mode share one id between insert/delete sides so a top-level
-  // replacement projects as one logical graph change. A replacement nested
-  // inside another author's open review item must keep each side separately
-  // reviewable, so those child sides intentionally use distinct ids even when
-  // the caller's default replacement mode is paired.
-  const shouldPairReplacement = intent.replacements === 'paired' && !replacementParentId;
+  // In paired mode share one id between insert/delete sides so the replacement
+  // projects as one logical child change. The parent remains independently
+  // reviewable through overlapParentId.
+  const shouldPairReplacement = intent.replacements === 'paired';
   const sharedId = shouldPairReplacement ? intent.replacementGroupHint || uuidv4() : null;
   const replacementGroupId = sharedId ?? '';
 

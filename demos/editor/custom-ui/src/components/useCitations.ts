@@ -22,20 +22,31 @@ function readMetadataApi(host: ReturnType<typeof useSuperDocHost>): MetadataDocA
 }
 
 /** Hydrate a list of citation entries by fetching their payloads. */
-function hydrate(api: MetadataDocApi): CitationInfo[] {
-  const result = api.list({ namespace: CITATIONS_NAMESPACE });
+function hydrate(
+  api: MetadataDocApi,
+  query?: { resolvedOnly?: boolean },
+): CitationInfo[] {
+  const result = api.list({ namespace: CITATIONS_NAMESPACE, ...query });
   const out: CitationInfo[] = [];
   for (const summary of result.items) {
     const info = api.get({ id: summary.id });
     if (!info || !isCitationPayload(info.payload)) continue;
-    out.push({ id: info.id, namespace: info.namespace, partName: info.partName, payload: info.payload });
+    out.push({
+      id: info.id,
+      namespace: info.namespace,
+      partName: info.partName,
+      anchorStatus: summary.anchorStatus,
+      payload: info.payload,
+    });
   }
   return out;
 }
 
 export type UseCitationsResult = {
-  /** Current list. Refreshes when content-controls slice ticks or after each mutation. */
+  /** Resolved citations shown in the primary sidebar list. */
   citations: CitationInfo[];
+  /** Citations whose anchor no longer resolves in the document body. */
+  orphanCitations: CitationInfo[];
   /** True until SuperDoc is ready. */
   loading: boolean;
   /**
@@ -66,12 +77,16 @@ export function useCitations(): UseCitationsResult {
   // Subscribe to the contentControls slice so any SDT mutation re-runs us.
   const cc = useSuperDocContentControls();
   const [citations, setCitations] = useState<CitationInfo[]>([]);
+  const [orphanCitations, setOrphanCitations] = useState<CitationInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(() => {
     const api = readMetadataApi(host);
     if (!api) return;
-    setCitations(hydrate(api));
+    const resolved = hydrate(api, { resolvedOnly: true });
+    const all = hydrate(api);
+    setCitations(resolved);
+    setOrphanCitations(all.filter((c) => c.anchorStatus === 'orphan'));
     setLoading(false);
   }, [host]);
 
@@ -125,5 +140,5 @@ export function useCitations(): UseCitationsResult {
     [host],
   );
 
-  return { citations, loading, attach, update, remove, resolve, refresh };
+  return { citations, orphanCitations, loading, attach, update, remove, resolve, refresh };
 }

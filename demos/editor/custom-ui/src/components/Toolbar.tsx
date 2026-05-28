@@ -197,6 +197,7 @@ function ExportButton() {
       await ui.document.export({
         exportType: ['docx'],
         commentsType: 'external',
+        isFinalDoc: true,
         triggerDownload: true,
       });
     } catch (err) {

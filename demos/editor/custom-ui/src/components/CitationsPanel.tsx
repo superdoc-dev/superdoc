@@ -15,7 +15,7 @@ type UpdateCitation = (id: string, payload: CitationPayload) => { error?: string
  */
 export function CitationsPanel() {
   const ui = useSuperDocUI();
-  const { citations, remove, update, loading } = useCitations();
+  const { citations, orphanCitations, remove, update, loading } = useCitations();
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const groups = useMemo(() => groupBySource(citations), [citations]);
@@ -33,6 +33,33 @@ export function CitationsPanel() {
   return (
     <div className="citations-panel">
       <GenerateDraftButton />
+
+      {!loading && orphanCitations.length > 0 && (
+        <section className="orphaned-citations" aria-label="Orphaned citations">
+          <div className="orphaned-citations-header">
+            <strong>Orphaned citations</strong>
+            <span>{orphanCitations.length}</span>
+          </div>
+          <p className="orphaned-citations-help">
+            These citations no longer have an anchor in the document. They are hidden from the main Sources list and
+            removed from final-doc export.
+          </p>
+          <ul className="reference-citations">
+            {orphanCitations.map((c) => (
+              <li key={c.id} className="reference-citation">
+                <div className="reference-citation-line">
+                  <span className="reference-citation-id">{c.payload.citationId}</span>
+                  {c.payload.locator && <span className="reference-citation-locator">{c.payload.locator}</span>}
+                </div>
+                <div className="reference-citation-actions">
+                  <button onClick={() => setEditingId(c.id)}>Edit</button>
+                  <button onClick={() => remove(c.id)}>Remove</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {loading && <div className="citations-empty">Loading\u2026</div>}
       {!loading && citations.length === 0 && (

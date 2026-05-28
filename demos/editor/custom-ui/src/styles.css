@@ -652,6 +652,34 @@ button {
   padding: 16px 8px;
 }
 
+.orphaned-citations {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--bg-muted);
+}
+
+.orphaned-citations-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.orphaned-citations-header span {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.orphaned-citations-help {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 .generate-draft {
   display: flex;
   flex-direction: column;

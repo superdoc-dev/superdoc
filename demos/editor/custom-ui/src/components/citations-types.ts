@@ -69,6 +69,7 @@ export type CitationInfo = {
   id: string;
   namespace: string;
   partName: string;
+  anchorStatus: 'resolved' | 'orphan';
   payload: CitationPayload;
 };
 
@@ -88,11 +89,13 @@ export type MetadataDocApi = {
     payload: unknown;
     id?: string;
   }): MetadataAttachResult;
-  list(input?: { namespace?: string; within?: SelectionTarget }): {
-    items: Array<{ id: string; namespace: string; partName: string }>;
+  list(input?: { namespace?: string; within?: SelectionTarget; resolvedOnly?: boolean }): {
+    items: Array<{ id: string; namespace: string; partName: string; anchorStatus: 'resolved' | 'orphan' }>;
     total: number;
   };
-  get(input: { id: string }): { id: string; namespace: string; partName: string; payload: unknown } | null;
+  get(input: {
+    id: string;
+  }): { id: string; namespace: string; partName: string; anchorStatus: 'resolved' | 'orphan'; payload: unknown } | null;
   update(input: { id: string; payload: unknown }): MetadataMutationResult;
   remove(input: { id: string }): MetadataMutationResult;
   resolve(input: { id: string }): { id: string; target: SelectionTarget } | null;

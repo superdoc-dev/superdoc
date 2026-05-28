@@ -741,6 +741,27 @@ export interface BookmarkEndAttrs extends InlineNodeAttributes {
 }
 
 // ============================================
+// SMART TAG (ECMA-376 §17.5.1.9)
+// ============================================
+
+/**
+ * Smart-tag node attributes (SD-2647 / SD-3298).
+ *
+ * `w:smartTag` is a transparent OOXML inline wrapper around `EG_PContent`.
+ * The wrapper carries semantic metadata (element + uri) plus an optional
+ * `<w:smartTagPr>` property bag (`<w:attr w:name w:val>` pairs). Children are
+ * normal inline content; the wrapper itself is invisible at render time.
+ */
+export interface SmartTagAttrs extends InlineNodeAttributes {
+  /** Smart-tag element name (w:element), e.g. "country-region", "PlaceName" */
+  element?: string | null;
+  /** Smart-tag namespace URI (w:uri), e.g. "urn:schemas-microsoft-com:office:smarttags" */
+  uri?: string | null;
+  /** @internal Preserved raw `<w:smartTagPr>` OOXML for round-trip export. */
+  smartTagPr?: Record<string, unknown> | null;
+}
+
+// ============================================
 // SHAPE CONTAINER
 // ============================================
 
@@ -1236,6 +1257,9 @@ declare module '../../core/types/NodeAttributesMap.js' {
     // Bookmarks
     bookmarkStart: BookmarkStartAttrs;
     bookmarkEnd: BookmarkEndAttrs;
+
+    // Smart tags
+    smartTag: SmartTagAttrs;
 
     // Comments (note: no 'comment' node - only commentRangeStart/End/Reference)
     commentRangeStart: CommentRangeStartAttrs;

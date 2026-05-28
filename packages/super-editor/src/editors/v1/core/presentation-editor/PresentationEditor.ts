@@ -4943,7 +4943,6 @@ export class PresentationEditor extends EventEmitter {
    */
   #focusEditorAfterImageSelection(): void {
     this.#shouldScrollSelectionIntoView = true;
-    this.#scheduleSelectionUpdate();
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -4952,6 +4951,7 @@ export class PresentationEditor extends EventEmitter {
       editorDom.focus();
       this.#editor.view?.focus();
     }
+    this.#scheduleSelectionUpdate({ immediate: true });
   }
 
   #resolveFieldAnnotationSelectionFromElement(
@@ -6643,14 +6643,23 @@ export class PresentationEditor extends EventEmitter {
     let node: ProseMirrorNode | null = null;
     let pos: number | null = null;
     let id: string | null = null;
+    let fallbackPos: number | null = null;
 
     if (selection instanceof NodeSelection) {
-      if (selection.node?.type?.name !== 'structuredContentBlock') {
-        this.#clearSelectedStructuredContentBlockClass();
-        return;
+      if (selection.node?.type?.name === 'structuredContentBlock') {
+        node = selection.node;
+        pos = selection.from;
+      } else {
+        fallbackPos = selection.from;
+        const editorDoc = this.#editor?.view?.state?.doc;
+        const resolved = editorDoc ? findStructuredContentBlockAtPos(editorDoc, selection.from) : null;
+        if (!resolved) {
+          this.#clearSelectedStructuredContentBlockClass();
+          return;
+        }
+        node = resolved.node;
+        pos = resolved.pos;
       }
-      node = selection.node;
-      pos = selection.from;
     } else {
       const editorDoc = this.#editor?.view?.state?.doc;
       if (!editorDoc) {
@@ -6689,6 +6698,14 @@ export class PresentationEditor extends EventEmitter {
     if (elements.length === 0) {
       const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
       const container = elementAtPos?.closest?.(`.${DOM_CLASS_NAMES.BLOCK_SDT}`) as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0 && fallbackPos != null && fallbackPos !== pos) {
+      const elementAtFallbackPos = this.getElementAtPos(fallbackPos, { fallbackToCoords: true });
+      const container = elementAtFallbackPos?.closest?.(`.${DOM_CLASS_NAMES.BLOCK_SDT}`) as HTMLElement | null;
       if (container) {
         elements = [container];
       }

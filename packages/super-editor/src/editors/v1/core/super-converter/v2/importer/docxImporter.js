@@ -26,6 +26,7 @@ import { getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
 import { pruneIgnoredNodes } from './ignoredNodes.js';
 import { tabNodeEntityHandler } from './tabImporter.js';
 import { noBreakHyphenNodeEntityHandler } from './noBreakHyphenImporter.js';
+import { smartTagNodeEntityHandler } from './smartTagImporter.js';
 import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
 import { endnoteReferenceHandlerEntity } from './endnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
@@ -339,6 +340,7 @@ export const defaultNodeListHandler = () => {
     endnoteReferenceHandlerEntity,
     tabNodeEntityHandler,
     noBreakHyphenNodeEntityHandler,
+    smartTagNodeEntityHandler,
     tableOfContentsHandlerEntity,
     indexHandlerEntity,
     bibliographyHandlerEntity,

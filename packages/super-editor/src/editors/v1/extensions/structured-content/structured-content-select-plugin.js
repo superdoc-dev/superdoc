@@ -1,19 +1,15 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
 
 import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
+import { SELECT_INLINE_SDT_BEFORE_RUN_START_META } from '@core/commands/selectInlineSdtBeforeRunStart.js';
 
 const INLINE_LEAF_TEXT = '\ufffc';
 
 /**
- * Select-all-on-click plugin for inline StructuredContent nodes.
+ * Boundary navigation plugin for inline StructuredContent nodes.
  *
- * When a click places a collapsed cursor inside an inline SDT and the previous
- * selection was outside that SDT, the entire SDT content is selected. This
- * matches Word's content control behavior: first click selects all for easy
- * replacement, second click (cursor already inside) allows normal positioning.
- *
- * Uses appendTransaction so it works in both editing mode (PM DOM clicks) and
- * presentation mode (PresentationEditor dispatched selections).
+ * Keeps arrow-key exits and editable boundary slots predictable without
+ * converting normal content clicks into whole-inline-content selections.
  */
 export function createStructuredContentSelectPlugin(editor) {
   return new Plugin({
@@ -27,6 +23,26 @@ export function createStructuredContentSelectPlugin(editor) {
         const { state } = view;
         const { selection } = state;
         const isEditableSlotText = (text) => text.replace(/\u200B/g, '').length === 0;
+
+        const resolveAdjacentEmptyInlineSdtEntry = () => {
+          if (event.key !== 'ArrowLeft') return null;
+          if (!selection.empty) return null;
+
+          let targetPos = null;
+          state.doc.descendants((node, pos) => {
+            if (node.type.name !== 'structuredContent') return true;
+            if (node.content.size !== 0) return true;
+
+            if (event.key === 'ArrowLeft' && selection.from === pos + node.nodeSize) {
+              targetPos = pos + 1;
+              return false;
+            }
+
+            return true;
+          });
+
+          return targetPos;
+        };
 
         const resolveBoundaryExit = ($pos) => {
           for (let depth = $pos.depth; depth > 0; depth -= 1) {
@@ -66,6 +82,17 @@ export function createStructuredContentSelectPlugin(editor) {
           return null;
         };
 
+        const adjacentEmptySdtEntry = resolveAdjacentEmptyInlineSdtEntry();
+        if (adjacentEmptySdtEntry != null) {
+          try {
+            view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, adjacentEmptySdtEntry)));
+            event.preventDefault();
+            return true;
+          } catch {
+            return false;
+          }
+        }
+
         const nextPos = resolveBoundaryExit(selection.$from);
         if (nextPos == null) return false;
 
@@ -93,14 +120,16 @@ export function createStructuredContentSelectPlugin(editor) {
       if (transactions.some((tr) => tr.docChanged)) return null;
 
       if (!selection.empty) {
+        if (transactions.some((tr) => tr.getMeta(SELECT_INLINE_SDT_BEFORE_RUN_START_META))) return null;
+
         let selectedSdt = null;
         newState.doc.descendants((node, pos) => {
           if (node.type.name !== 'structuredContent') return true;
 
           const contentFrom = pos + 1;
           const contentTo = pos + node.nodeSize - 1;
-          const wrapsSelection = selection.from <= contentFrom && selection.to >= contentTo;
-          if (!wrapsSelection) return true;
+          const selectsWholeContent = selection.from === contentFrom && selection.to === contentTo;
+          if (!selectsWholeContent) return true;
 
           selectedSdt = {
             node,
@@ -124,39 +153,6 @@ export function createStructuredContentSelectPlugin(editor) {
           }
         }
         return null;
-      }
-
-      // Only for collapsed selections (cursor placement, not range selections)
-      if (!selection.empty) return null;
-
-      // Walk up to find an enclosing inline structuredContent node
-      const $pos = selection.$from;
-      const old$pos = oldState.selection.$from;
-      for (let d = $pos.depth; d > 0; d--) {
-        const node = $pos.node(d);
-        if (node.type.name !== 'structuredContent') continue;
-        const sdtStart = $pos.before(d);
-        const contentFrom = $pos.start(d);
-        const contentTo = $pos.end(d);
-
-        // Boundary positions represent "before/after SDT content" intent and should
-        // not trigger first-click select-all behavior.
-        if (selection.from <= contentFrom || selection.from >= contentTo) {
-          return null;
-        }
-
-        // Don't select empty content
-        if (contentFrom === contentTo) return null;
-
-        // If old selection was already inside this same SDT, allow normal
-        // cursor placement (second click / arrow navigation within SDT)
-        for (let od = old$pos.depth; od > 0; od--) {
-          if (old$pos.node(od).type.name === 'structuredContent' && old$pos.before(od) === sdtStart) {
-            return null;
-          }
-        }
-
-        return newState.tr.setSelection(TextSelection.create(newState.doc, contentFrom, contentTo));
       }
 
       return null;

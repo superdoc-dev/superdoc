@@ -4,7 +4,7 @@ import { getActiveFormatting } from '../../editors/v1/core/helpers/getActiveForm
 import { getFileOpener, processAndInsertImageFile } from '../../editors/v1/extensions/image/imageHelpers/index.js';
 import { TextSelection, Selection } from 'prosemirror-state';
 import { getCurrentResolvedParagraphProperties, isFieldAnnotationSelection, resolveStateEditor } from './context.js';
-import { createDirectCommandExecute, isCommandDisabled } from './general.js';
+import { createDirectCommandExecute, isMutationCommandDisabled } from './general.js';
 import type { ToolbarContext } from '../types.js';
 
 /**
@@ -104,7 +104,7 @@ export const createBoldStateDeriver =
   ({ context }: { context: ToolbarContext | null }) => {
     const stateEditor = resolveStateEditor(context);
     const formatting = stateEditor ? getActiveFormatting(stateEditor) : [];
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
 
     if (isDisabled) {
       return {
@@ -129,7 +129,7 @@ export const createItalicStateDeriver =
   ({ context }: { context: ToolbarContext | null }) => {
     const stateEditor = resolveStateEditor(context);
     const formatting = stateEditor ? getActiveFormatting(stateEditor) : [];
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
 
     if (isDisabled) {
       return {
@@ -151,7 +151,7 @@ export const createUnderlineStateDeriver =
   ({ context }: { context: ToolbarContext | null }) => {
     const stateEditor = resolveStateEditor(context);
     const formatting = stateEditor ? getActiveFormatting(stateEditor) : [];
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
 
     if (isDisabled) {
       return {
@@ -173,7 +173,7 @@ export const createStrikethroughStateDeriver =
   ({ context }: { context: ToolbarContext | null }) => {
     const stateEditor = resolveStateEditor(context);
     const formatting = stateEditor ? getActiveFormatting(stateEditor) : [];
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
 
     if (isDisabled) {
       return {
@@ -195,7 +195,7 @@ export const createCopyFormatStateDeriver =
   ({ context }: { context: ToolbarContext | null }) => {
     return {
       active: hasStoredCopyFormat(context),
-      disabled: isCommandDisabled(context),
+      disabled: isMutationCommandDisabled(context),
     };
   };
 
@@ -204,7 +204,7 @@ export const createFontSizeStateDeriver =
   ({ context }: { context: ToolbarContext | null }) => {
     const stateEditor = resolveStateEditor(context);
     const formatting = stateEditor ? getActiveFormatting(stateEditor) : [];
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
 
     if (isDisabled) {
       return {
@@ -242,7 +242,7 @@ export const createFontFamilyStateDeriver =
   ({ context }: { context: ToolbarContext | null }) => {
     const stateEditor = resolveStateEditor(context);
     const formatting = stateEditor ? getActiveFormatting(stateEditor) : [];
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
 
     if (isDisabled) {
       return {
@@ -284,7 +284,7 @@ export const createTextColorStateDeriver =
   ({ context }: { context: ToolbarContext | null }) => {
     const stateEditor = resolveStateEditor(context);
     const formatting = stateEditor ? getActiveFormatting(stateEditor) : [];
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
 
     if (isDisabled) {
       return {
@@ -313,7 +313,7 @@ export const createHighlightColorStateDeriver =
   ({ context }: { context: ToolbarContext | null }) => {
     const stateEditor = resolveStateEditor(context);
     const formatting = stateEditor ? getActiveFormatting(stateEditor) : [];
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
 
     if (isDisabled) {
       return {
@@ -342,7 +342,7 @@ export const createLinkStateDeriver =
   ({ context }: { context: ToolbarContext | null }) => {
     const stateEditor = resolveStateEditor(context);
     const formatting = stateEditor ? getActiveFormatting(stateEditor) : [];
-    const isDisabled = isCommandDisabled(context);
+    const isDisabled = isMutationCommandDisabled(context);
 
     if (isDisabled) {
       return {

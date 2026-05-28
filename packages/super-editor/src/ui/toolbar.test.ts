@@ -15,6 +15,14 @@ import type { SuperDocLike } from './types.js';
 function makeStubs() {
   const editorListeners = new Map<string, Set<(...args: unknown[]) => void>>();
   const superdocListeners = new Map<string, Set<(...args: unknown[]) => void>>();
+  const emptyMarks: unknown[] = [];
+  const selectionPosition = {
+    pos: 0,
+    depth: 0,
+    parent: { attrs: {} },
+    marks: () => emptyMarks,
+    node: () => null,
+  };
 
   const editor = {
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
@@ -25,8 +33,26 @@ function makeStubs() {
       editorListeners.get(event)?.delete(handler);
     }),
     state: {
-      selection: { empty: true, from: 0, to: 0 },
+      selection: {
+        empty: true,
+        from: 0,
+        to: 0,
+        $from: selectionPosition,
+        $to: selectionPosition,
+        $head: selectionPosition,
+      },
+      storedMarks: emptyMarks,
+      doc: {
+        nodesBetween: vi.fn(),
+        resolve: vi.fn(() => selectionPosition),
+      },
+      schema: {
+        marks: {
+          link: { name: 'link' },
+        },
+      },
     },
+    storage: {},
     options: { documentId: 'doc-1', isHeaderOrFooter: false },
     commands: {
       toggleBold: vi.fn(() => true),
@@ -107,6 +133,8 @@ describe('ui.toolbar', () => {
     const { superdoc, editor } = makeStubs();
     const ui = createSuperDocUI({ superdoc });
 
+    expect(ui.toolbar.getSnapshot().commands.bold).toMatchObject({ disabled: false });
+
     ui.toolbar.execute('bold');
     expect(editor.commands.toggleBold).toHaveBeenCalled();
 
@@ -164,6 +192,8 @@ describe('ui.commands', () => {
   it('execute forwards to the internal toolbar controller', () => {
     const { superdoc, editor } = makeStubs();
     const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.toolbar.getSnapshot().commands.bold).toMatchObject({ disabled: false });
 
     ui.commands.bold.execute();
     expect(editor.commands.toggleBold).toHaveBeenCalled();

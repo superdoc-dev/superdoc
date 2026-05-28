@@ -12,15 +12,21 @@ import {
   effectiveTableCellSpacing,
   expandRunsForInlineNewlines,
   getParagraphInlineDirection,
+  isEmptySdtPlaceholderRun,
+  shouldApplyJustify,
+  sliceRunsForLine,
 } from '@superdoc/contracts';
 import { resolveMarkerIndent, type MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import {
   applySdtContainerChrome,
+  getSdtContainerMetadata,
+  isStructuredContentMetadata,
   shouldRenderSdtContainerChrome,
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
 import { createParagraphDecorationLayers, stampBetweenBorderDataset, type BetweenBorderInfo } from './borders/index.js';
+import { resolveTextAlign } from '../features/inline-direction/index.js';
 import {
   applyParagraphLineIndentation,
   hasExplicitSegmentPositioning,
@@ -28,6 +34,8 @@ import {
 } from './indentation.js';
 import { renderLegacyListMarker, renderResolvedListMarker, resolvePainterListTextStartPx } from './list-marker.js';
 import { applyParagraphBlockStyles, clearParagraphFrameIndentStyles } from './styles.js';
+
+const INLINE_SDT_CHROME_EXTRA_WIDTH_PX = 4;
 
 export type RenderedParagraphLineInfo = {
   el: HTMLElement;
@@ -191,6 +199,20 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
           ...params,
           lineTopOffset: lineTopOffset + beforeHeight,
         });
+  if (applySdtChrome) {
+    applyBlockSdtChromeBounds(
+      frameEl,
+      block,
+      measure,
+      getRenderedContentLines(params),
+      width,
+      lineIndexOffset + localStartLine,
+      continuesFromPrev,
+      continuesOnNext,
+      sdtBoundary,
+      resolvedContent,
+    );
+  }
 
   let renderedHeight = renderResult.renderedHeight;
   const originalLineCount = measure.lines?.length ?? linesOverride?.length ?? 0;
@@ -220,6 +242,209 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
     totalHeight: beforeHeight + renderedHeight + afterHeight,
     renderedLines: renderResult.renderedLines,
   };
+};
+
+const getRenderedContentLines = (params: RenderParagraphContentParams): Line[] => {
+  if (params.resolvedContent) {
+    return params.resolvedContent.lines.map((line) => line.line);
+  }
+
+  const lines = params.linesOverride ?? params.measure.lines ?? [];
+  return lines.slice(params.localStartLine, Math.min(params.localEndLine, lines.length));
+};
+
+const applyBlockSdtChromeBounds = (
+  element: HTMLElement,
+  block: ParagraphBlock,
+  measure: ParagraphMeasure,
+  lines: Line[],
+  fragmentWidth: number,
+  lineIndexBase: number,
+  fragmentContinuesFromPrev: boolean | undefined,
+  fragmentContinuesOnNext: boolean | undefined,
+  sdtBoundary: SdtBoundaryOptions | undefined,
+  content?: ResolvedParagraphContent,
+): void => {
+  const sdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
+  if (!isStructuredContentMetadata(sdt) || sdt.scope !== 'block') return;
+  if (fragmentContinuesFromPrev || fragmentContinuesOnNext) return;
+  if (sdtBoundary && ((sdtBoundary.isStart ?? true) === false || (sdtBoundary.isEnd ?? true) === false)) return;
+
+  const sourceLineCount = Math.max(measure.lines?.length ?? 0, content?.lines.length ?? 0, lines.length);
+  if (sourceLineCount > 1) return;
+
+  const expandedBlock = { ...block, runs: expandRunsForInlineNewlines(block.runs) };
+  let contentLeft = Number.POSITIVE_INFINITY;
+  let contentRight = Number.NEGATIVE_INFINITY;
+
+  for (const [index, line] of lines.entries()) {
+    const runsForLine = sliceRunsForLine(expandedBlock, line);
+    if (runsForLine.length === 0) continue;
+
+    let hasVisibleContent = false;
+    for (const run of runsForLine) {
+      if (run.kind === 'lineBreak' || run.kind === 'break') continue;
+      if (isEmptySdtPlaceholderRun(run)) {
+        hasVisibleContent = true;
+        break;
+      }
+      if ((run.kind === 'text' || run.kind === undefined) && 'text' in run) {
+        if ((run.text ?? '').trim().length === 0) continue;
+      }
+      hasVisibleContent = true;
+      break;
+    }
+
+    if (!hasVisibleContent) continue;
+
+    const lineWidth = Math.max(0, line.naturalWidth ?? line.width ?? 0);
+    if (lineWidth <= 0) continue;
+    const inlineSdtChromeWidth = hasExplicitSegmentPositioning(line) ? 0 : getInlineSdtChromeExtraWidth(runsForLine);
+
+    const resolvedLine = content?.lines[index];
+    const lineIndex = resolvedLine?.lineIndex ?? lineIndexBase + index;
+    const lineOffset = resolveBlockSdtChromeLineOffset(block, line, resolvedLine, lineIndex);
+    const availableWidth = resolveBlockSdtChromeAvailableWidth(block, line, fragmentWidth, lineOffset, resolvedLine);
+    const paintedLineWidth = resolveBlockSdtChromePaintedLineWidth(
+      block,
+      line,
+      lineWidth,
+      availableWidth,
+      index,
+      lines.length,
+      fragmentContinuesOnNext,
+      resolvedLine,
+      content,
+    );
+    const paintedLineWidthWithChrome = paintedLineWidth + inlineSdtChromeWidth;
+    const alignmentSlack = Math.max(0, availableWidth - paintedLineWidthWithChrome);
+    const alignment = resolveTextAlign(block.attrs?.alignment, getParagraphInlineDirection(block.attrs) === 'rtl');
+    const lineLeft =
+      lineOffset + (alignment === 'center' ? alignmentSlack / 2 : alignment === 'right' ? alignmentSlack : 0);
+    contentLeft = Math.min(contentLeft, lineLeft);
+    contentRight = Math.max(contentRight, lineLeft + paintedLineWidthWithChrome);
+  }
+
+  if (!Number.isFinite(contentLeft) || !Number.isFinite(contentRight)) return;
+
+  const chromeLeft = Math.max(0, contentLeft);
+  const chromeWidth = Math.max(0, Math.min(fragmentWidth, contentRight) - chromeLeft);
+  if (chromeWidth <= 0 || chromeWidth >= fragmentWidth) return;
+
+  element.style.setProperty('--sd-sdt-chrome-left', `${chromeLeft}px`);
+  element.style.setProperty('--sd-sdt-chrome-width', `${chromeWidth}px`);
+};
+
+const getInlineSdtChromeExtraWidth = (runs: Run[]): number => {
+  let wrapperCount = 0;
+  let currentSdtId: string | null = null;
+
+  for (const run of runs) {
+    const sdt = 'sdt' in run ? run.sdt : undefined;
+    const sdtId =
+      sdt?.type === 'structuredContent' && sdt.scope === 'inline' && sdt.id && sdt.appearance !== 'hidden'
+        ? String(sdt.id)
+        : null;
+
+    if (sdtId !== currentSdtId) {
+      if (sdtId) wrapperCount += 1;
+      currentSdtId = sdtId;
+    }
+  }
+
+  return wrapperCount * INLINE_SDT_CHROME_EXTRA_WIDTH_PX;
+};
+
+const resolveBlockSdtChromeLineOffset = (
+  block: ParagraphBlock,
+  line: Line,
+  resolvedLine: ResolvedParagraphContent['lines'][number] | undefined,
+  lineIndex: number,
+): number => {
+  if (resolvedLine) {
+    if (resolvedLine.isListFirstLine) {
+      return resolvedLine.resolvedListTextStartPx ?? resolvedLine.indentOffset;
+    }
+    if (resolvedLine.hasExplicitSegmentPositioning) {
+      return resolvedLine.indentOffset;
+    }
+    return Math.max(0, resolvedLine.paddingLeftPx + resolvedLine.textIndentPx);
+  }
+
+  const paraIndent = block.attrs?.indent;
+  const indentLeft = paraIndent?.left ?? 0;
+  const firstLine = paraIndent?.firstLine ?? 0;
+  const hanging = paraIndent?.hanging ?? 0;
+  const suppressFirstLineIndent = block.attrs?.suppressFirstLineIndent === true;
+  const firstLineOffset = suppressFirstLineIndent ? 0 : firstLine - hanging;
+  const isFirstLine = lineIndex === 0;
+  const lineHasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
+
+  if (lineHasExplicitSegmentPositioning) {
+    const effectiveLeftIndent = indentLeft < 0 ? 0 : indentLeft;
+    return Math.max(0, effectiveLeftIndent + (isFirstLine ? firstLineOffset : 0));
+  }
+
+  if (isFirstLine) {
+    return Math.max(0, indentLeft + firstLineOffset);
+  }
+  if (indentLeft > 0) {
+    return indentLeft;
+  }
+  if (hanging > 0 && indentLeft >= 0) {
+    return hanging;
+  }
+  return 0;
+};
+
+const resolveBlockSdtChromeAvailableWidth = (
+  block: ParagraphBlock,
+  line: Line,
+  fragmentWidth: number,
+  lineOffset: number,
+  resolvedLine: ResolvedParagraphContent['lines'][number] | undefined,
+): number => {
+  if (resolvedLine) {
+    return Math.max(0, resolvedLine.availableWidth);
+  }
+
+  const rightIndent = Math.max(0, block.attrs?.indent?.right ?? 0);
+  const fallbackAvailableWidth = Math.max(0, fragmentWidth - lineOffset - rightIndent);
+  if (line.maxWidth != null) {
+    return Math.min(line.maxWidth, fallbackAvailableWidth);
+  }
+  return fallbackAvailableWidth;
+};
+
+const resolveBlockSdtChromePaintedLineWidth = (
+  block: ParagraphBlock,
+  line: Line,
+  lineWidth: number,
+  availableWidth: number,
+  fragmentLineIndex: number,
+  fragmentLineCount: number,
+  fragmentContinuesOnNext: boolean | undefined,
+  resolvedLine: ResolvedParagraphContent['lines'][number] | undefined,
+  content: ResolvedParagraphContent | undefined,
+): number => {
+  const explicitPositionedSegmentCount = line.segments?.filter((segment) => segment.x !== undefined).length ?? 0;
+  const hasMultipleExplicitPositionedSegments = explicitPositionedSegmentCount > 1;
+  const paragraphEndsWithLineBreak =
+    content?.paragraphEndsWithLineBreak === true || block.runs[block.runs.length - 1]?.kind === 'lineBreak';
+  const isLastLineOfParagraph =
+    resolvedLine != null
+      ? resolvedLine.skipJustify
+      : fragmentLineIndex === fragmentLineCount - 1 && !fragmentContinuesOnNext;
+  const justifyShouldApply = shouldApplyJustify({
+    alignment: block.attrs?.alignment,
+    hasExplicitPositioning: line.segments?.some((segment) => segment.x !== undefined) === true,
+    hasExplicitTabStops: line.hasExplicitTabStops === true,
+    isLastLineOfParagraph,
+    paragraphEndsWithLineBreak,
+    skipJustifyOverride: (resolvedLine?.skipJustify ?? false) || hasMultipleExplicitPositionedSegments,
+  });
+
+  return justifyShouldApply ? Math.max(lineWidth, availableWidth) : lineWidth;
 };
 
 const renderResolvedLines = (
@@ -324,9 +549,7 @@ const renderMeasuredLines = (
   } = resolveMarkerIndent(paraIndent, isRtl);
   const wordLayoutIndentLeft = (wordLayout as { indentLeftPx?: number } | undefined)?.indentLeftPx;
   const tableMarkerIndentLeft =
-    measure.marker?.indentLeft ??
-    wordLayoutIndentLeft ??
-    (typeof paraIndent?.left === 'number' ? paraIndent.left : 0);
+    measure.marker?.indentLeft ?? wordLayoutIndentLeft ?? (typeof paraIndent?.left === 'number' ? paraIndent.left : 0);
   const suppressFirstLineIndent = block.attrs?.suppressFirstLineIndent === true;
   const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
   const expandedRunsForBlock = containerKind === 'body-fragment' ? expandRunsForInlineNewlines(block.runs) : undefined;

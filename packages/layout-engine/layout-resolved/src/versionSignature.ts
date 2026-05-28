@@ -160,6 +160,8 @@ const renderedInlineImageRunVersion = (image: ImageRun): string =>
     image.flipH ? 1 : 0,
     image.flipV ? 1 : 0,
     imageHyperlinkVersion(image.hyperlink),
+    stableSerializeEvidenceValue(image.sdt),
+    stableSerializeEvidenceValue(image.dataAttrs),
   ].join('|');
 
 // ---------------------------------------------------------------------------

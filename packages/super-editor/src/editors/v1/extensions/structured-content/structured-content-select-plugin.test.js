@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { SELECT_INLINE_SDT_BEFORE_RUN_START_META } from '@core/commands/selectInlineSdtBeforeRunStart.js';
+import { createStructuredContentSelectPlugin } from './structured-content-select-plugin.js';
 
 function findNode(doc, nodeType) {
   let result = null;
@@ -50,7 +52,7 @@ describe('StructuredContentSelectPlugin', () => {
     return handled;
   }
 
-  it('selects inline SDT content on first click in editing mode', () => {
+  it('keeps inline SDT content clicks collapsed in editing mode', () => {
     const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
     const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);
     applyDoc(schema.nodes.doc.create(null, [paragraph]));
@@ -59,13 +61,34 @@ describe('StructuredContentSelectPlugin', () => {
     expect(sdt).not.toBeNull();
 
     const contentFrom = sdt.pos + 1;
-    const contentTo = sdt.pos + sdt.node.nodeSize - 1;
 
     editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, contentFrom + 1)));
 
-    expect(editor.state.selection.empty).toBe(false);
-    expect(editor.state.selection.from).toBe(contentFrom);
-    expect(editor.state.selection.to).toBe(contentTo);
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.state.selection.from).toBe(contentFrom + 1);
+    expect(editor.state.selection.to).toBe(contentFrom + 1);
+  });
+
+  it('keeps Backspace-created inline SDT node selections when the meta escape is set', () => {
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);
+    applyDoc(schema.nodes.doc.create(null, [paragraph]));
+
+    const sdt = findNode(editor.state.doc, 'structuredContent');
+    expect(sdt).not.toBeNull();
+
+    const afterSdt = sdt.pos + sdt.node.nodeSize;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, afterSdt)));
+
+    editor.view.dispatch(
+      editor.state.tr
+        .setMeta(SELECT_INLINE_SDT_BEFORE_RUN_START_META, true)
+        .setSelection(NodeSelection.create(editor.state.doc, sdt.pos)),
+    );
+
+    expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+    expect(editor.state.selection.from).toBe(sdt.pos);
+    expect(editor.state.selection.to).toBe(sdt.pos + sdt.node.nodeSize);
   });
 
   it('does not auto-select inline SDT content in viewing mode', () => {
@@ -270,6 +293,48 @@ describe('StructuredContentSelectPlugin', () => {
     expect(editor.state.selection.from).toBeGreaterThanOrEqual(sdt.pos + 1);
   });
 
+  it('moves back inside an empty inline SDT with ArrowLeft from its trailing boundary', () => {
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' });
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('Lead '), inlineSdt, schema.text(' trail')]);
+    applyDoc(schema.nodes.doc.create(null, [paragraph]));
+
+    const sdt = findNode(editor.state.doc, 'structuredContent');
+    expect(sdt).not.toBeNull();
+
+    const insideSdt = sdt.pos + 1;
+    const afterSdt = sdt.pos + sdt.node.nodeSize;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, afterSdt)));
+
+    const handled = pressArrow('ArrowLeft');
+
+    expect(handled).toBe(true);
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.state.selection.from).toBe(insideSdt);
+    expect(editor.state.selection.to).toBe(insideSdt);
+  });
+
+  it('does not scan the document for empty inline SDT entry on ArrowRight', () => {
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' });
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('Lead '), inlineSdt, schema.text(' trail')]);
+    applyDoc(schema.nodes.doc.create(null, [paragraph]));
+
+    const sdt = findNode(editor.state.doc, 'structuredContent');
+    expect(sdt).not.toBeNull();
+
+    const afterSdt = sdt.pos + sdt.node.nodeSize;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, afterSdt)));
+
+    const descendants = editor.state.doc.descendants.bind(editor.state.doc);
+    const descendantsSpy = vi.fn(descendants);
+    editor.state.doc.descendants = descendantsSpy;
+
+    const plugin = createStructuredContentSelectPlugin(editor);
+    const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true });
+
+    expect(plugin.props.handleKeyDown(editor.view, event)).toBe(false);
+    expect(descendantsSpy).not.toHaveBeenCalled();
+  });
+
   it('does not intercept Shift+ArrowRight near inline SDT boundary', () => {
     const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
     const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);
@@ -296,6 +361,39 @@ describe('StructuredContentSelectPlugin', () => {
     expect(editor.state.selection.from).toBe(beforeFrom);
     expect(editor.state.selection.to).toBe(beforeTo);
     expect(editor.state.doc.textContent).toBe(beforeText);
+  });
+
+  it('does not collapse a parent block selection that contains an inline SDT', () => {
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('Before '), inlineSdt, schema.text(' after')]);
+    const blockSdt = schema.nodes.structuredContentBlock.create({ id: 'block-1' }, [paragraph]);
+    applyDoc(schema.nodes.doc.create(null, [blockSdt]));
+
+    const inline = findNode(editor.state.doc, 'structuredContent');
+    const block = findNode(editor.state.doc, 'structuredContentBlock');
+    expect(inline).not.toBeNull();
+    expect(block).not.toBeNull();
+
+    let textFrom = null;
+    let textTo = null;
+    block.node.descendants((node, pos) => {
+      if (!node.isText) return true;
+      const textPos = block.pos + 1 + pos;
+      textFrom ??= textPos;
+      textTo = textPos + node.nodeSize;
+      return true;
+    });
+
+    expect(textFrom).not.toBeNull();
+    expect(textTo).not.toBeNull();
+
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, textFrom)));
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, textFrom, textTo)));
+
+    expect(editor.state.selection.empty).toBe(false);
+    expect(editor.state.selection.from).toBe(textFrom);
+    expect(editor.state.selection.to).toBe(textTo);
+    expect(editor.state.selection.from).not.toBe(inline.pos);
   });
 
   it('does not intercept Ctrl/Cmd+ArrowRight near inline SDT boundary', () => {

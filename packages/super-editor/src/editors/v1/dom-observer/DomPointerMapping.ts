@@ -16,7 +16,7 @@
  * @module dom-observer/DomPointerMapping
  */
 
-import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
+import { DOM_CLASS_NAMES, STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES } from '@superdoc/dom-contract';
 
 // ---------------------------------------------------------------------------
 // Debug logging (disabled by default — flip to true for click-mapping traces)
@@ -38,6 +38,7 @@ const CLASS = {
   line: DOM_CLASS_NAMES.LINE,
   tableFragment: DOM_CLASS_NAMES.TABLE_FRAGMENT,
   inlineSdtWrapper: DOM_CLASS_NAMES.INLINE_SDT_WRAPPER,
+  emptySdtPlaceholder: 'superdoc-empty-sdt-placeholder',
 } as const;
 
 /** Augmented Document type for the `elementsFromPoint` API. */
@@ -118,19 +119,24 @@ function getInlineSdtWrapperBoundaryPos(
   return side === 'before' ? start - 1 : end + 1;
 }
 
+function isStructuredContentChromeLabel(el: HTMLElement): boolean {
+  return STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES.some((className) => el.classList.contains(className));
+}
+
 /**
  * Collects clickable span/anchor elements inside a line.
  *
- * Filters to elements with PM position data and excludes inline SDT wrapper
- * elements — their child spans provide more accurate character-level
- * positioning.
+ * Filters to elements with PM position data and excludes SDT chrome. Inline
+ * SDT wrappers and labels carry PM ranges for highlighting/drag affordances,
+ * but only child content spans should drive body-text caret placement.
  */
 function getClickableSpans(lineEl: HTMLElement): HTMLElement[] {
   return (Array.from(lineEl.querySelectorAll('span, a')) as HTMLElement[]).filter(
     (el) =>
       el.dataset.pmStart !== undefined &&
       el.dataset.pmEnd !== undefined &&
-      !el.classList.contains(CLASS.inlineSdtWrapper),
+      !el.classList.contains(CLASS.inlineSdtWrapper) &&
+      !isStructuredContentChromeLabel(el),
   );
 }
 
@@ -483,6 +489,11 @@ function resolvePositionInLine(
 
   const { start: spanStart, end: spanEnd } = readPmRange(targetEl);
   if (!Number.isFinite(spanStart) || !Number.isFinite(spanEnd)) return null;
+
+  if (targetEl.classList.contains(CLASS.emptySdtPlaceholder)) {
+    return spanStart;
+  }
+
   const rightCaretBoundary = resolveRightCaretBoundary(spanEls, targetIndex, spanStart, spanEnd);
 
   // Non-text or empty element → snap to nearest edge

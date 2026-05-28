@@ -5,6 +5,7 @@ import type { Editor as EditorInstance } from '../../Editor.js';
 import { Editor } from '../../Editor.js';
 import { HeaderFooterEditorManager, HeaderFooterLayoutAdapter } from '../../header-footer/HeaderFooterRegistry.js';
 import { buildMultiSectionIdentifier } from '@superdoc/layout-bridge';
+import { NodeSelection } from 'prosemirror-state';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
   mock: {
@@ -396,6 +397,36 @@ describe('PresentationEditor', () => {
   let container: HTMLElement;
   let editor: PresentationEditor;
 
+  const makeNodeSelection = (from: number, to: number, node: Record<string, unknown>) => {
+    const selection = Object.create(NodeSelection.prototype);
+    Object.defineProperty(selection, 'from', { value: from, configurable: true });
+    Object.defineProperty(selection, 'to', { value: to, configurable: true });
+    Object.defineProperty(selection, 'anchor', { value: from, configurable: true });
+    Object.defineProperty(selection, 'head', { value: to, configurable: true });
+    Object.defineProperty(selection, 'empty', { value: false, configurable: true });
+    Object.defineProperty(selection, 'node', { value: node, configurable: true });
+    return selection as NodeSelection;
+  };
+
+  const getLastEditorInstance = () => {
+    const results = (Editor as unknown as MockedEditor).mock.results;
+    return results[results.length - 1].value;
+  };
+
+  const getSelectionUpdateHandler = (editorInstance: EditorInstance) => {
+    const onMock = editorInstance.on as unknown as Mock;
+    const call = onMock.mock.calls.find(([event]) => event === 'selectionUpdate');
+    expect(call).toBeTruthy();
+    return call![1] as () => void;
+  };
+
+  const syncViewState = (editorInstance: EditorInstance) => {
+    (
+      editorInstance.view as typeof editorInstance.view & { state?: EditorInstance['state']; hasFocus?: () => boolean }
+    ).state = editorInstance.state;
+    (editorInstance.view as typeof editorInstance.view & { hasFocus?: () => boolean }).hasFocus = vi.fn(() => true);
+  };
+
   beforeEach(() => {
     // Create a container element for the presentation editor
     container = document.createElement('div');
@@ -461,6 +492,113 @@ describe('PresentationEditor', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(editor.historyCoordinator).toBeNull();
+    });
+  });
+
+  describe('structured content selected chrome', () => {
+    it('marks a block SDT selected when an image NodeSelection is inside it', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'sdt-image-selection-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const editorInstance = getLastEditorInstance();
+      syncViewState(editorInstance);
+
+      const sdtNode = {
+        type: { name: 'structuredContentBlock' },
+        attrs: { id: 'sdt-image-block' },
+        nodeSize: 24,
+      };
+      const imageNode = {
+        type: { name: 'image' },
+        attrs: {},
+        isBlock: false,
+        isInline: true,
+        isLeaf: true,
+        nodeSize: 1,
+      };
+      const doc = {
+        ...editorInstance.state.doc,
+        nodeAt: vi.fn(() => imageNode),
+        resolve: vi.fn((pos: number) => ({
+          pos,
+          depth: 2,
+          node: (depth: number) => {
+            if (depth === 1) return sdtNode;
+            if (depth === 2) return { type: { name: 'paragraph' } };
+            return { type: { name: 'doc' } };
+          },
+          before: (depth: number) => (depth === 1 ? 90 : 93),
+          start: (depth: number) => (depth === 1 ? 91 : 94),
+          end: (depth: number) => (depth === 1 ? 113 : 95),
+        })),
+      };
+      editorInstance.state.doc = doc as never;
+      (editorInstance.view as typeof editorInstance.view & { state: EditorInstance['state'] }).state =
+        editorInstance.state;
+      editorInstance.state.selection = makeNodeSelection(94, 95, imageNode);
+
+      const sdtWrapper = document.createElement('div');
+      sdtWrapper.className = 'superdoc-structured-content-block';
+      sdtWrapper.dataset.sdtId = 'sdt-image-block';
+      sdtWrapper.dataset.pmStart = '94';
+      sdtWrapper.dataset.pmEnd = '95';
+      container.querySelector('.presentation-editor__pages')?.appendChild(sdtWrapper);
+
+      getSelectionUpdateHandler(editorInstance)();
+
+      expect(sdtWrapper.classList.contains('ProseMirror-selectednode')).toBe(true);
+    });
+
+    it('does not mark a block SDT selected when an image NodeSelection is outside it', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'outside-sdt-image-selection-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const editorInstance = getLastEditorInstance();
+      syncViewState(editorInstance);
+
+      const imageNode = {
+        type: { name: 'image' },
+        attrs: {},
+        isBlock: false,
+        isInline: true,
+        isLeaf: true,
+        nodeSize: 1,
+      };
+      const doc = {
+        ...editorInstance.state.doc,
+        nodeAt: vi.fn(() => imageNode),
+        resolve: vi.fn((pos: number) => ({
+          pos,
+          depth: 1,
+          node: (depth: number) => (depth === 1 ? { type: { name: 'paragraph' } } : { type: { name: 'doc' } }),
+          before: () => 10,
+          start: () => 11,
+          end: () => 20,
+        })),
+      };
+      editorInstance.state.doc = doc as never;
+      (editorInstance.view as typeof editorInstance.view & { state: EditorInstance['state'] }).state =
+        editorInstance.state;
+      editorInstance.state.selection = makeNodeSelection(40, 41, imageNode);
+
+      const sdtWrapper = document.createElement('div');
+      sdtWrapper.className = 'superdoc-structured-content-block';
+      sdtWrapper.dataset.sdtId = 'unrelated-sdt-block';
+      sdtWrapper.dataset.pmStart = '90';
+      sdtWrapper.dataset.pmEnd = '113';
+      container.querySelector('.presentation-editor__pages')?.appendChild(sdtWrapper);
+
+      getSelectionUpdateHandler(editorInstance)();
+
+      expect(sdtWrapper.classList.contains('ProseMirror-selectednode')).toBe(false);
     });
   });
 

@@ -18,7 +18,7 @@ import type {
   TrackedChangeMeta,
   SourceAnchor,
 } from '@superdoc/contracts';
-import { expandRunsForInlineNewlines } from '@superdoc/contracts';
+import { expandRunsForInlineNewlines, isEmptyInlineSdtPlaceholderRun } from '@superdoc/contracts';
 import type {
   PMNode,
   PMMark,
@@ -48,6 +48,7 @@ import {
 } from './inline-converters/common.js';
 import { runNodeChildrenToRuns } from './inline-converters/run.js';
 import { structuredContentNodeToBlocks } from './inline-converters/structured-content.js';
+import { smartTagNodeToBlocks } from './inline-converters/smart-tag.js';
 import { pageReferenceNodeToBlock } from './inline-converters/page-reference.js';
 import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.js';
 import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
@@ -209,6 +210,8 @@ export function mergeAdjacentRuns(runs: Run[]): Run[] {
       isTextRun(next) &&
       !current.token &&
       !next.token &&
+      !isEmptyInlineSdtPlaceholderRun(current) &&
+      !isEmptyInlineSdtPlaceholderRun(next) &&
       current.pmStart != null &&
       current.pmEnd != null &&
       next.pmStart != null &&
@@ -967,6 +970,9 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   },
   structuredContent: {
     inlineConverter: structuredContentNodeToBlocks,
+  },
+  smartTag: {
+    inlineConverter: smartTagNodeToBlocks,
     extraCheck: (node: PMNode) => Array.isArray(node.content),
   },
   fieldAnnotation: {

@@ -184,6 +184,32 @@ describe('deriveBlockVersion - inline image runs', () => {
     expect(linked).not.toBe(unlinked);
   });
 
+  it('changes when inline image SDT metadata changes', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImageRun(baseImageRun));
+    const locked = deriveBlockVersion(
+      makeParagraphWithImageRun({
+        ...baseImageRun,
+        sdt: {
+          type: 'structuredContent',
+          scope: 'inline',
+          id: 'image-sdt',
+          lockMode: 'contentLocked',
+        },
+      }),
+    );
+
+    expect(locked).not.toBe(plain);
+  });
+
+  it('changes when inline image data attributes change', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImageRun(baseImageRun));
+    const withDataAttrs = deriveBlockVersion(
+      makeParagraphWithImageRun({ ...baseImageRun, dataAttrs: { 'data-example': '1' } }),
+    );
+
+    expect(withDataAttrs).not.toBe(plain);
+  });
+
   it('changes when an inline image raw clip path changes', () => {
     const clipA = { ...baseImageRun, clipPath: 'url(#clip-a)' };
     const clipB = { ...baseImageRun, clipPath: 'url(#clip-b)' };

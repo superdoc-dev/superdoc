@@ -17,6 +17,42 @@ const findTextRange = (doc, text) => {
   return range;
 };
 
+const findStructuredContent = (doc) => {
+  let result = null;
+  doc.descendants((node, pos) => {
+    if (node.type.name === 'structuredContent') {
+      result = { node, pos };
+      return false;
+    }
+    return true;
+  });
+  return result;
+};
+
+const inlineStructuredContentDoc = {
+  type: 'doc',
+  content: [
+    {
+      type: 'paragraph',
+      content: [
+        { type: 'run', content: [{ type: 'text', text: 'A ' }] },
+        {
+          type: 'structuredContent',
+          attrs: { id: 'inline-sdt-1' },
+          content: [{ type: 'run', content: [{ type: 'text', text: 'Field' }] }],
+        },
+        { type: 'run', content: [{ type: 'text', text: ' Z' }] },
+      ],
+    },
+  ],
+};
+
+const inlineStructuredContentDocWithLockMode = (lockMode) => {
+  const doc = structuredClone(inlineStructuredContentDoc);
+  doc.content[0].content[1].attrs.lockMode = lockMode;
+  return doc;
+};
+
 /**
  * Test the handleKeyDown plugin handler directly via someProp.
  * Returns true if the handler blocked the key, false if allowed.
@@ -41,6 +77,12 @@ describe('Editable extension insertText beforeinput handling', () => {
     editor?.destroy();
     editor = null;
   });
+
+  const getInlineStructuredContent = () => {
+    const sdt = findStructuredContent(editor.state.doc);
+    expect(sdt).not.toBeNull();
+    return sdt;
+  };
 
   it('replaces backward non-empty selection on beforeinput insertText', () => {
     ({ editor } = initTestEditor({
@@ -111,6 +153,95 @@ describe('Editable extension insertText beforeinput handling', () => {
     expect(prevented).toBe(false);
     expect(editor.state.doc.textContent).toBe('QA');
   });
+
+  it('inserts collapsed beforeinput insertText outside an inline SDT after its boundary', () => {
+    ({ editor } = initTestEditor({
+      loadFromSchema: true,
+      content: structuredClone(inlineStructuredContentDoc),
+    }));
+
+    const sdt = getInlineStructuredContent();
+    const afterSdt = sdt.pos + sdt.node.nodeSize;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, afterSdt)));
+
+    const beforeInputEvent = new InputEvent('beforeinput', {
+      data: 'a',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
+
+    const updatedSdt = findStructuredContent(editor.state.doc);
+    expect(prevented).toBe(true);
+    expect(updatedSdt).not.toBeNull();
+    expect(updatedSdt.node.textContent).toBe('Field');
+    expect(editor.state.doc.textContent).toBe('A Fielda Z');
+    expect(editor.state.doc.textBetween(0, editor.state.selection.from)).toBe('A Fielda');
+    expect(editor.state.selection.empty).toBe(true);
+  });
+
+  it('inserts collapsed beforeinput insertText outside an inline SDT before its boundary', () => {
+    ({ editor } = initTestEditor({
+      loadFromSchema: true,
+      content: structuredClone(inlineStructuredContentDoc),
+    }));
+
+    const sdt = getInlineStructuredContent();
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, sdt.pos)));
+
+    const beforeInputEvent = new InputEvent('beforeinput', {
+      data: 'a',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
+
+    const updatedSdt = findStructuredContent(editor.state.doc);
+    expect(prevented).toBe(true);
+    expect(updatedSdt).not.toBeNull();
+    expect(updatedSdt.node.textContent).toBe('Field');
+    expect(editor.state.doc.textContent).toBe('A aField Z');
+    expect(editor.state.doc.textBetween(0, editor.state.selection.from)).toBe('A a');
+    expect(editor.state.selection.empty).toBe(true);
+  });
+
+  it.each([
+    ['contentLocked', 'after', 'A Fielda Z', 'A Fielda'],
+    ['sdtContentLocked', 'after', 'A Fielda Z', 'A Fielda'],
+    ['contentLocked', 'before', 'A aField Z', 'A a'],
+    ['sdtContentLocked', 'before', 'A aField Z', 'A a'],
+  ])(
+    'inserts collapsed beforeinput insertText outside a %s inline SDT at the %s boundary',
+    (lockMode, boundary, expectedText, expectedTextBeforeSelection) => {
+      ({ editor } = initTestEditor({
+        loadFromSchema: true,
+        content: inlineStructuredContentDocWithLockMode(lockMode),
+      }));
+
+      const sdt = getInlineStructuredContent();
+      const pos = boundary === 'after' ? sdt.pos + sdt.node.nodeSize : sdt.pos;
+      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pos)));
+
+      const beforeInputEvent = new InputEvent('beforeinput', {
+        data: 'a',
+        inputType: 'insertText',
+        bubbles: true,
+        cancelable: true,
+      });
+      const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
+
+      const updatedSdt = findStructuredContent(editor.state.doc);
+      expect(prevented).toBe(true);
+      expect(updatedSdt).not.toBeNull();
+      expect(updatedSdt.node.attrs.lockMode).toBe(lockMode);
+      expect(updatedSdt.node.textContent).toBe('Field');
+      expect(editor.state.doc.textContent).toBe(expectedText);
+      expect(editor.state.doc.textBetween(0, editor.state.selection.from)).toBe(expectedTextBeforeSelection);
+      expect(editor.state.selection.empty).toBe(true);
+    },
+  );
 
   it('intercepts collapsed beforeinput insertText for active footer editors', () => {
     ({ editor } = initTestEditor({

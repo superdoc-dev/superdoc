@@ -104,6 +104,27 @@ describe('structured content resolution helpers', () => {
     });
   });
 
+  it('finds a structured content block when the position points at the block node', () => {
+    const blockNode = { type: { name: 'structuredContentBlock' }, nodeSize: 12 };
+    const doc = {
+      nodeAt: vi.fn(() => blockNode),
+      resolve: vi.fn(() => ({
+        depth: 1,
+        node: () => ({ type: { name: 'paragraph' } }),
+        before: () => 10,
+        start: () => 11,
+        end: () => 20,
+      })),
+    };
+
+    expect(findStructuredContentBlockAtPos(doc as never, 10)).toEqual({
+      node: blockNode,
+      pos: 10,
+      start: 11,
+      end: 21,
+    });
+  });
+
   it('returns null for invalid positions (non-integer, non-finite, out-of-range)', () => {
     const doc = {
       resolve: vi.fn((pos: number) => {

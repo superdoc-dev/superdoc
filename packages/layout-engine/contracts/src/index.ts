@@ -299,6 +299,10 @@ export type FlowRunLink = {
   history?: boolean;
 };
 
+export const EMPTY_SDT_PLACEHOLDER_TEXT = 'Click or tap here to enter text';
+
+export type SdtVisualPlaceholder = 'emptyInlineSdt' | 'emptyBlockSdt';
+
 /**
  * Common formatting marks that can be applied to any run type.
  * Used by TextRun, TabRun, and other run types that support inline formatting.
@@ -351,6 +355,8 @@ export type TextRun = RunMarks & {
    */
   dataAttrs?: Record<string, string>;
   sdt?: SdtMetadata;
+  /** Layout-only placeholder for visual affordances that do not represent document text. */
+  visualPlaceholder?: SdtVisualPlaceholder;
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
   token?: 'pageNumber' | 'totalPageCount' | 'pageReference';
@@ -467,10 +473,10 @@ export type ImageRun = {
 
   /**
    * Vertical alignment of image relative to text baseline.
-   * Currently only 'bottom' is supported (image sits on baseline).
-   * Future: 'top', 'middle', 'baseline', 'text-top', 'text-bottom'.
+   * 'top' keeps the image box inside the measured line height; 'bottom'
+   * preserves legacy baseline alignment for existing callers.
    */
-  verticalAlign?: 'bottom';
+  verticalAlign?: 'top' | 'bottom';
 
   /** Absolute ProseMirror position (inclusive) of this image run. */
   pmStart?: number;
@@ -2224,6 +2230,11 @@ export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from 
 
 // Pure transformations on inline-run shapes (used by pm-adapter, layout-bridge,
 // and painter-dom). Located in contracts to avoid reverse stage dependencies.
-export { expandRunsForInlineNewlines, sliceRunsForLine } from './run-helpers.js';
+export {
+  expandRunsForInlineNewlines,
+  isEmptyInlineSdtPlaceholderRun,
+  isEmptySdtPlaceholderRun,
+  sliceRunsForLine,
+} from './run-helpers.js';
 
 export * as Engines from './engines/index.js';

@@ -1,6 +1,6 @@
 import { expect, test } from '../../fixtures/superdoc.js';
 import { dragRenderedElement } from '../../helpers/drag-drop.js';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 test.use({ config: { toolbar: 'full', showSelection: true } });
 
@@ -38,6 +38,46 @@ async function getLineByText(page: Page, text: string) {
     throw new Error(`Line containing "${text}" is not visible`);
   }
   return { line, box };
+}
+
+async function dragRenderedElementWithPointer(
+  source: Locator,
+  target: Locator,
+  options: { targetOffsetX?: number; targetOffsetY?: number } = {},
+): Promise<void> {
+  await source.scrollIntoViewIfNeeded();
+  await target.scrollIntoViewIfNeeded();
+
+  const sourceBox = await source.boundingBox();
+  const targetBox = await target.boundingBox();
+  if (!sourceBox) {
+    throw new Error('dragRenderedElementWithPointer: source element is not visible');
+  }
+  if (!targetBox) {
+    throw new Error('dragRenderedElementWithPointer: target element is not visible');
+  }
+
+  const sourcePoint = {
+    x: Math.round(sourceBox.x + sourceBox.width / 2),
+    y: Math.round(sourceBox.y + sourceBox.height / 2),
+  };
+  const targetPoint = {
+    x:
+      options.targetOffsetX !== undefined
+        ? Math.round(targetBox.x + options.targetOffsetX)
+        : Math.round(targetBox.x + targetBox.width / 2),
+    y:
+      options.targetOffsetY !== undefined
+        ? Math.round(targetBox.y + options.targetOffsetY)
+        : Math.round(targetBox.y + targetBox.height / 2),
+  };
+  const page = source.page();
+
+  await page.mouse.move(sourcePoint.x, sourcePoint.y);
+  await page.mouse.down();
+  await page.mouse.move(sourcePoint.x + 4, sourcePoint.y + 4);
+  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 12 });
+  await page.mouse.up();
 }
 
 async function setBlockDragDoc(page: Page): Promise<void> {
@@ -178,7 +218,7 @@ test.describe('structured content drag and drop', () => {
     const anchorAfter = await superdoc.findTextPos('Drop anchor');
 
     expect(sourceAfter).toBeGreaterThan(tailAfter);
-    expect(sourceAfter).toBeGreaterThan(anchorAfter);
+    expect(sourceAfter).toBeLessThan(anchorAfter);
     expect(sourceAfter).not.toBe(sourceBefore);
     await superdoc.assertTextContains('Block payload to move');
   });
@@ -226,6 +266,44 @@ test.describe('structured content drag and drop', () => {
     await expect(labelLocator).toHaveAttribute('data-sdt-id', /.+/);
     await expect(labelLocator).toHaveAttribute('data-pm-start', /\d+/);
     await expect(labelLocator).toHaveAttribute('data-pm-end', /\d+/);
+  });
+
+  test('@behavior SD-2192: native dragging a production block SDT label repositions the block', async ({
+    superdoc,
+  }) => {
+    await setBlockDragDoc(superdoc.page);
+    await superdoc.waitForStable();
+
+    const sourceBefore = await getFirstNodePosByType(superdoc.page, 'structuredContentBlock');
+    const tailBefore = await superdoc.findTextPos('Tail paragraph');
+    const anchorBefore = await superdoc.findTextPos('Drop anchor');
+    expect(sourceBefore).toBeLessThan(tailBefore);
+    expect(tailBefore).toBeLessThan(anchorBefore);
+
+    const sourceBody = superdoc.page.locator(BLOCK_CONTAINER).filter({ hasText: 'Block payload to move' }).first();
+    const bodyBox = await sourceBody.boundingBox();
+    if (!bodyBox) throw new Error('Block SDT body is not visible');
+    await superdoc.page.mouse.click(bodyBox.x + bodyBox.width / 2, bodyBox.y + bodyBox.height / 2);
+    await superdoc.waitForStable();
+
+    const sourceLabel = superdoc.page
+      .locator(`${BLOCK_CONTAINER} .superdoc-structured-content__label`)
+      .filter({ hasText: 'Block to move' })
+      .first();
+    const { line: target } = await getLineByText(superdoc.page, 'Drop anchor');
+
+    await expect(sourceLabel).toBeVisible();
+    await dragRenderedElementWithPointer(sourceLabel, target, { targetOffsetX: 4 });
+    await superdoc.waitForStable();
+
+    const sourceAfter = await getFirstNodePosByType(superdoc.page, 'structuredContentBlock');
+    const tailAfter = await superdoc.findTextPos('Tail paragraph');
+    const anchorAfter = await superdoc.findTextPos('Drop anchor');
+
+    expect(sourceAfter).toBeGreaterThan(tailAfter);
+    expect(sourceAfter).toBeLessThan(anchorAfter);
+    expect(sourceAfter).not.toBe(sourceBefore);
+    await superdoc.assertTextContains('Block payload to move');
   });
 
   // SD-2192 review: a block SDT wrapping a table should still be draggable.
@@ -289,5 +367,43 @@ test.describe('structured content drag and drop', () => {
     await expect(labelLocator).toHaveAttribute('data-sdt-id', /.+/);
     await expect(labelLocator).toHaveAttribute('data-pm-start', /\d+/);
     await expect(labelLocator).toHaveAttribute('data-pm-end', /\d+/);
+  });
+
+  test('@behavior SD-2192: native dragging a production inline SDT label repositions the inline field', async ({
+    superdoc,
+  }) => {
+    await setInlineDragDoc(superdoc.page);
+    await superdoc.waitForStable();
+
+    const sourceBefore = await getFirstNodePosByType(superdoc.page, 'structuredContent');
+    const tailBefore = await superdoc.findTextPos('Tail paragraph');
+    const anchorBefore = await superdoc.findTextPos('Drop anchor');
+    expect(sourceBefore).toBeLessThan(tailBefore);
+    expect(tailBefore).toBeLessThan(anchorBefore);
+
+    const sourceBody = superdoc.page.locator(INLINE_CONTAINER).filter({ hasText: 'Inline payload to move' }).first();
+    const bodyBox = await sourceBody.boundingBox();
+    if (!bodyBox) throw new Error('Inline SDT body is not visible');
+    await superdoc.page.mouse.click(bodyBox.x + bodyBox.width / 2, bodyBox.y + bodyBox.height / 2);
+    await superdoc.waitForStable();
+
+    const sourceLabel = superdoc.page
+      .locator(`${INLINE_CONTAINER} .superdoc-structured-content-inline__label`)
+      .filter({ hasText: 'Inline to move' })
+      .first();
+    const { line: target } = await getLineByText(superdoc.page, 'Drop anchor');
+
+    await expect(sourceLabel).toBeVisible();
+    await dragRenderedElementWithPointer(sourceLabel, target, { targetOffsetX: 4 });
+    await superdoc.waitForStable();
+
+    const sourceAfter = await getFirstNodePosByType(superdoc.page, 'structuredContent');
+    const tailAfter = await superdoc.findTextPos('Tail paragraph');
+    const anchorAfter = await superdoc.findTextPos('Drop anchor');
+
+    expect(sourceAfter).toBeGreaterThan(tailAfter);
+    expect(sourceAfter).toBeLessThan(anchorAfter);
+    expect(sourceAfter).not.toBe(sourceBefore);
+    await superdoc.assertTextContains('Inline payload to move');
   });
 });

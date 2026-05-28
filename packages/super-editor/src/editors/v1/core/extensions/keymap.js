@@ -38,6 +38,8 @@ export const handleBackspace = (editor) => {
       return false;
     },
     () => commands.deleteBlockSdtAtTextBlockStart(),
+    () => commands.selectInlineSdtBeforeRunStart(),
+    () => commands.moveIntoBlockSdtBeforeTextBlockStart(),
     () => commands.backspaceEmptyRunParagraph(),
     () => commands.backspaceSkipEmptyRun(),
     () => commands.backspaceAtomBefore(),
@@ -58,6 +60,8 @@ export const handleDelete = (editor) => {
 
   return editor.commands.first(({ commands }) => [
     () => commands.deleteBlockSdtAtTextBlockStart(),
+    () => commands.selectInlineSdtAfterRunEnd(),
+    () => commands.moveIntoBlockSdtAfterTextBlockEnd(),
     () => commands.deleteSkipEmptyRun(),
     () => commands.deleteAtomAfter(),
     () => commands.deleteNextToRun(),

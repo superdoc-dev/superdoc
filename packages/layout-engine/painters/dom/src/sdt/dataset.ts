@@ -12,6 +12,7 @@ const SDT_DATASET_KEYS = [
   'sdtScope',
   'sdtTag',
   'sdtAlias',
+  'appearance',
   'lockMode',
   'sdtSectionTitle',
   'sdtSectionType',
@@ -61,6 +62,7 @@ export const applySdtDataset = (el: HTMLElement | null, metadata?: SdtMetadata |
     setDatasetString(el, 'sdtScope', metadata.scope);
     setDatasetString(el, 'sdtTag', metadata.tag);
     setDatasetString(el, 'sdtAlias', metadata.alias);
+    setDatasetString(el, 'appearance', metadata.appearance);
     // Always set lockMode so CSS can target all structured-content SDTs uniformly.
     setDatasetString(el, 'lockMode', metadata.lockMode || 'unlocked');
   } else if (metadata.type === 'documentSection') {

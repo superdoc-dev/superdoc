@@ -1,10 +1,9 @@
 import type { FieldAnnotationRun } from '@superdoc/contracts';
-import { sanitizeHref } from '@superdoc/url-validation';
+import { sanitizeHref, isValidImageDataUrl } from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import { assertPmPositions } from '../pm-position-validation.js';
 import type { RunRenderContext } from './types.js';
 import { BROWSER_DEFAULT_FONT_SIZE } from './text-run.js';
-import { MAX_DATA_URL_LENGTH, VALID_IMAGE_DATA_URL } from './image-run.js';
 
 /**
  * Renders a FieldAnnotationRun as an inline "pill" element matching super-editor's visual appearance.
@@ -127,7 +126,7 @@ export const renderFieldAnnotationRun = (run: FieldAnnotationRun, context: RunRe
         // SECURITY: Validate data URLs
         const isDataUrl = run.imageSrc.startsWith('data:');
         if (isDataUrl) {
-          if (run.imageSrc.length <= MAX_DATA_URL_LENGTH && VALID_IMAGE_DATA_URL.test(run.imageSrc)) {
+          if (isValidImageDataUrl(run.imageSrc)) {
             img.src = run.imageSrc;
           } else {
             // Invalid data URL - fall back to displayLabel

@@ -5,6 +5,7 @@ import { carbonCopy } from '../carbonCopy.js';
 import { createStyleTag } from '../createStyleTag.js';
 import { deleteProps } from '../deleteProps.js';
 import { getMediaObjectUrls } from '../imageBlobs.js';
+import { simpleStringHash, stableHexHash } from '../hash.js';
 import { isEmptyObject } from '../isEmptyObject.js';
 import { isIOS } from '../isIOS.js';
 import { isMacOS } from '../isMacOS.js';
@@ -103,6 +104,17 @@ describe('core utilities', () => {
 
       expect(result).toBeUndefined();
       expect(errorSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('hash utilities', () => {
+    it('preserves the simple string hash used by image filenames', () => {
+      expect(simpleStringHash('fake-image-payload')).toBe('1287114076');
+      expect(simpleStringHash('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=')).toBe('1253334850');
+    });
+
+    it('preserves the stable hex hash used by imported comment IDs', () => {
+      expect(stableHexHash('1-1707568200000')).toBe('58b122b1');
     });
   });
 

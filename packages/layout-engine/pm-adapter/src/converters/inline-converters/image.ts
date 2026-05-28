@@ -45,7 +45,7 @@ const DEFAULT_IMAGE_DIMENSION_PX = 100;
  *   },
  *   positionMap
  * )
- * // Returns: { kind: 'image', src: 'data:...', width: 200, height: 150, alt: 'Company logo', distTop: 10, distBottom: 10, verticalAlign: 'bottom' }
+ * // Returns: { kind: 'image', src: 'data:...', width: 200, height: 150, alt: 'Company logo', distTop: 10, distBottom: 10, verticalAlign: 'top' }
  *
  * // Missing src - returns null
  * imageNodeToRun({ type: 'image', attrs: {} }, positionMap)
@@ -56,7 +56,7 @@ const DEFAULT_IMAGE_DIMENSION_PX = 100;
  *   { type: 'image', attrs: { src: 'image.png', size: { width: NaN, height: -10 } } },
  *   positionMap
  * )
- * // Returns: { kind: 'image', src: 'image.png', width: 100, height: 100, verticalAlign: 'bottom' }
+ * // Returns: { kind: 'image', src: 'image.png', width: 100, height: 100, verticalAlign: 'top' }
  * ```
  */
 export function imageNodeToRun({ node, positions, sdtMetadata }: InlineConverterParams): ImageRun | null {
@@ -116,8 +116,8 @@ export function imageNodeToRun({ node, positions, sdtMetadata }: InlineConverter
   const distRight = pickNumber(wrapAttrs.distRight ?? wrapAttrs.distR);
   if (distRight != null) run.distRight = distRight;
 
-  // Default vertical alignment to bottom (text baseline alignment)
-  run.verticalAlign = 'bottom';
+  // Keep the image box inside the measured line height.
+  run.verticalAlign = 'top';
 
   // Position tracking
   const pos = positions.get(node);

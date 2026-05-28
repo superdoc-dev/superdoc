@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { historyKey } from 'prosemirror-history';
-import { PluginKey } from 'prosemirror-state';
+import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
+import { Schema } from 'prosemirror-model';
 
 const getActiveFormattingMock = vi.hoisted(() => vi.fn(() => []));
 const getYUndoPluginStateMock = vi.hoisted(() => vi.fn(() => undefined));
@@ -46,6 +47,116 @@ const createContext = (): ToolbarContext => ({
   selectionEmpty: false,
   editor: {} as any,
 });
+
+const sdtSchema = new Schema({
+  nodes: {
+    doc: { content: 'block+' },
+    paragraph: {
+      group: 'block',
+      content: 'inline*',
+      toDOM: () => ['p', 0],
+      parseDOM: [{ tag: 'p' }],
+    },
+    text: { group: 'inline' },
+    structuredContent: {
+      group: 'inline',
+      inline: true,
+      content: 'inline*',
+      attrs: {
+        id: { default: null },
+        lockMode: { default: 'unlocked' },
+      },
+      toDOM: () => ['span', 0],
+      parseDOM: [{ tag: 'span' }],
+    },
+    structuredContentBlock: {
+      group: 'block',
+      content: 'block+',
+      attrs: {
+        id: { default: null },
+        lockMode: { default: 'unlocked' },
+      },
+      toDOM: () => ['div', 0],
+      parseDOM: [{ tag: 'div' }],
+    },
+  },
+});
+
+const makeToolbarContextWithSelection = (state: EditorState): ToolbarContext => ({
+  ...createContext(),
+  editor: {
+    state,
+    options: {
+      documentMode: 'editing',
+    },
+  } as any,
+});
+
+const findNodeById = (doc: any, id: string) => {
+  let result: { node: any; pos: number } | null = null;
+  doc.descendants((node: any, pos: number) => {
+    if (result) return false;
+    if (String(node.attrs?.id) === id) {
+      result = { node, pos };
+      return false;
+    }
+    return true;
+  });
+  if (!result) throw new Error(`Missing test node "${id}"`);
+  return result;
+};
+
+const findTextPos = (doc: any, text: string) => {
+  let result: number | null = null;
+  doc.descendants((node: any, pos: number) => {
+    if (result != null) return false;
+    if (node.isText && node.text?.includes(text)) {
+      result = pos + node.text.indexOf(text);
+      return false;
+    }
+    return true;
+  });
+  if (result == null) throw new Error(`Missing test text "${text}"`);
+  return result;
+};
+
+const makeInlineSdtState = (lockMode: string, selectionKind: 'inside' | 'node' | 'span' = 'inside') => {
+  const doc = sdtSchema.node('doc', null, [
+    sdtSchema.node('paragraph', null, [
+      sdtSchema.text('A '),
+      sdtSchema.node('structuredContent', { id: 'inline-sdt', lockMode }, [sdtSchema.text('Field')]),
+      sdtSchema.text(' Z'),
+    ]),
+  ]);
+
+  const baseState = EditorState.create({ schema: sdtSchema, doc });
+  const inlineSdt = findNodeById(doc, 'inline-sdt');
+
+  if (selectionKind === 'node') {
+    return baseState.apply(baseState.tr.setSelection(NodeSelection.create(doc, inlineSdt.pos)));
+  }
+
+  if (selectionKind === 'span') {
+    return baseState.apply(
+      baseState.tr.setSelection(TextSelection.create(doc, findTextPos(doc, 'A'), findTextPos(doc, 'Z') + 1)),
+    );
+  }
+
+  return baseState.apply(baseState.tr.setSelection(TextSelection.create(doc, findTextPos(doc, 'Field') + 1)));
+};
+
+const makeBlockSdtState = (lockMode: string) => {
+  const doc = sdtSchema.node('doc', null, [
+    sdtSchema.node('paragraph', null, [sdtSchema.text('Before')]),
+    sdtSchema.node('structuredContentBlock', { id: 'block-sdt', lockMode }, [
+      sdtSchema.node('paragraph', null, [sdtSchema.text('Block field')]),
+    ]),
+    sdtSchema.node('paragraph', null, [sdtSchema.text('After')]),
+  ]);
+
+  const baseState = EditorState.create({ schema: sdtSchema, doc });
+  return baseState.apply(baseState.tr.setSelection(TextSelection.create(doc, findTextPos(doc, 'Block field') + 1)));
+};
 
 describe('createToolbarRegistry', () => {
   afterEach(() => {
@@ -1224,6 +1335,91 @@ describe('createToolbarRegistry', () => {
       active: false,
       disabled: true,
     });
+  });
+
+  it.each(['contentLocked', 'sdtContentLocked'])(
+    'disables representative mutation commands inside a %s inline SDT',
+    (lockMode) => {
+      const registry = createToolbarRegistry();
+      const context = makeToolbarContextWithSelection(makeInlineSdtState(lockMode));
+
+      expect(registry.bold?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry.italic?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry.underline?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry.link?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry.image?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry['table-insert']?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry['clear-formatting']?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry['copy-format']?.state({ context, superdoc: {} })?.disabled).toBe(true);
+    },
+  );
+
+  it.each(['unlocked', 'sdtLocked'])('does not disable mutation commands from %s SDTs alone', (lockMode) => {
+    const registry = createToolbarRegistry();
+    const context = makeToolbarContextWithSelection(makeInlineSdtState(lockMode));
+
+    expect(registry.bold?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry.link?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry['table-insert']?.state({ context, superdoc: {} })?.disabled).toBe(false);
+  });
+
+  it('leaves document controls governed by their existing rules inside content-locked SDTs', () => {
+    getYUndoPluginStateMock.mockReturnValue({
+      undoManager: {
+        undoStack: [1],
+        redoStack: [1],
+      },
+    });
+
+    const registry = createToolbarRegistry();
+    const baseContext = makeToolbarContextWithSelection(makeInlineSdtState('contentLocked'));
+    const context = {
+      ...baseContext,
+      editor: {
+        ...baseContext.editor,
+        options: {
+          ydoc: {},
+          documentMode: 'editing',
+        },
+      } as any,
+    };
+
+    expect(registry.undo?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry.redo?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry.ruler?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry.zoom?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry['document-mode']?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(
+      registry['formatting-marks']?.state({
+        context,
+        superdoc: {
+          toggleFormattingMarks: vi.fn(),
+        },
+      })?.disabled,
+    ).toBe(false);
+  });
+
+  it('keeps text-align available when mutation commands are disabled inside a locked block SDT paragraph', () => {
+    const registry = createToolbarRegistry();
+    const context = makeToolbarContextWithSelection(makeBlockSdtState('contentLocked'));
+
+    expect(registry.bold?.state({ context, superdoc: {} })?.disabled).toBe(true);
+    expect(registry['text-align']?.state({ context, superdoc: {} })?.disabled).toBe(false);
+  });
+
+  it('disables mutation commands for a NodeSelection on a locked SDT', () => {
+    const registry = createToolbarRegistry();
+    const context = makeToolbarContextWithSelection(makeInlineSdtState('sdtContentLocked', 'node'));
+
+    expect(registry.bold?.state({ context, superdoc: {} })?.disabled).toBe(true);
+  });
+
+  it('disables mutation commands for a range spanning locked SDT content', () => {
+    const registry = createToolbarRegistry();
+    const context = makeToolbarContextWithSelection(makeInlineSdtState('contentLocked', 'span'));
+
+    expect(registry.bold?.state({ context, superdoc: {} })?.disabled).toBe(true);
+    expect(registry['bullet-list']?.state({ context, superdoc: {} })?.disabled).toBe(true);
   });
 
   // -------------------------------------------------------------------------

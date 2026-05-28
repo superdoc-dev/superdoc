@@ -3,7 +3,7 @@ import {
   isTrackedChangeActionAllowed,
 } from '../../editors/v1/extensions/track-changes/permission-helpers.js';
 import { resolveStateEditor } from './context.js';
-import { isCommandDisabled } from './general.js';
+import { isMutationCommandDisabled } from './general.js';
 import type { ToolbarContext } from '../types.js';
 
 // SD-3213f: prefer the narrow `superdoc.getComment(id)` method when
@@ -43,7 +43,7 @@ const enrichTrackedChanges = (trackedChanges: Array<Record<string, any>> = [], s
 export const createTrackChangesSelectionActionStateDeriver =
   (action: 'accept' | 'reject') =>
   ({ context, superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any> }) => {
-    if (isCommandDisabled(context)) {
+    if (isMutationCommandDisabled(context)) {
       return {
         active: false,
         disabled: true,

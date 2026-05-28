@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc - Layered CSS (DOCX + PDF)</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="controls">
+          <label>
+            Document
+            <input id="file-input" type="file" accept=".docx,.pdf" />
+          </label>
+          <label>
+            Mode
+            <select id="mode-select">
+              <option value="editing">editing</option>
+              <option value="viewing">viewing</option>
+              <option value="suggesting">suggesting</option>
+            </select>
+          </label>
+          <button id="reload-btn" type="button">Reload</button>
+        </div>
+        <p id="status" class="status">Load a .docx or .pdf file to validate layered styling.</p>
+      </header>
+      <div id="toolbar" class="toolbar-host"></div>
+
+      <main id="editor" class="editor"></main>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

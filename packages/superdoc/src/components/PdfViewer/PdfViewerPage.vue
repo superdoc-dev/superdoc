@@ -292,6 +292,7 @@ onBeforeUnmount(() => {
   /* border: 9px solid transparent; */
   background-clip: content-box;
   background-color: #fff;
+  box-shadow: none;
   box-sizing: content-box;
   margin: 0 0 calc(var(--scale-factor) * 10px);
 }

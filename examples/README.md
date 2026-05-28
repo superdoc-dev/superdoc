@@ -64,6 +64,7 @@ Patterns for the browser editor surface.
 | Example | Docs |
 |---------|------|
 | [theming](./editor/theming) | [docs](https://docs.superdoc.dev/editor/theming/overview) |
+| [layered-docx-pdf](./editor/layered-docx-pdf) | layered stylesheet validation for DOCX + PDF |
 
 ### Spell check
 

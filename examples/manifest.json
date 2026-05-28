@@ -255,6 +255,21 @@
     "ci": false
   },
   {
+    "id": "editor-theming-layered-docx-pdf",
+    "section": "editor",
+    "subsection": "theming",
+    "kind": "minimal-example",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Layered CSS (DOCX + PDF)",
+    "category": "Editor",
+    "surface": "Theming",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/layered-docx-pdf",
+    "docs": "https://docs.superdoc.dev/editor/theming/overview",
+    "ci": false
+  },
+  {
     "id": "editor-spell-check-typo-js",
     "section": "editor",
     "subsection": "spell-check",

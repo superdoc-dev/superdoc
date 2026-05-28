@@ -2087,6 +2087,19 @@ importers:
         specifier: npm:rolldown-vite@7.3.1
         version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
+  examples/editor/layered-docx-pdf:
+    dependencies:
+      pdfjs-dist:
+        specifier: ^5.4.296
+        version: 5.7.284
+      superdoc:
+        specifier: workspace:*
+        version: link:../../../packages/superdoc
+    devDependencies:
+      vite:
+        specifier: npm:rolldown-vite@7.3.1
+        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
   examples/editor/spell-check/language-tool-self-hosted:
     dependencies:
       react:
@@ -46771,7 +46784,7 @@ snapshots:
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       terser: 5.46.1
-      webpack: 5.105.4(esbuild@0.27.7)(webpack-cli@5.1.4)
+      webpack: 5.105.4(esbuild@0.27.7)(webpack-cli@6.0.1)
     optionalDependencies:
       esbuild: 0.27.7
 

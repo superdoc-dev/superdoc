@@ -1,6 +1,7 @@
 // @ts-check
 import { NodeSelection, TextSelection, AllSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
+import { Attribute } from '@core/Attribute.js';
 import { defaultBlockAt } from '@core/helpers/defaultBlockAt.js';
 import { getSplitRunProperties, syncSplitParagraphRunProperties } from '@core/helpers/splitParagraphRunProperties.js';
 import {
@@ -94,15 +95,8 @@ export function splitBlockPatch(state, dispatch, editor) {
         atStart = $from.start(d) == $from.pos - ($from.depth - d);
         deflt = defaultBlockAt($from.node(d - 1).contentMatchAt($from.indexAfter(d - 1)));
         const sourceParagraphStyleId = node.attrs?.paragraphProperties?.styleId;
-        paragraphAttrs = /** @type {Record<string, unknown>} */ ({
-          ...node.attrs,
-          // Ensure newly created block gets a fresh ID (block-node plugin assigns one)
-          sdBlockId: null,
-          sdBlockRev: null,
-          // Reset DOCX identifiers on split to avoid duplicate paragraph IDs
-          paraId: null,
-          textId: null,
-        });
+        const extensionAttrs = editor?.extensionService?.attributes ?? [];
+        paragraphAttrs = Attribute.getSplittedAttributes(extensionAttrs, node.type.name, node.attrs);
         paragraphAttrs = clearInheritedLinkedStyleId(paragraphAttrs, editor, { emptyParagraph: atEnd });
 
         // When splitting at the end (creating an empty new paragraph), store the

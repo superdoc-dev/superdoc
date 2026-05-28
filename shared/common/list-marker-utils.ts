@@ -22,6 +22,9 @@ export type MinimalMarkerRun = {
   fontSize?: number;
   bold?: boolean;
   italic?: boolean;
+  color?: string;
+  letterSpacing?: number;
+  vanish?: boolean;
 };
 
 /**
@@ -43,9 +46,9 @@ export type MinimalMarker = {
   /** Width of the gutter between marker and text (used for center/right justification) */
   gutterWidthPx?: number;
   /** Marker justification: 'left', 'center', or 'right' */
-  justification?: string;
+  justification?: 'left' | 'center' | 'right';
   /** What follows the marker: 'tab', 'space', or 'nothing' */
-  suffix?: string;
+  suffix?: 'tab' | 'space' | 'nothing';
   /** The text content of the marker (for measurement if glyphWidthPx not available) */
   markerText?: string;
   /** Formatting information for the marker (for measurement if needed) */
@@ -62,6 +65,8 @@ export type MinimalWordLayout = {
   firstLineIndentMode?: boolean;
   /** Pre-calculated horizontal position where text should start */
   textStartPx?: number;
+  /** Left indent in pixels from word-layout marker positioning */
+  indentLeftPx?: number;
   /** Array of tab stop positions in pixels (for firstLineIndentMode) */
   tabsPx?: number[];
   /** Marker information */

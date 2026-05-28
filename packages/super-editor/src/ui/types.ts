@@ -75,6 +75,14 @@ export interface SuperDocEditorLike {
   off?(event: string, handler: (...args: unknown[]) => void): unknown;
   emit?(event: string, payload: unknown): void;
   /**
+   * Minimal editor options surface the controller reads today.
+   * Keep this narrow so test doubles do not need to model the full
+   * editor options bag.
+   */
+  options?: {
+    replacedFile?: boolean;
+  };
+  /**
    * Replace the current document file. Consumed by `ui.document.replaceFile`
    * to give consumers a typed import path without reaching into the host
    * instance. Optional in the structural typing so SSR / non-browser

@@ -12,6 +12,7 @@ import type {
   TableColumnBoundary,
   TableRowBoundary,
   ParagraphBlock,
+  SdtMetadata,
 } from '@superdoc/contracts';
 import type { FragmentRenderContext } from '../renderer.js';
 
@@ -167,6 +168,200 @@ describe('renderTableFragment', () => {
 
     expect(element.style.borderLeftWidth).toBe('2px');
     expect(element.style.borderRightWidth).toBe('3px');
+  });
+
+  it('suppresses child chrome when table containerSdt shares id-less metadata', () => {
+    const sharedSdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      alias: 'Shared Container',
+    };
+    const block: TableBlock = {
+      kind: 'table',
+      id: 'container-sdt-table' as BlockId,
+      attrs: {
+        containerSdt: sharedSdt,
+      },
+      rows: [
+        {
+          id: 'container-sdt-row' as BlockId,
+          cells: [
+            {
+              id: 'container-sdt-cell' as BlockId,
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  id: 'container-sdt-para' as BlockId,
+                  runs: [{ text: 'Shared', fontFamily: 'Arial', fontSize: 16 }],
+                  attrs: {
+                    containerSdt: sharedSdt,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const measure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  lines: [
+                    {
+                      fromRun: 0,
+                      fromChar: 0,
+                      toRun: 0,
+                      toChar: 6,
+                      width: 60,
+                      ascent: 12,
+                      descent: 4,
+                      lineHeight: 20,
+                    },
+                  ],
+                  totalHeight: 20,
+                },
+              ],
+              width: 100,
+              height: 20,
+              gridColumnStart: 0,
+              colSpan: 1,
+              rowSpan: 1,
+            },
+          ],
+          height: 20,
+        },
+      ],
+      columnWidths: [100],
+      totalWidth: 100,
+      totalHeight: 20,
+    };
+
+    const element = renderTableFragment({
+      doc,
+      fragment: createTestTableFragment(),
+      context,
+      block,
+      measure,
+      cellSpacingPx: 0,
+      effectiveColumnWidths: measure.columnWidths,
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {},
+      applySdtDataset: () => {},
+      applyStyles: (el, styles) => Object.assign(el.style, styles),
+    });
+
+    const chromeElements = [
+      ...(element.classList.contains('superdoc-structured-content-block') ? [element] : []),
+      ...Array.from(element.querySelectorAll('.superdoc-structured-content-block')),
+    ];
+    expect(chromeElements).toHaveLength(1);
+  });
+
+  it('preserves keyed ancestor suppression through an id-less table SDT', () => {
+    const idlessTableSdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      alias: 'Idless Table',
+    };
+    const outerSdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      id: 'outer-sdt',
+      alias: 'Outer',
+    };
+    const block: TableBlock = {
+      kind: 'table',
+      id: 'idless-nested-table' as BlockId,
+      attrs: {
+        sdt: idlessTableSdt,
+      },
+      rows: [
+        {
+          id: 'idless-nested-row' as BlockId,
+          cells: [
+            {
+              id: 'idless-nested-cell' as BlockId,
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  id: 'idless-nested-para' as BlockId,
+                  runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+                  attrs: {
+                    containerSdt: outerSdt,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const measure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  lines: [
+                    {
+                      fromRun: 0,
+                      fromChar: 0,
+                      toRun: 0,
+                      toChar: 6,
+                      width: 60,
+                      ascent: 12,
+                      descent: 4,
+                      lineHeight: 20,
+                    },
+                  ],
+                  totalHeight: 20,
+                },
+              ],
+              width: 100,
+              height: 20,
+              gridColumnStart: 0,
+              colSpan: 1,
+              rowSpan: 1,
+            },
+          ],
+          height: 20,
+        },
+      ],
+      columnWidths: [100],
+      totalWidth: 100,
+      totalHeight: 20,
+    };
+
+    const element = renderTableFragment({
+      doc,
+      fragment: createTestTableFragment(),
+      context,
+      block,
+      measure,
+      cellSpacingPx: 0,
+      effectiveColumnWidths: measure.columnWidths,
+      ancestorContainerKey: 'structuredContent:outer-sdt',
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {},
+      applySdtDataset: () => {},
+      applyStyles: (el, styles) => Object.assign(el.style, styles),
+    });
+
+    const chromeElements = [
+      ...(element.classList.contains('superdoc-structured-content-block') ? [element] : []),
+      ...Array.from(element.querySelectorAll('.superdoc-structured-content-block')),
+    ];
+    expect(chromeElements).toHaveLength(1);
+    expect(chromeElements[0].querySelector('.superdoc-structured-content__label')?.textContent).toBe('Idless Table');
   });
 
   describe('merged-cell border ownership', () => {

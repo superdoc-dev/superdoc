@@ -182,6 +182,12 @@ export function executeAnchoredMetadataList(
   if (query?.within !== undefined) {
     validateWithin(query.within, 'metadata.list');
   }
+  if (query?.resolvedOnly !== undefined && typeof query.resolvedOnly !== 'boolean') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `metadata.list 'resolvedOnly' must be a boolean when provided.`,
+    );
+  }
   return adapter.list(query);
 }
 

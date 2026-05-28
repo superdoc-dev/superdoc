@@ -238,9 +238,18 @@ describe('generateFieldColorCSS', () => {
     const css = generateFieldColorCSS({ signer: '#d97706' }, '.scope');
 
     expect(css).toContain('--sd-content-controls-block-border: #d97706;');
+    expect(css).toContain('--sd-content-controls-block-bg: color-mix(in srgb, #d97706 8%, transparent);');
     expect(css).toContain('--sd-content-controls-block-hover-border: #d97706;');
-    expect(css).toContain('--sd-content-controls-block-hover-bg: color-mix(in srgb, #d97706 8%, transparent);');
-    expect(css).toContain('--sd-content-controls-lock-hover-bg: color-mix(in srgb, #d97706 8%, transparent);');
+    expect(css).toContain('--sd-content-controls-block-hover-bg: color-mix(in srgb, #d97706 12%, transparent);');
+    expect(css).toContain('--sd-content-controls-inline-bg: color-mix(in srgb, #d97706 8%, transparent);');
+    expect(css).toContain('--sd-content-controls-lock-hover-bg: color-mix(in srgb, #d97706 12%, transparent);');
+  });
+
+  it('sets resting background variables for owner default rules', () => {
+    const css = generateFieldColorCSS({ owner: '#629be7' }, '.scope');
+
+    expect(css).toContain('--sd-content-controls-inline-bg: color-mix(in srgb, #629be7 8%, transparent);');
+    expect(css).toContain('--sd-content-controls-block-bg: color-mix(in srgb, #629be7 8%, transparent);');
   });
 
   it('keeps label text color configurable through the content control token', () => {

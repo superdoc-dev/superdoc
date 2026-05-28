@@ -61,3 +61,67 @@ describe('computeFingerprint', () => {
     expect(computeFingerprint(baseState)).not.toBe(computeFingerprint(changedState));
   });
 });
+
+describe('buildCanonicalDiffableState fingerprint stability', () => {
+  // SD-3279: two SuperDoc editor instances loaded from the same DOCX assign
+  // different session-local sdBlockId UUIDs. Including those in the body
+  // fingerprint makes diff.apply across instances throw PRECONDITION_FAILED.
+  // The fingerprint must be stable against sdBlockId / sdBlockRev divergence.
+  it('produces the same fingerprint for body trees that differ only in identity attrs (sdBlockId / sdBlockRev)', async () => {
+    const { buildCanonicalDiffableState } = await import('./canonicalize');
+    const { Schema } = await import('prosemirror-model');
+
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: {
+          group: 'block',
+          content: 'text*',
+          attrs: { sdBlockId: { default: null }, sdBlockRev: { default: null }, align: { default: 'left' } },
+        },
+        text: { group: 'inline' },
+      },
+    });
+
+    const makeDoc = (uuid: string, rev: number) =>
+      schema.nodes.doc.create(null, [
+        schema.nodes.paragraph.create({ sdBlockId: uuid, sdBlockRev: rev, align: 'left' }, schema.text('Hello')),
+      ]);
+
+    const stateA = buildCanonicalDiffableState(makeDoc('uuid-A', 1), [], null, null, null, null);
+    const stateB = buildCanonicalDiffableState(makeDoc('uuid-B', 99), [], null, null, null, null);
+
+    expect(computeFingerprint(stateA)).toBe(computeFingerprint(stateB));
+  });
+
+  // SD-3279 backward compatibility: the new and legacy normalizers must
+  // produce different fingerprints for a doc with sdBlockId on the body.
+  // The validation fallback relies on this to detect "this snapshot was
+  // captured under the old algorithm" — if the two were identical, the
+  // fallback path would be dead code.
+  it('legacy normalizer produces a different fingerprint than the current normalizer when sdBlockId is present', async () => {
+    const { buildCanonicalDiffableState, buildLegacyCanonicalDiffableState } = await import('./canonicalize');
+    const { Schema } = await import('prosemirror-model');
+
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: {
+          group: 'block',
+          content: 'text*',
+          attrs: { sdBlockId: { default: null }, align: { default: 'left' } },
+        },
+        text: { group: 'inline' },
+      },
+    });
+
+    const doc = schema.nodes.doc.create(null, [
+      schema.nodes.paragraph.create({ sdBlockId: 'session-uuid', align: 'left' }, schema.text('Hello')),
+    ]);
+
+    const current = computeFingerprint(buildCanonicalDiffableState(doc, [], null, null, null, null));
+    const legacy = computeFingerprint(buildLegacyCanonicalDiffableState(doc, [], null, null, null, null));
+
+    expect(current).not.toBe(legacy);
+  });
+});

@@ -48,6 +48,8 @@ const FONT_FAMILY_FALLBACKS = Object.freeze({
 const DEFAULT_GENERIC_FALLBACK = 'sans-serif';
 const DEFAULT_FONT_SIZE_PT = 10;
 const CURRENT_APP_VERSION = typeof __APP_VERSION__ === 'string' && __APP_VERSION__ ? __APP_VERSION__ : '0.0.0';
+const SUPERDOC_DOCUMENT_ORIGIN_PROPERTY = 'SuperdocDocumentOrigin';
+const STORED_DOCUMENT_ORIGINS = new Set(['word', 'google-docs', 'unknown', 'superdoc']);
 
 /**
  * Pull default run formatting (font family, size, kern) out of a DOCX run properties node.
@@ -211,6 +213,14 @@ class SuperConverter {
      * @type {{ replacements?: 'paired' | 'independent' } | null}
      */
     this.trackedChangesOptions = params?.trackedChangesOptions || null;
+
+    /**
+     * Word revision id allocator. Built lazily at export time; preserves
+     * imported decimal `w:id` values and mints fresh part-local decimal ids
+     * for native revisions / successor fragments.
+     * @type {import('@extensions/track-changes/review-model/word-id-allocator').WordIdAllocator | null}
+     */
+    this.wordIdAllocator = null;
 
     this.addedMedia = {};
     this.comments = [];
@@ -1270,6 +1280,13 @@ class SuperConverter {
 
     // Store SuperDoc version
     SuperConverter.setStoredSuperdocVersion(this.convertedXml);
+    const storedDocumentOrigin = STORED_DOCUMENT_ORIGINS.has(this.documentOrigin) ? this.documentOrigin : 'superdoc';
+    SuperConverter.setStoredCustomProperty(
+      this.convertedXml,
+      SUPERDOC_DOCUMENT_ORIGIN_PROPERTY,
+      storedDocumentOrigin,
+      false,
+    );
 
     // Store document GUID if document was modified
     if (this.documentModified || this.documentGuid) {
@@ -1303,6 +1320,7 @@ class SuperConverter {
     preserveSdtWrappers = false,
     statFieldCacheMap = undefined,
     existingRelationships = [],
+    partPath = 'word/document.xml',
   }) {
     const bodyNode = this.savedTagsToRestore.find((el) => el.name === 'w:body');
 
@@ -1340,6 +1358,7 @@ class SuperConverter {
       preserveSdtWrappers,
       statFieldCacheMap: resolvedCacheMap,
       existingRelationships,
+      currentPartPath: partPath,
     });
 
     return { result, params };
@@ -1500,6 +1519,7 @@ class SuperConverter {
         isHeaderFooter: true,
         isFinalDoc,
         existingRelationships,
+        partPath,
       });
 
       const bodyContent = result.elements[0].elements;
@@ -1566,6 +1586,7 @@ class SuperConverter {
         isHeaderFooter: true,
         isFinalDoc,
         existingRelationships,
+        partPath,
       });
 
       const bodyContent = result.elements[0].elements;

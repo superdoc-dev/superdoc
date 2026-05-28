@@ -7,6 +7,7 @@ import {
   MUTATING_OPERATION_IDS,
   OPERATION_IDS,
   buildInternalContractSchemas,
+  createDocumentApi,
   textReceiptToSDReceipt,
   type InlineRunPatchKey,
   type OperationId,
@@ -18,6 +19,7 @@ import {
 } from '../../extensions/track-changes/constants.js';
 import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
+import { assembleDocumentApiAdapters } from '../assemble-adapters.js';
 import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
 import { blocksDeleteWrapper, blocksDeleteRangeWrapper } from '../plan-engine/blocks-wrappers.js';
 import { clearContentWrapper } from '../plan-engine/clear-content-wrapper.js';
@@ -521,6 +523,56 @@ type MockParagraphNode = {
   textContent: string;
 };
 
+function resolveMockNodePosition(root: ProseMirrorNode, pos: number) {
+  const path: Array<{ node: ProseMirrorNode; start: number }> = [{ node: root, start: -1 }];
+
+  const walk = (node: ProseMirrorNode, contentStart: number): void => {
+    const children = ((node as unknown as { _children?: ProseMirrorNode[] })._children ?? []) as ProseMirrorNode[];
+    let offset = contentStart;
+
+    for (const child of children) {
+      const childStart = offset;
+      const childEnd = childStart + child.nodeSize;
+      if (pos >= childStart && pos < childEnd) {
+        path.push({ node: child, start: childStart });
+        const grandChildren = ((child as unknown as { _children?: ProseMirrorNode[] })._children ??
+          []) as ProseMirrorNode[];
+        if (grandChildren.length > 0) {
+          walk(child, childStart + 1);
+        }
+        return;
+      }
+      offset = childEnd;
+    }
+  };
+
+  walk(root, 0);
+
+  return {
+    depth: path.length - 1,
+    node(depth: number) {
+      return path[depth]?.node ?? root;
+    },
+    before(depth: number) {
+      return path[depth]?.start ?? 0;
+    },
+    start(depth: number) {
+      if (depth <= 0) return 0;
+      return (path[depth]?.start ?? 0) + 1;
+    },
+    end(depth: number) {
+      const entry = path[depth];
+      if (!entry) return 0;
+      return (path[depth]?.start ?? 0) + 1 + entry.node.content.size;
+    },
+    after(depth: number) {
+      const entry = path[depth];
+      if (!entry) return 0;
+      return (path[depth]?.start ?? 0) + entry.node.nodeSize;
+    },
+  };
+}
+
 function createNode(typeName: string, children: ProseMirrorNode[] = [], options: NodeOptions = {}): ProseMirrorNode {
   const attrs = options.attrs ?? {};
   const text = options.text ?? '';
@@ -600,8 +652,40 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
       }
       walk(children, 0);
     },
+    nodesBetween(from: number, to: number, callback: (node: ProseMirrorNode, pos: number) => boolean | void) {
+      function walk(kids: ProseMirrorNode[], startPos: number) {
+        let offset = startPos;
+        for (const child of kids) {
+          const childStart = offset;
+          const childEnd = childStart + child.nodeSize;
+          if (childEnd < from) {
+            offset = childEnd;
+            continue;
+          }
+          if (childStart > to) {
+            break;
+          }
+          const result = callback(child, childStart);
+          if (result !== false) {
+            const innerKids = (child as unknown as { _children?: ProseMirrorNode[] })._children;
+            if (innerKids && innerKids.length > 0) {
+              walk(innerKids, childStart + 1);
+            }
+          }
+          offset = childEnd;
+        }
+      }
+      walk(children, 0);
+    },
+    resolve(pos: number) {
+      return resolveMockNodePosition(node as unknown as ProseMirrorNode, pos);
+    },
   };
   return node as unknown as ProseMirrorNode;
+}
+
+function makeDocumentApiForEditor(editor: Editor) {
+  return createDocumentApi(assembleDocumentApiAdapters(editor));
 }
 
 function makeTextEditor(
@@ -768,6 +852,7 @@ function makeTextEditor(
     })),
     dispatch,
     ...overrides,
+    on: vi.fn(),
     schema: {
       marks: baseMarks,
       ...(overrides.schema ?? {}),
@@ -4464,6 +4549,53 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return styleApplyWrapper(
         editor,
         { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: 'on', italic: 'off' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  formatRange: {
+    throwCase: () => {
+      const { editor } = makeTextEditor();
+      const api = makeDocumentApiForEditor(editor);
+      return api.formatRange(
+        {
+          target: {
+            kind: 'selection',
+            start: { kind: 'text', blockId: 'missing', offset: 0 },
+            end: { kind: 'text', blockId: 'missing', offset: 1 },
+          },
+          properties: { bold: true },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const { editor } = makeTextEditor();
+      const api = makeDocumentApiForEditor(editor);
+      return api.formatRange(
+        {
+          target: {
+            kind: 'selection',
+            start: { kind: 'text', blockId: 'p1', offset: 2 },
+            end: { kind: 'text', blockId: 'p1', offset: 2 },
+          },
+          properties: { bold: true },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor();
+      const api = makeDocumentApiForEditor(editor);
+      return api.formatRange(
+        {
+          target: {
+            kind: 'selection',
+            start: { kind: 'text', blockId: 'p1', offset: 0 },
+            end: { kind: 'text', blockId: 'p1', offset: 5 },
+          },
+          properties: { bold: true, italic: false },
+        },
         { changeMode: 'direct' },
       );
     },
@@ -8965,6 +9097,24 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const result = styleApplyWrapper(
       editor,
       { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: 'on' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(tr.addMark).not.toHaveBeenCalled();
+    return result;
+  },
+  formatRange: () => {
+    const { editor, dispatch, tr } = makeTextEditor();
+    const api = makeDocumentApiForEditor(editor);
+    const result = api.formatRange(
+      {
+        target: {
+          kind: 'selection',
+          start: { kind: 'text', blockId: 'p1', offset: 0 },
+          end: { kind: 'text', blockId: 'p1', offset: 5 },
+        },
+        properties: { bold: true },
+      },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();

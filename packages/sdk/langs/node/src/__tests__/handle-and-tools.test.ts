@@ -16,7 +16,47 @@ describe('SuperDocDocument', () => {
 
     expect(typeof doc.getMarkdown).toBe('function');
     expect(typeof doc.query.match).toBe('function');
+    expect(typeof doc.formatRange).toBe('function');
     expect('api' in (doc as unknown as Record<string, unknown>)).toBe(false);
+  });
+
+  test('formatRange delegates to doc.format.apply with inline properties', async () => {
+    const calls: Array<{ operationId: string; params: unknown }> = [];
+    const boundRuntime = {
+      invoke: async (operation: { operationId: string }, params: unknown) => {
+        calls.push({ operationId: operation.operationId, params });
+        return { ok: true };
+      },
+      markClosed: () => {},
+    };
+    const client = { removeHandle: () => {} };
+
+    const doc = new SuperDocDocument(boundRuntime as any, 'session-1', { contextId: 'session-1' }, client as any);
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 5 },
+    };
+
+    const result = await doc.formatRange({
+      target,
+      properties: { bold: true, italic: false },
+      changeMode: 'tracked',
+      dryRun: true,
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(calls).toEqual([
+      {
+        operationId: 'doc.format.apply',
+        params: {
+          target,
+          inline: { bold: true, italic: false },
+          changeMode: 'tracked',
+          dryRun: true,
+        },
+      },
+    ]);
   });
 });
 

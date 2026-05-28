@@ -155,6 +155,53 @@ const testNonParagraphModify = () => {
 };
 
 /**
+ * SD-3279: replay must preserve the recipient editor's session-local
+ * sdBlockId on a non-paragraph attr update.
+ * @returns {void}
+ */
+const testNonParagraphPreservesRecipientSdBlockId = () => {
+  const schema = createSchema();
+  const recipientToc = createTableOfContents(schema, 'Contents', {
+    sdBlockId: 'recipient-uuid',
+  });
+  const doc = schema.nodes.doc.create(null, [recipientToc]);
+  const state = EditorState.create({ schema, doc });
+  const tr = state.tr;
+
+  const tocPos = findNodePos(doc, 'tableOfContents');
+  if (tocPos === null) {
+    throw new Error('Expected to find tableOfContents position for identity-preservation test.');
+  }
+
+  const sourceToc = createTableOfContents(schema, 'Contents', {
+    sdBlockId: 'source-uuid',
+    instruction: 'updated',
+  });
+
+  const diff = {
+    action: 'modified',
+    nodeType: 'tableOfContents',
+    oldNodeJSON: recipientToc.toJSON(),
+    newNodeJSON: sourceToc.toJSON(),
+    attrsDiff: {
+      added: {},
+      deleted: {},
+      modified: {
+        instruction: { from: null, to: 'updated' },
+      },
+    },
+    pos: tocPos,
+  };
+
+  const result = replayNonParagraphDiff({ tr, diff, schema });
+
+  expect(result.applied).toBe(1);
+  const updatedAttrs = tr.doc.child(0).attrs;
+  expect(updatedAttrs.sdBlockId).toBe('recipient-uuid');
+  expect(updatedAttrs.instruction).toBe('updated');
+};
+
+/**
  * Runs the non-paragraph diff replay suite.
  * @returns {void}
  */
@@ -162,6 +209,7 @@ const runNonParagraphSuite = () => {
   it('inserts a non-paragraph node using the diff position', testNonParagraphInsert);
   it('deletes a non-paragraph node at the diff position', testNonParagraphDelete);
   it('updates non-paragraph node attributes without replacing content', testNonParagraphModify);
+  it('preserves recipient sdBlockId on attr replay (SD-3279)', testNonParagraphPreservesRecipientSdBlockId);
 };
 
 describe('replayNonParagraphDiff', runNonParagraphSuite);

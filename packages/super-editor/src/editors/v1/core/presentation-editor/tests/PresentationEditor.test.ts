@@ -3323,6 +3323,28 @@ describe('PresentationEditor', () => {
       expect(sessionEditor?.view.focus).toHaveBeenCalled();
     });
 
+    it('uses the public Word tracked-change id during story navigation when the note session supports it', async () => {
+      const { sessionEditor } = await activateFootnoteSession();
+      const setCursorById = vi.fn((id: string) => id === 'word:trackInsert:101');
+      if (sessionEditor?.commands) {
+        sessionEditor.commands.setCursorById = setCursorById;
+      }
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'word:trackInsert:101',
+        story: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(setCursorById).toHaveBeenCalledTimes(1);
+      expect(setCursorById).toHaveBeenCalledWith('word:trackInsert:101', {
+        preferredActiveThreadId: 'word:trackInsert:101',
+      });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
+    });
+
     it('falls back to rendered tracked-change stamps for inactive non-body stories', async () => {
       const { viewport } = await prepareFootnoteEditor();
       const page = document.createElement('div');

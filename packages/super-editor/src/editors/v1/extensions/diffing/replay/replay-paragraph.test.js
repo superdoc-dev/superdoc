@@ -192,6 +192,58 @@ const testParagraphAttrsModify = () => {
 };
 
 /**
+ * SD-3279: replay must not overwrite the recipient editor's session-local
+ * sdBlockId. The diff carries only the semantic delta; the recipient keeps
+ * its own block identity.
+ *
+ * Before the fix, replay called setNodeMarkup with the source's full attrs
+ * (including its sdBlockId), which silently replaced the recipient's ID.
+ * @returns {void}
+ */
+const testParagraphAttrsPreservesRecipientSdBlockId = () => {
+  const schema = createSchema();
+  const recipientParagraph = schema.nodes.paragraph.create(
+    { sdBlockId: 'recipient-uuid', sdBlockRev: 7 },
+    schema.text('Hello'),
+  );
+  const doc = schema.nodes.doc.create(null, [recipientParagraph]);
+  const state = EditorState.create({ schema, doc });
+  const tr = state.tr;
+
+  const paragraphPos = findParagraphPos(doc);
+  const sourceParagraph = schema.nodes.paragraph.create(
+    { sdBlockId: 'source-uuid', sdBlockRev: 42, paragraphProperties: { styleId: 'Heading1' } },
+    schema.text('Hello'),
+  );
+
+  const diff = {
+    action: 'modified',
+    nodeType: 'paragraph',
+    pos: paragraphPos,
+    oldText: 'Hello',
+    newText: 'Hello',
+    oldNodeJSON: recipientParagraph.toJSON(),
+    newNodeJSON: sourceParagraph.toJSON(),
+    contentDiff: [],
+    attrsDiff: {
+      added: {},
+      deleted: {},
+      modified: {
+        'paragraphProperties.styleId': { from: null, to: 'Heading1' },
+      },
+    },
+  };
+
+  const result = replayParagraphDiff({ tr, diff, schema });
+
+  expect(result.applied).toBe(1);
+  const updatedAttrs = tr.doc.child(0).attrs;
+  expect(updatedAttrs.sdBlockId).toBe('recipient-uuid');
+  expect(updatedAttrs.sdBlockRev).toBe(7);
+  expect(updatedAttrs.paragraphProperties?.styleId).toBe('Heading1');
+};
+
+/**
  * Runs the paragraph replay helper suite.
  * @returns {void}
  */
@@ -200,6 +252,7 @@ const runParagraphReplaySuite = () => {
   it('deletes a paragraph', testParagraphDelete);
   it('modifies a paragraph with inline diffs', testParagraphInlineModify);
   it('updates paragraph attributes', testParagraphAttrsModify);
+  it('preserves recipient sdBlockId on attr replay (SD-3279)', testParagraphAttrsPreservesRecipientSdBlockId);
 };
 
 describe('replayParagraphDiff', runParagraphReplaySuite);

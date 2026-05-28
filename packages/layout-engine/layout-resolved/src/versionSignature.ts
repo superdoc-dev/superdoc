@@ -18,6 +18,7 @@ import {
   type TableAttrs,
   type TableBlock,
   type TableCellAttrs,
+  type TrackedChangeMeta,
   type TextRun,
   type VectorShapeDrawing,
 } from '@superdoc/contracts';
@@ -54,6 +55,32 @@ const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string
   return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
 };
 
+const getTrackedChangeLayers = (run: TextRun): TrackedChangeMeta[] => {
+  if (Array.isArray(run.trackedChanges) && run.trackedChanges.length > 0) {
+    return run.trackedChanges;
+  }
+  return run.trackedChange ? [run.trackedChange] : [];
+};
+
+const trackedChangeVersion = (run: TextRun): string =>
+  getTrackedChangeLayers(run)
+    .map((trackedChange) =>
+      [
+        trackedChange.kind ?? '',
+        trackedChange.id ?? '',
+        trackedChange.storyKey ?? '',
+        trackedChange.overlapParentId ?? '',
+        trackedChange.relationship ?? '',
+        trackedChange.author ?? '',
+        trackedChange.authorEmail ?? '',
+        trackedChange.authorImage ?? '',
+        trackedChange.date ?? '',
+        trackedChange.before ? JSON.stringify(trackedChange.before) : '',
+        trackedChange.after ? JSON.stringify(trackedChange.after) : '',
+      ].join(':'),
+    )
+    .join('|');
+
 // ---------------------------------------------------------------------------
 // Clip path helpers
 // ---------------------------------------------------------------------------
@@ -80,6 +107,60 @@ const resolveBlockClipPath = (block: unknown): string => {
   const record = block as Record<string, unknown>;
   return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
 };
+
+const imageHyperlinkVersion = (hyperlink: ImageBlock['hyperlink'] | undefined): string => {
+  if (!hyperlink) return '';
+  return JSON.stringify([hyperlink.url ?? '', hyperlink.tooltip ?? '']);
+};
+
+const imageLuminanceVersion = (lum: ImageBlock['lum'] | undefined): string => {
+  if (!lum) return '';
+  return [lum.bright ?? '', lum.contrast ?? ''].join(':');
+};
+
+const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
+  [
+    image.src ?? '',
+    image.width ?? '',
+    image.height ?? '',
+    image.alt ?? '',
+    image.title ?? '',
+    image.objectFit ?? '',
+    image.display ?? '',
+    image.gain ?? '',
+    image.blacklevel ?? '',
+    image.grayscale ? 1 : 0,
+    imageLuminanceVersion(image.lum),
+    image.rotation ?? '',
+    image.flipH ? 1 : 0,
+    image.flipV ? 1 : 0,
+    imageHyperlinkVersion(image.hyperlink),
+    resolveBlockClipPath(image),
+  ].join('|');
+
+const renderedInlineImageRunVersion = (image: ImageRun): string =>
+  [
+    'img',
+    image.src ?? '',
+    image.width ?? '',
+    image.height ?? '',
+    image.alt ?? '',
+    image.title ?? '',
+    typeof image.clipPath === 'string' ? image.clipPath.trim() : '',
+    image.distTop ?? '',
+    image.distBottom ?? '',
+    image.distLeft ?? '',
+    image.distRight ?? '',
+    image.verticalAlign ?? '',
+    image.gain ?? '',
+    image.blacklevel ?? '',
+    image.grayscale ? 1 : 0,
+    imageLuminanceVersion(image.lum),
+    image.rotation ?? '',
+    image.flipH ? 1 : 0,
+    image.flipV ? 1 : 0,
+    imageHyperlinkVersion(image.hyperlink),
+  ].join('|');
 
 // ---------------------------------------------------------------------------
 // List marker validation
@@ -203,9 +284,8 @@ export const resolveFragmentLayoutIdentity = (fragment: Fragment, story?: Layout
  * This version string is used for cache invalidation. When any visual property of the block
  * changes, the version string changes, triggering a DOM rebuild instead of reusing cached elements.
  *
- * Duplicated from painters/dom/src/renderer.ts to allow the resolved layout stage to
- * pre-compute block versions without depending on painter-dom. Keep the two copies in sync
- * until the painter fully migrates to resolved versions.
+ * Kept in layout-resolved so the resolved layout stage can pre-compute block
+ * versions without depending on painter-dom.
  */
 export const deriveBlockVersion = (block: FlowBlock): string => {
   if (block.kind === 'paragraph') {
@@ -216,21 +296,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
     const runsVersion = block.runs
       .map((run) => {
         if (run.kind === 'image') {
-          const imgRun = run as ImageRun;
-          return [
-            'img',
-            imgRun.src,
-            imgRun.width,
-            imgRun.height,
-            imgRun.alt ?? '',
-            imgRun.title ?? '',
-            imgRun.clipPath ?? '',
-            imgRun.distTop ?? '',
-            imgRun.distBottom ?? '',
-            imgRun.distLeft ?? '',
-            imgRun.distRight ?? '',
-            readClipPathValue((imgRun as { clipPath?: unknown }).clipPath),
-          ].join(',');
+          return renderedInlineImageRunVersion(run as ImageRun);
         }
 
         if (run.kind === 'lineBreak') {
@@ -271,6 +337,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         }
 
         const textRun = run as TextRun;
+        const trackedVersion = trackedChangeVersion(textRun);
         return [
           textRun.text ?? '',
           textRun.fontFamily,
@@ -286,7 +353,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
           textRun.vertAlign ?? '',
           textRun.baselineShift != null ? textRun.baselineShift : '',
           textRun.token ?? '',
-          textRun.trackedChange ? 1 : 0,
+          trackedVersion,
           textRun.comments?.length ?? 0,
           // SD-3098: DomPainter reads run.bidi to apply dir + RLM injection; signature must include it.
           textRun.bidi ? JSON.stringify(textRun.bidi) : '',
@@ -329,28 +396,13 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
   if (block.kind === 'image') {
     const imgSdt = (block as ImageBlock).attrs?.sdt;
     const imgSdtVersion = getSdtMetadataVersion(imgSdt);
-    return [
-      block.src ?? '',
-      block.width ?? '',
-      block.height ?? '',
-      block.alt ?? '',
-      block.title ?? '',
-      resolveBlockClipPath(block),
-      imgSdtVersion,
-    ].join('|');
+    return [renderedBlockImageVersion(block), imgSdtVersion].join('|');
   }
 
   if (block.kind === 'drawing') {
     if (block.drawingKind === 'image') {
       const imageLike = block as ImageDrawing;
-      return [
-        'drawing:image',
-        imageLike.src ?? '',
-        imageLike.width ?? '',
-        imageLike.height ?? '',
-        imageLike.alt ?? '',
-        resolveBlockClipPath(imageLike),
-      ].join('|');
+      return ['drawing:image', renderedBlockImageVersion(imageLike)].join('|');
     }
     if (block.drawingKind === 'vectorShape') {
       const vector = block as VectorShapeDrawing;
@@ -461,6 +513,13 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
             }
 
             for (const run of runs) {
+              if (run.kind === 'image') {
+                hash = hashString(hash, renderedInlineImageRunVersion(run as ImageRun));
+                hash = hashNumber(hash, run.pmStart ?? -1);
+                hash = hashNumber(hash, run.pmEnd ?? -1);
+                continue;
+              }
+
               if ('text' in run && typeof run.text === 'string') {
                 hash = hashString(hash, run.text);
               }
@@ -481,7 +540,10 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
               // SD-3098: include run.bidi so rtl-only changes invalidate the cached block hash.
               const bidi = (run as { bidi?: unknown }).bidi;
               hash = hashString(hash, bidi ? JSON.stringify(bidi) : '');
+              hash = hashString(hash, trackedChangeVersion(run as TextRun));
             }
+          } else if (cellBlock?.kind) {
+            hash = hashString(hash, deriveBlockVersion(cellBlock as FlowBlock));
           }
         }
       }

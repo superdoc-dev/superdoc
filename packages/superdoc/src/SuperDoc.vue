@@ -47,12 +47,19 @@ import AiLayer from './components/AiLayer/AiLayer.vue';
 import { useSelectedText } from './composables/use-selected-text';
 import { useAi } from './composables/use-ai';
 import { useHighContrastMode } from './composables/use-high-contrast-mode';
+import { useCommentSmallScreen } from './composables/use-comment-small-screen.js';
+import { useCompactCommentPopover } from './composables/use-compact-comment-popover.js';
 import { getVisibleThreadAnchorClientY } from './helpers/comment-focus.js';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
 import { usePasswordPrompt } from './composables/use-password-prompt.js';
 import { useFindReplace } from './composables/use-find-replace.js';
 import { collectTouchedTrackedChangeIds } from './helpers/collect-touched-tracked-change-ids.js';
 import SurfaceHost from './components/surfaces/SurfaceHost.vue';
+import {
+  DEFAULT_COMMENTS_DISPLAY_MODE,
+  RIGHT_CLICK_COMMENT_SUPPRESS_MS,
+  VALID_COMMENTS_DISPLAY_MODES,
+} from './helpers/comment-small-screen.js';
 
 const PdfViewer = defineAsyncComponent(() => import('./components/PdfViewer/PdfViewer.vue'));
 const getDocumentLoadPassword = (doc) => doc.password ?? proxy.$superdoc.config.password;
@@ -212,10 +219,20 @@ const superdocRoot = ref(null);
 const layers = ref(null);
 const pdfViewerRef = ref(null);
 const pendingReplayTrackedChangeSync = ref(false);
+const toolsMenuPosition = reactive({ top: null, right: '-25px', zIndex: 101 });
+const {
+  superdocContainerWidth,
+  isCompactCommentsMode,
+  recalculateCompactCommentsMode,
+  ensureCompactMeasurementObserver,
+} = useCommentSmallScreen({
+  commentsModuleConfig,
+  superdocRoot,
+  layers,
+});
 
 // Comments layer
 const commentsLayer = ref(null);
-const toolsMenuPosition = reactive({ top: null, right: '-25px', zIndex: 101 });
 
 // Create a ref to pass to the composable
 const activeEditorRef = computed(() => proxy.$superdoc.activeEditor);
@@ -373,6 +390,7 @@ const onCommentsLoaded = ({ editor, comments, replacedFile }) => {
         editor,
         comments,
         documentId: editor.options.documentId,
+        replacedFile,
       });
     });
   }
@@ -712,6 +730,26 @@ const onEditorListdefinitionsChange = (params) => {
   proxy.$superdoc.emit('list-definitions-change', params);
 };
 
+let suppressCommentActivationUntilTs = 0;
+
+const markContextMenuOpen = () => {
+  suppressCommentActivationUntilTs = Date.now() + RIGHT_CLICK_COMMENT_SUPPRESS_MS;
+};
+
+const shouldSuppressCommentActivation = () => Date.now() < suppressCommentActivationUntilTs;
+
+const handleDocumentContextMenu = (event) => {
+  const root = superdocRoot.value;
+  if (!root) return;
+  if (!(event.target instanceof Node) || !root.contains(event.target)) return;
+  if (layers.value?.contains(event.target)) {
+    commentsStore.setActiveComment(proxy.$superdoc, null);
+    commentsStore.removePendingComment(proxy.$superdoc);
+    resetClickAnchor();
+  }
+  markContextMenuOpen();
+};
+
 const editorOptions = (doc) => {
   // We only want to run the font check if the user has provided a callback
   // The font check might request extra permissions, and we don't want to run it unless the developer has requested it
@@ -864,8 +902,13 @@ const REPLAY_MUTABLE_COMMENT_FIELDS = new Set([
   'trackedChangeType',
   'trackedChangeText',
   'trackedChangeDisplayType',
+  'trackedChangeStory',
+  'trackedChangeStoryKind',
+  'trackedChangeStoryLabel',
+  'trackedChangeAnchorKey',
   'deletedText',
   'resolvedTime',
+  'resolvedById',
   'resolvedByEmail',
   'resolvedByName',
   'importedAuthor',
@@ -874,18 +917,27 @@ const REPLAY_MUTABLE_COMMENT_FIELDS = new Set([
 
 const applyReplayIsDoneResolutionFallback = (target, payload = {}) => {
   if (!target || payload.isDone === undefined) return;
-  if (payload.resolvedTime != null || payload.resolvedByEmail != null || payload.resolvedByName != null) return;
+  if (
+    payload.resolvedTime != null ||
+    payload.resolvedById != null ||
+    payload.resolvedByEmail != null ||
+    payload.resolvedByName != null
+  ) {
+    return;
+  }
 
   // Imported replay payloads often use `isDone` while resolved fields remain null.
   // When resolved fields are not explicitly populated, derive sidebar/export state from `isDone`.
   if (payload.isDone) {
     target.resolvedTime = target.resolvedTime || Date.now();
+    target.resolvedById = target.resolvedById || payload.creatorId || null;
     target.resolvedByEmail = target.resolvedByEmail || payload.creatorEmail || null;
     target.resolvedByName = target.resolvedByName || payload.creatorName || null;
     return;
   }
 
   target.resolvedTime = null;
+  target.resolvedById = null;
   target.resolvedByEmail = null;
   target.resolvedByName = null;
 };
@@ -1005,6 +1057,7 @@ const onEditorCommentsUpdate = (params = {}) => {
 
     const currentUser = proxy.$superdoc?.user;
     if (currentUser) {
+      if (!commentPayload.creatorId) commentPayload.creatorId = currentUser.id;
       if (!commentPayload.creatorName) commentPayload.creatorName = currentUser.name;
       if (!commentPayload.creatorEmail) commentPayload.creatorEmail = currentUser.email;
     }
@@ -1128,6 +1181,10 @@ const onEditorCommentsUpdate = (params = {}) => {
     handleTrackedChangeUpdate({ superdoc: proxy.$superdoc, params });
   }
 
+  if (shouldSyncActiveComment && activeCommentId != null && shouldSuppressCommentActivation()) {
+    shouldSyncActiveComment = false;
+  }
+
   if (shouldSyncActiveComment && (activeCommentId == null || !isSameActiveCommentSelection(activeCommentId))) {
     syncInstantSidebarAlignmentFromEditorSelection(activeCommentId);
   }
@@ -1210,8 +1267,18 @@ const onEditorTransaction = (payload = {}) => {
 };
 
 const isCommentsEnabled = computed(() => Boolean(commentsModuleConfig.value));
+const shouldUseSidebarComments = computed(() => {
+  const displayMode = commentsModuleConfig.value?.displayMode ?? DEFAULT_COMMENTS_DISPLAY_MODE;
+  if (!VALID_COMMENTS_DISPLAY_MODES.has(displayMode)) return true;
+  if (displayMode === 'sidebar') return true;
+  if (displayMode === 'inline') return false;
+  // Backward-compatible default: keep sidebar unless integrator explicitly opts into auto.
+  if (displayMode !== 'auto') return true;
+  return !isCompactCommentsMode.value;
+});
 const showCommentsSidebar = computed(() => {
   if (!shouldRenderCommentsInViewing.value) return false;
+  if (!shouldUseSidebarComments.value) return false;
   return (
     pendingComment.value ||
     (floatingComments.value.length > 0 &&
@@ -1221,7 +1288,27 @@ const showCommentsSidebar = computed(() => {
       !isCommentsListVisible.value)
   );
 });
-
+const activeCompactComment = computed(() => {
+  if (showCommentsSidebar.value) return null;
+  if (!isCommentsEnabled.value) return null;
+  if (pendingComment.value) return pendingComment.value;
+  if (!activeComment.value) return null;
+  return getComment(activeComment.value) ?? null;
+});
+const { compactCommentPopoverStyle, closeCompactCommentPopover, resetClickAnchor } = useCompactCommentPopover({
+  activeComment,
+  pendingComment,
+  activeCompactComment,
+  showCommentsSidebar,
+  superdocRoot,
+  layers,
+  documents,
+  resolveCommentPositionEntry,
+  selectionPosition,
+  activeZoom,
+  clearActiveComment: () => commentsStore.setActiveComment(proxy.$superdoc, null),
+  clearPendingComment: () => commentsStore.removePendingComment(proxy.$superdoc),
+});
 const showToolsFloatingMenu = computed(() => {
   if (!isCommentsEnabled.value) return false;
   return selectionPosition.value && toolsMenuPosition.top && !getConfig.value?.readOnly;
@@ -1230,7 +1317,6 @@ const showActiveSelection = computed(() => {
   if (!isCommentsEnabled.value) return false;
   return !getConfig.value?.readOnly && selectionPosition.value;
 });
-
 watch(showCommentsSidebar, (value) => {
   proxy.$superdoc.broadcastSidebarToggle(value);
 });
@@ -1249,7 +1335,11 @@ onMounted(() => {
   if (config && !config.readOnly) {
     document.addEventListener('mousedown', handleDocumentMouseDown);
   }
+  document.addEventListener('contextmenu', handleDocumentContextMenu, true);
   document.addEventListener('keydown', handleDocumentShortcut, true);
+
+  recalculateCompactCommentsMode();
+  ensureCompactMeasurementObserver();
 });
 
 function isFindShortcutEvent(e) {
@@ -1304,6 +1394,12 @@ function handleFormattingMarksShortcut(e) {
  * do not always leave keyboard focus on a node that bubbles through the root.
  */
 function handleDocumentShortcut(e) {
+  if (e.key === 'Escape' && activeCompactComment.value) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeCompactCommentPopover();
+    return;
+  }
   handleFindShortcut(e);
   if (e.defaultPrevented) return;
   handleFormattingMarksShortcut(e);
@@ -1319,6 +1415,7 @@ onBeforeUnmount(() => {
   passwordPrompt.destroy();
   findReplace.destroy();
   document.removeEventListener('mousedown', handleDocumentMouseDown);
+  document.removeEventListener('contextmenu', handleDocumentContextMenu, true);
   document.removeEventListener('keydown', handleDocumentShortcut, true);
   if (selectionUpdateRafId != null) {
     cancelAnimationFrame(selectionUpdateRafId);
@@ -1742,6 +1839,10 @@ const getPDFViewer = () => {
       </div>
     </div>
 
+    <div v-if="activeCompactComment" class="superdoc__compact-comment-popover" :style="compactCommentPopoverStyle">
+      <CommentDialog :comment="activeCompactComment" :parent="layers" />
+    </div>
+
     <!-- AI Writer at cursor position -->
     <div class="ai-writer-container" v-if="showAiWriter" :style="aiWriterPosition">
       <AIWriter
@@ -1835,6 +1936,14 @@ const getPDFViewer = () => {
   z-index: 2;
 }
 
+.superdoc__compact-comment-popover {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 11;
+  width: min(320px, calc(100% - 24px));
+}
+
 /* Tools styles */
 .tools {
   position: absolute;
@@ -1887,7 +1996,6 @@ const getPDFViewer = () => {
 
   .superdoc__right-sidebar {
     padding: 10px;
-    width: 55px;
     position: relative;
   }
 }

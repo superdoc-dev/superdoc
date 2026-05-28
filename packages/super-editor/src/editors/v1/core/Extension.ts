@@ -4,6 +4,9 @@ import type { MaybeGetter } from './utilities/callOrGet.js';
 
 /**
  * Base configuration for extensions.
+ *
+ * @typeParam Options - Type for extension options.
+ * @typeParam Storage - Type for extension storage.
  */
 export interface ExtensionConfig<
   Options extends Record<string, unknown> = Record<string, never>,
@@ -24,8 +27,6 @@ export interface ExtensionConfig<
 
 /**
  * Extension class is used to create extensions.
- * @template Options - Type for extension options
- * @template Storage - Type for extension storage
  */
 export class Extension<
   Options extends Record<string, unknown> = Record<string, never>,

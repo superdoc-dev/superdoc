@@ -1232,6 +1232,33 @@ describe('Table commands', async () => {
         });
       });
     });
+
+    it('does not duplicate paraId when splitting the trailing paragraph', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      const pos = editor.state.doc.content.size;
+      editor.commands.insertTableAt({ pos, rows: 2, columns: 2 });
+
+      const doc = editor.state.doc;
+      const trailingParagraph = doc.child(doc.childCount - 1);
+      expect(trailingParagraph.type.name).toBe('paragraph');
+      expect(trailingParagraph.attrs.paraId).toMatch(/^[0-9A-F]{8}$/);
+
+      const trailingParagraphPos = doc.content.size - trailingParagraph.nodeSize;
+      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(doc, trailingParagraphPos + 1)));
+
+      expect(editor.commands.splitBlock()).toBe(true);
+
+      const paraIds = [];
+      editor.state.doc.descendants((node) => {
+        if (node.type.name === 'paragraph' && node.attrs.paraId) {
+          paraIds.push(node.attrs.paraId);
+        }
+      });
+
+      expect(new Set(paraIds).size).toBe(paraIds.length);
+    });
   });
 
   describe('insertTable trailing separator paragraph', () => {

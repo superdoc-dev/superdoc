@@ -260,6 +260,22 @@ describe('SuperDoc core', () => {
     expect(commentsStore.init).toHaveBeenCalledWith({});
   });
 
+  it('falls back to hidden comments when top-level comments config is null', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      comments: null,
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(instance.config.comments).toEqual({ visible: false });
+  });
+
   it('relays store exception payloads through the public exception event', async () => {
     const { superdocStore } = createAppHarness();
     const onException = vi.fn();
@@ -311,7 +327,6 @@ describe('SuperDoc core', () => {
 
   it('keeps toolbarGroups separate from toolbar group item mappings', async () => {
     createAppHarness();
-
     const instance = new SuperDoc({
       selector: '#host',
       document: 'https://example.com/doc.docx',
@@ -331,6 +346,54 @@ describe('SuperDoc core', () => {
     expect(instance.toolbar.config.groups).toEqual({ custom: ['bold', 'italic'] });
   });
 
+  it('keeps valid compact comments policy fields', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: {
+        comments: {
+          displayMode: 'inline',
+          compactBreakpointPx: 760,
+          compactMeasurementSelector: '  #shell-main  ',
+        },
+        toolbar: {},
+      },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(instance.config.modules.comments).toMatchObject({
+      displayMode: 'inline',
+      compactBreakpointPx: 760,
+      compactMeasurementSelector: '#shell-main',
+    });
+  });
+
+  it('normalizes invalid compact comments policy fields', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: {
+        comments: {
+          displayMode: 'unexpected-mode',
+          compactBreakpointPx: -10,
+          compactMeasurementSelector: '   ',
+        },
+        toolbar: {},
+      },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(instance.config.modules.comments.displayMode).toBeUndefined();
+    expect(instance.config.modules.comments.compactBreakpointPx).toBeUndefined();
+    expect(instance.config.modules.comments.compactMeasurementSelector).toBeUndefined();
+  });
+
   it('creates a default user when none is provided', async () => {
     createAppHarness();
 
@@ -339,6 +402,24 @@ describe('SuperDoc core', () => {
       document: 'https://example.com/doc.docx',
       documents: [],
       modules: { comments: {}, toolbar: {} },
+    });
+
+    await flushMicrotasks();
+
+    expect(instance.config.user).toEqual(expect.objectContaining({ name: 'Default SuperDoc user', email: null }));
+    expect(instance.user).toEqual(expect.objectContaining({ name: 'Default SuperDoc user', email: null }));
+  });
+
+  it('falls back to the default user when config.user is null', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      user: null,
+      onException: vi.fn(),
     });
 
     await flushMicrotasks();
@@ -895,6 +976,37 @@ describe('SuperDoc core', () => {
     expect(results).toEqual([originalBlob]);
   });
 
+  it('drops non-DOCX fallback data when an editor export yields no blob', async () => {
+    const { superdocStore } = createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const exportDocxMock = vi.fn().mockResolvedValue(undefined);
+
+    instance.superdocStore.documents = [
+      {
+        id: 'doc-1',
+        type: DOCX,
+        data: new Blob(['pdf'], { type: PDF }),
+        getEditor: () => ({ exportDocx: exportDocxMock }),
+      },
+    ];
+
+    const results = await instance.exportEditorsToDOCX();
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([]);
+  });
+
   it('passes comments: undefined when the UI store is unhydrated (modules.comments: false)', async () => {
     // Regression for the Custom UI story. With the built-in comments
     // module disabled, the UI store never holds the imported
@@ -1431,6 +1543,36 @@ describe('SuperDoc core', () => {
     expect(setDocumentMode).toHaveBeenLastCalledWith('viewing');
   });
 
+  it('applies suggesting mode when the role permits suggestions', async () => {
+    const { superdocStore } = createAppHarness();
+    const restoreComments = vi.fn();
+    const setDocumentMode = vi.fn();
+    const docStub = {
+      removeComments: vi.fn(),
+      restoreComments,
+      getEditor: vi.fn(() => ({ setDocumentMode })),
+      getPresentationEditor: vi.fn(() => null),
+    };
+    superdocStore.documents = [docStub];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    instance.setDocumentMode('suggesting');
+
+    expect(restoreComments).toHaveBeenCalledTimes(1);
+    expect(setDocumentMode).toHaveBeenLastCalledWith('suggesting');
+  });
+
   it('updates viewing comment options for presentation editors', async () => {
     const { superdocStore } = createAppHarness();
     const setViewingCommentOptions = vi.fn();
@@ -1591,6 +1733,57 @@ describe('SuperDoc core', () => {
     expect(setShowFormattingMarks).toHaveBeenLastCalledWith(true);
   });
 
+  it('propagates toggleRuler to all store documents after ready', async () => {
+    const { superdocStore } = createAppHarness();
+    const firstDoc = { rulers: false };
+    const secondDoc = { rulers: false };
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      rulers: false,
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    superdocStore.documents = [firstDoc, secondDoc];
+    instance.toggleRuler();
+
+    expect(instance.config.rulers).toBe(true);
+    expect(firstDoc.rulers).toBe(true);
+    expect(secondDoc.rulers).toBe(true);
+  });
+
+  it('renders comments list for non-viewer roles and emits the rendered callback', async () => {
+    createAppHarness();
+    const onCommentsListChange = vi.fn();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onCommentsListChange,
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const container = document.createElement('div');
+    instance.addCommentsList(container);
+
+    expect(instance.config.modules.comments.element).toBe(container);
+    expect(superCommentsConstructor).toHaveBeenCalledWith(instance.config.modules.comments, instance);
+    expect(instance.commentsList).toBeDefined();
+    expect(onCommentsListChange).toHaveBeenCalledWith({ isRendered: true });
+  });
+
   it('skips rendering comments list when role is viewer', async () => {
     createAppHarness();
 
@@ -1659,6 +1852,31 @@ describe('SuperDoc core', () => {
         // It should only be true when creating from blank template
         expect(instance.config.documents[0].isNewFile).toBeUndefined();
         expect(instance.config.documents[0].data).toBe(file);
+      });
+
+      it('handles File inputs through the native File branch when the File is not an uploader wrapper', async () => {
+        createAppHarness();
+
+        const file = new File(['content'], 'contract.docx', {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        });
+        const branchOnlyFile = new Proxy(file, {
+          ownKeys: () => [],
+        });
+
+        const instance = new SuperDoc({
+          selector: '#host',
+          document: branchOnlyFile,
+        });
+        await flushMicrotasks();
+
+        expect(instance.config.documents).toHaveLength(1);
+        expect(instance.config.documents[0]).toMatchObject({
+          id: expect.any(String),
+          type: DOCX,
+          name: 'contract.docx',
+          data: branchOnlyFile,
+        });
       });
 
       it('handles Blob from fetch response', async () => {
@@ -2539,6 +2757,21 @@ describe('SuperDoc core', () => {
       expect(typeof instance.version).toBe('string');
       expect(instance.version).not.toBe('0.0.0');
     });
+
+    it('skips the toolbar exception bridge when onException is explicitly undefined', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        onException: undefined,
+      });
+
+      await flushMicrotasks();
+
+      expect(instance.toolbar.listeners.exception).toBeUndefined();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -2652,6 +2885,109 @@ describe('SuperDoc core', () => {
         /SuperDoc: setDocumentMode requires the instance to be ready/,
       );
       expect(instance.config.documentMode).toBe(before);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // SD-673: runtime event payload shapes
+  // ---------------------------------------------------------------------------
+  //
+  // Pin the exact key set the runtime emits for each public event whose
+  // Config callback has a named payload type (SuperDoc{Ready,Editor,Locked}
+  // Payload). Existing tests use objectContaining({...}) which would not
+  // catch a missing or extra field; these assertions catch the bug class
+  // from #3503 where typed payloads silently drifted from what the runtime
+  // emits.
+  //
+  // Each test:
+  //   1. Registers superdoc.on(event, listener).
+  //   2. Triggers the runtime emit path (the broadcast/lock method).
+  //   3. Asserts Object.keys(payload).sort() matches the named type's
+  //      key set, and each value has the expected runtime type.
+
+  describe('SD-673: runtime event payload shapes', () => {
+    const baseConfig = () => ({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+
+    it("ready: payload key set is ['superdoc'] and value is the SuperDoc instance", async () => {
+      const { superdocStore } = createAppHarness();
+      superdocStore.documents = [{ type: DOCX, getEditor: vi.fn(() => ({})), setEditor: vi.fn() }];
+
+      const instance = new SuperDoc(baseConfig());
+      await flushMicrotasks();
+
+      const received = [];
+      instance.on('ready', (payload) => received.push(payload));
+
+      instance.broadcastEditorCreate({});
+
+      expect(received).toHaveLength(1);
+      expect(Object.keys(received[0]).sort()).toEqual(['superdoc']);
+      expect(received[0].superdoc).toBe(instance);
+    });
+
+    it("editorBeforeCreate: payload key set is ['editor']", async () => {
+      createAppHarness();
+      const instance = new SuperDoc(baseConfig());
+      await flushMicrotasks();
+
+      const received = [];
+      instance.on('editorBeforeCreate', (payload) => received.push(payload));
+
+      const editor = { id: 'editor-1' };
+      instance.broadcastEditorBeforeCreate(editor);
+
+      expect(received).toHaveLength(1);
+      expect(Object.keys(received[0]).sort()).toEqual(['editor']);
+      // editor is wrapped in createDeprecatedEditorProxy; the proxy is
+      // transparent for property access, so identity-by-property holds.
+      expect(received[0].editor.id).toBe('editor-1');
+    });
+
+    it("editorCreate: payload key set is ['editor']", async () => {
+      createAppHarness();
+      const instance = new SuperDoc(baseConfig());
+      await flushMicrotasks();
+
+      const received = [];
+      instance.on('editorCreate', (payload) => received.push(payload));
+
+      const editor = { id: 'editor-2' };
+      instance.broadcastEditorCreate(editor);
+
+      expect(received).toHaveLength(1);
+      expect(Object.keys(received[0]).sort()).toEqual(['editor']);
+      expect(received[0].editor.id).toBe('editor-2');
+    });
+
+    it("locked: payload key set is ['isLocked', 'lockedBy'] and lockedBy is User | null", async () => {
+      createAppHarness();
+      const instance = new SuperDoc(baseConfig());
+      await flushMicrotasks();
+      instance.config.documents = [];
+
+      const received = [];
+      instance.on('locked', (payload) => received.push(payload));
+
+      // Lock with a user.
+      instance.lockSuperdoc(true, { name: 'Admin', email: 'admin@x.com' });
+      // Unlock (lockedBy is the implicit `null` default).
+      instance.lockSuperdoc(false);
+
+      expect(received).toHaveLength(2);
+
+      expect(Object.keys(received[0]).sort()).toEqual(['isLocked', 'lockedBy']);
+      expect(received[0]).toEqual({ isLocked: true, lockedBy: { name: 'Admin', email: 'admin@x.com' } });
+
+      expect(Object.keys(received[1]).sort()).toEqual(['isLocked', 'lockedBy']);
+      expect(received[1]).toEqual({ isLocked: false, lockedBy: null });
     });
   });
 });

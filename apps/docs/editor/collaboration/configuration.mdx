@@ -152,7 +152,7 @@ onLocked: ({ isLocked, lockedBy }) => {
 | Property   | Type      | Description                    |
 | ---------- | --------- | ------------------------------ |
 | `isLocked` | `boolean` | Whether the document is locked |
-| `lockedBy` | `Object`  | User who locked the document   |
+| `lockedBy` | `User \| null` | User who locked the document. `null` when unlocked or when the lock was set without an attributed user; always null-check before reading `lockedBy.name`. |
 
 ## Provider events
 

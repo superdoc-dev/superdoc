@@ -49,13 +49,11 @@ export function resolveCurrentSelectionInfo(editor: Editor, input: SelectionCurr
   const activeMarks = collectActiveMarks(state, from, to);
   const { commentIds: activeCommentIds, changeIds: activeChangeRawIds } = collectActiveEntityIds(state, from, to);
 
-  // Tracked-change marks store their PM `attrs.id` (raw id), but the
-  // Document API's canonical id (`trackChanges.list().items[].id`) is a
-  // derived hash from `groupTrackedChanges`. Consumers compare the
-  // active ids against `list()` output to highlight the active sidebar
-  // card; returning raw ids would silently miss every match. Translate
-  // raw → canonical here so `activeChangeIds` matches the public
-  // contract.
+  // Tracked-change marks store their PM `attrs.id` (raw id), while the
+  // Document API can expose a different stable canonical id (for example
+  // imported Word revisions use a source-wrapper key and paired changes may
+  // collapse multiple aliases to one public id). Translate raw → canonical
+  // here so `activeChangeIds` matches the public contract.
   const activeChangeIds = mapRawChangeIdsToCanonical(editor, activeChangeRawIds);
 
   const info: SelectionInfo = {

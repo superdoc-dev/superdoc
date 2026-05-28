@@ -143,6 +143,43 @@ describe('splitRunToParagraph command', () => {
     expect(paragraphTexts).toEqual(['He', 'llo']);
   });
 
+  it('uses paragraph split metadata instead of copying DOCX identities', () => {
+    loadDoc({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: {
+            paraId: 'ABCDEF01',
+            textId: 'ABCDEF02',
+            sdBlockId: 'block-1',
+            sdBlockRev: 3,
+            paragraphProperties: { styleId: 'BodyText' },
+          },
+          content: [
+            {
+              type: 'run',
+              content: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const start = findTextPos('Hello');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 2);
+
+    expect(editor.commands.splitRunToParagraph()).toBe(true);
+
+    const splitParagraph = editor.view.state.doc.child(1);
+    expect(splitParagraph.attrs.paraId).toBeNull();
+    expect(splitParagraph.attrs.textId).toBeNull();
+    expect(splitParagraph.attrs.sdBlockId).toBeNull();
+    expect(splitParagraph.attrs.sdBlockRev).toBe(0);
+    expect(splitParagraph.attrs.paragraphProperties).toEqual({ styleId: 'BodyText' });
+  });
+
   it('preserves explicit stored marks when splitting into a new paragraph', () => {
     loadDoc(RUN_DOC);
 

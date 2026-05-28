@@ -126,6 +126,11 @@ export interface AnchoredMetadataListInput {
    * constraints as {@link MetadataTarget}: text-range only.
    */
   within?: SelectionTarget;
+  /**
+   * When true, include only entries whose SDT anchor currently resolves
+   * in the document body.
+   */
+  resolvedOnly?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -165,6 +170,8 @@ export interface AnchoredMetadataSummary {
   namespace: string;
   /** Package-relative path of the backing Storage Part. */
   partName: string;
+  /** Whether the corresponding SDT anchor currently exists in the document. */
+  anchorStatus: 'resolved' | 'orphan';
 }
 
 export type AnchoredMetadataInfo = AnchoredMetadataSummary & {

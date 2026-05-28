@@ -16,6 +16,9 @@ import type {
   ResolvedLayout,
   TableBlock,
   TableMeasure,
+  TextRun,
+  TrackedChangeMeta,
+  TrackedChangesMode,
 } from '@superdoc/contracts';
 
 const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageGap: 0, pages: [] };
@@ -227,6 +230,39 @@ const buildSingleParagraphData = (blockId: string, runLength: number) => {
   return { paragraphMeasure, paragraphLayout };
 };
 
+const createOverlapTrackedBlock = (mode: TrackedChangesMode): FlowBlock => {
+  const parentInsert: TrackedChangeMeta = {
+    kind: 'insert',
+    id: 'ins-parent',
+    relationship: 'parent',
+    author: 'Author 1',
+  };
+  const childDelete: TrackedChangeMeta = {
+    kind: 'delete',
+    id: 'del-child',
+    relationship: 'child',
+    overlapParentId: parentInsert.id,
+    author: 'Reviewer 2',
+  };
+  const run: TextRun = {
+    text: 'Overlapped text',
+    fontFamily: 'Arial',
+    fontSize: 16,
+    trackedChange: parentInsert,
+    trackedChanges: [parentInsert, childDelete],
+  };
+
+  return {
+    kind: 'paragraph',
+    id: `overlap-block-${mode}`,
+    runs: [run],
+    attrs: {
+      trackedChangesMode: mode,
+      trackedChangesEnabled: true,
+    },
+  };
+};
+
 const createResolvedTestLine = (textLength: number, overrides: Partial<Line> = {}): Line => ({
   fromRun: 0,
   fromChar: 0,
@@ -248,24 +284,6 @@ const withFallbackFragment = (
 
   const fromLine = 'fromLine' in item && typeof item.fromLine === 'number' ? item.fromLine : 0;
   const toLine = 'toLine' in item && typeof item.toLine === 'number' ? item.toLine : fromLine + 1;
-
-  if (item.fragmentKind === 'list-item') {
-    return {
-      ...item,
-      fragment: {
-        kind: 'list-item',
-        blockId: item.blockId,
-        itemId: item.itemId,
-        markerText: item.markerText ?? '',
-        markerWidth: item.markerWidth ?? 0,
-        fromLine,
-        toLine,
-        x: item.x,
-        y: item.y,
-        width: item.width,
-      },
-    };
-  }
 
   return {
     ...item,
@@ -4686,6 +4704,93 @@ describe('DomPainter', () => {
     expect(span.dataset.trackChangeAuthorEmail).toBe('reviewer@example.com');
   });
 
+  it('renders overlapping parent insert and child delete as an insertion with delete strikethrough metadata', () => {
+    const overlapBlock = createOverlapTrackedBlock('review');
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      overlapBlock.id,
+      (overlapBlock.runs[0] as TextRun).text.length,
+    );
+
+    const painter = createTestPainter({ blocks: [overlapBlock], measures: [paragraphMeasure] });
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('[data-track-change-id="ins-parent"]') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.classList.contains('track-insert-dec')).toBe(true);
+    expect(span.classList.contains('track-delete-dec')).toBe(true);
+    expect(span.classList.contains('track-overlap-insert-delete-dec')).toBe(true);
+    expect(span.classList.contains('highlighted')).toBe(true);
+    expect(span.dataset.trackChangeKind).toBe('insert');
+    expect(span.dataset.trackChangeIds).toBe('ins-parent,del-child');
+    expect(span.dataset.trackChangeKinds).toBe('insert,delete');
+    expect(span.dataset.trackChangePreferredTargetId).toBe('del-child');
+
+    const styleEl = document.head.querySelector('[data-superdoc-track-change-styles="true"]') as HTMLStyleElement;
+    expect(styleEl).toBeTruthy();
+    const cssText = styleEl.textContent ?? '';
+    const deleteRuleIndex = cssText.indexOf('.superdoc-layout .track-delete-dec.highlighted');
+    const overlapRuleIndex = cssText.indexOf(
+      '.superdoc-layout .track-overlap-insert-delete-dec.track-insert-dec.track-delete-dec.highlighted',
+    );
+    expect(deleteRuleIndex).toBeGreaterThanOrEqual(0);
+    expect(overlapRuleIndex).toBeGreaterThan(deleteRuleIndex);
+
+    const overlapRule =
+      cssText.match(
+        /\.superdoc-layout \.track-overlap-insert-delete-dec\.track-insert-dec\.track-delete-dec\.highlighted\s*\{([\s\S]*?)\}/,
+      )?.[1] ?? '';
+    expect(overlapRule).toContain('var(--sd-tracked-changes-insert-border, #00853d)');
+    expect(overlapRule).toContain('background-color: var(--sd-tracked-changes-insert-background, #399c7222);');
+    expect(overlapRule).toContain('color: var(--sd-tracked-changes-insert-text, currentColor);');
+    expect(overlapRule).toMatch(
+      /text-decoration:\s*line-through\s+solid\s+var\(--sd-tracked-changes-delete-text,\s*#cb0e47\)\s+var\(--sd-tracked-changes-delete-decoration-thickness,\s*2px\)\s*!important;/,
+    );
+
+    const overlapFocusRule =
+      cssText.match(
+        /\.superdoc-layout \.track-overlap-insert-delete-dec\.track-insert-dec\.track-delete-dec\.highlighted\.track-change-focused\s*\{([\s\S]*?)\}/,
+      )?.[1] ?? '';
+    expect(overlapFocusRule).toContain(
+      'background-color: var(--sd-tracked-changes-insert-background-focused, #399c7244);',
+    );
+    expect(overlapFocusRule).toContain('border-top-style: solid;');
+    expect(overlapFocusRule).toContain('border-bottom-style: solid;');
+    expect(overlapFocusRule).toMatch(
+      /text-decoration:\s*line-through\s+solid\s+var\(--sd-tracked-changes-delete-text,\s*#cb0e47\)\s+var\(--sd-tracked-changes-delete-decoration-thickness,\s*2px\)\s*!important;/,
+    );
+  });
+
+  it('keeps overlap visibility driven by all revision layers', () => {
+    const originalBlock = createOverlapTrackedBlock('original');
+    const finalBlock = createOverlapTrackedBlock('final');
+    const { paragraphMeasure: originalMeasure, paragraphLayout: originalLayout } = buildSingleParagraphData(
+      originalBlock.id,
+      (originalBlock.runs[0] as TextRun).text.length,
+    );
+    const { paragraphMeasure: finalMeasure, paragraphLayout: finalLayout } = buildSingleParagraphData(
+      finalBlock.id,
+      (finalBlock.runs[0] as TextRun).text.length,
+    );
+
+    const painter = createTestPainter({ blocks: [originalBlock], measures: [originalMeasure] });
+    painter.paint(originalLayout, mount);
+
+    let span = mount.querySelector('[data-track-change-id="ins-parent"]') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.classList.contains('track-overlap-insert-delete-dec')).toBe(true);
+    expect(span.classList.contains('hidden')).toBe(true);
+
+    painter.setData([finalBlock], [finalMeasure]);
+    painter.paint(finalLayout, mount);
+
+    span = mount.querySelector('[data-track-change-id="ins-parent"]') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.classList.contains('track-overlap-insert-delete-dec')).toBe(true);
+    expect(span.classList.contains('normal')).toBe(true);
+    expect(span.classList.contains('hidden')).toBe(true);
+    expect(span.classList.contains('highlighted')).toBe(false);
+  });
+
   it('stamps comment metadata on tracked-change text', () => {
     const trackedCommentBlock: FlowBlock = {
       kind: 'paragraph',
@@ -5631,224 +5736,6 @@ describe('DomPainter', () => {
       // totalPageCount is resolved from layout.pages.length = 1
       expect(headerEl?.textContent).toBe('Count: 1');
     });
-  });
-
-  it('renders list fragments with markers', () => {
-    const listBlock: FlowBlock = {
-      kind: 'list',
-      id: 'list-1',
-      listType: 'number',
-      items: [
-        {
-          id: 'item-1',
-          marker: { kind: 'number', text: '1.', level: 0, order: 1 },
-          paragraph: block,
-        },
-      ],
-    };
-
-    const listMeasure: Measure = {
-      kind: 'list',
-      items: [
-        {
-          itemId: 'item-1',
-          markerWidth: 30,
-          markerTextWidth: 18,
-          indentLeft: 0,
-          paragraph: measure as ParagraphMeasure,
-        },
-      ],
-      totalHeight: measure.totalHeight,
-    };
-
-    const listLayout: Layout = {
-      pageSize: layout.pageSize,
-      pages: [
-        {
-          number: 1,
-          fragments: [
-            {
-              kind: 'list-item',
-              blockId: 'list-1',
-              itemId: 'item-1',
-              fromLine: 0,
-              toLine: 1,
-              x: 100,
-              y: 40,
-              width: 260,
-              markerWidth: 30,
-            },
-          ],
-        },
-      ],
-    };
-
-    const painter = createTestPainter({ blocks: [listBlock], measures: [listMeasure] });
-    painter.paint(listLayout, mount);
-
-    const marker = mount.querySelector('.superdoc-list-marker');
-    expect(marker?.textContent).toBe('1.');
-  });
-
-  it('preserves marker-adjusted list-item wrapper geometry during resolved incremental updates', () => {
-    const listBlock: FlowBlock = {
-      kind: 'list',
-      id: 'list-1',
-      listType: 'number',
-      items: [
-        {
-          id: 'item-1',
-          marker: { kind: 'number', text: '1.', level: 0, order: 1 },
-          paragraph: block,
-        },
-      ],
-    };
-
-    const listMeasure: Measure = {
-      kind: 'list',
-      items: [
-        {
-          itemId: 'item-1',
-          markerWidth: 30,
-          markerTextWidth: 18,
-          indentLeft: 0,
-          paragraph: measure as ParagraphMeasure,
-        },
-      ],
-      totalHeight: measure.totalHeight,
-    };
-
-    const initialLayout: Layout = {
-      pageSize: layout.pageSize,
-      pages: [
-        {
-          number: 1,
-          fragments: [
-            {
-              kind: 'list-item',
-              blockId: 'list-1',
-              itemId: 'item-1',
-              fromLine: 0,
-              toLine: 1,
-              x: 100,
-              y: 40,
-              width: 260,
-              markerWidth: 30,
-            },
-          ],
-        },
-      ],
-    };
-
-    const updatedLayout: Layout = {
-      pageSize: layout.pageSize,
-      pages: [
-        {
-          number: 1,
-          fragments: [
-            {
-              kind: 'list-item',
-              blockId: 'list-1',
-              itemId: 'item-1',
-              fromLine: 0,
-              toLine: 1,
-              x: 120,
-              y: 55,
-              width: 280,
-              markerWidth: 30,
-            },
-          ],
-        },
-      ],
-    };
-
-    const initialResolvedLayout: ResolvedLayout = {
-      version: 1,
-      flowMode: 'paginated',
-      pageGap: 0,
-      pages: [
-        {
-          id: 'page-0',
-          index: 0,
-          number: 1,
-          width: 400,
-          height: 500,
-          items: [
-            {
-              kind: 'fragment',
-              id: 'list-item:list-1:item-1:0:1',
-              pageIndex: 0,
-              x: 100,
-              y: 40,
-              width: 260,
-              height: 20,
-              fragmentKind: 'list-item',
-              fragment: initialLayout.pages[0].fragments[0],
-              blockId: 'list-1',
-              fragmentIndex: 0,
-              markerWidth: 30,
-              block: listBlock as import('@superdoc/contracts').ListBlock,
-              measure: listMeasure as import('@superdoc/contracts').ListMeasure,
-            },
-          ],
-        },
-      ],
-    };
-
-    const updatedResolvedLayout: ResolvedLayout = {
-      version: 1,
-      flowMode: 'paginated',
-      pageGap: 0,
-      pages: [
-        {
-          id: 'page-0',
-          index: 0,
-          number: 1,
-          width: 400,
-          height: 500,
-          items: [
-            {
-              kind: 'fragment',
-              id: 'list-item:list-1:item-1:0:1',
-              pageIndex: 0,
-              x: 120,
-              y: 55,
-              width: 280,
-              height: 20,
-              fragmentKind: 'list-item',
-              fragment: updatedLayout.pages[0].fragments[0],
-              blockId: 'list-1',
-              fragmentIndex: 0,
-              markerWidth: 30,
-              block: listBlock as import('@superdoc/contracts').ListBlock,
-              measure: listMeasure as import('@superdoc/contracts').ListMeasure,
-            },
-          ],
-        },
-      ],
-    };
-
-    const painter = createTestPainter({ blocks: [listBlock], measures: [listMeasure] });
-
-    painter.setResolvedLayout(initialResolvedLayout);
-    painter.paint(initialLayout, mount);
-
-    const initialWrapper = mount.querySelector('.superdoc-fragment-list-item') as HTMLElement;
-    expect(initialWrapper.style.left).toBe('70px');
-    expect(initialWrapper.style.top).toBe('40px');
-    expect(initialWrapper.style.width).toBe('290px');
-
-    painter.setResolvedLayout(updatedResolvedLayout);
-    painter.paint(updatedLayout, mount);
-
-    const updatedWrapper = mount.querySelector('.superdoc-fragment-list-item') as HTMLElement;
-    const updatedLine = updatedWrapper.querySelector('.superdoc-line') as HTMLElement;
-    expect(updatedWrapper).not.toBe(initialWrapper);
-    expect(updatedWrapper.style.left).toBe('90px');
-    expect(updatedWrapper.style.top).toBe('55px');
-    expect(updatedWrapper.style.width).toBe('310px');
-    expect(updatedWrapper.dataset.layoutEpoch).toBeTruthy();
-    expect(updatedLine.dataset.layoutEpoch).toBe(updatedWrapper.dataset.layoutEpoch);
   });
 
   it('applies resolved zIndex only to anchored media fragments', () => {
@@ -6922,85 +6809,6 @@ describe('DomPainter', () => {
     const shadingLayer = fragment.querySelector('.superdoc-paragraph-shading') as HTMLElement;
     expect(shadingLayer).toBeTruthy();
     expectCssColor(shadingLayer.style.backgroundColor, '#ffeeaa');
-  });
-
-  it('strips indent padding when rendering list content', () => {
-    const listBlock: FlowBlock = {
-      kind: 'list',
-      id: 'list-indent',
-      listType: 'number',
-      items: [
-        {
-          id: 'item-1',
-          marker: { kind: 'number', text: '1.', level: 1, order: 1 },
-          paragraph: {
-            kind: 'paragraph',
-            id: 'paragraph-list',
-            runs: [{ text: 'Indented body', fontFamily: 'Arial', fontSize: 16 }],
-            attrs: { indent: { left: 36, hanging: 18 } },
-          },
-        },
-      ],
-    };
-
-    const paragraphMeasure: ParagraphMeasure = {
-      kind: 'paragraph',
-      lines: [
-        {
-          fromRun: 0,
-          fromChar: 0,
-          toRun: 0,
-          toChar: 13,
-          width: 140,
-          ascent: 12,
-          descent: 4,
-          lineHeight: 18,
-        },
-      ],
-      totalHeight: 18,
-    };
-
-    const listMeasure: Measure = {
-      kind: 'list',
-      items: [
-        {
-          itemId: 'item-1',
-          markerWidth: 30,
-          markerTextWidth: 14,
-          indentLeft: 36,
-          paragraph: paragraphMeasure,
-        },
-      ],
-      totalHeight: 18,
-    };
-
-    const listLayout: Layout = {
-      pageSize: layout.pageSize,
-      pages: [
-        {
-          number: 1,
-          fragments: [
-            {
-              kind: 'list-item',
-              blockId: 'list-indent',
-              itemId: 'item-1',
-              fromLine: 0,
-              toLine: 1,
-              x: 80,
-              y: 40,
-              width: 180,
-              markerWidth: 30,
-            },
-          ],
-        },
-      ],
-    };
-
-    const painter = createTestPainter({ blocks: [listBlock], measures: [listMeasure] });
-    painter.paint(listLayout, mount);
-
-    const content = mount.querySelector('.superdoc-list-content') as HTMLElement;
-    expect(content.style.paddingLeft).toBe('');
   });
 
   describe('line-level paragraph indent handling', () => {

@@ -416,15 +416,23 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   track_changes: {
     toolName: 'superdoc_track_changes',
     description:
-      'Review and resolve tracked changes (insertions, deletions, format changes) in the document. ' +
-      'Action "list" returns all tracked changes with optional filtering by type (insert, delete, format) and pagination (limit, offset). Each change includes an ID, type, author, timestamp, and content preview. ' +
+      'Review and resolve tracked changes (insertions, deletions, replacements, format changes) in the document. ' +
+      'Action "list" returns all tracked changes with optional filtering by type (insert, delete, replacement, format) and pagination (limit, offset). Each change includes an ID, type, author, timestamp, and content preview. ' +
       'Action "decide" accepts or rejects changes. Pass decision:"accept" to apply the change permanently, or decision:"reject" to discard it. ' +
-      'Target a single change with {id:"<changeId>"} or all changes at once with {scope:"all"}. ' +
+      'Target a single change with {id:"<changeId>"}, a partial selection with {kind:"range", range:{...}}, or all changes at once with {scope:"all"} (optionally plus story). ' +
       'Do NOT use this tool unless the document has tracked changes. Use superdoc_get_content info to check the tracked change count first.',
     inputExamples: [
       { action: 'list' },
-      { action: 'list', type: 'insert', limit: 10 },
+      { action: 'list', type: 'replacement', limit: 10 },
       { action: 'decide', decision: 'accept', target: { id: '<changeId>' } },
+      {
+        action: 'decide',
+        decision: 'reject',
+        target: {
+          kind: 'range',
+          range: { kind: 'text', segments: [{ blockId: '<blockId>', range: { start: 0, end: 5 } }] },
+        },
+      },
       { action: 'decide', decision: 'reject', target: { scope: 'all' } },
     ],
   },
@@ -954,6 +962,23 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'edit',
     intentAction: 'delete',
   },
+  formatRange: {
+    memberPath: 'formatRange',
+    description:
+      'Legacy root-level alias for inline range formatting. Routes to `format.apply` for compatibility with older callers.',
+    expectedResult: 'Returns a TextMutationReceipt confirming inline styles were applied to the target range.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
+    }),
+    referenceDocPath: 'format/apply.mdx',
+    referenceGroup: 'format',
+    skipAsATool: true,
+  },
 
   'blocks.list': {
     memberPath: 'blocks.list',
@@ -1029,7 +1054,7 @@ export const OPERATION_DEFINITIONS = {
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET'],
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
       throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'format/apply.mdx',
@@ -2374,7 +2399,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'comments.create',
     description: 'Create a new comment thread (or reply when parentCommentId is given).',
     expectedResult:
-      'Returns a Receipt confirming the comment was created; reports NO_OP if the anchor target is invalid.',
+      'Returns a Receipt confirming the comment was created, including the new comment id; reports NO_OP if the anchor target is invalid.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -2456,7 +2481,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'trackChanges.list',
     description: 'List all tracked changes in the document.',
     expectedResult:
-      'Returns a TrackChangesListResult with tracked change entries, total count, and raw imported Word OOXML revision IDs (`w:id`) when available.',
+      'Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`, `replacement`, `format`), total count, and raw imported Word OOXML revision IDs (`w:id`) when available.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -2471,7 +2496,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'trackChanges.get',
     description: 'Retrieve a single tracked change by ID.',
     expectedResult:
-      'Returns a TrackChangeInfo object with the change type, author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available.',
+      'Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `replacement`, `format`), author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -2482,15 +2507,23 @@ export const OPERATION_DEFINITIONS = {
   },
   'trackChanges.decide': {
     memberPath: 'trackChanges.decide',
-    description: 'Accept or reject a tracked change (by ID or scope: all).',
+    description: 'Accept or reject tracked changes by ID, range, or scope: all (optionally filtered by story).',
     expectedResult:
-      'Returns a Receipt confirming the decision was applied; reports NO_OP if the change was already resolved.',
+      'Returns a Receipt confirming the decision was applied; reports NO_OP if the change was already resolved and typed failures for unsupported or denied tracked-change decisions.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
       supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
+      possibleFailureCodes: [
+        'NO_OP',
+        'INVALID_TARGET',
+        'TARGET_NOT_FOUND',
+        'CAPABILITY_UNAVAILABLE',
+        'PERMISSION_DENIED',
+        'PRECONDITION_FAILED',
+        'COMMENT_CASCADE_PARTIAL',
+      ],
       throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_INPUT', 'INVALID_TARGET'],
     }),
     referenceDocPath: 'track-changes/decide.mdx',

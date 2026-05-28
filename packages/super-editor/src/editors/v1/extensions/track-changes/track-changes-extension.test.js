@@ -799,29 +799,29 @@ describe('TrackChanges extension commands', () => {
     const doc = schema.nodes.doc.create(null, paragraph);
     const state = createState(doc);
 
-    const acceptSpy = vi.fn().mockReturnValue(true);
-    const tr = state.tr;
+    let nextState = state;
+    const editor = { options: { user: { name: 'Reviewer', email: 'reviewer@example.com' } } };
+    const dispatch = (tr) => {
+      nextState = nextState.apply(tr);
+    };
     const result = commands.acceptTrackedChangeById('ins-id')({
       state,
-      tr,
-      commands: { acceptTrackedChangesBetween: acceptSpy },
+      tr: state.tr,
+      dispatch,
+      editor,
+      commands: {},
     });
-
     expect(result).toBe(true);
-    // Call one time not multiple
-    expect(acceptSpy).toHaveBeenCalledTimes(1);
-    expect(acceptSpy).toHaveBeenCalledWith(2, 3);
-
-    const rejectSpy = vi.fn().mockReturnValue(true);
-    const rejectResult = commands.rejectTrackedChangeById('ins-id')({
-      state,
-      tr,
-      commands: { rejectTrackedChangesBetween: rejectSpy },
+    // The target's "B" is accepted (no longer tracked-inserted), but the
+    // unrelated "prev" insertion ("A") remains tracked.
+    const insertIds = new Set();
+    nextState.doc.descendants((node) => {
+      if (!node.isText) return;
+      const mark = node.marks.find((m) => m.type.name === TrackInsertMarkName);
+      if (mark?.attrs?.id) insertIds.add(mark.attrs.id);
     });
-    expect(rejectResult).toBe(true);
-    // Call one time not multiple
-    expect(rejectSpy).toHaveBeenCalledTimes(1);
-    expect(rejectSpy).toHaveBeenCalledWith(2, 3);
+    expect(insertIds.has('ins-id')).toBe(false);
+    expect(insertIds.has('prev')).toBe(true);
   });
 
   it('interaction: color suggestion reject removes inline color styling from DOM', () => {
@@ -1044,6 +1044,50 @@ describe('TrackChanges extension commands', () => {
     }
   });
 
+  it('interaction(docx): rejectTrackedChangesBetween keeps inserted inline structured content wrapper', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'docx',
+      content: '<p></p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.setDocumentMode('suggesting');
+      interactionEditor.commands.insertStructuredContentInline({
+        attrs: {
+          id: '101',
+          tag: 'meta-track-1',
+          alias: 'Anchored metadata',
+        },
+        text: 'Tracked SDT',
+      });
+
+      let hasStructuredContent = false;
+      interactionEditor.state.doc.descendants((node) => {
+        if (node.type.name === 'structuredContent' && node.attrs?.tag === 'meta-track-1') {
+          hasStructuredContent = true;
+          return false;
+        }
+      });
+      expect(hasStructuredContent).toBe(true);
+
+      interactionEditor.commands.rejectTrackedChangesBetween(0, interactionEditor.state.doc.content.size);
+
+      hasStructuredContent = false;
+      interactionEditor.state.doc.descendants((node) => {
+        if (node.type.name === 'structuredContent' && node.attrs?.tag === 'meta-track-1') {
+          hasStructuredContent = true;
+          return false;
+        }
+      });
+      // Current behavior: rejecting tracked insertion clears inserted text,
+      // but does not remove the inline SDT wrapper node itself.
+      expect(hasStructuredContent).toBe(true);
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
   it('interaction: rejectTrackedChangeOnSelection reverts mixed marks + textStyle in suggesting mode', () => {
     const { editor: interactionEditor } = initTestEditor({
       mode: 'text',
@@ -1233,231 +1277,178 @@ describe('TrackChanges extension commands', () => {
     }
   });
 
-  it('acceptTrackedChangeById links contiguous insertion segments sharing an id across formatting', () => {
+  // The by-id tests below assert product-visible outcomes (final doc text +
+  // remaining tracked marks) instead of internal delegation to the range
+  // command. The decision engine is the single accept/reject path; how it
+  // groups same-id segments internally is an implementation detail and not a
+  // contract callers depend on.
+
+  const runByIdDecision = ({ decision, id, doc }) => {
+    const state = createState(doc);
+    let nextState = state;
+    const editor = { options: { user: { name: 'Reviewer', email: 'reviewer@example.com' } } };
+    const command = decision === 'accept' ? commands.acceptTrackedChangeById(id) : commands.rejectTrackedChangeById(id);
+    const result = command({
+      state,
+      tr: state.tr,
+      dispatch: (tr) => {
+        nextState = state.apply(tr);
+      },
+      editor,
+      commands: {
+        // Provide range-command fallbacks so the underlying command stays
+        // functional if it ever needs to compose them. These are not the path
+        // under test — the decision engine handles by-id natively.
+        acceptTrackedChangesBetween: (from, to) => {
+          const tr = nextState.tr;
+          nextState.doc.nodesBetween(from, to, (node, pos) => {
+            const mark = node.marks.find((m) => TRACKED_MARK_NAMES.has(m.type.name));
+            if (!mark) return;
+            const mFrom = Math.max(pos, from);
+            const mTo = Math.min(pos + node.nodeSize, to);
+            if (mark.type.name === TrackDeleteMarkName) tr.replace(mFrom, mTo);
+            else tr.removeMark(mFrom, mTo, mark);
+          });
+          nextState = nextState.apply(tr);
+          return true;
+        },
+        rejectTrackedChangesBetween: (from, to) => {
+          const tr = nextState.tr;
+          nextState.doc.nodesBetween(from, to, (node, pos) => {
+            const mark = node.marks.find((m) => TRACKED_MARK_NAMES.has(m.type.name));
+            if (!mark) return;
+            const mFrom = Math.max(pos, from);
+            const mTo = Math.min(pos + node.nodeSize, to);
+            if (mark.type.name === TrackInsertMarkName) tr.replace(mFrom, mTo);
+            else tr.removeMark(mFrom, mTo, mark);
+          });
+          nextState = nextState.apply(tr);
+          return true;
+        },
+      },
+    });
+    return { result, nextState };
+  };
+
+  const TRACKED_MARK_NAMES = new Set([TrackInsertMarkName, TrackDeleteMarkName]);
+
+  it('acceptTrackedChangeById resolves contiguous insertion segments sharing an id (across inline formatting)', () => {
     const italicMark = schema.marks.italic.create();
     const insertionId = 'ins-multi';
-    const firstSegmentMark = schema.marks[TrackInsertMarkName].create({ id: insertionId });
-    const secondSegmentMark = schema.marks[TrackInsertMarkName].create({ id: insertionId });
-    const thirdSegmentMark = schema.marks[TrackInsertMarkName].create({ id: insertionId });
     const paragraph = schema.nodes.paragraph.create(null, [
-      schema.text('A', [firstSegmentMark]),
-      schema.text('B', [italicMark, secondSegmentMark]),
-      schema.text('C', [thirdSegmentMark]),
+      schema.text('A', [schema.marks[TrackInsertMarkName].create({ id: insertionId })]),
+      schema.text('B', [italicMark, schema.marks[TrackInsertMarkName].create({ id: insertionId })]),
+      schema.text('C', [schema.marks[TrackInsertMarkName].create({ id: insertionId })]),
     ]);
     const doc = schema.nodes.doc.create(null, paragraph);
-    const state = createState(doc);
 
-    const acceptSpy = vi.fn().mockReturnValue(true);
-    const tr = state.tr;
-    const result = commands.acceptTrackedChangeById(insertionId)({
-      state,
-      tr,
-      commands: { acceptTrackedChangesBetween: acceptSpy },
-    });
-
+    const { result, nextState } = runByIdDecision({ decision: 'accept', id: insertionId, doc });
     expect(result).toBe(true);
-    expect(acceptSpy).toHaveBeenCalledTimes(3);
-    expect(acceptSpy).toHaveBeenNthCalledWith(1, 1, 2);
-    expect(acceptSpy).toHaveBeenNthCalledWith(2, 2, 3);
-    expect(acceptSpy).toHaveBeenNthCalledWith(3, 3, 4);
-
-    const rejectSpy = vi.fn().mockReturnValue(true);
-    const rejectResult = commands.rejectTrackedChangeById(insertionId)({
-      state,
-      tr,
-      commands: { rejectTrackedChangesBetween: rejectSpy },
-    });
-
-    expect(rejectResult).toBe(true);
-    expect(rejectSpy).toHaveBeenCalledTimes(3);
-    expect(rejectSpy).toHaveBeenNthCalledWith(1, 1, 2);
-    expect(rejectSpy).toHaveBeenNthCalledWith(2, 2, 3);
-    expect(rejectSpy).toHaveBeenNthCalledWith(3, 3, 4);
+    expect(nextState.doc.textContent).toBe('ABC');
+    expect(hasAnyMark(nextState.doc, TrackInsertMarkName)).toBe(false);
   });
 
-  it('acceptTrackedChangeById resolves contiguous same-id insertions without pulling in adjacent different-id deletions', () => {
+  it('rejectTrackedChangeById removes inserted content across formatting splits', () => {
     const italicMark = schema.marks.italic.create();
-    const deletionMark = schema.marks[TrackDeleteMarkName].create({ id: 'del-id' });
+    const insertionId = 'ins-multi-reject';
+    const paragraph = schema.nodes.paragraph.create(null, [
+      schema.text('A', [schema.marks[TrackInsertMarkName].create({ id: insertionId })]),
+      schema.text('B', [italicMark, schema.marks[TrackInsertMarkName].create({ id: insertionId })]),
+      schema.text('C', [schema.marks[TrackInsertMarkName].create({ id: insertionId })]),
+    ]);
+    const doc = schema.nodes.doc.create(null, paragraph);
+
+    const { result, nextState } = runByIdDecision({ decision: 'reject', id: insertionId, doc });
+    expect(result).toBe(true);
+    expect(nextState.doc.textContent).toBe('');
+  });
+
+  it('acceptTrackedChangeById does not pull in adjacent different-id deletions', () => {
     const insertionId = 'shared-id';
-    const firstSegmentMark = schema.marks[TrackInsertMarkName].create({ id: insertionId });
-    const secondSegmentMark = schema.marks[TrackInsertMarkName].create({ id: insertionId });
     const paragraph = schema.nodes.paragraph.create(null, [
-      schema.text('old', [deletionMark]),
-      schema.text('A', [firstSegmentMark]),
-      schema.text('B', [italicMark, secondSegmentMark]),
+      schema.text('old', [schema.marks[TrackDeleteMarkName].create({ id: 'del-id' })]),
+      schema.text('AB', [schema.marks[TrackInsertMarkName].create({ id: insertionId })]),
     ]);
     const doc = schema.nodes.doc.create(null, paragraph);
-    const state = createState(doc);
 
-    const acceptSpy = vi.fn().mockReturnValue(true);
-    const tr = state.tr;
-    const result = commands.acceptTrackedChangeById(insertionId)({
-      state,
-      tr,
-      commands: { acceptTrackedChangesBetween: acceptSpy },
-    });
-
+    const { result, nextState } = runByIdDecision({ decision: 'accept', id: insertionId, doc });
     expect(result).toBe(true);
-    expect(acceptSpy).toHaveBeenCalledTimes(2);
-    expect(acceptSpy).toHaveBeenNthCalledWith(1, 4, 5);
-    expect(acceptSpy).toHaveBeenNthCalledWith(2, 5, 6);
-
-    const rejectSpy = vi.fn().mockReturnValue(true);
-    const rejectResult = commands.rejectTrackedChangeById(insertionId)({
-      state,
-      tr,
-      commands: { rejectTrackedChangesBetween: rejectSpy },
-    });
-
-    expect(rejectResult).toBe(true);
-    expect(rejectSpy).toHaveBeenCalledTimes(2);
-    expect(rejectSpy).toHaveBeenNthCalledWith(1, 4, 5);
-    expect(rejectSpy).toHaveBeenNthCalledWith(2, 5, 6);
+    expect(nextState.doc.textContent).toBe('oldAB');
+    // The unrelated deletion is still tracked-deleted.
+    expect(hasAnyMark(nextState.doc, TrackDeleteMarkName)).toBe(true);
+    // Our insertion is accepted (no longer tracked-inserted).
+    expect(hasAnyMark(nextState.doc, TrackInsertMarkName)).toBe(false);
   });
 
-  it('acceptTrackedChangeById and rejectTrackedChangeById should NOT link adjacent deletion-insertion pairs with different ids', () => {
-    const deletionMark = schema.marks[TrackDeleteMarkName].create({ id: 'del-id' });
-    const insertionMark = schema.marks[TrackInsertMarkName].create({ id: 'ins-id' });
+  it('by-id decisions on adjacent del+ins pairs with different ids resolve only the target id', () => {
     const paragraph = schema.nodes.paragraph.create(null, [
-      schema.text('old', [deletionMark]),
-      schema.text('new', [insertionMark]),
+      schema.text('old', [schema.marks[TrackDeleteMarkName].create({ id: 'del-id' })]),
+      schema.text('new', [schema.marks[TrackInsertMarkName].create({ id: 'ins-id' })]),
     ]);
     const doc = schema.nodes.doc.create(null, paragraph);
-    const state = createState(doc);
 
-    const acceptSpy = vi.fn().mockReturnValue(true);
-    const tr = state.tr;
-    const result = commands.acceptTrackedChangeById('ins-id')({
-      state,
-      tr,
-      commands: { acceptTrackedChangesBetween: acceptSpy },
-    });
-
+    const { result, nextState } = runByIdDecision({ decision: 'accept', id: 'ins-id', doc });
     expect(result).toBe(true);
-    expect(acceptSpy).toHaveBeenCalledTimes(1);
-    expect(acceptSpy).toHaveBeenCalledWith(4, 7);
-
-    const rejectSpy = vi.fn().mockReturnValue(true);
-    const rejectResult = commands.rejectTrackedChangeById('ins-id')({
-      state,
-      tr,
-      commands: { rejectTrackedChangesBetween: rejectSpy },
-    });
-    expect(rejectResult).toBe(true);
-    expect(rejectSpy).toHaveBeenCalledTimes(1);
-    expect(rejectSpy).toHaveBeenCalledWith(4, 7);
+    expect(hasAnyMark(nextState.doc, TrackInsertMarkName)).toBe(false);
+    expect(hasAnyMark(nextState.doc, TrackDeleteMarkName)).toBe(true);
   });
 
-  it('acceptTrackedChangeById and rejectTrackedChangeById should still link adjacent deletion-insertion pairs with the same id', () => {
+  it('by-id decisions on adjacent del+ins pairs with the same id resolve the paired replacement together', () => {
     const sharedId = 'replace-id';
-    const deletionMark = schema.marks[TrackDeleteMarkName].create({ id: sharedId });
-    const insertionMark = schema.marks[TrackInsertMarkName].create({ id: sharedId });
     const paragraph = schema.nodes.paragraph.create(null, [
-      schema.text('old', [deletionMark]),
-      schema.text('new', [insertionMark]),
+      schema.text('old', [schema.marks[TrackDeleteMarkName].create({ id: sharedId })]),
+      schema.text('new', [schema.marks[TrackInsertMarkName].create({ id: sharedId })]),
     ]);
     const doc = schema.nodes.doc.create(null, paragraph);
-    const state = createState(doc);
 
-    const acceptSpy = vi.fn().mockReturnValue(true);
-    const tr = state.tr;
-    const result = commands.acceptTrackedChangeById(sharedId)({
-      state,
-      tr,
-      commands: { acceptTrackedChangesBetween: acceptSpy },
-    });
-
+    const { result, nextState } = runByIdDecision({ decision: 'accept', id: sharedId, doc });
     expect(result).toBe(true);
-    expect(acceptSpy).toHaveBeenCalledTimes(2);
-    expect(acceptSpy).toHaveBeenNthCalledWith(1, 1, 4);
-    expect(acceptSpy).toHaveBeenNthCalledWith(2, 4, 7);
-
-    const rejectSpy = vi.fn().mockReturnValue(true);
-    const rejectResult = commands.rejectTrackedChangeById(sharedId)({
-      state,
-      tr,
-      commands: { rejectTrackedChangesBetween: rejectSpy },
-    });
-    expect(rejectResult).toBe(true);
-    expect(rejectSpy).toHaveBeenCalledTimes(2);
-    expect(rejectSpy).toHaveBeenNthCalledWith(1, 1, 4);
-    expect(rejectSpy).toHaveBeenNthCalledWith(2, 4, 7);
+    expect(nextState.doc.textContent).toBe('new');
+    expect(hasAnyMark(nextState.doc, TrackInsertMarkName)).toBe(false);
+    expect(hasAnyMark(nextState.doc, TrackDeleteMarkName)).toBe(false);
   });
 
-  it('should NOT link changes separated by untracked content', () => {
-    const deletionMark = schema.marks[TrackDeleteMarkName].create({ id: 'del-id' });
-    const insertionMark = schema.marks[TrackInsertMarkName].create({ id: 'ins-id' });
+  it('by-id decisions do not resolve unrelated tracked changes separated by untracked content', () => {
     const paragraph = schema.nodes.paragraph.create(null, [
-      schema.text('deleted', [deletionMark]),
-      schema.text(' '), // Untracked space between
-      schema.text('inserted', [insertionMark]),
+      schema.text('deleted', [schema.marks[TrackDeleteMarkName].create({ id: 'del-id' })]),
+      schema.text(' '),
+      schema.text('inserted', [schema.marks[TrackInsertMarkName].create({ id: 'ins-id' })]),
     ]);
     const doc = schema.nodes.doc.create(null, paragraph);
-    const state = createState(doc);
 
-    const acceptSpy = vi.fn().mockReturnValue(true);
-    const tr = state.tr;
-    const result = commands.acceptTrackedChangeById('ins-id')({
-      state,
-      tr,
-      commands: { acceptTrackedChangesBetween: acceptSpy },
-    });
-
+    const { result, nextState } = runByIdDecision({ decision: 'accept', id: 'ins-id', doc });
     expect(result).toBe(true);
-    // Should only resolve the insertion, not the deletion
-    expect(acceptSpy).toHaveBeenCalledTimes(1);
-    expect(acceptSpy).toHaveBeenCalledWith(9, 17);
+    expect(hasAnyMark(nextState.doc, TrackInsertMarkName)).toBe(false);
+    expect(hasAnyMark(nextState.doc, TrackDeleteMarkName)).toBe(true);
   });
 
-  it('acceptTrackedChangesById should link changes sharing the same id even if they are not directly connected', () => {
+  it('by-id decisions resolve same-id changes even when they are not directly adjacent', () => {
     const id = 'shared-id';
-    const deletionMark = schema.marks[TrackDeleteMarkName].create({ id });
-    const insertionMark = schema.marks[TrackInsertMarkName].create({ id });
     const paragraph = schema.nodes.paragraph.create(null, [
-      schema.text('deleted', [deletionMark]),
-      schema.text(' '), // Untracked space between
-      schema.text('inserted', [insertionMark]),
+      schema.text('deleted', [schema.marks[TrackDeleteMarkName].create({ id })]),
+      schema.text(' '),
+      schema.text('inserted', [schema.marks[TrackInsertMarkName].create({ id })]),
     ]);
-
     const doc = schema.nodes.doc.create(null, paragraph);
-    const state = createState(doc);
 
-    const acceptSpy = vi.fn().mockReturnValue(true);
-    const tr = state.tr;
-    const result = commands.acceptTrackedChangeById(id)({
-      state,
-      tr,
-      commands: { acceptTrackedChangesBetween: acceptSpy },
-    });
-
+    const { result, nextState } = runByIdDecision({ decision: 'accept', id, doc });
     expect(result).toBe(true);
-    expect(acceptSpy).toHaveBeenCalledTimes(2);
-    expect(acceptSpy).toHaveBeenNthCalledWith(1, 1, 8);
-    expect(acceptSpy).toHaveBeenNthCalledWith(2, 9, 17);
+    expect(nextState.doc.textContent).toBe(' inserted');
+    expect(hasAnyMark(nextState.doc, TrackInsertMarkName)).toBe(false);
+    expect(hasAnyMark(nextState.doc, TrackDeleteMarkName)).toBe(false);
   });
 
-  it('should NOT link two deletions', () => {
-    const deletionMark1 = schema.marks[TrackDeleteMarkName].create({ id: 'del-1' });
-    const deletionMark2 = schema.marks[TrackDeleteMarkName].create({ id: 'del-2' });
+  it('by-id decisions resolve only the target deletion, leaving sibling deletions intact', () => {
     const paragraph = schema.nodes.paragraph.create(null, [
-      schema.text('first', [deletionMark1]),
-      schema.text('second', [deletionMark2]),
+      schema.text('first', [schema.marks[TrackDeleteMarkName].create({ id: 'del-1' })]),
+      schema.text('second', [schema.marks[TrackDeleteMarkName].create({ id: 'del-2' })]),
     ]);
     const doc = schema.nodes.doc.create(null, paragraph);
-    const state = createState(doc);
 
-    const acceptSpy = vi.fn().mockReturnValue(true);
-    const tr = state.tr;
-    const result = commands.acceptTrackedChangeById('del-2')({
-      state,
-      tr,
-      commands: { acceptTrackedChangesBetween: acceptSpy },
-    });
-
+    const { result, nextState } = runByIdDecision({ decision: 'accept', id: 'del-2', doc });
     expect(result).toBe(true);
-    // Should only resolve the target deletion, not the previous deletion
-    expect(acceptSpy).toHaveBeenCalledTimes(1);
-    expect(acceptSpy).toHaveBeenCalledWith(6, 12);
+    expect(nextState.doc.textContent).toBe('first');
+    expect(hasAnyMark(nextState.doc, TrackDeleteMarkName)).toBe(true);
   });
 
   it('toggle and enable commands set plugin metadata', () => {
@@ -1533,6 +1524,10 @@ describe('TrackChanges extension commands', () => {
   });
 
   it('wrapper commands delegate to range-based handlers', () => {
+    // Single-target wrappers still delegate to the range commands because the
+    // wrappers compose them. The All wrappers go through the unified decision
+    // engine instead (see "acceptAllTrackedChanges resolves every tracked
+    // change in the document" below).
     const rangeCommand = vi.fn().mockReturnValue(true);
     const trackedChange = { start: 5, end: 9 };
 
@@ -1570,27 +1565,41 @@ describe('TrackChanges extension commands', () => {
       }),
     ).toBe(true);
     expect(rejectSelection).toHaveBeenCalledWith(1, 4);
+  });
 
-    const doc = createDoc('All the things');
+  it('acceptAllTrackedChanges resolves every tracked change in the document', () => {
+    const doc = createDoc('All the things', [schema.marks[TrackInsertMarkName].create({ id: 'all-accept' })]);
     const state = createState(doc);
-    const acceptAll = vi.fn().mockReturnValue(true);
-    const rejectAll = vi.fn().mockReturnValue(true);
 
-    expect(
-      commands.acceptAllTrackedChanges()({
-        state,
-        commands: { acceptTrackedChangesBetween: acceptAll },
-      }),
-    ).toBe(true);
-    expect(acceptAll).toHaveBeenCalledWith(0, doc.content.size);
+    let nextState;
+    commands.acceptAllTrackedChanges()({
+      state,
+      dispatch: (tr) => {
+        nextState = state.apply(tr);
+      },
+      editor: { options: { user: { name: 'Reviewer', email: 'reviewer@example.com' } } },
+    });
 
-    expect(
-      commands.rejectAllTrackedChanges()({
-        state,
-        commands: { rejectTrackedChangesBetween: rejectAll },
-      }),
-    ).toBe(true);
-    expect(rejectAll).toHaveBeenCalledWith(0, doc.content.size);
+    expect(nextState).toBeDefined();
+    expect(nextState.doc.textContent).toBe('All the things');
+    expect(hasAnyMark(nextState.doc, TrackInsertMarkName)).toBe(false);
+  });
+
+  it('rejectAllTrackedChanges removes every tracked insertion from the document', () => {
+    const doc = createDoc('Hello world', [schema.marks[TrackInsertMarkName].create({ id: 'all-reject' })]);
+    const state = createState(doc);
+
+    let nextState;
+    commands.rejectAllTrackedChanges()({
+      state,
+      dispatch: (tr) => {
+        nextState = state.apply(tr);
+      },
+      editor: { options: { user: { name: 'Reviewer', email: 'reviewer@example.com' } } },
+    });
+
+    expect(nextState).toBeDefined();
+    expect(nextState.doc.textContent).toBe('');
   });
 
   describe('insertTrackedChange', () => {

@@ -133,6 +133,17 @@ export function resolveRunProperties(
       delete inlineRpr.underline;
     }
 
+    // w:vanish and w:specVanish on the paragraph-mark rPr (w:pPr/w:rPr) apply only
+    // to the paragraph-mark glyph (¶), per ECMA-376 §17.3.2.41 and §17.3.2.36.
+    // They must not leak into the auto-generated list marker (SD-3269). Vanish set
+    // on the numbering definition's own rPr still applies via numberingProps below.
+    if (inlineRpr?.vanish) {
+      delete inlineRpr.vanish;
+    }
+    if (inlineRpr?.specVanish) {
+      delete inlineRpr.specVanish;
+    }
+
     styleChain = [
       ...defaultsChain,
       tableStyleProps,

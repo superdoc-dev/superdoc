@@ -1,7 +1,7 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
-import { exportSchemaToJson, processOutputMarks } from '../../../../exporter.js';
-import { buildInstructionElements } from '../shared/index.js';
+import { processOutputMarks } from '../../../../exporter.js';
+import { buildFieldResultRuns, buildInstructionElements } from '../shared/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'sd:citation';
@@ -47,7 +47,7 @@ const encode = (params) => {
 const decode = (params) => {
   const { node } = params;
   const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
-  const contentNodes = (node.content ?? []).flatMap((n) => exportSchemaToJson({ ...params, node: n }));
+  const contentNodes = buildFieldResultRuns(params, outputMarks);
   const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens);
 
   return [
@@ -107,16 +107,29 @@ function parseCitationSourceIds(instruction) {
 }
 
 /**
- * Extracts resolved text from processed content.
+ * Extracts resolved text from processed content. Walks recursively because the
+ * cached result between w:fldChar separate/end is typically wrapped in a `run`
+ * node (or deeper: run -> text with marks), so a top-level text-only filter
+ * misses the field's display text. Mirrors crossReference-translator.js.
  * @param {Array<any>} content
  * @returns {string}
  */
 function extractResolvedText(content) {
   if (!Array.isArray(content)) return '';
-  return content
-    .filter((n) => n.type === 'text')
-    .map((n) => n.text || '')
-    .join('');
+  let out = '';
+  /** @param {Array<any>} nodes */
+  const walk = (nodes) => {
+    for (const node of nodes) {
+      if (!node) continue;
+      if (node.type === 'text') {
+        out += node.text || '';
+      } else if (Array.isArray(node.content)) {
+        walk(node.content);
+      }
+    }
+  };
+  walk(content);
+  return out;
 }
 
 /** @type {import('@translator').NodeTranslatorConfig} */

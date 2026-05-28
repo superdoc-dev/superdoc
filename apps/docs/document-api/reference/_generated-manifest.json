@@ -524,6 +524,7 @@
       "aliasMemberPaths": ["format.strikethrough"],
       "key": "format",
       "operationIds": [
+        "formatRange",
         "format.apply",
         "format.bold",
         "format.italic",
@@ -1077,5 +1078,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "266b6bb8fa042ebd94c3da6e11652471f49c40a061960f3df9055cf64c4bcbbe"
+  "sourceHash": "5f439c4117bbb2e55f227e7711df415c1173f8c476954c6e412a4b8b45edd1a3"
 }

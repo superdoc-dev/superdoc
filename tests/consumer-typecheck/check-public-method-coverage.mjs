@@ -2,11 +2,11 @@
 /**
  * Public-method fixture coverage gate.
  *
- * Obligation-based ratchet over public SuperDoc methods + getters.
+ * Strict-zero obligation gate over public SuperDoc methods + getters.
  * For each public member, the gate computes what fixture coverage is
- * meaningful (`parameters`, `returns`, or `call`) and fails when any
- * required obligation is unmet AND the member is not on the debt
- * snapshot.
+ * meaningful (`parameters`, `returns`, or `call`) and fails on any
+ * unmet obligation. There is no debt snapshot, no `--write`, and no
+ * grandfathering.
  *
  * Obligations (per member, computed from the AST):
  *
@@ -29,34 +29,23 @@
  * Call sites do NOT satisfy parameter or return obligations on their
  * own (TypeScript would accept a wrong-typed argument if the consumer
  * matched the signature). This is the central distinction from a
- * "mentioned somewhere" ratchet: the gate must catch the
+ * "mentioned somewhere" gate: the gate must catch the
  * `search(text: string)` regression class, where a call site
  * `sd.search('hello')` shipped while `Parameters<SuperDoc['search']>`
  * was never asserted.
- *
- * Two failure modes:
- *
- *   1. RATCHET — A NEW unmet obligation lands (member added, fixture
- *      removed, or migration narrows a signature) and the obligation
- *      is not on the debt snapshot.
- *   2. SNAPSHOT DRIFT — A snapshot entry is stale (the obligation it
- *      records is now satisfied). The contributor must run `--write`
- *      to lock the win.
- *
- * Refresh the snapshot after intentional changes:
- *   node tests/consumer-typecheck/check-public-method-coverage.mjs --write
  *
  * Allowlist: `tests/consumer-typecheck/public-method-coverage-allowlist.cjs`.
  * Use only for members that are intentionally not consumer-callable
  * (e.g. internal lifecycle relays that escaped `private` for runtime
  * reasons). Each entry requires (a) a key that matches an actual public
  * member of `SuperDoc`, and (b) a non-empty string reason. The gate
- * validates both.
+ * validates both. The allowlist is the only escape hatch — there is
+ * no grandfathered debt snapshot.
  *
  * Wrapper stage: `public-method-coverage` in `scripts/check-public-contract.mjs`.
  */
 
-import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -66,13 +55,22 @@ const REPO_ROOT = resolve(HERE, '..', '..');
 const SUPERDOC_TS = resolve(REPO_ROOT, 'packages/superdoc/src/core/SuperDoc.ts');
 const FIXTURE_DIR = resolve(REPO_ROOT, 'tests/consumer-typecheck/src');
 const ALLOWLIST_PATH = resolve(HERE, 'public-method-coverage-allowlist.cjs');
-const SNAPSHOT_PATH = resolve(HERE, 'public-method-coverage-debt-snapshot.json');
 
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
 
-const flags = new Set(process.argv.slice(2));
-const writeMode = flags.has('--write');
+// --write was used during the ratchet phase to refresh a grandfathered
+// debt snapshot. Strict-zero mode rejects it loudly so contributors
+// don't accidentally re-introduce grandfathering.
+if (process.argv.includes('--write')) {
+  console.error(
+    '[public-method-coverage] --write is no longer supported. The gate is\n' +
+      'strict zero — every unmet obligation must be satisfied by a consumer\n' +
+      'fixture or moved to public-method-coverage-allowlist.cjs (with a\n' +
+      'one-line reason). No grandfathered snapshot.',
+  );
+  process.exit(2);
+}
 
 const EVENT_EMITTER_MEMBERS = new Set([
   'on', 'off', 'once', 'emit',
@@ -86,27 +84,6 @@ function loadAllowlist() {
   const mod = require(ALLOWLIST_PATH);
   if (typeof mod !== 'object' || mod === null) return {};
   return mod;
-}
-
-function loadSnapshot() {
-  if (!existsSync(SNAPSHOT_PATH)) return [];
-  const raw = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8'));
-  if (!Array.isArray(raw.knownUnmet)) {
-    console.error(`[public-method-coverage] invalid snapshot at ${SNAPSHOT_PATH} (missing "knownUnmet" array)`);
-    process.exit(1);
-  }
-  return raw.knownUnmet.slice().sort();
-}
-
-function writeSnapshot(entries) {
-  const payload = {
-    $comment:
-      'Auto-managed by tests/consumer-typecheck/check-public-method-coverage.mjs. ' +
-      'Each entry is "memberName:obligation" where obligation is one of ' +
-      'parameters | returns | call. Refresh with --write after adding fixtures.',
-    knownUnmet: entries.slice().sort(),
-  };
-  writeFileSync(SNAPSHOT_PATH, JSON.stringify(payload, null, 2) + '\n');
 }
 
 /** Enumerate public members and compute their obligations. */
@@ -245,33 +222,21 @@ for (const m of members) {
 }
 unmetNow.sort();
 
-if (writeMode) {
-  writeSnapshot(unmetNow);
-  console.log(
-    `[public-method-coverage] wrote ${SNAPSHOT_PATH.replace(REPO_ROOT + '/', '')} (${unmetNow.length} entries).`,
-  );
-  process.exit(0);
-}
-
-const snapshot = loadSnapshot();
-const snapshotSet = new Set(snapshot);
-const unmetSet = new Set(unmetNow);
-
-const newUnmet = unmetNow.filter((e) => !snapshotSet.has(e));
-const stale = snapshot.filter((e) => !unmetSet.has(e));
-
 const totalObligations = members.reduce((n, m) => n + m.obligations.length, 0);
+const enforcedMembers = members.filter((m) => !allowlistKeys.has(m.name));
+const enforcedObligations = enforcedMembers.reduce((n, m) => n + m.obligations.length, 0);
 
 const HR = '='.repeat(72);
-console.log('[public-method-coverage] SuperDoc public-surface fixture coverage');
+console.log('[public-method-coverage] SuperDoc public-surface fixture coverage (strict zero)');
 console.log(HR);
-console.log(`Members inspected:           ${members.length}`);
-console.log(`  Methods (non-EventEmitter): ${members.filter((m) => m.kind === 'method').length}`);
-console.log(`  Getters:                    ${members.filter((m) => m.kind === 'getter').length}`);
-console.log(`Total obligations:            ${totalObligations}`);
-console.log(`Allowlisted members:          ${allowlistKeys.size}`);
-console.log(`Tracked as known debt:        ${unmetNow.length - newUnmet.length}`);
-console.log(`Snapshot at:                  ${SNAPSHOT_PATH.replace(REPO_ROOT + '/', '')}`);
+console.log(`Members inspected:               ${members.length}`);
+console.log(`  Methods (non-EventEmitter):    ${members.filter((m) => m.kind === 'method').length}`);
+console.log(`  Getters:                       ${members.filter((m) => m.kind === 'getter').length}`);
+console.log(`Allowlisted members:             ${allowlistKeys.size}`);
+console.log(`Enforced members:                ${enforcedMembers.length}`);
+console.log(`Enforced obligations:            ${enforcedObligations}`);
+console.log(`Total obligations (pre-allowlist): ${totalObligations}`);
+console.log(`Unmet obligations:               ${unmetNow.length}`);
 console.log('');
 
 const failures = [];
@@ -279,10 +244,10 @@ if (allowlistFailures.length > 0) {
   failures.push('public-method-coverage-allowlist contract violations:');
   for (const f of allowlistFailures) failures.push(f);
 }
-if (newUnmet.length > 0) {
+if (unmetNow.length > 0) {
   if (failures.length > 0) failures.push('');
-  failures.push(`${newUnmet.length} NEW unmet obligation(s):`);
-  for (const e of newUnmet) failures.push(`  + ${e}`);
+  failures.push(`${unmetNow.length} unmet obligation(s):`);
+  for (const e of unmetNow) failures.push(`  + ${e}`);
   failures.push('');
   failures.push(`Add a consumer fixture under tests/consumer-typecheck/src/ that asserts the`);
   failures.push(`required shape for each entry above. Obligation key is "memberName:obligation":`);
@@ -294,24 +259,14 @@ if (newUnmet.length > 0) {
   failures.push(`If the member is intentionally not consumer-callable, add an entry with a`);
   failures.push(`one-line reason to public-method-coverage-allowlist.cjs.`);
 }
-if (stale.length > 0) {
-  if (failures.length > 0) failures.push('');
-  failures.push(`${stale.length} stale entry/entries in the debt snapshot (obligation now satisfied):`);
-  for (const e of stale) failures.push(`  - ${e}`);
-  failures.push('');
-  failures.push(
-    `Run \`node tests/consumer-typecheck/check-public-method-coverage.mjs --write\``,
-  );
-  failures.push(`to refresh the snapshot and lock in the win.`);
-}
 
 if (failures.length > 0) {
-  console.log('FAIL  fixture coverage drift:');
+  console.log('FAIL  fixture coverage gap:');
   for (const line of failures) console.log(line);
   process.exit(1);
 }
 
 console.log(
-  `OK    ${totalObligations} obligation(s) across ${members.length - allowlistKeys.size} members; ${unmetNow.length} tracked as known debt; ratchet snapshot in sync.`,
+  `OK    ${enforcedObligations} enforced obligation(s) across ${enforcedMembers.length} members; zero unmet.`,
 );
 process.exit(0);

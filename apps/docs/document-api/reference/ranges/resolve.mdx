@@ -26,9 +26,9 @@ Returns a ResolveRangeOutput with evaluatedRevision, handle.ref, target (Selecti
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `end` | object(kind="document") \\| object(kind="point") \\| object(kind="ref") | yes | One of: object(kind="document"), object(kind="point"), object(kind="ref") |
+| `end` | object(kind="document") \| object(kind="point") \| object(kind="ref") | yes | One of: object(kind="document"), object(kind="point"), object(kind="ref") |
 | `expectedRevision` | string | no |  |
-| `start` | object(kind="document") \\| object(kind="point") \\| object(kind="ref") | yes | One of: object(kind="document"), object(kind="point"), object(kind="ref") |
+| `start` | object(kind="document") \| object(kind="point") \| object(kind="ref") | yes | One of: object(kind="document"), object(kind="point"), object(kind="ref") |
 
 ### Example request
 
@@ -53,7 +53,7 @@ Returns a ResolveRangeOutput with evaluatedRevision, handle.ref, target (Selecti
 | `evaluatedRevision` | string | yes |  |
 | `handle` | object(refStability="ephemeral") | yes |  |
 | `handle.coversFullTarget` | boolean | yes |  |
-| `handle.ref` | string \\| null | yes | One of: string, null |
+| `handle.ref` | string \| null | yes | One of: string, null |
 | `handle.refStability` | `"ephemeral"` | yes | Constant: `"ephemeral"` |
 | `preview` | object | yes |  |
 | `preview.blocks` | object[] | yes |  |

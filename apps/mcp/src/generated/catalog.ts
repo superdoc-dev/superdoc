@@ -2327,16 +2327,35 @@ export const MCP_TOOL_CATALOG = {
                   {
                     $ref: '#/$defs/TextTarget',
                   },
+                  {
+                    $ref: '#/$defs/SelectionTarget',
+                  },
+                  {
+                    $ref: '#/$defs/CommentTrackedChangeTarget',
+                  },
                 ],
                 description:
-                  "Text range to anchor the comment. Accepts either a single-block TextAddress {kind:'text', blockId, range} or a multi-segment TextTarget {kind:'text', segments:[{blockId, range}, ...]} for selections that span blocks.",
+                  "Comment target. Accepts a TextAddress, TextTarget, SelectionTarget, or {trackedChangeId, kind?:'trackedChange'} to anchor directly on tracked content.",
               },
               {
-                $ref: '#/$defs/TextAddress',
+                oneOf: [
+                  {
+                    $ref: '#/$defs/TextAddress',
+                  },
+                  {
+                    $ref: '#/$defs/TextTarget',
+                  },
+                  {
+                    $ref: '#/$defs/SelectionTarget',
+                  },
+                  {
+                    $ref: '#/$defs/CommentTrackedChangeTarget',
+                  },
+                ],
               },
             ],
             description:
-              "Text range to anchor the comment. Accepts either a single-block TextAddress {kind:'text', blockId, range} or a multi-segment TextTarget {kind:'text', segments:[{blockId, range}, ...]} for selections that span blocks. Only for actions 'create', 'update'. Omit for other actions.",
+              "Comment target. Accepts a TextAddress, TextTarget, SelectionTarget, or {trackedChangeId, kind?:'trackedChange'} to anchor directly on tracked content. Only for actions 'create', 'update'. Omit for other actions.",
           },
           parentId: {
             type: 'string',
@@ -2404,7 +2423,7 @@ export const MCP_TOOL_CATALOG = {
     {
       toolName: 'superdoc_track_changes',
       description:
-        'Review and resolve tracked changes (insertions, deletions, format changes) in the document. Action "list" returns all tracked changes with optional filtering by type (insert, delete, format) and pagination (limit, offset). Each change includes an ID, type, author, timestamp, and content preview. Action "decide" accepts or rejects changes. Pass decision:"accept" to apply the change permanently, or decision:"reject" to discard it. Target a single change with {id:"<changeId>"} or all changes at once with {scope:"all"}. Do NOT use this tool unless the document has tracked changes. Use superdoc_get_content info to check the tracked change count first.\n\nEXAMPLES:\n  1. {"action":"list"}\n  2. {"action":"list","type":"insert","limit":10}\n  3. {"action":"decide","decision":"accept","target":{"id":"<changeId>"}}\n  4. {"action":"decide","decision":"reject","target":{"scope":"all"}}',
+        'Review and resolve tracked changes (insertions, deletions, replacements, format changes) in the document. Action "list" returns all tracked changes with optional filtering by type (insert, delete, replacement, format) and pagination (limit, offset). Each change includes an ID, type, author, timestamp, and content preview. Action "decide" accepts or rejects changes. Pass decision:"accept" to apply the change permanently, or decision:"reject" to discard it. Target a single change with {id:"<changeId>"}, a partial selection with {kind:"range", range:{...}}, or all changes at once with {scope:"all"} (optionally plus story). Do NOT use this tool unless the document has tracked changes. Use superdoc_get_content info to check the tracked change count first.\n\nEXAMPLES:\n  1. {"action":"list"}\n  2. {"action":"list","type":"replacement","limit":10}\n  3. {"action":"decide","decision":"accept","target":{"id":"<changeId>"}}\n  4. {"action":"decide","decision":"reject","target":{"kind":"range","range":{"kind":"text","segments":[{"blockId":"<blockId>","range":{"start":0,"end":5}}]}}}\n  5. {"action":"decide","decision":"reject","target":{"scope":"all"}}',
       inputSchema: {
         type: 'object',
         properties: {
@@ -2423,9 +2442,9 @@ export const MCP_TOOL_CATALOG = {
               "Number of tracked changes to skip for pagination. Only for action 'list'. Omit for other actions.",
           },
           type: {
-            enum: ['insert', 'delete', 'format'],
+            enum: ['insert', 'delete', 'replacement', 'format'],
             description:
-              "Filter by change type: 'insert', 'delete', or 'format'. Only for action 'list'. Omit for other actions.",
+              "Filter by change type: 'insert', 'delete', 'replacement', or 'format'. Only for action 'list'. Omit for other actions.",
           },
           force: {
             type: 'boolean',
@@ -2459,8 +2478,42 @@ export const MCP_TOOL_CATALOG = {
               {
                 type: 'object',
                 properties: {
+                  kind: {
+                    const: 'range',
+                    type: 'string',
+                  },
+                  range: {
+                    $ref: '#/$defs/TextTarget',
+                  },
+                  story: {
+                    $ref: '#/$defs/StoryLocator',
+                  },
+                  part: {
+                    type: 'string',
+                    description: 'Optional part discriminator for the range target.',
+                  },
+                },
+                additionalProperties: false,
+                required: ['kind', 'range'],
+              },
+              {
+                type: 'object',
+                properties: {
                   scope: {
                     enum: ['all'],
+                  },
+                  story: {
+                    oneOf: [
+                      {
+                        $ref: '#/$defs/StoryLocator',
+                      },
+                      {
+                        const: 'all',
+                        type: 'string',
+                      },
+                    ],
+                    description:
+                      "Optional explicit bulk filter. Omit or pass 'all' to target every revision-capable story, or pass a StoryLocator to scope the decision to one story.",
                   },
                 },
                 additionalProperties: false,

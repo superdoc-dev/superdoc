@@ -11,7 +11,7 @@ import type { CommentInput } from '../algorithm/comment-diffing';
 import type { HeaderFooterState } from '../algorithm/header-footer-diffing';
 import type { PartsState } from '../algorithm/parts-diffing';
 import { COMMENT_ATTRS_DIFF_IGNORED_KEYS } from '../algorithm/comment-diffing';
-import { normalizeDocJSON } from '../algorithm/semantic-normalization';
+import { normalizeDocJSON, normalizeDocJSONLegacy } from '../algorithm/semantic-normalization';
 
 /** The canonical diffable state of one document. */
 export interface CanonicalDiffableState {
@@ -71,6 +71,31 @@ export function buildCanonicalDiffableState(
 ): CanonicalDiffableState {
   return {
     body: normalizeDocJSON(doc.toJSON() as Record<string, unknown>),
+    comments: comments.map(canonicalizeComment),
+    styles: styles ? (styles as unknown as Record<string, unknown>) : null,
+    numbering: numbering ? (numbering as unknown as Record<string, unknown>) : null,
+    headerFooters: headerFooters ? structuredClone(headerFooters) : null,
+    partsState: partsState ? structuredClone(partsState) : null,
+  };
+}
+
+/**
+ * Builds the canonical state under the pre-SD-3279 normalization. Used only
+ * by the validation fallback in `diff-service.ts` to accept snapshots and
+ * diff payloads whose stored fingerprint was computed under the old
+ * algorithm. Identical shape to {@link buildCanonicalDiffableState}; only
+ * the body normalizer differs.
+ */
+export function buildLegacyCanonicalDiffableState(
+  doc: PMNode,
+  comments: CommentInput[],
+  styles: StylesDocumentProperties | null | undefined,
+  numbering: NumberingProperties | null | undefined,
+  headerFooters: HeaderFooterState | null | undefined,
+  partsState: PartsState | null | undefined,
+): CanonicalDiffableState {
+  return {
+    body: normalizeDocJSONLegacy(doc.toJSON() as Record<string, unknown>),
     comments: comments.map(canonicalizeComment),
     styles: styles ? (styles as unknown as Record<string, unknown>) : null,
     numbering: numbering ? (numbering as unknown as Record<string, unknown>) : null,

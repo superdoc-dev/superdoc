@@ -2,7 +2,22 @@ import type { TrackedChangeAddress } from './address.js';
 import type { DiscoveryOutput } from './discovery.js';
 import type { StoryLocator } from './story.types.js';
 
-export type TrackChangeType = 'insert' | 'delete' | 'format';
+export type TrackChangeType = 'insert' | 'delete' | 'replacement' | 'format';
+export type TrackChangeOverlapRelationship = 'parent' | 'child' | 'standalone';
+export type TrackChangeGrouping = 'standalone' | 'replacement-pair' | 'unknown';
+export type TrackChangeProvenanceOrigin = 'word' | 'google-docs' | 'superdoc' | 'custom' | 'unknown';
+
+export interface TrackChangeOverlapLayer {
+  id: string;
+  type: TrackChangeType;
+  relationship: TrackChangeOverlapRelationship;
+}
+
+export interface TrackChangeOverlapInfo {
+  visualLayers?: TrackChangeOverlapLayer[];
+  preferredContextTargetId?: string;
+  preferredContextTarget?: TrackChangeOverlapLayer;
+}
 
 /**
  * Scope marker used by {@link TrackChangesListQuery.in} to request changes
@@ -32,13 +47,25 @@ export interface TrackChangeInfo {
   /** Convenience alias for `address.entityId`. */
   id: string;
   type: TrackChangeType;
+  grouping?: TrackChangeGrouping;
+  pairedWithChangeId?: string | null;
   /** Raw imported Word OOXML revision IDs (`w:id`) from the source document when available. */
   wordRevisionIds?: TrackChangeWordRevisionIds;
+  /** Overlap metadata for nested tracked changes that share the same text range. */
+  overlap?: TrackChangeOverlapInfo;
   author?: string;
   authorEmail?: string;
   authorImage?: string;
   date?: string;
   excerpt?: string;
+  /** Inserted content for insertion-style changes when available. */
+  insertedText?: string;
+  /** Deleted content for deletion-style changes when available. */
+  deletedText?: string;
+  /** Source application or package family detected on import. */
+  origin?: TrackChangeProvenanceOrigin;
+  /** True when this tracked change came from an imported document revision. */
+  imported?: boolean;
 }
 
 export interface TrackChangesListQuery {
@@ -60,13 +87,25 @@ export interface TrackChangesListQuery {
 export interface TrackChangeDomain {
   address: TrackedChangeAddress;
   type: TrackChangeType;
+  grouping?: TrackChangeGrouping;
+  pairedWithChangeId?: string | null;
   /** Raw imported Word OOXML revision IDs (`w:id`) from the source document when available. */
   wordRevisionIds?: TrackChangeWordRevisionIds;
+  /** Overlap metadata for nested tracked changes that share the same text range. */
+  overlap?: TrackChangeOverlapInfo;
   author?: string;
   authorEmail?: string;
   authorImage?: string;
   date?: string;
   excerpt?: string;
+  /** Inserted content for insertion-style changes when available. */
+  insertedText?: string;
+  /** Deleted content for deletion-style changes when available. */
+  deletedText?: string;
+  /** Source application or package family detected on import. */
+  origin?: TrackChangeProvenanceOrigin;
+  /** True when this tracked change came from an imported document revision. */
+  imported?: boolean;
 }
 
 /**

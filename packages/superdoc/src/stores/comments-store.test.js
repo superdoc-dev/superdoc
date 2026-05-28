@@ -208,6 +208,35 @@ describe('comments-store', () => {
     expect(store.getComment(undefined)).toBeNull();
   });
 
+  it('resolves rendered tracked-change aliases by equivalent position', () => {
+    const canonicalAnchorKey = 'tc::hf:part:rId8::word:trackInsert:101';
+    const renderedAnchorKey = 'tc::hf:part:rId8::rendered-uuid';
+    const comment = {
+      commentId: 'word:trackInsert:101',
+      trackedChange: true,
+      trackedChangeAnchorKey: canonicalAnchorKey,
+    };
+    store.commentsList = [comment];
+    store.editorCommentPositions = {
+      [canonicalAnchorKey]: {
+        key: canonicalAnchorKey,
+        threadId: 'word:trackInsert:101',
+        kind: 'trackedChange',
+        storyKey: 'hf:part:rId8',
+        bounds: { top: 49, left: 199, bottom: 69, right: 267, width: 68, height: 20 },
+      },
+      [renderedAnchorKey]: {
+        key: renderedAnchorKey,
+        threadId: 'rendered-uuid',
+        kind: 'trackedChange',
+        storyKey: 'hf:part:rId8',
+        bounds: { top: 47, left: 188, bottom: 69, right: 300, width: 112, height: 22 },
+      },
+    };
+
+    expect(store.getComment('rendered-uuid')).toEqual(comment);
+  });
+
   it('prefers tracked-change anchor keys for position lookup and alias resolution', () => {
     const comment = {
       commentId: 'tc-1',
@@ -483,6 +512,15 @@ describe('comments-store', () => {
         comment: { commentId: 'change-1' },
       }),
     );
+
+    // SD-673: pin the exact key set of the comments-update payload.
+    // SuperDocCommentsUpdatePayload declares { type, comment?, changes? };
+    // the objectContaining assertion above would not catch a regression
+    // to the older { data: ... } shape or an extra field leaking in.
+    const [, payload] = superdoc.emit.mock.calls[0];
+    expect(Object.keys(payload).sort()).toEqual(['comment', 'type']);
+    expect(typeof payload.type).toBe('string');
+    expect(payload.comment).toEqual({ commentId: 'change-1' });
   });
 
   it('reopens resolved tracked change comments on update events', () => {
@@ -604,7 +642,7 @@ describe('comments-store', () => {
   it('resolves tracked change comments on resolve events', () => {
     const superdoc = {
       emit: vi.fn(),
-      user: { email: 'reviewer@example.com', name: 'Reviewer' },
+      user: { id: 'reviewer-id', email: 'reviewer@example.com', name: 'Reviewer' },
     };
 
     const existingComment = {
@@ -614,8 +652,9 @@ describe('comments-store', () => {
       resolvedByEmail: null,
       resolvedByName: null,
       getValues: vi.fn(() => ({ commentId: 'change-resolve-1', resolvedTime: Date.now() })),
-      resolveComment: vi.fn(function ({ email, name }) {
+      resolveComment: vi.fn(function ({ id, email, name }) {
         this.resolvedTime = Date.now();
+        this.resolvedById = id;
         this.resolvedByEmail = email;
         this.resolvedByName = name;
         const emitData = { type: comments_module_events.RESOLVED, comment: this.getValues() };
@@ -634,6 +673,7 @@ describe('comments-store', () => {
     });
 
     expect(existingComment.resolveComment).toHaveBeenCalledWith({
+      id: 'reviewer-id',
       email: 'reviewer@example.com',
       name: 'Reviewer',
       superdoc,
@@ -651,10 +691,10 @@ describe('comments-store', () => {
     );
   });
 
-  it('cascades resolve to user comments anchored to the same tracked change (SD-2528)', async () => {
+  it('does not blanket-cascade linked user comments on tracked-change resolve events', async () => {
     const superdoc = {
       emit: vi.fn(),
-      user: { email: 'reviewer@example.com', name: 'Reviewer' },
+      user: { id: 'reviewer-id', email: 'reviewer@example.com', name: 'Reviewer' },
     };
 
     const trackedChangeComment = {
@@ -695,24 +735,12 @@ describe('comments-store', () => {
     });
 
     expect(trackedChangeComment.resolveComment).toHaveBeenCalledTimes(1);
-    // Cascading runs in a microtask so we wait one turn before asserting.
     await Promise.resolve();
-    expect(linkedUserComment.resolveComment).toHaveBeenCalledTimes(1);
-    expect(linkedUserComment.resolveComment).toHaveBeenCalledWith({
-      email: 'reviewer@example.com',
-      name: 'Reviewer',
-      superdoc,
-    });
+    expect(linkedUserComment.resolveComment).not.toHaveBeenCalled();
     expect(unrelatedUserComment.resolveComment).not.toHaveBeenCalled();
   });
 
-  // SD-2528 P2 #1 — when the resolve event carries an explicit `documentId`,
-  // the cascade must filter linked comments by that document. `findTrackedChangeById`
-  // does this for the primary comment; the cascade scan one level down was
-  // missing the same guard. In multi-document sessions where imported TC ids
-  // happen to collide, accepting/rejecting a change in one document must not
-  // resolve comments anchored on a different document.
-  it('scopes cascade resolve to the active document when documentId is provided', async () => {
+  it('does not cascade linked comments even when tracked-change resolve carries a documentId', async () => {
     const superdoc = { emit: vi.fn(), user: { email: 'reviewer@example.com', name: 'Reviewer' } };
     __mockSuperdoc.documents.value = [
       { id: 'doc-A', type: 'docx' },
@@ -757,13 +785,11 @@ describe('comments-store', () => {
     });
 
     await Promise.resolve();
-    expect(linkedOnDocA.resolveComment).toHaveBeenCalledTimes(1);
+    expect(linkedOnDocA.resolveComment).not.toHaveBeenCalled();
     expect(linkedOnDocB.resolveComment).not.toHaveBeenCalled();
   });
 
-  // Regression: when no documentId is passed, single-document behaviour is
-  // unchanged. Mirrors the legacy `cascades resolve` test contract.
-  it('cascades to every doc-anchored linked comment when no documentId is provided (single-doc)', async () => {
+  it('does not cascade linked comments in single-document resolve flows either', async () => {
     const superdoc = { emit: vi.fn(), user: { email: 'r@e', name: 'R' } };
 
     const trackedChangeComment = {
@@ -792,7 +818,7 @@ describe('comments-store', () => {
     });
 
     await Promise.resolve();
-    expect(linkedNoFileId.resolveComment).toHaveBeenCalledTimes(1);
+    expect(linkedNoFileId.resolveComment).not.toHaveBeenCalled();
   });
 
   it('does not re-resolve already-resolved linked user comments', async () => {
@@ -1365,6 +1391,20 @@ describe('comments-store', () => {
         comment: expect.objectContaining({ commentId: 'tc-stale' }),
       }),
     );
+
+    // SD-673: pin the DELETED variant of SuperDocCommentsUpdatePayload.
+    // This emit path produces the three-key shape { type, comment, changes }
+    // (changes carries the [{ key: 'deleted', commentId, fileId }] tuple).
+    // The objectContaining assertion above does not require `changes` to be
+    // present, so a regression that dropped it would not be caught.
+    const deletedCall = superdoc.emit.mock.calls.find(
+      ([name, payload]) => name === 'comments-update' && payload?.type === comments_module_events.DELETED,
+    );
+    expect(deletedCall).toBeDefined();
+    const [, deletedPayload] = deletedCall;
+    expect(Object.keys(deletedPayload).sort()).toEqual(['changes', 'comment', 'type']);
+    expect(Array.isArray(deletedPayload.changes)).toBe(true);
+    expect(deletedPayload.changes[0]).toMatchObject({ key: 'deleted' });
   });
 
   it('keeps tracked-change comments whose IDs are still present in marks', () => {
@@ -1523,6 +1563,65 @@ describe('comments-store', () => {
     expect(superdoc.emit).not.toHaveBeenCalled();
   });
 
+  it('creates the first live tracked-change comment from an add event', () => {
+    const superdoc = {
+      ...__mockSuperdoc,
+      emit: vi.fn(),
+      activeEditor: { commands: { removeComment: vi.fn(), setActiveComment: vi.fn() } },
+    };
+
+    store.commentsList = [];
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'add',
+        changeId: 'tc-live-insert',
+        trackedChangeText: 'Tracked live insert',
+        trackedChangeType: 'trackInsert',
+        deletedText: null,
+        authorEmail: 'alice@example.com',
+        author: 'Alice',
+        date: 123,
+        documentId: 'doc-1',
+      },
+      broadcastChanges: false,
+    });
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(store.commentsList[0]).toEqual(
+      expect.objectContaining({
+        commentId: 'tc-live-insert',
+        trackedChange: true,
+        trackedChangeText: 'Tracked live insert',
+        trackedChangeType: 'trackInsert',
+        fileId: 'doc-1',
+      }),
+    );
+  });
+
+  it('does not create a missing tracked-change comment from an update-only refresh event', () => {
+    const superdoc = { emit: vi.fn() };
+
+    store.commentsList = [];
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'update',
+        changeId: 'tc-live-insert',
+        trackedChangeText: 'Tracked live insert',
+        trackedChangeType: 'trackInsert',
+        deletedText: null,
+        authorEmail: 'alice@example.com',
+        author: 'Alice',
+        date: 123,
+        documentId: 'doc-1',
+      },
+    });
+
+    expect(store.commentsList).toEqual([]);
+    expect(superdoc.emit).not.toHaveBeenCalled();
+  });
+
   it('keeps imported resolved tracked-change comments resolved during initial tracked-change rebuild', async () => {
     const editorDispatch = vi.fn();
     const tr = { setMeta: vi.fn() };
@@ -1562,6 +1661,95 @@ describe('comments-store', () => {
     expect(store.commentsList[0].commentId).toBe('tc-import-resolved');
     expect(store.commentsList[0].resolvedTime).not.toBeNull();
     expect(createOrUpdateTrackedChangeCommentMock).not.toHaveBeenCalled();
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('replaces stale document threads immediately when a new file is loaded into the same document id', async () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      converter: { commentThreadingProfile: 'range-based' },
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'tc-new' } } }]);
+    groupChangesMock.mockReturnValue([{ insertedMark: { mark: { attrs: { id: 'tc-new' } } } }]);
+
+    store.commentsList = [
+      {
+        commentId: 'tc-old',
+        trackedChange: true,
+        trackedChangeText: 'Old tracked text',
+        fileId: 'doc-1',
+      },
+      {
+        commentId: 'tc-old-reply',
+        parentCommentId: 'tc-old',
+        fileId: 'doc-1',
+      },
+      {
+        commentId: 'regular-old',
+        commentText: 'Old regular comment',
+        fileId: 'doc-1',
+      },
+    ];
+
+    store.processLoadedDocxComments({
+      superdoc: __mockSuperdoc,
+      editor,
+      comments: [
+        {
+          commentId: 'regular-new',
+          creatorName: 'Imported Author',
+          creatorEmail: 'imported@example.com',
+          createdTime: 123,
+          elements: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'run',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Replacement comment',
+                      attrs: {
+                        type: 'element',
+                        attributes: {},
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      documentId: 'doc-1',
+      replacedFile: true,
+    });
+
+    expect(store.commentsList).toHaveLength(2);
+    expect(store.commentsList.find((comment) => comment.commentId === 'tc-old')).toBeUndefined();
+    expect(store.commentsList.find((comment) => comment.commentId === 'tc-old-reply')).toBeUndefined();
+    expect(store.commentsList.find((comment) => comment.commentId === 'regular-old')).toBeUndefined();
+    expect(store.commentsList).toEqual([
+      expect.objectContaining({
+        commentId: 'regular-new',
+        fileId: 'doc-1',
+        docxCommentJSON: expect.any(Array),
+      }),
+      expect.objectContaining({
+        commentId: 'tc-new',
+        trackedChange: true,
+        trackedChangeText: 'tracked-tc-new',
+        fileId: 'doc-1',
+      }),
+    ]);
+    expect(createOrUpdateTrackedChangeCommentMock).toHaveBeenCalledTimes(1);
     expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });

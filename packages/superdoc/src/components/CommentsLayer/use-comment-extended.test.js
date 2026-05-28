@@ -27,7 +27,8 @@ describe('use-comment: extended coverage', () => {
     it('sets resolved fields and emits a resolved event', () => {
       const c = useComment({ commentId: 'c-1', fileId: 'doc-1' });
       const superdoc = makeSuperdoc();
-      c.resolveComment({ email: 'a@b.com', name: 'Alice', superdoc });
+      c.resolveComment({ id: 'alice-id', email: 'a@b.com', name: 'Alice', superdoc });
+      expect(c.resolvedById).toBe('alice-id');
       expect(c.resolvedByEmail).toBe('a@b.com');
       expect(c.resolvedByName).toBe('Alice');
       expect(typeof c.resolvedTime).toBe('number');
@@ -41,7 +42,8 @@ describe('use-comment: extended coverage', () => {
     it('is a no-op when already resolved', () => {
       const c = useComment({ commentId: 'c-1', resolvedTime: 1234 });
       const superdoc = makeSuperdoc();
-      c.resolveComment({ email: 'a@b.com', name: 'Alice', superdoc });
+      c.resolveComment({ id: 'alice-id', email: 'a@b.com', name: 'Alice', superdoc });
+      expect(c.resolvedById).toBeNull();
       expect(c.resolvedByEmail).toBeNull();
       expect(superdoc.emit).not.toHaveBeenCalled();
     });
@@ -49,7 +51,7 @@ describe('use-comment: extended coverage', () => {
     it('emits when tracked change is present (suggestion resolve path)', () => {
       const c = useComment({ commentId: 'c-1', trackedChange: { insert: {} } });
       const superdoc = makeSuperdoc();
-      c.resolveComment({ email: 'a@b.com', name: 'Alice', superdoc });
+      c.resolveComment({ id: 'alice-id', email: 'a@b.com', name: 'Alice', superdoc });
       expect(superdoc.emit).toHaveBeenCalled();
       expect(superdoc.activeEditor.commands.resolveComment).toHaveBeenCalled();
     });
@@ -179,6 +181,7 @@ describe('use-comment: extended coverage', () => {
         creatorImage: '/a.png',
       });
       expect(c.getCommentUser()).toEqual({
+        id: null,
         name: 'Alice',
         email: 'a@b.com',
         image: '/a.png',

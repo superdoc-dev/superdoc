@@ -46,10 +46,14 @@ export interface Comment {
   commentId: string;
   /** Timestamp when the comment was created (ms since epoch) */
   createdTime: number | null;
+  /** Stable actor id of the comment author */
+  creatorId?: string | null;
   /** Display name of the comment author */
   creatorName: string | null;
   /** Email address of the comment author */
   creatorEmail: string | null;
+  /** Stable actor id of the resolver */
+  resolvedById?: string | null;
   /** Avatar URL of the comment author */
   creatorImage?: string | null;
   /** Structured body content of the comment */

@@ -160,7 +160,8 @@ export function resolveTextRangeInBlock(
     const segmentStart = offset;
     const segmentEnd = offset + segmentLength;
 
-    if (fromPos == null && range.start <= segmentEnd) {
+    const collapsed = range.start === range.end;
+    if (fromPos == null && (range.start < segmentEnd || (collapsed && range.start <= segmentEnd))) {
       fromPos = resolveSegmentPosition(range.start, segmentStart, segmentLength, docFrom, docTo);
     }
     if (toPos == null && range.end <= segmentEnd) {

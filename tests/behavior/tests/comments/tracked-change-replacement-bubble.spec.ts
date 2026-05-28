@@ -1,7 +1,10 @@
 import { test, expect } from '../../fixtures/superdoc.js';
 import { assertDocumentApiReady, listTrackChanges } from '../../helpers/document-api.js';
+import { findTrackedChangeComment } from '../../helpers/story-tracked-changes.js';
 
 test.use({ config: { toolbar: 'full', comments: 'on', trackChanges: true } });
+
+const BODY_STORY = { kind: 'story', storyType: 'body' } as const;
 
 test('SD-1739 tracked change replacement does not duplicate text in bubble', async ({ superdoc }) => {
   await assertDocumentApiReady(superdoc.page);
@@ -19,9 +22,16 @@ test('SD-1739 tracked change replacement does not duplicate text in bubble', asy
   await superdoc.waitForStable();
 
   await expect
-    .poll(async () => (await listTrackChanges(superdoc.page, { type: 'insert' })).total)
+    .poll(async () => (await listTrackChanges(superdoc.page, { type: 'replacement' })).total)
     .toBeGreaterThanOrEqual(1);
   await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBeGreaterThanOrEqual(1);
+
+  const replacementComment = await findTrackedChangeComment(superdoc.page, {
+    story: BODY_STORY,
+    excerpt: 'redlining',
+    type: 'replacement',
+  });
+  expect(replacementComment.deletedText).toContain('editing');
 
   // The floating dialog should show the tracked change with correct text
   // (Bug SD-1739 would show "Added: redliningg" with duplicated trailing char)

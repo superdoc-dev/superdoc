@@ -405,6 +405,21 @@
     "ci": false
   },
   {
+    "id": "ai-footnote-tool-agent",
+    "section": "ai",
+    "subsection": "agents",
+    "kind": "minimal-example",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Footnote tool agent",
+    "category": "AI",
+    "surface": "Agents",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/ai/footnote-tool-agent",
+    "docs": "https://docs.superdoc.dev/ai/agents/integrations",
+    "ci": false
+  },
+  {
     "id": "ai-redlining",
     "section": "ai",
     "subsection": "agents",

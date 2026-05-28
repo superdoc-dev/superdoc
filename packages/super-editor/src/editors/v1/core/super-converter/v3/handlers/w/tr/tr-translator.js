@@ -8,6 +8,7 @@ import { translator as tcTranslator } from '../tc';
 import { translator as tblBordersTranslator } from '../tblBorders';
 import { translator as trPrTranslator } from '../trPr';
 import { advancePastRowSpans, fillPlaceholderColumns, isPlaceholderCell } from './tr-helpers.js';
+import { normalizeRowCellChildren } from './row-cell-children.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:tr';
@@ -75,7 +76,7 @@ const encode = (params, encodedAttrs) => {
   const totalColumns = Array.isArray(gridColumnWidths) ? gridColumnWidths.length : 0;
   const pendingRowSpans = Array.isArray(activeRowSpans) ? activeRowSpans.slice() : [];
   while (pendingRowSpans.length < totalColumns) pendingRowSpans.push(0);
-  const cellNodes = row.elements.filter((el) => el.name === 'w:tc');
+  const cellEntries = normalizeRowCellChildren(row);
   const content = [];
   let currentColumnIndex = 0;
 
@@ -98,7 +99,7 @@ const encode = (params, encodedAttrs) => {
   fillUntil(safeGridBefore, 'gridBefore');
   skipOccupiedColumns();
 
-  cellNodes?.forEach((node) => {
+  cellEntries.forEach(({ node, cellSdt }) => {
     skipOccupiedColumns();
 
     const startColumn = currentColumnIndex;
@@ -121,6 +122,13 @@ const encode = (params, encodedAttrs) => {
         columnWidth,
       },
     });
+
+    // Attach cell-level SDT metadata after encode. The `NodeTranslator` wrapper
+    // ignores any second arg to `encode`, so we cannot piggyback `cellSdt` on
+    // the standard `encodedAttrs` channel; the cell loop owns this merge.
+    if (result && cellSdt) {
+      result.attrs = { ...(result.attrs || {}), cellSdt };
+    }
 
     if (result) {
       content.push(result);
@@ -213,6 +221,26 @@ const decode = (params, decodedAttrs) => {
   };
 
   const elements = translateChildNodes(translateParams);
+
+  // Re-wrap cells that were originally imported as cell-level SDT
+  // (ECMA-376 §17.5.2.32, CT_SdtCell). The decoder above emits a plain `<w:tc>`
+  // for each cell; we wrap it back in `<w:sdt><w:sdtContent><w:tc/></w:sdtContent></w:sdt>`
+  // using the preserved `sdtPr` (and `sdtEndPr` if present) on the source cell.
+  // Done here (not inside `tc-translator.decode`) so callers checking
+  // `el.name === 'w:tc'` on the decoder result remain correct.
+  let cellCursor = 0;
+  for (let i = 0; i < elements.length; i += 1) {
+    const exportedEl = elements[i];
+    if (!exportedEl || exportedEl.name !== 'w:tc') continue;
+    const sourceCell = trimmedContent[cellCursor];
+    cellCursor += 1;
+    const cellSdt = sourceCell?.attrs?.cellSdt;
+    if (!cellSdt || cellSdt.scope !== 'cell' || !cellSdt.sdtPr) continue;
+    const sdtChildren = [cellSdt.sdtPr];
+    if (cellSdt.sdtEndPr) sdtChildren.push(cellSdt.sdtEndPr);
+    sdtChildren.push({ name: 'w:sdtContent', elements: [exportedEl] });
+    elements[i] = { name: 'w:sdt', elements: sdtChildren };
+  }
 
   if (node.attrs?.tableRowProperties) {
     const tableRowProperties = { ...node.attrs.tableRowProperties };

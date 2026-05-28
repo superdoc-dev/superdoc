@@ -43,7 +43,11 @@ export interface ExtractTableContext {
 export interface ExtractTextSpanTrackedChange {
   /** Tracked change entity ID. */
   entityId: string;
-  /** The mark type carried on this run: insert, delete, or format. */
+  /**
+   * The mark type carried on this run: insert, delete, or format.
+   * Entity-level paired replacements surface as `replacement` only on
+   * `ExtractResult.trackedChanges[]`, not on span marks.
+   */
   type: TrackChangeType;
 }
 
@@ -123,9 +127,9 @@ export interface ExtractTrackedChange {
    * In paired replacement mode (the default: set
    * `modules.trackChanges.replacements: 'independent'` for one entity per
    * `<w:ins>` / `<w:del>` instead), a delete + insert pair shares one entity
-   * and the aggregate `type` collapses to `'insert'`. Per-half information
-   * lives on `block.textSpans[].trackedChanges[].type`, which is the source
-   * of truth for what each run actually represents.
+   * and `type` is `'replacement'`. Per-half information still lives on
+   * `block.textSpans[].trackedChanges[].type`, which is the source of truth
+   * for what each run actually represents.
    *
    * In independent mode every revision is its own entity and `type` is the
    * entity's only type.

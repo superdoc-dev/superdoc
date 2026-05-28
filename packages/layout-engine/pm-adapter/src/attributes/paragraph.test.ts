@@ -312,6 +312,106 @@ describe('computeParagraphAttrs', () => {
     expect(markerRun?.fontSize).toBe(11);
   });
 
+  // SD-3269: w:vanish / w:specVanish on the paragraph-mark rPr (w:pPr/w:rPr)
+  // apply to the paragraph-mark glyph only (ECMA-376 §17.3.2.36/§17.3.2.41).
+  // They must not leak into the auto-generated list marker's run properties,
+  // or the renderer drops the marker (e.g. "Section 2.01" disappears).
+  it('does not leak paragraph-mark vanish/specVanish into the list marker run', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          numberingProperties: { numId: 1, ilvl: 0 },
+          runProperties: {
+            vanish: true,
+            specVanish: true,
+          },
+        },
+        listRendering: {
+          markerText: 'Section 1.01',
+          justification: 'left',
+          path: [0],
+          numberingType: 'decimalZero',
+          suffix: 'tab',
+        },
+      },
+    };
+
+    const minimalContext = {
+      translatedNumbering: {
+        definitions: { '1': { numId: 1, abstractNumId: 1 } },
+        abstracts: {
+          '1': {
+            abstractNumId: 1,
+            levels: {
+              '0': {
+                ilvl: 0,
+                runProperties: {},
+              },
+            },
+          },
+        },
+      },
+      translatedLinkedStyles: { docDefaults: {}, styles: {} },
+      tableInfo: null,
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, minimalContext as never);
+    const markerRun = (
+      paragraphAttrs as {
+        wordLayout?: { marker?: { run?: { vanish?: boolean; specVanish?: boolean } } };
+      }
+    )?.wordLayout?.marker?.run;
+
+    expect(markerRun?.vanish).not.toBe(true);
+    expect(markerRun?.specVanish).not.toBe(true);
+  });
+
+  // Vanish defined on the numbering definition itself is still honoured.
+  // That is the supported way to hide an auto-generated list marker.
+  it('honours w:vanish defined on the numbering definition rPr for the marker', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          numberingProperties: { numId: 1, ilvl: 0 },
+        },
+        listRendering: {
+          markerText: '1.',
+          justification: 'left',
+          path: [0],
+          numberingType: 'decimal',
+          suffix: 'tab',
+        },
+      },
+    };
+
+    const minimalContext = {
+      translatedNumbering: {
+        definitions: { '1': { numId: 1, abstractNumId: 1 } },
+        abstracts: {
+          '1': {
+            abstractNumId: 1,
+            levels: {
+              '0': {
+                ilvl: 0,
+                runProperties: { vanish: true },
+              },
+            },
+          },
+        },
+      },
+      translatedLinkedStyles: { docDefaults: {}, styles: {} },
+      tableInfo: null,
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, minimalContext as never);
+    const markerRun = (paragraphAttrs as { wordLayout?: { marker?: { run?: { vanish?: boolean } } } })?.wordLayout
+      ?.marker?.run;
+
+    expect(markerRun?.vanish).toBe(true);
+  });
+
   it('preserves explicit paragraph bidi direction', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },

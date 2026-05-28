@@ -2,10 +2,11 @@ import { Node } from './Node.js';
 import type { NodeConfig } from './Node.js';
 
 /**
- * Configuration for OXML Node extensions (extends NodeConfig)
- * @template Options - Type for node options
- * @template Storage - Type for node storage
- * @template Attrs - Type for node attributes (optional, enables typed addAttributes)
+ * Configuration for OXML Node extensions (extends NodeConfig).
+ *
+ * @typeParam Options - Type for node options.
+ * @typeParam Storage - Type for node storage.
+ * @typeParam Attrs - Type for node attributes (optional, enables typed addAttributes).
  */
 export interface OxmlNodeConfig<
   Options extends Record<string, unknown> = Record<string, never>,
@@ -21,9 +22,10 @@ export interface OxmlNodeConfig<
 
 /**
  * OxmlNode class extends Node with OXML-specific properties.
- * @template Options - Type for node options
- * @template Storage - Type for node storage
- * @template Attrs - Type for node attributes (enables typed attribute access)
+ *
+ * @typeParam Options - Type for node options.
+ * @typeParam Storage - Type for node storage.
+ * @typeParam Attrs - Type for node attributes (enables typed attribute access).
  */
 export class OxmlNode<
   Options extends Record<string, unknown> = Record<string, never>,

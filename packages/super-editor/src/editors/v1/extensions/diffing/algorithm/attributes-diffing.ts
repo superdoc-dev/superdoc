@@ -290,6 +290,99 @@ function joinPath(base: string, key: string): string {
 }
 
 /**
+ * Applies an {@link AttributesDiff} onto a base set of attributes, returning a
+ * new object where:
+ *   - `added` paths are written
+ *   - `modified` paths overwrite the existing value with the `to` value
+ *   - `deleted` paths are removed
+ * Any key not referenced by the diff is preserved unchanged.
+ *
+ * Used at replay time so cross-editor diff apply does not overwrite the
+ * recipient editor's session-local identity attrs (sdBlockId, sdBlockRev) with
+ * the originator's values. See SD-3279.
+ *
+ * @param baseAttrs Recipient node's current attrs (preserved when not in diff).
+ * @param attrsDiff Diff to apply. When null, returns a shallow copy of base.
+ * @returns New attrs object with the diff layered onto base.
+ */
+export function applyAttrsDiff(
+  baseAttrs: Record<string, unknown> | null | undefined,
+  attrsDiff: AttributesDiff | null | undefined,
+): Record<string, unknown> {
+  const result = cloneAttrs(baseAttrs ?? {});
+  if (!attrsDiff) {
+    return result;
+  }
+  for (const [path, value] of Object.entries(attrsDiff.added ?? {})) {
+    setAtPath(result, path, value);
+  }
+  for (const [path, change] of Object.entries(attrsDiff.modified ?? {})) {
+    setAtPath(result, path, change.to);
+  }
+  for (const path of Object.keys(attrsDiff.deleted ?? {})) {
+    deleteAtPath(result, path);
+  }
+  return result;
+}
+
+function cloneAttrs(value: unknown): Record<string, unknown> {
+  if (!isPlainObject(value)) {
+    return {};
+  }
+  const clone: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    clone[key] = cloneDeep(child);
+  }
+  return clone;
+}
+
+function cloneDeep(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(cloneDeep);
+  }
+  if (isPlainObject(value)) {
+    const clone: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      clone[key] = cloneDeep(child);
+    }
+    return clone;
+  }
+  return value;
+}
+
+function splitPath(path: string): string[] {
+  return path.split('.');
+}
+
+function setAtPath(target: Record<string, unknown>, path: string, value: unknown): void {
+  const segments = splitPath(path);
+  let cursor: Record<string, unknown> = target;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const key = segments[i];
+    const next = cursor[key];
+    if (!isPlainObject(next)) {
+      cursor[key] = {};
+    }
+    cursor = cursor[key] as Record<string, unknown>;
+  }
+  cursor[segments[segments.length - 1]] = cloneDeep(value);
+}
+
+function deleteAtPath(target: Record<string, unknown>, path: string): void {
+  const segments = splitPath(path);
+  let cursor: Record<string, unknown> = target;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const key = segments[i];
+    const next = cursor[key];
+    if (!isPlainObject(next)) {
+      return;
+    }
+    cursor = next;
+  }
+  delete cursor[segments[segments.length - 1]];
+}
+
+/**
  * Determines if a value is a plain object (no arrays or nulls).
  *
  * @param value Value to inspect.

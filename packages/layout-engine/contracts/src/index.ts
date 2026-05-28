@@ -101,6 +101,13 @@ export type {
 import type { LayoutSourceIdentity } from './layout-identity.js';
 export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
 export type { NormalizedColumnLayout } from './column-layout.js';
+export {
+  getSdtContainerKey,
+  getSdtContainerKeyForBlock,
+  getSdtContainerMetadata,
+  hasExplicitSdtContainerKey,
+  isSdtContainerMetadata,
+} from './sdt-container.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -257,6 +264,8 @@ export type RunMark = {
 export type TrackedChangeMeta = {
   kind: TrackedChangeKind;
   id: string;
+  overlapParentId?: string;
+  relationship?: 'parent' | 'child' | 'standalone';
   /**
    * Internal story key identifying which content story owns this tracked
    * change (`'body'`, `'hf:part:…'`, `'fn:…'`, `'en:…'`).
@@ -356,6 +365,8 @@ export type TextRun = RunMarks & {
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;
+  /** All tracked-change layers on this run, preserving overlap order. */
+  trackedChanges?: TrackedChangeMeta[];
   /**
    * Run-level bidi signals preserved from the source DOCX (run rtl flag,
    * embedding/override directions). Direction-only - script formatting lives
@@ -497,6 +508,7 @@ export type BreakRun = {
   pmEnd?: number;
   sdt?: SdtMetadata;
   trackedChange?: TrackedChangeMeta;
+  trackedChanges?: TrackedChangeMeta[];
 };
 
 /**
@@ -1568,6 +1580,21 @@ export type ParagraphAttrs = {
   trackedChangesEnabled?: boolean;
   /** Marks an empty paragraph that only exists to carry section properties. */
   sectPrMarker?: boolean;
+  /**
+   * The paragraph break should not produce a visible line break: the next
+   * paragraph's runs fuse into this block during pm-adapter post-processing
+   * and the successor's auto-generated list marker disappears with it.
+   * Numbering counters on subsequent paragraphs still advance per OOXML
+   * paragraph, matching Word.
+   *
+   * Triggered by `w:vanish` on the paragraph-mark rPr (`w:pPr/w:rPr`).
+   * ECMA-376 §17.3.2.36 reads as if `w:specVanish` is the trigger ("a
+   * paragraph mark shall never be used to break the end of a paragraph for
+   * display"), but Word 16.0 fuses on `w:vanish` and leaves `w:specVanish`
+   * standalone as a no-op for the paragraph break (SD-3269 fixture matrix).
+   * Matching Word, not the literal spec, is the rendering goal.
+   */
+  suppressParagraphBreak?: boolean;
   /**
    * Resolved direction context for the paragraph (inline direction + writing mode).
    * Single source of truth for paragraph direction-aware rendering decisions.

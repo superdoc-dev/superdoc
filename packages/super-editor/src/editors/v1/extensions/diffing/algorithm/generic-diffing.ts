@@ -13,6 +13,13 @@ import {
 import { diffSequences, reorderDiffOperations } from './sequence-diffing';
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing';
 import { getInsertionPos, type NodePositionInfo } from './diff-utils';
+import { NON_SEMANTIC_BLOCK_ATTRS } from './identity-attrs';
+
+// Non-paragraph block-node attr diffing must ignore session-local identity
+// attrs. Otherwise a cross-editor diff carries the originator's sdBlockId in
+// the `modified` paths and replay overwrites the recipient's ID. Paragraphs
+// already strip these upstream via normalizeParagraphAttrs. See SD-3279.
+const NON_PARAGRAPH_BLOCK_IGNORED_ATTRS: string[] = Array.from(NON_SEMANTIC_BLOCK_ATTRS);
 
 type NodeJSON = ReturnType<PMNode['toJSON']>;
 
@@ -220,7 +227,11 @@ function buildModifiedDiff(oldNodeInfo: NodeInfo, newNodeInfo: NodeInfo): NodeDi
     return buildModifiedParagraphDiff(oldNodeInfo, newNodeInfo);
   }
 
-  const attrsDiff = getAttributesDiff(oldNodeInfo.node.attrs, newNodeInfo.node.attrs);
+  const attrsDiff = getAttributesDiff(
+    oldNodeInfo.node.attrs,
+    newNodeInfo.node.attrs,
+    NON_PARAGRAPH_BLOCK_IGNORED_ATTRS,
+  );
   if (!attrsDiff) {
     return null;
   }

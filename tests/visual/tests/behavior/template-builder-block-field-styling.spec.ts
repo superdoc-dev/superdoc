@@ -79,6 +79,38 @@ test('inline and block structured content field chrome use Template Builder fiel
   const getBlock = (fieldType: 'owner' | 'signer') =>
     renderedPage.locator(`.superdoc-structured-content-block[data-sdt-tag*='"fieldType":"${fieldType}"']`).first();
 
+  const expectRestingBackgrounds = async (fieldType: 'owner' | 'signer') => {
+    const inline = getInline(fieldType);
+    const block = getBlock(fieldType);
+
+    await inline.evaluate((el) => el.classList.remove('ProseMirror-selectednode'));
+    await block.evaluate((el) => {
+      el.classList.remove('ProseMirror-selectednode');
+      el.classList.remove('sdt-group-hover');
+    });
+
+    const inlineBackground = await inline.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const blockBackground = await block.evaluate((el) => getComputedStyle(el).backgroundColor);
+
+    expect(inlineBackground).toBe(blockBackground);
+    expect(inlineBackground).not.toBe('rgba(0, 0, 0, 0)');
+  };
+
+  const expectSelectedStateBackgrounds = async (fieldType: 'owner' | 'signer') => {
+    const inline = getInline(fieldType);
+    const block = getBlock(fieldType);
+
+    await inline.evaluate((el) => el.classList.add('ProseMirror-selectednode'));
+    await block.evaluate((el) => {
+      el.classList.remove('sdt-group-hover');
+      el.classList.add('ProseMirror-selectednode');
+    });
+
+    await expect(inline).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    const blockSelectedBackground = await block.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(blockSelectedBackground).not.toBe('rgba(0, 0, 0, 0)');
+  };
+
   const showInlineLabel = async (fieldType: 'owner' | 'signer') => {
     const inline = getInline(fieldType);
     await inline.evaluate((el) => el.classList.add('ProseMirror-selectednode'));
@@ -132,7 +164,9 @@ test('inline and block structured content field chrome use Template Builder fiel
   const signerBlockLabel = signerBlock.locator('.superdoc-structured-content-block__label');
   await expect(signerBlockLabel).toHaveCSS('color', 'rgb(255, 255, 0)');
   await expect(signerBlockLabel).toHaveCSS('border-color', 'rgb(220, 38, 38)');
+  await expectRestingBackgrounds('signer');
   await expectHoverBackgroundParity('signer');
+  await expectSelectedStateBackgrounds('signer');
 
   const ownerInline = await showInlineLabel('owner');
   await expect(ownerInline).toBeVisible();
@@ -149,7 +183,17 @@ test('inline and block structured content field chrome use Template Builder fiel
   const ownerBlockLabel = ownerBlock.locator('.superdoc-structured-content-block__label');
   await expect(ownerBlockLabel).toHaveCSS('color', 'rgb(255, 255, 0)');
   await expect(ownerBlockLabel).toHaveCSS('border-color', 'rgb(37, 99, 235)');
+  await expectRestingBackgrounds('owner');
   await expectHoverBackgroundParity('owner');
+  await expectSelectedStateBackgrounds('owner');
+
+  for (const fieldType of ['signer', 'owner'] as const) {
+    await getInline(fieldType).evaluate((el) => el.classList.remove('ProseMirror-selectednode'));
+    await getBlock(fieldType).evaluate((el) => {
+      el.classList.remove('ProseMirror-selectednode');
+      el.classList.remove('sdt-group-hover');
+    });
+  }
 
   await superdoc.screenshot('template-builder-owner-and-signer-inline-and-block-field-styling');
 });

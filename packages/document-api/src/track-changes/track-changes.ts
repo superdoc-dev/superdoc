@@ -1,7 +1,9 @@
 import type { Receipt, TrackChangeInfo, TrackChangesListQuery, TrackChangesListResult } from '../types/index.js';
 import type { StoryLocator } from '../types/story.types.js';
+import type { TextTarget } from '../types/address.js';
 import type { RevisionGuardOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 
 export type TrackChangesListInput = TrackChangesListQuery;
 
@@ -23,19 +25,59 @@ export interface TrackChangesRejectInput {
   story?: StoryLocator;
 }
 
-export type TrackChangesAcceptAllInput = Record<string, never>;
+export interface TrackChangesAcceptAllInput {
+  /**
+   * Optional explicit bulk filter. Omit or pass `'all'` to operate across
+   * every revision-capable story; pass a StoryLocator to scope the decision
+   * to one story.
+   */
+  story?: StoryLocator | 'all';
+}
 
-export type TrackChangesRejectAllInput = Record<string, never>;
+export interface TrackChangesRejectAllInput {
+  /**
+   * Optional explicit bulk filter. Omit or pass `'all'` to operate across
+   * every revision-capable story; pass a StoryLocator to scope the decision
+   * to one story.
+   */
+  story?: StoryLocator | 'all';
+}
+
+/**
+ * Range target for partial-range decisions.
+ *
+ * `range` is a canonical {@link TextTarget}; the engine resolves the
+ * selected overlap with each affected logical tracked change and applies
+ * the {@link https://www.w3.org/TR/selection-api/ selection-style} partial
+ * resolution rules from the tracked-changes spec § 9.
+ */
+export interface TrackChangesRangeInput {
+  range: TextTarget;
+  /** Story containing the range. Omit for body (backward compatible). */
+  story?: StoryLocator;
+}
 
 // ---------------------------------------------------------------------------
 // trackChanges.decide: consolidated accept/reject operation
 // ---------------------------------------------------------------------------
 
+/**
+ * Public decide target surface:
+ * - `{ id, story? }` for a single logical tracked change
+ * - `{ kind: 'range', range, story? }` for partial-range decisions
+ * - `{ scope: 'all', story? }` for bulk decisions, optionally filtered by story
+ *
+ * The executor also accepts internal legacy aliases (`kind: 'id'` /
+ * `kind: 'all'`) so JS-only callers keep working during the migration.
+ */
+export type ReviewDecisionTarget =
+  | { id: string; story?: StoryLocator }
+  | { kind: 'range'; range: TextTarget; story?: StoryLocator; part?: string }
+  | { scope: 'all'; story?: StoryLocator | 'all' };
+
 export type ReviewDecideInput =
-  | { decision: 'accept'; target: { id: string; story?: StoryLocator } }
-  | { decision: 'reject'; target: { id: string; story?: StoryLocator } }
-  | { decision: 'accept'; target: { scope: 'all' } }
-  | { decision: 'reject'; target: { scope: 'all' } };
+  | { decision: 'accept'; target: ReviewDecisionTarget }
+  | { decision: 'reject'; target: ReviewDecisionTarget };
 
 export interface TrackChangesAdapter {
   /** List tracked changes matching the given query. */
@@ -46,10 +88,21 @@ export interface TrackChangesAdapter {
   accept(input: TrackChangesAcceptInput, options?: RevisionGuardOptions): Receipt;
   /** Reject a tracked change, reverting it from the document. */
   reject(input: TrackChangesRejectInput, options?: RevisionGuardOptions): Receipt;
-  /** Accept all tracked changes in the document. */
+  /** Accept all tracked changes matching the requested bulk filter. */
   acceptAll(input: TrackChangesAcceptAllInput, options?: RevisionGuardOptions): Receipt;
-  /** Reject all tracked changes in the document. */
+  /** Reject all tracked changes matching the requested bulk filter. */
   rejectAll(input: TrackChangesRejectAllInput, options?: RevisionGuardOptions): Receipt;
+  /**
+   * Accept or reject a tracked-change selection range. Adapters
+   * that have not been updated to handle `kind: 'range'` may return a
+   * `CAPABILITY_UNAVAILABLE` failure receipt; the document-api executor
+   * surfaces that to callers without falling back to the legacy id/all
+   * paths because their semantics are not equivalent.
+   */
+  decideRange?(
+    input: { decision: 'accept' | 'reject' } & TrackChangesRangeInput,
+    options?: RevisionGuardOptions,
+  ): Receipt;
 }
 
 /** Public surface for trackChanges on DocumentApi. */
@@ -122,31 +175,100 @@ export function executeTrackChangesDecide(
   if (typeof input.target !== 'object' || input.target == null) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
-      'trackChanges.decide target must be an object with { id: string } or { scope: "all" }.',
+      'trackChanges.decide target must be an object with { id }, { kind: "range", range }, or { scope: "all" }.',
       { field: 'target', value: input.target },
     );
   }
 
   const target = input.target as Record<string, unknown>;
-  const isAll = target.scope === 'all';
+  const decision = input.decision as 'accept' | 'reject';
+  const rawStory = target.story;
 
-  if (!isAll) {
-    if (typeof target.id !== 'string' || target.id.length === 0) {
+  if (rawStory !== undefined && rawStory !== 'all') {
+    validateStoryLocator(rawStory, 'target.story');
+  }
+
+  const story = rawStory as StoryLocator | undefined;
+  const bulkStory = rawStory as StoryLocator | 'all' | undefined;
+
+  if ((target.scope === 'all' || target.kind === 'all') && (target.id !== undefined || target.kind === 'id')) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      'trackChanges.decide target must specify exactly one of { id }, { kind: "range", range }, or { scope: "all" }.',
+      { field: 'target', value: input.target },
+    );
+  }
+
+  if (target.kind === 'range') {
+    if (target.id !== undefined || target.scope !== undefined) {
       throw new DocumentApiValidationError(
         'INVALID_TARGET',
-        'trackChanges.decide target must have { id: string } or { scope: "all" }.',
+        'trackChanges.decide range targets must not include id or scope fields.',
         { field: 'target', value: input.target },
       );
     }
+    if (rawStory === 'all') {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        'trackChanges.decide range targets do not support story: "all".',
+        { field: 'target.story', value: rawStory },
+      );
+    }
+    if (typeof adapter.decideRange !== 'function') {
+      return {
+        success: false,
+        failure: {
+          code: 'CAPABILITY_UNAVAILABLE',
+          message: 'trackChanges.decide range targets are not supported by the active adapter.',
+          details: { target: input.target },
+        },
+      };
+    }
+    const range = target.range as TextTarget;
+    if (
+      !range ||
+      typeof range !== 'object' ||
+      range.kind !== 'text' ||
+      !Array.isArray(range.segments) ||
+      range.segments.length === 0
+    ) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        'trackChanges.decide target.kind = "range" requires a non-empty TextTarget range.',
+        { field: 'target.range', value: target.range },
+      );
+    }
+    return adapter.decideRange({ decision, range, ...(story ? { story } : {}) }, options);
   }
 
-  const story = (target as { story?: StoryLocator }).story;
-
-  if (input.decision === 'accept') {
-    if (isAll) return adapter.acceptAll({} as TrackChangesAcceptAllInput, options);
-    return adapter.accept({ id: target.id as string, ...(story ? { story } : {}) }, options);
+  if (target.scope === 'all' || target.kind === 'all') {
+    if (decision === 'accept') {
+      return adapter.acceptAll({ ...(bulkStory ? { story: bulkStory } : {}) }, options);
+    }
+    return adapter.rejectAll({ ...(bulkStory ? { story: bulkStory } : {}) }, options);
   }
 
-  if (isAll) return adapter.rejectAll({} as TrackChangesRejectAllInput, options);
-  return adapter.reject({ id: target.id as string, ...(story ? { story } : {}) }, options);
+  if (target.kind === 'id' || target.id !== undefined) {
+    if (rawStory === 'all') {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        'trackChanges.decide id targets do not support story: "all".',
+        { field: 'target.story', value: rawStory },
+      );
+    }
+    if (typeof target.id !== 'string' || target.id.length === 0) {
+      throw new DocumentApiValidationError('INVALID_TARGET', 'trackChanges.decide id targets require a non-empty id.', {
+        field: 'target',
+        value: input.target,
+      });
+    }
+    if (decision === 'accept') return adapter.accept({ id: target.id, ...(story ? { story } : {}) }, options);
+    return adapter.reject({ id: target.id, ...(story ? { story } : {}) }, options);
+  }
+
+  throw new DocumentApiValidationError(
+    'INVALID_TARGET',
+    'trackChanges.decide target must have { id }, { kind: "range", range }, or { scope: "all" }.',
+    { field: 'target', value: input.target },
+  );
 }

@@ -23,11 +23,36 @@ function normalizeTrackedChangeExcerpt(change: TrackChangeInfo): string {
   return String(change.excerpt ?? '').trim();
 }
 
-function mapTrackChangeTypeToCommentType(type: TrackChangeType | undefined): string | null {
-  if (!type) return null;
-  if (type === 'insert') return 'trackInsert';
-  if (type === 'delete') return 'trackDelete';
-  return 'trackFormat';
+function matchesTrackedChangeCommentType(
+  comment: TrackedChangeCommentSnapshot,
+  type: TrackChangeType | undefined,
+): boolean {
+  if (!type) return true;
+
+  const trackedChangeType = comment.trackedChangeType ?? null;
+  const trackedChangeDisplayType = comment.trackedChangeDisplayType ?? null;
+  if (type === 'insert') {
+    return (
+      trackedChangeType === 'trackInsert' || trackedChangeType === 'insert' || trackedChangeDisplayType === 'insert'
+    );
+  }
+  if (type === 'delete') {
+    return (
+      trackedChangeType === 'trackDelete' || trackedChangeType === 'delete' || trackedChangeDisplayType === 'delete'
+    );
+  }
+  if (type === 'replacement') {
+    return (
+      trackedChangeType === 'replacement' ||
+      trackedChangeType === 'both' ||
+      trackedChangeDisplayType === 'replacement' ||
+      ((trackedChangeType === 'trackInsert' ||
+        trackedChangeType === 'insert' ||
+        trackedChangeDisplayType === 'insert') &&
+        comment.deletedText != null)
+    );
+  }
+  return trackedChangeType === 'trackFormat' || trackedChangeType === 'format' || trackedChangeDisplayType === 'format';
 }
 
 function sameStory(left: StoryLocator | null | undefined, right: StoryLocator | null | undefined): boolean {
@@ -110,13 +135,12 @@ export async function findTrackedChangeComment(
     type?: TrackChangeType;
   },
 ): Promise<TrackedChangeCommentSnapshot> {
-  const commentType = mapTrackChangeTypeToCommentType(input.type);
   const comments = await getCommentsSnapshot(page);
   const matched = comments.find((comment) => {
     if (comment.trackedChange !== true) return false;
     if (!sameStory(comment.trackedChangeStory ?? null, input.story)) return false;
     if (input.id && !trackedChangeIdMatches(comment, input.id)) return false;
-    if (commentType && comment.trackedChangeType !== commentType) return false;
+    if (!matchesTrackedChangeCommentType(comment, input.type)) return false;
     if (input.excerpt) {
       const haystack = [comment.trackedChangeText, comment.deletedText].filter(Boolean).join(' ');
       if (!haystack.includes(input.excerpt)) return false;

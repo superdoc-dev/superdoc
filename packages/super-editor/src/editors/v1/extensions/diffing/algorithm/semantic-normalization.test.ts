@@ -19,6 +19,8 @@ describe('normalizeParagraphAttrs', () => {
       rsidP: '00112233',
       rsidRPr: '00445566',
       rsidDel: '00778899',
+      sdBlockId: 'session-local-uuid-1',
+      sdBlockRev: 7,
       align: 'center',
       indent: { left: 720 },
     };
@@ -264,6 +266,69 @@ describe('normalizeDocJSON', () => {
     const result = normalizeDocJSON(docJSON) as any;
     const cellParagraph = result.content[0].content[0].content[0].content[0];
     expect(cellParagraph.attrs).toEqual({});
+  });
+
+  it('strips identity attrs from non-paragraph block nodes (tables, rows, cells, sections)', () => {
+    // sdBlockId is assigned per editor session to every block node that
+    // accepts it (paragraphs, tables, rows, cells, sections). Including it
+    // in the diff fingerprint makes two editors loaded from the same DOCX
+    // produce different fingerprints.
+    const docJSON = {
+      type: 'doc',
+      content: [
+        {
+          type: 'table',
+          attrs: { sdBlockId: 'table-uuid-A', sdBlockRev: 1, tableStyleId: 'Grid' },
+          content: [
+            {
+              type: 'tableRow',
+              attrs: { sdBlockId: 'row-uuid-A', sdBlockRev: 2 },
+              content: [
+                {
+                  type: 'tableCell',
+                  attrs: { sdBlockId: 'cell-uuid-A', sdBlockRev: 3, cellWidth: 100 },
+                  content: [
+                    {
+                      type: 'paragraph',
+                      attrs: { sdBlockId: 'p-uuid-A', sdBlockRev: 4, align: 'left' },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = normalizeDocJSON(docJSON) as any;
+
+    expect(result.content[0].attrs).toEqual({ tableStyleId: 'Grid' });
+    expect(result.content[0].content[0].attrs).toEqual({});
+    expect(result.content[0].content[0].content[0].attrs).toEqual({ cellWidth: 100 });
+    expect(result.content[0].content[0].content[0].content[0].attrs).toEqual({ align: 'left' });
+  });
+
+  it('produces the same normalized output for two doc trees that differ only in sdBlockId values', () => {
+    const makeDoc = (uuidA: string, uuidB: string) => ({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: { sdBlockId: uuidA, align: 'left' },
+          content: [{ type: 'run', attrs: {}, content: [{ type: 'text', text: 'Hello' }] }],
+        },
+        {
+          type: 'table',
+          attrs: { sdBlockId: uuidB, tableStyleId: 'Grid' },
+          content: [],
+        },
+      ],
+    });
+
+    const a = normalizeDocJSON(makeDoc('uuid-A1', 'uuid-A2'));
+    const b = normalizeDocJSON(makeDoc('uuid-B1', 'uuid-B2'));
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
   it('returns the doc unchanged when there is no content', () => {

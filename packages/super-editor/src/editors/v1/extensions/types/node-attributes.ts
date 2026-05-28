@@ -366,6 +366,22 @@ export interface CellBackground {
   color: string;
 }
 
+/**
+ * Cell-level structured document tag metadata, preserved on a `tableCell` when
+ * the source OOXML wrapped the cell in `<w:sdt>` (ECMA-376 §17.5.2.32, CT_SdtCell).
+ *
+ * The wrapper is reconstructed on export. Cells carrying this metadata are not
+ * exposed through the content-controls Document API in v1.
+ */
+export interface CellSdtMetadata {
+  /** Discriminator for future SDT scope variants (row, block) on the same slot. */
+  scope: 'cell';
+  /** Raw `<w:sdtPr>` element preserved from import for opaque round-trip. */
+  sdtPr: unknown;
+  /** Raw `<w:sdtEndPr>` element if present, otherwise null. */
+  sdtEndPr: unknown | null;
+}
+
 /** Table cell node attributes */
 export interface TableCellAttrs extends TableNodeAttributes {
   /** Legacy imported identity preserved for backwards compatibility */
@@ -396,6 +412,11 @@ export interface TableCellAttrs extends TableNodeAttributes {
   widthUnit: string;
   /** Placeholder key for temporary cells */
   __placeholder: string | null;
+  /**
+   * Cell-level structured document tag metadata preserved from OOXML import
+   * when the source `<w:tc>` was wrapped in `<w:sdt>`. Reconstructed on export.
+   */
+  cellSdt?: CellSdtMetadata | null;
 }
 
 /** Table header cell attributes (same as TableCellAttrs) */

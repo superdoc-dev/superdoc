@@ -6,6 +6,7 @@ describe('comment-schemas', () => {
     expect(conversation).toEqual({
       conversationId: null,
       documentId: null,
+      creatorId: null,
       creatorEmail: null,
       creatorName: null,
       comments: [],
@@ -16,7 +17,7 @@ describe('comment-schemas', () => {
   it('exposes a comment template with user/timestamp placeholders', () => {
     expect(comment).toEqual({
       comment: null,
-      user: { name: null, email: null },
+      user: { id: null, name: null, email: null },
       timestamp: null,
     });
   });

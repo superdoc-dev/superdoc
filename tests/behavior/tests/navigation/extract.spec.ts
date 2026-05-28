@@ -101,7 +101,7 @@ test('@behavior SD-2525: doc.extract returns tracked changes', async ({ superdoc
   expect(result.trackedChanges.length).toBeGreaterThanOrEqual(1);
   const tc = result.trackedChanges[0];
   expect(tc.entityId).toBeTruthy();
-  expect(['insert', 'delete', 'format']).toContain(tc.type);
+  expect(['insert', 'delete', 'replacement', 'format']).toContain(tc.type);
 });
 
 test('@behavior SD-2525: extract nodeIds work with scrollToElement', async ({ superdoc }) => {

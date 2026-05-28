@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { markRaw, toRaw } from 'vue';
 import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 
-import { DOCX, PDF, HTML } from '@superdoc/common';
+import { DOCX, PDF, HTML, getActorIdentityKey, normalizeActorEmail } from '@superdoc/common';
 import { SuperToolbar, createZip, seedEditorStateToYDoc, onCollaborationProviderSynced } from '@superdoc/super-editor';
 import { SuperComments } from '../components/CommentsLayer/commentsList/super-comments-list.js';
 import { createSuperdocVueApp } from './create-app.js';
@@ -21,8 +21,10 @@ import { WhiteboardRenderer } from './whiteboard/WhiteboardRenderer';
 import { SurfaceManager } from './surface-manager.js';
 import { createDeprecatedEditorProxy } from '../helpers/deprecation.js';
 import { normalizeTrackChangesConfig } from './helpers/normalize-track-changes-config.js';
+import { normalizeCommentsUiPolicy } from '../helpers/comment-small-screen.js';
 
 const DEFAULT_USER = Object.freeze({
+  id: null,
   name: 'Default SuperDoc user',
   email: null,
 });
@@ -68,14 +70,20 @@ import type {
   Config,
   DocumentMode,
   Editor,
+  EditorUpdateEvent,
   ExportParams,
   InternalConfig,
   Modules,
   NavigableAddress,
   RuntimeDocument,
   SearchMatch,
+  SuperDocAwarenessUpdatePayload,
+  SuperDocCommentsUpdatePayload,
+  SuperDocEditorPayload,
   SuperDocExceptionPayload,
   SuperDocExceptionStorePayload,
+  SuperDocLockedPayload,
+  SuperDocReadyPayload,
   SuperDocState,
   SurfaceHandle,
   SurfaceRequest,
@@ -88,13 +96,8 @@ import type * as Y from 'yjs';
 // as a type here without a separate `import type` declaration.
 import type { WhiteboardData } from './whiteboard/Whiteboard.js';
 
-// Event payload shapes (formerly JSDoc typedefs above the class).
-interface SuperDocReadyPayload {
-  superdoc: SuperDoc;
-}
-interface SuperDocEditorPayload {
-  editor: Editor;
-}
+// Internal-only event payload shapes (consumer-facing payloads are
+// exported from `core/types/index.ts` and imported above).
 interface SuperDocWhiteboardPayload {
   whiteboard: Whiteboard;
 }
@@ -116,28 +119,6 @@ interface SuperDocContentErrorPayload {
   error: unknown;
   editor: Editor;
 }
-interface SuperDocLockedPayload {
-  isLocked: boolean;
-  lockedBy?: User | null;
-}
-interface SuperDocEditorUpdatePayload {
-  editor?: Editor;
-  sourceEditor?: Editor;
-  surface: string;
-  headerId: string | null;
-  sectionType: string | null;
-}
-interface SuperDocAwarenessUpdatePayload {
-  states: AwarenessState[];
-  added: number[];
-  removed: number[];
-  superdoc: SuperDoc;
-}
-interface SuperDocCommentsUpdatePayload {
-  type: string;
-  comment?: Comment;
-  changes?: Array<{ key: string; commentId: string; fileId?: string | null }>;
-}
 
 /**
  * SuperDoc lifecycle event registry. Keys are event names emitted via
@@ -155,7 +136,7 @@ interface SuperDocEventMap {
   zoomChange: [SuperDocZoomPayload];
   'formatting-marks-change': [SuperDocFormattingMarksPayload];
   'document-mode-change': [SuperDocDocumentModeChangePayload];
-  'editor-update': [SuperDocEditorUpdatePayload];
+  'editor-update': [EditorUpdateEvent];
   'content-error': [SuperDocContentErrorPayload];
   'fonts-resolved': [FontsResolvedPayload];
   'pagination-update': [SuperDocPaginationPayload];
@@ -189,36 +170,10 @@ interface SuperDocEventMap {
 // current consumer-visible contract.
 
 /**
- * Adapts an optional `Config` callback to EventEmitter's
- * `(...args: any[]) => void` listener signature.
- *
- * Every callback wrapped by this helper defaults to `() => null` in the
- * class-field initializer, so EventEmitter receives a function in normal
- * use. This helper is a runtime identity cast: behavior is unchanged if
- * that invariant ever breaks (e.g. a consumer explicitly passes
- * `undefined`), and EventEmitter sees the same value it would have
- * without the wrapper. Sites with a `null` default (`onFontsResolved`,
- * `onTrackedChangeBubbleAccept`, `onTrackedChangeBubbleReject`) use a
- * separate `if`-guard pattern instead of this helper.
- *
- * The `any[]` here is correct: EventEmitter dispatches whatever payload
- * each emit site supplies, and the consumer-supplied callback only
- * inspects the args its own signature names. Narrower typing would force
- * every callsite below to cast.
- */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function asEventListener(listener: ((...args: any[]) => void) | undefined): (...args: any[]) => void {
-  return listener as (...args: any[]) => void;
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
-
-/**
  * SuperDoc class
  * Expects a config object
  *
  * @class
- * @extends {EventEmitter<SuperDocEventMap>}
- * @implements {SuperDocLike}
  */
 export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   static allowedTypes = [DOCX, PDF, HTML];
@@ -227,7 +182,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   #isUpgrading = false;
 
-  /** @type {(() => void) | null} — aborts an in-flight upgrade (sync wait or ready wait) */
+  /** Aborts an in-flight upgrade (sync wait or ready wait). */
   #abortUpgrade: (() => void) | null = null;
 
   #mountWrapper: HTMLDivElement | null = null;
@@ -362,10 +317,10 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   /** Pinia store root for the SuperDoc Vue app. Set in `#initVueApp`. */
   pinia: ReturnType<typeof createSuperdocVueApp>['pinia'] | undefined;
 
-  /** @type {number} Count of editors that have signaled `editorCreate`. */
+  /** Count of editors that have signaled `editorCreate`. */
   readyEditors = 0;
 
-  /** @type {number} Outstanding async saves waiting for collaboration ack. */
+  /** Outstanding async saves waiting for collaboration ack. */
   pendingCollaborationSaves = 0;
 
   // ─── Runtime fields populated by `#init` ──────────────────────────────
@@ -584,6 +539,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     if (!Object.prototype.hasOwnProperty.call(this.config.modules, 'comments')) {
       this.config.modules.comments = {};
     }
+    this.config.modules.comments = normalizeCommentsUiPolicy(this.config.modules.comments);
 
     this.config.colors = shuffleArray(this.config.colors as `#${string}`[]);
     this.userColorMap = new Map();
@@ -675,7 +631,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   /**
    * Get the number of editors that are required for this superdoc
-   * @returns {number} The number of required editors
+   * @returns The number of required editors
    */
   get requiredNumberOfEditors() {
     return this.#requireSuperdocStore('requiredNumberOfEditors').documents.filter(
@@ -742,7 +698,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     const cspNonce = this.config.cspNonce;
 
     const originalCreateElement = document.createElement;
-    /** @param {string} tagName */
+    /** @param tagName */
     document.createElement = function (tagName: string) {
       const element = originalCreateElement.call(this, tagName);
       if (tagName.toLowerCase() === 'style') {
@@ -857,33 +813,52 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.#syncViewingVisibility();
   }
 
-  #initListeners() {
-    this.on('editorBeforeCreate', asEventListener(this.config.onEditorBeforeCreate));
-    this.on('editorCreate', asEventListener(this.config.onEditorCreate));
-    this.on('editorDestroy', asEventListener(this.config.onEditorDestroy));
-    this.on('ready', asEventListener(this.config.onReady));
-    this.on('comments-update', asEventListener(this.config.onCommentsUpdate));
-    this.on('awareness-update', asEventListener(this.config.onAwarenessUpdate));
-    this.on('locked', asEventListener(this.config.onLocked));
-    this.on('pdf:document-ready', asEventListener(this.config.onPdfDocumentReady));
-    this.on('sidebar-toggle', asEventListener(this.config.onSidebarToggle));
-    this.on('collaboration-ready', asEventListener(this.config.onCollaborationReady));
-    this.on('editor-update', asEventListener(this.config.onEditorUpdate));
-    this.on('content-error', this.onContentError);
-    this.on('exception', asEventListener(this.config.onException));
-    this.on('list-definitions-change', asEventListener(this.config.onListDefinitionsChange));
-    this.on('pagination-update', asEventListener(this.config.onPaginationUpdate));
+  /**
+   * Register an optional `Config` callback as a listener for the matching
+   * SuperDoc event. The event key constrains `K`, so TypeScript checks
+   * that the consumer-typed `Config.onX` is assignable to
+   * `SuperDocEventMap[event]` at the registration site. No-ops on
+   * `undefined`, so optional callbacks do not register dead listeners.
+   *
+   * This catches most event/callback drift at registration sites; the
+   * earlier `any → any` bridge let mismatches like `lockedBy: User` vs
+   * runtime `User | null` ship undetected. It does not catch overly
+   * wide callback types: `(p: {}) => void` is contravariantly
+   * assignable to any narrower payload, so consumer fixtures still
+   * need to lock the exact emitted payload shape per callback (see
+   * `tests/consumer-typecheck/src/config-callback-payloads.ts`).
+   */
+  #onConfig<K extends keyof SuperDocEventMap>(
+    event: K,
+    listener: EventEmitter.EventListener<SuperDocEventMap, K> | undefined,
+  ): void {
+    if (listener) this.on(event, listener);
+  }
 
-    if (this.config.onFontsResolved) {
-      this.on('fonts-resolved', this.config.onFontsResolved);
-    }
+  #initListeners() {
+    this.#onConfig('editorBeforeCreate', this.config.onEditorBeforeCreate);
+    this.#onConfig('editorCreate', this.config.onEditorCreate);
+    this.#onConfig('editorDestroy', this.config.onEditorDestroy);
+    this.#onConfig('ready', this.config.onReady);
+    this.#onConfig('comments-update', this.config.onCommentsUpdate);
+    this.#onConfig('awareness-update', this.config.onAwarenessUpdate);
+    this.#onConfig('locked', this.config.onLocked);
+    this.#onConfig('pdf:document-ready', this.config.onPdfDocumentReady);
+    this.#onConfig('sidebar-toggle', this.config.onSidebarToggle);
+    this.#onConfig('collaboration-ready', this.config.onCollaborationReady);
+    this.#onConfig('editor-update', this.config.onEditorUpdate);
+    this.on('content-error', this.onContentError);
+    this.#onConfig('exception', this.config.onException);
+    this.#onConfig('list-definitions-change', this.config.onListDefinitionsChange);
+    this.#onConfig('pagination-update', this.config.onPaginationUpdate);
+    this.#onConfig('fonts-resolved', this.config.onFontsResolved);
   }
 
   /**
    * Initialize collaboration if configured. Accepts the full
    * `Config.modules` block so it can read both the collaboration
    * subkey and the comments subkey at once.
-   * @returns {Promise<Document[] | undefined>} The processed documents with collaboration enabled. Caller awaits for side effects; the return value is informational.
+   * @returns The processed documents with collaboration enabled. Caller awaits for side effects; the return value is informational.
    */
   async #initCollaboration(
     { collaboration: collaborationModuleConfig, comments: commentsConfig = {} }: Modules = {} as Modules,
@@ -1030,7 +1005,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     if (!user || user.color) return;
 
     const palette = this.colors.length > 0 ? this.colors : DEFAULT_AWARENESS_PALETTE;
-    const userKey = user.email || user.name || '';
+    const userKey = user.id || user.email || user.name || '';
     let hash = 5381;
     for (let i = 0; i < userKey.length; i++) {
       hash = ((hash << 5) + hash) ^ userKey.charCodeAt(i);
@@ -1056,7 +1031,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * - External `{ ydoc, provider }` collaboration
    * - Overwrite-and-upgrade only (no merge semantics)
    *
-   * @returns {Promise<void>} Resolves once the collaborative runtime is ready
+   * @returns Resolves once the collaborative runtime is ready
    */
   async upgradeToCollaboration({ ydoc, provider }: UpgradeToCollaborationOptions): Promise<void> {
     this.#validateUpgradePrerequisites({ ydoc, provider });
@@ -1137,7 +1112,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * "instance not yet ready" failure mode explicit instead of a
    * generic TypeError on `.documents`.
    *
-   * @param {string} methodName The public method name surfaced in
+   * @param methodName The public method name surfaced in
    *   the error so consumers know which call needed the ready state.
    */
   #requireSuperdocStore(methodName: string) {
@@ -1353,7 +1328,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * Validate that the instance is in a valid state for a collaboration upgrade.
    * Throws descriptive errors for each invalid condition.
    *
-   * @param {{ ydoc: unknown, provider: unknown }} options
+   * @param options
    */
   #validateUpgradePrerequisites({ ydoc, provider }: UpgradeToCollaborationOptions) {
     if (this.#destroyed) {
@@ -1385,7 +1360,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   /**
    * Resolve the source editor from the DOCX document entry.
    *
-   * @returns {Editor} The editor instance for the source document
+   * @returns The editor instance for the source document
    * @throws {Error} If the editor is not yet created
    */
   #resolveSourceEditor() {
@@ -1409,23 +1384,34 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * ready; pre-ready mutations would be silently overwritten by the
    * `this.users = this.config.users || []` re-seed inside `#init`.
    *
-   * @param {User} user The user to add
+   * @param user The user to add
    */
   addSharedUser(user: User) {
     this.#requireReady('addSharedUser');
-    if (this.users.some((u) => u.email === user.email)) return;
+    const userKey = getActorIdentityKey({ actor: user });
+    if (userKey && this.users.some((u) => getActorIdentityKey({ actor: u }) === userKey)) return;
     this.users.push(user);
   }
 
   /**
    * Remove a user from the shared users list. Requires the instance
-   * to be ready for the same reason as `addSharedUser`.
+   * to be ready for the same reason as `addSharedUser`. Accepts
+   * either a user-like object or a legacy email string.
    *
-   * @param {String} email The email of the user to remove
+   * @param userOrEmail The user or email of the user to remove
    */
-  removeSharedUser(email: string) {
+  removeSharedUser(userOrEmail: User | string) {
     this.#requireReady('removeSharedUser');
-    this.users = this.users.filter((u) => u.email !== email);
+    const legacyEmail = typeof userOrEmail === 'string' ? normalizeActorEmail(userOrEmail) : '';
+    const targetKey =
+      typeof userOrEmail === 'string' ? `email:${legacyEmail}` : getActorIdentityKey({ actor: userOrEmail });
+
+    this.users = this.users.filter((u) => {
+      const existingKey = getActorIdentityKey({ actor: u });
+      if (targetKey) return existingKey !== targetKey;
+      if (legacyEmail) return normalizeActorEmail(u.email) !== legacyEmail;
+      return true;
+    });
   }
 
   /**
@@ -1441,9 +1427,9 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     // The errored editor came from `superdocStore.documents`, so the find
     // by its `documentId` is expected to hit. Cast the find result to a
     // RuntimeDocument to assert non-null at the consumer callback.
-    const doc = /** @type {RuntimeDocument} */ this.#requireSuperdocStore('onContentError').documents.find(
+    const doc = this.#requireSuperdocStore('onContentError').documents.find(
       (d: RuntimeDocument) => d.id === documentId,
-    );
+    ) as RuntimeDocument;
     // `onContentError` is typed as optional on the public Config typedef
     // because consumers don't have to wire a handler. The class field
     // initializer installs a `() => null` default, but `#init` spreads
@@ -1458,7 +1444,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.config.onContentError?.({
       error,
       editor,
-      documentId: /** @type {string} */ doc.id,
+      documentId: doc.id as string,
       file: doc.data,
     });
   }
@@ -1481,7 +1467,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   /**
    * Triggered before an editor is created
-   * @param {Editor} editor The editor that is about to be created
+   * @param editor The editor that is about to be created
    */
   broadcastEditorBeforeCreate(editor: Editor) {
     this.emit('editorBeforeCreate', { editor: createDeprecatedEditorProxy(editor) });
@@ -1489,7 +1475,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   /**
    * Triggered when an editor is created
-   * @param {Editor} editor The editor that was created
+   * @param editor The editor that was created
    */
   broadcastEditorCreate(editor: Editor) {
     this.readyEditors++;
@@ -1511,14 +1497,14 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.emit('sidebar-toggle', isOpened);
   }
 
-  /** @param {unknown[]} args */
+  /** @param args */
   #log(...args: unknown[]) {
     (console.debug ? console.debug : console.log)('🦋 🦸‍♀️ [superdoc]', ...args);
   }
 
   /**
    * Set the active editor
-   * @param {Editor} editor The editor to set as active
+   * @param editor The editor to set as active
    */
   setActiveEditor(editor: Editor) {
     this.activeEditor = editor;
@@ -1624,7 +1610,18 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
     this.toolbar = new SuperToolbar(config);
 
-    this.toolbar.on('exception', asEventListener(this.config.onException));
+    // Toolbar bridge: forwards SuperToolbar's exception events into the
+    // user's Config.onException callback. SuperToolbar's event types are
+    // not aligned with SuperDocEventMap, so this is intentionally a
+    // local cast rather than going through the typed `#onConfig` helper.
+    // Truthy guard mirrors `#onConfig`: skip absent callbacks (consumer
+    // passes `{ onException: undefined }` explicitly), but pass through
+    // truthy non-function values so eventemitter3 throws loudly at
+    // registration time.
+    if (this.config.onException) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this.toolbar.on('exception', this.config.onException as any);
+    }
     // `this.toolbar` infers as `SuperToolbar | null` from the field's
     // first assignment in `#addToolbar` (the `null` placeholder a few
     // lines up). The closure registers after the SuperToolbar instance
@@ -1638,7 +1635,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   /**
    * Add a comments list to the superdoc
    * Requires the comments module to be enabled
-   * @param {HTMLElement} element The DOM element to render the comments list in
+   * @param element The DOM element to render the comments list in
    */
   addCommentsList(element: HTMLElement) {
     if (!this.config?.modules?.comments || this.config.role === 'viewer') return;
@@ -1661,9 +1658,9 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   /**
    * Scroll the document to a given comment by id.
    *
-   * @param {string} commentId The comment id
-   * @param {{ behavior?: ScrollBehavior, block?: ScrollLogicalPosition }} [options]
-   * @returns {boolean} Whether a matching element was found
+   * @param commentId The comment id
+   * @param [options]
+   * @returns Whether a matching element was found
    */
   scrollToComment(commentId: string, options: { behavior?: ScrollBehavior; block?: ScrollLogicalPosition } = {}) {
     const commentsConfig = this.config?.modules?.comments;
@@ -1690,7 +1687,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * Story-aware navigation is currently supported for bookmark and tracked
    * change targets. Block and comment targets are body-only.
    *
-   * @returns {Promise<boolean>} Whether the target was found and navigated to.
+   * @returns Whether the target was found and navigated to.
    */
   async navigateTo(target: NavigableAddress): Promise<boolean> {
     const storeDocs = this.superdocStore?.documents;
@@ -1707,8 +1704,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * change entityId. The method resolves the element type automatically
    * and scrolls to it.
    *
-   * @param {string} elementId - The element's stable ID.
-   * @returns {Promise<boolean>} Whether the element was found and scrolled to.
+   * @param elementId - The element's stable ID.
+   * @returns Whether the element was found and scrolled to.
    *
    * @example
    * // Navigate to a paragraph by its nodeId
@@ -1820,8 +1817,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   /**
    * Set the document mode on a document's editor (PresentationEditor or Editor).
    * Tries PresentationEditor first, falls back to Editor for backward compatibility.
-   * @param {RuntimeDocument} doc - The document object
-   * @param {DocumentMode} mode - The document mode ('editing', 'viewing', 'suggesting')
+   * @param doc - The document object
+   * @param mode - The document mode ('editing', 'viewing', 'suggesting')
    */
   #applyDocumentMode(doc: RuntimeDocument, mode: DocumentMode) {
     const presentationEditor = typeof doc.getPresentationEditor === 'function' ? doc.getPresentationEditor() : null;
@@ -1839,7 +1836,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * Force PresentationEditor instances to render a specific tracked-changes mode
    * or disable tracked-change metadata entirely.
    *
-   * @param {{ mode?: 'review' | 'original' | 'final' | 'off', enabled?: boolean }} [preferences]
+   * @param [preferences]
    */
   setTrackedChangesPreferences(preferences?: { mode?: 'review' | 'original' | 'final' | 'off'; enabled?: boolean }) {
     const normalized = preferences && Object.keys(preferences).length ? { ...preferences } : undefined;
@@ -1959,8 +1956,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * returns the array of matches the underlying search command produced
    * (possibly empty).
    *
-   * @param {string | RegExp} text The text or regex to search for
-   * @returns {import('./types/index.js').SearchMatch[] | undefined} The search results
+   * @param text The text or regex to search for
+   * @returns The search results
    */
   search(text: string | RegExp): SearchMatch[] | undefined {
     return this.activeEditor?.commands.search(text, { searchModel: 'visible' });
@@ -1973,8 +1970,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * runtime resolves its current document position via the embedded
    * tracker ids.
    *
-   * @param {import('./types/index.js').SearchMatch} match The match object returned by `superdoc.search()`.
-   * @returns {boolean | undefined} Whether the command dispatched, or `undefined` if no active editor.
+   * @param match The match object returned by `superdoc.search()`.
+   * @returns Whether the command dispatched, or `undefined` if no active editor.
    */
   goToSearchResult(match: SearchMatch) {
     return this.activeEditor?.commands.goToSearchResult(match);
@@ -1982,7 +1979,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   /**
    * Get the current zoom level as a percentage (e.g., 100 for 100%)
-   * @returns {number} The current zoom level as a percentage
+   * @returns The current zoom level as a percentage
    * @example
    * const zoom = superdoc.getZoom(); // Returns 100, 150, 200, etc.
    */
@@ -1994,7 +1991,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * Set the zoom level for all documents.
    * Updates the centralized activeZoom state, which propagates to all
    * presentation editors, PDF viewers, and whiteboard layers via the Vue watcher.
-   * @param {number} percent - The zoom level as a percentage (e.g., 100, 150, 200)
+   * @param percent - The zoom level as a percentage (e.g., 100, 150, 200)
    * @example
    * superdoc.setZoom(150); // Set zoom to 150%
    * superdoc.setZoom(50);  // Set zoom to 50%
@@ -2034,7 +2031,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   /**
    * Get the HTML content of all editors
-   * @returns {Array<string>} The HTML content of all editors
+   * @returns The HTML content of all editors
    */
   getHTML(options: Parameters<Editor['getHTML']>[0] = {}) {
     const editors: Editor[] = [];
@@ -2051,8 +2048,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   /**
    * Lock the current superdoc and emit the `locked` event.
    *
-   * @param {boolean} [isLocked] Whether the superdoc is locked. Defaults to `false`.
-   * @param {User | null} [lockedBy] The user who locked the superdoc, or `null`
+   * @param [isLocked] Whether the superdoc is locked. Defaults to `false`.
+   * @param [lockedBy] The user who locked the superdoc, or `null`
    *   when unlocking (or when no user is known). Defaults to `null`.
    */
   lockSuperdoc(isLocked: boolean = false, lockedBy: User | null = null): void {
@@ -2064,7 +2061,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   /**
    * Export the superdoc to a file
-   * @param {ExportParams} params - Export configuration
+   * @param params - Export configuration
    */
   async export(
     {
@@ -2114,7 +2111,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   /**
    * Export editors to DOCX format.
-   * @param {{ commentsType?: string, isFinalDoc?: boolean, fieldsHighlightColor?: string | null }} [options]
+   * @param [options]
    */
   async exportEditorsToDOCX({
     commentsType,
@@ -2204,7 +2201,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   /**
    * Request an immediate save from all collaboration documents
-   * @returns {Promise<void>} Resolves when all documents have saved
+   * @returns Resolves when all documents have saved
    */
   async #triggerCollaborationSaves() {
     this.#log('🦋 [superdoc] Triggering collaboration saves');
@@ -2217,7 +2214,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
           this.pendingCollaborationSaves++;
           this.#log(`After increment - Doc ${index}: pending = ${this.pendingCollaborationSaves}`);
           const metaMap = doc.ydoc.getMap('meta');
-          metaMap.observe((/** @type {import('yjs').YMapEvent<unknown>} */ event) => {
+          metaMap.observe((event: Y.YMapEvent<unknown>) => {
             if (event.changes.keys.has('immediate-save-finished')) {
               this.pendingCollaborationSaves--;
               if (this.pendingCollaborationSaves <= 0) {
@@ -2288,7 +2285,6 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   /**
    * Open a surface (dialog or floating) above the document content.
    *
-   * @template [TResult=unknown]
    */
   openSurface<TResult = unknown>(request: SurfaceRequest): SurfaceHandle<TResult> {
     return this.#surfaceManager.open(request) as SurfaceHandle<TResult>;

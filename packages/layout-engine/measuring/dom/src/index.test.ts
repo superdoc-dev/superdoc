@@ -3640,6 +3640,103 @@ describe('measureBlock', () => {
       expect(measure.totalWidth).toBe(450);
     });
 
+    it('keeps tblW auto tables with a fitting authored grid within that grid budget despite wider tcW preferences', async () => {
+      const paragraph = (id: string, text: string): FlowBlock => ({
+        kind: 'paragraph',
+        id,
+        runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
+      });
+      const cell = (id: string, text: string, width: number) => ({
+        id,
+        blocks: [paragraph(`${id}-paragraph`, text)],
+        attrs: {
+          tableCellProperties: {
+            cellWidth: { value: width, type: 'dxa' },
+          },
+        },
+      });
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'table-autofit-grid-budget',
+        attrs: {
+          tableWidth: { value: 0, type: 'auto' },
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              cell('cell-0-0', 'Title', 3600),
+              cell('cell-0-1', 'Year', 1152),
+              cell('cell-0-2', 'Genre', 2160),
+              cell('cell-0-3', 'Notes', 4320),
+            ],
+          },
+          {
+            id: 'row-1',
+            cells: [
+              cell('cell-1-0', 'A', 2160),
+              cell('cell-1-1', 'B', 2160),
+              cell('cell-1-2', 'C', 2160),
+              cell('cell-1-3', 'D', 2160),
+            ],
+          },
+        ],
+        columnWidths: [144, 144, 144, 144],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 576 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+      expect(measure.columnWidths).toHaveLength(4);
+      expect(measure.totalWidth).toBeLessThanOrEqual(576);
+      expect(measure.columnWidths[0]).toBeGreaterThan(measure.columnWidths[1]);
+      expect(measure.columnWidths[3]).toBeGreaterThan(measure.columnWidths[2]);
+    });
+
+    it('does not stretch missing-grid AutoFit tables to fallback content width', async () => {
+      const paragraph = (id: string, text: string): FlowBlock => ({
+        kind: 'paragraph',
+        id,
+        runs: [{ text, fontFamily: 'Times New Roman', fontSize: 12 }],
+      });
+      const cell = (id: string, text: string, width: number) => ({
+        id,
+        blocks: [paragraph(`${id}-paragraph`, text)],
+        attrs: {
+          tableCellProperties: {
+            cellWidth: { value: width, type: 'dxa' },
+          },
+        },
+      });
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'table-autofit-missing-grid',
+        attrs: {},
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              cell('cell-0-0', '', 3885),
+              cell('cell-0-1', 'Lets see how Word Reacts seems liek we are...', 3900),
+            ],
+          },
+          {
+            id: 'row-1',
+            cells: [cell('cell-1-0', 'Lets go ..', 3885), cell('cell-1-1', '', 3900)],
+          },
+        ],
+        columnWidths: [312, 312],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 624 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+      expect(measure.columnWidths).toHaveLength(2);
+      expect(measure.totalWidth).toBeCloseTo(519, 3);
+    });
+
     it('scales column widths proportionally when exceeding available width', async () => {
       const block: FlowBlock = {
         kind: 'table',

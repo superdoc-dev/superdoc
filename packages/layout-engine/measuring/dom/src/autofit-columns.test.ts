@@ -180,6 +180,157 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.columnWidths[3]).toBeLessThan(156);
   });
 
+  it('keeps a fitting uniform tblW auto grid within its width budget when tcW preferences overflow it', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: withAutoGridWidthBudget(
+          buildWorkingInput({
+            preferredTableWidth: undefined,
+            maxTableWidth: 576,
+            preferredColumnWidths: [144, 144, 144, 144],
+            gridColumnCount: 4,
+            rows: [
+              buildAutoGridRow([240, 76.8, 144, 288]),
+              buildAutoGridRow([240, 76.8, 144, 288]),
+              buildAutoGridRow([144, 144, 144, 144]),
+            ],
+          }),
+          576,
+        ),
+        fixedLayout: {
+          columnWidths: [240, 144, 144, 288],
+          totalWidth: 816,
+          gridColumnCount: 4,
+          preferredTableWidth: undefined,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 40, max: 160, preferredWidth: 240 },
+            { min: 40, max: 80, preferredWidth: 76.8 },
+            { min: 40, max: 120, preferredWidth: 144 },
+            { min: 40, max: 220, preferredWidth: 288 },
+          ],
+          [
+            { min: 40, max: 160, preferredWidth: 240 },
+            { min: 40, max: 80, preferredWidth: 76.8 },
+            { min: 40, max: 120, preferredWidth: 144 },
+            { min: 40, max: 220, preferredWidth: 288 },
+          ],
+          [
+            { min: 40, max: 120, preferredWidth: 144 },
+            { min: 40, max: 120, preferredWidth: 144 },
+            { min: 40, max: 120, preferredWidth: 144 },
+            { min: 40, max: 120, preferredWidth: 144 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.totalWidth).toBeLessThanOrEqual(576);
+    expect(result.columnWidths[0]).toBeGreaterThan(result.columnWidths[1]);
+    expect(result.columnWidths[3]).toBeGreaterThan(result.columnWidths[2]);
+  });
+
+  it('keeps a fitting non-uniform tblW auto grid within its width budget when tcW preferences overflow it', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: withAutoGridWidthBudget(
+          buildWorkingInput({
+            preferredTableWidth: undefined,
+            preserveAutoGrid: true,
+            maxTableWidth: 576,
+            preferredColumnWidths: [180, 120, 276],
+            gridColumnCount: 3,
+            rows: [buildAutoGridRow([240, 144, 360])],
+          }),
+          576,
+        ),
+        fixedLayout: {
+          columnWidths: [240, 144, 360],
+          totalWidth: 744,
+          gridColumnCount: 3,
+          preferredTableWidth: undefined,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 60, max: 180, preferredWidth: 240 },
+            { min: 60, max: 120, preferredWidth: 144 },
+            { min: 60, max: 240, preferredWidth: 360 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.totalWidth).toBeLessThanOrEqual(576);
+  });
+
+  it('does not expand a narrower AutoFit table up to the grid budget', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: withAutoGridWidthBudget(
+          buildWorkingInput({
+            preferredTableWidth: undefined,
+            maxTableWidth: 624,
+            preferredColumnWidths: [312, 312],
+            gridColumnCount: 2,
+            rows: [buildAutoGridRow([259, 260])],
+          }),
+          624,
+        ),
+        fixedLayout: {
+          columnWidths: [259, 260],
+          totalWidth: 519,
+          gridColumnCount: 2,
+          preferredTableWidth: undefined,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 40, max: 120, preferredWidth: 259 },
+            { min: 40, max: 160, preferredWidth: 260 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.totalWidth).toBeCloseTo(519, 3);
+    expect(result.columnWidths[0]).toBeLessThan(312);
+    expect(result.columnWidths[1]).toBeLessThan(312);
+  });
+
+  it('allows a tblW auto grid budget to grow only when content minimums require it', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: withAutoGridWidthBudget(
+          buildWorkingInput({
+            preferredTableWidth: undefined,
+            maxTableWidth: 500,
+            preferredColumnWidths: [100, 100, 100],
+            gridColumnCount: 3,
+            rows: [buildAutoGridRow([240, 100, 100])],
+          }),
+          300,
+        ),
+        fixedLayout: {
+          columnWidths: [240, 100, 100],
+          totalWidth: 440,
+          gridColumnCount: 3,
+          preferredTableWidth: undefined,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 260, max: 320, preferredWidth: 240 },
+            { min: 80, max: 100, preferredWidth: 100 },
+            { min: 80, max: 100, preferredWidth: 100 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.totalWidth).toBeGreaterThan(300);
+    expect(result.totalWidth).toBeLessThanOrEqual(500);
+    expect(result.columnWidths[0]).toBeGreaterThanOrEqual(260);
+  });
+
   it('preserves explicit tblW AutoFit authored grid when content already fits', () => {
     const authoredWidths = [95.867, 472.533, 84.467];
     const tableWidth = authoredWidths.reduce((sum, width) => sum + width, 0);
@@ -851,6 +1002,27 @@ function buildWorkingInput(overrides: Partial<WorkingTableGridInput> = {}): Work
       },
     ],
     ...overrides,
+  };
+}
+
+function withAutoGridWidthBudget(workingInput: WorkingTableGridInput, budget: number): WorkingTableGridInput {
+  return {
+    ...workingInput,
+    autoGridWidthBudget: budget,
+  } as WorkingTableGridInput;
+}
+
+function buildAutoGridRow(preferredWidths: number[]): WorkingTableGridInput['rows'][number] {
+  return {
+    skippedBefore: [],
+    skippedAfter: [],
+    skippedColumns: [],
+    logicalColumnCount: preferredWidths.length,
+    cells: preferredWidths.map((preferredWidth, startColumn) => ({
+      startColumn,
+      span: 1,
+      preferredWidth,
+    })),
   };
 }
 

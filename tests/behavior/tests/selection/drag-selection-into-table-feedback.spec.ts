@@ -34,6 +34,30 @@ async function getSelectionOverlayRectCount(superdoc: SuperDocFixture): Promise<
   });
 }
 
+/**
+ * The committed selection's span and the document text it covers.
+ *
+ * `text` joins every selection range, not just `from`..`to`: a CellSelection's
+ * `from`/`to` span only the head cell, while the selected cells live in
+ * `.ranges`. Joining the ranges yields the full selected content for both a
+ * TextSelection (one range = the whole span) and a CellSelection (one range per
+ * selected cell).
+ */
+async function getSelectionInfo(
+  superdoc: SuperDocFixture,
+): Promise<{ type: string; from: number; to: number; head: number; text: string }> {
+  return superdoc.page.evaluate(() => {
+    const { state } = (window as any).editor;
+    const s = state.selection;
+    const text = s.ranges
+      .map((r: { $from: { pos: number }; $to: { pos: number } }) =>
+        state.doc.textBetween(r.$from.pos, r.$to.pos, ' ', ' '),
+      )
+      .join(' ');
+    return { type: s.constructor.name, from: s.from, to: s.to, head: s.head, text };
+  });
+}
+
 /** Label used for the cell at (row, col), 1-indexed. */
 function cellLabel(row: number, col: number): string {
   return `R${row}C${col} content`;
@@ -114,13 +138,22 @@ test.describe('drag selection live feedback in tables (SD-2676)', () => {
     const tableBox = await tableFragment.boundingBox();
     if (!tableBox) throw new Error('Table fragment not visible');
 
-    // Anchor in the paragraph above, sweep down to near the bottom of the table.
-    // End the sweep within the last content row — not on the table's bottom
-    // border, where the resolved hit lands on the boundary and re-collapses.
+    // End the drag squarely on the LAST row's first-column text. Aiming at a
+    // real cell line (not the table's horizontal/vertical seams) is essential:
+    // a resting point over a column gap or row border resolves to the table
+    // boundary and the head snaps back out of the table. The sweep stays in the
+    // left column the whole way down, so the pointer is always over cell text.
+    const lastRowCell = superdoc.page
+      .locator('.superdoc-line')
+      .filter({ hasText: cellLabel(ROWS, 1) })
+      .first();
+    const lastRowCellBox = await lastRowCell.boundingBox();
+    if (!lastRowCellBox) throw new Error('Last-row cell line not visible');
+
     const startX = paragraphBox.x + 20;
     const startY = paragraphBox.y + paragraphBox.height / 2;
-    const endX = tableBox.x + tableBox.width / 2;
-    const endY = tableBox.y + tableBox.height * 0.85;
+    const endX = lastRowCellBox.x + lastRowCellBox.width / 2;
+    const endY = lastRowCellBox.y + lastRowCellBox.height / 2;
 
     const samples = await dragSampling(superdoc, startX, startY, endX, endY, 12);
 
@@ -128,23 +161,28 @@ test.describe('drag selection live feedback in tables (SD-2676)', () => {
     const inTable = samples.filter((s) => s.y >= tableBox.y);
     expect(inTable.length).toBeGreaterThan(2);
 
-    // Core regression guard: this drag stays a TextSelection (the anchor is
-    // outside the table), so its size must keep growing while the pointer
+    // Live-feedback guard: this drag stays a TextSelection (the anchor is
+    // outside the table), so its size must keep changing while the pointer
     // sweeps through rows — not freeze at the boundary. The pre-fix bug pinned
-    // the head to the table boundary, collapsing every in-table sample to a
-    // single size. More than one distinct size, and a maximum that exceeds the
-    // first in-table sample, proves the highlight kept updating.
+    // the head to the table boundary, collapsing every in-table sample to one
+    // size. More than one distinct in-table size proves the highlight updated.
     const inTableSizes = inTable.map((s) => s.size);
     expect(new Set(inTableSizes).size).toBeGreaterThan(1);
-    expect(Math.max(...inTableSizes)).toBeGreaterThan(inTableSizes[0]);
 
     // The painted highlight must be present whenever there is a selection.
     for (const s of samples) {
       if (s.size > 0) expect(s.rects).toBeGreaterThan(0);
     }
 
-    // Final selection is non-collapsed.
-    const finalSel = await superdoc.getSelection();
+    // End-state guard (the part that matters to the user): once the pointer
+    // comes to rest inside the table and the button is released, the committed
+    // selection must actually reach into the table — spanning from the
+    // paragraph through the cells the pointer crossed, down to the last row.
+    // Pre-fix, the head was clamped to the boundary and this collapsed back to
+    // the paragraph alone.
+    const finalSel = await getSelectionInfo(superdoc);
+    expect(finalSel.text).toContain(cellLabel(1, 1)); // reached the first row
+    expect(finalSel.text).toContain(cellLabel(ROWS, 1)); // through to the last row
     expect(finalSel.to - finalSel.from).toBeGreaterThan(0);
     expect(await getSelectionOverlayRectCount(superdoc)).toBeGreaterThan(0);
   });
@@ -171,10 +209,13 @@ test.describe('drag selection live feedback in tables (SD-2676)', () => {
 
     const samples = await dragSampling(superdoc, startX, startY, endX, endY, 10);
 
-    // Dragging from inside the table must actually produce a selection — the
-    // second symptom in SD-2676 was that no text got selected at all.
-    const finalSel = await superdoc.getSelection();
+    // Dragging from inside the table must actually produce a selection that
+    // spans the rows the pointer crossed — the second symptom in SD-2676 was
+    // that no text got selected at all.
+    const finalSel = await getSelectionInfo(superdoc);
     expect(finalSel.to - finalSel.from).toBeGreaterThan(0);
+    expect(finalSel.text).toContain(cellLabel(1, 1));
+    expect(finalSel.text).toContain(cellLabel(ROWS, 1));
     expect(await getSelectionOverlayRectCount(superdoc)).toBeGreaterThan(0);
 
     // A same-table drag resolves to a CellSelection, whose paint expands across
@@ -209,8 +250,10 @@ test.describe('drag selection live feedback in tables (SD-2676)', () => {
 
     const samples = await dragSampling(superdoc, startX, startY, endX, endY, 10);
 
-    const finalSel = await superdoc.getSelection();
+    const finalSel = await getSelectionInfo(superdoc);
     expect(finalSel.to - finalSel.from).toBeGreaterThan(0);
+    expect(finalSel.text).toContain(cellLabel(1, 1));
+    expect(finalSel.text).toContain(cellLabel(ROWS, 1));
     expect(await getSelectionOverlayRectCount(superdoc)).toBeGreaterThan(0);
 
     // The highlight expands across rows as the pointer ascends.

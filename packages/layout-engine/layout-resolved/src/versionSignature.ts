@@ -50,9 +50,40 @@ const getSdtMetadataLockMode = (metadata: SdtMetadata | null | undefined): strin
   return metadata.type === 'structuredContent' ? (metadata.lockMode ?? '') : '';
 };
 
+const getSdtMetadataAlias = (metadata: SdtMetadata | null | undefined): string => {
+  if (!metadata) return '';
+  if ('alias' in metadata && metadata.alias != null) {
+    return String(metadata.alias);
+  }
+  return '';
+};
+
+const getSdtMetadataTag = (metadata: SdtMetadata | null | undefined): string => {
+  if (!metadata) return '';
+  if ('tag' in metadata && metadata.tag != null) {
+    return String(metadata.tag);
+  }
+  return '';
+};
+
+const getSdtMetadataAppearance = (metadata: SdtMetadata | null | undefined): string => {
+  if (!metadata) return '';
+  if (metadata.type === 'structuredContent' && 'appearance' in metadata && metadata.appearance != null) {
+    return String(metadata.appearance);
+  }
+  return '';
+};
+
 const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string => {
   if (!metadata) return '';
-  return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
+  return [
+    metadata.type,
+    getSdtMetadataLockMode(metadata),
+    getSdtMetadataId(metadata),
+    getSdtMetadataAlias(metadata),
+    getSdtMetadataTag(metadata),
+    getSdtMetadataAppearance(metadata),
+  ].join(':');
 };
 
 const getTrackedChangeLayers = (run: TextRun): TrackedChangeMeta[] => {
@@ -359,6 +390,8 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
           textRun.comments?.length ?? 0,
           // SD-3098: DomPainter reads run.bidi to apply dir + RLM injection; signature must include it.
           textRun.bidi ? JSON.stringify(textRun.bidi) : '',
+          // Include inline SDT metadata (alias, tag, etc.) so changes trigger repaint.
+          getSdtMetadataVersion(textRun.sdt),
         ].join(',');
       })
       .join('|');

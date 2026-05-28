@@ -6,28 +6,9 @@
  * document sections, TOC entries, structured content blocks, etc.
  */
 
-import type {
-  FlowBlock,
-  TableBlock,
-  ListBlock,
-  SdtMetadata,
-  FieldAnnotationMetadata,
-  StructuredContentMetadata,
-  DocumentSectionMetadata,
-  DocPartMetadata,
-} from '@superdoc/contracts';
+import type { FlowBlock, TableBlock, ListBlock, SdtMetadata } from '@superdoc/contracts';
 import type { PMNode } from '../types.js';
 import { resolveSdtMetadata } from '@superdoc/style-engine';
-
-type SdtMetadataForOverride<TOverride extends string | undefined> = TOverride extends 'fieldAnnotation'
-  ? FieldAnnotationMetadata
-  : TOverride extends 'structuredContent' | 'structuredContentBlock'
-    ? StructuredContentMetadata
-    : TOverride extends 'documentSection'
-      ? DocumentSectionMetadata
-      : TOverride extends 'docPartObject'
-        ? DocPartMetadata
-        : SdtMetadata;
 
 /**
  * Type guard to check if a node has instruction attribute.
@@ -76,16 +57,17 @@ export function getDocPartObjectId(node: PMNode): string | undefined {
  * @param overrideType - Optional type override (e.g., 'documentSection', 'docPartObject')
  * @returns Resolved SDT metadata, or undefined if none
  */
-export function resolveNodeSdtMetadata<TOverride extends string | undefined = undefined>(
-  node: PMNode,
-  overrideType?: TOverride,
-): SdtMetadataForOverride<TOverride> | undefined {
+export function resolveNodeSdtMetadata(node: PMNode, overrideType?: string): SdtMetadata | undefined {
   const attrs = node.attrs;
   if (!attrs) return undefined;
   const nodeType = overrideType ?? node.type;
   if (!nodeType) return undefined;
-  const cacheKey =
-    typeof attrs.hash === 'string'
+  // Don't pass cacheKey for structuredContent - let buildSdtCacheKey use full attrs
+  // This ensures mutable properties are included in the cache key
+  const isStructuredContent = nodeType === 'structuredContent' || nodeType === 'structuredContentBlock';
+  const cacheKey = isStructuredContent
+    ? undefined
+    : typeof attrs.hash === 'string'
       ? attrs.hash
       : typeof attrs.id === 'string'
         ? attrs.id
@@ -96,7 +78,7 @@ export function resolveNodeSdtMetadata<TOverride extends string | undefined = un
     nodeType,
     attrs,
     cacheKey,
-  }) as SdtMetadataForOverride<TOverride> | undefined;
+  });
 }
 
 /**

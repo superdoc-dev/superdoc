@@ -408,6 +408,15 @@ function buildSdtCacheKey(
 
   const id = toOptionalString(attrs.id);
   if (id) {
+    // For structuredContent, include mutable properties in the cache key
+    // so that changes to alias/tag/lockMode/appearance cause cache misses.
+    if (nodeType === 'structuredContent' || nodeType === 'structuredContentBlock') {
+      const alias = toOptionalString(attrs.alias) ?? '';
+      const tag = toOptionalString(attrs.tag) ?? '';
+      const lockMode = toOptionalString(attrs.lockMode) ?? '';
+      const appearance = toOptionalString(attrs.appearance) ?? '';
+      return `${nodeType}:${id}:${alias}:${tag}:${lockMode}:${appearance}`;
+    }
     return `${nodeType}:${id}`;
   }
 

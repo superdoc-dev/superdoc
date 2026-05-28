@@ -162,6 +162,15 @@ export interface AdapterOptions {
   enableTrackedChanges?: boolean;
 
   /**
+   * Composed per-author tracked-change color resolver. When provided, the
+   * adapter stamps `TrackedChangeMeta.color` for every tracked-change layer
+   * from the author identity before paint. Build it from the host
+   * `authorColors` config via `composeAuthorColorResolver`. Omit (or leave
+   * `undefined`) to keep the default tracked-change palette.
+   */
+  resolveTrackedChangeColor?: import('@superdoc/contracts').TrackChangeAuthorColorResolver;
+
+  /**
    * Feature flag for emitting rich hyperlink metadata (FlowRunLink v2 schema).
    * When false, the adapter outputs the legacy `{ href, title }` shape.
    * Defaults to `false`.

@@ -39,6 +39,7 @@ import {
   PresentationEditor,
   getTrackedChangeIndex,
   TrackChangesBasePluginKey,
+  composeAuthorColorResolver,
 } from '@superdoc/super-editor';
 import { ySyncPluginKey } from 'y-prosemirror';
 import HtmlViewer from './components/HtmlViewer/HtmlViewer.vue';
@@ -835,6 +836,9 @@ const editorOptions = (doc) => {
           emitCommentPositionsInViewing: isViewingMode() && shouldRenderCommentsInViewing.value,
           enableCommentsInViewing: isViewingCommentsVisible.value,
           contentControlsChrome: proxy.$superdoc.config.modules?.contentControls?.chrome,
+          resolveTrackedChangeColor: composeAuthorColorResolver(
+            proxy.$superdoc.config.modules?.trackChanges?.authorColors,
+          ),
         }
       : undefined,
     permissionResolver: (payload = {}) =>

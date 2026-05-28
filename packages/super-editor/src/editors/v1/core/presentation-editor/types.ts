@@ -7,7 +7,15 @@
 
 import type { Editor } from '../Editor.js';
 import type { CollaborationProvider } from '../types/EditorConfig.js';
-import type { TrackedChangesMode, FlowBlock, Layout, Measure, FlowMode, SectionMetadata } from '@superdoc/contracts';
+import type {
+  TrackedChangesMode,
+  FlowBlock,
+  Layout,
+  Measure,
+  FlowMode,
+  SectionMetadata,
+  TrackChangeAuthor,
+} from '@superdoc/contracts';
 import type { LayoutMode, RulerOptions } from '@superdoc/painter-dom';
 import type { ProofingConfig } from './proofing/types.js';
 import type * as Y from 'yjs';
@@ -152,6 +160,13 @@ export type LayoutEngineOptions = {
   /** Internal-only semantic mode options (not a stable public API). */
   semanticOptions?: SemanticLayoutOptions;
   trackedChanges?: TrackedChangesOverrides;
+  /**
+   * Composed per-author tracked-change color resolver. Threaded into
+   * `toFlowBlocks` so the adapter stamps `TrackedChangeMeta.color` for each
+   * tracked-change layer before paint. Built by SuperDoc from the host
+   * `modules.trackChanges.authorColors` config. Omit to keep default colors.
+   */
+  resolveTrackedChangeColor?: (author: TrackChangeAuthor) => string | undefined;
   /** Emit comment positions while in viewing mode (used to render comment highlights). */
   emitCommentPositionsInViewing?: boolean;
   /** Render comment highlights while in viewing mode. */

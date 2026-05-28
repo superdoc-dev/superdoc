@@ -153,6 +153,13 @@ export type { PaintSnapshot, LayoutMode } from '@superdoc/painter-dom';
 export type { FlowBlock, Layout, Measure, SectionMetadata, TrackedChangesMode } from '@superdoc/contracts';
 export type { Page as LayoutPage, Fragment as LayoutFragment } from '@superdoc/contracts';
 
+// Per-author tracked-change color resolution (used by SuperDoc to compose the
+// resolver threaded into the layout-engine render path). Sourced from
+// @superdoc/contracts so the published declarations stay on the relocated
+// type surface rather than referencing a private workspace specifier.
+export { composeAuthorColorResolver, fallbackAuthorColor } from '@superdoc/contracts';
+export type { AuthorColorsConfig, TrackChangeAuthorColorResolver, TrackChangeAuthor } from '@superdoc/contracts';
+
 // Headless toolbar public types
 export type {
   CreateHeadlessToolbarOptions,

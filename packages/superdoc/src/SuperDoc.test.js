@@ -115,6 +115,8 @@ const createTrackedChangeIndexStub = () => ({
 });
 
 const getTrackedChangeIndexMock = vi.fn(() => createTrackedChangeIndexStub());
+const resolveTrackedChangeColorMock = vi.fn(() => '#123456');
+const composeAuthorColorResolverMock = vi.fn((config) => (config ? resolveTrackedChangeColorMock : undefined));
 
 // Mock @superdoc/super-editor with stubs and PresentationEditor class
 vi.mock('@superdoc/super-editor', () => ({
@@ -122,6 +124,7 @@ vi.mock('@superdoc/super-editor', () => ({
   AIWriter: AIWriterStub,
   getTrackedChangeIndex: getTrackedChangeIndexMock,
   TrackChangesBasePluginKey: 'TrackChangesBasePluginKey',
+  composeAuthorColorResolver: composeAuthorColorResolverMock,
   PresentationEditor: class PresentationEditorMock {
     static getInstance(documentId) {
       return mockState.instances.get(documentId);
@@ -423,6 +426,9 @@ describe('SuperDoc.vue', () => {
     useSelectedTextMock.mockClear();
     getTrackedChangeIndexMock.mockClear();
     getTrackedChangeIndexMock.mockImplementation(() => createTrackedChangeIndexStub());
+    resolveTrackedChangeColorMock.mockClear();
+    composeAuthorColorResolverMock.mockReset();
+    composeAuthorColorResolverMock.mockImplementation((config) => (config ? resolveTrackedChangeColorMock : undefined));
     mockState.instances.clear();
 
     // Make RAF synchronous in tests — jsdom has no rendering loop, and
@@ -847,6 +853,19 @@ describe('SuperDoc.vue', () => {
 
     const options = wrapper.findComponent(SuperEditorStub).props('options');
     expect(options.layoutEngineOptions.contentControlsChrome).toBeUndefined();
+  });
+
+  it('forwards modules.trackChanges.authorColors into layoutEngineOptions for PresentationEditor', async () => {
+    const superdocStub = createSuperdocStub();
+    const authorColors = { overrides: { Alice: '#f00' } };
+    superdocStub.config.modules.trackChanges = { authorColors };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    expect(composeAuthorColorResolverMock).toHaveBeenCalledWith(authorColors);
+    expect(options.layoutEngineOptions.resolveTrackedChangeColor).toBe(resolveTrackedChangeColorMock);
   });
 
   it('handles replay comment update/delete events and triggers tracked-change resync', async () => {

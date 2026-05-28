@@ -47,3 +47,14 @@ export { expandRunsForInlineNewlines } from '@superdoc/contracts';
 // Re-export cache for incremental conversion
 export { FlowBlockCache } from './cache.js';
 export type { CachedParagraphEntry, FlowBlockCacheStats, CacheLookupResult } from './cache.js';
+
+// Re-export per-author tracked-change color resolution (defined in
+// @superdoc/contracts so it stays on the publishable type surface)
+export {
+  composeAuthorColorResolver,
+  fallbackAuthorColor,
+  authorIdentityKey,
+  authorFromTrackedChangeMeta,
+  stampTrackedChangeColors,
+} from '@superdoc/contracts';
+export type { AuthorColorsConfig, TrackChangeAuthorColorResolver, TrackChangeAuthor } from '@superdoc/contracts';

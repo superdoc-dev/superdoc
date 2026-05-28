@@ -1,5 +1,5 @@
 import type { EditorState } from 'prosemirror-state';
-import type { FlowBlock, Run as LayoutRun, TextRun } from '@superdoc/contracts';
+import type { FlowBlock, Run as LayoutRun, TextRun, TrackChangeAuthorColorResolver } from '@superdoc/contracts';
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
@@ -29,6 +29,7 @@ export function buildEndnoteBlocks(
   converterContext: ConverterContext | undefined,
   themeColors: unknown,
   renderOverride: NoteRenderOverride | null = null,
+  resolveTrackedChangeColor?: TrackChangeAuthorColorResolver,
 ): FlowBlock[] {
   if (!editorState) return [];
 
@@ -64,6 +65,7 @@ export function buildEndnoteBlocks(
         enableRichHyperlinks: true,
         themeColors: themeColors as never,
         converterContext: converterContext as never,
+        resolveTrackedChangeColor,
       });
 
       if (result?.blocks?.length) {

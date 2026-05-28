@@ -643,6 +643,7 @@ export class PresentationEditor extends EventEmitter {
       flowMode: requestedFlowMode,
       semanticOptions: options.layoutEngineOptions?.semanticOptions,
       trackedChanges: options.layoutEngineOptions?.trackedChanges,
+      resolveTrackedChangeColor: options.layoutEngineOptions?.resolveTrackedChangeColor,
       emitCommentPositionsInViewing: options.layoutEngineOptions?.emitCommentPositionsInViewing,
       enableCommentsInViewing: options.layoutEngineOptions?.enableCommentsInViewing,
       presence: validatedPresence,
@@ -6162,6 +6163,7 @@ export class PresentationEditor extends EventEmitter {
           sectionMetadata,
           trackedChangesMode: this.#trackedChangesMode,
           enableTrackedChanges: this.#trackedChangesEnabled,
+          resolveTrackedChangeColor: this.#layoutOptions.resolveTrackedChangeColor,
           enableComments: commentsEnabled,
           enableRichHyperlinks: true,
           // SD-3240: converter.themeColors is `unknown` on the public
@@ -6212,6 +6214,7 @@ export class PresentationEditor extends EventEmitter {
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
         activeFootnoteOverride,
+        this.#layoutOptions.resolveTrackedChangeColor,
       );
       const semanticFootnoteBlocks = isSemanticFlow
         ? buildSemanticFootnoteBlocks(footnotesLayoutInput, this.#layoutOptions.semanticOptions?.footnotesMode)
@@ -6223,6 +6226,7 @@ export class PresentationEditor extends EventEmitter {
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
         activeEndnoteOverride,
+        this.#layoutOptions.resolveTrackedChangeColor,
       );
       const blocksForLayout =
         semanticFootnoteBlocks.length > 0 || endnoteBlocks.length > 0

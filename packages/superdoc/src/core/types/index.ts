@@ -1254,6 +1254,46 @@ export interface Modules {
  * top-level `config.trackChanges` and `config.layoutEngineOptions.trackedChanges`
  * keys, which remain supported as deprecated aliases.
  */
+/**
+ * Identity of a tracked-change author, passed to a per-author color
+ * {@link TrackChangesAuthorColorsConfig.resolve | resolver}. Mirrors the
+ * author metadata SuperDoc carries on each tracked change.
+ */
+export interface TrackChangeAuthor {
+  /** Author display name (from the OOXML `w:author` attribute). */
+  name?: string;
+  /** Author email, when available. */
+  email?: string;
+  /** Author avatar image URL, when available. */
+  image?: string;
+}
+
+/**
+ * Per-author tracked-change color configuration. Lets hosts assign a color
+ * per author without injecting CSS `!important` rules against
+ * `[data-track-change-author]` or reaching into private editor internals.
+ *
+ * Resolution order per author: `overrides` by identity (email first, then
+ * name; exact match) → `resolve(author)` → a deterministic fallback color
+ * derived from the author identity. The fallback guarantees imported /
+ * discovered authors the host did not configure ahead of time still receive
+ * a stable, distinct color.
+ */
+export interface TrackChangesAuthorColorsConfig {
+  /** When `false`, per-author colors are not applied. Defaults to enabled. */
+  enabled?: boolean;
+  /**
+   * Color overrides keyed by author identity. Both `email` and `name` keys
+   * are supported (email is checked first); matching is exact.
+   */
+  overrides?: Record<string, string>;
+  /**
+   * Resolver consulted after `overrides`. Return a CSS color string, or
+   * `undefined` to fall through to the deterministic fallback.
+   */
+  resolve?: (author: TrackChangeAuthor) => string | undefined;
+}
+
 export interface TrackChangesModuleConfig {
   /** Whether tracked-change indicators are shown in viewing mode. */
   visible?: boolean;
@@ -1278,6 +1318,13 @@ export interface TrackChangesModuleConfig {
    *   and resolves independently.
    */
   replacements?: 'paired' | 'independent';
+  /**
+   * Per-author tracked-change colors. When configured, insert/delete/format
+   * tracked-change highlights are tinted per author through the
+   * `--sd-tracked-changes-*` CSS variable surface, and
+   * `ui.trackChanges.getSnapshot()` exposes the resolved author colors.
+   */
+  authorColors?: TrackChangesAuthorColorsConfig;
 }
 
 export type DocumentMode = 'editing' | 'viewing' | 'suggesting';

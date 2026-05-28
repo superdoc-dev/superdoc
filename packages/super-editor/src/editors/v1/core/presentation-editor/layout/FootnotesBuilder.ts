@@ -19,7 +19,7 @@
  */
 
 import type { EditorState } from 'prosemirror-state';
-import type { FlowBlock } from '@superdoc/contracts';
+import type { FlowBlock, TrackChangeAuthorColorResolver } from '@superdoc/contracts';
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
@@ -99,6 +99,7 @@ export function buildFootnotesInput(
   converterContext: ConverterContext | undefined,
   themeColors: unknown,
   renderOverride: NoteRenderOverride | null = null,
+  resolveTrackedChangeColor?: TrackChangeAuthorColorResolver,
 ): FootnotesLayoutInput | null {
   if (!editorState) return null;
 
@@ -139,6 +140,7 @@ export function buildFootnotesInput(
         enableRichHyperlinks: true,
         themeColors: themeColors as never,
         converterContext: converterContext as never,
+        resolveTrackedChangeColor,
       });
 
       if (result?.blocks?.length) {

@@ -269,6 +269,22 @@ describe('groupTrackedChanges', () => {
     expect(grouped[0]?.excerpt).toBe('O ');
   });
 
+  it('does not duplicate excerpt text for overlapping imported format marks', () => {
+    const mark = makeTrackMark(TrackFormatMarkName, 'format', { sourceId: '1' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...mark, node: { text: 'Format ', marks: [mark.mark] }, from: 2, to: 9 },
+      { ...mark, from: 1, to: 10 },
+    ] as never);
+
+    const editor = makeEditor();
+    vi.mocked(editor.state.doc.textBetween).mockReturnValue('Format ');
+
+    const grouped = groupTrackedChanges(editor);
+
+    expect(grouped[0]?.rawId).toBe(`word:${TrackFormatMarkName}:1`);
+    expect(grouped[0]?.excerpt).toBe('Format ');
+  });
+
   it('sorts results by from position', () => {
     vi.mocked(getTrackChanges).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-2'), from: 10, to: 15 },

@@ -23,7 +23,7 @@ const EMPTY_SELECTION: SelectionSlice = {
 
 const EMPTY_COMMENTS: CommentsSlice = { items: [], activeIds: [], total: 0 };
 
-const EMPTY_TRACK_CHANGES: TrackChangesSlice = { items: [], total: 0, activeId: null };
+const EMPTY_TRACK_CHANGES: TrackChangesSlice = { items: [], total: 0, activeId: null, authors: [] };
 
 const EMPTY_CONTENT_CONTROLS: ContentControlsSlice = { items: [], activeIds: [], activeId: null, total: 0 };
 

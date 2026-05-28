@@ -90,6 +90,7 @@ const superdocLogo = SuperdocLogo;
 const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
 const headerCollapsed = ref(false);
+const seededSdtDocs = new Set();
 
 const DEV_THEME_CLASSES = ['sd-theme-docs', 'sd-theme-word', 'sd-theme-blueprint', 'sd-theme-neon-night'];
 
@@ -726,6 +727,9 @@ const init = async () => {
     // ],
     // cspNonce: 'testnonce123',
     modules: {
+      contentControls: {
+        chrome: 'none',
+      },
       comments: {
         // comments: sampleComments,
         // overflow: true,
@@ -1129,6 +1133,67 @@ const onEditorCreate = ({ editor }) => {
   editor.on('rightClick', (params) => {
     console.log('rightClick', { params });
   });
+
+  void seedContentControlsForChromeDev(editor);
+};
+
+const seedContentControlsForChromeDev = async (editor) => {
+  const docId = editor?.options?.documentId || 'default';
+  if (seededSdtDocs.has(docId)) return;
+
+  const api = editor?.doc;
+  if (!api?.insert || !api?.extract || !api?.create?.contentControl) return;
+
+  seededSdtDocs.add(docId);
+
+  try {
+    const seedText = ['Inline seed: Signer Name', '', 'Block seed paragraph'].join('\n');
+
+    const inserted = api.insert({ value: seedText, type: 'markdown' });
+    if (!inserted?.success && inserted?.failure?.code !== 'NO_OP') return;
+
+    const blocks = api.extract({})?.blocks || [];
+    const findBlock = (text) => blocks.find((b) => typeof b?.text === 'string' && b.text.includes(text));
+
+    const wrapInline = (block, token, tag, alias) => {
+      if (!block?.nodeId || typeof block.text !== 'string') return;
+      const start = block.text.indexOf(token);
+      if (start < 0) return;
+      api.create.contentControl({
+        kind: 'inline',
+        controlType: 'text',
+        at: {
+          kind: 'selection',
+          start: { kind: 'text', blockId: block.nodeId, offset: start },
+          end: { kind: 'text', blockId: block.nodeId, offset: start + token.length },
+        },
+        tag,
+        alias,
+        lockMode: 'unlocked',
+      });
+    };
+
+    const wrapBlock = (block, tag, alias) => {
+      if (!block?.nodeId || typeof block.text !== 'string') return;
+      api.create.contentControl({
+        kind: 'block',
+        controlType: 'text',
+        at: {
+          kind: 'selection',
+          start: { kind: 'text', blockId: block.nodeId, offset: 0 },
+          end: { kind: 'text', blockId: block.nodeId, offset: block.text.length },
+        },
+        tag,
+        alias,
+        lockMode: 'unlocked',
+      });
+    };
+
+    wrapInline(findBlock('Inline seed:'), 'Signer Name', '{"fieldType":"signer"}', 'Signer Name');
+    wrapBlock(findBlock('Block seed paragraph'), '{"fieldType":"notes"}', 'Block Notes');
+  } catch (error) {
+    console.warn('[SuperdocDev] Failed to seed test content controls', error);
+  }
 };
 
 watch(
@@ -1568,7 +1633,8 @@ if (scrollTestMode.value) {
         <div class="dev-app__view">
           <div class="dev-app__content">
             <div class="dev-app__content-container" :class="{ 'dev-app__content-container--web-layout': useWebLayout }">
-              <div id="superdoc"></div>
+              <div id="superdoc" class="dev-custom-cc-theme"></div>
+              <!-- -->
             </div>
           </div>
         </div>
@@ -2271,6 +2337,44 @@ if (scrollTestMode.value) {
   font-size: 14px;
   line-height: 1.5;
   color: #fde68a;
+}
+
+/* -------------------------------------------------------------------------- */
+/* SDT custom styling demo (for modules.contentControls.chrome = 'none')      */
+/* -------------------------------------------------------------------------- */
+.dev-custom-cc-theme :deep(.superdoc-structured-content-inline[data-sdt-tag*='"fieldType":"signer"']) {
+  background: color-mix(in srgb, #0ea5e9 14%, transparent);
+  border-radius: 6px;
+  padding: 0 6px;
+}
+
+.dev-custom-cc-theme :deep(.superdoc-structured-content-inline[data-sdt-tag*='"fieldType":"signer"']:hover) {
+  background: color-mix(in srgb, #0ea5e9 22%, transparent);
+}
+
+/* Keep custom hover even when global chrome-none lock-hover neutralizer is active. */
+.dev-custom-cc-theme
+  :deep(
+    .superdoc-cc-chrome-none
+      .superdoc-structured-content-inline[data-sdt-tag*='"fieldType":"signer"'][data-lock-mode]:hover
+  ) {
+  background-color: color-mix(in srgb, #0ea5e9 22%, transparent);
+  z-index: 10;
+}
+
+.dev-custom-cc-theme :deep(.superdoc-structured-content-block[data-sdt-tag*='"fieldType":"notes"']) {
+  background: color-mix(in srgb, #22c55e 10%, transparent);
+  border-left: 3px solid #22c55e;
+  border-radius: 6px;
+}
+
+.dev-custom-cc-theme
+  :deep(
+    .superdoc-cc-chrome-none
+      .superdoc-structured-content-block[data-sdt-tag*='"fieldType":"notes"'][data-lock-mode].sdt-group-hover
+  ) {
+  background-color: color-mix(in srgb, #22c55e 16%, transparent);
+  z-index: 10;
 }
 
 /* Mobile responsive styles */

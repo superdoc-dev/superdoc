@@ -69,6 +69,8 @@ const generatedWordScreenshots = ref([]);
 const isGeneratingWordBaseline = ref(false);
 const wordBaselineStatus = ref('');
 const wordBaselineError = ref('');
+const lastContentControlActiveChange = ref(null);
+const lastContentControlClick = ref(null);
 const wordOverlayOpacityLabel = computed(() => `${Math.round(wordOverlayOpacity.value * 100)}%`);
 const wordOverlayAvailable = computed(
   () => useLayoutEngine.value && !useWebLayout.value && generatedWordScreenshots.value.length > 0,
@@ -923,6 +925,14 @@ const init = async () => {
   superdoc.value?.on('zoomChange', ({ zoom }) => {
     currentZoom.value = zoom;
   });
+  superdoc.value?.on('content-control:active-change', (payload) => {
+    lastContentControlActiveChange.value = payload;
+    console.log('content-control:active-change', payload);
+  });
+  superdoc.value?.on('content-control:click', (payload) => {
+    lastContentControlClick.value = payload;
+    console.log('content-control:click', payload);
+  });
 
   window.superdoc = superdoc.value;
 
@@ -943,6 +953,27 @@ const onCommentsUpdate = () => {};
 const onContentError = ({ editor, error, documentId, file }) => {
   console.debug('Content error on', documentId, error);
 };
+
+const formatSdtRef = (value) => {
+  if (!value) return 'none';
+  const parts = [value.id];
+  if (value.scope) parts.push(value.scope);
+  if (value.controlType) parts.push(value.controlType);
+  if (value.tag) parts.push(`tag:${value.tag}`);
+  return parts.join(' · ');
+};
+
+const contentControlActiveChangeLabel = computed(() => {
+  const payload = lastContentControlActiveChange.value;
+  if (!payload) return 'no events yet';
+  return `${formatSdtRef(payload.previous)} -> ${formatSdtRef(payload.active)} (${payload.source})`;
+});
+
+const contentControlClickLabel = computed(() => {
+  const payload = lastContentControlClick.value;
+  if (!payload) return 'no events yet';
+  return `${formatSdtRef(payload.target)} (${payload.source})`;
+});
 
 const exportHTML = async (commentsType) => {
   console.debug('Exporting HTML', { commentsType });
@@ -1118,17 +1149,57 @@ const onEditorCreate = ({ editor }) => {
   });
 
   // SD-2494: Pointer event observability for debugging trackpad/right-click selection issues
-  editor.on('pointerDown', (params) => {
-    console.log('pointerDown', { params });
-  });
+  // editor.on('pointerDown', (params) => {
+  //   console.log('pointerDown', { params });
+  // });
 
-  editor.on('pointerUp', (params) => {
-    console.log('pointerUp', { params });
-  });
+  // editor.on('pointerUp', (params) => {
+  //   console.log('pointerUp', { params });
+  // });
 
   editor.on('rightClick', (params) => {
     console.log('rightClick', { params });
   });
+
+  // Seed test SDT fields once per editor instance to verify content-control APIs/events.
+  if (!editor.__devSeededSdtFields) {
+    editor.__devSeededSdtFields = true;
+    try {
+      editor.commands.insertContent('<p>SDT dev sandbox: </p>');
+      editor.commands.insertStructuredContentInline({
+        attrs: {
+          id: String(Date.now()),
+          tag: 'dev-inline-name',
+          alias: 'Dev Name',
+          controlType: 'text',
+        },
+        text: 'Customer Name',
+      });
+      editor.commands.insertContent(' ');
+      editor.commands.insertStructuredContentInline({
+        attrs: {
+          id: String(Date.now() + 1),
+          tag: 'dev-inline-date',
+          alias: 'Dev Date',
+          controlType: 'date',
+        },
+        text: '2026-05-22',
+      });
+      editor.commands.insertContent('<p></p>');
+      editor.commands.insertStructuredContentBlock({
+        attrs: {
+          id: String(Date.now() + 2),
+          tag: 'dev-block-notes',
+          alias: 'Dev Notes',
+          controlType: 'richText',
+        },
+        html: '<p>Block SDT test area</p>',
+      });
+      editor.commands.insertContent('<p></p>');
+    } catch (error) {
+      console.warn('[SuperDoc Dev] Failed to seed SDT test fields:', error);
+    }
+  }
 };
 
 watch(
@@ -1391,6 +1462,10 @@ if (scrollTestMode.value) {
               <span v-if="useWebLayout" class="badge">Web Layout: ON</span>
               <span v-if="scrollTestMode" class="badge badge--warning">Scroll Test: ON</span>
               <span v-if="useCollaboration" class="badge badge--collab">Collab: ON</span>
+            </div>
+            <div class="dev-app__meta-row">
+              <span class="badge">CC active-change: {{ contentControlActiveChangeLabel }}</span>
+              <span class="badge">CC click: {{ contentControlClickLabel }}</span>
             </div>
             <h2 class="dev-app__title">SuperDoc Dev</h2>
             <div class="dev-app__header-layout-toggle">

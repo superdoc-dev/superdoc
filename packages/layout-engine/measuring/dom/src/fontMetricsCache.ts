@@ -44,6 +44,11 @@ export type FontMetricsResult = {
  *
  * Keyed by primary family name lowercased. Add entries when corpus evidence
  * shows a systematic gap between Canvas measurement and Word.
+ *
+ * Transitional empirical data. The table should move to a fixture-backed
+ * FontMetricsProvider (generated from Word-native fixtures with provenance
+ * and a drift test) — tracked in SD-3296. Do not grow this table
+ * indefinitely; once the provider lands, retire it.
  */
 const FONT_NATURAL_LINE_CALIBRATION: Record<string, number> = {
   aptos: 1.218,

@@ -1176,18 +1176,18 @@ describe('measureBlock', () => {
     });
 
     it('applies multiplier × naturalSingle to empty paragraphs in calibrated fonts (SD-2735)', async () => {
-      // Caio's third PR-review repro (arial-empty-rows.docx): empty cell
-      // paragraphs go through `calculateEmptyParagraphMetrics`, which does
-      // not plumb the font's calibrated `naturalSingleLine` through to
-      // `resolveLineHeight`. For uncalibrated fonts the bug hides because
-      // naturalSingle ≈ WORD_SINGLE_LINE_SPACING_MULTIPLIER × fontSize
-      // (18.4 px at 16 px) matches the fallback floor inside resolveLineHeight.
+      // Empty calibrated-font cell paragraph (Aptos): `naturalSingleLine`
+      // must thread through `calculateEmptyParagraphMetrics` so empty cells
+      // match the height of text-bearing cells in the same table. For
+      // uncalibrated fonts the bug hides because naturalSingle ≈
+      // WORD_SINGLE_LINE_SPACING_MULTIPLIER × fontSize (18.4 px at 16 px)
+      // happens to match the fallback floor inside `resolveLineHeight`.
       // For Aptos (calibrated to ~19.5 px at 16 px), the gap surfaces:
-      // empty rows measure 1.15 × fontSize instead of the calibrated value,
-      // so empty cells render shorter than text-bearing cells in the same
-      // table. The fix is symmetric with `calculateTypographyMetrics`:
-      // populate naturalSingle from the calibration table when fontInfo is
-      // present, and forward it to resolveLineHeight.
+      // empty rows would measure 1.15 × fontSize instead of the calibrated
+      // value, rendering shorter than text-bearing cells. Symmetric with
+      // `calculateTypographyMetrics`: populate naturalSingle from the
+      // calibration table when fontInfo is present, and forward it to
+      // resolveLineHeight.
       const fontSize = 16; // 12 pt
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -1209,6 +1209,77 @@ describe('measureBlock', () => {
       // 1.5 × 19.488 ≈ 29.2.
       const aptosNaturalSingle = 19.488;
       expect(measure.lines[0].lineHeight).toBeCloseTo(1.5 * aptosNaturalSingle, 0);
+    });
+
+    it('threads naturalSingle through drop-cap height for calibrated fonts (SD-2735)', async () => {
+      // SD-2735 follow-up: `measureDropCap` previously called
+      // `resolveLineHeight` without `naturalSingleLine`, so drop caps for
+      // calibrated fonts used the 1.15 × fontSize fallback floor rather than
+      // the calibrated single-line height. This rendered drop caps shorter
+      // than the body lines they span. After plumbing naturalSingle through,
+      // drop-cap height scales off the same intrinsic line height as the
+      // surrounding paragraph.
+      const fontSize = 16; // 12 pt
+      const dropCapDescriptor = {
+        mode: 'drop' as const,
+        lines: 3,
+        run: {
+          text: 'A',
+          fontFamily: 'Aptos',
+          fontSize,
+        },
+      };
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'drop-cap-aptos',
+        runs: [
+          {
+            text: 'The rest of the paragraph.',
+            fontFamily: 'Aptos',
+            fontSize,
+          },
+        ],
+        attrs: {
+          spacing: { line: 1.5, lineUnit: 'multiplier', lineRule: 'auto' },
+          dropCapDescriptor,
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 400));
+      // Aptos calibrated naturalSingle ≈ 19.488 px. With line=1.5 / auto and
+      // lines=3: expected drop-cap height ≈ 3 × 1.5 × 19.488 ≈ 87.7. The
+      // pre-fix code returned 3 × 1.5 × 18.4 ≈ 82.8 (1.15 × fontSize floor).
+      const aptosNaturalSingle = 19.488;
+      expect(measure.dropCap?.height).toBeCloseTo(3 * 1.5 * aptosNaturalSingle, 0);
+    });
+
+    it('expands atLeast line height to fit a larger run in a mixed-size paragraph (SD-2735)', async () => {
+      // SD-2735 follow-up: `lineRule="atLeast"` per ECMA-376 §17.18.48 must
+      // expand to fit content when the content's natural line height
+      // exceeds the `line` floor. With mixed font sizes on a single line,
+      // `line.maxFontInfo` should drive `naturalSingle` to the larger run's
+      // metrics so `resolveLineHeight` returns the larger value rather than
+      // the floor. Anchors the invariant against future refactors of the
+      // maxFontInfo plumbing.
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'mixed-atleast',
+        runs: [
+          { text: 'small ', fontFamily: 'Arial', fontSize: 16 }, // 12 pt
+          { text: 'BIG', fontFamily: 'Arial', fontSize: 48 }, //   36 pt
+        ],
+        attrs: {
+          // 18 px floor — well below the 36 pt run's natural single-line
+          // height (≈ 48 × 1.15 = 55.2 px for uncalibrated Arial).
+          spacing: { line: 18, lineUnit: 'px', lineRule: 'atLeast' },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 800));
+      // Expect the line to expand to the larger run's natural single line,
+      // not the 18 px floor.
+      expect(measure.lines[0].lineHeight).toBeGreaterThan(50);
+      expect(measure.lines[0].lineHeight).toBeLessThan(60);
     });
 
     it('ensures line height is never smaller than glyph bounds to prevent clipping', async () => {

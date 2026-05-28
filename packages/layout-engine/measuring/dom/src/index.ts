@@ -9,14 +9,19 @@
  * - Calculate typography metrics (ascent, descent, lineHeight)
  * - Return Measure with positioned line boundaries
  *
- * Typography Approximations (v0.1.0):
- * - ascent ≈ fontSize * 0.8 (baseline to top)
- * - descent ≈ fontSize * 0.2 (baseline to bottom)
- * - lineHeight = fontSize * 1.15 (Word 2007+ "single" line spacing)
- * - empty paragraphs use fontSize as the base line height
+ * Typography model (post-SD-2735, ECMA-376 §17.18.48):
+ * - ascent / descent come from Canvas `actualBoundingBox*` when fontInfo
+ *   is available; fall back to fontSize × 0.8 / 0.2 only when it is not.
+ * - lineHeight for `w:lineRule="auto"` is `line × naturalSingleLine`. The
+ *   spec leaves "a line" undefined; we source it from `fontMetricsCache`
+ *   (calibrated value for fonts the browser cannot measure — Aptos,
+ *   Calibri, Cambria — else `fontBoundingBox*`). `naturalSingleLine` is
+ *   floored at 1.15 × fontSize as a Word 2007+ Normal-style compatibility
+ *   choice, not a spec minimum.
+ * - empty paragraphs follow the same path via `calculateEmptyParagraphMetrics`.
  *
- * These are documented heuristics; we can swap in precise font metrics later
- * if needed via libraries like opentype.js.
+ * The calibration table is transitional empirical data, tracked for
+ * migration to a fixture-backed FontMetricsProvider in SD-3296.
  *
  * Line Breaking Strategy:
  * - Greedy algorithm: accumulate words until exceeding maxWidth
@@ -133,12 +138,6 @@ export function configureMeasurement(options: Partial<MeasurementConfig>): void 
 }
 
 export { clearMeasurementCache };
-
-/**
- * Future: Font-specific calibration factors could be added here if Canvas measurements
- * consistently diverge from MS Word after all precision fixes (bounding box, fractional pt→px, etc.)
- * are applied. Currently not needed.
- */
 
 /**
  * Global canvas context cache for text measurement
@@ -355,15 +354,12 @@ function measureText(
  */
 
 /**
- * Word 2007+ default line spacing multiplier for "single" line spacing.
- *
- * Microsoft Word changed its line spacing algorithm in Word 2007 to use 1.15× font size
- * as the baseline for "single" line spacing, rather than just using ascent + descent.
- * This provides more breathing room and matches the industry standard for readability.
- *
- * For example, 12pt (16px) font: 16 × 1.15 = 18.4px line height.
- *
- * Reference: Word 2007+ line spacing behavior
+ * Word 2007+ "single" line spacing multiplier, used as a Word-fidelity floor
+ * on `naturalSingleLine` in `resolveLineHeight`. ECMA-376 §17.18.48 leaves
+ * "a line" undefined for `lineRule="auto"`, so this floor is a compatibility
+ * choice (Word's Normal style assumes 1.15 × fontSize), not a spec minimum.
+ * It guards against fonts whose `fontBoundingBox*` reports a tighter natural
+ * line than Word would render.
  */
 const WORD_SINGLE_LINE_SPACING_MULTIPLIER = 1.15;
 
@@ -383,13 +379,15 @@ const WORD_SINGLE_LINE_SPACING_MULTIPLIER = 1.15;
  * - Browser doesn't support actualBoundingBox* metrics (legacy browsers)
  *
  * **Line Height Calculation:**
- * Uses Word 2007+'s default "single" line spacing of fontSize × 1.15 as the base.
- * This base is then modified by paragraph spacing rules (lineRule: auto/exact/atLeast).
- * A minimum line height clamp is intentionally NOT enforced to match Word's behavior
- * for small font sizes and empty paragraphs.
+ * Resolved via `resolveLineHeight` per ECMA-376 §17.18.48:
+ *   - `auto`:    `line × naturalSingleLine`
+ *   - `atLeast`: `max(line, naturalSingleLine)`
+ *   - `exact`:   `line` (clipping is the painter's responsibility, see SD-3297)
  *
- * The 1.15 multiplier provides consistent spacing that matches Word's behavior and
- * accounts for the line gap that Canvas TextMetrics doesn't expose directly.
+ * `naturalSingleLine` comes from `fontMetricsCache` — the calibrated value
+ * for fonts the browser cannot measure (Aptos, Calibri, Cambria), else
+ * `fontBoundingBox*`. It is floored at 1.15 × fontSize as a Word-fidelity
+ * choice (see `WORD_SINGLE_LINE_SPACING_MULTIPLIER`).
  *
  * @param fontSize - The font size in pixels
  * @param spacing - Optional paragraph spacing configuration (lineRule, line value)
@@ -397,19 +395,19 @@ const WORD_SINGLE_LINE_SPACING_MULTIPLIER = 1.15;
  * @returns Object containing ascent, descent, and lineHeight in pixels
  *
  * @example
- * // Basic usage with 16px font
+ * // 16 px Arial (uncalibrated), no spacing — naturalSingle floors at 1.15 × 16 = 18.4
  * const metrics = calculateTypographyMetrics(16);
- * // Returns: { ascent: ~12.8, descent: ~3.2, lineHeight: 18.4 }
+ * // Returns: { ascent: ~12.8, descent: ~3.2, lineHeight: ~18.4 }
  *
  * @example
- * // With 1.5 line spacing multiplier
- * const metrics = calculateTypographyMetrics(16, { line: 1.5, lineRule: 'auto' });
- * // Returns: { ascent: ~12.8, descent: ~3.2, lineHeight: 27.6 } // 16 × 1.15 × 1.5
+ * // 16 px Aptos (calibrated to 1.218 × fontSize), `line=1.5 auto`
+ * const metrics = calculateTypographyMetrics(16, { line: 1.5, lineUnit: 'multiplier', lineRule: 'auto' }, aptosFontInfo);
+ * // Returns: { lineHeight: ~29.2 } // 1.5 × (1.218 × 16) = 1.5 × 19.488
  *
  * @example
- * // With exact line height override
- * const metrics = calculateTypographyMetrics(16, { line: 24, lineRule: 'exact' });
- * // Returns: { ascent: ~12.8, descent: ~3.2, lineHeight: 24 }
+ * // Exact line height override
+ * const metrics = calculateTypographyMetrics(16, { line: 24, lineUnit: 'px', lineRule: 'exact' });
+ * // Returns: { lineHeight: 24 }
  */
 function calculateTypographyMetrics(
   fontSize: number,
@@ -3565,7 +3563,7 @@ const appendSegment = (
  * |----------|---------------------------------------------------------|
  * | auto     | `target` — no min, no max                               |
  * | atLeast  | `max(target, naturalSingle)`                            |
- * | exact    | `target` (clipped by caller if content taller)          |
+ * | exact    | `target` (paint-time clipping tracked in SD-3297)       |
  *
  * For `lineUnit='multiplier'`, `target = line × naturalSingle` — the adapter
  * has already divided `w:line` by 240, so `line` is the dimensionless ratio.
@@ -3654,9 +3652,21 @@ const measureDropCap = (
   // Add padding for spacing between drop cap and text
   const width = roundValue(textWidth + DROP_CAP_PADDING_PX);
 
-  // Calculate height based on the number of lines the drop cap should span
-  // This uses the base line height calculation from the paragraph's spacing
-  const lineHeight = resolveLineHeight(spacing, run.fontSize);
+  // Calculate height based on the number of lines the drop cap should span.
+  // Thread the drop-cap font's `naturalSingleLine` through `resolveLineHeight`
+  // (matching `calculateTypographyMetrics`) so calibrated fonts (Aptos,
+  // Calibri) size drop caps off the same intrinsic line height as the body
+  // lines they span. Without this, drop caps fell back to the 1.15 × fontSize
+  // floor and rendered shorter than the calibrated body.
+  const dropCapFontInfo: FontInfo = {
+    fontFamily: normalizeFontFamily(run.fontFamily),
+    fontSize: normalizeFontSize(run.fontSize),
+    bold: run.bold,
+    italic: run.italic,
+  };
+  const dropCapMetrics = getFontMetrics(ctx, dropCapFontInfo, measurementConfig.mode, measurementConfig.fonts);
+  const naturalSingle = dropCapMetrics.naturalSingleLine ?? dropCapMetrics.ascent + dropCapMetrics.descent;
+  const lineHeight = resolveLineHeight(spacing, dropCapFontInfo.fontSize, naturalSingle);
   const height = roundValue(lineHeight * lines);
 
   return {

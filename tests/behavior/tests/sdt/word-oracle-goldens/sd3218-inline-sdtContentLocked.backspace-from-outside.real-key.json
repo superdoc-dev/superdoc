@@ -1,0 +1,99 @@
+{
+  "fixture": "sd3218-inline-sdtContentLocked",
+  "foreground": {
+    "docHwnd": 1508126,
+    "title": "probe-bs19 - Word",
+    "setFgOk": true
+  },
+  "placement": "caret at cc.Range.End + 1 (just OUTSIDE the SDT trailing boundary)",
+  "recordedAt": "2026-05-28T20:40:57Z",
+  "source": "Windows Word real keyboard via WScript.Shell.SendKeys post-tscon",
+  "preflight": {
+    "mySessionId": 1,
+    "qwinstaBefore": " SESSIONNAME       USERNAME                 ID  STATE   TYPE        DEVICE \r\n services                                    0  Disc                        \r\n>console           Administrator             1  Active                      \r\n rdp-tcp                                 65536  Listen                      \r\n"
+  },
+  "steps": [
+    {
+      "docText": null,
+      "selStart": 19,
+      "ccCount": 1,
+      "selType": 1,
+      "inside": false,
+      "label": "step0:placed-at-cc.Range.End-plus-1",
+      "selEnd": 19,
+      "cc": {
+        "rangeEnd": 18,
+        "lockContentControl": true,
+        "rangeStart": 6,
+        "rangeText": "inline value",
+        "tag": "inline-sdtContentLocked",
+        "title": "sdtContentLocked Inline",
+        "lockContents": true
+      },
+      "selText": " "
+    },
+    {
+      "docText": null,
+      "selStart": 5,
+      "ccCount": 1,
+      "selType": 2,
+      "inside": true,
+      "label": "step1:after-real-BACKSPACE-1",
+      "selEnd": 19,
+      "cc": {
+        "rangeEnd": 18,
+        "lockContentControl": true,
+        "rangeStart": 6,
+        "rangeText": "inline value",
+        "tag": "inline-sdtContentLocked",
+        "title": "sdtContentLocked Inline",
+        "lockContents": true
+      },
+      "selText": "inline value"
+    },
+    {
+      "docText": null,
+      "selStart": 5,
+      "ccCount": 1,
+      "selType": 1,
+      "inside": true,
+      "label": "step2:after-real-BACKSPACE-2",
+      "selEnd": 5,
+      "cc": {
+        "rangeEnd": 18,
+        "lockContentControl": true,
+        "rangeStart": 6,
+        "rangeText": "inline value",
+        "tag": "inline-sdtContentLocked",
+        "title": "sdtContentLocked Inline",
+        "lockContents": true
+      },
+      "selText": null
+    },
+    {
+      "docText": null,
+      "selStart": 4,
+      "ccCount": 1,
+      "selType": 1,
+      "inside": true,
+      "label": "step3:after-real-BACKSPACE-3",
+      "selEnd": 4,
+      "cc": {
+        "rangeEnd": 17,
+        "lockContentControl": true,
+        "rangeStart": 5,
+        "rangeText": "inline value",
+        "tag": "inline-sdtContentLocked",
+        "title": "sdtContentLocked Inline",
+        "lockContents": true
+      },
+      "selText": null
+    }
+  ],
+  "sessionState": "Active",
+  "wordVersion": "16.0",
+  "test": "backspace-from-outside-trailing-x3",
+  "savedDocxBytes": 20461,
+  "trustedFor": ["real-keyboard-parity", "destructive-key-behavior"],
+  "inputMode": "win32-sendkeys-post-tscon"
+}

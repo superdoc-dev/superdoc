@@ -1,0 +1,91 @@
+{
+  "paragraphsInsideSdtContent": null,
+  "foreground": {
+    "setFgOk": true,
+    "docHwnd": 2556430,
+    "isWord": true,
+    "procName": "WINWORD",
+    "procId": 6360,
+    "title": "behavior-probe-scratch - Word",
+    "hwnd": 2556430
+  },
+  "placement": "cc-content-end",
+  "recordedAt": "2026-05-28T22:36:42Z",
+  "savedDocxBase64": "",
+  "preflight": {
+    "sessionStateInitial": "Active",
+    "qwinstaBefore": " SESSIONNAME       USERNAME                 ID  STATE   TYPE        DEVICE \r\n services                                    0  Disc                        \r\n>console           Administrator             1  Active                      \r\n rdp-tcp                                 65536  Listen                      \r\n",
+    "mySessionId": 1
+  },
+  "steps": [
+    {
+      "selType": 1,
+      "docText": null,
+      "label": "step0:placed",
+      "ccCount": 1,
+      "selStart": 18,
+      "paragraphCount": 1,
+      "inside": true,
+      "selEnd": 18,
+      "selText": null,
+      "cc": {
+        "lockContentControl": false,
+        "rangeText": "inline value",
+        "paragraphsInContent": 1,
+        "rangeEnd": 18,
+        "title": "Inline Field",
+        "rangeStart": 6,
+        "lockContents": false,
+        "tag": "inline-unlocked"
+      }
+    },
+    {
+      "selType": 2,
+      "docText": null,
+      "label": "step1:after-^a",
+      "ccCount": 1,
+      "selStart": 0,
+      "paragraphCount": 1,
+      "inside": true,
+      "selEnd": 27,
+      "selText": "Lead inline value trail.\r",
+      "cc": {
+        "lockContentControl": false,
+        "rangeText": "inline value",
+        "paragraphsInContent": 1,
+        "rangeEnd": 18,
+        "title": "Inline Field",
+        "rangeStart": 6,
+        "lockContents": false,
+        "tag": "inline-unlocked"
+      }
+    },
+    {
+      "selType": 2,
+      "docText": null,
+      "label": "step2:after-^a",
+      "ccCount": 1,
+      "selStart": 0,
+      "paragraphCount": 1,
+      "inside": true,
+      "selEnd": 27,
+      "selText": "Lead inline value trail.\r",
+      "cc": {
+        "lockContentControl": false,
+        "rangeText": "inline value",
+        "paragraphsInContent": 1,
+        "rangeEnd": 18,
+        "title": "Inline Field",
+        "rangeStart": 6,
+        "lockContents": false,
+        "tag": "inline-unlocked"
+      }
+    }
+  ],
+  "sessionState": "Active",
+  "wordVersion": "16.0",
+  "documentXmlSdtExcerpt": "",
+  "savedDocxBytes": 0,
+  "trustedFor": ["real-keyboard-parity", "destructive-key-behavior"],
+  "inputMode": "win32-sendkeys-post-tscon"
+}

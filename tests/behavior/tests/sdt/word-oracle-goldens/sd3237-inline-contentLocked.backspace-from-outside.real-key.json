@@ -1,0 +1,81 @@
+{
+  "fixture": "sd3237-inline-contentLocked",
+  "foreground": {
+    "docHwnd": 918016,
+    "title": "probe-bs19 - Word",
+    "setFgOk": true
+  },
+  "placement": "caret at cc.Range.End + 1 (just OUTSIDE the SDT trailing boundary)",
+  "recordedAt": "2026-05-28T20:40:42Z",
+  "source": "Windows Word real keyboard via WScript.Shell.SendKeys post-tscon",
+  "preflight": {
+    "mySessionId": 1,
+    "qwinstaBefore": " SESSIONNAME       USERNAME                 ID  STATE   TYPE        DEVICE \r\n services                                    0  Disc                        \r\n>console           Administrator             1  Active                      \r\n rdp-tcp                                 65536  Listen                      \r\n"
+  },
+  "steps": [
+    {
+      "docText": null,
+      "selStart": 20,
+      "ccCount": 1,
+      "selType": 1,
+      "inside": false,
+      "label": "step0:placed-at-cc.Range.End-plus-1",
+      "selEnd": 20,
+      "cc": {
+        "rangeEnd": 19,
+        "lockContentControl": false,
+        "rangeStart": 6,
+        "rangeText": "locked inline",
+        "tag": "inline-contentlocked",
+        "title": "Locked Inline",
+        "lockContents": true
+      },
+      "selText": " "
+    },
+    {
+      "docText": null,
+      "selStart": 5,
+      "ccCount": 1,
+      "selType": 2,
+      "inside": true,
+      "label": "step1:after-real-BACKSPACE-1",
+      "selEnd": 20,
+      "cc": {
+        "rangeEnd": 19,
+        "lockContentControl": false,
+        "rangeStart": 6,
+        "rangeText": "locked inline",
+        "tag": "inline-contentlocked",
+        "title": "Locked Inline",
+        "lockContents": true
+      },
+      "selText": "locked inline"
+    },
+    {
+      "docText": null,
+      "selStart": 5,
+      "ccCount": 0,
+      "selType": 1,
+      "inside": false,
+      "label": "step2:after-real-BACKSPACE-2",
+      "selEnd": 5,
+      "selText": " "
+    },
+    {
+      "docText": null,
+      "selStart": 4,
+      "ccCount": 0,
+      "selType": 1,
+      "inside": false,
+      "label": "step3:after-real-BACKSPACE-3",
+      "selEnd": 4,
+      "selText": " "
+    }
+  ],
+  "sessionState": "Active",
+  "wordVersion": "16.0",
+  "test": "backspace-from-outside-trailing-x3",
+  "savedDocxBytes": 13395,
+  "trustedFor": ["real-keyboard-parity", "destructive-key-behavior"],
+  "inputMode": "win32-sendkeys-post-tscon"
+}

@@ -1,0 +1,83 @@
+{
+  "source": "Windows Word real keyboard via WScript.Shell.SendKeys post-tscon",
+  "recordedAt": "2026-05-28T20:31:05Z",
+  "trustedFor": ["navigation", "real-keyboard-parity"],
+  "fixture": "sd3237-inline-unlocked.docx",
+  "inputMode": "win32-sendkeys-post-tscon",
+  "preflight": {
+    "qwinstaAfter": " SESSIONNAME       USERNAME                 ID  STATE   TYPE        DEVICE \r\n services                                    0  Disc                        \r\n>console           Administrator             1  Active                      \r\n rdp-tcp                                 65536  Listen                      \r\n",
+    "tsconAttempt": "",
+    "qwinstaBefore": " SESSIONNAME       USERNAME                 ID  STATE   TYPE        DEVICE \r\n services                                    0  Disc                        \r\n>                  Administrator             1  Disc                        \r\n console                                     2  Conn                        \r\n rdp-tcp                                 65536  Listen                      \r\n",
+    "mySessionId": 1,
+    "tsconExit": 0
+  },
+  "foreground": {
+    "title": "probe-scratch - Word",
+    "hwnd": 786914,
+    "setFgOk": true,
+    "wordHwnd": 786914
+  },
+  "test": "right-arrow-trailing",
+  "wordVersion": "16.0",
+  "sessionState": "Active",
+  "steps": [
+    {
+      "docText": null,
+      "selStart": 18,
+      "ccCount": 1,
+      "selType": 1,
+      "inside": true,
+      "label": "step0:placed-at-trailing-edge",
+      "selEnd": 18,
+      "cc": {
+        "rangeEnd": 18,
+        "lockContentControl": false,
+        "rangeStart": 6,
+        "rangeText": "inline value",
+        "tag": "inline-unlocked",
+        "title": "Inline Field",
+        "lockContents": false
+      },
+      "selText": null
+    },
+    {
+      "docText": null,
+      "selStart": 19,
+      "ccCount": 1,
+      "selType": 1,
+      "inside": false,
+      "label": "step1:after-real-key-RIGHT",
+      "selEnd": 19,
+      "cc": {
+        "rangeEnd": 18,
+        "lockContentControl": false,
+        "rangeStart": 6,
+        "rangeText": "inline value",
+        "tag": "inline-unlocked",
+        "title": "Inline Field",
+        "lockContents": false
+      },
+      "selText": " "
+    },
+    {
+      "docText": null,
+      "selStart": 20,
+      "ccCount": 1,
+      "selType": 1,
+      "inside": false,
+      "label": "step2:after-real-key-RIGHT",
+      "selEnd": 20,
+      "cc": {
+        "rangeEnd": 18,
+        "lockContentControl": false,
+        "rangeStart": 6,
+        "rangeText": "inline value",
+        "tag": "inline-unlocked",
+        "title": "Inline Field",
+        "lockContents": false
+      },
+      "selText": "t"
+    }
+  ],
+  "notTrustedFor": []
+}

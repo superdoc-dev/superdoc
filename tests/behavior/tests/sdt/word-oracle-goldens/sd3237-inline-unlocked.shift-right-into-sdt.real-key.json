@@ -1,0 +1,175 @@
+{
+  "paragraphsInsideSdtContent": null,
+  "foreground": {
+    "setFgOk": true,
+    "docHwnd": 4653712,
+    "isWord": true,
+    "procName": "WINWORD",
+    "procId": 4548,
+    "title": "behavior-probe-scratch - Word",
+    "hwnd": 4653712
+  },
+  "placement": "cc-content-start-minus-1",
+  "recordedAt": "2026-05-28T22:35:46Z",
+  "savedDocxBase64": "",
+  "preflight": {
+    "sessionStateInitial": "Active",
+    "qwinstaBefore": " SESSIONNAME       USERNAME                 ID  STATE   TYPE        DEVICE \r\n services                                    0  Disc                        \r\n>console           Administrator             1  Active                      \r\n rdp-tcp                                 65536  Listen                      \r\n",
+    "mySessionId": 1
+  },
+  "steps": [
+    {
+      "selType": 1,
+      "docText": null,
+      "label": "step0:placed",
+      "ccCount": 1,
+      "selStart": 5,
+      "paragraphCount": 1,
+      "inside": true,
+      "selEnd": 5,
+      "selText": null,
+      "cc": {
+        "lockContentControl": false,
+        "rangeText": "inline value",
+        "paragraphsInContent": 1,
+        "rangeEnd": 18,
+        "title": "Inline Field",
+        "rangeStart": 6,
+        "lockContents": false,
+        "tag": "inline-unlocked"
+      }
+    },
+    {
+      "selType": 2,
+      "docText": null,
+      "label": "step1:after-+{RIGHT}",
+      "ccCount": 1,
+      "selStart": 5,
+      "paragraphCount": 1,
+      "inside": true,
+      "selEnd": 6,
+      "selText": null,
+      "cc": {
+        "lockContentControl": false,
+        "rangeText": "inline value",
+        "paragraphsInContent": 1,
+        "rangeEnd": 18,
+        "title": "Inline Field",
+        "rangeStart": 6,
+        "lockContents": false,
+        "tag": "inline-unlocked"
+      }
+    },
+    {
+      "selType": 2,
+      "docText": null,
+      "label": "step2:after-+{RIGHT}",
+      "ccCount": 1,
+      "selStart": 5,
+      "paragraphCount": 1,
+      "inside": true,
+      "selEnd": 7,
+      "selText": "i",
+      "cc": {
+        "lockContentControl": false,
+        "rangeText": "inline value",
+        "paragraphsInContent": 1,
+        "rangeEnd": 18,
+        "title": "Inline Field",
+        "rangeStart": 6,
+        "lockContents": false,
+        "tag": "inline-unlocked"
+      }
+    },
+    {
+      "selType": 2,
+      "docText": null,
+      "label": "step3:after-+{RIGHT}",
+      "ccCount": 1,
+      "selStart": 5,
+      "paragraphCount": 1,
+      "inside": true,
+      "selEnd": 8,
+      "selText": "in",
+      "cc": {
+        "lockContentControl": false,
+        "rangeText": "inline value",
+        "paragraphsInContent": 1,
+        "rangeEnd": 18,
+        "title": "Inline Field",
+        "rangeStart": 6,
+        "lockContents": false,
+        "tag": "inline-unlocked"
+      }
+    },
+    {
+      "selType": 2,
+      "docText": null,
+      "label": "step4:after-+{RIGHT}",
+      "ccCount": 1,
+      "selStart": 5,
+      "paragraphCount": 1,
+      "inside": true,
+      "selEnd": 9,
+      "selText": "inl",
+      "cc": {
+        "lockContentControl": false,
+        "rangeText": "inline value",
+        "paragraphsInContent": 1,
+        "rangeEnd": 18,
+        "title": "Inline Field",
+        "rangeStart": 6,
+        "lockContents": false,
+        "tag": "inline-unlocked"
+      }
+    },
+    {
+      "selType": 2,
+      "docText": null,
+      "label": "step5:after-+{RIGHT}",
+      "ccCount": 1,
+      "selStart": 5,
+      "paragraphCount": 1,
+      "inside": true,
+      "selEnd": 10,
+      "selText": "inli",
+      "cc": {
+        "lockContentControl": false,
+        "rangeText": "inline value",
+        "paragraphsInContent": 1,
+        "rangeEnd": 18,
+        "title": "Inline Field",
+        "rangeStart": 6,
+        "lockContents": false,
+        "tag": "inline-unlocked"
+      }
+    },
+    {
+      "selType": 2,
+      "docText": null,
+      "label": "step6:after-+{RIGHT}",
+      "ccCount": 1,
+      "selStart": 5,
+      "paragraphCount": 1,
+      "inside": true,
+      "selEnd": 11,
+      "selText": "inlin",
+      "cc": {
+        "lockContentControl": false,
+        "rangeText": "inline value",
+        "paragraphsInContent": 1,
+        "rangeEnd": 18,
+        "title": "Inline Field",
+        "rangeStart": 6,
+        "lockContents": false,
+        "tag": "inline-unlocked"
+      }
+    }
+  ],
+  "sessionState": "Active",
+  "wordVersion": "16.0",
+  "documentXmlSdtExcerpt": "",
+  "savedDocxBytes": 0,
+  "trustedFor": ["real-keyboard-parity", "destructive-key-behavior"],
+  "inputMode": "win32-sendkeys-post-tscon"
+}

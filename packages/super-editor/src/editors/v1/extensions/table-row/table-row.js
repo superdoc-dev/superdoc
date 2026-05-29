@@ -163,7 +163,7 @@ export const TableRow = Node.create({
        * @private
        * Row-level structured document tag metadata (ECMA-376 §17.5.2.30, CT_SdtRow).
        * Set when the source OOXML wrapped this row in `<w:sdt>`; reconstructed on export.
-       * Shape: `{ scope: 'row', sdtPr, sdtEndPr }`.
+       * Shape: `{ scope: 'row', sdtPr, sdtEndPr, contentBefore?, contentAfter? }`.
        */
       rowSdt: {
         default: null,

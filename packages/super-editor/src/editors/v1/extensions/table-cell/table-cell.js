@@ -254,7 +254,7 @@ export const TableCell = Node.create({
        * @private
        * Cell-level structured document tag metadata (ECMA-376 §17.5.2.32, CT_SdtCell).
        * Set when the source OOXML wrapped this cell in `<w:sdt>`; reconstructed on export.
-       * Shape: `{ scope: 'cell', sdtPr, sdtEndPr }`.
+       * Shape: `{ scope: 'cell', sdtPr, sdtEndPr, contentBefore?, contentAfter? }`.
        */
       cellSdt: {
         default: null,

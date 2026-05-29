@@ -307,6 +307,10 @@ export interface SdtMetadata<Scope extends 'cell' | 'row' = 'cell' | 'row'> {
   sdtPr: unknown;
   /** Raw `<w:sdtEndPr>` element if present, otherwise null. */
   sdtEndPr: unknown | null;
+  /** Raw SDT content elements that appeared before the wrapped row/cell. */
+  contentBefore?: unknown[];
+  /** Raw SDT content elements that appeared after the wrapped row/cell. */
+  contentAfter?: unknown[];
 }
 
 /**

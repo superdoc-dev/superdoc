@@ -555,3 +555,137 @@ describe('ui.viewport.contextAt - bundle composition', () => {
     ui.destroy();
   });
 });
+
+describe('ui.viewport.observe — geometry invalidation (SD-3311)', () => {
+  // The rAF flush resolves within a frame; a short real-timer wait covers both
+  // the requestAnimationFrame path and the setTimeout fallback.
+  const nextFrame = () => new Promise((resolve) => setTimeout(resolve, 30));
+
+  it('fires once per frame on scroll (reason "scroll") and stops after unsubscribe', async () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const events: Array<{ reason: string }> = [];
+    const unsubscribe = ui.viewport.observe((e) => events.push(e));
+
+    // Burst in one frame -> a single coalesced notification.
+    window.dispatchEvent(new Event('scroll'));
+    window.dispatchEvent(new Event('scroll'));
+    await nextFrame();
+    expect(events).toEqual([{ reason: 'scroll' }]);
+
+    unsubscribe();
+    window.dispatchEvent(new Event('scroll'));
+    await nextFrame();
+    expect(events).toHaveLength(1); // no notification after unsubscribe
+
+    ui.destroy();
+  });
+
+  it('coalesces different reasons in the same frame to "mixed"', async () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const events: Array<{ reason: string }> = [];
+    ui.viewport.observe((e) => events.push(e));
+
+    window.dispatchEvent(new Event('scroll'));
+    window.dispatchEvent(new Event('resize'));
+    await nextFrame();
+    expect(events).toEqual([{ reason: 'mixed' }]);
+
+    ui.destroy();
+  });
+
+  it('does not notify after the UI is destroyed', async () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const events: Array<{ reason: string }> = [];
+    ui.viewport.observe((e) => events.push(e));
+
+    ui.destroy();
+    window.dispatchEvent(new Event('resize'));
+    await nextFrame();
+    expect(events).toEqual([]);
+  });
+});
+
+// Stub with real event emitters so tests can drive the engine signals that
+// feed ui.viewport.observe: superdoc `zoomChange` and presentation
+// `layoutUpdated` / `paginationUpdate`.
+function makeEmitter() {
+  const map = new Map<string, Set<(p?: unknown) => void>>();
+  return {
+    on: (e: string, h: (p?: unknown) => void) => {
+      if (!map.has(e)) map.set(e, new Set());
+      map.get(e)!.add(h);
+    },
+    off: (e: string, h: (p?: unknown) => void) => {
+      map.get(e)?.delete(h);
+    },
+    emit: (e: string, p?: unknown) => [...(map.get(e) ?? [])].forEach((h) => h(p)),
+  };
+}
+
+function makeGeometryStub() {
+  const sd = makeEmitter();
+  const pres = makeEmitter();
+  const emptyList = () => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } });
+  const editor: { on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn>; doc: unknown; presentationEditor: unknown } = {
+    on: vi.fn(),
+    off: vi.fn(),
+    doc: {
+      selection: { current: vi.fn(() => ({ empty: true })) },
+      comments: { list: vi.fn(emptyList) },
+      trackChanges: { list: vi.fn(emptyList) },
+      contentControls: { list: vi.fn(() => ({ items: [], total: 0 })) },
+    },
+    presentationEditor: undefined,
+  };
+  editor.presentationEditor = {
+    on: pres.on,
+    off: pres.off,
+    getActiveEditor: () => editor,
+    getEntityRects: vi.fn(() => []),
+    navigateTo: vi.fn(async () => true),
+  };
+  const superdoc: SuperDocLike = {
+    activeEditor: editor as never,
+    config: { documentMode: 'editing' },
+    on: sd.on as never,
+    off: sd.off as never,
+  };
+  return { superdoc, emitSuperdoc: sd.emit, emitPresentation: pres.emit };
+}
+
+describe('ui.viewport.observe — repaint reason (SD-3311 regression)', () => {
+  const nextFrame = () => new Promise((resolve) => setTimeout(resolve, 30));
+
+  it('reports "zoom" for a zoom repaint, not "mixed" (layoutUpdated + paginationUpdate are one paint)', async () => {
+    const { superdoc, emitSuperdoc, emitPresentation } = makeGeometryStub();
+    const ui = createSuperDocUI({ superdoc });
+    const events: Array<{ reason: string }> = [];
+    ui.viewport.observe((e) => events.push(e));
+
+    // zoomChange (pre-paint), then the paired post-paint repaint events.
+    emitSuperdoc('zoomChange');
+    emitPresentation('layoutUpdated');
+    emitPresentation('paginationUpdate'); // same paint / payload — must not double-count
+    await nextFrame();
+
+    expect(events).toEqual([{ reason: 'zoom' }]);
+    ui.destroy();
+  });
+
+  it('reports "layout" for a plain repaint (the paginationUpdate alias does not make it "mixed")', async () => {
+    const { superdoc, emitPresentation } = makeGeometryStub();
+    const ui = createSuperDocUI({ superdoc });
+    const events: Array<{ reason: string }> = [];
+    ui.viewport.observe((e) => events.push(e));
+
+    emitPresentation('layoutUpdated');
+    emitPresentation('paginationUpdate');
+    await nextFrame();
+
+    expect(events).toEqual([{ reason: 'layout' }]);
+    ui.destroy();
+  });
+});

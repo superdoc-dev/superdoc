@@ -121,8 +121,8 @@ describe('makeDefaultItems LG compact styles', () => {
     const documentMode = getItem(defaultItems, overflowItems, 'documentMode');
     const linkedStyles = getItem(defaultItems, overflowItems, 'linkedStyles');
 
-    expect(documentMode.attributes.value.className).toContain('toolbar-item--doc-mode-compact');
-    expect(linkedStyles.attributes.value.className).toContain('toolbar-item--linked-styles-compact');
+    expect(documentMode.attributes.value.className).toContain('sd-toolbar-item--doc-mode-compact');
+    expect(linkedStyles.attributes.value.className).toContain('sd-toolbar-item--linked-styles-compact');
   });
 
   it(`does not apply compact classes at ${LG_BREAKPOINT + 1}px (above breakpoint)`, () => {
@@ -130,8 +130,8 @@ describe('makeDefaultItems LG compact styles', () => {
     const documentMode = getItem(defaultItems, overflowItems, 'documentMode');
     const linkedStyles = getItem(defaultItems, overflowItems, 'linkedStyles');
 
-    expect(documentMode.attributes.value.className).not.toContain('toolbar-item--doc-mode-compact');
-    expect(linkedStyles.attributes.value.className).not.toContain('toolbar-item--linked-styles-compact');
+    expect(documentMode.attributes.value.className).not.toContain('sd-toolbar-item--doc-mode-compact');
+    expect(linkedStyles.attributes.value.className).not.toContain('sd-toolbar-item--linked-styles-compact');
   });
 });
 

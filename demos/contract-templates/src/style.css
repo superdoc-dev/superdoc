@@ -136,9 +136,12 @@ input:focus {
 }
 .btn:disabled { color: var(--demo-text-muted); cursor: not-allowed; opacity: 0.55; }
 
-/* "Locate" — scroll a field/clause control into view (ui.contentControls.scrollIntoView). */
+/* "Locate" — scroll a control into view (ui.contentControls.scrollIntoView);
+   "Focus" — scroll AND place the caret inside it (ui.contentControls.focus). */
 .clause-actions { display: flex; align-items: center; gap: 8px; }
-.locate {
+.row-actions { display: flex; align-items: center; gap: 6px; }
+.locate,
+.focus {
   font: inherit;
   font-size: var(--sd-font-size-100, 11px);
   line-height: 1;
@@ -150,8 +153,10 @@ input:focus {
   cursor: pointer;
   white-space: nowrap;
 }
-.locate:hover { color: var(--demo-text); border-color: var(--demo-accent); }
-.locate:focus-visible { outline: 1px solid var(--demo-accent); outline-offset: 1px; }
+.locate:hover,
+.focus:hover { color: var(--demo-text); border-color: var(--demo-accent); }
+.locate:focus-visible,
+.focus:focus-visible { outline: 1px solid var(--demo-accent); outline-offset: 1px; }
 
 #fields-panel .btn { width: 100%; margin-top: 12px; }
 

@@ -396,6 +396,47 @@ describe('ui.contentControls handle (SD-3157)', () => {
     ui.destroy();
   });
 
+  it('focus({ id }) returns { success: false, reason: "invalid-id" } for an empty id without touching the presentation', async () => {
+    const { superdoc, editor } = makeStub({ items: [makeItem('sdt-1')] });
+    const ui = createSuperDocUI({ superdoc });
+    const focus = vi.fn().mockResolvedValue({ success: true });
+    (editor as { presentationEditor?: unknown }).presentationEditor = { focusContentControl: focus };
+
+    expect(await ui.contentControls.focus({ id: '' })).toEqual({ success: false, reason: 'invalid-id' });
+    expect(focus).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('focus({ id }) returns { success: false, reason: "not-ready" } when the presentation layer is not ready', async () => {
+    const { superdoc } = makeStub({ items: [makeItem('sdt-1')] });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(await ui.contentControls.focus({ id: 'sdt-1' })).toEqual({ success: false, reason: 'not-ready' });
+
+    ui.destroy();
+  });
+
+  it('focus({ id }) delegates to the presentation focus with center/smooth defaults and returns its result', async () => {
+    const { superdoc, editor } = makeStub({ items: [makeItem('sdt-1')] });
+    const ui = createSuperDocUI({ superdoc });
+    const focus = vi.fn().mockResolvedValue({ success: true });
+    (editor as { presentationEditor?: unknown }).presentationEditor = { focusContentControl: focus };
+
+    expect(await ui.contentControls.focus({ id: 'sdt-1' })).toEqual({ success: true });
+    expect(focus).toHaveBeenCalledWith('sdt-1', { block: 'center', behavior: 'smooth' });
+
+    // Explicit options pass through; the presentation result is returned verbatim.
+    focus.mockResolvedValueOnce({ success: false, reason: 'not-found' });
+    expect(await ui.contentControls.focus({ id: 'nope', block: 'start', behavior: 'auto' })).toEqual({
+      success: false,
+      reason: 'not-found',
+    });
+    expect(focus).toHaveBeenLastCalledWith('nope', { block: 'start', behavior: 'auto' });
+
+    ui.destroy();
+  });
+
   it('observe receives the snapshot value directly (parallel to comments/trackChanges)', async () => {
     // `observe` is the value-shaped alias of `subscribe`. The demo
     // (`field-chip.ts`) consumes it directly, so an explicit test

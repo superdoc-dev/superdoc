@@ -115,7 +115,11 @@ export function attachFieldChip(superdoc: SuperDoc, ui: SuperDocUI, lookup: Smar
     positionChip();
   };
 
-  const onScrollOrResize = () => positionChip();
+  // Re-anchor whenever the viewport geometry changes. ui.viewport.observe is
+  // the single signal for this - it fires on scroll, resize, zoom, and
+  // layout/pagination reflow, so we catch the zoom / reflow cases that
+  // hand-wired window scroll + resize listeners miss (SD-3311).
+  const onViewportChange = () => positionChip();
 
   // SD-3232: the active control comes from the public SuperDoc event. The
   // payload includes the SdtRef (id + tag), so we can narrow to smart
@@ -150,13 +154,11 @@ export function attachFieldChip(superdoc: SuperDoc, ui: SuperDocUI, lookup: Smar
   };
 
   superdoc.on('content-control:active-change', onActiveChange);
-  window.addEventListener('scroll', onScrollOrResize, true);
-  window.addEventListener('resize', onScrollOrResize);
+  const unobserveViewport = ui.viewport.observe(onViewportChange);
 
   return () => {
     superdoc.off('content-control:active-change', onActiveChange);
-    window.removeEventListener('scroll', onScrollOrResize, true);
-    window.removeEventListener('resize', onScrollOrResize);
+    unobserveViewport();
     chipEl.remove();
   };
 }

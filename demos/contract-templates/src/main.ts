@@ -376,6 +376,21 @@ function locateByTag(tag: string): void {
   void ui.contentControls.scrollIntoView({ id: first.target.nodeId, block: 'center' });
 }
 
+/**
+ * Focus the first control carrying `tag`: scroll to it AND put the caret
+ * inside (ui.contentControls.focus), so the user can start editing. The
+ * counterpart to locateByTag (scroll only).
+ */
+function focusByTag(tag: string): void {
+  const ui = state.ui;
+  const editor = state.editor;
+  if (!ui || !editor?.doc) return;
+  const { items } = editor.doc.contentControls.selectByTag({ tag });
+  const first = items[0];
+  if (!first) return;
+  void ui.contentControls.focus({ id: first.target.nodeId, block: 'center' });
+}
+
 function renderPanels(): void {
   renderFieldsPanel();
   renderClausesPanel();
@@ -393,13 +408,19 @@ function renderFieldsPanel(): void {
     row.innerHTML = `
       <div class="row-label">
         <label class="row-label-text" for="${inputId}">${escapeHtml(field.label)}</label>
-        <button class="locate" type="button" data-locate-field="${escapeAttr(field.key)}" aria-label="Locate ${escapeAttr(field.label)} in the document" title="Scroll to this field">Locate</button>
+        <span class="row-actions">
+          <button class="locate" type="button" data-locate-field="${escapeAttr(field.key)}" aria-label="Locate ${escapeAttr(field.label)} in the document" title="Scroll to this field">Locate</button>
+          <button class="focus" type="button" data-focus-field="${escapeAttr(field.key)}" aria-label="Focus ${escapeAttr(field.label)} in the document" title="Scroll to this field and place the cursor in it">Focus</button>
+        </span>
       </div>
       <input id="${inputId}" data-field="${field.key}" value="${escapeAttr(state.values[field.key] ?? '')}" />
     `;
     fieldsPanelEl.appendChild(row);
     row.querySelector<HTMLButtonElement>('.locate')?.addEventListener('click', () => {
       locateByTag(fieldTag(field.key));
+    });
+    row.querySelector<HTMLButtonElement>('.focus')?.addEventListener('click', () => {
+      focusByTag(fieldTag(field.key));
     });
     const input = row.querySelector<HTMLInputElement>('input');
     if (!input) continue;
@@ -435,6 +456,7 @@ function renderClausesPanel(): void {
           <div class="clause-actions">
             <span class="clause-status">Update available</span>
             <button class="locate" type="button" data-locate-clause="${escapeAttr(clause.id)}" aria-label="Locate ${escapeAttr(clause.label)} in the document" title="Scroll to this clause">Locate</button>
+            <button class="focus" type="button" data-focus-clause="${escapeAttr(clause.id)}" aria-label="Focus ${escapeAttr(clause.label)} in the document" title="Scroll to this clause and place the cursor in it">Focus</button>
           </div>
         </header>
         <p class="clause-summary">${escapeHtml(upgrade.summary)}</p>
@@ -469,6 +491,7 @@ function renderClausesPanel(): void {
           <div class="clause-actions">
             <span class="clause-status muted">Current</span>
             <button class="locate" type="button" data-locate-clause="${escapeAttr(clause.id)}" aria-label="Locate ${escapeAttr(clause.label)} in the document" title="Scroll to this clause">Locate</button>
+            <button class="focus" type="button" data-focus-clause="${escapeAttr(clause.id)}" aria-label="Focus ${escapeAttr(clause.label)} in the document" title="Scroll to this clause and place the cursor in it">Focus</button>
           </div>
         </header>
         <p class="clause-meta">Document ${escapeHtml(inDoc)}</p>
@@ -477,6 +500,9 @@ function renderClausesPanel(): void {
 
     card.querySelector<HTMLButtonElement>('.locate')?.addEventListener('click', () => {
       locateByTag(clauseTag(clause.id, inDoc));
+    });
+    card.querySelector<HTMLButtonElement>('.focus')?.addEventListener('click', () => {
+      focusByTag(clauseTag(clause.id, inDoc));
     });
     clausesPanelEl.appendChild(card);
   }

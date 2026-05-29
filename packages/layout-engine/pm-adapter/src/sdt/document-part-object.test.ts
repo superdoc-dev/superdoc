@@ -702,5 +702,84 @@ describe('document-part-object', () => {
         expect(callArgs[2]).toMatchObject({ sectionState: state });
       });
     });
+
+    // ==================== SD-3005: block field children ====================
+    describe('block field children (SD-3005)', () => {
+      beforeEach(() => {
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Bibliographies');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('bib-1');
+        vi.mocked(metadataModule.getNodeInstruction).mockReturnValue(undefined);
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue({ type: 'docPartObject' });
+      });
+
+      const bibliography = (): PMNode =>
+        ({
+          type: 'bibliography',
+          attrs: { instruction: 'BIBLIOGRAPHY' },
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Entry One' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'Entry Two' }] },
+          ],
+        }) as unknown as PMNode;
+
+      // Minimal section state with a far-away boundary so no break is emitted —
+      // these tests only assert rendering + the paragraph-index counter.
+      const withSectionState = () => {
+        mockContext.sectionState = {
+          ranges: [{ sectionIndex: 0, startParagraphIndex: 0, endParagraphIndex: 99 }],
+          currentSectionIndex: 0,
+          currentParagraphIndex: 0,
+        } as unknown as NonNullable<NodeHandlerContext['sectionState']>;
+      };
+
+      it('renders a direct bibliography child (heading + both entries become blocks)', () => {
+        withSectionState();
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Bibliography' }] }, bibliography()],
+        };
+
+        handleDocumentPartObjectNode(node, mockContext);
+
+        // heading paragraph + 2 bibliography entry paragraphs
+        expect(mockParagraphConverter).toHaveBeenCalledTimes(3);
+        expect(mockContext.blocks).toHaveLength(3);
+      });
+
+      it('advances currentParagraphIndex through a bibliography child to match findParagraphsWithSectPr', () => {
+        // findParagraphsWithSectPr recurses `bibliography`, so the handler must
+        // advance the counter per entry or section breaks downstream drift.
+        withSectionState();
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Bibliography' }] }, bibliography()],
+        };
+
+        handleDocumentPartObjectNode(node, mockContext);
+
+        // heading (1) + Entry One (1) + Entry Two (1) = 3 paragraphs counted
+        expect(mockContext.sectionState!.currentParagraphIndex).toBe(3);
+      });
+
+      it('renders a structuredContentBlock-wrapped bibliography without advancing the counter', () => {
+        // findParagraphsWithSectPr does NOT recurse structuredContentBlock, so its
+        // inner paragraphs render but must not advance currentParagraphIndex.
+        withSectionState();
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Bibliography' }] },
+            { type: 'structuredContentBlock', attrs: {}, content: [bibliography()] },
+          ],
+        };
+
+        handleDocumentPartObjectNode(node, mockContext);
+
+        // both entries still render
+        expect(mockParagraphConverter).toHaveBeenCalledTimes(3); // heading + 2 entries
+        // but only the heading advanced the counter (scb is not recursed by analysis)
+        expect(mockContext.sectionState!.currentParagraphIndex).toBe(1);
+      });
+    });
   });
 });

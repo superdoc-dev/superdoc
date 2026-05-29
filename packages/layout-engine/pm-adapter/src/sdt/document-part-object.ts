@@ -9,6 +9,13 @@ import type { PMNode, NodeHandlerContext } from '../types.js';
 import { emitPendingSectionBreakForParagraph } from '../sections/index.js';
 import { getDocPartGallery, getDocPartObjectId, getNodeInstruction, resolveNodeSdtMetadata } from './metadata.js';
 import { processTocChildren } from './toc.js';
+import { handleParagraphContainerNode } from './paragraph-container.js';
+import { handleStructuredContentBlockNode } from './structured-content-block.js';
+
+// Block field children whose paragraphs `findParagraphsWithSectPr` recurses into,
+// so their handler must advance currentParagraphIndex in step (delegated to
+// handleParagraphContainerNode).
+const PARAGRAPH_CONTAINER_TYPES = new Set(['bibliography', 'index', 'tableOfAuthorities']);
 
 /**
  * Handle document part object nodes (e.g., TOC galleries, page numbers).
@@ -115,9 +122,18 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
         };
         const output = { blocks, recordBlockKind };
         processTocChildren(child.content, metadata, tocContext, output);
+      } else if (PARAGRAPH_CONTAINER_TYPES.has(child.type)) {
+        // SD-3005: a block field (bibliography / index / table of authorities)
+        // generated inside this SDT. Render its entry paragraphs and advance
+        // currentParagraphIndex per child to match findParagraphsWithSectPr,
+        // which recurses into these node types.
+        handleParagraphContainerNode(child, context);
+      } else if (child.type === 'structuredContentBlock') {
+        // SD-3005: a nested content control (often wrapping a block field).
+        // findParagraphsWithSectPr does NOT recurse structuredContentBlock, so
+        // its handler renders without advancing currentParagraphIndex.
+        handleStructuredContentBlockNode(child, context);
       }
     }
   }
-  // Note: Other documentPartObject types (e.g., Bibliography) are intentionally
-  // not processed - they are ignored to maintain backward compatibility.
 }

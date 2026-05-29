@@ -103,13 +103,7 @@ export function resolveHeaderFooterSlotRuntime(
     }
 
     // For 'effective' resolution, walk the section chain backward
-    const resolved = resolveEffectiveRef(
-      hostEditor,
-      sections,
-      projection.range.sectionIndex,
-      headerFooterKind,
-      variant,
-    );
+    const resolved = resolveEffectiveRef(sections, projection.range.sectionIndex, headerFooterKind, variant);
     effectiveRefId = resolved?.refId ?? null;
   }
 

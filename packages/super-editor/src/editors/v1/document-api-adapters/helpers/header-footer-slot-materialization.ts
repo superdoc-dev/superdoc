@@ -122,7 +122,7 @@ export function ensureExplicitHeaderFooterSlot(
 
   // Step 4: Resolve inherited effective ref for potential cloning.
   const sectionIndex = sections.indexOf(projection);
-  const inheritedRef = resolveEffectiveRef(editor, sections, sectionIndex, kind, variant);
+  const inheritedRef = resolveEffectiveRef(sections, sectionIndex, kind, variant);
   const effectiveSourceRefId = sourceRefId ?? inheritedRef?.refId ?? undefined;
 
   // Step 5–11: Create part + update sectPr, wrapped in compoundMutation

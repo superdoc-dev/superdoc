@@ -1,6 +1,5 @@
 export type HeaderFooterKind = 'header' | 'footer';
 export type HeaderFooterVariant = 'default' | 'first' | 'even' | 'odd';
-export type HeaderFooterMatchedVariant = HeaderFooterVariant;
 
 export type HeaderFooterSectionRefs = Partial<Record<HeaderFooterVariant, string | null>>;
 
@@ -28,8 +27,7 @@ export type HeaderFooterEffectiveRefInput = {
 export type HeaderFooterEffectiveRefResult = {
   refId: string;
   matchedSectionIndex: number;
-  selectedVariant: HeaderFooterVariant;
-  matchedVariant: HeaderFooterMatchedVariant;
+  matchedVariant: HeaderFooterVariant;
 };
 
 export function selectHeaderFooterVariantForPage({
@@ -44,7 +42,7 @@ export function selectHeaderFooterVariantForPage({
   return 'default';
 }
 
-function candidateVariantsFor(variant: HeaderFooterVariant): readonly HeaderFooterMatchedVariant[] {
+function candidateVariantsFor(variant: HeaderFooterVariant): readonly HeaderFooterVariant[] {
   return variant === 'odd' ? ['odd', 'default'] : [variant];
 }
 
@@ -79,7 +77,6 @@ export function resolveEffectiveHeaderFooterRef({
         return {
           refId,
           matchedSectionIndex: currentIndex,
-          selectedVariant: variant,
           matchedVariant: candidate,
         };
       }

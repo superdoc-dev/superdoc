@@ -35,9 +35,10 @@ export {
   resolveEffectiveHeaderFooterRef,
   type HeaderFooterKind,
   type HeaderFooterVariant,
-  type HeaderFooterMatchedVariant,
   type HeaderFooterSectionRefs,
   type HeaderFooterResolutionSection,
+  type HeaderFooterVariantSelectionInput,
+  type HeaderFooterEffectiveRefInput,
   type HeaderFooterEffectiveRefResult,
 } from '@superdoc/contracts';
 export {

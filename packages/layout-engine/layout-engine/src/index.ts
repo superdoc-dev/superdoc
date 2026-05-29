@@ -876,11 +876,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Initial effective margins use default variant (will be adjusted per-page)
   const headerDistance = margins.header ?? margins.top;
   const footerDistance = margins.footer ?? margins.bottom;
-  const defaultHeaderHeight = 0;
-  const defaultFooterHeight = 0;
+  const initialHeaderHeight = 0;
+  const initialFooterHeight = 0;
   const effectiveMargins = clampHeaderFooterInflatedMargins(
-    calculateEffectiveTopMargin(defaultHeaderHeight, headerDistance, margins.top),
-    calculateEffectiveBottomMargin(defaultFooterHeight, footerDistance, margins.bottom),
+    calculateEffectiveTopMargin(initialHeaderHeight, headerDistance, margins.top),
+    calculateEffectiveBottomMargin(initialFooterHeight, footerDistance, margins.bottom),
     margins.top,
     margins.bottom,
     pageSize.h,

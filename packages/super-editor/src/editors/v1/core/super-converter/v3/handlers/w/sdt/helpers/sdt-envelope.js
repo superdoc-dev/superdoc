@@ -34,11 +34,21 @@ export const normalizeSdtContentChildren = (parent, { childName, metadataKey, sc
     }
     if (child.name === 'w:sdt') {
       const { sdtPr, sdtEndPr, sdtContent } = getSdtEnvelopeParts(child);
-      const innerChildren = sdtContent?.elements?.filter((el) => el?.name === childName) ?? [];
+      const sdtContentElements = Array.isArray(sdtContent?.elements) ? sdtContent.elements : [];
+      const innerChildren = sdtContentElements.filter((el) => el?.name === childName);
       if (innerChildren.length === 1 && sdtPr) {
+        const childIndex = sdtContentElements.indexOf(innerChildren[0]);
+        const contentBefore = sdtContentElements.slice(0, childIndex);
+        const contentAfter = sdtContentElements.slice(childIndex + 1);
         out.push({
           node: innerChildren[0],
-          [metadataKey]: { scope, sdtPr, sdtEndPr },
+          [metadataKey]: {
+            scope,
+            sdtPr,
+            sdtEndPr,
+            ...(contentBefore.length > 0 && { contentBefore }),
+            ...(contentAfter.length > 0 && { contentAfter }),
+          },
         });
       } else {
         for (const innerChild of innerChildren) {
@@ -69,7 +79,9 @@ export const wrapSdtContentChildren = (elements, sourceChildren, { childName, me
     if (!sdtMetadata || sdtMetadata.scope !== scope || !sdtMetadata.sdtPr) continue;
     const sdtChildren = [sdtMetadata.sdtPr];
     if (sdtMetadata.sdtEndPr) sdtChildren.push(sdtMetadata.sdtEndPr);
-    sdtChildren.push({ name: 'w:sdtContent', elements: [exportedEl] });
+    const contentBefore = Array.isArray(sdtMetadata.contentBefore) ? sdtMetadata.contentBefore : [];
+    const contentAfter = Array.isArray(sdtMetadata.contentAfter) ? sdtMetadata.contentAfter : [];
+    sdtChildren.push({ name: 'w:sdtContent', elements: [...contentBefore, exportedEl, ...contentAfter] });
     elements[i] = { name: 'w:sdt', elements: sdtChildren };
   }
   return elements;

@@ -472,6 +472,43 @@ describe('w:tbl translator', () => {
       expect(rowChildren[1]).toBe(bareTr);
     });
 
+    it('preserves rowSdt content siblings inside the exported SDT content', () => {
+      const bookmarkStart = { name: 'w:bookmarkStart', attributes: { 'w:id': '1', 'w:name': 'row-start' } };
+      const bookmarkEnd = { name: 'w:bookmarkEnd', attributes: { 'w:id': '1' } };
+      const wrappedTr = { name: 'w:tr', comment: 'wrapped row' };
+      vi.mocked(translateChildNodes).mockReturnValueOnce([wrappedTr]);
+
+      const tableNode = {
+        type: 'table',
+        attrs: {},
+        content: [
+          {
+            type: 'tableRow',
+            attrs: {
+              rowSdt: {
+                scope: 'row',
+                sdtPr: ROW_SDT_PR,
+                sdtEndPr: null,
+                contentBefore: [bookmarkStart],
+                contentAfter: [bookmarkEnd],
+              },
+            },
+            content: [],
+          },
+        ],
+      };
+
+      const result = translator.decode({ node: tableNode, extraParams: {} });
+      const rowChildren = result.elements.filter((el) => el.name === 'w:sdt' || el.name === 'w:tr');
+
+      expect(rowChildren).toEqual([
+        {
+          name: 'w:sdt',
+          elements: [ROW_SDT_PR, { name: 'w:sdtContent', elements: [bookmarkStart, wrappedTr, bookmarkEnd] }],
+        },
+      ]);
+    });
+
     it('keeps rowSdt wrappers aligned across alternating bare and wrapped rows', () => {
       const bareTr1 = { name: 'w:tr', comment: 'bare row 1' };
       const wrappedTr1 = { name: 'w:tr', comment: 'wrapped row 1' };

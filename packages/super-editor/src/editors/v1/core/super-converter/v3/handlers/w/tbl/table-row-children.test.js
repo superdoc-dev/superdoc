@@ -6,6 +6,8 @@ const SDT_PR = { name: 'w:sdtPr', elements: [{ name: 'w:id', attributes: { 'w:va
 const SDT_END_PR = { name: 'w:sdtEndPr', elements: [] };
 const FIRST_ROW = { name: 'w:tr', elements: [{ name: 'w:tc', elements: [] }] };
 const SECOND_ROW = { name: 'w:tr', elements: [{ name: 'w:tc', elements: [] }] };
+const BOOKMARK_START = { name: 'w:bookmarkStart', attributes: { 'w:id': '1', 'w:name': 'row-start' } };
+const BOOKMARK_END = { name: 'w:bookmarkEnd', attributes: { 'w:id': '1' } };
 
 describe('normalizeTableRowChildren', () => {
   it('emits direct table rows unchanged', () => {
@@ -29,6 +31,31 @@ describe('normalizeTableRowChildren', () => {
       {
         node: FIRST_ROW,
         rowSdt: { scope: 'row', sdtPr: SDT_PR, sdtEndPr: SDT_END_PR },
+      },
+    ]);
+  });
+
+  it('preserves non-row SDT content siblings around a single imported row', () => {
+    const table = {
+      name: 'w:tbl',
+      elements: [
+        {
+          name: 'w:sdt',
+          elements: [SDT_PR, { name: 'w:sdtContent', elements: [BOOKMARK_START, FIRST_ROW, BOOKMARK_END] }],
+        },
+      ],
+    };
+
+    expect(normalizeTableRowChildren(table)).toEqual([
+      {
+        node: FIRST_ROW,
+        rowSdt: {
+          scope: 'row',
+          sdtPr: SDT_PR,
+          sdtEndPr: null,
+          contentBefore: [BOOKMARK_START],
+          contentAfter: [BOOKMARK_END],
+        },
       },
     ]);
   });

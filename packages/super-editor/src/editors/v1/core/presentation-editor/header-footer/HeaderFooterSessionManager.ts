@@ -24,7 +24,7 @@ import type {
   ResolvedPage,
   LayoutStoryLocator,
 } from '@superdoc/contracts';
-import { namedStoryLocator, resolveInheritedHeaderFooterRef } from '@superdoc/contracts';
+import { namedStoryLocator } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
 import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
 import type { HeaderFooterPartStoryLocator } from '@superdoc/document-api';
@@ -51,6 +51,7 @@ import {
   extractIdentifierFromConverter,
   getHeaderFooterType,
   getHeaderFooterTypeForSection,
+  resolveEffectiveHeaderFooterRef,
   getBucketForPageNumber,
   getBucketRepresentative,
   buildSectionAwareHeaderFooterLayoutKey,
@@ -2416,15 +2417,17 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
-      const pageRefs = kind === 'header' ? page?.sectionRefs?.headerRefs : page?.sectionRefs?.footerRefs;
-      const sectionRId =
-        resolveInheritedHeaderFooterRef({
-          identifier: multiSectionId ?? legacyIdentifier,
-          sectionIndex,
-          kind,
-          variantType: headerFooterType,
-          pageRefs,
-        }) ?? undefined;
+      const effectiveRef = multiSectionId
+        ? resolveEffectiveHeaderFooterRef({
+            sections: multiSectionId.sections,
+            sectionIndex,
+            kind,
+            variant: headerFooterType,
+          })
+        : null;
+      const legacyIds = kind === 'header' ? legacyIdentifier.headerIds : legacyIdentifier.footerIds;
+      const sectionRId = effectiveRef?.refId ?? legacyIds[headerFooterType] ?? undefined;
+      const layoutVariantType = effectiveRef?.matchedVariant ?? headerFooterType;
 
       // PRIORITY 1: Try per-rId layout (composite key first for per-section margins, then plain rId)
       const compositeKey = sectionRId ? `${sectionRId}::s${sectionIndex}` : undefined;
@@ -2498,7 +2501,7 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
-      const variantIndex = results.findIndex((entry) => entry.type === headerFooterType);
+      const variantIndex = results.findIndex((entry) => entry.type === layoutVariantType);
       const variant = variantIndex >= 0 ? results[variantIndex] : undefined;
       if (!variant || !variant.layout?.pages?.length) {
         return null;
@@ -2518,7 +2521,7 @@ export class HeaderFooterSessionManager {
         slotPage.number,
         variant,
         resolvedVariant,
-        `variant '${headerFooterType}' page ${pageNumber}`,
+        `variant '${layoutVariantType}' page ${pageNumber}`,
         finalHeaderId ?? headerFooterType,
       );
       if (!alignedVariantItems) {

@@ -31,6 +31,16 @@ import {
 
 export type { HeaderFooterType } from '@superdoc/contracts';
 export {
+  selectHeaderFooterVariantForPage,
+  resolveEffectiveHeaderFooterRef,
+  type HeaderFooterKind,
+  type HeaderFooterVariant,
+  type HeaderFooterMatchedVariant,
+  type HeaderFooterSectionRefs,
+  type HeaderFooterResolutionSection,
+  type HeaderFooterEffectiveRefResult,
+} from '@superdoc/contracts';
+export {
   extractIdentifierFromConverter,
   getHeaderFooterType,
   defaultHeaderFooterIdentifier,

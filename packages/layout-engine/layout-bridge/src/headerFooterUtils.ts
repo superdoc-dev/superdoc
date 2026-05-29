@@ -1,10 +1,11 @@
-import {
-  resolveInheritedHeaderFooterRef,
-  type HeaderFooterType,
-  type Layout,
-  type SectionMetadata,
-  type Page,
+import type {
+  HeaderFooterType,
+  Layout,
+  SectionMetadata,
+  Page,
+  HeaderFooterResolutionSection,
 } from '@superdoc/contracts';
+import { resolveEffectiveHeaderFooterRef, selectHeaderFooterVariantForPage } from '@superdoc/contracts';
 
 export type HeaderFooterIdentifier = {
   headerIds: Record<'default' | 'first' | 'even' | 'odd', string | null>;
@@ -162,6 +163,8 @@ export type MultiSectionHeaderFooterIdentifier = {
   sectionFooterIds: Map<number, SectionHeaderFooterIds>;
   // Per-section titlePg flags (Word allows different first page per section)
   sectionTitlePg: Map<number, boolean>;
+  // Ordered section metadata used by the shared effective-ref resolver.
+  sections: HeaderFooterResolutionSection[];
 };
 
 /**
@@ -176,7 +179,36 @@ export const defaultMultiSectionIdentifier = (): MultiSectionHeaderFooterIdentif
   sectionHeaderIds: new Map(),
   sectionFooterIds: new Map(),
   sectionTitlePg: new Map(),
+  sections: [],
 });
+
+function refreshResolutionSections(identifier: MultiSectionHeaderFooterIdentifier): void {
+  const maxIndex = Math.max(
+    identifier.sectionCount - 1,
+    ...Array.from(identifier.sectionHeaderIds.keys()),
+    ...Array.from(identifier.sectionFooterIds.keys()),
+    ...Array.from(identifier.sectionTitlePg.keys()),
+    0,
+  );
+
+  const sections: HeaderFooterResolutionSection[] = [];
+  for (let sectionIndex = 0; sectionIndex <= maxIndex; sectionIndex += 1) {
+    sections.push({
+      sectionIndex,
+      titlePg: identifier.sectionTitlePg.has(sectionIndex)
+        ? identifier.sectionTitlePg.get(sectionIndex)
+        : sectionIndex === 0
+          ? identifier.titlePg
+          : false,
+      headerRefs:
+        identifier.sectionHeaderIds.get(sectionIndex) ?? (sectionIndex === 0 ? { ...identifier.headerIds } : undefined),
+      footerRefs:
+        identifier.sectionFooterIds.get(sectionIndex) ?? (sectionIndex === 0 ? { ...identifier.footerIds } : undefined),
+    });
+  }
+
+  identifier.sections = sections;
+}
 
 /**
  * Builds a multi-section header/footer identifier from section metadata.
@@ -295,6 +327,8 @@ export function buildMultiSectionIdentifier(
     identifier.footerIds.odd = identifier.footerIds.odd ?? converterIds.footerIds.odd ?? null;
   }
 
+  refreshResolutionSections(identifier);
+
   return identifier;
 }
 
@@ -343,79 +377,25 @@ export function getHeaderFooterTypeForSection(
   const sectionPageNumber = options?.sectionPageNumber ?? pageNumber;
   const parityPageNumber = options?.parityPageNumber ?? pageNumber;
 
-  // Get section-specific IDs, falling back to legacy IDs for backward compatibility
-  const sectionIds =
-    kind === 'header' ? identifier.sectionHeaderIds.get(sectionIndex) : identifier.sectionFooterIds.get(sectionIndex);
-
-  // Fallback to legacy fields if section not found (backward compatibility)
-  const ids = sectionIds ?? (kind === 'header' ? identifier.headerIds : identifier.footerIds);
-
-  const hasFirst = Boolean(ids.first);
-  const hasEven = Boolean(ids.even);
-  const hasOdd = Boolean(ids.odd);
-  const hasDefault = Boolean(ids.default);
-  const legacyIds = kind === 'header' ? identifier.headerIds : identifier.footerIds;
-  let hasAny = hasFirst || hasEven || hasOdd || hasDefault;
-  if (!hasAny) {
-    for (let index = sectionIndex - 1; index >= 0; index -= 1) {
-      const inheritedIds =
-        kind === 'header' ? identifier.sectionHeaderIds.get(index) : identifier.sectionFooterIds.get(index);
-      if (inheritedIds?.first || inheritedIds?.even || inheritedIds?.odd || inheritedIds?.default) {
-        hasAny = true;
-        break;
-      }
-    }
-  }
-  if (!hasAny) {
-    hasAny = Boolean(legacyIds.first || legacyIds.even || legacyIds.odd || legacyIds.default);
-  }
-
   // Check titlePg for this specific section
   const sectionTitlePg = identifier.sectionTitlePg.has(sectionIndex)
     ? identifier.sectionTitlePg.get(sectionIndex)!
     : identifier.titlePg;
-  const titlePgEnabled = sectionTitlePg === true;
+  const variant = selectHeaderFooterVariantForPage({
+    documentPageNumber: parityPageNumber,
+    sectionPageNumber,
+    titlePg: sectionTitlePg,
+    alternateHeaders: identifier.alternateHeaders,
+  });
+  if (!variant) return null;
 
-  // Use the section-relative page number to determine "first page" variants
-  const isFirstPageOfSection = sectionPageNumber === 1;
-  if (isFirstPageOfSection && titlePgEnabled) {
-    // Return 'first' variant type when titlePg is enabled, regardless of whether this section
-    // has a 'first' header defined. Word inherits headers from previous sections when not defined,
-    // so we let the rendering layer handle the inheritance/fallback logic.
-    // Only return null if there's absolutely no header content anywhere.
-    if (hasAny) return 'first';
-    return null;
-  }
-
-  if (identifier.alternateHeaders) {
-    if (!hasAny) return null;
-    const parityVariant = parityPageNumber % 2 === 0 ? 'even' : 'odd';
-    return resolveInheritedHeaderFooterRef({
-      identifier,
-      sectionIndex,
-      kind,
-      variantType: parityVariant,
-    })
-      ? parityVariant
-      : null;
-  }
-
-  if (hasDefault) {
-    return 'default';
-  }
-
-  if (
-    resolveInheritedHeaderFooterRef({
-      identifier,
-      sectionIndex,
-      kind,
-      variantType: 'default',
-    })
-  ) {
-    return 'default';
-  }
-
-  return null;
+  const resolved = resolveEffectiveHeaderFooterRef({
+    sections: identifier.sections,
+    sectionIndex,
+    kind,
+    variant,
+  });
+  return resolved ? variant : null;
 }
 
 /**
@@ -446,23 +426,25 @@ export function getHeaderFooterIdForPage(
   const sectionIndex = page.sectionIndex ?? 0;
   const sectionPageNumber = options?.sectionPageNumber ?? page.number;
   const parityPageNumber = options?.parityPageNumber ?? page.displayNumber ?? page.number;
-
-  // Determine which variant type to use (default, first, even, odd)
-  const variantType = getHeaderFooterTypeForSection(page.number, sectionIndex, identifier, {
-    kind,
+  const sectionTitlePg = identifier.sectionTitlePg.has(sectionIndex)
+    ? identifier.sectionTitlePg.get(sectionIndex)!
+    : identifier.titlePg;
+  const variantType = selectHeaderFooterVariantForPage({
+    documentPageNumber: parityPageNumber,
     sectionPageNumber,
-    parityPageNumber,
+    titlePg: sectionTitlePg,
+    alternateHeaders: identifier.alternateHeaders,
   });
   if (!variantType) return null;
 
-  const pageRefs = kind === 'header' ? page.sectionRefs?.headerRefs : page.sectionRefs?.footerRefs;
-  return resolveInheritedHeaderFooterRef({
-    identifier,
-    sectionIndex,
-    kind,
-    variantType,
-    pageRefs,
-  });
+  return (
+    resolveEffectiveHeaderFooterRef({
+      sections: identifier.sections,
+      sectionIndex,
+      kind,
+      variant: variantType,
+    })?.refId ?? null
+  );
 }
 
 /**
@@ -519,19 +501,27 @@ export function resolveHeaderFooterForPageAndSection(
   const sectionPageNumber = typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
   const parityPageNumber = options?.parityPageNumber ?? page.displayNumber ?? pageNumber;
 
-  // Determine variant type for this section
-  const type = getHeaderFooterTypeForSection(pageNumber, sectionIndex, identifier, {
-    kind,
+  const sectionTitlePg = identifier.sectionTitlePg.has(sectionIndex)
+    ? identifier.sectionTitlePg.get(sectionIndex)!
+    : identifier.titlePg;
+  const type = selectHeaderFooterVariantForPage({
+    documentPageNumber: parityPageNumber,
     sectionPageNumber,
-    parityPageNumber,
+    titlePg: sectionTitlePg,
+    alternateHeaders: identifier.alternateHeaders,
   });
   if (!type) return null;
 
-  // Get content ID for this page/section
-  const contentId = getHeaderFooterIdForPage(page, identifier, { kind, sectionPageNumber, parityPageNumber });
+  const resolvedRef = resolveEffectiveHeaderFooterRef({
+    sections: identifier.sections,
+    sectionIndex,
+    kind,
+    variant: type,
+  });
+  if (!resolvedRef) return null;
 
-  // Look up the header/footer layout slot
-  const slot = layout.headerFooter?.[type];
+  // Look up the concrete slot; odd pages may be backed by OOXML default content.
+  const slot = layout.headerFooter?.[resolvedRef.matchedVariant] ?? layout.headerFooter?.[type];
   if (!slot) return null;
 
   // Find the page entry within the header/footer layout
@@ -543,6 +533,6 @@ export function resolveHeaderFooterForPageAndSection(
     layout: slot,
     page: headerFooterPage,
     sectionIndex,
-    contentId,
+    contentId: resolvedRef.refId,
   };
 }

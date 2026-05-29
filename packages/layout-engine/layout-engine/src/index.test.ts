@@ -6067,6 +6067,7 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { odd: 'h-odd', even: 'h-even' } }],
       headerContentHeights: {
         odd: 80, // Odd pages: header pushes body start down
         even: 40, // Even pages: smaller header
@@ -6143,6 +6144,7 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       alternateHeaders: false,
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'h-default' } }],
       headerContentHeights: {
         default: 60,
         odd: 80,
@@ -6167,6 +6169,7 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       // alternateHeaders not set
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'h-default' } }],
       headerContentHeights: {
         default: 60,
         odd: 80,
@@ -6198,7 +6201,9 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       alternateHeaders: true,
-      sectionMetadata: [{ sectionIndex: 0, titlePg: true }],
+      sectionMetadata: [
+        { sectionIndex: 0, titlePg: true, headerRefs: { first: 'h-first', odd: 'h-odd', even: 'h-even' } },
+      ],
       headerContentHeights: {
         first: 100, // First page: tallest header
         odd: 80,
@@ -6257,7 +6262,7 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       alternateHeaders: true,
-      sectionMetadata: [{ sectionIndex: 0 }, { sectionIndex: 1 }],
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { odd: 'h-odd', even: 'h-even' } }, { sectionIndex: 1 }],
       headerContentHeights: {
         odd: 80,
         even: 40,
@@ -6334,6 +6339,91 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     // to the base top margin.
     expect(layout.pages[0].margins?.top).toBeCloseTo(90, 0);
     expect(layout.pages[1].margins?.top).toBeCloseTo(50, 0);
+  });
+
+  it('uses inherited first and even refs across multiple sections for margin heights', () => {
+    const sb0: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb0',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      margins: {},
+    };
+    const sb1: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb1',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      margins: {},
+    };
+    const sb2: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb2',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 2 },
+      margins: {},
+    };
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [
+        { sectionIndex: 0, titlePg: true, headerRefs: { first: 'h0-first', even: 'h0-even' } },
+        { sectionIndex: 1 },
+        { sectionIndex: 2, titlePg: true },
+      ],
+      headerContentHeightsByRId: new Map([
+        ['h0-first', 100],
+        ['h0-even', 80],
+      ]),
+    };
+
+    const layout = layoutDocument(
+      [sb0, tallBlock('p1'), sb1, tallBlock('p2'), sb2, tallBlock('p3'), tallBlock('p4')],
+      [
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        tallMeasure,
+      ],
+      options,
+    );
+
+    expect(layout.pages[2].fragments.find((f) => f.blockId === 'p3')?.y).toBeCloseTo(130, 0);
+    expect(layout.pages[3].fragments.find((f) => f.blockId === 'p4')?.y).toBeCloseTo(110, 0);
+  });
+
+  it('resets to base margin when selected first variant is blank', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      sectionMetadata: [{ sectionIndex: 0, titlePg: true, headerRefs: { default: 'h-default' } }],
+      headerContentHeightsByRId: new Map([['h-default', 100]]),
+    };
+
+    const layout = layoutDocument([tallBlock('p1')], [tallMeasure], options);
+
+    expect(layout.pages[0].fragments.find((f) => f.blockId === 'p1')?.y).toBeCloseTo(50, 0);
+    expect(layout.pages[0].margins?.top).toBeCloseTo(50, 0);
+  });
+
+  it('uses default variant height when odd selection is backed by a default ref', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'h-default' } }],
+      headerContentHeights: {
+        default: 60,
+        odd: 140,
+      },
+    };
+
+    const layout = layoutDocument([tallBlock('p1')], [tallMeasure], options);
+
+    expect(layout.pages[0].fragments.find((f) => f.blockId === 'p1')?.y).toBeCloseTo(90, 0);
   });
 
   it('prefers section-aware header heights over the plain rId fallback', () => {
@@ -6443,7 +6533,10 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       alternateHeaders: true,
-      sectionMetadata: [{ sectionIndex: 0 }, { sectionIndex: 1, titlePg: true }],
+      sectionMetadata: [
+        { sectionIndex: 0 },
+        { sectionIndex: 1, titlePg: true, headerRefs: { first: 'h-first', odd: 'h-odd', even: 'h-even' } },
+      ],
       headerContentHeights: {
         first: 100, // section 2 title-page header
         odd: 80,

@@ -35,6 +35,19 @@ export {
 
 export { effectiveTableCellSpacing } from './table-cell-spacing.js';
 
+export {
+  selectHeaderFooterVariantForPage,
+  resolveEffectiveHeaderFooterRef,
+  type HeaderFooterKind,
+  type HeaderFooterVariant,
+  type HeaderFooterMatchedVariant,
+  type HeaderFooterSectionRefs,
+  type HeaderFooterResolutionSection,
+  type HeaderFooterVariantSelectionInput,
+  type HeaderFooterEffectiveRefInput,
+  type HeaderFooterEffectiveRefResult,
+} from './header-footer-resolution.js';
+
 // Table column rescaling (moved from layout-engine for cross-stage use)
 export { rescaleColumnWidths } from './table-column-rescale.js';
 

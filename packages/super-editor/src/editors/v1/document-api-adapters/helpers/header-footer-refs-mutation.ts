@@ -4,13 +4,13 @@ import type {
   SectionAddress,
   SectionMutationResult,
 } from '@superdoc/document-api';
+import { resolveEffectiveHeaderFooterRef } from '@superdoc/contracts';
 import type { Editor } from '../../core/Editor.js';
 import type { SectionProjection } from './sections-resolver.js';
 import {
   getSectPrHeaderFooterRef,
   setSectPrHeaderFooterRef,
   clearSectPrHeaderFooterRef,
-  readSectPrHeaderFooterRefs,
   type XmlElement,
 } from './sections-xml.js';
 import {
@@ -18,7 +18,6 @@ import {
   hasHeaderFooterRelationship,
   type ConverterWithHeaderFooterParts,
 } from './header-footer-parts.js';
-import { readTargetSectPr } from './section-projection-access.js';
 
 // ---------------------------------------------------------------------------
 // Shared resolver
@@ -36,37 +35,28 @@ export function resolveEffectiveRef(
   kind: HeaderFooterKind,
   variant: HeaderFooterVariant,
 ): { refId: string; resolvedFromSection: SectionAddress; resolvedVariant: HeaderFooterVariant } | null {
-  // Walk previous sections in descending index order (toward section 0)
-  for (let i = startSectionIndex - 1; i >= 0; i--) {
-    const section = sections.find((s) => s.range.sectionIndex === i);
-    if (!section) continue;
+  void editor;
+  const resolved = resolveEffectiveHeaderFooterRef({
+    sections: sections.map((section) => ({
+      sectionIndex: section.range.sectionIndex,
+      titlePg: section.range.titlePg,
+      headerRefs: section.range.headerRefs,
+      footerRefs: section.range.footerRefs,
+    })),
+    sectionIndex: startSectionIndex - 1,
+    kind,
+    variant,
+  });
+  if (!resolved) return null;
 
-    const sectPr = readTargetSectPr(editor, section);
-    if (!sectPr) continue;
+  const resolvedSection = sections.find((section) => section.range.sectionIndex === resolved.matchedSectionIndex);
+  if (!resolvedSection) return null;
 
-    const refs = readSectPrHeaderFooterRefs(sectPr, kind);
-    if (!refs) continue;
-
-    // Try exact variant first
-    if (refs[variant]) {
-      return {
-        refId: refs[variant]!,
-        resolvedFromSection: section.address,
-        resolvedVariant: variant,
-      };
-    }
-
-    // Fall back to 'default' (only for non-default requests)
-    if (variant !== 'default' && refs.default) {
-      return {
-        refId: refs.default,
-        resolvedFromSection: section.address,
-        resolvedVariant: 'default',
-      };
-    }
-  }
-
-  return null;
+  return {
+    refId: resolved.refId,
+    resolvedFromSection: resolvedSection.address,
+    resolvedVariant: resolved.matchedVariant as HeaderFooterVariant,
+  };
 }
 
 // ---------------------------------------------------------------------------

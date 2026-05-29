@@ -13,7 +13,7 @@ import { createStoryEditor } from '../../core/story-editor-factory.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { resolveSectionProjections } from '../helpers/sections-resolver.js';
 import { readTargetSectPr } from '../helpers/section-projection-access.js';
-import { readSectPrHeaderFooterRefs, type XmlElement } from '../helpers/sections-xml.js';
+import { readSectPrHeaderFooterRefs } from '../helpers/sections-xml.js';
 import { resolveEffectiveRef } from '../helpers/header-footer-refs-mutation.js';
 import { exportSubEditorToPart } from '../../core/parts/adapters/header-footer-sync.js';
 import { ensureExplicitHeaderFooterSlot } from '../helpers/header-footer-slot-materialization.js';

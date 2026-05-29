@@ -13,7 +13,6 @@
 import type { SectionHeaderFooterKind, SectionHeaderFooterVariant } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { getWordPartRelsPath } from '../../core/helpers/word-part-path.js';
-import type { SectionProjection } from './sections-resolver.js';
 import { resolveSectionProjections } from './sections-resolver.js';
 import { readTargetSectPr } from './section-projection-access.js';
 import { ensureSectPrElement, setSectPrHeaderFooterRef, readSectPrHeaderFooterRefs } from './sections-xml.js';

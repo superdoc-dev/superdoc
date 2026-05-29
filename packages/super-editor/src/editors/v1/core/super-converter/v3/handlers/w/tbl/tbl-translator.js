@@ -9,6 +9,8 @@ import { NodeTranslator } from '@translator';
 import { translator as tblGridTranslator } from '../tblGrid';
 import { translator as tblPrTranslator } from '../tblPr';
 import { translator as trTranslator } from '../tr';
+import { normalizeRowCellChildren } from '../tr/row-cell-children.js';
+import { normalizeTableRowChildren } from './table-row-children.js';
 
 /**
  * Legacy table identity attributes imported from older SuperDoc exports.
@@ -49,10 +51,10 @@ const sumColumnTwips = (columns = []) =>
  * @returns {number | null} Total cell width in twips, or null if incomplete
  */
 const getFirstRowCellWidthSumTwips = (rows = []) => {
-  const firstRow = rows.find((row) => row?.elements?.some((el) => el.name === 'w:tc'));
+  const firstRow = rows.find((row) => normalizeRowCellChildren(row).length > 0);
   if (!firstRow?.elements) return null;
 
-  const cells = firstRow.elements.filter((el) => el.name === 'w:tc');
+  const cells = normalizeRowCellChildren(firstRow).map((entry) => entry.node);
   if (!cells.length) return null;
 
   let sum = 0;
@@ -162,7 +164,8 @@ const encode = (params, encodedAttrs) => {
   };
 
   // Process each row
-  const rows = node.elements.filter((el) => el.name === 'w:tr');
+  const rowEntries = normalizeTableRowChildren(node);
+  const rows = rowEntries.map((entry) => entry.node);
   let columnWidths = Array.isArray(encodedAttrs['grid'])
     ? encodedAttrs['grid'].map((item) => twipsToPixels(item.col))
     : [];
@@ -206,7 +209,7 @@ const encode = (params, encodedAttrs) => {
   const totalColumns = columnWidths.length;
   const totalRows = rows.length;
   const activeRowSpans = totalColumns > 0 ? new Array(totalColumns).fill(0) : [];
-  rows.forEach((row, rowIndex) => {
+  rowEntries.forEach(({ node: row, rowSdt }, rowIndex) => {
     const result = trTranslator.encode({
       ...params,
       path: [...(params.path || []), node],
@@ -225,6 +228,9 @@ const encode = (params, encodedAttrs) => {
       },
     });
     if (result) {
+      if (rowSdt) {
+        result.attrs = { ...(result.attrs || {}), rowSdt };
+      }
       content.push(result);
 
       if (totalColumns > 0) {
@@ -301,6 +307,20 @@ const decode = (params, decodedAttrs) => {
   };
 
   const elements = translateChildNodes({ ...params, extraParams });
+
+  let rowCursor = 0;
+  for (let i = 0; i < elements.length; i += 1) {
+    const exportedEl = elements[i];
+    if (!exportedEl || exportedEl.name !== 'w:tr') continue;
+    const sourceRow = node.content?.[rowCursor];
+    rowCursor += 1;
+    const rowSdt = sourceRow?.attrs?.rowSdt;
+    if (!rowSdt || rowSdt.scope !== 'row' || !rowSdt.sdtPr) continue;
+    const sdtChildren = [rowSdt.sdtPr];
+    if (rowSdt.sdtEndPr) sdtChildren.push(rowSdt.sdtEndPr);
+    sdtChildren.push({ name: 'w:sdtContent', elements: [exportedEl] });
+    elements[i] = { name: 'w:sdt', elements: sdtChildren };
+  }
 
   // Table grid - generate if not present
   const firstRow = node.content?.find((n) => n.type === 'tableRow');

@@ -1,4 +1,5 @@
 // @ts-check
+import { getSdtEnvelopeParts } from '../sdt/helpers/sdt-envelope.js';
 
 /**
  * Normalize a `<w:tr>` element's children into the cell stream the row encoder
@@ -35,9 +36,7 @@ export const normalizeRowCellChildren = (row) => {
       continue;
     }
     if (child.name === 'w:sdt') {
-      const sdtPr = child.elements?.find((/** @type {any} */ el) => el?.name === 'w:sdtPr') ?? null;
-      const sdtEndPr = child.elements?.find((/** @type {any} */ el) => el?.name === 'w:sdtEndPr') ?? null;
-      const sdtContent = child.elements?.find((/** @type {any} */ el) => el?.name === 'w:sdtContent');
+      const { sdtPr, sdtEndPr, sdtContent } = getSdtEnvelopeParts(child);
       const innerCells = sdtContent?.elements?.filter((/** @type {any} */ el) => el?.name === 'w:tc') ?? [];
       if (innerCells.length === 1 && sdtPr) {
         out.push({

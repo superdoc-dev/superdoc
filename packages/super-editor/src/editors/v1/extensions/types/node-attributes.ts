@@ -299,6 +299,25 @@ export interface TableRowProperties {
   jc?: 'center' | 'end' | 'left' | 'right' | 'start';
 }
 
+/** Structured document tag metadata preserved for opaque OOXML round-trip. */
+export interface SdtMetadata<Scope extends 'cell' | 'row' = 'cell' | 'row'> {
+  /** Discriminator for structured document tag scope. */
+  scope: Scope;
+  /** Raw `<w:sdtPr>` element preserved from import for opaque round-trip. */
+  sdtPr: unknown;
+  /** Raw `<w:sdtEndPr>` element if present, otherwise null. */
+  sdtEndPr: unknown | null;
+}
+
+/**
+ * Row-level structured document tag metadata, preserved on a `tableRow` when
+ * the source OOXML wrapped the row in `<w:sdt>` (ECMA-376 §17.5.2.30, CT_SdtRow).
+ *
+ * The wrapper is reconstructed on export. Rows carrying this metadata are not
+ * exposed through the content-controls Document API in v1.
+ */
+export type RowSdtMetadata = SdtMetadata<'row'>;
+
 /** Table row node attributes */
 export interface TableRowAttrs extends TableNodeAttributes {
   /** Row properties */
@@ -307,6 +326,11 @@ export interface TableRowAttrs extends TableNodeAttributes {
   rsidRPr?: string | null;
   /** Tracking revision save ID */
   rsidTr?: string | null;
+  /**
+   * Row-level structured document tag metadata preserved from OOXML import
+   * when the source `<w:tr>` was wrapped in `<w:sdt>`. Reconstructed on export.
+   */
+  rowSdt?: RowSdtMetadata | null;
 }
 
 // ============================================
@@ -373,14 +397,7 @@ export interface CellBackground {
  * The wrapper is reconstructed on export. Cells carrying this metadata are not
  * exposed through the content-controls Document API in v1.
  */
-export interface CellSdtMetadata {
-  /** Discriminator for future SDT scope variants (row, block) on the same slot. */
-  scope: 'cell';
-  /** Raw `<w:sdtPr>` element preserved from import for opaque round-trip. */
-  sdtPr: unknown;
-  /** Raw `<w:sdtEndPr>` element if present, otherwise null. */
-  sdtEndPr: unknown | null;
-}
+export type CellSdtMetadata = SdtMetadata<'cell'>;
 
 /** Table cell node attributes */
 export interface TableCellAttrs extends TableNodeAttributes {

@@ -2,6 +2,7 @@ import { twipsToPixels, resolveShadingFillColor } from '@converter/helpers';
 import { translator as tcPrTranslator } from '../../tcPr';
 import { isInlineNode } from '../../../helpers/is-inline-node.js';
 import { normalizeRowCellChildren } from '../../tr/row-cell-children.js';
+import { normalizeTableRowChildren } from '../../tbl/table-row-children.js';
 
 /**
  * @param {Object} options
@@ -105,7 +106,7 @@ export function handleTableCellNode({
 
   // Rowspan - tables can have vertically merged cells
   if (tableCellProperties.vMerge === 'restart') {
-    const rows = table.elements.filter((el) => el.name === 'w:tr');
+    const rows = normalizeTableRowChildren(table).map((entry) => entry.node);
     const currentRowIndex = rows.findIndex((r) => r === row);
     const remainingRows = rows.slice(currentRowIndex + 1);
     let rowspan = 1;

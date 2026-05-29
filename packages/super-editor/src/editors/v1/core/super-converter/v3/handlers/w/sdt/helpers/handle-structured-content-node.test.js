@@ -110,6 +110,20 @@ describe('handleStructuredContentNode', () => {
     expect(result.type).toBe('structuredContentBlock');
   });
 
+  it('returns structuredContentBlock when content is a block field node (SD-3005)', () => {
+    // A content control wrapping a block field (e.g. BIBLIOGRAPHY) has no
+    // direct w:p — after field preprocessing its only child is an sd:bibliography
+    // block node. Classifying it inline (structuredContent) puts a block node
+    // inside an inline node and crashes the editor; it must be block.
+    const sdtContentElements = [{ name: 'sd:bibliography', attributes: { instruction: 'BIBLIOGRAPHY' }, elements: [] }];
+    const node = createNode([], sdtContentElements);
+
+    parseAnnotationMarks.mockReturnValue({ marks: [] });
+    const result = handleStructuredContentNode({ nodes: [node], nodeListHandler: mockNodeListHandler });
+
+    expect(result.type).toBe('structuredContentBlock');
+  });
+
   it('includes sdtPr in result attrs', () => {
     const sdtPrElements = [{ name: 'w:tag', attributes: { 'w:val': 'test' } }];
     const node = createNode(sdtPrElements, [{ name: 'w:r', text: 'content' }]);

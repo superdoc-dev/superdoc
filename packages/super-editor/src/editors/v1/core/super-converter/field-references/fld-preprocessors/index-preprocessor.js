@@ -1,4 +1,4 @@
-import { normalizeFieldContentToParagraphs } from './normalize-field-content.js';
+import { buildBlockFieldNode } from './build-block-field-node.js';
 
 /**
  * Processes an INDEX instruction and creates an `sd:index` node.
@@ -9,15 +9,5 @@ import { normalizeFieldContentToParagraphs } from './normalize-field-content.js'
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  */
 export function preProcessIndexInstruction(nodesToCombine, instrText, _docx, instructionTokens = null) {
-  return [
-    {
-      name: 'sd:index',
-      type: 'element',
-      attributes: {
-        instruction: instrText,
-        ...(instructionTokens ? { instructionTokens } : {}),
-      },
-      elements: normalizeFieldContentToParagraphs(nodesToCombine),
-    },
-  ];
+  return buildBlockFieldNode('sd:index', nodesToCombine, instrText, instructionTokens);
 }

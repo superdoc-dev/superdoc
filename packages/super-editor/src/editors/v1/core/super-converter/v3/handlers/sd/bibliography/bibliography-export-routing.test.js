@@ -57,4 +57,27 @@ describe('bibliography export routing', () => {
     expect(serialized).toContain('w:instrText');
     expect(serialized).toContain(BIBLIOGRAPHY_INSTRUCTION);
   });
+
+  it('reproduces a multi-run split instruction verbatim from tokens (SD-3066)', () => {
+    // Parity with index/toa: a BIBLIOGRAPHY instruction Word split across runs
+    // must export as those same runs, rebuilt from instructionTokens, rather
+    // than collapsing to a single instrText run.
+    const instructionTokens = [
+      { type: 'text', text: 'BIBLIOGRAPHY ' },
+      { type: 'text', text: '\\l 1033 ' },
+    ];
+
+    const exported = exportSchemaToJson({
+      node: buildBibliographyNode({ attrs: { instructionTokens } }),
+    });
+
+    const instrTexts = exported
+      .flatMap((para) => para.elements || [])
+      .filter((el) => el.name === 'w:r')
+      .flatMap((run) => run.elements || [])
+      .filter((el) => el.name === 'w:instrText')
+      .map((el) => el.elements[0].text);
+
+    expect(instrTexts).toEqual(['BIBLIOGRAPHY ', '\\l 1033 ']);
+  });
 });

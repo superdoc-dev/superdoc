@@ -1,5 +1,6 @@
 import { parseAnnotationMarks } from './handle-annotation-node';
 import { parseStrictStOnOff } from '../../../utils.js';
+import { BLOCK_FIELD_XML_NAMES } from '../../../sd/shared/block-field-xml-names.js';
 
 /**
  * Detect the semantic control type from sdtPr child elements.
@@ -114,6 +115,10 @@ export function handleStructuredContentNode(params) {
 
   const paragraph = sdtContent.elements?.find((el) => el.name === 'w:p');
   const table = sdtContent.elements?.find((el) => el.name === 'w:tbl');
+  // SD-3005: a content control wrapping a block field (e.g. BIBLIOGRAPHY) has
+  // no direct w:p after preprocessing — its child is an sd:* block node. It is
+  // block content and must not be emitted as an inline structuredContent.
+  const blockField = sdtContent.elements?.find((el) => BLOCK_FIELD_XML_NAMES.has(el?.name));
   const { marks } = parseAnnotationMarks(sdtContent);
   const translatedContent = nodeListHandler.handler({
     ...params,
@@ -121,7 +126,7 @@ export function handleStructuredContentNode(params) {
     path: [...(params.path || []), sdtContent],
   });
 
-  const isBlockNode = paragraph || table;
+  const isBlockNode = paragraph || table || blockField;
   const sdtContentType = isBlockNode ? 'structuredContentBlock' : 'structuredContent';
 
   let result = {

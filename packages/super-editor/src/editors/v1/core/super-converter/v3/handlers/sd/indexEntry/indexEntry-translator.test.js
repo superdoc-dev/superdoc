@@ -194,6 +194,33 @@ describe('sd:indexEntry translator', () => {
       expect(hasTab).toBe(true);
     });
 
+    it('reproduces a multi-run split instruction verbatim from tokens (SD-3066)', () => {
+      // Word splits XE instructions across runs with literal spaces preserved:
+      // ' XE "' + 'Building Standard' + '" '. The clean `instruction` string is
+      // for display; export must rebuild the original runs from tokens so the
+      // round-trip stays byte-faithful (not collapse to one run from the string).
+      const instructionTokens = [
+        { type: 'text', text: ' XE "' },
+        { type: 'text', text: 'Building Standard' },
+        { type: 'text', text: '" ' },
+      ];
+
+      const result = config.decode({
+        node: {
+          type: 'indexEntry',
+          attrs: { instruction: 'XE "Building Standard"', instructionTokens },
+          content: [],
+        },
+      });
+
+      const instrTexts = result
+        .flatMap((run) => (run.name === 'w:r' ? run.elements || [] : []))
+        .filter((el) => el.name === 'w:instrText')
+        .map((el) => el.elements[0].text);
+
+      expect(instrTexts).toEqual([' XE "', 'Building Standard', '" ']);
+    });
+
     it('includes instruction text in instrText element', () => {
       const mockParams = {
         node: {

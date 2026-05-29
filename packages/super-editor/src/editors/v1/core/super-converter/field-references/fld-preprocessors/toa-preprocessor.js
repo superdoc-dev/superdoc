@@ -1,4 +1,4 @@
-import { normalizeFieldContentToParagraphs } from './normalize-field-content.js';
+import { buildBlockFieldNode } from './build-block-field-node.js';
 
 /**
  * Processes a TOA (Table of Authorities) instruction and creates an `sd:tableOfAuthorities` node.
@@ -12,15 +12,5 @@ import { normalizeFieldContentToParagraphs } from './normalize-field-content.js'
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  */
 export function preProcessToaInstruction(nodesToCombine, instrText, _docx, instructionTokens = null) {
-  return [
-    {
-      name: 'sd:tableOfAuthorities',
-      type: 'element',
-      attributes: {
-        instruction: instrText,
-        ...(instructionTokens ? { instructionTokens } : {}),
-      },
-      elements: normalizeFieldContentToParagraphs(nodesToCombine),
-    },
-  ];
+  return buildBlockFieldNode('sd:tableOfAuthorities', nodesToCombine, instrText, instructionTokens);
 }

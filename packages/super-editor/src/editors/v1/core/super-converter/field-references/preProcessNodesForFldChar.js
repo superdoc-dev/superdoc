@@ -178,7 +178,13 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
           currentField.instructionTokens.push(...instructionTokens);
           const instrTextValue = instrTextEl?.elements?.[0]?.text;
           if (instrTextValue != null) {
-            currentField.instrText += `${instrTextValue} `;
+            // SD-3066: join instrText fragments verbatim. Word preserves the
+            // literal spaces inside each run, so an instruction split across
+            // runs (e.g. ' XE "' + 'Building Standard' + '" ') already carries
+            // its own separators. Injecting a space per fragment corrupted the
+            // entry text to 'XE " Building Standard "'. The leading/trailing
+            // whitespace is trimmed by finalizeField via `instrText.trim()`.
+            currentField.instrText += `${instrTextValue}`;
           }
           if (instructionTokens.some((token) => token.type === 'tab')) {
             currentField.instrText += '\t';

@@ -1,8 +1,8 @@
 // @ts-check
 import { translator as wPNodeTranslator } from '../../v3/handlers/w/p/index.js';
+import { BLOCK_FIELD_XML_NAMES } from '../../v3/handlers/sd/shared/block-field-xml-names.js';
 
 const PARAGRAPH_PROPERTIES_XML_NAME = 'w:pPr';
-const BLOCK_FIELD_XML_NAMES = new Set(['sd:tableOfContents', 'sd:index', 'sd:bibliography', 'sd:tableOfAuthorities']);
 
 const hasMeaningfulParagraphContent = (elements = []) =>
   elements.some((element) => element?.name && element.name !== PARAGRAPH_PROPERTIES_XML_NAME);

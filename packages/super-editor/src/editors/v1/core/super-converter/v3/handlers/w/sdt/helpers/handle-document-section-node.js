@@ -1,4 +1,5 @@
 import { parseTagValueJSON } from './parse-tag-value-json';
+import { getSdtEnvelopeParts } from './sdt-envelope';
 
 /**
  * Handle document section node. Special case of w:sdt nodes
@@ -13,7 +14,7 @@ export function handleDocumentSectionNode(params) {
   }
 
   const node = nodes[0];
-  const sdtPr = node.elements.find((el) => el.name === 'w:sdtPr');
+  const { sdtPr, sdtContent } = getSdtEnvelopeParts(node);
   const tag = sdtPr?.elements.find((el) => el.name === 'w:tag');
   const tagValue = parseTagValueJSON(tag?.attributes?.['w:val']);
 
@@ -30,7 +31,6 @@ export function handleDocumentSectionNode(params) {
   const lockValue = lockTag?.attributes?.['w:val'];
   const isLocked = lockValue === 'sdtContentLocked';
 
-  const sdtContent = node.elements.find((el) => el.name === 'w:sdtContent');
   const translatedContent = nodeListHandler.handler({
     ...params,
     nodes: sdtContent?.elements,

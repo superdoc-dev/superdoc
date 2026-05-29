@@ -49,3 +49,28 @@ export const normalizeSdtContentChildren = (parent, { childName, metadataKey, sc
   }
   return out;
 };
+
+/**
+ * Re-wrap exported child elements that carry preserved SDT envelope metadata.
+ *
+ * @param {any[]} elements
+ * @param {any[]} sourceChildren
+ * @param {{ childName: string, metadataKey: string, scope: string }} config
+ * @returns {any[]}
+ */
+export const wrapSdtContentChildren = (elements, sourceChildren, { childName, metadataKey, scope }) => {
+  let sourceCursor = 0;
+  for (let i = 0; i < elements.length; i += 1) {
+    const exportedEl = elements[i];
+    if (!exportedEl || exportedEl.name !== childName) continue;
+    const sourceChild = sourceChildren?.[sourceCursor];
+    sourceCursor += 1;
+    const sdtMetadata = sourceChild?.attrs?.[metadataKey];
+    if (!sdtMetadata || sdtMetadata.scope !== scope || !sdtMetadata.sdtPr) continue;
+    const sdtChildren = [sdtMetadata.sdtPr];
+    if (sdtMetadata.sdtEndPr) sdtChildren.push(sdtMetadata.sdtEndPr);
+    sdtChildren.push({ name: 'w:sdtContent', elements: [exportedEl] });
+    elements[i] = { name: 'w:sdt', elements: sdtChildren };
+  }
+  return elements;
+};

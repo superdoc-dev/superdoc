@@ -1,6 +1,7 @@
 import { parseTagValueJSON } from './parse-tag-value-json';
 import { parseMarks } from '@converter/v2/importer/markImporter';
 import { generateDocxRandomId } from '@core/helpers/generateDocxRandomId';
+import { getSdtEnvelopeParts } from './sdt-envelope';
 
 /**
  * @param {Object} params
@@ -14,8 +15,7 @@ export function handleAnnotationNode(params) {
   }
 
   const node = nodes[0];
-  const sdtPr = node.elements.find((el) => el.name === 'w:sdtPr');
-  const sdtContent = node.elements.find((el) => el.name === 'w:sdtContent');
+  const { sdtPr, sdtContent } = getSdtEnvelopeParts(node);
 
   const sdtId = sdtPr?.elements?.find((el) => el.name === 'w:id');
   const alias = sdtPr?.elements.find((el) => el.name === 'w:alias');

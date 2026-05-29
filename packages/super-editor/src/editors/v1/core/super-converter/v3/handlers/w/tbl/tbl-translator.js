@@ -10,6 +10,7 @@ import { translator as tblGridTranslator } from '../tblGrid';
 import { translator as tblPrTranslator } from '../tblPr';
 import { translator as trTranslator } from '../tr';
 import { normalizeRowCellChildren } from '../tr/row-cell-children.js';
+import { wrapSdtContentChildren } from '../sdt/helpers/sdt-envelope.js';
 import { normalizeTableRowChildren } from './table-row-children.js';
 
 /**
@@ -312,19 +313,7 @@ const decode = (params, decodedAttrs) => {
   // (ECMA-376 §17.5.2.30, CT_SdtRow). The table schema contains only tableRow
   // children, so each exported `<w:tr>` advances the source row cursor once;
   // table properties/grid are inserted after this pass and cannot shift it.
-  let rowCursor = 0;
-  for (let i = 0; i < elements.length; i += 1) {
-    const exportedEl = elements[i];
-    if (!exportedEl || exportedEl.name !== 'w:tr') continue;
-    const sourceRow = node.content?.[rowCursor];
-    rowCursor += 1;
-    const rowSdt = sourceRow?.attrs?.rowSdt;
-    if (!rowSdt || rowSdt.scope !== 'row' || !rowSdt.sdtPr) continue;
-    const sdtChildren = [rowSdt.sdtPr];
-    if (rowSdt.sdtEndPr) sdtChildren.push(rowSdt.sdtEndPr);
-    sdtChildren.push({ name: 'w:sdtContent', elements: [exportedEl] });
-    elements[i] = { name: 'w:sdt', elements: sdtChildren };
-  }
+  wrapSdtContentChildren(elements, node.content || [], { childName: 'w:tr', metadataKey: 'rowSdt', scope: 'row' });
 
   // Table grid - generate if not present
   const firstRow = node.content?.find((n) => n.type === 'tableRow');

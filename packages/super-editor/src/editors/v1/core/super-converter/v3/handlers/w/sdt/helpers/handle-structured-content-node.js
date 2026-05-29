@@ -1,5 +1,6 @@
 import { parseAnnotationMarks } from './handle-annotation-node';
 import { parseStrictStOnOff } from '../../../utils.js';
+import { getSdtEnvelopeParts } from './sdt-envelope';
 
 /**
  * Detect the semantic control type from sdtPr child elements.
@@ -87,8 +88,7 @@ export function handleStructuredContentNode(params) {
   }
 
   const node = nodes[0];
-  const sdtPr = node.elements.find((el) => el.name === 'w:sdtPr');
-  const sdtContent = node.elements.find((el) => el.name === 'w:sdtContent');
+  const { sdtPr, sdtContent } = getSdtEnvelopeParts(node);
 
   const id = sdtPr?.elements?.find((el) => el.name === 'w:id');
   const tag = sdtPr?.elements?.find((el) => el.name === 'w:tag');

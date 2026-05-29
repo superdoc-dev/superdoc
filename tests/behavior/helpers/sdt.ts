@@ -180,3 +180,83 @@ export async function getSdtIdFromState(page: Page, alias: string): Promise<stri
     return foundId;
   }, alias);
 }
+
+// ---------------------------------------------------------------------------
+// Inline SDT state helpers used by keyboard/parity behavior tests. Locate an
+// inline SDT and snapshot selection/control state so specs don't each
+// reimplement the PM scan.
+// ---------------------------------------------------------------------------
+
+export interface InlineSdtRange {
+  id: string;
+  pos: number;
+  start: number;
+  end: number;
+  nodeEnd: number;
+  content: string;
+}
+
+/** Return the first inline `structuredContent` node (or the one with `sdtId`) and its PM range. */
+export async function getInlineSdtRange(page: Page, sdtId?: string): Promise<InlineSdtRange | null> {
+  return page.evaluate((sdtId) => {
+    const { state } = (window as any).editor;
+    let r: InlineSdtRange | null = null;
+    state.doc.descendants((node: any, pos: number) => {
+      if (r) return false;
+      if (node.type.name === 'structuredContent' && (sdtId == null || String(node.attrs?.id) === sdtId)) {
+        r = {
+          id: String(node.attrs?.id),
+          pos,
+          start: pos + 1,
+          end: pos + node.nodeSize - 1,
+          nodeEnd: pos + node.nodeSize,
+          content: node.textContent,
+        };
+        return false;
+      }
+      return true;
+    });
+    return r;
+  }, sdtId);
+}
+
+export interface InlineSdtSnapshot {
+  from: number;
+  to: number;
+  empty: boolean;
+  nodeType: string | null;
+  sdtExists: boolean;
+  sdtContent: string | null;
+  sdtPos: number;
+  docText: string;
+}
+
+/** Snapshot the current selection plus the existence/content/position of inline SDT `sdtId`. */
+export async function getInlineSdtSnapshot(page: Page, sdtId: string): Promise<InlineSdtSnapshot> {
+  return page.evaluate((sdtId) => {
+    const { state } = (window as any).editor;
+    const sel = state.selection;
+    let sdtExists = false;
+    let sdtContent: string | null = null;
+    let sdtPos = -1;
+    state.doc.descendants((node: any, pos: number) => {
+      if (node.type.name === 'structuredContent' && String(node.attrs?.id) === sdtId) {
+        sdtExists = true;
+        sdtContent = node.textContent;
+        sdtPos = pos;
+        return false;
+      }
+      return true;
+    });
+    return {
+      from: sel.from,
+      to: sel.to,
+      empty: sel.empty,
+      nodeType: sel.node?.type?.name ?? null,
+      sdtExists,
+      sdtContent,
+      sdtPos,
+      docText: state.doc.textContent,
+    };
+  }, sdtId);
+}

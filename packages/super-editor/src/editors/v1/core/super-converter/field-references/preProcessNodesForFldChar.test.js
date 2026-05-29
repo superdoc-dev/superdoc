@@ -683,7 +683,11 @@ describe('preProcessNodesForFldChar', () => {
       {
         nodes: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] }],
         fieldInfo: {
-          instrText: 'HYPERLINK "http://example.com"   ',
+          // SD-3066: verbatim concatenation of the two instrText runs
+          // ('HYPERLINK "http://example.com"' + ' ') is a single trailing
+          // space. The previous expectation of three spaces reflected the
+          // old per-fragment injected separator, not the literal source text.
+          instrText: 'HYPERLINK "http://example.com" ',
           instructionTokens: [
             { type: 'text', text: 'HYPERLINK "http://example.com"' },
             { type: 'text', text: ' ' },
@@ -744,6 +748,63 @@ describe('preProcessNodesForFldChar', () => {
     expect(processedNodes).toHaveLength(1);
     expect(processedNodes[0].name).toBe('sd:indexEntry');
     expect(processedNodes[0].attributes.instruction).toBe('XE "Term"');
+  });
+
+  it('processes fldSimple INDEX fields, wrapping loose result runs in a paragraph (SD-3066)', () => {
+    // The ticket flags w:fldSimple as a primary INDEX signal. A fldSimple INDEX
+    // carries its generated entries as loose runs; the index PM node requires
+    // `paragraph+`, so the preprocessor must wrap them (normalizeFieldContentToParagraphs,
+    // the SD-3005 fix). This guards both the fldSimple dispatch and that wrapping.
+    const nodes = [
+      {
+        name: 'w:fldSimple',
+        attributes: { 'w:instr': 'INDEX \\c 2' },
+        elements: [
+          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'apple, 3' }] }] },
+          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'banana, 5' }] }] },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('sd:index');
+    expect(processedNodes[0].attributes.instruction).toBe('INDEX \\c 2');
+    // Loose runs wrapped into a single paragraph so the PM `paragraph+` schema holds.
+    expect(processedNodes[0].elements).toHaveLength(1);
+    expect(processedNodes[0].elements[0].name).toBe('w:p');
+    expect(processedNodes[0].elements[0].elements).toHaveLength(2);
+  });
+
+  it('joins instruction text split across multiple instrText runs verbatim (SD-3066)', () => {
+    // Word commonly splits an XE instruction across runs, with the literal
+    // spaces preserved inside each run: ' XE "' + 'Building Standard' + '" '.
+    // The aggregated instruction must reconstruct the literal string, not
+    // inject a separator space per fragment (which produced
+    // 'XE " Building Standard "' with spurious internal spaces).
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:instrText', attributes: { 'xml:space': 'preserve' }, elements: [{ type: 'text', text: ' XE "' }] },
+        ],
+      },
+      { name: 'w:r', elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'Building Standard' }] }] },
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:instrText', attributes: { 'xml:space': 'preserve' }, elements: [{ type: 'text', text: '" ' }] },
+        ],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('sd:indexEntry');
+    expect(processedNodes[0].attributes.instruction).toBe('XE "Building Standard"');
   });
 
   it('passes field-sequence rPr into body NUMWORDS fields when cached-result runs have no styling', () => {

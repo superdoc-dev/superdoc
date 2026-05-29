@@ -182,6 +182,18 @@ export const defaultMultiSectionIdentifier = (): MultiSectionHeaderFooterIdentif
   sections: [],
 });
 
+function mergeSection0FallbackRefs(
+  sectionRefs: SectionHeaderFooterIds | undefined,
+  fallbackRefs: SectionHeaderFooterIds,
+): SectionHeaderFooterIds {
+  return {
+    default: sectionRefs?.default ?? fallbackRefs.default,
+    first: sectionRefs?.first ?? fallbackRefs.first,
+    even: sectionRefs?.even ?? fallbackRefs.even,
+    odd: sectionRefs?.odd ?? fallbackRefs.odd,
+  };
+}
+
 function refreshResolutionSections(identifier: MultiSectionHeaderFooterIdentifier): void {
   const maxIndex = Math.max(
     identifier.sectionCount - 1,
@@ -201,9 +213,13 @@ function refreshResolutionSections(identifier: MultiSectionHeaderFooterIdentifie
           ? identifier.titlePg
           : false,
       headerRefs:
-        identifier.sectionHeaderIds.get(sectionIndex) ?? (sectionIndex === 0 ? { ...identifier.headerIds } : undefined),
+        sectionIndex === 0
+          ? mergeSection0FallbackRefs(identifier.sectionHeaderIds.get(sectionIndex), identifier.headerIds)
+          : identifier.sectionHeaderIds.get(sectionIndex),
       footerRefs:
-        identifier.sectionFooterIds.get(sectionIndex) ?? (sectionIndex === 0 ? { ...identifier.footerIds } : undefined),
+        sectionIndex === 0
+          ? mergeSection0FallbackRefs(identifier.sectionFooterIds.get(sectionIndex), identifier.footerIds)
+          : identifier.sectionFooterIds.get(sectionIndex),
     });
   }
 

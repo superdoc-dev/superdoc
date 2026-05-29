@@ -395,6 +395,30 @@ describe('headerFooterUtils', () => {
       expect(identifier.footerIds.even).toBe('converter-f-even');
     });
 
+    it('should expose converter fallbacks through section-aware resolution', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: null },
+          footerRefs: { default: null },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, undefined, {
+        headerIds: { default: 'converter-h-default' },
+        footerIds: { default: 'converter-f-default' },
+      });
+
+      expect(getHeaderFooterTypeForSection(1, 0, identifier, { kind: 'header' })).toBe('default');
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'header' }),
+      ).toBe('converter-h-default');
+      expect(getHeaderFooterTypeForSection(1, 0, identifier, { kind: 'footer' })).toBe('default');
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'footer' }),
+      ).toBe('converter-f-default');
+    });
+
     it('should NOT override existing section metadata with converter IDs', () => {
       const sectionMetadata: SectionMetadata[] = [
         {

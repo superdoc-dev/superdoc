@@ -3,8 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 /**
  * @typedef {'paired' | 'independent'} TrackChangesReplacements
- * @typedef {{ type: string, author: string, date: string, internalId: string }} TrackedChangeEntry
- * @typedef {{ lastTrackedChange: TrackedChangeEntry | null, replacements: TrackChangesReplacements }} WalkContext
+ * @typedef {{ type: string, author: string, date: string, internalId?: string }} TrackedChangeEntry
+ * @typedef {{ beforeLastTrackedChange: TrackedChangeEntry | null, lastTrackedChange: TrackedChangeEntry | null, replacements: TrackChangesReplacements }} WalkContext
  */
 
 const TRACKED_CHANGE_NAMES = new Set(['w:ins', 'w:del']);
@@ -45,6 +45,66 @@ function isReplacementPair(previous, current) {
 }
 
 /**
+ * @param {object} element
+ * @returns {TrackedChangeEntry}
+ */
+function trackedChangeEntryFromElement(element) {
+  return {
+    type: element.name,
+    author: element.attributes?.['w:author'] ?? '',
+    date: element.attributes?.['w:date'] ?? '',
+  };
+}
+
+/**
+ * Returns the next sibling tracked-change element, skipping only non-content
+ * markers. Content-bearing elements terminate the sibling check because they
+ * break Word replacement adjacency.
+ *
+ * @param {Array} elements
+ * @param {number} startIndex
+ * @returns {TrackedChangeEntry | null}
+ */
+function findNextSiblingTrackedChange(elements, startIndex) {
+  if (!Array.isArray(elements)) return null;
+
+  for (let i = startIndex; i < elements.length; i += 1) {
+    const element = elements[i];
+    if (TRACKED_CHANGE_NAMES.has(element?.name)) {
+      return trackedChangeEntryFromElement(element);
+    }
+    if (!PAIRING_TRANSPARENT_NAMES.has(element?.name)) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Word serializes a replacement selected inside another author's deletion as
+ * child insertion/deletion sides surrounded by the parent deletion fragments.
+ * In paired mode the generic adjacent-replacement heuristic would otherwise
+ * collapse the child sides into one replacement. Keep them independent when
+ * either side of the candidate pair touches a different-author deletion.
+ *
+ * @param {TrackedChangeEntry | null} beforePrevious
+ * @param {TrackedChangeEntry} previous
+ * @param {TrackedChangeEntry} current
+ * @param {TrackedChangeEntry | null} next
+ * @returns {boolean}
+ */
+function isChildReplacementInsideDeletion(beforePrevious, previous, current, next) {
+  if (!isReplacementPair(previous, current)) return false;
+
+  const touchesDifferentAuthorDeletionBefore =
+    beforePrevious?.type === 'w:del' && beforePrevious.author !== previous.author;
+  const touchesDifferentAuthorDeletionAfter = next?.type === 'w:del' && next.author !== previous.author;
+
+  return touchesDifferentAuthorDeletionBefore || touchesDifferentAuthorDeletionAfter;
+}
+
+/**
  * Assigns an internal UUID to a tracked change element. In paired mode,
  * adjacent replacement halves (w:del + w:ins with matching author/date)
  * share the same UUID.
@@ -53,8 +113,9 @@ function isReplacementPair(previous, current) {
  * @param {Map<string, string>} idMap  Accumulates Word ID → internal UUID
  * @param {WalkContext} context  Mutable walk state for replacement pairing
  * @param {boolean} insideTrackedChange  Whether this element is nested in another tracked change
+ * @param {TrackedChangeEntry | null} nextTrackedChange
  */
-function assignInternalId(element, idMap, context, insideTrackedChange) {
+function assignInternalId(element, idMap, context, insideTrackedChange, nextTrackedChange = null) {
   const wordId = String(element.attributes?.['w:id'] ?? '');
   if (!wordId) return;
 
@@ -66,15 +127,24 @@ function assignInternalId(element, idMap, context, insideTrackedChange) {
     return;
   }
 
-  const current = {
-    type: element.name,
-    author: element.attributes?.['w:author'] ?? '',
-    date: element.attributes?.['w:date'] ?? '',
-  };
+  const current = trackedChangeEntryFromElement(element);
 
   const shouldPair = context.replacements === 'paired';
+  const shouldKeepChildSides =
+    context.lastTrackedChange &&
+    isChildReplacementInsideDeletion(
+      context.beforeLastTrackedChange,
+      context.lastTrackedChange,
+      current,
+      nextTrackedChange,
+    );
 
-  if (shouldPair && context.lastTrackedChange && isReplacementPair(context.lastTrackedChange, current)) {
+  if (
+    shouldPair &&
+    context.lastTrackedChange &&
+    !shouldKeepChildSides &&
+    isReplacementPair(context.lastTrackedChange, current)
+  ) {
     // Second half of a replacement — share the first half's UUID, but only
     // if this w:id hasn't already been mapped. A reused id that was already
     // part of an earlier pair must keep its original mapping.
@@ -82,6 +152,7 @@ function assignInternalId(element, idMap, context, insideTrackedChange) {
       idMap.set(wordId, context.lastTrackedChange.internalId);
     }
     context.lastTrackedChange = null;
+    context.beforeLastTrackedChange = null;
   } else {
     // Reuse an existing mapping when the same w:id appears more than once
     // (Word reuses tracked-change ids across the document). Minting a fresh
@@ -89,6 +160,7 @@ function assignInternalId(element, idMap, context, insideTrackedChange) {
     // pair that was already recorded for this id.
     const internalId = idMap.get(wordId) ?? uuidv4();
     idMap.set(wordId, internalId);
+    context.beforeLastTrackedChange = context.lastTrackedChange;
     context.lastTrackedChange = { ...current, internalId };
   }
 }
@@ -105,9 +177,11 @@ function assignInternalId(element, idMap, context, insideTrackedChange) {
 function walkElements(elements, idMap, context, insideTrackedChange = false) {
   if (!Array.isArray(elements)) return;
 
-  for (const element of elements) {
+  for (let index = 0; index < elements.length; index += 1) {
+    const element = elements[index];
     if (TRACKED_CHANGE_NAMES.has(element.name)) {
-      assignInternalId(element, idMap, context, insideTrackedChange);
+      const nextTrackedChange = findNextSiblingTrackedChange(elements, index + 1);
+      assignInternalId(element, idMap, context, insideTrackedChange, nextTrackedChange);
 
       if (element.elements) {
         // Descend with an isolated context so content inside a tracked change
@@ -116,7 +190,7 @@ function walkElements(elements, idMap, context, insideTrackedChange = false) {
         walkElements(
           element.elements,
           idMap,
-          { lastTrackedChange: null, replacements: context.replacements },
+          { beforeLastTrackedChange: null, lastTrackedChange: null, replacements: context.replacements },
           /* insideTrackedChange */ true,
         );
       }
@@ -125,6 +199,7 @@ function walkElements(elements, idMap, context, insideTrackedChange = false) {
       // markers (comment/bookmark/permission ranges) are transparent.
       if (!PAIRING_TRANSPARENT_NAMES.has(element.name)) {
         context.lastTrackedChange = null;
+        context.beforeLastTrackedChange = null;
       }
 
       if (element.elements) {
@@ -150,7 +225,7 @@ function buildTrackedChangeIdMapForPart(part, options = {}) {
 
   const replacements = options.replacements === 'independent' ? 'independent' : 'paired';
   const idMap = new Map();
-  walkElements(root.elements, idMap, { lastTrackedChange: null, replacements });
+  walkElements(root.elements, idMap, { beforeLastTrackedChange: null, lastTrackedChange: null, replacements });
   return idMap;
 }
 

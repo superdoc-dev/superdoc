@@ -101,25 +101,31 @@ export function executeTextSelector(
 
   const search = requireEditorCommand(editor.commands?.search, 'find (search)');
 
-  const rawResult = search(pattern, {
-    highlight: false,
-    caseSensitive: selector.caseSensitive ?? false,
-    maxMatches: Infinity,
-    searchModel: 'visible',
-  });
-
-  if (!Array.isArray(rawResult)) {
-    throw new DocumentApiAdapterError(
-      'CAPABILITY_UNAVAILABLE',
-      'Editor search command returned an unexpected result format.',
-    );
-  }
-  const allMatches = rawResult as SearchMatch[];
-
   const scopeRange = scope.range;
-  const matches = scopeRange
-    ? allMatches.filter((m) => m.from >= scopeRange.start && m.to <= scopeRange.end)
-    : allMatches;
+  const runSearch = (searchModel: 'visible' | 'raw'): SearchMatch[] => {
+    pattern.lastIndex = 0;
+    const rawResult = search(pattern, {
+      highlight: false,
+      caseSensitive: selector.caseSensitive ?? false,
+      maxMatches: Infinity,
+      searchModel,
+    });
+
+    if (!Array.isArray(rawResult)) {
+      throw new DocumentApiAdapterError(
+        'CAPABILITY_UNAVAILABLE',
+        'Editor search command returned an unexpected result format.',
+      );
+    }
+
+    const allMatches = rawResult as SearchMatch[];
+    return scopeRange ? allMatches.filter((m) => m.from >= scopeRange.start && m.to <= scopeRange.end) : allMatches;
+  };
+
+  let matches = runSearch('visible');
+  if (matches.length === 0) {
+    matches = runSearch('raw');
+  }
 
   const textBlocks = index.candidates.filter(isTextBlockCandidate);
   const contexts: MatchContext[] = [];

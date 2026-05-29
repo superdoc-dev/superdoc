@@ -577,6 +577,15 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
         version: 1.28.0(zod@4.3.6)
+      ws:
+        specifier: ^8.18.3
+        version: 8.20.0
+      y-websocket:
+        specifier: 'catalog:'
+        version: 3.0.0(yjs@13.6.30)
+      yjs:
+        specifier: 'catalog:'
+        version: 13.6.30
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -593,6 +602,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.2
+      '@types/ws':
+        specifier: 'catalog:'
+        version: 8.18.1
       superdoc:
         specifier: workspace:*
         version: link:../../packages/superdoc

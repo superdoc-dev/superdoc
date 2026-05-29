@@ -19,6 +19,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "ws": "^8.18.3",
+    "y-websocket": "catalog:",
+    "yjs": "catalog:",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -27,6 +30,7 @@
     "superdoc": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/ws": "catalog:",
     "typescript": "catalog:"
   },
   "publishConfig": {

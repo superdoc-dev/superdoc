@@ -141,6 +141,31 @@ describe('w:tr translator — cell-level SDT (SD-3289 / IT-1119)', () => {
       });
     });
 
+    it('preserves non-cell SDT content siblings around a single imported cell', () => {
+      const bookmarkStart = { name: 'w:bookmarkStart', attributes: { 'w:id': '1', 'w:name': 'cell-start' } };
+      const bookmarkEnd = { name: 'w:bookmarkEnd', attributes: { 'w:id': '1' } };
+      const row = {
+        name: 'w:tr',
+        elements: [
+          {
+            name: 'w:sdt',
+            elements: [SDT_PR, { name: 'w:sdtContent', elements: [bookmarkStart, DATE_CELL, bookmarkEnd] }],
+          },
+        ],
+      };
+      const params = { nodes: [row], extraParams: { row, columnWidths: [296] } };
+
+      const result = translator.encode(params, {});
+
+      expect(result.content[0].attrs.cellSdt).toEqual({
+        scope: 'cell',
+        sdtPr: SDT_PR,
+        sdtEndPr: null,
+        contentBefore: [bookmarkStart],
+        contentAfter: [bookmarkEnd],
+      });
+    });
+
     it('routes the inner w:tc through the existing tc-translator', () => {
       const row = {
         name: 'w:tr',
@@ -263,6 +288,42 @@ describe('w:tr translator — cell-level SDT (SD-3289 / IT-1119)', () => {
       expect(wrapped.elements[0]).toBe(SDT_PR);
       expect(wrapped.elements[1]).toBe(SDT_END_PR);
       expect(wrapped.elements[2]).toEqual({ name: 'w:sdtContent', elements: [exportedTc] });
+    });
+
+    it('preserves cellSdt content siblings inside the exported SDT content', () => {
+      const bookmarkStart = { name: 'w:bookmarkStart', attributes: { 'w:id': '1', 'w:name': 'cell-start' } };
+      const bookmarkEnd = { name: 'w:bookmarkEnd', attributes: { 'w:id': '1' } };
+      const exportedTc = { name: 'w:tc', comment: 'cell xml' };
+      vi.mocked(translateChildNodes).mockReturnValueOnce([exportedTc]);
+
+      const row = {
+        type: 'tableRow',
+        attrs: {},
+        content: [
+          {
+            type: 'tableCell',
+            attrs: {
+              cellSdt: {
+                scope: 'cell',
+                sdtPr: SDT_PR,
+                sdtEndPr: null,
+                contentBefore: [bookmarkStart],
+                contentAfter: [bookmarkEnd],
+              },
+            },
+            content: [],
+          },
+        ],
+      };
+
+      const result = translator.decode({ node: row, extraParams: {} }, {});
+
+      expect(result.elements).toEqual([
+        {
+          name: 'w:sdt',
+          elements: [SDT_PR, { name: 'w:sdtContent', elements: [bookmarkStart, exportedTc, bookmarkEnd] }],
+        },
+      ]);
     });
 
     it('does not wrap cells without cellSdt metadata', () => {

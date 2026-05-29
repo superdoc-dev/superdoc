@@ -1,4 +1,5 @@
 // @ts-check
+import { normalizeSdtContentChildren } from '../sdt/helpers/sdt-envelope.js';
 
 /**
  * Normalize a `<w:tr>` element's children into the cell stream the row encoder
@@ -25,33 +26,7 @@
  * @returns {Array<{ node: any, cellSdt: any }>}
  */
 export const normalizeRowCellChildren = (row) => {
-  /** @type {Array<{ node: any, cellSdt: any }>} */
-  const out = [];
-  const children = Array.isArray(row?.elements) ? row.elements : [];
-  for (const child of children) {
-    if (!child || typeof child.name !== 'string') continue;
-    if (child.name === 'w:tc') {
-      out.push({ node: child, cellSdt: null });
-      continue;
-    }
-    if (child.name === 'w:sdt') {
-      const sdtPr = child.elements?.find((/** @type {any} */ el) => el?.name === 'w:sdtPr') ?? null;
-      const sdtEndPr = child.elements?.find((/** @type {any} */ el) => el?.name === 'w:sdtEndPr') ?? null;
-      const sdtContent = child.elements?.find((/** @type {any} */ el) => el?.name === 'w:sdtContent');
-      const innerCells = sdtContent?.elements?.filter((/** @type {any} */ el) => el?.name === 'w:tc') ?? [];
-      if (innerCells.length === 1 && sdtPr) {
-        out.push({
-          node: innerCells[0],
-          cellSdt: { scope: 'cell', sdtPr, sdtEndPr },
-        });
-      } else {
-        // Multi-cell wrapper or wrapper without sdtPr: import inner cells without
-        // wrapper metadata so the row is not dropped.
-        for (const innerTc of innerCells) {
-          out.push({ node: innerTc, cellSdt: null });
-        }
-      }
-    }
-  }
-  return out;
+  return /** @type {Array<{ node: any, cellSdt: any }>} */ (
+    normalizeSdtContentChildren(row, { childName: 'w:tc', metadataKey: 'cellSdt', scope: 'cell' })
+  );
 };

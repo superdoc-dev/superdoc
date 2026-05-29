@@ -32,6 +32,15 @@ import { NodeTranslator } from '@translator';
 import { translator as trTranslator } from '../tr';
 import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/index.js';
 
+const ROW_SDT_PR = {
+  name: 'w:sdtPr',
+  elements: [
+    { name: 'w:id', attributes: { 'w:val': '849213029' } },
+    { name: 'w:date', elements: [{ name: 'w:dateFormat', attributes: { 'w:val': 'd MMMM yyyy' } }] },
+  ],
+};
+const ROW_SDT_END_PR = { name: 'w:sdtEndPr', elements: [] };
+
 describe('w:tbl translator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -165,6 +174,40 @@ describe('w:tbl translator', () => {
         insideH: { size: 0.25, val: 'dashed' }, // from style
         bottom: { size: 1, val: 'double' }, // from inline
       });
+    });
+
+    it('imports row-level SDT wrappers as rows with rowSdt metadata', () => {
+      const wrappedRow = { name: 'w:tr', elements: [{ name: 'w:tc', attributes: {}, elements: [] }] };
+      const bareRow = { name: 'w:tr', elements: [{ name: 'w:tc', attributes: {}, elements: [] }] };
+      const table = {
+        name: 'w:tbl',
+        elements: [
+          { name: 'w:tblPr', elements: [] },
+          {
+            name: 'w:sdt',
+            elements: [ROW_SDT_PR, ROW_SDT_END_PR, { name: 'w:sdtContent', elements: [wrappedRow] }],
+          },
+          bareRow,
+        ],
+      };
+
+      const result = translator.encode({ nodes: [table], docx: mockDocx }, {});
+
+      expect(trTranslator.encode).toHaveBeenCalledTimes(2);
+      expect(trTranslator.encode).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          nodes: [wrappedRow],
+          extraParams: expect.objectContaining({ row: wrappedRow }),
+        }),
+      );
+      expect(result.content).toHaveLength(2);
+      expect(result.content[0].attrs.rowSdt).toEqual({
+        scope: 'row',
+        sdtPr: ROW_SDT_PR,
+        sdtEndPr: ROW_SDT_END_PR,
+      });
+      expect(result.content[1].attrs.rowSdt).toBeUndefined();
     });
 
     it('handles tables with no properties or rows', () => {
@@ -396,6 +439,116 @@ describe('w:tbl translator', () => {
       const tblGrid = result.elements.find((el) => el.name === 'w:tblGrid');
       expect(tblGrid).toBeDefined();
       expect(tblGrid.elements).toEqual([expect.objectContaining({ name: 'w:gridCol', attributes: { 'w:w': '2000' } })]);
+    });
+
+    it('wraps exported rows carrying rowSdt metadata in row-level SDT envelopes', () => {
+      const bareTr = { name: 'w:tr', comment: 'bare row' };
+      const wrappedTr = { name: 'w:tr', comment: 'wrapped row' };
+      vi.mocked(translateChildNodes).mockReturnValueOnce([wrappedTr, bareTr]);
+
+      const tableNode = {
+        type: 'table',
+        attrs: {},
+        content: [
+          {
+            type: 'tableRow',
+            attrs: { rowSdt: { scope: 'row', sdtPr: ROW_SDT_PR, sdtEndPr: ROW_SDT_END_PR } },
+            content: [],
+          },
+          { type: 'tableRow', attrs: {}, content: [] },
+        ],
+      };
+
+      const result = translator.decode({ node: tableNode, extraParams: {} });
+      const rowChildren = result.elements.filter((el) => el.name === 'w:sdt' || el.name === 'w:tr');
+
+      expect(rowChildren).toHaveLength(2);
+      expect(rowChildren[0].name).toBe('w:sdt');
+      expect(rowChildren[0].elements).toEqual([
+        ROW_SDT_PR,
+        ROW_SDT_END_PR,
+        { name: 'w:sdtContent', elements: [wrappedTr] },
+      ]);
+      expect(rowChildren[1]).toBe(bareTr);
+    });
+
+    it('preserves rowSdt content siblings inside the exported SDT content', () => {
+      const bookmarkStart = { name: 'w:bookmarkStart', attributes: { 'w:id': '1', 'w:name': 'row-start' } };
+      const bookmarkEnd = { name: 'w:bookmarkEnd', attributes: { 'w:id': '1' } };
+      const wrappedTr = { name: 'w:tr', comment: 'wrapped row' };
+      vi.mocked(translateChildNodes).mockReturnValueOnce([wrappedTr]);
+
+      const tableNode = {
+        type: 'table',
+        attrs: {},
+        content: [
+          {
+            type: 'tableRow',
+            attrs: {
+              rowSdt: {
+                scope: 'row',
+                sdtPr: ROW_SDT_PR,
+                sdtEndPr: null,
+                contentBefore: [bookmarkStart],
+                contentAfter: [bookmarkEnd],
+              },
+            },
+            content: [],
+          },
+        ],
+      };
+
+      const result = translator.decode({ node: tableNode, extraParams: {} });
+      const rowChildren = result.elements.filter((el) => el.name === 'w:sdt' || el.name === 'w:tr');
+
+      expect(rowChildren).toEqual([
+        {
+          name: 'w:sdt',
+          elements: [ROW_SDT_PR, { name: 'w:sdtContent', elements: [bookmarkStart, wrappedTr, bookmarkEnd] }],
+        },
+      ]);
+    });
+
+    it('keeps rowSdt wrappers aligned across alternating bare and wrapped rows', () => {
+      const bareTr1 = { name: 'w:tr', comment: 'bare row 1' };
+      const wrappedTr1 = { name: 'w:tr', comment: 'wrapped row 1' };
+      const bareTr2 = { name: 'w:tr', comment: 'bare row 2' };
+      const wrappedTr2 = { name: 'w:tr', comment: 'wrapped row 2' };
+      vi.mocked(translateChildNodes).mockReturnValueOnce([bareTr1, wrappedTr1, bareTr2, wrappedTr2]);
+
+      const tableNode = {
+        type: 'table',
+        attrs: {},
+        content: [
+          { type: 'tableRow', attrs: {}, content: [] },
+          {
+            type: 'tableRow',
+            attrs: { rowSdt: { scope: 'row', sdtPr: ROW_SDT_PR, sdtEndPr: null } },
+            content: [],
+          },
+          { type: 'tableRow', attrs: {}, content: [] },
+          {
+            type: 'tableRow',
+            attrs: { rowSdt: { scope: 'row', sdtPr: ROW_SDT_PR, sdtEndPr: ROW_SDT_END_PR } },
+            content: [],
+          },
+        ],
+      };
+
+      const result = translator.decode({ node: tableNode, extraParams: {} });
+      const rowChildren = result.elements.filter((el) => el.name === 'w:sdt' || el.name === 'w:tr');
+
+      expect(rowChildren).toHaveLength(4);
+      expect(rowChildren[0]).toBe(bareTr1);
+      expect(rowChildren[1]).toEqual({
+        name: 'w:sdt',
+        elements: [ROW_SDT_PR, { name: 'w:sdtContent', elements: [wrappedTr1] }],
+      });
+      expect(rowChildren[2]).toBe(bareTr2);
+      expect(rowChildren[3]).toEqual({
+        name: 'w:sdt',
+        elements: [ROW_SDT_PR, ROW_SDT_END_PR, { name: 'w:sdtContent', elements: [wrappedTr2] }],
+      });
     });
 
     it('should generate a grid if not present', () => {

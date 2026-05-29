@@ -337,6 +337,57 @@ describe('legacy-handle-table-cell-node', () => {
     expect(continuationCell._vMergeConsumed).toBe(true);
   });
 
+  it('finds vMerge continuations inside row-level SDT wrappers (SD-3291)', () => {
+    const restartCell = {
+      name: 'w:tc',
+      elements: [
+        { name: 'w:tcPr', elements: [{ name: 'w:vMerge', attributes: { 'w:val': 'restart' } }] },
+        { name: 'w:p' },
+      ],
+    };
+    const row1 = { name: 'w:tr', elements: [restartCell] };
+
+    const continuationCell = {
+      name: 'w:tc',
+      elements: [{ name: 'w:tcPr', elements: [{ name: 'w:vMerge' }] }, { name: 'w:p' }],
+    };
+    const wrappedRow2 = { name: 'w:tr', elements: [continuationCell] };
+    const table = {
+      name: 'w:tbl',
+      elements: [
+        row1,
+        {
+          name: 'w:sdt',
+          elements: [
+            { name: 'w:sdtPr', elements: [{ name: 'w:id', attributes: { 'w:val': '849213029' } }] },
+            { name: 'w:sdtContent', elements: [wrappedRow2] },
+          ],
+        },
+      ],
+    };
+
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => 'CONTENT') },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: restartCell,
+      table,
+      row: row1,
+      columnIndex: 0,
+      columnWidth: null,
+      allColumnWidths: [90],
+      _referencedStyles: null,
+    });
+
+    expect(out.attrs.rowspan).toBe(2);
+    expect(continuationCell._vMergeConsumed).toBe(true);
+  });
+
   it('blends percentage table shading into a solid background color', () => {
     const cellNode = { name: 'w:tc', elements: [{ name: 'w:p' }] };
     const row = { name: 'w:tr', elements: [cellNode] };

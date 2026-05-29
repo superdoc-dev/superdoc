@@ -7,6 +7,7 @@ import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/i
 import { translator as tcTranslator } from '../tc';
 import { translator as tblBordersTranslator } from '../tblBorders';
 import { translator as trPrTranslator } from '../trPr';
+import { wrapSdtContentChildren } from '../sdt/helpers/sdt-envelope.js';
 import { advancePastRowSpans, fillPlaceholderColumns, isPlaceholderCell } from './tr-helpers.js';
 import { normalizeRowCellChildren } from './row-cell-children.js';
 
@@ -228,19 +229,7 @@ const decode = (params, decodedAttrs) => {
   // using the preserved `sdtPr` (and `sdtEndPr` if present) on the source cell.
   // Done here (not inside `tc-translator.decode`) so callers checking
   // `el.name === 'w:tc'` on the decoder result remain correct.
-  let cellCursor = 0;
-  for (let i = 0; i < elements.length; i += 1) {
-    const exportedEl = elements[i];
-    if (!exportedEl || exportedEl.name !== 'w:tc') continue;
-    const sourceCell = trimmedContent[cellCursor];
-    cellCursor += 1;
-    const cellSdt = sourceCell?.attrs?.cellSdt;
-    if (!cellSdt || cellSdt.scope !== 'cell' || !cellSdt.sdtPr) continue;
-    const sdtChildren = [cellSdt.sdtPr];
-    if (cellSdt.sdtEndPr) sdtChildren.push(cellSdt.sdtEndPr);
-    sdtChildren.push({ name: 'w:sdtContent', elements: [exportedEl] });
-    elements[i] = { name: 'w:sdt', elements: sdtChildren };
-  }
+  wrapSdtContentChildren(elements, trimmedContent, { childName: 'w:tc', metadataKey: 'cellSdt', scope: 'cell' });
 
   if (node.attrs?.tableRowProperties) {
     const tableRowProperties = { ...node.attrs.tableRowProperties };

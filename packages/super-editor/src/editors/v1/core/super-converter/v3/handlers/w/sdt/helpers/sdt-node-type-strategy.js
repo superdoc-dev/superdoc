@@ -3,6 +3,7 @@ import { handleAnnotationNode } from './handle-annotation-node';
 import { handleDocPartObj } from './handle-doc-part-obj';
 import { handleDocumentSectionNode } from './handle-document-section-node';
 import { handleStructuredContentNode } from './handle-structured-content-node';
+import { getSdtEnvelopeParts } from './sdt-envelope';
 
 /**
  * There are multiple types of w:sdt nodes.
@@ -13,8 +14,7 @@ import { handleStructuredContentNode } from './handle-structured-content-node';
  * @returns {Object}
  */
 export function sdtNodeTypeStrategy(node) {
-  const sdtContent = node.elements.find((el) => el.name === 'w:sdtContent');
-  const sdtPr = node.elements.find((el) => el.name === 'w:sdtPr');
+  const { sdtPr, sdtContent } = getSdtEnvelopeParts(node);
   const tag = sdtPr?.elements.find((el) => el.name === 'w:tag');
   const tagValue = tag?.attributes?.['w:val'];
   const docPartObj = sdtPr?.elements.find((el) => el.name === 'w:docPartObj');

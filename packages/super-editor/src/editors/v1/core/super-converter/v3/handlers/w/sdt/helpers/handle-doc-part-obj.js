@@ -1,3 +1,5 @@
+import { getSdtEnvelopeParts } from './sdt-envelope';
+
 /**
  * @param {Object} params
  * @returns {Array|null}
@@ -10,23 +12,21 @@ export function handleDocPartObj(params) {
   }
 
   const node = nodes[0];
-  const sdtPr = node.elements.find((el) => el.name === 'w:sdtPr');
+  const { sdtPr, sdtContent } = getSdtEnvelopeParts(node);
   const docPartObj = sdtPr?.elements.find((el) => el.name === 'w:docPartObj');
   const docPartGallery = docPartObj?.elements.find((el) => el.name === 'w:docPartGallery');
   const docPartGalleryType = docPartGallery?.attributes?.['w:val'] ?? null;
-
-  const content = node?.elements.find((el) => el.name === 'w:sdtContent');
 
   // SD-1333: emit inline only when the SDT both sits inside a w:p AND its
   // sdtContent has no direct w:p/w:tbl children. Word emits Table-of-Figures
   // SDTs inside a w:p with real w:p children inside sdtContent — those must
   // stay block so the paragraph translator can hoist them.
   const isInsideParagraph = (params.path || []).some((p) => p?.name === 'w:p');
-  const hasBlockChild = !!content?.elements?.some((el) => el?.name === 'w:p' || el?.name === 'w:tbl');
+  const hasBlockChild = !!sdtContent?.elements?.some((el) => el?.name === 'w:p' || el?.name === 'w:tbl');
   if (isInsideParagraph && !hasBlockChild) {
     return inlineDocPartHandler({
       ...params,
-      nodes: [content],
+      nodes: [sdtContent],
       extraParams: { ...(params.extraParams || {}), sdtPr, docPartGalleryType },
     });
   }
@@ -35,7 +35,7 @@ export function handleDocPartObj(params) {
   const handler = validGalleryTypeMap[docPartGalleryType] || genericDocPartHandler;
   const result = handler({
     ...params,
-    nodes: [content],
+    nodes: [sdtContent],
     extraParams: { ...(params.extraParams || {}), sdtPr, docPartGalleryType },
   });
 

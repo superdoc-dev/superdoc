@@ -64,6 +64,7 @@ import { parseRowHeight } from './helpers/parseRowHeight.js';
  * @property {string} [rsidTr] @internal - Editing session ID for properties modification
  * @property {string} [paraId] @internal - Unique identifier for the row
  * @property {string} [textId] @internal - Unique identifier for row text
+ * @property {Object} [rowSdt] @internal - Row-level structured document tag metadata
  */
 
 /**
@@ -158,6 +159,16 @@ export const TableRow = Node.create({
        * @see {@link https://learn.microsoft.com/en-us/openspecs/office_standards/ms-docx/b7eeddec-7c50-47fb-88b6-1feec3ed832c}
        */
       textId: { rendered: false },
+      /**
+       * @private
+       * Row-level structured document tag metadata (ECMA-376 §17.5.2.30, CT_SdtRow).
+       * Set when the source OOXML wrapped this row in `<w:sdt>`; reconstructed on export.
+       * Shape: `{ scope: 'row', sdtPr, sdtEndPr, contentBefore?, contentAfter? }`.
+       */
+      rowSdt: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 

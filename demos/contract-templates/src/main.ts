@@ -43,6 +43,10 @@ import 'superdoc/style.css';
 import './style.css';
 import { attachFieldChip } from './field-chip.js';
 
+// Lock icons (Font Awesome Free v7.2.0)
+const ICON_LOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" class="lock-icon"><path d="M256 160L256 224L384 224L384 160C384 124.7 355.3 96 320 96C284.7 96 256 124.7 256 160zM192 224L192 160C192 89.3 249.3 32 320 32C390.7 32 448 89.3 448 160L448 224C483.3 224 512 252.7 512 288L512 512C512 547.3 483.3 576 448 576L192 576C156.7 576 128 547.3 128 512L128 288C128 252.7 156.7 224 192 224z"/></svg>`;
+const ICON_UNLOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" class="lock-icon"><path d="M256 160C256 124.7 284.7 96 320 96C351.7 96 378 119 383.1 149.3C386 166.7 402.5 178.5 420 175.6C437.5 172.7 449.2 156.2 446.3 138.7C436.1 78.1 383.5 32 320 32C249.3 32 192 89.3 192 160L192 224C156.7 224 128 252.7 128 288L128 512C128 547.3 156.7 576 192 576L448 576C483.3 576 512 547.3 512 512L512 288C512 252.7 483.3 224 448 224L256 224L256 160z"/></svg>`;
+
 type NodeKind = 'block' | 'inline';
 type LockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
 type ContentControlTarget = { kind: NodeKind; nodeType: 'sdt'; nodeId: string };
@@ -62,8 +66,10 @@ type MutationResult =
 type DocumentApi = {
   contentControls: {
     list(input?: Record<string, unknown>): { items: ContentControlInfo[]; total: number };
+    getParent(input: { target: ContentControlTarget }): ContentControlInfo | null;
     selectByTag(input: { tag: string }): { items: ContentControlInfo[]; total: number };
     patch(input: { target: ContentControlTarget; tag?: string; alias?: string }): MutationResult;
+    setLockMode(input: { target: ContentControlTarget; lockMode: LockMode }): MutationResult;
     replaceContent(input: { target: ContentControlTarget; content: string; format?: 'text' }): MutationResult;
     text: {
       setValue(input: { target: ContentControlTarget; value: string }): MutationResult;
@@ -194,10 +200,20 @@ const parseTag = (tag: string | undefined): TagPayload | null => {
 // State and DOM
 // ---------------------------------------------------------------------------
 
+/** Child SDT info for nested content controls within a clause. */
+type ChildSdtInfo = {
+  target: ContentControlTarget;
+  label: string;
+  lockMode: LockMode;
+};
+
 const state = {
   editor: null as DemoEditor | null,
   values: {} as Record<FieldKey, string>,
   versions: {} as Record<ClauseId, string>,
+  lockModes: {} as Record<ClauseId, LockMode>,
+  /** Nested SDTs within each clause (e.g., inline smart fields inside a block clause). */
+  children: {} as Record<ClauseId, ChildSdtInfo[]>,
   expandedClause: null as ClauseId | null,
   /** UI controller; created in `initialize`, disposed by `teardown`. */
   ui: null as ReturnType<typeof createSuperDocUI> | null,
@@ -284,18 +300,66 @@ async function initialize(instance: DemoSuperDoc): Promise<void> {
   setBusy(false);
 }
 
-/** Read field values and clause versions from the loaded fixture. */
+/** Read field values, clause versions, lock modes, and children from the loaded fixture. */
 function readStateFromDocument(): void {
   const doc = getDoc();
-  for (const ctrl of doc.contentControls.list({}).items) {
+  const allControls = doc.contentControls.list({}).items;
+
+  // Build a map of clause nodeIds to their ClauseId for quick lookup
+  const clauseNodeIdToClauseId = new Map<string, ClauseId>();
+
+  // First pass: process all SDTs, identify clauses and smart fields
+  for (const ctrl of allControls) {
     const tag = parseTag(ctrl.properties?.tag);
     if (!tag) continue;
     if (tag.kind === 'smartField') {
       state.values[tag.key] = ctrl.text ?? '';
     } else if (tag.kind === 'reusableSection') {
       state.versions[tag.sectionId] = tag.version;
+      state.lockModes[tag.sectionId] = ctrl.lockMode;
+      state.children[tag.sectionId] = []; // Initialize empty children array
+      clauseNodeIdToClauseId.set(ctrl.target.nodeId, tag.sectionId);
     }
   }
+
+  // Second pass: for each inline SDT, walk up the parent chain to find a clause ancestor
+  for (const ctrl of allControls) {
+    if (ctrl.target.kind !== 'inline') continue; // Only check inline SDTs
+
+    // Walk up the parent chain to find a clause
+    let current: ContentControlInfo | null = ctrl;
+    let clauseId: ClauseId | undefined;
+
+    while (current) {
+      const parent = doc.contentControls.getParent({ target: current.target });
+      if (!parent) break;
+
+      clauseId = clauseNodeIdToClauseId.get(parent.target.nodeId);
+      if (clauseId) break; // Found a clause ancestor
+
+      current = parent; // Keep walking up
+    }
+
+    if (!clauseId) continue; // Not inside any clause
+
+    // This inline SDT is inside a clause - add it as a child
+    // Use alias from properties, fall back to field label or generic name
+    const alias = ctrl.properties?.alias;
+    const tag = parseTag(ctrl.properties?.tag);
+    const label =
+      alias ||
+      (tag?.kind === 'smartField' ? FIELDS.find((f) => f.key === tag.key)?.label || tag.key : null) ||
+      ctrl.text ||
+      `Field ${state.children[clauseId].length + 1}`;
+
+
+    state.children[clauseId].push({
+      target: ctrl.target,
+      label,
+      lockMode: ctrl.lockMode,
+    });
+  }
+
 }
 
 // ---------------------------------------------------------------------------
@@ -338,6 +402,68 @@ async function applyClauseVersion(clauseId: ClauseId, toVersion: string, body: s
   );
 
   state.versions[clauseId] = toVersion;
+}
+
+/** Toggle lockMode between unlocked and contentLocked for a clause (outer SDT). */
+async function toggleClauseLockMode(clauseId: ClauseId): Promise<void> {
+  const doc = getDoc();
+  const ctrl = findClauseControl(clauseId);
+  if (!ctrl) throw new Error(`Clause ${clauseId} not in document`);
+
+  const currentLock = state.lockModes[clauseId] ?? 'unlocked';
+  const newLock: LockMode = currentLock === 'unlocked' ? 'contentLocked' : 'unlocked';
+
+  assertMutation(
+    doc.contentControls.setLockMode({ target: ctrl.target, lockMode: newLock }),
+    `Could not set lock mode for ${clauseId}`,
+    true,
+  );
+
+  state.lockModes[clauseId] = newLock;
+}
+
+/** Toggle lockMode for a child SDT within a clause. */
+async function toggleChildLockMode(clauseId: ClauseId, childIndex: number): Promise<void> {
+  const doc = getDoc();
+  const children = state.children[clauseId];
+  if (!children || !children[childIndex]) throw new Error(`Child ${childIndex} not found in ${clauseId}`);
+
+  const child = children[childIndex];
+  const newLock: LockMode = child.lockMode === 'unlocked' ? 'contentLocked' : 'unlocked';
+
+  assertMutation(
+    doc.contentControls.setLockMode({ target: child.target, lockMode: newLock }),
+    `Could not set lock mode for child SDT`,
+    true,
+  );
+
+  state.children[clauseId][childIndex].lockMode = newLock;
+}
+
+/** Lock or unlock all SDTs within a clause (the clause itself + all children). */
+async function setAllLockModes(clauseId: ClauseId, lockMode: LockMode): Promise<void> {
+  const doc = getDoc();
+  const ctrl = findClauseControl(clauseId);
+  if (!ctrl) throw new Error(`Clause ${clauseId} not in document`);
+
+  // Lock the outer clause
+  assertMutation(
+    doc.contentControls.setLockMode({ target: ctrl.target, lockMode }),
+    `Could not set lock mode for ${clauseId}`,
+    true,
+  );
+  state.lockModes[clauseId] = lockMode;
+
+  // Lock all children
+  const children = state.children[clauseId] ?? [];
+  for (let i = 0; i < children.length; i++) {
+    assertMutation(
+      doc.contentControls.setLockMode({ target: children[i].target, lockMode }),
+      `Could not set lock mode for child SDT`,
+      true,
+    );
+    state.children[clauseId][i].lockMode = lockMode;
+  }
 }
 
 async function exportDocument(mode: 'raw' | 'clean'): Promise<void> {
@@ -388,20 +514,65 @@ function renderClausesPanel(): void {
     const inDoc = state.versions[clause.id] ?? clause.latestVersion;
     const stale = clause.upgrade != null && inDoc !== clause.latestVersion;
     const expanded = stale && state.expandedClause === clause.id;
+    const lockMode = state.lockModes[clause.id] ?? 'unlocked';
+    const isLocked = lockMode !== 'unlocked';
+    const children = state.children[clause.id] ?? [];
+    const allLocked = isLocked && children.every((c) => c.lockMode !== 'unlocked');
+    const anyLocked = isLocked || children.some((c) => c.lockMode !== 'unlocked');
 
     const card = document.createElement('article');
     card.className = 'clause' + (stale ? ' stale' : ' current') + (expanded ? ' expanded' : '');
+
+    // Build the children lock controls HTML (collapsible Fields section)
+    const childItems = children.map(
+      (child, i) => {
+        const isLocked = child.lockMode !== 'unlocked';
+        return `<div class="clause-child">
+        <span class="clause-child-label">${escapeHtml(child.label)}</span>
+        <button class="clause-child-lock ${isLocked ? 'is-locked' : ''}" data-child-index="${i}" type="button">
+          <span class="lock-label">${isLocked ? 'Locked' : 'Unlocked'}</span>
+          ${isLocked ? ICON_LOCKED : ICON_UNLOCKED}
+        </button>
+      </div>`;
+      },
+    );
+
+    const childrenHtml =
+      children.length > 0
+        ? `<div class="clause-fields">
+        <button class="clause-fields-toggle" type="button">
+          <span class="clause-fields-arrow">▼</span>
+          <span class="clause-fields-title">Field Lock Controls</span>
+        </button>
+        <div class="clause-fields-list">${childItems.join('')}</div>
+      </div>`
+        : '';
+
+    // Build the lock controls HTML (only show if there are children)
+    const lockControlsHtml =
+      children.length > 0
+        ? `
+      <div class="clause-lock-controls">
+        ${childrenHtml}
+        <button class="clause-lock-all ${allLocked ? 'is-locked' : ''}" type="button">
+          <span class="lock-label">${allLocked ? 'Unlock All' : 'Lock All'}</span>
+          ${allLocked ? ICON_LOCKED : ICON_UNLOCKED}
+        </button>
+      </div>
+    `
+        : '';
 
     if (stale && clause.upgrade) {
       const upgrade = clause.upgrade;
       const previewHtml = upgrade.preview.map(renderSegment).join('');
       card.innerHTML = `
         <header class="clause-header">
+          <div class="clause-status">Update Available</div>
           <h3 class="clause-label">${escapeHtml(clause.label)}</h3>
-          <span class="clause-status">Update available</span>
         </header>
         <p class="clause-summary">${escapeHtml(upgrade.summary)}</p>
-        <p class="clause-meta">Document ${escapeHtml(inDoc)} \u00b7 Library ${escapeHtml(upgrade.version)}</p>
+        <p class="clause-meta">Document ${escapeHtml(inDoc)} · Library ${escapeHtml(upgrade.version)}</p>
+        ${lockControlsHtml}
         <button class="btn clause-review" type="button">${expanded ? 'Hide' : 'Review'}</button>
         ${
           expanded
@@ -432,8 +603,36 @@ function renderClausesPanel(): void {
           <span class="clause-status muted">Current</span>
         </header>
         <p class="clause-meta">Document ${escapeHtml(inDoc)}</p>
+        ${lockControlsHtml}
       `;
     }
+
+    // Wire up fields toggle (collapse/expand)
+    card.querySelector<HTMLButtonElement>('.clause-fields-toggle')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      const fields = btn.closest('.clause-fields');
+      fields?.classList.toggle('collapsed');
+    });
+
+    // Wire up child lock toggles
+    card.querySelectorAll<HTMLButtonElement>('.clause-child-lock').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const childIndex = parseInt(btn.dataset.childIndex ?? '0', 10);
+        const child = children[childIndex];
+        const childLocked = child?.lockMode !== 'unlocked';
+        void run(`${child?.label ?? 'SDT'}: ${childLocked ? 'unlocked' : 'locked'}`, async () => {
+          await toggleChildLockMode(clause.id, childIndex);
+        });
+      });
+    });
+
+    // Wire up lock all / unlock all button
+    card.querySelector<HTMLButtonElement>('.clause-lock-all')?.addEventListener('click', () => {
+      const newMode: LockMode = allLocked ? 'unlocked' : 'contentLocked';
+      void run(`${clause.label}: ${allLocked ? 'all unlocked' : 'all locked'}`, async () => {
+        await setAllLockModes(clause.id, newMode);
+      });
+    });
 
     clausesPanelEl.appendChild(card);
   }

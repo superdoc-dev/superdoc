@@ -26,5 +26,7 @@ import { normalizeSdtContentChildren } from '../sdt/helpers/sdt-envelope.js';
  * @returns {Array<{ node: any, cellSdt: any }>}
  */
 export const normalizeRowCellChildren = (row) => {
-  return normalizeSdtContentChildren(row, { childName: 'w:tc', metadataKey: 'cellSdt', scope: 'cell' });
+  return /** @type {Array<{ node: any, cellSdt: any }>} */ (
+    normalizeSdtContentChildren(row, { childName: 'w:tc', metadataKey: 'cellSdt', scope: 'cell' })
+  );
 };

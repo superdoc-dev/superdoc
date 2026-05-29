@@ -6395,6 +6395,66 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(layout.pages[3].fragments.find((f) => f.blockId === 'p4')?.y).toBeCloseTo(110, 0);
   });
 
+  it('uses inherited footer refs across sections for margin heights', () => {
+    const sb0: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb0-footer',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      margins: {},
+    };
+    const sb1: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb1-footer',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      margins: {},
+    };
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, footer: 30 },
+      sectionMetadata: [{ sectionIndex: 0, footerRefs: { default: 'f0-default' } }, { sectionIndex: 1 }],
+      footerContentHeightsByRId: new Map([['f0-default', 80]]),
+    };
+
+    const layout = layoutDocument(
+      [sb0, tallBlock('p1-footer'), sb1, tallBlock('p2-footer')],
+      [{ kind: 'sectionBreak' }, tallMeasure, { kind: 'sectionBreak' }, tallMeasure],
+      options,
+    );
+
+    expect(layout.pages[1].margins?.bottom).toBeCloseTo(110, 0);
+  });
+
+  it('uses metadata matched by sparse sectionIndex for title-page header selection', () => {
+    const sb0: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb0-sparse',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      margins: {},
+    };
+    const sb2: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb2-sparse',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 2 },
+      margins: {},
+    };
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      sectionMetadata: [{ sectionIndex: 0 }, { sectionIndex: 2, titlePg: true, headerRefs: { first: 'h2-first' } }],
+      headerContentHeightsByRId: new Map([['h2-first', 100]]),
+    };
+
+    const layout = layoutDocument(
+      [sb0, tallBlock('p1-sparse'), sb2, tallBlock('p2-sparse')],
+      [{ kind: 'sectionBreak' }, tallMeasure, { kind: 'sectionBreak' }, tallMeasure],
+      options,
+    );
+
+    expect(layout.pages[1].fragments.find((f) => f.blockId === 'p2-sparse')?.y).toBeCloseTo(130, 0);
+  });
+
   it('resets to base margin when selected first variant is blank', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },

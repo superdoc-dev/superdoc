@@ -91,4 +91,31 @@ describe('header/footer effective ref resolution', () => {
       }),
     ).toBe('even');
   });
+
+  it('returns null for non-positive page numbers', () => {
+    expect(
+      selectHeaderFooterVariantForPage({
+        documentPageNumber: 0,
+        sectionPageNumber: 1,
+        titlePg: false,
+        alternateHeaders: false,
+      }),
+    ).toBeNull();
+    expect(
+      selectHeaderFooterVariantForPage({
+        documentPageNumber: 1,
+        sectionPageNumber: 0,
+        titlePg: false,
+        alternateHeaders: false,
+      }),
+    ).toBeNull();
+    expect(
+      selectHeaderFooterVariantForPage({
+        documentPageNumber: -1,
+        sectionPageNumber: -1,
+        titlePg: false,
+        alternateHeaders: true,
+      }),
+    ).toBeNull();
+  });
 });

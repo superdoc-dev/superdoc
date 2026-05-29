@@ -39,4 +39,10 @@ describe('resolveEffectiveRef', () => {
       resolvedVariant: 'default',
     });
   });
+
+  it('returns null when resolving before the first section', () => {
+    const sections = [projection(0, { default: 'h0-default' })];
+
+    expect(resolveEffectiveRef(editor, sections, 0, 'header', 'default')).toBeNull();
+  });
 });

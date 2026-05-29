@@ -1037,7 +1037,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
       // Set numbering for first section from metadata
       const firstSectionMetadata = Number.isFinite(firstMetadataIndex)
-        ? sectionMetadataList[firstMetadataIndex]
+        ? getSectionMetadata(firstMetadataIndex)
         : undefined;
       if (firstSectionMetadata?.numbering) {
         if (firstSectionMetadata.numbering.format) activeNumberFormat = firstSectionMetadata.numbering.format;
@@ -1109,7 +1109,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       pendingSectionIndex = metadataIndex;
     }
     // Get section metadata for numbering if available
-    const sectionMetadata = Number.isFinite(metadataIndex) ? sectionMetadataList[metadataIndex] : undefined;
+    const sectionMetadata = Number.isFinite(metadataIndex) ? getSectionMetadata(metadataIndex) : undefined;
     // Schedule numbering change for next page - prefer metadata over block
     if (sectionMetadata?.numbering) {
       pendingNumbering = { ...sectionMetadata.numbering };
@@ -1435,6 +1435,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     };
   };
   const sectionMetadataList = options.sectionMetadata ?? [];
+  const getSectionMetadata = (sectionIndex: number) =>
+    sectionMetadataList.find((section, fallbackIndex) => (section.sectionIndex ?? fallbackIndex) === sectionIndex);
   const runtimeSectionRefsByIndex = new Map<number, SectionRefs>();
   const buildHeaderFooterResolutionSections = (): HeaderFooterResolutionSection[] => {
     const sectionIndexes = new Set<number>();
@@ -1445,7 +1447,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     return Array.from(sectionIndexes)
       .sort((a, b) => a - b)
       .map((sectionIndex) => {
-        const metadata = sectionMetadataList.find((section) => section.sectionIndex === sectionIndex);
+        const metadata = getSectionMetadata(sectionIndex);
         const runtimeRefs = runtimeSectionRefsByIndex.get(sectionIndex);
         return {
           sectionIndex,
@@ -1631,7 +1633,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const sectionPageNumber = newPageNumber - firstPageInSection + 1;
 
         // Get section metadata for titlePg setting
-        const sectionMetadata = sectionMetadataList[activeSectionIndex];
+        const sectionMetadata = getSectionMetadata(activeSectionIndex);
         const titlePgEnabled = sectionMetadata?.titlePg ?? false;
         const alternateHeaders = options.alternateHeaders ?? false;
 
@@ -2222,7 +2224,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
       // Get section metadata for numbering if available
-      const sectionMetadata = Number.isFinite(metadataIndex) ? sectionMetadataList[metadataIndex] : undefined;
+      const sectionMetadata = Number.isFinite(metadataIndex) ? getSectionMetadata(metadataIndex) : undefined;
       if (sectionMetadata?.numbering) {
         if (isFirstSection) {
           // First section: apply immediately

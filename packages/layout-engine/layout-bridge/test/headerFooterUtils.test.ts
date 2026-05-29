@@ -444,6 +444,28 @@ describe('headerFooterUtils', () => {
       expect(identifier.footerIds.odd).toBe('converter-f-odd');
     });
 
+    it('should prefer non-null section refs over converter fallbacks in section-aware resolution', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'section-h-default' },
+          footerRefs: { default: 'section-f-default' },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, undefined, {
+        headerIds: { default: 'converter-h-default' },
+        footerIds: { default: 'converter-f-default' },
+      });
+
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'header' }),
+      ).toBe('section-h-default');
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'footer' }),
+      ).toBe('section-f-default');
+    });
+
     it('should handle missing converterIds parameter gracefully', () => {
       const sectionMetadata: SectionMetadata[] = [
         {

@@ -14,3 +14,38 @@ export const getSdtEnvelopeParts = (node) => {
     sdtContent: elements.find((el) => el?.name === 'w:sdtContent') ?? null,
   };
 };
+
+/**
+ * Normalize direct children plus same-level SDT wrappers into the child stream
+ * a parent translator consumes.
+ *
+ * @param {any} parent
+ * @param {{ childName: string, metadataKey: string, scope: string }} config
+ * @returns {Array<{ node: any } & Record<string, any>>}
+ */
+export const normalizeSdtContentChildren = (parent, { childName, metadataKey, scope }) => {
+  const out = [];
+  const children = Array.isArray(parent?.elements) ? parent.elements : [];
+  for (const child of children) {
+    if (!child || typeof child.name !== 'string') continue;
+    if (child.name === childName) {
+      out.push({ node: child, [metadataKey]: null });
+      continue;
+    }
+    if (child.name === 'w:sdt') {
+      const { sdtPr, sdtEndPr, sdtContent } = getSdtEnvelopeParts(child);
+      const innerChildren = sdtContent?.elements?.filter((el) => el?.name === childName) ?? [];
+      if (innerChildren.length === 1 && sdtPr) {
+        out.push({
+          node: innerChildren[0],
+          [metadataKey]: { scope, sdtPr, sdtEndPr },
+        });
+      } else {
+        for (const innerChild of innerChildren) {
+          out.push({ node: innerChild, [metadataKey]: null });
+        }
+      }
+    }
+  }
+  return out;
+};

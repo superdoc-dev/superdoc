@@ -472,6 +472,48 @@ describe('w:tbl translator', () => {
       expect(rowChildren[1]).toBe(bareTr);
     });
 
+    it('keeps rowSdt wrappers aligned across alternating bare and wrapped rows', () => {
+      const bareTr1 = { name: 'w:tr', comment: 'bare row 1' };
+      const wrappedTr1 = { name: 'w:tr', comment: 'wrapped row 1' };
+      const bareTr2 = { name: 'w:tr', comment: 'bare row 2' };
+      const wrappedTr2 = { name: 'w:tr', comment: 'wrapped row 2' };
+      vi.mocked(translateChildNodes).mockReturnValueOnce([bareTr1, wrappedTr1, bareTr2, wrappedTr2]);
+
+      const tableNode = {
+        type: 'table',
+        attrs: {},
+        content: [
+          { type: 'tableRow', attrs: {}, content: [] },
+          {
+            type: 'tableRow',
+            attrs: { rowSdt: { scope: 'row', sdtPr: ROW_SDT_PR, sdtEndPr: null } },
+            content: [],
+          },
+          { type: 'tableRow', attrs: {}, content: [] },
+          {
+            type: 'tableRow',
+            attrs: { rowSdt: { scope: 'row', sdtPr: ROW_SDT_PR, sdtEndPr: ROW_SDT_END_PR } },
+            content: [],
+          },
+        ],
+      };
+
+      const result = translator.decode({ node: tableNode, extraParams: {} });
+      const rowChildren = result.elements.filter((el) => el.name === 'w:sdt' || el.name === 'w:tr');
+
+      expect(rowChildren).toHaveLength(4);
+      expect(rowChildren[0]).toBe(bareTr1);
+      expect(rowChildren[1]).toEqual({
+        name: 'w:sdt',
+        elements: [ROW_SDT_PR, { name: 'w:sdtContent', elements: [wrappedTr1] }],
+      });
+      expect(rowChildren[2]).toBe(bareTr2);
+      expect(rowChildren[3]).toEqual({
+        name: 'w:sdt',
+        elements: [ROW_SDT_PR, ROW_SDT_END_PR, { name: 'w:sdtContent', elements: [wrappedTr2] }],
+      });
+    });
+
     it('should generate a grid if not present', () => {
       const mockNode = {
         type: 'table',

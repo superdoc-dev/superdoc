@@ -308,6 +308,10 @@ const decode = (params, decodedAttrs) => {
 
   const elements = translateChildNodes({ ...params, extraParams });
 
+  // Re-wrap rows that were originally imported as row-level SDT
+  // (ECMA-376 §17.5.2.30, CT_SdtRow). The table schema contains only tableRow
+  // children, so each exported `<w:tr>` advances the source row cursor once;
+  // table properties/grid are inserted after this pass and cannot shift it.
   let rowCursor = 0;
   for (let i = 0; i < elements.length; i += 1) {
     const exportedEl = elements[i];

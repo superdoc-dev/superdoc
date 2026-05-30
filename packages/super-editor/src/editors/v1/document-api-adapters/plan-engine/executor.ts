@@ -998,6 +998,13 @@ export function executeTextRewrite(
         tr.replaceWith(remap(change.docFrom), remap(change.docTo), content);
       }
     }
+  } else if (trimmedNew.length === 0) {
+    // Pure deletion after trimming: a non-empty replacement whose new text is
+    // fully contained in the old text's common prefix + suffix collapses to an
+    // empty delta (e.g. "best endeavours to:" → "endeavours to:" leaves
+    // trimmedNew === ""). Delete the removed range rather than building
+    // schema.text('') — ProseMirror rejects empty text nodes.
+    tr.delete(trimmedFrom, trimmedTo);
   } else {
     // 0 or 1 word change: replace just the trimmed range.
     const content = buildTextWithTabs(editor.state.schema, trimmedNew, asProseMirrorMarks(marks));

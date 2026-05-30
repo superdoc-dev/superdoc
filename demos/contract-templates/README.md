@@ -1,20 +1,29 @@
 # Contract templates
 
-Runtime contract template management built on Word content controls. A Mutual NDA opens with tagged smart fields and six versioned clauses. The app detects stale clauses against a library, updates them in place, and exports either a raw template DOCX or a clean final DOCX. Single-page, no backend, no framework.
+Build your own UI for Word content controls (SDT fields) on top of SuperDoc. SuperDoc's built-in field chrome is off (`modules: { contentControls: { chrome: 'none' } }`), so you paint the field and clause look yourself and drive every interaction through the public surface: `editor.doc.*` and `superdoc/ui`. The document stays a real, Word-compatible `.docx` that round-trips. Single page, no backend, no framework.
 
-This is a demo: it composes multiple content-control patterns into a product workflow. For the smallest copy-pasteable primitive, see the [tagged inline text example](../../examples/document-api/content-controls/tagged-inline-text).
+The model is a locked template you assemble from a component library. A Mutual NDA opens with its fields and clauses already in place. The document is a locked surface: you can't change a control by typing in it. Instead you drag building blocks in from the sidebar and fill values through a form. Every change goes through the public API.
 
-## What this shows
+## What it shows
 
-The starting document is a Mutual NDA at `public/nda-template.docx` with thirteen content controls already in place: seven inline plain-text controls (smart fields) and six block rich-text controls (reusable clauses). Receiving party and Purpose each appear twice — once in the header sentence and once nested inside the Permitted Use clause. Each control carries a `w:tag` with a JSON payload. On boot, SuperDoc imports the DOCX, parses the SDTs, and the demo reads field values and clause versions straight from the parsed controls.
+The starting document is `public/nda-template.docx`: inline plain-text fields and six block rich-text clauses, each carrying a `w:tag` with a JSON payload (`{ kind: 'smartField', key }` or `{ kind: 'reusableSection', sectionId }`). Receiving party and Purpose appear twice, in the header sentence and nested inside the Permitted Use clause.
 
-Three flows of the same primitive, composed into one app:
+**Locked controls.** On load, every field and clause is set to `contentLocked` (`ui.contentControls.setLockMode`). You can't change a value or a clause by typing in the document. This is the template surface; the custom UI drives all edits.
 
-1. **Smart fields.** Seven inline plain-text content controls across five field keys share a `tag` shape (`{ kind: 'smartField', key: 'disclosingParty' }`) per occurrence. They were authored as Word "Plain Text Content Controls" (`ContentControls.Add(1, range)`), so SuperDoc resolves them as `controlType: 'text'`. Edit a value in the Fields tab; every occurrence of that field updates live via `selectByTag` + per-occurrence `text.setValue`. Receiving party and Purpose appear twice (header sentence and nested inside the Permitted Use clause), so a single edit fans across both locations.
-2. **Versioned reusable clauses.** Six block rich-text content controls carry `{ kind: 'reusableSection', sectionId, version }` in their tags. They were authored as Word "Rich Text Content Controls" (`ContentControls.Add(0, range)`), which produces typeless sdtPr; SuperDoc resolves them as `controlType: 'richText'` per ECMA-376 §17.5.2.26. The app reads each live version from `contentControls.list`, compares against the clause library, and surfaces a Review CTA when they diverge. Review expands a card with the current clause text alongside the library clause text plus a Replace with library clause action that calls `replaceContent` + `patch`.
-3. **Export.** `superdoc.export({ exportedName, isFinalDoc, triggerDownload })` has two buttons: **Export raw DOCX** uses `isFinalDoc: false` to preserve content controls and tags for future template/library updates; **Export clean DOCX** uses `isFinalDoc: true` to flatten controls so the filled values are in place.
+**Template tab, the building-block library.** Two catalogs, fields and clauses, each styled to match what it inserts:
 
-Every mutation goes through `editor.doc.*`. The same operation set runs headless via the Node SDK and CLI.
+- Smart-field chips wear the same blue token look as the in-document field (CSS on `.superdoc-structured-content-inline[data-sdt-tag*='smartField']`). Drag a chip onto the document, or click to insert it at the cursor. An unfilled field shows its field-name token (e.g. `DISCLOSING_PARTY`) as a stand-in placeholder. That token is literal text content, not a native SDT placeholder.
+- Clause cards wear the same blue block look as the in-document clause and carry metadata (category, jurisdiction, version) and a status. A clause is single-use, like an inclusion checklist: a card already in the contract reads **In contract** and clicking it reveals the existing clause; an available card reads **Add clause** and drags or clicks in. The catalog includes clauses that aren't in the document yet (e.g. Indemnification, Return of Materials).
+
+Inserts resolve the drop point with `ui.viewport.positionAt({ x, y })` and create the control with `editor.doc.create.contentControl({ kind, at, content, tag, lockMode })`. A field inserts inline at the exact caret; a clause snaps to a block boundary so it lands as a clean section instead of splitting a paragraph. Clicking a control in the document highlights its chip or card (`content-control:click`).
+
+A clause is assembled from structured `parts`: prose plus `{ field }` slots. Inserting "Permitted Use" creates the block and then wraps each slot as a nested, locked inline smart field, so the inserted clause carries real Receiving party and Purpose fields, just like the seeded one. Filling those fields in the Values tab updates the clause and the header sentence together.
+
+**Values tab, fill the fields.** Edit a value and it fans to every occurrence of that field, including the ones nested inside a locked clause. Each write briefly unlocks the clauses, sets the value (`selectByTag` + `text.setValue`), then relocks them. A clause's content lock otherwise silently vetoes writes to anything nested in it, so without this the nested occurrence would never update. The form is the only way to change a value.
+
+**Export.** `superdoc.export({ exportedName, isFinalDoc, triggerDownload })`: raw DOCX keeps the controls and tags; clean DOCX flattens them so the filled values are in place.
+
+Every mutation goes through `editor.doc.*`, so the same operations run headless via the Node SDK and CLI.
 
 ## Run
 
@@ -23,17 +32,19 @@ pnpm install
 pnpm dev
 ```
 
-The seeded NDA ships with three clauses behind their latest versions (Confidentiality, Governing Law, Limitation of Liability). The Clauses tab shows a Review CTA on each; expanding a card lets you compare the in-document clause with the library version and replace it in place. Edit a value in the Fields tab and watch it fan to every occurrence in the document (header and nested locations). Export raw DOCX when you want to keep the template controls, or export clean DOCX when you want a final document with the values in place.
-
-## Related work
-
-If you need a **ready-made React component for authoring templates** with content controls (`{{` trigger menu, linked field groups, owner/signer field types, DOCX export), see [`@superdoc-dev/template-builder`](https://docs.superdoc.dev/solutions/template-builder/introduction). This demo focuses on the *runtime* side: an app filling and updating already-tagged regions. Template Builder focuses on the *authoring* side.
+Open the Template tab. Drag a field or clause into the document, or click one to insert it at the cursor. Switch to the Values tab and edit a value; it updates every occurrence, header and nested. Export raw DOCX to keep the controls, or clean DOCX for a final document.
 
 ## Honest limits
 
-- All content controls in the fixture are `unlocked`. Locked controls (`sdtLocked`, `sdtContentLocked`) are not driven programmatically here.
-- Smart field values are pushed through `text.setValue` (the typed API for plain-text controls). Clause bodies are pushed through `replaceContent` because rich-text controls don't have a typed setter.
-- Clause bodies in the seeded fixture are single-paragraph plain prose; the rich-text wrapper supports formatting/lists/tables when authored that way, but the demo doesn't exercise those.
+- An inserted clause is a single paragraph of prose with field slots. Multi-paragraph clauses, lists, tables, or other formatting inside a clause aren't modeled here; the slots become inline text fields. (The block control is a `richText` SDT, so richer bodies are possible; this demo just doesn't author them.)
+- A drop snaps to the start of the block under the cursor, so a clause lands at a block boundary rather than at the exact pixel.
+- The placeholder shown in an unfilled field is the field-name token, set as content. SuperDoc's native empty-control placeholder text is renderer-hardcoded and not settable through the API.
+- Every control is `contentLocked`. The demo doesn't exercise `sdtLocked` or `sdtContentLocked`.
+- Clause version review / replace (detect an outdated clause, swap in the library text) is intentionally out of scope. This demo proves template assembly, not the clause lifecycle.
+
+## Related work
+
+If you need a ready-made React component for authoring templates with content controls (`{{` trigger menu, linked field groups, owner/signer field types, DOCX export), see [`@superdoc-dev/template-builder`](https://docs.superdoc.dev/solutions/template-builder/introduction). This demo shows how to build that kind of UI yourself on the public API.
 
 ## See also
 

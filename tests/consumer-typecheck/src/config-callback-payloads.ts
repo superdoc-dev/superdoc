@@ -37,6 +37,8 @@
  */
 import type {
   Config,
+  ContentControlActiveChangePayload,
+  ContentControlClickPayload,
   EditorUpdateEvent,
   ListDefinitionsPayload,
   SuperDocAwarenessUpdatePayload,
@@ -71,6 +73,15 @@ const _onLockedOk: AssertEqual<ParamOf<Config['onLocked']>, SuperDocLockedPayloa
 
 // ─── onCommentsUpdate ───────────────────────────────────────────────
 const _onCommentsUpdateOk: AssertEqual<ParamOf<Config['onCommentsUpdate']>, SuperDocCommentsUpdatePayload> = true;
+
+// ─── onContentControlActiveChange / onContentControlClick ───────────
+// The public payload types must match what the Config callbacks receive
+// (and be importable by name from 'superdoc').
+const _onContentControlActiveChangeOk: AssertEqual<
+  ParamOf<Config['onContentControlActiveChange']>,
+  ContentControlActiveChangePayload
+> = true;
+const _onContentControlClickOk: AssertEqual<ParamOf<Config['onContentControlClick']>, ContentControlClickPayload> = true;
 
 // ─── onAwarenessUpdate ──────────────────────────────────────────────
 // Field set is `{ states, added, removed, superdoc }` - NOT `context`.

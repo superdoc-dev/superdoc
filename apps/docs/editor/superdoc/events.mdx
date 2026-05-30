@@ -243,6 +243,55 @@ superdoc.on('fonts-resolved', ({ documentFonts, unsupportedFonts }) => {
 ```
 </CodeGroup>
 
+## Content controls (SDT fields)
+
+### `content-control:active-change`
+
+Fires when selection enters a content control, switches between controls, or leaves all controls.
+
+```javascript
+superdoc.on('content-control:active-change', ({ active, previous, activePath, source }) => {
+  // source: 'keyboard' | 'pointer'
+  // active / previous: SdtRef | null
+  // activePath: SdtRef[] - full active stack, innermost first ([] when none)
+});
+```
+
+`SdtRef` shape:
+
+```ts
+type SdtRef = {
+  id: string;
+  tag?: string;
+  alias?: string;
+  controlType: string;
+  scope: 'inline' | 'block';
+};
+```
+
+`active` is the deepest control (`activePath[0]`); `activePath` holds the full stack, innermost first. Controls without an `id` do not emit these events.
+
+How to interpret:
+
+1. Focus (`null -> A`): `previous === null && active !== null`
+2. Switch (`A -> B`): `previous !== null && active !== null && previous.id !== active.id`
+3. Blur (`A -> null`): `previous !== null && active === null`
+
+### `content-control:click`
+
+Fires on pointer click inside a content control.
+
+```javascript
+superdoc.on('content-control:click', ({ target, source }) => {
+  // source is always 'pointer'
+  // target: SdtRef
+});
+```
+
+Both are also available as config callbacks: `onContentControlActiveChange` and `onContentControlClick`.
+
+To build your own content-control UI on these events, see [Custom UI > Content controls](/editor/custom-ui/content-controls).
+
 ## Comments events
 
 ### `comments-update`

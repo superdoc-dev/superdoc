@@ -400,11 +400,26 @@ const onEditorBeforeCreate = ({ editor }) => {
   proxy.$superdoc?.broadcastEditorBeforeCreate(editor);
 };
 
+const onEditorContentControlFocus = (payload) => {
+  proxy.$superdoc.emit('content-control:active-change', payload);
+};
+
+const onEditorContentControlBlur = (payload) => {
+  proxy.$superdoc.emit('content-control:active-change', payload);
+};
+
+const onEditorContentControlClick = (payload) => {
+  proxy.$superdoc.emit('content-control:click', payload);
+};
+
 const onEditorCreate = ({ editor }) => {
   const { documentId } = editor.options;
   const doc = getDocument(documentId);
   doc.setEditor(editor);
   proxy.$superdoc.setActiveEditor(editor);
+  editor.on?.('contentControlFocus', onEditorContentControlFocus);
+  editor.on?.('contentControlBlur', onEditorContentControlBlur);
+  editor.on?.('contentControlClick', onEditorContentControlClick);
   proxy.$superdoc.broadcastEditorCreate(editor);
   // Initialize the ai layer
   initAiLayer(true);

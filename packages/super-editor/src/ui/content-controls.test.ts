@@ -351,6 +351,92 @@ describe('ui.contentControls handle (SD-3157)', () => {
     ui.destroy();
   });
 
+  it('scrollIntoView({ id }) returns { success: false } for an empty or missing id without touching the presentation', async () => {
+    const { superdoc, editor } = makeStub({ items: [makeItem('sdt-1')] });
+    const ui = createSuperDocUI({ superdoc });
+    // Attach after construction: a `presentationEditor` present during the
+    // toolbar-snapshot build would need the full presentation interface.
+    const scroll = vi.fn().mockResolvedValue(true);
+    (editor as { presentationEditor?: unknown }).presentationEditor = { scrollContentControlIntoView: scroll };
+
+    expect(await ui.contentControls.scrollIntoView({ id: '' })).toEqual({ success: false });
+    // @ts-expect-error exercising the runtime guard for a missing id
+    expect(await ui.contentControls.scrollIntoView({})).toEqual({ success: false });
+    expect(scroll).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('scrollIntoView({ id }) returns { success: false } when the presentation layer is not ready', async () => {
+    // The stub editor has no `presentationEditor` (e.g. SSR / pre-mount).
+    const { superdoc } = makeStub({ items: [makeItem('sdt-1')] });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(await ui.contentControls.scrollIntoView({ id: 'sdt-1' })).toEqual({ success: false });
+
+    ui.destroy();
+  });
+
+  it('scrollIntoView({ id }) delegates to the presentation scroll with center/smooth defaults and maps the boolean to { success }', async () => {
+    const { superdoc, editor } = makeStub({ items: [makeItem('sdt-1')] });
+    const ui = createSuperDocUI({ superdoc });
+    const scroll = vi.fn().mockResolvedValue(true);
+    (editor as { presentationEditor?: unknown }).presentationEditor = { scrollContentControlIntoView: scroll };
+
+    expect(await ui.contentControls.scrollIntoView({ id: 'sdt-1' })).toEqual({ success: true });
+    expect(scroll).toHaveBeenCalledWith('sdt-1', { block: 'center', behavior: 'smooth' });
+
+    // Explicit options pass through; a falsy presentation result maps to failure.
+    scroll.mockResolvedValueOnce(false);
+    expect(await ui.contentControls.scrollIntoView({ id: 'sdt-1', block: 'start', behavior: 'auto' })).toEqual({
+      success: false,
+    });
+    expect(scroll).toHaveBeenLastCalledWith('sdt-1', { block: 'start', behavior: 'auto' });
+
+    ui.destroy();
+  });
+
+  it('focus({ id }) returns { success: false, reason: "invalid-id" } for an empty id without touching the presentation', async () => {
+    const { superdoc, editor } = makeStub({ items: [makeItem('sdt-1')] });
+    const ui = createSuperDocUI({ superdoc });
+    const focus = vi.fn().mockResolvedValue({ success: true });
+    (editor as { presentationEditor?: unknown }).presentationEditor = { focusContentControl: focus };
+
+    expect(await ui.contentControls.focus({ id: '' })).toEqual({ success: false, reason: 'invalid-id' });
+    expect(focus).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('focus({ id }) returns { success: false, reason: "not-ready" } when the presentation layer is not ready', async () => {
+    const { superdoc } = makeStub({ items: [makeItem('sdt-1')] });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(await ui.contentControls.focus({ id: 'sdt-1' })).toEqual({ success: false, reason: 'not-ready' });
+
+    ui.destroy();
+  });
+
+  it('focus({ id }) delegates to the presentation focus with center/smooth defaults and returns its result', async () => {
+    const { superdoc, editor } = makeStub({ items: [makeItem('sdt-1')] });
+    const ui = createSuperDocUI({ superdoc });
+    const focus = vi.fn().mockResolvedValue({ success: true });
+    (editor as { presentationEditor?: unknown }).presentationEditor = { focusContentControl: focus };
+
+    expect(await ui.contentControls.focus({ id: 'sdt-1' })).toEqual({ success: true });
+    expect(focus).toHaveBeenCalledWith('sdt-1', { block: 'center', behavior: 'smooth' });
+
+    // Explicit options pass through; the presentation result is returned verbatim.
+    focus.mockResolvedValueOnce({ success: false, reason: 'not-found' });
+    expect(await ui.contentControls.focus({ id: 'nope', block: 'start', behavior: 'auto' })).toEqual({
+      success: false,
+      reason: 'not-found',
+    });
+    expect(focus).toHaveBeenLastCalledWith('nope', { block: 'start', behavior: 'auto' });
+
+    ui.destroy();
+  });
+
   it('observe receives the snapshot value directly (parallel to comments/trackChanges)', async () => {
     // `observe` is the value-shaped alias of `subscribe`. The demo
     // (`field-chip.ts`) consumes it directly, so an explicit test

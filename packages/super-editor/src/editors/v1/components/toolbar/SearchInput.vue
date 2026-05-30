@@ -17,7 +17,7 @@ const handleSubmit = () => {
 
 <template>
   <div class="search-input-ctn">
-    <div class="row">
+    <div class="sd-row">
       <input
         :ref="searchRef"
         v-model="searchValue"
@@ -28,8 +28,8 @@ const handleSubmit = () => {
         @keydown.enter.stop.prevent="handleSubmit"
       />
     </div>
-    <div class="row submit">
-      <button class="submit-btn" @click="handleSubmit">Apply</button>
+    <div class="sd-row sd-submit">
+      <button class="sd-submit-btn" @click="handleSubmit">Apply</button>
     </div>
   </div>
 </template>
@@ -57,15 +57,15 @@ const handleSubmit = () => {
     }
   }
 
-  .row {
+  .sd-row {
     display: flex;
-    &.submit {
+    &.sd-submit {
       margin-top: 10px;
       flex-direction: row-reverse;
     }
   }
 
-  .submit-btn {
+  .sd-submit-btn {
     display: flex;
     justify-content: center;
     align-items: center;

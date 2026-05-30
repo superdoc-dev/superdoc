@@ -1,7 +1,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { test, expect, type SuperDocFixture } from '../../fixtures/superdoc.js';
-import { getInlineSdtRange, getInlineSdtSnapshot } from '../../helpers/sdt.js';
+import { getInlineSdtRange, getInlineSdtSnapshot, selectionScope } from '../../helpers/sdt.js';
 
 /**
  * Select-all (Ctrl/Cmd+A) with the caret inside an inline SDT.
@@ -31,7 +31,7 @@ async function selectAllInside(superdoc: SuperDocFixture, fixture: string) {
   await superdoc.waitForStable();
   await superdoc.press('ControlOrMeta+a');
   await superdoc.waitForStable();
-  return getInlineSdtSnapshot(superdoc.page, sdt!.id);
+  return { sdt: sdt!, snap: await getInlineSdtSnapshot(superdoc.page, sdt!.id) };
 }
 
 test.describe('SDT select-all from inside - Word parity', () => {
@@ -41,14 +41,11 @@ test.describe('SDT select-all from inside - Word parity', () => {
     test(`${mode}: select-all inside the SDT selects the whole document, not just the control`, async ({
       superdoc,
     }) => {
-      const s = await selectAllInside(superdoc, FIXTURE[mode]);
-      expect(s.empty).toBe(false);
-      const docSize = await superdoc.page.evaluate(() => (window as any).editor.state.doc.content.size);
-      // selection spans the whole body, not just the SDT content
-      expect(s.from).toBeLessThanOrEqual(1);
-      expect(s.to).toBeGreaterThanOrEqual(docSize - 1);
+      const { sdt, snap } = await selectAllInside(superdoc, FIXTURE[mode]);
+      // Word's contract axis: selection escapes the control to the whole document.
+      expect(selectionScope(snap, sdt)).toBe('whole-document');
       // and the SDT is untouched by a non-destructive select-all
-      expect(s.sdtExists).toBe(true);
+      expect(snap.sdtExists).toBe(true);
     });
   }
 });

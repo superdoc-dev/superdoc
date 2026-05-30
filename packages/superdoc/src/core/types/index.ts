@@ -1227,6 +1227,10 @@ export interface Modules {
      * controls whether the marks render in the document.
      */
     showFormattingMarksButton?: boolean;
+    /**
+     * Show the table of contents insert button in the toolbar. Off by default.
+     */
+    showTableOfContentsButton?: boolean;
   } & Record<string, unknown>;
   /** Link click popover configuration. */
   links?: {
@@ -1433,6 +1437,32 @@ export interface EditorTransactionEvent {
   headerId?: string | null;
   /** Header/footer variant (`default`, `first`, `even`, `odd`) when available. */
   sectionType?: string | null;
+}
+
+export interface SdtRef {
+  id: string;
+  tag?: string;
+  alias?: string;
+  controlType: string;
+  scope: 'inline' | 'block';
+}
+
+export interface ContentControlActiveChangePayload {
+  active: SdtRef | null;
+  previous: SdtRef | null;
+  /**
+   * Active content-control stack for the new selection, innermost first
+   * (matches `ui.contentControls` activeIds). `active` is `activePath[0]`.
+   * Empty when the selection is not inside any control. Lets nested-aware
+   * custom UI read the surrounding controls without combining with observe().
+   */
+  activePath: SdtRef[];
+  source: 'keyboard' | 'pointer';
+}
+
+export interface ContentControlClickPayload {
+  target: SdtRef;
+  source: 'pointer';
 }
 
 export interface SuperDocLayoutEngineOptions {
@@ -1649,6 +1679,10 @@ export interface Config {
   onReady?: (params: SuperDocReadyPayload) => void;
   /** Callback when comments are updated. */
   onCommentsUpdate?: (params: SuperDocCommentsUpdatePayload) => void;
+  /** Callback when active content control changes. */
+  onContentControlActiveChange?: (params: ContentControlActiveChangePayload) => void;
+  /** Callback when user clicks inside a content control. */
+  onContentControlClick?: (params: ContentControlClickPayload) => void;
   /** Callback when awareness is updated. */
   onAwarenessUpdate?: (params: SuperDocAwarenessUpdatePayload) => void;
   /** Callback when the SuperDoc is locked or unlocked. */

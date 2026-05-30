@@ -649,6 +649,51 @@ describe('PresentationEditor - scrollToPosition', () => {
       expect(result).toBe(true);
     });
 
+    it('centers a virtualized match after mount even with ifNeeded (SD-3315)', async () => {
+      // Reaching the async/mount path means the target was off-screen at call time, so it should
+      // center once mounted. The post-mount retry forces ifNeeded:false; without that, a match
+      // that ends up edge-visible after the page scrolls into view would downgrade to 'nearest'
+      // and skip centering. Pin innerHeight so the span counts as "visible" (where the old
+      // forwarded ifNeeded:true would have downgraded).
+      const originalInnerHeight = window.innerHeight;
+      Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+      try {
+        editor = new PresentationEditor({ element: container, documentId: 'test-doc' });
+        await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+        const span = document.createElement('span');
+        span.dataset.pmStart = '140';
+        span.dataset.pmEnd = '160';
+        span.scrollIntoView = vi.fn();
+        span.getBoundingClientRect = vi.fn(
+          () => ({ top: 100, bottom: 120, left: 0, right: 0, width: 0, height: 20 }) as DOMRect,
+        );
+        // Mount page index 1 (covers pos 150) after the async call starts.
+        setTimeout(() => {
+          const mockPage = document.createElement('div');
+          mockPage.setAttribute('data-page-index', '1');
+          mockPage.scrollIntoView = vi.fn();
+          mockPage.appendChild(span);
+          pagesHost.appendChild(mockPage);
+        }, 100);
+
+        const result = await editor.scrollToPositionAsync(150, {
+          block: 'center',
+          ifNeeded: true,
+          suppressSelectionSyncScroll: true,
+        });
+
+        expect(result).toBe(true);
+        // Post-mount retry must center the now-visible match, not downgrade to 'nearest'.
+        expect(span.scrollIntoView).toHaveBeenCalledWith({ block: 'center', inline: 'nearest', behavior: 'auto' });
+        expect(span.scrollIntoView).not.toHaveBeenCalledWith(expect.objectContaining({ block: 'nearest' }));
+      } finally {
+        Object.defineProperty(window, 'innerHeight', { value: originalInnerHeight, configurable: true });
+      }
+    });
+
     it('should return false and warn when page fails to mount within timeout', async () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -670,6 +715,109 @@ describe('PresentationEditor - scrollToPosition', () => {
       expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('failed to mount within timeout'));
 
       consoleWarnSpy.mockRestore();
+    });
+  });
+
+  // SD-3315: "scroll only if needed" mode for search navigation. When the precise match
+  // element is already fully visible, scrolling is downgraded to 'nearest' (a no-op for a
+  // fully-visible element) so next/previous does not re-center an already-visible match.
+  // Off-screen matches keep the requested 'center'. The visibility check measures the match
+  // element against the scroll container; with no scrollable ancestor the container is the
+  // window, so we pin innerHeight for determinism.
+  describe('scrollToPosition — ifNeeded (SD-3315)', () => {
+    let originalInnerHeight: number;
+
+    beforeEach(() => {
+      originalInnerHeight = window.innerHeight;
+      Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(window, 'innerHeight', { value: originalInnerHeight, configurable: true });
+    });
+
+    /** Build a mounted page (index 0) with a match span at pos 50 whose rect we control. */
+    async function setupMatchSpan(rect: { top: number; bottom: number }) {
+      editor = new PresentationEditor({ element: container, documentId: 'test-doc' });
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      mockPage.scrollIntoView = vi.fn();
+
+      const span = document.createElement('span');
+      span.dataset.pmStart = '45';
+      span.dataset.pmEnd = '55';
+      span.scrollIntoView = vi.fn();
+      span.getBoundingClientRect = vi.fn(
+        () =>
+          ({
+            top: rect.top,
+            bottom: rect.bottom,
+            left: 0,
+            right: 0,
+            width: 0,
+            height: rect.bottom - rect.top,
+          }) as DOMRect,
+      );
+      mockPage.appendChild(span);
+      pagesHost.appendChild(mockPage);
+      return { span, mockPage };
+    }
+
+    it('downgrades to nearest (no re-center) when the match is already fully visible', async () => {
+      const { span } = await setupMatchSpan({ top: 100, bottom: 120 }); // inside 0..800
+
+      const result = editor.scrollToPosition(50, { block: 'center', ifNeeded: true });
+
+      expect(result).toBe(true);
+      expect(span.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
+      expect(span.scrollIntoView).not.toHaveBeenCalledWith(expect.objectContaining({ block: 'center' }));
+    });
+
+    it('centers when the match is off-screen, even in ifNeeded mode', async () => {
+      const { span } = await setupMatchSpan({ top: 1000, bottom: 1020 }); // below 800 → off-screen
+
+      const result = editor.scrollToPosition(50, { block: 'center', ifNeeded: true });
+
+      expect(result).toBe(true);
+      expect(span.scrollIntoView).toHaveBeenCalledWith({ block: 'center', inline: 'nearest', behavior: 'auto' });
+    });
+
+    it('centers when the match is partially clipped at the bottom edge', async () => {
+      const { span } = await setupMatchSpan({ top: 790, bottom: 815 }); // top in view, bottom past 800
+
+      editor.scrollToPosition(50, { block: 'center', ifNeeded: true });
+
+      expect(span.scrollIntoView).toHaveBeenCalledWith({ block: 'center', inline: 'nearest', behavior: 'auto' });
+    });
+
+    it('does not change default behavior: a fully visible match still centers without ifNeeded', async () => {
+      const { span } = await setupMatchSpan({ top: 100, bottom: 120 });
+
+      editor.scrollToPosition(50, { block: 'center' });
+
+      expect(span.scrollIntoView).toHaveBeenCalledWith({ block: 'center', inline: 'nearest', behavior: 'auto' });
+    });
+
+    it('centers via the page fallback (no precise match element) even in ifNeeded mode', async () => {
+      editor = new PresentationEditor({ element: container, documentId: 'test-doc' });
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      mockPage.scrollIntoView = vi.fn();
+      // No span with pm data → #findElementAtPosition returns null → page fallback, not measurable.
+      pagesHost.appendChild(mockPage);
+
+      const result = editor.scrollToPosition(50, { block: 'center', ifNeeded: true });
+
+      expect(result).toBe(true);
+      expect(mockPage.scrollIntoView).toHaveBeenCalledWith({ block: 'center', inline: 'nearest', behavior: 'auto' });
     });
   });
 });

@@ -18,7 +18,7 @@ const LAYOUT_ENGINE_ROOT = path.resolve(__dirname, '../../');
 // SD-3222: the v1 ProseMirror adapter now lives inside @superdoc/super-editor
 // (it is v1 SuperEditor's projection from hidden PM state into FlowBlock[]),
 // not in a standalone layout-engine package.
-const V1_ADAPTER_ROOT = path.resolve(__dirname, '../../../../super-editor/src/editors/v1/core/layout-adapter');
+const V1_ADAPTER_ROOT = path.resolve(__dirname, '../../../super-editor/src/editors/v1/core/layout-adapter');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -125,6 +125,11 @@ function expectNoViolations(violations: { file: string; line: string }[]) {
 // ---------------------------------------------------------------------------
 
 describe('architecture boundaries', () => {
+  it('sanity check: architecture guard source roots exist', () => {
+    expect(fs.existsSync(LAYOUT_ENGINE_ROOT)).toBe(true);
+    expect(fs.existsSync(V1_ADAPTER_ROOT)).toBe(true);
+  });
+
   describe('Guard A: style-engine does not leak into layout runtime packages', () => {
     it('painter-dom runtime src does not import @superdoc/style-engine', () => {
       const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'painters/dom/src');

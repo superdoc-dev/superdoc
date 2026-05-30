@@ -30,6 +30,33 @@ new SuperDoc({
 
 The event tells you *what* is active; `getRect` tells you *where* to draw. `active` is an `SdtRef` with `id`, `tag`, `alias`, `controlType`, and `scope`.
 
+## Style the controls in place
+
+Turning off chrome erases the built-in look, including hover and selection. To paint your own field and clause look, set `--sd-content-controls-custom-*` variables on the painted wrapper. Target it by your own `data-sdt-*` attributes. No `!important`, and no need to touch SuperDoc's internal state classes: the painter applies your variables across rest, hover, and selected, so the box stays stable and you never write `.ProseMirror-selectednode` or hover rules yourself.
+
+```css
+/* A field your app tagged { kind: 'smartField', ... } */
+.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-sdt-tag*='smartField'] {
+  --sd-content-controls-custom-inline-border: 1px solid #1355ff;
+  --sd-content-controls-custom-inline-bg: color-mix(in srgb, #1355ff 12%, transparent);
+  --sd-content-controls-custom-inline-hover-bg: color-mix(in srgb, #1355ff 20%, transparent);
+  --sd-content-controls-custom-inline-radius: 4px;
+  --sd-content-controls-custom-inline-padding: 1px 6px;
+}
+
+/* A clause your app tagged { kind: 'reusableSection', ... } */
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-sdt-tag*='reusableSection'] {
+  --sd-content-controls-custom-block-border: 1px solid #d6e0ff;
+  --sd-content-controls-custom-block-border-left: 4px solid #1355ff; /* accent rail */
+  --sd-content-controls-custom-block-bg: color-mix(in srgb, #1355ff 4%, transparent);
+  --sd-content-controls-custom-block-radius: 6px;
+}
+```
+
+`border` is a full CSS shorthand; `border-left` is an optional accent rail for block clauses. The background variables cascade, so set only what changes: `-hover-bg` defaults to `-bg`, and `-selected-bg` defaults to `-hover-bg`.
+
+This is the path for `chrome: 'none'`. To theme the **built-in** chrome instead (`chrome: 'default'`), use the `--sd-content-controls-*` variables (without `custom`).
+
 ## Pick the right surface
 
 | Goal | API |

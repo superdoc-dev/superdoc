@@ -322,6 +322,36 @@ describe('ensureSdtContainerStyles', () => {
     expect(lastChromeShowing).toBeGreaterThan(-1);
     expect(chromeNoneSuppression).toBeGreaterThan(lastChromeShowing);
   });
+
+  it('exposes a --sd-content-controls-custom-* styling surface under chrome-none (SD-3322)', () => {
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    // Inline rest reads the custom vars; the default-preserving fallbacks
+    // (0-width transparent border, no background/radius/padding) keep
+    // chrome-none visually empty when no variable is set.
+    expect(cssText).toContain('background: var(--sd-content-controls-custom-inline-bg, none);');
+    expect(cssText).toContain('border: var(--sd-content-controls-custom-inline-border, 0 solid transparent);');
+    expect(cssText).toContain('padding: var(--sd-content-controls-custom-inline-padding, 0);');
+    expect(cssText).toContain('border-radius: var(--sd-content-controls-custom-inline-radius, 0);');
+
+    // Hover and selected re-assert the SAME border var (constant box, no jitter)
+    // and read the background vars, which cascade from the rest background.
+    expect(cssText).toContain(
+      'background: var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none));',
+    );
+    expect(cssText).toContain(
+      'background: var(--sd-content-controls-custom-inline-selected-bg, var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none)));',
+    );
+
+    // Block exposes the same set plus an accent rail (-border-left) that falls
+    // back to the regular border.
+    expect(cssText).toContain('background: var(--sd-content-controls-custom-block-bg, none);');
+    expect(cssText).toContain(
+      'border-left: var(--sd-content-controls-custom-block-border-left, var(--sd-content-controls-custom-block-border, 0 solid transparent));',
+    );
+  });
 });
 
 describe('ensureTrackChangeStyles', () => {

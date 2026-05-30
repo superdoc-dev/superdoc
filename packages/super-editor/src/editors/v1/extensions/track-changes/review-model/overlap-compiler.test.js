@@ -688,7 +688,7 @@ describe('overlap-compiler: text-delete', () => {
 });
 
 describe('overlap-compiler: text-replace inside named no-email insertion', () => {
-  it('preserves parent insertion and creates child replacement sides', () => {
+  it('preserves parent insertion and creates child insertion/deletion sides', () => {
     const parentId = 'ins-alice-no-email';
     const { state } = stateFromTrackedSpans({
       schema,
@@ -718,25 +718,24 @@ describe('overlap-compiler: text-replace inside named no-email insertion', () =>
     });
     const result = runCompile({ state, intent });
     expect(result.ok).toBe(true);
-    expect(textOf(result.tr)).toBe('lazyquickly ');
+    expect(textOf(result.tr)).toBe('quicklylazy ');
 
     const graph = buildReviewGraph({ state: { doc: result.tr.doc } });
     expect(graph.changes.size).toBe(3);
     const parent = graph.changes.get(parentId);
     expect(parent).toBeDefined();
     expect(parent.type).toBe(CanonicalChangeType.Insertion);
-    const childDelete = Array.from(graph.changes.values()).find(
-      (change) => change.type === CanonicalChangeType.Deletion,
-    );
-    const childInsert = Array.from(graph.changes.values()).find(
-      (change) => change.type === CanonicalChangeType.Insertion && change.id !== parentId,
-    );
-    expect(childDelete).toBeDefined();
-    expect(childDelete.deletedSegments[0].text).toBe('lazy');
-    expect(childDelete.deletedSegments[0].attrs.overlapParentId).toBe(parentId);
-    expect(childInsert).toBeDefined();
-    expect(childInsert.insertedSegments.map((segment) => segment.text).join('')).toBe('quickly');
-    expect(childInsert.insertedSegments[0].attrs.overlapParentId).toBe(parentId);
+
+    const children = Array.from(graph.changes.values()).filter((change) => change.parent === parentId);
+    expect(children).toHaveLength(2);
+    const childDeletion = children.find((change) => change.type === CanonicalChangeType.Deletion);
+    const childInsertion = children.find((change) => change.type === CanonicalChangeType.Insertion);
+    expect(childDeletion).toBeDefined();
+    expect(childInsertion).toBeDefined();
+    expect(childDeletion.deletedSegments.map((segment) => segment.text).join('')).toBe('lazy');
+    expect(childDeletion.deletedSegments.every((segment) => segment.attrs.overlapParentId === parentId)).toBe(true);
+    expect(childInsertion.insertedSegments.map((segment) => segment.text).join('')).toBe('quickly');
+    expect(childInsertion.insertedSegments.every((segment) => segment.attrs.overlapParentId === parentId)).toBe(true);
   });
 });
 
@@ -815,7 +814,7 @@ describe('overlap-compiler: text-replace produces paired replacement metadata', 
     expect(change.replacement?.deleted.length).toBeGreaterThan(0);
   });
 
-  it('keeps both sides of a child replacement separately reviewable under an other-user insertion parent', () => {
+  it('keeps child insertion and deletion sides under an other-user insertion parent', () => {
     const parentId = 'ins-bob';
     const { state } = stateFromTrackedSpans({
       schema,
@@ -838,12 +837,16 @@ describe('overlap-compiler: text-replace produces paired replacement metadata', 
     const graph = buildReviewGraph({ state: { doc: result.tr.doc }, replacementsMode: 'paired' });
     const children = Array.from(graph.changes.values()).filter((change) => change.parent === parentId);
     expect(children).toHaveLength(2);
-    expect(children.map((change) => change.type).sort()).toEqual([
-      CanonicalChangeType.Deletion,
-      CanonicalChangeType.Insertion,
-    ]);
+    const childDeletion = children.find((change) => change.type === CanonicalChangeType.Deletion);
+    const childInsertion = children.find((change) => change.type === CanonicalChangeType.Insertion);
+    expect(childDeletion).toBeDefined();
+    expect(childInsertion).toBeDefined();
+    expect(childDeletion.deletedSegments.map((segment) => segment.text).join('')).toBe('or');
+    expect(childInsertion.insertedSegments.map((segment) => segment.text).join('')).toBe('AR');
     expect(
-      children.every((change) => change.segments.every((segment) => segment.attrs.overlapParentId === parentId)),
+      [...childDeletion.segments, ...childInsertion.segments].every(
+        (segment) => segment.attrs.overlapParentId === parentId,
+      ),
     ).toBe(true);
   });
 

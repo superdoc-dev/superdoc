@@ -366,6 +366,22 @@ export interface CellBackground {
   color: string;
 }
 
+/**
+ * Cell-level structured document tag metadata, preserved on a `tableCell` when
+ * the source OOXML wrapped the cell in `<w:sdt>` (ECMA-376 §17.5.2.32, CT_SdtCell).
+ *
+ * The wrapper is reconstructed on export. Cells carrying this metadata are not
+ * exposed through the content-controls Document API in v1.
+ */
+export interface CellSdtMetadata {
+  /** Discriminator for future SDT scope variants (row, block) on the same slot. */
+  scope: 'cell';
+  /** Raw `<w:sdtPr>` element preserved from import for opaque round-trip. */
+  sdtPr: unknown;
+  /** Raw `<w:sdtEndPr>` element if present, otherwise null. */
+  sdtEndPr: unknown | null;
+}
+
 /** Table cell node attributes */
 export interface TableCellAttrs extends TableNodeAttributes {
   /** Legacy imported identity preserved for backwards compatibility */
@@ -396,6 +412,11 @@ export interface TableCellAttrs extends TableNodeAttributes {
   widthUnit: string;
   /** Placeholder key for temporary cells */
   __placeholder: string | null;
+  /**
+   * Cell-level structured document tag metadata preserved from OOXML import
+   * when the source `<w:tc>` was wrapped in `<w:sdt>`. Reconstructed on export.
+   */
+  cellSdt?: CellSdtMetadata | null;
 }
 
 /** Table header cell attributes (same as TableCellAttrs) */
@@ -717,6 +738,27 @@ export interface BookmarkEndAttrs extends InlineNodeAttributes {
   colFirst?: number | null;
   /** Last column reference */
   colLast?: number | null;
+}
+
+// ============================================
+// SMART TAG (ECMA-376 §17.5.1.9)
+// ============================================
+
+/**
+ * Smart-tag node attributes (SD-2647 / SD-3298).
+ *
+ * `w:smartTag` is a transparent OOXML inline wrapper around `EG_PContent`.
+ * The wrapper carries semantic metadata (element + uri) plus an optional
+ * `<w:smartTagPr>` property bag (`<w:attr w:name w:val>` pairs). Children are
+ * normal inline content; the wrapper itself is invisible at render time.
+ */
+export interface SmartTagAttrs extends InlineNodeAttributes {
+  /** Smart-tag element name (w:element), e.g. "country-region", "PlaceName" */
+  element?: string | null;
+  /** Smart-tag namespace URI (w:uri), e.g. "urn:schemas-microsoft-com:office:smarttags" */
+  uri?: string | null;
+  /** @internal Preserved raw `<w:smartTagPr>` OOXML for round-trip export. */
+  smartTagPr?: Record<string, unknown> | null;
 }
 
 // ============================================
@@ -1215,6 +1257,9 @@ declare module '../../core/types/NodeAttributesMap.js' {
     // Bookmarks
     bookmarkStart: BookmarkStartAttrs;
     bookmarkEnd: BookmarkEndAttrs;
+
+    // Smart tags
+    smartTag: SmartTagAttrs;
 
     // Comments (note: no 'comment' node - only commentRangeStart/End/Reference)
     commentRangeStart: CommentRangeStartAttrs;

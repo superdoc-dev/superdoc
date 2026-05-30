@@ -9,3 +9,4 @@ export * from './parseSizeUnit.js';
 export * from './minMax.js';
 export * from './clipboardUtils.js';
 export * from './cssColorToHex.js';
+export * from './hash.js';

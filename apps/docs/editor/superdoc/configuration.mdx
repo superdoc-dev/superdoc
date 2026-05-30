@@ -357,6 +357,34 @@ See [Surfaces](/editor/superdoc/surfaces) for the full API and examples.
   <Warning>**Deprecated**: Use `modules.contextMenu` instead. See the [Context Menu module](/editor/built-in-ui/context-menu) for configuration options.</Warning>
 </ParamField>
 
+### Content controls module
+
+<ParamField path="modules.contentControls" type="Object">
+  Content-control rendering configuration.
+
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="modules.contentControls.chrome" type="'default' | 'none'" default="'default'">
+      Built-in content-control chrome mode.
+      - `'default'`: Word-like built-in chrome (labels, borders, hover, selected outline)
+      - `'none'`: disables built-in chrome while keeping SDT data/geometry and `data-sdt-*` wrappers
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+Use this when you want to keep content controls in the document but disable SuperDoc’s built-in field visuals.
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  modules: {
+    contentControls: {
+      chrome: 'none',
+    },
+  },
+});
+```
+
 ## Spell check
 
 Provider-based spell check for the layout-engine editor surface. The configuration key is `proofing` because the provider contract is designed to support spelling, grammar, and style. The current UI renders spelling only.

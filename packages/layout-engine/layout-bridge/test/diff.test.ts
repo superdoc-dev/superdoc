@@ -1,11 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import type { VectorShapeDrawing } from '@superdoc/contracts';
+import type { ImageRun, ParagraphBlock, VectorShapeDrawing } from '@superdoc/contracts';
 import { computeDirtyRegions } from '../src/diff';
 
 const block = (id: string, text: string) => ({
   kind: 'paragraph' as const,
   id,
   runs: [{ text, fontFamily: 'Arial', fontSize: 16 }],
+});
+
+const imageRun = (src: string, width: number, height: number): ImageRun => ({
+  kind: 'image',
+  src,
+  width,
+  height,
+});
+
+const paragraphWithRuns = (id: string, runs: ParagraphBlock['runs']) => ({
+  kind: 'paragraph' as const,
+  id,
+  runs,
 });
 
 const drawing = (overrides?: Partial<VectorShapeDrawing>): VectorShapeDrawing => ({
@@ -179,6 +192,112 @@ describe('computeDirtyRegions', () => {
     ];
     const result = computeDirtyRegions(prev, next);
     expect(result.firstDirtyIndex).toBe(0);
+  });
+
+  it('detects inline image height changes inside paragraphs', () => {
+    const prev = [paragraphWithRuns('0-paragraph', [imageRun('img.png', 100, 50)])];
+    const next = [paragraphWithRuns('0-paragraph', [imageRun('img.png', 100, 60)])];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+    expect(result.stableBlockIds.has('0-paragraph')).toBe(false);
+  });
+
+  it('detects inline image width changes inside paragraphs', () => {
+    const prev = [paragraphWithRuns('0-paragraph', [imageRun('img.png', 100, 50)])];
+    const next = [paragraphWithRuns('0-paragraph', [imageRun('img.png', 120, 50)])];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+    expect(result.stableBlockIds.has('0-paragraph')).toBe(false);
+  });
+
+  it('treats identical inline image dimensions as stable', () => {
+    const prev = [paragraphWithRuns('0-paragraph', [imageRun('img.png', 100, 50)])];
+    const next = [paragraphWithRuns('0-paragraph', [imageRun('img.png', 100, 50)])];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(next.length);
+    expect(result.stableBlockIds.has('0-paragraph')).toBe(true);
+  });
+
+  it.each([
+    ['src', { src: 'other.png' }],
+    ['alt', { alt: 'Diagram' }],
+    ['title', { title: 'Title' }],
+    ['clipPath', { clipPath: 'inset(1px)' }],
+    ['distTop', { distTop: 1 }],
+    ['distBottom', { distBottom: 2 }],
+    ['distLeft', { distLeft: 3 }],
+    ['distRight', { distRight: 4 }],
+    ['verticalAlign', { verticalAlign: 'top' as const }],
+    ['rotation', { rotation: 90 }],
+    ['flipH', { flipH: true }],
+    ['flipV', { flipV: true }],
+    ['gain', { gain: '50000' }],
+    ['blacklevel', { blacklevel: '20000' }],
+    ['grayscale', { grayscale: true }],
+    ['lum', { lum: { bright: 10000, contrast: -10000 } }],
+    ['hyperlink', { hyperlink: { url: 'https://example.com', tooltip: 'Example' } }],
+    ['dataAttrs', { dataAttrs: { 'data-example': '1' } }],
+  ] satisfies Array<[string, Partial<ImageRun>]>)(
+    'detects inline image %s changes inside paragraphs',
+    (_field, overrides) => {
+      const prev = [paragraphWithRuns('0-paragraph', [imageRun('img.png', 100, 50)])];
+      const next = [paragraphWithRuns('0-paragraph', [{ ...imageRun('img.png', 100, 50), ...overrides }])];
+
+      const result = computeDirtyRegions(prev, next);
+
+      expect(result.firstDirtyIndex).toBe(0);
+      expect(result.stableBlockIds.has('0-paragraph')).toBe(false);
+    },
+  );
+
+  it('detects inline image SDT metadata changes inside paragraphs', () => {
+    const prev = [paragraphWithRuns('0-paragraph', [imageRun('img.png', 100, 50)])];
+    const next = [
+      paragraphWithRuns('0-paragraph', [
+        {
+          ...imageRun('img.png', 100, 50),
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'image-sdt',
+            lockMode: 'contentLocked',
+          },
+        },
+      ]),
+    ];
+
+    const result = computeDirtyRegions(prev, next);
+
+    expect(result.firstDirtyIndex).toBe(0);
+    expect(result.stableBlockIds.has('0-paragraph')).toBe(false);
+  });
+
+  it('detects inline image resize in mixed text and image paragraphs', () => {
+    const prev = [
+      paragraphWithRuns('0-paragraph', [
+        { text: 'Before ', fontFamily: 'Arial', fontSize: 16 },
+        imageRun('img.png', 100, 50),
+        { text: ' after', fontFamily: 'Arial', fontSize: 16 },
+      ]),
+    ];
+    const next = [
+      paragraphWithRuns('0-paragraph', [
+        { text: 'Before ', fontFamily: 'Arial', fontSize: 16 },
+        imageRun('img.png', 100, 60),
+        { text: ' after', fontFamily: 'Arial', fontSize: 16 },
+      ]),
+    ];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+    expect(result.stableBlockIds.has('0-paragraph')).toBe(false);
+  });
+
+  it('detects changes to later inline image runs', () => {
+    const prev = [paragraphWithRuns('0-paragraph', [imageRun('img1.png', 100, 50), imageRun('img2.png', 80, 40)])];
+    const next = [paragraphWithRuns('0-paragraph', [imageRun('img1.png', 100, 50), imageRun('img2.png', 80, 60)])];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+    expect(result.stableBlockIds.has('0-paragraph')).toBe(false);
   });
 
   it('treats unchanged drawing blocks as stable', () => {

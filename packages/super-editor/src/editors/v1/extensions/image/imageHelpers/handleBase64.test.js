@@ -1,4 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { base64ToFile, getBase64FileMeta } from './handleBase64.js';
 
 const base64ForPayload = (payload, mime = 'image/png') =>
@@ -23,6 +25,16 @@ describe('handleBase64', () => {
     expect(file.size).toBe(Buffer.byteLength(payload));
   });
 
+  it('uses shared url-validation helpers directly instead of converter helpers', () => {
+    const packageRelativePath = 'src/editors/v1/extensions/image/imageHelpers/handleBase64.js';
+    const rootRelativePath = `packages/super-editor/${packageRelativePath}`;
+    const sourcePath = existsSync(resolve(process.cwd(), packageRelativePath)) ? packageRelativePath : rootRelativePath;
+    const source = readFileSync(resolve(process.cwd(), sourcePath), 'utf8');
+
+    expect(source).toContain("from '@superdoc/url-validation'");
+    expect(source).not.toContain("from '@converter/helpers/mediaHelpers.js'");
+  });
+
   it('falls back to Buffer decoding when atob is unavailable', () => {
     // Ensure atob is not defined so Buffer path is used
     vi.stubGlobal('atob', undefined);
@@ -33,7 +45,7 @@ describe('handleBase64', () => {
     const file = base64ToFile(base64);
 
     expect(file.type).toBe('image/jpeg');
-    expect(file.name).toMatch(/^image-\d+\.jpeg$/);
+    expect(file.name).toMatch(/^image-\d+\.jpg$/);
     expect(file.size).toBe(Buffer.byteLength(payload));
   });
 
@@ -57,6 +69,64 @@ describe('handleBase64', () => {
 
     expect(mimeType).toBe('image/jpeg');
     expect(filename).toBe(file.name);
+  });
+
+  it('normalizes svg+xml data URI filenames to .svg', () => {
+    vi.stubGlobal('atob', (encoded) => Buffer.from(encoded, 'base64').toString('binary'));
+
+    const payload = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" />';
+    const base64 = base64ForPayload(payload, 'image/svg+xml');
+
+    const { filename, mimeType } = getBase64FileMeta(base64);
+    const file = base64ToFile(base64);
+
+    expect(mimeType).toBe('image/svg+xml');
+    expect(filename).toBe(file.name);
+    expect(file.name).toMatch(/^image-\d+\.svg$/);
+    expect(file.type).toBe('image/svg+xml');
+  });
+
+  it('normalizes svg+xml MIME casing for filenames', () => {
+    vi.stubGlobal('atob', (encoded) => Buffer.from(encoded, 'base64').toString('binary'));
+
+    const payload = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" />';
+    const base64 = base64ForPayload(payload, 'Image/SVG+XML');
+
+    const { filename, mimeType } = getBase64FileMeta(base64);
+    const file = base64ToFile(base64);
+
+    expect(mimeType).toBe('Image/SVG+XML');
+    expect(filename).toBe(file.name);
+    expect(file.name).toMatch(/^image-\d+\.svg$/);
+    expect(file.type).toBe('image/svg+xml');
+  });
+
+  it('handles non-base64 svg data URI filenames', async () => {
+    const payload = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" />';
+    const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(payload)}`;
+
+    const { filename, mimeType } = getBase64FileMeta(dataUri);
+    const file = base64ToFile(dataUri);
+
+    expect(mimeType).toBe('image/svg+xml');
+    expect(filename).toBe(file.name);
+    expect(file.name).toMatch(/^image-\d+\.svg$/);
+    expect(file.type).toBe('image/svg+xml');
+    await expect(file.text()).resolves.toBe(payload);
+  });
+
+  it('returns null when non-base64 payload percent decoding fails', () => {
+    const dataUri = 'data:image/svg+xml,%';
+
+    const file = base64ToFile(dataUri);
+
+    expect(file).toBeNull();
+  });
+
+  it('returns null for data URIs without a payload separator', () => {
+    const file = base64ToFile('data:image/svg+xml');
+
+    expect(file).toBeNull();
   });
 
   it('defaults metadata when mime data is missing', () => {

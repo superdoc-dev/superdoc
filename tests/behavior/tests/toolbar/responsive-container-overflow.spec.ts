@@ -37,7 +37,7 @@ test('toolbar buttons stay inside the container when it narrows (SD-2328)', asyn
     const container = document.getElementById('toolbar');
     if (!container) return null;
     const containerRect = container.getBoundingClientRect();
-    const items = Array.from(container.querySelectorAll('.button-group > .toolbar-item-ctn'));
+    const items = Array.from(container.querySelectorAll('.button-group > .sd-toolbar-item-ctn'));
     const overflowing = items
       .map((el) => {
         const rect = (el as HTMLElement).getBoundingClientRect();

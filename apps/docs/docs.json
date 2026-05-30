@@ -104,6 +104,7 @@
                   "editor/custom-ui/custom-commands",
                   "editor/custom-ui/comments",
                   "editor/custom-ui/track-changes",
+                  "editor/custom-ui/content-controls",
                   "editor/custom-ui/context-menu",
                   "editor/custom-ui/selection-and-viewport",
                   "editor/custom-ui/document-control",

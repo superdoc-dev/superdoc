@@ -1,4 +1,5 @@
 import { base64ToUint8Array } from './helpers.js';
+import { getDataUriMetadata, tryDecodeDataUriText } from './helpers/mediaHelpers.js';
 
 /**
  * Read intrinsic image dimensions from raw binary headers.
@@ -144,6 +145,24 @@ function readWebpDimensions(bytes) {
   return null;
 }
 
+function readSvgDimensions(svgText) {
+  if (typeof svgText !== 'string') return null;
+
+  const svgMatch = svgText.match(/<svg\b[^>]*>/i);
+  if (!svgMatch) return null;
+
+  const widthMatch = svgMatch[0].match(/\bwidth=(["']?)([0-9.]+)(?:px)?\1/i);
+  const heightMatch = svgMatch[0].match(/\bheight=(["']?)([0-9.]+)(?:px)?\1/i);
+  const width = widthMatch ? Number.parseFloat(widthMatch[2]) : NaN;
+  const height = heightMatch ? Number.parseFloat(heightMatch[2]) : NaN;
+
+  if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+    return { width, height };
+  }
+
+  return null;
+}
+
 /**
  * Extract dimensions from a data URI's base64 payload.
  *
@@ -153,14 +172,23 @@ function readWebpDimensions(bytes) {
 export function readImageDimensionsFromDataUri(dataUri) {
   if (typeof dataUri !== 'string' || !dataUri.startsWith('data:')) return null;
 
-  const commaIndex = dataUri.indexOf(',');
-  if (commaIndex === -1) return null;
+  const metadata = getDataUriMetadata(dataUri);
+  if (!metadata?.hasPayloadSeparator || !metadata.payload) return null;
 
-  const base64Payload = dataUri.slice(commaIndex + 1);
-  if (!base64Payload) return null;
+  if (metadata.mimeType === 'image/svg+xml') {
+    try {
+      const svgText = metadata.isBase64 ? atob(metadata.payload) : tryDecodeDataUriText(metadata.payload);
+      if (svgText == null) return null;
+      return readSvgDimensions(svgText);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!metadata.isBase64) return null;
 
   try {
-    const bytes = base64ToUint8Array(base64Payload);
+    const bytes = base64ToUint8Array(metadata.payload);
     return readImageDimensions(bytes);
   } catch {
     return null;

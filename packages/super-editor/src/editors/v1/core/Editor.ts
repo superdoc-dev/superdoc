@@ -6,10 +6,10 @@ import type { Doc as YDoc, XmlFragment as YXmlFragment } from 'yjs';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
 import type { EditorHelpers, ExtensionStorage, ProseMirrorJSON, PageStyles, Toolbar } from './types/EditorTypes.js';
 import type { ChainableCommandObject, CanObject, EditorCommands } from './types/ChainedCommands.js';
-import type { EditorEventMap, FontsResolvedPayload, Comment } from './types/EditorEvents.js';
+import type { EditorEventMap, FontsResolvedPayload, Comment, SdtRef } from './types/EditorEvents.js';
 import type { SchemaSummaryJSON } from './types/EditorSchema.js';
 
-import { EditorState as PmEditorState } from 'prosemirror-state';
+import { EditorState as PmEditorState, NodeSelection as PmNodeSelection } from 'prosemirror-state';
 import { DOMSerializer as PmDOMSerializer } from 'prosemirror-model';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as helpers from './helpers/index.js';
@@ -402,6 +402,14 @@ const transactionTouchesTrackedReviewState = (state: EditorState, tr: Transactio
   const docs = (tr as unknown as { docs?: PmNode[] }).docs ?? [];
   return tr.steps.some((step, index) => stepTouchesTrackedReviewState(step, docs[index] ?? state.doc));
 };
+// Best-effort heuristic for labeling a content-control event's `source`. A
+// click sets `uiEvent: 'click'` on its selection transaction (the precise
+// signal); this window is the fallback for selection changes that don't carry
+// that meta but follow a recent pointerDown. It is deliberately generous (a
+// click can be followed by async selection settling); the trade-off is that a
+// keyboard move within this window of a click is labeled 'pointer'. Source is
+// advisory metadata, not a correctness guarantee.
+const CONTENT_CONTROL_POINTER_WINDOW_MS = 800;
 
 type ExtensionInstanceLike = {
   type?: string;
@@ -679,6 +687,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Guard flag to prevent double-tracking document open
    */
   #documentOpenTracked = false;
+  #lastActiveContentControlRef: SdtRef | null = null;
+  #lastPointerDownAt = 0;
 
   /**
    * Fragment configured at construction time. This is reusable default config,
@@ -1087,8 +1097,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
     this.on('pointerDown', this.options.onPointerDown!);
+    this.#trackContentControlPointer();
     this.on('pointerUp', this.options.onPointerUp!);
     this.on('rightClick', this.options.onRightClick!);
+  }
+
+  /**
+   * Record the most recent pointerDown timestamp for content-control event
+   * source detection. Registered on every init path (#registerEventListeners,
+   * #init, #initRichText) so source detection works regardless of
+   * deferDocumentLoad - the default PresentationEditor path uses #init /
+   * #initRichText, not #registerEventListeners.
+   */
+  #trackContentControlPointer(): void {
+    this.on('pointerDown', () => {
+      this.#lastPointerDownAt = Date.now();
+    });
   }
 
   /**
@@ -1414,6 +1438,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // Reset internal state
     this._state = undefined!;
+
+    // Reset content-control event tracking. These track the active SDT and the
+    // last pointer-down for the *current* document; leaving them set would leak
+    // a stale `previous` into the first content-control event of the next
+    // document opened on this instance (or skip the first focus if ids collide).
+    this.#lastActiveContentControlRef = null;
+    this.#lastPointerDownAt = 0;
   }
 
   /**
@@ -1498,6 +1529,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
     this.on('pointerDown', this.options.onPointerDown!);
+    this.#trackContentControlPointer();
     this.on('pointerUp', this.options.onPointerUp!);
     this.on('rightClick', this.options.onRightClick!);
 
@@ -1577,6 +1609,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('locked', this.options.onDocumentLocked!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('pointerDown', this.options.onPointerDown!);
+    this.#trackContentControlPointer();
     this.on('pointerUp', this.options.onPointerUp!);
     this.on('rightClick', this.options.onRightClick!);
 
@@ -3145,6 +3178,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
         transaction: transactionToApply,
       });
     }
+    this.#emitContentControlEvents({
+      transaction: transactionToApply,
+      nextState,
+      selectionHasChanged,
+    });
 
     const focus = transactionToApply.getMeta('focus');
     if (focus) {
@@ -3180,6 +3218,102 @@ export class Editor extends EventEmitter<EditorEventMap> {
         transaction: effectiveTransaction,
       });
     }
+  }
+
+  #emitContentControlEvents({
+    transaction,
+    nextState,
+    selectionHasChanged,
+  }: {
+    transaction: Transaction;
+    nextState: EditorState;
+    selectionHasChanged: boolean;
+  }): void {
+    const uiEvent = transaction.getMeta('uiEvent');
+    const recentPointerDown = Date.now() - this.#lastPointerDownAt <= CONTENT_CONTROL_POINTER_WINDOW_MS;
+    const source: 'keyboard' | 'pointer' = uiEvent === 'click' || recentPointerDown ? 'pointer' : 'keyboard';
+    // Full active stack (innermost first), matching ui.contentControls
+    // activeIds. `active` is the deepest control; `activePath` lets nested-aware
+    // custom UI read the surrounding controls without combining with observe().
+    const activePath = nextState.selection ? this.#collectActiveSdtRefs(nextState.selection) : [];
+    const activeContentControl = activePath[0] ?? null;
+
+    if (selectionHasChanged) {
+      const previous = this.#lastActiveContentControlRef;
+      const activeChanged = previous?.id !== activeContentControl?.id;
+      if (activeChanged) {
+        if (activeContentControl) {
+          this.emit('contentControlFocus', {
+            active: activeContentControl,
+            previous,
+            activePath,
+            source,
+          });
+        } else if (previous) {
+          this.emit('contentControlBlur', {
+            active: null,
+            previous,
+            activePath: [],
+            source,
+          });
+        }
+        this.#lastActiveContentControlRef = activeContentControl;
+      }
+    }
+
+    if (uiEvent === 'click' && activeContentControl) {
+      this.emit('contentControlClick', {
+        target: activeContentControl,
+        source: 'pointer',
+      });
+    }
+  }
+
+
+  #collectActiveSdtRefs(selection: EditorState['selection']): SdtRef[] {
+    const refs: SdtRef[] = [];
+    const seenIds = new Set<string>();
+    const selectedNode = selection instanceof PmNodeSelection ? selection.node : null;
+    if (
+      selectedNode &&
+      (selectedNode.type?.name === 'structuredContent' || selectedNode.type?.name === 'structuredContentBlock')
+    ) {
+      const ref = this.#toSdtRef(selectedNode);
+      if (ref) {
+        refs.push(ref);
+        seenIds.add(ref.id);
+      }
+    }
+
+    const anchor = selection.$anchor;
+    if (anchor && typeof anchor.depth === 'number' && typeof anchor.node === 'function') {
+      for (let depth = anchor.depth; depth >= 0; depth -= 1) {
+        const node = anchor.node(depth) as PmNode | null | undefined;
+        if (!node) continue;
+        const typeName = node?.type?.name;
+        if (typeName !== 'structuredContent' && typeName !== 'structuredContentBlock') continue;
+        const ref = this.#toSdtRef(node);
+        if (!ref) continue;
+        if (seenIds.has(ref.id)) continue;
+        refs.push(ref);
+        seenIds.add(ref.id);
+      }
+    }
+    return refs;
+  }
+
+  #toSdtRef(node: PmNode): SdtRef | null {
+    const attrs = node.attrs as { id?: unknown; tag?: unknown; alias?: unknown; controlType?: unknown };
+    const id = attrs?.id;
+    if (typeof id !== 'string' || id.length === 0) return null;
+    const scope = node.type.name === 'structuredContent' ? 'inline' : 'block';
+    return {
+      id,
+      tag: typeof attrs.tag === 'string' ? attrs.tag : undefined,
+      alias: typeof attrs.alias === 'string' ? attrs.alias : undefined,
+      controlType: typeof attrs.controlType === 'string' ? attrs.controlType : 'unknown',
+      scope,
+    };
   }
 
   /**

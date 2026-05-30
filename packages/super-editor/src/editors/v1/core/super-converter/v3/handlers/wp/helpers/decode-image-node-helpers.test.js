@@ -4,6 +4,7 @@ import {
 } from '@converter/v3/handlers/wp/helpers/decode-image-node-helpers.js';
 import * as helpers from '@converter/helpers.js';
 import * as annotationHelpers from '@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js';
+import * as coreHelpers from '@core/helpers/index.js';
 
 vi.mock('@converter/helpers.js', async (importOriginal) => {
   const actual = await importOriginal();
@@ -37,6 +38,10 @@ vi.mock(import('@core/helpers/index.js'), async (importOriginal) => {
     generateDocxRandomId: vi.fn(() => '123'),
   };
 });
+
+vi.mock('@core/utilities/hash.js', () => ({
+  simpleStringHash: vi.fn(() => '123'),
+}));
 
 describe('translateImageNode', () => {
   let baseParams;
@@ -110,6 +115,277 @@ describe('translateImageNode', () => {
     expect(baseParams.relationships.length).toBe(1);
     expect(baseParams.relationships[0].attributes.Type).toContain('relationships/image');
     expect(result.elements).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'a:graphic' })]));
+  });
+
+  it('should register data URI image media when rId is missing', () => {
+    const src = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    baseParams.node.attrs = {
+      src,
+      alt: 'Signature Example',
+      size: { width: 200, height: 50 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(1);
+    const target = baseParams.relationships[0].attributes.Target;
+    expect(target).toMatch(/^media\/image-\d+\.svg$/);
+    expect(baseParams.media[`word/${target}`]).toBe(src);
+
+    const blip = result.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+    expect(blip.attributes['r:embed']).toBe(baseParams.relationships[0].attributes.Id);
+  });
+
+  it('should reuse data URI image media and relationship for duplicate payloads', () => {
+    const src = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    baseParams.node.attrs = {
+      src,
+      alt: 'Signature Example',
+      size: { width: 200, height: 50 },
+    };
+
+    const firstResult = translateImageNode(baseParams);
+    const secondResult = translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(1);
+    expect(Object.keys(baseParams.media)).toEqual([`word/${baseParams.relationships[0].attributes.Target}`]);
+
+    const firstBlip = firstResult.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+    const secondBlip = secondResult.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+    expect(secondBlip.attributes['r:embed']).toBe(firstBlip.attributes['r:embed']);
+  });
+
+  it('should reuse the same collision media target for repeated data URI payloads', () => {
+    const firstSrc = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    const collidingSrc = 'data:image/svg+xml;base64,PHN2ZyBpZD0iMiI+PC9zdmc+';
+    baseParams.node.attrs = {
+      src: firstSrc,
+      alt: 'First Image',
+      size: { width: 20, height: 10 },
+    };
+    translateImageNode(baseParams);
+
+    vi.mocked(coreHelpers.generateDocxRandomId).mockClear();
+    baseParams.node.attrs = {
+      src: collidingSrc,
+      alt: 'Colliding Image',
+      size: { width: 20, height: 10 },
+    };
+
+    translateImageNode(baseParams);
+    translateImageNode(baseParams);
+
+    expect(Object.keys(baseParams.media).sort()).toEqual(['word/media/image-123.svg', 'word/media/image-123_123.svg']);
+    expect(baseParams.relationships.map((rel) => rel.attributes.Target)).toEqual([
+      'media/image-123.svg',
+      'media/image-123_123.svg',
+    ]);
+    expect(vi.mocked(coreHelpers.generateDocxRandomId).mock.calls.filter(([length]) => length === 8)).toHaveLength(1);
+  });
+
+  it('should create a media target when a data URI image already has an rId', () => {
+    const src = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    baseParams.node.attrs = {
+      src,
+      rId: 'rIdExisting',
+      alt: 'Signature Example',
+      size: { width: 200, height: 50 },
+    };
+
+    translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(1);
+    expect(baseParams.relationships[0].attributes).toMatchObject({
+      Id: 'rIdExisting',
+      Target: expect.stringMatching(/^media\/.+\.svg$/),
+    });
+    expect(baseParams.relationships[0].attributes.Target).not.toBeUndefined();
+    expect(baseParams.media[`word/${baseParams.relationships[0].attributes.Target}`]).toBe(src);
+  });
+
+  it('should not add duplicate relationships for repeated data URI image rIds', () => {
+    const src = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    baseParams.node.attrs = {
+      src,
+      rId: 'rIdExisting',
+      alt: 'Signature Example',
+      size: { width: 200, height: 50 },
+    };
+
+    translateImageNode(baseParams);
+    translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(1);
+    expect(baseParams.relationships[0].attributes).toMatchObject({
+      Id: 'rIdExisting',
+      Target: expect.stringMatching(/^media\/.+\.svg$/),
+    });
+  });
+
+  it('should register raster data URI image media when rId is missing', () => {
+    const src = 'data:image/png;base64,iVBORw0KGgo=';
+    baseParams.node.attrs = {
+      src,
+      alt: 'Raster Example',
+      size: { width: 20, height: 10 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(1);
+    const target = baseParams.relationships[0].attributes.Target;
+    expect(target).toMatch(/^media\/image-\d+\.png$/);
+    expect(baseParams.media[`word/${target}`]).toBe(src);
+
+    const blip = result.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+    expect(blip.attributes['r:embed']).toBe(baseParams.relationships[0].attributes.Id);
+  });
+
+  it('should reuse document relationship by target when image rId is missing', () => {
+    baseParams.node.attrs = {
+      src: 'word/media/test.png',
+      size: { width: 100, height: 50 },
+    };
+    baseParams.converter.convertedXml['word/_rels/document.xml.rels'].elements[0].elements.push({
+      type: 'element',
+      name: 'Relationship',
+      attributes: {
+        Id: 'rIdDocumentImage',
+        Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+        Target: 'media/test.png',
+      },
+    });
+
+    const result = translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(0);
+    const blip = result.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+    expect(blip.attributes['r:embed']).toBe('rIdDocumentImage');
+  });
+
+  it('should not export non-base64 raster data URI media', () => {
+    baseParams.node.attrs = {
+      src: 'data:image/png,not-base64',
+      alt: 'Raster Example',
+      size: { width: 20, height: 10 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(result).toBeNull();
+    expect(baseParams.relationships).toHaveLength(0);
+    expect(baseParams.media).toEqual({});
+  });
+
+  it('should not export malformed base64 image data URI media', () => {
+    baseParams.node.attrs = {
+      src: 'data:image/png;base64,%%%',
+      alt: 'Malformed Image',
+      size: { width: 20, height: 10 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(result).toBeNull();
+    expect(baseParams.relationships).toHaveLength(0);
+    expect(baseParams.media).toEqual({});
+  });
+
+  it('should not export non-image data URI media', () => {
+    baseParams.node.attrs = {
+      src: 'data:text/html,%3Cscript%3Ealert(1)%3C%2Fscript%3E',
+      alt: 'HTML Example',
+      size: { width: 20, height: 10 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(result).toBeNull();
+    expect(baseParams.relationships).toHaveLength(0);
+    expect(baseParams.media).toEqual({});
+  });
+
+  it('should not create a corrupt relationship when image src is null', () => {
+    baseParams.node.attrs = {
+      src: null,
+      rId: 'rIdMissingSrc',
+      size: { width: 200, height: 50 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(result).toBeNull();
+    expect(baseParams.relationships).toHaveLength(0);
+    expect(baseParams.media).toEqual({});
+  });
+
+  it('should skip data URI image export when no media target can be created', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    baseParams.node.attrs = {
+      src: 'data:,payload',
+      size: { width: 200, height: 50 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(result).toBeNull();
+    expect(baseParams.relationships).toHaveLength(0);
+    expect(baseParams.media).toEqual({});
+    expect(warn).toHaveBeenCalledWith(
+      'Skipping image export because media target could not be resolved.',
+      expect.objectContaining({ nodeType: 'image', src: 'data:,payload' }),
+    );
+    warn.mockRestore();
+  });
+
+  it('should not add an existing image rId relationship when data URI media target is invalid', () => {
+    baseParams.node.attrs = {
+      src: 'data:,payload',
+      rId: 'rIdInvalidData',
+      size: { width: 200, height: 50 },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(result).toBeNull();
+    expect(baseParams.relationships).toHaveLength(0);
+    expect(baseParams.media).toEqual({});
+  });
+
+  it('should fall back to text for fieldAnnotation with rId and invalid data URI media target', () => {
+    const params = {
+      ...baseParams,
+      node: {
+        type: 'fieldAnnotation',
+        attrs: {
+          src: 'data:,payload',
+          rId: 'rIdInvalidData',
+          size: { width: 200, height: 50 },
+        },
+      },
+    };
+
+    const result = translateImageNode(params);
+
+    expect(annotationHelpers.prepareTextAnnotation).toHaveBeenCalledWith(params);
+    expect(result).toEqual({ type: 'text', text: 'annotation' });
+    expect(params.relationships).toHaveLength(0);
+    expect(params.media).toEqual({});
   });
 
   it('should use clamped fallback size (1 EMU) when attrs.size is empty', () => {
@@ -204,6 +480,75 @@ describe('translateImageNode', () => {
     const result = translateImageNode(params);
     expect(annotationHelpers.prepareTextAnnotation).toHaveBeenCalledWith(params);
     expect(result).toEqual({ type: 'text', text: 'annotation' });
+  });
+
+  it('should export fieldAnnotation SVG data URI media with svg extension', () => {
+    const src = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    baseParams.node = {
+      type: 'fieldAnnotation',
+      attrs: {
+        fieldId: 'signatureField',
+        hash: 'signatureHash',
+        src,
+        size: { width: 200, height: 50 },
+      },
+    };
+
+    const result = translateImageNode(baseParams);
+
+    expect(baseParams.relationships).toHaveLength(1);
+    expect(baseParams.relationships[0].attributes.Target).toBe('media/signatureField_signatureHash.svg');
+    expect(baseParams.media['word/media/signatureField_signatureHash.svg']).toBe(src);
+
+    const blip = result.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+    expect(blip.attributes['r:embed']).toBe(baseParams.relationships[0].attributes.Id);
+  });
+
+  it('should fall back to text for fieldAnnotation with non-base64 raster data URI', () => {
+    const params = {
+      ...baseParams,
+      node: {
+        type: 'fieldAnnotation',
+        attrs: {
+          fieldId: 'signatureField',
+          hash: 'signatureHash',
+          src: 'data:image/png,not-base64',
+          size: { width: 200, height: 50 },
+        },
+      },
+    };
+
+    const result = translateImageNode(params);
+
+    expect(annotationHelpers.prepareTextAnnotation).toHaveBeenCalledWith(params);
+    expect(result).toEqual({ type: 'text', text: 'annotation' });
+    expect(params.relationships).toHaveLength(0);
+    expect(params.media).toEqual({});
+  });
+
+  it('should fall back to text for fieldAnnotation with malformed non-base64 SVG data URI', () => {
+    const params = {
+      ...baseParams,
+      node: {
+        type: 'fieldAnnotation',
+        attrs: {
+          fieldId: 'signatureField',
+          hash: 'signatureHash',
+          src: 'data:image/svg+xml,%',
+          size: { width: 200, height: 50 },
+        },
+      },
+    };
+
+    const result = translateImageNode(params);
+
+    expect(annotationHelpers.prepareTextAnnotation).toHaveBeenCalledWith(params);
+    expect(result).toEqual({ type: 'text', text: 'annotation' });
+    expect(params.relationships).toHaveLength(0);
+    expect(params.media).toEqual({});
   });
 
   it('should resize images inside tableCell to maxWidth', () => {

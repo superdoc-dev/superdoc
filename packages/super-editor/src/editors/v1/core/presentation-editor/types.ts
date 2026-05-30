@@ -177,6 +177,8 @@ export type LayoutEngineOptions = {
   showBookmarks?: boolean;
   /** Render nonprinting formatting marks such as spaces, tabs, and paragraph marks. */
   showFormattingMarks?: boolean;
+  /** Built-in SDT chrome rendering mode. */
+  contentControlsChrome?: 'default' | 'none';
 };
 
 export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] & {

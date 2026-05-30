@@ -55,7 +55,7 @@ describe('ButtonGroup dropdownOptions selected class', () => {
     const options = wrapper.findComponent({ name: 'ToolbarDropdown' }).props('options');
 
     expect(options[1].type).toBeUndefined();
-    expect(options[1].props.class).toBe('selected');
+    expect(options[1].props.class).toBe('sd-selected');
   });
 });
 
@@ -162,7 +162,7 @@ describe('ButtonGroup dropdown keyboard activation', () => {
     const item = createDropdownItem('plain-match');
     const wrapper = mountWithItem(item);
 
-    await wrapper.find('.toolbar-item-ctn').trigger('keydown', { key });
+    await wrapper.find('.sd-toolbar-item-ctn').trigger('keydown', { key });
 
     expect(item.expand.value).toBe(true);
   });
@@ -170,8 +170,8 @@ describe('ButtonGroup dropdown keyboard activation', () => {
 
 // Regression for the codex P2 finding on PR #3304: after Escape closes the
 // dropdown, ToolbarDropdown.rememberTriggerFocusTarget restores focus to the
-// inner `.toolbar-item` (ToolbarButton root, role="button", tabindex="0"),
-// not to `.toolbar-item-ctn`. ToolbarButton used to handle Enter with
+// inner `.sd-toolbar-item` (ToolbarButton root, role="button", tabindex="0"),
+// not to `.sd-toolbar-item-ctn`. ToolbarButton used to handle Enter with
 // `@keydown.enter.stop`, which silently swallowed the event before
 // ButtonGroup's roving-tabindex handler could see it. Pressing Enter on the
 // restored focus would emit `buttonClick` (no listener on the dropdown
@@ -180,7 +180,7 @@ describe('ButtonGroup dropdown keyboard activation', () => {
 //
 // Fix is the `allowEnterPropagation` prop on ToolbarButton: when true the
 // keydown handler does NOT stopPropagation, so Enter bubbles to
-// `.toolbar-item-ctn` and ButtonGroup.activateToolbarItem runs.
+// `.sd-toolbar-item-ctn` and ButtonGroup.activateToolbarItem runs.
 // Note: this only applies to non-split dropdown items. Split buttons
 // (bullet list / numbered list main button) call handleSplitMainClick on
 // Enter which itself stops propagation and runs the main command instead.
@@ -225,11 +225,11 @@ describe('ButtonGroup dropdown trigger keyboard activation (codex P2 regression)
       },
     });
 
-  it('Enter on the inner .toolbar-item bubbles up and opens the dropdown', async () => {
+  it('Enter on the inner .sd-toolbar-item bubbles up and opens the dropdown', async () => {
     const item = createFullDropdownItem('plain-match');
     wrapper = mountWithDropdownItem(item);
 
-    const innerItem = wrapper.find('.toolbar-dropdown-trigger .toolbar-item').element;
+    const innerItem = wrapper.find('.toolbar-dropdown-trigger .sd-toolbar-item').element;
     expect(innerItem.getAttribute('tabindex')).toBe('0');
     expect(innerItem.getAttribute('role')).toBe('button');
 
@@ -246,8 +246,8 @@ describe('ButtonGroup dropdown trigger keyboard activation (codex P2 regression)
     const item = createFullDropdownItem('plain-match');
     wrapper = mountWithDropdownItem(item);
 
-    const ctn = wrapper.find('.toolbar-item-ctn').element;
-    const innerItem = wrapper.find('.toolbar-dropdown-trigger .toolbar-item').element;
+    const ctn = wrapper.find('.sd-toolbar-item-ctn').element;
+    const innerItem = wrapper.find('.toolbar-dropdown-trigger .sd-toolbar-item').element;
 
     // Open the dropdown the way Tab + Enter does (focus on ctn).
     ctn.focus();
@@ -271,11 +271,11 @@ describe('ButtonGroup dropdown trigger keyboard activation (codex P2 regression)
     expect(item.expand.value).toBe(true);
   });
 
-  it('Space on the inner .toolbar-item also opens the dropdown (control)', async () => {
+  it('Space on the inner .sd-toolbar-item also opens the dropdown (control)', async () => {
     const item = createFullDropdownItem('plain-match');
     wrapper = mountWithDropdownItem(item);
 
-    const innerItem = wrapper.find('.toolbar-dropdown-trigger .toolbar-item').element;
+    const innerItem = wrapper.find('.toolbar-dropdown-trigger .sd-toolbar-item').element;
     innerItem.focus();
     innerItem.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
     await nextTick();
@@ -299,7 +299,7 @@ describe('ButtonGroup dropdown trigger keyboard activation (codex P2 regression)
     };
     wrapper = mountWithDropdownItem(item);
 
-    const innerItem = wrapper.find('.toolbar-dropdown-trigger .toolbar-item').element;
+    const innerItem = wrapper.find('.toolbar-dropdown-trigger .sd-toolbar-item').element;
     innerItem.focus();
     innerItem.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await nextTick();

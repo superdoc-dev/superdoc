@@ -511,7 +511,7 @@ describe('DocxExporter', () => {
         elements: [
           {
             name: 'w:del',
-            attributes: { 'w:id': '1' },
+            attributes: { 'w:id': '1544' },
             elements: [
               {
                 name: 'w:r',
@@ -523,7 +523,7 @@ describe('DocxExporter', () => {
                     elements: [
                       {
                         type: 'text',
-                        text: ' PAGE   \\\\* MERGEFORMAT ',
+                        text: ' PAGE \\\\* MERGEFORMAT ',
                       },
                     ],
                   },
@@ -536,9 +536,10 @@ describe('DocxExporter', () => {
 
       const xml = exporter.schemaToXml(data);
 
+      expect(xml).toContain('<w:del ');
       expect(xml).toContain('<w:delInstrText');
       expect(xml).not.toContain('<w:instrText');
-      expect(xml).toContain('PAGE');
+      expect(xml).toContain('PAGE \\\\* MERGEFORMAT');
     });
 
     it('handles special characters along with [[sdspace]] placeholders', () => {

@@ -2287,6 +2287,49 @@ describe('DomPainter', () => {
     expect(annotation?.style.fontSize).toBe('14pt');
   });
 
+  it('renders field annotation images with non-base64 SVG data URLs', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10"/></svg>';
+    const imageSrc = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'fa-svg-image',
+      runs: [
+        {
+          kind: 'fieldAnnotation',
+          variant: 'signature',
+          displayLabel: 'Signature',
+          fieldId: 'F1',
+          fieldType: 'signer',
+          fieldColor: '#980043',
+          imageSrc,
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ],
+    };
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 100, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+    const testLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'fa-svg-image', fromLine: 0, toLine: 1, x: 10, y: 10, width: 200 }],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(testLayout, mount);
+
+    const img = mount.querySelector('.annotation img') as HTMLImageElement | null;
+    expect(img).toBeTruthy();
+    expect(img?.src).toBe(imageSrc);
+    expect(img?.alt).toBe('Signature');
+  });
+
   it('sets explicit fontSize on math run wrapper', () => {
     const block: FlowBlock = {
       kind: 'paragraph',
@@ -2503,6 +2546,62 @@ describe('DomPainter', () => {
     expect(fragment.dataset.sdtSectionLocked).toBe('true');
   });
 
+  it('keeps documentSection tooltip when contentControlsChrome is none', () => {
+    const sectionBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'section-para-tooltip',
+      runs: [{ text: 'Confidential terms', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 18 }],
+      attrs: {
+        sdt: {
+          type: 'documentSection',
+          id: 'section-2',
+          title: 'Locked Section',
+          description: 'Confidential clause',
+          sectionType: 'locked',
+          isLocked: true,
+        },
+      },
+    };
+
+    const sectionMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 18, width: 120, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const sectionLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'section-para-tooltip',
+              fromLine: 0,
+              toLine: 1,
+              x: 20,
+              y: 30,
+              width: 320,
+              pmStart: 0,
+              pmEnd: 18,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({
+      blocks: [sectionBlock],
+      measures: [sectionMeasure],
+      contentControlsChrome: 'none',
+    });
+    painter.paint(sectionLayout, mount);
+
+    expect(mount.classList.contains('superdoc-cc-chrome-none')).toBe(true);
+    expect(mount.querySelector('.superdoc-document-section__tooltip')).toBeTruthy();
+  });
+
   it('annotates fragments with both primary SDT and container SDT metadata', () => {
     // Test case: TOC paragraph inside a documentSection
     // Should have docPart metadata as primary (data-sdt-*) and section as container (data-sdt-container-*)
@@ -2695,6 +2794,7 @@ describe('DomPainter', () => {
     expect(wrapper.dataset.sdtScope).toBe('inline');
     expect(wrapper.dataset.sdtId).toBe('sc-inline-1');
     expect(wrapper.dataset.sdtTag).toBe('dropdown');
+    expect(wrapper.dataset.containsInlineImage).toBeUndefined();
 
     // The wrapper should span all contained runs (pmStart=7 to pmEnd=22)
     expect(wrapper.dataset.pmStart).toBe('7');
@@ -2710,6 +2810,176 @@ describe('DomPainter', () => {
 
     // Verify text content (label text + run text)
     expect(wrapper.textContent).toContain('controlled text');
+  });
+
+  it('marks inline structuredContent wrappers that contain inline images', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sc-image',
+      runs: [
+        { text: 'Before ', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 7 },
+        {
+          text: 'Caption ',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 7,
+          pmEnd: 15,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'sc-inline-image',
+            alias: 'Image control',
+          },
+        },
+        {
+          kind: 'image',
+          src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          width: 40,
+          height: 40,
+          pmStart: 15,
+          pmEnd: 16,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'sc-inline-image',
+            alias: 'Image control',
+          },
+        },
+        {
+          text: ' after',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 16,
+          pmEnd: 22,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'sc-inline-image',
+            alias: 'Image control',
+          },
+        },
+      ],
+      attrs: {},
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 3,
+          toChar: 6,
+          width: 160,
+          ascent: 40,
+          descent: 0,
+          lineHeight: 40,
+        },
+      ],
+      totalHeight: 40,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sc-image',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 0,
+              pmEnd: 22,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const wrapper = mount.querySelector(
+      '.superdoc-structured-content-inline[data-sdt-id="sc-inline-image"]',
+    ) as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.dataset.containsInlineImage).toBe('true');
+    expect(wrapper?.querySelector('.superdoc-inline-image')).toBeTruthy();
+    expect(wrapper?.dataset.pmStart).toBe('7');
+    expect(wrapper?.dataset.pmEnd).toBe('22');
+  });
+
+  it('omits inline content-control label when contentControlsChrome is none', () => {
+    const inlineScBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sc-no-chrome',
+      runs: [
+        { text: 'Before ', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 7 },
+        {
+          text: 'controlled',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 7,
+          pmEnd: 17,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'sc-inline-none',
+            tag: 'dropdown',
+            alias: 'Test Dropdown',
+          },
+        },
+        { text: ' after', fontFamily: 'Arial', fontSize: 16, pmStart: 17, pmEnd: 23 },
+      ],
+      attrs: {},
+    };
+
+    const inlineScMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 2, toChar: 6, width: 200, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const inlineScLayout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sc-no-chrome',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 0,
+              pmEnd: 23,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({
+      blocks: [inlineScBlock],
+      measures: [inlineScMeasure],
+      contentControlsChrome: 'none',
+    });
+    painter.paint(inlineScLayout, mount);
+
+    const wrapper = mount.querySelector(
+      '.superdoc-structured-content-inline[data-sdt-id="sc-inline-none"]',
+    ) as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    if (!wrapper) return;
+    expect(wrapper.querySelector('.superdoc-structured-content-inline__label')).toBeNull();
   });
 
   it('omits chrome and alias label when inline SDT appearance is hidden (SD-3110)', () => {
@@ -2789,6 +3059,217 @@ describe('DomPainter', () => {
     // with no alias text leaked in.
     expect(wrapper.textContent).toBe('Alpha Corp v. SEC');
     expect(wrapper.textContent).not.toContain('Harvey citation');
+  });
+
+  it('renders a visible wrapper for an empty inline SDT placeholder', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sc-empty',
+      runs: [
+        { text: 'Before ', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 7 },
+        {
+          kind: 'text',
+          text: '',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 8,
+          pmEnd: 8,
+          visualPlaceholder: 'emptyInlineSdt',
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'sc-empty-1',
+            alias: 'Empty SDT',
+          },
+        },
+        { text: ' after', fontFamily: 'Arial', fontSize: 16, pmStart: 8, pmEnd: 14 },
+      ],
+      attrs: {},
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 2, toChar: 6, width: 120, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sc-empty',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 0,
+              pmEnd: 14,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const wrapper = mount.querySelector(
+      '.superdoc-structured-content-inline[data-sdt-id="sc-empty-1"]',
+    ) as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.dataset.empty).toBe('true');
+    expect(wrapper?.dataset.pmStart).toBe('8');
+    expect(wrapper?.dataset.pmEnd).toBe('8');
+    const placeholder = wrapper?.querySelector('.superdoc-empty-inline-sdt-placeholder') as HTMLElement | null;
+    expect(placeholder).toBeTruthy();
+    expect(placeholder?.classList.contains('superdoc-empty-sdt-placeholder')).toBe(true);
+    expect(placeholder?.dataset.placeholderText).toBe('Click or tap here to enter text');
+    expect(wrapper?.textContent).not.toContain('old content');
+    expect(wrapper?.textContent).not.toContain('Click or tap here to enter text');
+  });
+
+  it('renders placeholder chrome for an empty block SDT without adding document text', () => {
+    const sdt = {
+      type: 'structuredContent',
+      scope: 'block',
+      id: 'sc-block-empty-1',
+      alias: 'Empty block',
+    } as const;
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'block-sc-empty',
+      runs: [
+        {
+          kind: 'text',
+          text: '',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 4,
+          pmEnd: 4,
+          visualPlaceholder: 'emptyBlockSdt',
+          sdt,
+        },
+      ],
+      attrs: { sdt },
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 220, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'block-sc-empty',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 3,
+              pmEnd: 5,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const fragment = mount.querySelector(
+      '.superdoc-structured-content-block[data-sdt-id="sc-block-empty-1"]',
+    ) as HTMLElement | null;
+    const placeholder = fragment?.querySelector('.superdoc-empty-block-sdt-placeholder') as HTMLElement | null;
+
+    expect(fragment).toBeTruthy();
+    expect(placeholder).toBeTruthy();
+    expect(placeholder?.classList.contains('superdoc-empty-sdt-placeholder')).toBe(true);
+    expect(placeholder?.dataset.placeholderText).toBe('Click or tap here to enter text');
+    expect(placeholder?.dataset.pmStart).toBe('4');
+    expect(placeholder?.dataset.pmEnd).toBe('4');
+    expect(placeholder?.style.fontFamily).toBe('Arial');
+    expect(placeholder?.style.fontSize).toBe('16px');
+    expect(fragment?.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('0px');
+    expect(fragment?.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('220px');
+    expect(fragment?.textContent).not.toContain('Click or tap here to enter text');
+  });
+
+  it('marks hidden empty block SDT wrappers so placeholder chrome can be suppressed', () => {
+    const sdt = {
+      type: 'structuredContent',
+      scope: 'block',
+      id: 'sc-block-hidden-empty-1',
+      alias: 'Hidden empty block',
+      appearance: 'hidden',
+    } as const;
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'block-sc-hidden-empty',
+      runs: [
+        {
+          kind: 'text',
+          text: '',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 4,
+          pmEnd: 4,
+          visualPlaceholder: 'emptyBlockSdt',
+          sdt,
+        },
+      ],
+      attrs: { sdt },
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 0, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'block-sc-hidden-empty',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 3,
+              pmEnd: 5,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const fragment = mount.querySelector('[data-sdt-id="sc-block-hidden-empty-1"]') as HTMLElement | null;
+
+    expect(fragment).toBeTruthy();
+    expect(fragment?.dataset.appearance).toBe('hidden');
+    expect(fragment?.classList.contains('superdoc-structured-content-block')).toBe(false);
+    expect(fragment?.querySelector('.superdoc-structured-content__label')).toBeNull();
   });
 
   it('keeps inline SDT wrapper font-size in sync when run font-size changes', () => {
@@ -7166,6 +7647,9 @@ describe('DomPainter', () => {
   });
 
   describe('renderImageRun (inline image runs)', () => {
+    const inlineImageSrc =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
     const renderInlineImageRun = (
       run: Extract<FlowBlock, { kind: 'paragraph' }>['runs'][number],
       lineWidth = 100,
@@ -7217,6 +7701,94 @@ describe('DomPainter', () => {
       const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
     };
+
+    const renderInlineImageTextLine = (runs: Extract<FlowBlock, { kind: 'paragraph' }>['runs']) => {
+      const imageBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'img-text-block',
+        runs,
+      };
+
+      const imageMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: runs.length - 1,
+            toChar: 'text' in runs[runs.length - 1]! ? runs[runs.length - 1]!.text.length : 0,
+            width: 140,
+            ascent: 40,
+            descent: 0,
+            lineHeight: 40,
+          },
+        ],
+        totalHeight: 40,
+      };
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-text-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 140,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      painter.paint(imageLayout, mount);
+    };
+
+    it('bottom-aligns normal text runs on lines containing inline images', () => {
+      renderInlineImageTextLine([
+        { text: 'Before ', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 7 },
+        { kind: 'image', src: inlineImageSrc, width: 40, height: 40, pmStart: 7, pmEnd: 8 },
+        { text: ' after', fontFamily: 'Arial', fontSize: 16, pmStart: 8, pmEnd: 14 },
+      ]);
+
+      const textSpans = Array.from(mount.querySelectorAll('.superdoc-line > span')) as HTMLElement[];
+      expect(textSpans.map((span) => span.textContent)).toEqual(['Before ', ' after']);
+      expect(textSpans[0]?.style.lineHeight).toBe('normal');
+      expect(textSpans[0]?.style.verticalAlign).toBe('bottom');
+      expect(textSpans[1]?.style.lineHeight).toBe('normal');
+      expect(textSpans[1]?.style.verticalAlign).toBe('bottom');
+
+      const img = mount.querySelector('img') as HTMLImageElement | null;
+      expect(img?.style.verticalAlign).toBe('top');
+    });
+
+    it('preserves explicit vertical positioning on text runs beside inline images', () => {
+      renderInlineImageTextLine([
+        { text: 'Base ', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 5 },
+        { kind: 'image', src: inlineImageSrc, width: 40, height: 40, pmStart: 5, pmEnd: 6 },
+        {
+          text: '2',
+          fontFamily: 'Arial',
+          fontSize: 10.4,
+          vertAlign: 'superscript',
+          pmStart: 6,
+          pmEnd: 7,
+        },
+      ]);
+
+      const textSpans = Array.from(mount.querySelectorAll('.superdoc-line > span')) as HTMLElement[];
+      expect(textSpans.map((span) => span.textContent)).toEqual(['Base ', '2']);
+      expect(textSpans[0]?.style.lineHeight).toBe('normal');
+      expect(textSpans[0]?.style.verticalAlign).toBe('bottom');
+      expect(textSpans[1]?.style.lineHeight).toBe('1');
+      expect(textSpans[1]?.style.verticalAlign).toBe('5.28px');
+    });
 
     it('renders img element with valid data URL', () => {
       const imageBlock: FlowBlock = {
@@ -7277,6 +7849,49 @@ describe('DomPainter', () => {
       expect(img?.src).toContain('data:image/png;base64');
       expect(img?.width).toBe(100);
       expect(img?.height).toBe(100);
+    });
+
+    it('renders img element with non-base64 SVG data URL', () => {
+      const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><text x="0" y="20">Signature</text></svg>';
+      const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+
+      renderInlineImageRun({
+        kind: 'image',
+        src: svgDataUrl,
+        width: 100,
+        height: 50,
+      });
+
+      const img = mount.querySelector('img');
+      expect(img).toBeTruthy();
+      expect(img?.src).toBe(svgDataUrl);
+      expect(img?.width).toBe(100);
+      expect(img?.height).toBe(50);
+    });
+
+    it('rejects non-base64 raster data URLs', () => {
+      renderInlineImageRun({
+        kind: 'image',
+        src: 'data:image/png,not-base64',
+        width: 100,
+        height: 100,
+      });
+
+      const img = mount.querySelector('img');
+      expect(img).toBeNull();
+    });
+
+    it('rejects non-image data URLs without requiring base64', () => {
+      renderInlineImageRun({
+        kind: 'image',
+        src: 'data:text/html;charset=utf-8,%3Cscript%3Ealert(1)%3C%2Fscript%3E',
+        width: 100,
+        height: 100,
+      });
+
+      const img = mount.querySelector('img');
+      expect(img).toBeNull();
     });
 
     it('renders DrawingML luminance using percentage units', () => {
@@ -12780,6 +13395,711 @@ describe('applyRunDataAttributes', () => {
         expect(fragment.dataset.sdtContainerEnd).toBe('true');
       });
 
+      it('limits block SDT chrome to paragraph content width', () => {
+        const textSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-text',
+          runs: [{ text: 'Short content', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 13 }],
+          attrs: {
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-text',
+              alias: 'Text Control',
+            },
+          },
+        };
+
+        const textSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 13,
+              width: 96,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 20,
+        };
+
+        const textSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-text',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 13,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [textSdtBlock], measures: [textSdtMeasure] });
+        painter.paint(textSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('0px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('96px');
+      });
+
+      it('keeps multiline block SDT chrome at full fragment width', () => {
+        const multilineSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-multiline',
+          runs: [{ text: 'First line second line', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 22 }],
+          attrs: {
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-multiline',
+              alias: 'Multiline Control',
+            },
+          },
+        };
+
+        const multilineSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 10,
+              width: 80,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+            {
+              fromRun: 0,
+              fromChar: 11,
+              toRun: 0,
+              toChar: 22,
+              width: 96,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 40,
+        };
+
+        const multilineSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-multiline',
+                  fromLine: 0,
+                  toLine: 2,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 22,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [multilineSdtBlock], measures: [multilineSdtMeasure] });
+        painter.paint(multilineSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('');
+      });
+
+      it('expands block SDT chrome to justified line width', () => {
+        const justifiedSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-justified',
+          runs: [{ text: 'Alpha beta gamma', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 16 }],
+          attrs: {
+            alignment: 'justify',
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-justified',
+              alias: 'Justified Control',
+            },
+          },
+        };
+
+        const justifiedSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 10,
+              width: 100,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+            {
+              fromRun: 0,
+              fromChar: 11,
+              toRun: 0,
+              toChar: 16,
+              width: 60,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 40,
+        };
+
+        const justifiedSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-justified',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 10,
+                  continuesOnNext: true,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [justifiedSdtBlock], measures: [justifiedSdtMeasure] });
+        painter.paint(justifiedSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('');
+      });
+
+      it('offsets block SDT chrome for indented paragraph content', () => {
+        const indentedSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-indented',
+          runs: [{ text: 'Indented', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 8 }],
+          attrs: {
+            indent: { left: 40 },
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-indented',
+              alias: 'Indented Control',
+            },
+          },
+        };
+
+        const indentedSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 8,
+              width: 96,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 20,
+        };
+
+        const indentedSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-indented',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 8,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [indentedSdtBlock], measures: [indentedSdtMeasure] });
+        painter.paint(indentedSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('40px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('96px');
+      });
+
+      it('keeps continuation fragment block SDT chrome at full fragment width', () => {
+        const continuedSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-continued',
+          runs: [{ text: 'First line second line', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 22 }],
+          attrs: {
+            indent: { left: 40, firstLine: 30 },
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-continued',
+              alias: 'Continued Control',
+            },
+          },
+        };
+
+        const continuedSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 10,
+              width: 100,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+            {
+              fromRun: 0,
+              fromChar: 11,
+              toRun: 0,
+              toChar: 22,
+              width: 96,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 40,
+        };
+
+        const fragment: Fragment = {
+          kind: 'para',
+          blockId: 'block-sdt-continued',
+          fromLine: 1,
+          toLine: 2,
+          x: 20,
+          y: 30,
+          width: 320,
+          pmStart: 11,
+          pmEnd: 22,
+          continuesFromPrev: true,
+        };
+
+        const continuedSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [{ number: 1, fragments: [fragment] }],
+        };
+
+        const painter = createTestPainter({ blocks: [continuedSdtBlock], measures: [continuedSdtMeasure] });
+        painter.setResolvedLayout({
+          version: 1,
+          flowMode: 'paginated',
+          pageGap: 0,
+          pages: [
+            {
+              id: 'page-0',
+              index: 0,
+              number: 1,
+              width: 400,
+              height: 500,
+              items: [
+                {
+                  kind: 'fragment',
+                  id: 'block-sdt-continued:1:2',
+                  pageIndex: 0,
+                  x: fragment.x,
+                  y: fragment.y,
+                  width: fragment.width,
+                  height: 20,
+                  fragmentKind: 'para',
+                  fragment,
+                  blockId: 'block-sdt-continued',
+                  fragmentIndex: 0,
+                  pmStart: fragment.pmStart,
+                  pmEnd: fragment.pmEnd,
+                  continuesFromPrev: true,
+                  block: continuedSdtBlock,
+                  measure: continuedSdtMeasure,
+                },
+              ],
+            },
+          ],
+        });
+        painter.paint(continuedSdtLayout, mount);
+
+        const paintedFragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(paintedFragment.style.width).toBe('320px');
+        expect(paintedFragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('');
+        expect(paintedFragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('');
+      });
+
+      it('limits block SDT chrome to inline image content width', () => {
+        const imageOnlySdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-image-only',
+          runs: [
+            {
+              kind: 'image',
+              src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+              width: 210,
+              height: 118,
+              pmStart: 0,
+              pmEnd: 1,
+            },
+          ],
+          attrs: {
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-image-only',
+              alias: 'Image Control',
+            },
+          },
+        };
+
+        const imageOnlySdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 0,
+              width: 210,
+              ascent: 118,
+              descent: 0,
+              lineHeight: 118,
+            },
+          ],
+          totalHeight: 118,
+        };
+
+        const imageOnlySdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-image-only',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 1,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [imageOnlySdtBlock], measures: [imageOnlySdtMeasure] });
+        painter.paint(imageOnlySdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('0px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('210px');
+      });
+
+      it('positions block SDT chrome around centered paragraph content', () => {
+        const centeredSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-centered',
+          runs: [{ text: 'Centered', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 8 }],
+          attrs: {
+            alignment: 'center',
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-centered',
+              alias: 'Centered Control',
+            },
+          },
+        };
+
+        const centeredSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 8,
+              width: 100,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 20,
+        };
+
+        const centeredSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-centered',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 8,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [centeredSdtBlock], measures: [centeredSdtMeasure] });
+        painter.paint(centeredSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('110px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('100px');
+      });
+
+      it('positions block SDT chrome around default RTL paragraph content', () => {
+        const rtlSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-rtl',
+          runs: [{ text: 'مرحبا', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 5 }],
+          attrs: {
+            directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' },
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-rtl',
+              alias: 'RTL Control',
+            },
+          },
+        };
+
+        const rtlSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 5,
+              width: 80,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 20,
+        };
+
+        const rtlSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-rtl',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 5,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({ blocks: [rtlSdtBlock], measures: [rtlSdtMeasure] });
+        painter.paint(rtlSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('240px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('80px');
+      });
+
+      it('positions centered block SDT chrome within paragraph indents', () => {
+        const centeredIndentedSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-centered-indented',
+          runs: [{ text: 'Centered', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 8 }],
+          attrs: {
+            alignment: 'center',
+            indent: { left: 40, right: 60 },
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-centered-indented',
+              alias: 'Centered Indented Control',
+            },
+          },
+        };
+
+        const centeredIndentedSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 8,
+              width: 100,
+              ascent: 12,
+              descent: 4,
+              lineHeight: 20,
+            },
+          ],
+          totalHeight: 20,
+        };
+
+        const centeredIndentedSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-centered-indented',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 8,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({
+          blocks: [centeredIndentedSdtBlock],
+          measures: [centeredIndentedSdtMeasure],
+        });
+        painter.paint(centeredIndentedSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.style.width).toBe('320px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('100px');
+        expect(fragment.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('100px');
+      });
+
+      it('omits block structured-content label when contentControlsChrome is none', () => {
+        const blockSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-none',
+          runs: [{ text: 'Content in block SDT', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 20 }],
+          attrs: {
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-block-none',
+              tag: '{"fieldType":"signer"}',
+              alias: 'Block Content Control',
+            },
+          },
+        };
+
+        const blockSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            { fromRun: 0, fromChar: 0, toRun: 0, toChar: 20, width: 180, ascent: 12, descent: 4, lineHeight: 20 },
+          ],
+          totalHeight: 20,
+        };
+
+        const blockSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-none',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 20,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({
+          blocks: [blockSdtBlock],
+          measures: [blockSdtMeasure],
+          contentControlsChrome: 'none',
+        });
+        painter.paint(blockSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.classList.contains('superdoc-structured-content-block')).toBe(true);
+        expect(fragment.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+      });
+
       it('updates block SDT boundaries when appending a new fragment during patch rendering', () => {
         const sdtMetadata = {
           type: 'structuredContent' as const,
@@ -12839,10 +14159,21 @@ describe('applyRunDataAttributes', () => {
 
         painter.paint(initialLayout, mount);
 
+        const initialA = mount.querySelector('[data-block-id="sdt-para-a"]') as HTMLElement;
+        const initialB = mount.querySelector('[data-block-id="sdt-para-b"]') as HTMLElement;
         const initialC = mount.querySelector('[data-block-id="sdt-para-c"]') as HTMLElement;
+        expect(initialA).toBeTruthy();
+        expect(initialB).toBeTruthy();
         expect(initialC).toBeTruthy();
+        expect(initialA.dataset.sdtContainerStart).toBe('true');
+        expect(initialA.dataset.sdtContainerEnd).toBe('false');
+        expect(initialB.dataset.sdtContainerStart).toBe('false');
+        expect(initialB.dataset.sdtContainerEnd).toBe('false');
         expect(initialC.dataset.sdtContainerStart).toBe('false');
         expect(initialC.dataset.sdtContainerEnd).toBe('true');
+        expect(initialA.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('');
+        expect(initialB.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('');
+        expect(initialC.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('');
 
         const paraD = buildParagraph('sdt-para-d', 'Delta', 17);
         const updatedLayout: Layout = {
@@ -12874,6 +14205,8 @@ describe('applyRunDataAttributes', () => {
         expect(updatedC.dataset.sdtContainerEnd).toBe('false');
         expect(updatedD.dataset.sdtContainerStart).toBe('false');
         expect(updatedD.dataset.sdtContainerEnd).toBe('true');
+        expect(updatedC.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('');
+        expect(updatedD.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('');
       });
 
       it('keeps table fragments within block SDT boundaries', () => {

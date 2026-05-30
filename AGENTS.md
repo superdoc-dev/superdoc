@@ -9,16 +9,22 @@ SuperDoc uses its own rendering pipeline. ProseMirror stores document state; it 
 ```
 .docx
   → super-converter parses OOXML into the hidden PM doc
-  → pm-adapter reads PM state and resolved styles
+  → v1 layout-adapter (super-editor: src/editors/v1/core/layout-adapter)
+    reads PM state and resolved styles
   → FlowBlock[]
   → layout-engine paginates
   → ResolvedLayout
   → DomPainter paints DOM
 ```
 
+- The v1 ProseMirror → `FlowBlock[]` adapter is owned by `@superdoc/super-editor`
+  (`src/editors/v1/core/layout-adapter`). It is v1 SuperEditor's projection from
+  hidden ProseMirror state into layout data. v2 owns its own projection adapter.
+  `layout-engine` runtime packages consume `FlowBlock[]` and layout contracts
+  only; they must never import either concrete adapter.
 - `PresentationEditor` wraps a hidden ProseMirror `Editor`. Its contenteditable DOM is never shown. PresentationEditor bridges editor events into layout/paint state; do not resolve OOXML semantics there.
 - **DomPainter** (`layout-engine/painters/dom/`) owns all visual rendering.
-- Style-resolved properties flow `pm-adapter` → DomPainter. Do not style document content with PM decorations.
+- Style-resolved properties flow `layout-adapter` → DomPainter. Do not style document content with PM decorations.
 
 ### Where To Put Your Change
 
@@ -26,8 +32,8 @@ SuperDoc uses its own rendering pipeline. ProseMirror stores document state; it 
 |---|---|---|
 | DOCX import/export | `super-editor/src/editors/v1/core/super-converter/` | Parse and preserve OOXML, style refs, inline properties. Do not bake resolved formatting into direct attrs. |
 | Style cascade | `layout-engine/style-engine/` | Single source of truth for defaults, styles, conditional formatting, inline overrides. |
-| Static document visuals | `pm-adapter/` data + `layout-engine/painters/dom/` rendering | Feed typed data into DomPainter. Do not style static content with PM decorations. |
-| Direction-aware properties | `layout-engine/painters/dom/` | DomPainter mirrors at paint time for `w:bidiVisual`. pm-adapter stores logical sides LTR-default. Pre-mirroring upstream is a double-swap. See `packages/layout-engine/pm-adapter/src/direction/README.md`. |
+| Static document visuals | v1 `core/layout-adapter/` data + `layout-engine/painters/dom/` rendering | Feed typed data into DomPainter. Do not style static content with PM decorations. |
+| Direction-aware properties | `layout-engine/painters/dom/` | DomPainter mirrors at paint time for `w:bidiVisual`. The v1 layout-adapter stores logical sides LTR-default. Pre-mirroring upstream is a double-swap. See `packages/super-editor/src/editors/v1/core/layout-adapter/direction/README.md`. |
 | Editing behavior | `super-editor/src/editors/v1/extensions/` | Commands, keybindings, editor plugins. Do not duplicate cascade or render document visuals here. |
 | Final DOM rendering | `layout-engine/painters/dom/` | Render `ResolvedLayout`. Paint-time transforms (e.g. RTL mirror) live here. |
 | New doc-api operation | `packages/document-api/src/contract/operation-definitions.ts` | Contract-first; touches 4 files. See `packages/document-api/README.md`. |
@@ -39,8 +45,8 @@ For specialized boundaries (interaction mapping, geometry/pagination, ephemeral 
 Before adding a visual or direction-aware path, run:
 
 ```bash
-# Painter must not import upstream packages.
-rg "@superdoc/(pm-adapter|style-engine|layout-bridge|layout-resolved)" packages/layout-engine/painters/dom/src
+# Painter must not import upstream packages or the concrete v1 adapter.
+rg "@superdoc/(super-editor|style-engine|layout-bridge|layout-resolved)" packages/layout-engine/painters/dom/src
 ```
 
 More checks in `packages/layout-engine/AGENTS.md`.

@@ -22,10 +22,13 @@ export const createInlineSdtWrapper = (sdt: SdtMetadata, context: RunRenderConte
     wrapper.dataset.appearance = 'hidden';
     return wrapper;
   }
+  if (context.contentControlsChrome === 'none') {
+    return wrapper;
+  }
 
   const alias = (sdt as { alias?: string })?.alias || 'Inline content';
   const labelEl = context.doc.createElement('span');
-  labelEl.className = `${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}__label`;
+  labelEl.className = DOM_CLASS_NAMES.INLINE_SDT_LABEL;
   labelEl.textContent = alias;
   wrapper.appendChild(labelEl);
   return wrapper;

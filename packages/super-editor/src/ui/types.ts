@@ -462,9 +462,10 @@ export interface ContentControlsSlice {
  * directly, matching the architectural rule that this handle is a UI
  * surface, not a parallel mutation contract.
  *
- * The handle does not include `scrollIntoView` in v1: that path
- * widens `ui.viewport.scrollIntoView` and is a separate slice from
- * `ui.viewport.getRect` (SD-3156).
+ * The handle includes `scrollIntoView` via a dedicated model-aware
+ * path. It does NOT widen `ui.viewport.scrollIntoView`: content controls
+ * stay UI-local and out of the Document API address union, mirroring how
+ * `getRect` resolves a content control through a UI-local address.
  */
 export interface ContentControlsHandle {
   /** Snapshot the current content-controls slice synchronously. */
@@ -496,7 +497,59 @@ export interface ContentControlsHandle {
    * failure reason).
    */
   getRect(input: { id: string }): ViewportRectResult;
+  /**
+   * Scroll the content control identified by `id` into view. The
+   * control's position is resolved from the document model (not the
+   * painted DOM), so it works even when the control sits on a
+   * not-yet-rendered (virtualized) page — the page is mounted, then
+   * scrolled. Scroll-only: it does not move the selection or place the
+   * caret inside the control.
+   *
+   * Returns the same `ScrollIntoViewOutput` shape as
+   * `ui.viewport.scrollIntoView`: `{ success: true }` once scrolled, or
+   * `{ success: false }` when `id` is empty/unknown or the presentation
+   * layer isn't ready. `block` defaults to `'center'`, `behavior` to
+   * `'smooth'`.
+   *
+   * v1 is body-only: a control inside a header/footer/note story does
+   * not resolve and returns `{ success: false }`.
+   */
+  scrollIntoView(input: {
+    id: string;
+    block?: 'start' | 'center' | 'end' | 'nearest';
+    behavior?: 'auto' | 'smooth';
+  }): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
+  /**
+   * Focus the content control identified by `id`: place the caret inside it
+   * and scroll it into view — the "take me there and let me edit" counterpart
+   * to {@link scrollIntoView} (which is scroll-only). `block` defaults to
+   * `'center'`, `behavior` to `'smooth'`.
+   *
+   * Selection, not mutation: it does NOT bypass lock or document-mode rules.
+   * If the control is locked or the document is read-only, the user can
+   * inspect it, but edits are still blocked by the normal editing rules.
+   *
+   * Resolves to `{ success: false, reason }` only for real navigation
+   * problems — `'invalid-id'` (empty id), `'not-ready'` (no presentation
+   * layer), `'not-found'` (no such control in the body document; v1 is
+   * body-only), or `'not-reachable'` (found, but its page couldn't be
+   * scrolled into view). Lock mode and viewing mode never make it fail.
+   */
+  focus(input: {
+    id: string;
+    block?: 'start' | 'center' | 'end' | 'nearest';
+    behavior?: 'auto' | 'smooth';
+  }): Promise<ContentControlFocusResult>;
 }
+
+/**
+ * Result of {@link ContentControlsHandle.focus}. Fails only for real
+ * navigation problems, never for lock mode or viewing mode (focus is
+ * selection, not mutation).
+ */
+export type ContentControlFocusResult =
+  | { success: true }
+  | { success: false; reason: 'invalid-id' | 'not-ready' | 'not-found' | 'not-reachable' };
 
 /**
  * Anchored-metadata domain handle exposed on `ui.metadata`. Sugar over
@@ -691,11 +744,10 @@ export interface SuperDocUI {
   selection: SelectionHandle;
 
   /**
-   * Viewport domain — imperative geometry queries for sticky-card /
-   * floating-toolbar placement against painted entities and ranges.
-   * No subscription substrate — viewport rects are read on-demand by
-   * the consumer (e.g. on hover, on scroll, on layout-change events
-   * the consumer already listens to). Browser-only by definition.
+   * Viewport domain — geometry queries for sticky-card / floating-toolbar
+   * placement against painted entities and ranges, plus
+   * {@link ViewportHandle.observe} to learn when those rects may have moved.
+   * Browser-only by definition.
    */
   viewport: ViewportHandle;
 
@@ -1808,17 +1860,38 @@ export type ViewportRectResult =
     };
 
 /**
- * Imperative viewport-geometry surface. No subscription primitive —
- * rects are read on demand. Consumers who need to reflow on layout
- * change typically already listen to a `transaction` / `paint` /
- * `scroll` event upstream and call `getRect` from there.
+ * Reason a {@link ViewportHandle.observe} notification fired. `'mixed'`
+ * when more than one change coalesced into the same animation frame.
  */
+export type ViewportGeometryReason = 'layout' | 'zoom' | 'scroll' | 'resize' | 'mixed';
+
+/**
+ * Payload for {@link ViewportHandle.observe}. Intentionally minimal: the
+ * signal means "your cached `getRect()` coordinates may be stale, re-query" -
+ * it carries no geometry.
+ */
+export interface ViewportGeometryEvent {
+  reason: ViewportGeometryReason;
+}
+
 export interface ViewportHandle {
   /**
    * Look up the painted rectangle(s) of an entity or text range in
    * viewport coordinates. Synchronous — no DOM mutation required.
    */
   getRect(input: ViewportGetRectInput): ViewportRectResult;
+  /**
+   * Subscribe to viewport geometry invalidation. The listener fires (once
+   * per animation frame, coalesced) after anything that can move painted
+   * rectangles: layout / pagination repaints, zoom, and DOM scroll / resize.
+   * It carries no coordinates — re-query {@link getRect} for the entities you
+   * care about. Returns an unsubscribe.
+   *
+   * This is the single signal overlays should listen to instead of
+   * hand-wiring scroll + resize + layout + zoom (and still missing cases like
+   * reflow and zoom, which fire no scroll event).
+   */
+  observe(listener: (event: ViewportGeometryEvent) => void): () => void;
   /**
    * Scroll the viewport so the target is visible. Browser-only by
    * definition: drives `presentation.navigateTo()` for entity targets
@@ -1834,7 +1907,7 @@ export interface ViewportHandle {
    * Look up entities painted under a viewport coordinate. Used by
    * right-click menus and hover tooltips to ask "what's at this point?"
    * without consumers reading `data-track-change-id` /
-   * `data-comment-ids` off the painted DOM themselves; the
+   * `data-comment-ids` / `data-sdt-id` off the painted DOM themselves; the
    * data-attribute layout is an implementation detail of the painter
    * that consumers shouldn't depend on.
    *
@@ -1851,11 +1924,12 @@ export interface ViewportHandle {
    * ids from the other's DOM, and post-destroy calls return `[]`
    * rather than stale ids from cached painted nodes.
    *
-   * Today the supported entity types are `comment` and `trackedChange`.
-   * `link`, `image`, and `tableCell` are reserved for follow-ups;
-   * adding them is purely additive (new union members), so callers can
-   * `switch` on `hit.type` and the default branch remains forward
-   * compatible.
+   * Today the supported entity types are `comment`, `trackedChange`, and
+   * `contentControl` (content controls / SDT fields, whose hit also carries
+   * `scope` and `tag`). `link`, `image`, and `tableCell` are reserved for
+   * follow-ups; adding them is purely additive (new union members), so
+   * callers can `switch` on `hit.type` and the default branch remains
+   * forward compatible.
    */
   entityAt(input: ViewportEntityAtInput): ViewportEntityHit[];
   /**

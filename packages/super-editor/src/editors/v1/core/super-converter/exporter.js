@@ -6,6 +6,7 @@ import { translator as wBrNodeTranslator } from './v3/handlers/w/br/br-translato
 import { translator as wHighlightTranslator } from './v3/handlers/w/highlight/highlight-translator.js';
 import { translator as wTabNodeTranslator } from './v3/handlers/w/tab/tab-translator.js';
 import { translator as wNoBreakHyphenNodeTranslator } from './v3/handlers/w/noBreakHyphen/no-break-hyphen-translator.js';
+import { translator as wSmartTagNodeTranslator } from './v3/handlers/w/smartTag/smartTag-translator.js';
 import { translator as wPNodeTranslator } from './v3/handlers/w/p/p-translator.js';
 import { translator as wRNodeTranslator } from './v3/handlers/w/r/r-translator.js';
 import { translator as wTcNodeTranslator } from './v3/handlers/w/tc/tc-translator';
@@ -218,6 +219,7 @@ export function exportSchemaToJson(params) {
     fieldAnnotation: wSdtNodeTranslator,
     tab: wTabNodeTranslator,
     noBreakHyphen: wNoBreakHyphenNodeTranslator,
+    smartTag: wSmartTagNodeTranslator,
     image: [wDrawingNodeTranslator, pictTranslator],
     hardBreak: wBrNodeTranslator,
     commentRangeStart: wCommentRangeStartTranslator,
@@ -701,9 +703,11 @@ export class DocxExporter {
     let { name } = node;
     const { elements, attributes } = node;
 
-    // Normalize w:delInstrText → w:instrText only when the field instruction is
-    // no longer inside a surviving w:del wrapper. Inside w:del, ECMA-376 expects
-    // w:delInstrText to remain intact.
+    // Normalize w:delInstrText → w:instrText. During import, w:del wrappers around
+    // field character runs lose their trackDelete marks (only text content gets marked),
+    // so on export the w:del wrapper is absent. Per ECMA-376 §17.16.13, w:delInstrText
+    // outside w:del is non-conformant — renaming to w:instrText keeps the field valid.
+    // Inside a surviving w:del wrapper, ECMA-376 expects w:delInstrText to remain intact.
     if (name === 'w:delInstrText' && !insideDeletion) {
       name = 'w:instrText';
     }

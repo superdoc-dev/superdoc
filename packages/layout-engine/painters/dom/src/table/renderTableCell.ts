@@ -224,6 +224,8 @@ type EmbeddedTableRenderParams = {
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
+  /** Built-in SDT chrome rendering mode. */
+  chrome?: 'default' | 'none';
   /** Starting row index for partial rendering (inclusive, default 0) */
   fromRow?: number;
   /** Ending row index for partial rendering (exclusive, default all rows) */
@@ -285,6 +287,7 @@ const renderEmbeddedTable = (
     captureLineSnapshot,
     renderDrawingContent,
     applySdtDataset,
+    chrome,
     fromRow: paramFromRow,
     toRow: paramToRow,
     partialRow: paramPartialRow,
@@ -343,6 +346,7 @@ const renderEmbeddedTable = (
     renderDrawingContent,
     applyFragmentFrame,
     applySdtDataset,
+    chrome,
     applyStyles: applyInlineStyles,
     sdtBoundary,
     ancestorContainerKey,
@@ -378,6 +382,7 @@ function renderPartialEmbeddedTable(params: {
   captureLineSnapshot?: EmbeddedTableRenderParams['captureLineSnapshot'];
   renderDrawingContent?: EmbeddedTableRenderParams['renderDrawingContent'];
   applySdtDataset: EmbeddedTableRenderParams['applySdtDataset'];
+  chrome?: EmbeddedTableRenderParams['chrome'];
   sdtBoundary?: SdtBoundaryOptions;
   ancestorContainerKey?: string | null;
   ancestorContainerSdt?: SdtMetadata | null;
@@ -398,6 +403,7 @@ function renderPartialEmbeddedTable(params: {
     captureLineSnapshot,
     renderDrawingContent,
     applySdtDataset,
+    chrome,
     sdtBoundary,
     ancestorContainerKey,
     ancestorContainerSdt,
@@ -505,6 +511,7 @@ function renderPartialEmbeddedTable(params: {
     captureLineSnapshot,
     renderDrawingContent,
     applySdtDataset,
+    chrome,
     fromRow: embeddedFromRow,
     toRow: embeddedToRow,
     partialRow: partialRowInfo,
@@ -575,6 +582,8 @@ type TableCellRenderDependencies = {
   context: FragmentRenderContext;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
+  /** Built-in SDT chrome rendering mode. */
+  chrome?: 'default' | 'none';
   /** Ancestor SDT container key for suppressing duplicate container styling in cells */
   ancestorContainerKey?: string | null;
   /** Ancestor SDT metadata for suppressing duplicate id-less container styling in cells */
@@ -675,6 +684,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     renderDrawingContent,
     context,
     applySdtDataset,
+    chrome,
     ancestorContainerKey,
     ancestorContainerSdt,
     ancestorContainerKeys,
@@ -812,6 +822,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           captureLineSnapshot,
           renderDrawingContent,
           applySdtDataset,
+          chrome,
           sdtBoundary: sdtBoundaries[i],
           ancestorContainerKey,
           ancestorContainerSdt,
@@ -1015,6 +1026,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
             cellEl.style.overflow = 'visible';
             onSdtContainerChrome?.();
           },
+          contentControlsChrome: chrome,
           applySdtDataset,
           renderLine: ({ block, line, lineIndex, isLastLine, resolvedListTextStartPx }) =>
             renderLine(block, line, { ...context, section: 'body' }, lineIndex, isLastLine, resolvedListTextStartPx),

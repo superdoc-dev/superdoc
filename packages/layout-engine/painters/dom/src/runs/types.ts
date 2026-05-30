@@ -25,6 +25,7 @@ export type RunRenderContext = {
   doc: Document;
   layoutEpoch: number;
   showFormattingMarks: boolean;
+  contentControlsChrome: 'default' | 'none';
   pendingTooltips: WeakMap<HTMLElement, string>;
   getNextLinkId: () => string;
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;

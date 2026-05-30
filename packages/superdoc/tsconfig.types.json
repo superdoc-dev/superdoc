@@ -2,7 +2,8 @@
   "extends": "./tsconfig.build.json",
   "compilerOptions": {
     "composite": true,
-    "outDir": "dist-types"
+    "outDir": "dist-types",
+    "rootDir": "../.."
   },
   "references": [
     { "path": "../super-editor/tsconfig.types.json" },

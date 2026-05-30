@@ -72,6 +72,14 @@ const superdoc = new SuperDoc({
 });
 ```
 
+Optional layered CSS mode:
+
+```css
+@layer reset, superdoc, app;
+@import 'superdoc/style.layered.css';
+@import 'your-app.css' layer(app);
+```
+
 Or use the CDN:
 
 ```html

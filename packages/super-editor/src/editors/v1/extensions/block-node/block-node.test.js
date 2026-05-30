@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { EditorState } from 'prosemirror-state';
 import { ReplaceStep } from 'prosemirror-transform';
 import { nodeAllowsSdBlockIdAttr, nodeNeedsSdBlockId, checkForNewBlockNodesInTrs } from './block-node.js';
 import { initTestEditor, loadTestDataForEditorTests } from '../../tests/helpers/helpers.js';
@@ -488,6 +489,94 @@ describe('BlockNode helpers', () => {
     const inRange = editor.helpers.blockNode.getBlockNodesInRange(from, to);
     expect(inRange.length).toBe(1);
     expect(inRange[0].node.eq(sample.node)).toBe(true);
+  });
+});
+
+describe('BlockNode sdBlockRev updates', () => {
+  let editor;
+  let schema;
+
+  beforeEach(() => {
+    ({ editor } = initTestEditor());
+    ({ schema } = editor);
+  });
+
+  afterEach(() => {
+    editor?.destroy();
+    editor = null;
+    schema = null;
+  });
+
+  function applyDocToEditor(doc) {
+    const state = EditorState.create({ schema, doc, plugins: editor.state.plugins });
+    editor.setState(state);
+  }
+
+  function findParagraphByParaId(paraId) {
+    let result = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'paragraph' && node.attrs.paraId === paraId) {
+        result = { node, pos };
+        return false;
+      }
+    });
+    return result;
+  }
+
+  function findInlineSdt() {
+    let result = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'structuredContent') {
+        result = { node, pos };
+        return false;
+      }
+    });
+    return result;
+  }
+
+  function createInlineSdtParagraphDoc() {
+    const paragraph = schema.nodes.paragraph.create({ paraId: 'p-inline-sdt', sdBlockRev: 0 }, [
+      schema.text('Before '),
+      schema.nodes.structuredContent.create({ id: 'sdt-1', lockMode: 'sdtLocked' }, schema.text('Field')),
+      schema.text(' After'),
+    ]);
+    return schema.nodes.doc.create(null, [paragraph]);
+  }
+
+  it('increments the containing paragraph revision when text is inserted inside an inline SDT', () => {
+    applyDocToEditor(createInlineSdtParagraphDoc());
+    const sdt = findInlineSdt();
+    expect(sdt).toBeTruthy();
+
+    editor.view.dispatch(editor.state.tr.insertText('!', sdt.pos + 1));
+
+    const paragraph = findParagraphByParaId('p-inline-sdt');
+    expect(paragraph.node.attrs.sdBlockRev).toBeGreaterThan(0);
+    expect(paragraph.node.textContent).toBe('Before !Field After');
+  });
+
+  it('increments the containing paragraph revision when inline SDT content is deleted to empty', () => {
+    applyDocToEditor(createInlineSdtParagraphDoc());
+    const sdt = findInlineSdt();
+    expect(sdt).toBeTruthy();
+
+    editor.view.dispatch(editor.state.tr.delete(sdt.pos + 1, sdt.pos + sdt.node.nodeSize - 1));
+
+    const paragraph = findParagraphByParaId('p-inline-sdt');
+    const emptySdt = findInlineSdt();
+    expect(paragraph.node.attrs.sdBlockRev).toBeGreaterThan(0);
+    expect(emptySdt.node.textContent).toBe('');
+    expect(paragraph.node.textContent).toBe('Before  After');
+  });
+
+  it('still increments the paragraph revision for ordinary text edits', () => {
+    const paragraph = schema.nodes.paragraph.create({ paraId: 'p-plain', sdBlockRev: 0 }, schema.text('Plain'));
+    applyDocToEditor(schema.nodes.doc.create(null, [paragraph]));
+
+    const plainParagraph = findParagraphByParaId('p-plain');
+    editor.view.dispatch(editor.state.tr.insertText('!', plainParagraph.pos + 1));
+
+    expect(findParagraphByParaId('p-plain').node.attrs.sdBlockRev).toBe(1);
   });
 });
 

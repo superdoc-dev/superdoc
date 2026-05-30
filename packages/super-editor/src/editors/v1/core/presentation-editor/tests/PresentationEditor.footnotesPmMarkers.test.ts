@@ -46,10 +46,9 @@ vi.mock('../../Editor', () => ({
   })),
 }));
 
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
-  return {
-    ...actual,
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const { buildLayoutDocumentAdapterVitestMock } = await import('./mock-layout-document-adapter-vitest.js');
+  return buildLayoutDocumentAdapterVitestMock(importOriginal, {
     toFlowBlocks: vi.fn((_: unknown, opts?: any) => {
       if (typeof opts?.blockIdPrefix === 'string' && opts.blockIdPrefix.startsWith('footnote-')) {
         return {
@@ -61,7 +60,7 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
       }
       return { blocks: [], bookmarks: new Map() };
     }),
-  };
+  });
 });
 
 vi.mock('@superdoc/layout-bridge', async (importOriginal) => {

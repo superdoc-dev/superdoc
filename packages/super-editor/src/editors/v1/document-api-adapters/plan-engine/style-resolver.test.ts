@@ -168,6 +168,29 @@ describe('captureRunsInRange', () => {
     expect(result.runs[0].marks.map((m) => m.type.name)).toEqual(['bold']);
   });
 
+  it('excludes tracked deleted text from visible run capture without leaving offset gaps', () => {
+    const bold = mockMark('bold');
+    const trackDelete = mockMark('trackDelete');
+
+    const paragraph = createNode(
+      'paragraph',
+      [
+        createNode('text', [], { text: 'A', marks: [bold] }),
+        createNode('text', [], { text: 'gone', marks: [trackDelete] }),
+        createNode('text', [], { text: 'B', marks: [bold] }),
+      ],
+      { isBlock: true, inlineContent: true },
+    );
+    const editor = makeEditor(0, paragraph);
+
+    const result = captureRunsInRange(editor, 0, 0, 2, { textModel: 'visible' });
+
+    expect(result.runs).toHaveLength(2);
+    expect(result.runs[0]).toMatchObject({ from: 0, to: 1, charCount: 1 });
+    expect(result.runs[1]).toMatchObject({ from: 1, to: 2, charCount: 1 });
+    expect(coalesceRuns(result.runs)).toHaveLength(1);
+  });
+
   it('returns empty runs when the block node cannot be resolved', () => {
     const editor = makeEditor(0, null);
     const result = captureRunsInRange(editor, 0, 0, 5);

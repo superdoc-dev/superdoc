@@ -35,6 +35,10 @@ export function dispatchIntentTool(
           return execute('doc.replace', rest);
         case 'delete':
           return execute('doc.delete', rest);
+        case 'delete_block':
+          return execute('doc.blocks.delete', rest);
+        case 'delete_block_range':
+          return execute('doc.blocks.deleteRange', rest);
         case 'undo':
           return execute('doc.history.undo', rest);
         case 'redo':

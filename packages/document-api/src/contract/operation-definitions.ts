@@ -158,6 +158,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Use scope: "block" so formatting covers the entire paragraph. ' +
       'Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values: use what the blocks show. ' +
       'Also supports replace, delete, and undo/redo. For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. ' +
+      "`delete` removes a text range and leaves the block container; `delete_block` removes the entire block node by its `{kind:'block',nodeType,nodeId}` address; `delete_block_range` removes a contiguous span of top-level blocks. " +
       'A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
       'For multi-step redlines or whole-clause rewrites, prefer superdoc_mutations with where:{by:"block", nodeType, nodeId} from superdoc_get_content action "blocks" includeText:true rather than relying on text selectors. ' +
       'Refs expire after any mutation; always re-search before the next edit. ' +
@@ -180,6 +181,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       },
       { action: 'replace', ref: '<handle.ref>', text: 'new text here' },
       { action: 'delete', ref: '<handle.ref>' },
+      { action: 'delete_block', target: { kind: 'block', nodeType: 'heading', nodeId: '<nodeId>' } },
       { action: 'undo' },
     ],
   },
@@ -1018,6 +1020,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'blocks/delete.mdx',
     referenceGroup: 'blocks',
+    intentGroup: 'edit',
+    intentAction: 'delete_block',
   },
 
   'blocks.deleteRange': {
@@ -1043,6 +1047,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'blocks/delete-range.mdx',
     referenceGroup: 'blocks',
+    intentGroup: 'edit',
+    intentAction: 'delete_block_range',
   },
 
   'format.apply': {

@@ -1227,6 +1227,10 @@ export interface Modules {
      * controls whether the marks render in the document.
      */
     showFormattingMarksButton?: boolean;
+    /**
+     * Show the table of contents insert button in the toolbar. Off by default.
+     */
+    showTableOfContentsButton?: boolean;
   } & Record<string, unknown>;
   /** Link click popover configuration. */
   links?: {

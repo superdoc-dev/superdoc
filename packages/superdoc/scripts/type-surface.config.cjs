@@ -288,6 +288,7 @@ const publicContract = {
   ],
   asset: [
     { subpath: './style.css', tier: 'asset', note: 'CSS bundle; no types' },
+    { subpath: './style.layered.css', tier: 'asset', note: 'Layered CSS bundle; no types' },
   ],
   deprecated: [],
 };

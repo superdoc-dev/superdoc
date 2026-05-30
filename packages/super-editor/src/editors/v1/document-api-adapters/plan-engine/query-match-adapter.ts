@@ -26,6 +26,7 @@ import type {
   PageInfo,
   StoryLocator,
 } from '@superdoc/document-api';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import {
   SNIPPET_MAX_LENGTH,
   SNIPPET_CONTEXT_CHARS,
@@ -50,6 +51,7 @@ import type { OoxmlResolverParams, ParagraphProperties } from '@superdoc/style-e
 import { readTranslatedLinkedStyles } from '../../core/parts/adapters/styles-read.js';
 import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
 import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
+import { textContentInBlock } from '../helpers/text-offset-resolver.js';
 
 // ---------------------------------------------------------------------------
 // V3 ref encoding (D6)
@@ -142,6 +144,14 @@ export function buildSelectionTargetFromTextRanges(textRanges: TextAddress[], st
   return target;
 }
 
+function readCandidateVisibleText(editor: Editor, candidate: { node?: unknown; pos: number; end: number }): string {
+  const maybeNode = candidate.node as { childCount?: number } | undefined;
+  if (maybeNode && typeof maybeNode.childCount === 'number' && maybeNode.childCount > 0) {
+    return textContentInBlock(maybeNode as ProseMirrorNode, { textModel: 'visible' });
+  }
+  return editor.state.doc.textBetween(candidate.pos + 1, candidate.end - 1, '\n', '\ufffc');
+}
+
 // ---------------------------------------------------------------------------
 // Block/run builders (D4, D5)
 // ---------------------------------------------------------------------------
@@ -224,9 +234,7 @@ function buildMatchBlocks(
     }
 
     // Get block-level metadata
-    const blockStart = candidate.pos + 1;
-    const blockEnd = candidate.end - 1;
-    const blockText = doc.textBetween(blockStart, blockEnd, '\n', '\ufffc');
+    const blockText = readCandidateVisibleText(editor, candidate);
     const matchedText = blockText.slice(from, to);
     const node = doc.nodeAt(candidate.pos);
     const nodeType = node?.type.name ?? 'paragraph';
@@ -243,7 +251,7 @@ function buildMatchBlocks(
       : undefined;
 
     // Capture PM runs within the matched range and coalesce (D4)
-    const captured = captureRunsInRange(editor, candidate.pos, from, to);
+    const captured = captureRunsInRange(editor, candidate.pos, from, to, { textModel: 'visible' });
     const coalesced = coalesceRuns(captured.runs);
 
     // Project to contract MatchRun[] with V4 refs
@@ -337,7 +345,6 @@ function buildBlocksSnippet(
   if (!editor.state?.doc || blocks.length === 0) return undefined;
 
   const index = getBlockIndex(editor);
-  const doc = editor.state.doc;
 
   // D11 step 1: join block match texts
   const matchText = blocks.map((b) => b.text).join('\n');
@@ -359,9 +366,7 @@ function buildBlocksSnippet(
   const firstBlock = blocks[0];
   const firstCandidate = index.candidates.find((c) => c.nodeId === firstBlock.blockId);
   if (firstCandidate) {
-    const blockStart = firstCandidate.pos + 1;
-    const blockEnd = firstCandidate.end - 1;
-    const fullBlockText = doc.textBetween(blockStart, blockEnd, '\n', '\ufffc');
+    const fullBlockText = readCandidateVisibleText(editor, firstCandidate);
     const contextStart = Math.max(0, firstBlock.range.start - contextEachSide);
     leftContext = fullBlockText.slice(contextStart, firstBlock.range.start);
   }
@@ -371,9 +376,7 @@ function buildBlocksSnippet(
   const lastBlock = blocks[blocks.length - 1];
   const lastCandidate = index.candidates.find((c) => c.nodeId === lastBlock.blockId);
   if (lastCandidate) {
-    const blockStart = lastCandidate.pos + 1;
-    const blockEnd = lastCandidate.end - 1;
-    const fullBlockText = doc.textBetween(blockStart, blockEnd, '\n', '\ufffc');
+    const fullBlockText = readCandidateVisibleText(editor, lastCandidate);
     const contextEnd = Math.min(fullBlockText.length, lastBlock.range.end + contextEachSide);
     rightContext = fullBlockText.slice(lastBlock.range.end, contextEnd);
   }

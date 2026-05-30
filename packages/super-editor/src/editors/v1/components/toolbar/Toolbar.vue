@@ -138,6 +138,7 @@ const handleToolbarMousedown = (e) => {
     :key="toolbarKey"
     role="toolbar"
     aria-label="Toolbar"
+    data-sd-part="toolbar"
     data-editor-ui-surface
     @mousedown="handleToolbarMousedown"
   >

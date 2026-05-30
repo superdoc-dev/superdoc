@@ -75,7 +75,7 @@ const handleFocus = () => {
       @mouseleave="activeUserIndex = null"
       :key="user.email"
       class="user-row"
-      :class="{ selected: activeUserIndex === index }"
+      :class="{ 'sd-selected': activeUserIndex === index }"
     >
       <div v-if="user.name">
         <span v-if="user.name">{{ user.name }}</span>
@@ -89,7 +89,7 @@ const handleFocus = () => {
 </template>
 
 <style scoped>
-.selected {
+.sd-selected {
   background-color: #dbdbdb;
 }
 .mentions-container {

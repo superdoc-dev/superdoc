@@ -7,6 +7,7 @@ import type {
   Schema,
 } from 'prosemirror-model';
 import type { Transaction } from 'prosemirror-state';
+import { TrackDeleteMarkName } from '../../extensions/track-changes/constants.js';
 
 /**
  * Build a text-or-fragment suitable for insertion, splitting on '\t' and
@@ -79,6 +80,7 @@ export function textBetweenWithTabs(
   to: number,
   blockSeparator: string,
   leafFallback: string,
+  options: { textModel?: 'raw' | 'visible' } = {},
 ): string {
   // Defensive path for mocked docs: when `nodesBetween` isn't available, fall
   // back to the legacy `textBetween` semantics with no tab handling. Real PM
@@ -108,6 +110,12 @@ export function textBetweenWithTabs(
       return false;
     }
     if (node.isText) {
+      if (
+        options.textModel === 'visible' &&
+        node.marks?.some((mark: ProseMirrorMark) => mark.type.name === TrackDeleteMarkName)
+      ) {
+        return false;
+      }
       const start = Math.max(from, pos) - pos;
       const end = Math.min(to, pos + node.nodeSize) - pos;
       // In real PM, node.text is always a string of length nodeSize. Some tests

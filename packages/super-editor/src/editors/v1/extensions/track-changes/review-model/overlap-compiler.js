@@ -104,6 +104,10 @@ const SUPPORTED_KINDS = new Set(['text-insert', 'text-delete', 'text-replace', '
 const EMPTY_STRUCTURAL_GAP_REFINEMENT_MAX_DISTANCE = 4;
 
 /**
+ * @typedef {false|'different-user'|'all'} ExistingDeletionReassignMode
+ */
+
+/**
  * Compile a tracked edit against an accumulated transaction.
  *
  * The compiler mutates `tr` in place. Callers MUST inspect `result.ok`
@@ -544,6 +548,8 @@ const compileTextDelete = (ctx, intent) => {
     replacementSideId: '',
     sharedDeletionId: intent.replacementGroupHint || null,
     recordSharedDeletionId: Boolean(intent.replacementGroupHint),
+    reassignExistingDeletions:
+      intent.source !== 'native' && !intent.preserveExistingReviewState ? 'different-user' : false,
   });
   if (result.ok === false) return result;
 
@@ -570,7 +576,7 @@ const compileTextDelete = (ctx, intent) => {
  * @param {*} ctx
  * @param {number} from
  * @param {number} to
- * @param {{ replacementGroupId: string, replacementSideId: string, sharedDeletionId: string | null, recordSharedDeletionId?: boolean, recordCollapsedIds?: boolean, reassignExistingDeletions?: boolean }} options
+ * @param {{ replacementGroupId: string, replacementSideId: string, sharedDeletionId: string | null, recordSharedDeletionId?: boolean, recordCollapsedIds?: boolean, reassignExistingDeletions?: ExistingDeletionReassignMode }} options
  * @returns {{ ok: true, deletionMarks: import('prosemirror-model').Mark[], deletionNodes: import('prosemirror-model').Node[], deletionId: string, mintedThisCall: boolean } | TrackedEditFailure}
  */
 const applyTrackedDelete = (
@@ -647,12 +653,21 @@ const applyTrackedDelete = (
 
     if (existingDelete) {
       const allExistingDeletes = node.marks.filter((m) => m.type.name === TrackDeleteMarkName);
-      if (reassignExistingDeletions) {
+      const deleteOwnership = classifyOwnership({
+        currentUser: ctx.currentIdentity,
+        change: getChangeAuthorIdentity(existingDelete.attrs),
+      });
+      const isDifferentUserDeletion = !isSameUserHighConfidence(deleteOwnership);
+      const shouldReassignExistingDeletion =
+        reassignExistingDeletions === 'all' ||
+        (reassignExistingDeletions === 'different-user' && isDifferentUserDeletion);
+      if (shouldReassignExistingDeletion) {
         ops.push({
           kind: 'reassign',
           from: segFrom,
           to: segTo,
           node,
+          parentId: existingDelete.attrs.id || existingDelete.attrs.overlapParentId || '',
           existingDeleteMarks: allExistingDeletes,
         });
         return;
@@ -696,7 +711,7 @@ const applyTrackedDelete = (
       // deletion mark so the new replacement encloses the prior delete.
       const mark = makeDeleteMark(ctx, {
         id: deletionId,
-        overlapParentId: '',
+        overlapParentId: op.parentId || '',
         replacementGroupId,
         replacementSideId,
       });
@@ -880,11 +895,9 @@ const compileTextReplace = (ctx, intent) => {
  * @returns {TrackedEditResult}
  */
 const compileOrdinaryTextReplace = (ctx, intent, sanitizedSlice, replacementParentId) => {
-  // In paired mode share one id between insert/delete sides so a top-level
-  // replacement projects as one logical graph change. A replacement nested
-  // inside another author's open review item must keep each side separately
-  // reviewable, so those child sides intentionally use distinct ids even when
-  // the caller's default replacement mode is paired.
+  // In paired mode ordinary replacements share one id between insert/delete
+  // sides. Nested replacements inside another author's pending change must
+  // keep the child insertion and deletion as independently reviewable sides.
   const shouldPairReplacement = intent.replacements === 'paired' && !replacementParentId;
   const sharedId = shouldPairReplacement ? intent.replacementGroupHint || uuidv4() : null;
   const replacementGroupId = sharedId ?? '';
@@ -892,11 +905,11 @@ const compileOrdinaryTextReplace = (ctx, intent, sanitizedSlice, replacementPare
   // 1. Probe for adjacent tracked-delete span at intent.to - 1 (legacy
   //    behavior). Only applies for single-step user actions — plan-engine
   //    multi-step rewrites must not probe.
-  let positionTo = intent.to;
+  let positionTo = replacementParentId ? intent.from : intent.to;
   if (intent.from !== intent.to && intent.probeForDeletionSpan) {
     const probePos = Math.max(intent.from, intent.to - 1);
     const deletionSpan = findMarkPosition(ctx.tr.doc, probePos, TrackDeleteMarkName);
-    if (deletionSpan && deletionSpan.to > positionTo) positionTo = deletionSpan.to;
+    if (!replacementParentId && deletionSpan && deletionSpan.to > positionTo) positionTo = deletionSpan.to;
   }
 
   // 2. Build a temp insertion in a throwaway transaction so we can read the
@@ -940,9 +953,8 @@ const compileOrdinaryTextReplace = (ctx, intent, sanitizedSlice, replacementPare
   if (insertion && insertion.insertedFrom !== insertion.insertedTo) {
     const { tempTr, insertedFrom, insertedTo } = insertion;
     // Use the legacy markInsertion primitive so id reuse / refinement matches
-    // existing behavior exactly. Compiler-specific overlap fields
-    // (overlapParentId, replacementGroupId, replacementSideId) are layered on
-    // afterward.
+    // existing behavior exactly for ordinary replacements. Nested replacements
+    // force a fresh child insertion side under the parent.
     const forcedInsertId = sharedId || (replacementParentId ? uuidv4() : undefined);
     insertedMark = markInsertion({
       tr: tempTr,
@@ -995,11 +1007,10 @@ const compileOrdinaryTextReplace = (ctx, intent, sanitizedSlice, replacementPare
     insertedLength = insertedToAbs - insertedFromAbs;
   }
 
-  // 4. Apply tracked delete on the original range. The range positions are
-  //    unaffected by the insertion (insertion happened at positionTo which is
-  //    >= intent.to). The delete may collapse own insertions inside the
-  //    range, shifting the doc — we map the inserted position through the
-  //    delete-induced map after.
+  // 4. Apply tracked delete on the original range. Ordinary replacements
+  //    insert at or after intent.to, so the original range is stable. Nested
+  //    replacements insert at intent.from; in that case remap the selected
+  //    original text past the inserted child side before marking deletion.
   /** @type {Array<import('prosemirror-model').Mark>} */
   let deletionMarks = [];
   /** @type {Array<import('prosemirror-model').Node>} */
@@ -1009,11 +1020,13 @@ const compileOrdinaryTextReplace = (ctx, intent, sanitizedSlice, replacementPare
 
   if (intent.from !== intent.to) {
     const stepsBefore = ctx.tr.steps.length;
-    const delResult = applyTrackedDelete(ctx, intent.from, intent.to, {
+    const deleteFrom = insertedLength > 0 && positionTo <= intent.from ? intent.from + insertedLength : intent.from;
+    const deleteTo = insertedLength > 0 && positionTo <= intent.from ? intent.to + insertedLength : intent.to;
+    const delResult = applyTrackedDelete(ctx, deleteFrom, deleteTo, {
       replacementGroupId,
       replacementSideId: sharedId ? `${sharedId}#deleted` : '',
       sharedDeletionId: sharedId,
-      reassignExistingDeletions: Boolean(sharedId),
+      reassignExistingDeletions: sharedId || replacementParentId ? 'all' : false,
     });
     if (delResult.ok === false) return delResult;
     deletionMarks = delResult.deletionMarks;

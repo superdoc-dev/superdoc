@@ -19,7 +19,7 @@ describe('ToolbarDropdown keyboard focus', () => {
       setup() {
         const show = ref(false);
         const options = [
-          { key: 'georgia', label: 'Georgia', props: { class: 'selected' } },
+          { key: 'georgia', label: 'Georgia', props: { class: 'sd-selected' } },
           { key: 'arial', label: 'Arial', props: {} },
           { key: 'courier', label: 'Courier New', props: {} },
         ];

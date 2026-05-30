@@ -256,11 +256,21 @@ export function resolveStoryRuntime(
   // causing a single edit to increment the store revision multiple times.
   if (store && !hasHostStoreSyncListener(runtime.editor, storyKey)) {
     markHostStoreSyncListener(runtime.editor, storyKey);
-    runtime.editor.on('transaction', ({ transaction }: { transaction: { docChanged: boolean } }) => {
-      if (transaction.docChanged) {
-        incrementStoryRevision(store, storyKey);
-      }
-    });
+    runtime.editor.on(
+      'transaction',
+      ({ transaction }: { transaction: { docChanged: boolean; getMeta?: (key: string) => unknown } }) => {
+        // skip runtime block-identity repair transactions
+        // so the host-held store revision tracks user-visible edits, not the
+        // remediation pass. The per-editor revision tracker
+        // (`revision-tracker.ts`) honours the same meta; both counters must
+        // stay aligned otherwise a story-editor repair would diverge them and
+        // a subsequent `expectedRevision` guard would mismatch.
+        if (transaction.getMeta?.('superdoc/block-identity-repair')) return;
+        if (transaction.docChanged) {
+          incrementStoryRevision(store, storyKey);
+        }
+      },
+    );
   }
 
   if (runtime.cacheable !== false) {

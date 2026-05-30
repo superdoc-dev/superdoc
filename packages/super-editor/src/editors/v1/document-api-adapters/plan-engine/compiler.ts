@@ -30,8 +30,9 @@ import { decodeRef, type StoryRefV4 } from '../story-runtime/story-ref-codec.js'
 import { planError } from './errors.js';
 import { hasStepExecutor } from './executor-registry.js';
 import { captureRunsInRange, checkUniformity, type CapturedStyle } from './style-resolver.js';
-import { getBlockIndex } from '../helpers/index-cache.js';
+import { getBlockIndex, clearIndexCache } from '../helpers/index-cache.js';
 import { getRevision } from './revision-tracker.js';
+import { repairDuplicateBlockIdentities } from './repair-block-identities.js';
 import { executeTextSelector } from '../find/text-strategy.js';
 import { executeBlockSelector } from '../find/block-strategy.js';
 import {
@@ -255,6 +256,18 @@ export interface CompilePlanOptions {
    * can address unresolved deletion text without changing public read APIs.
    */
   selectTextModel?: TextOffsetModel;
+
+  /**
+   * When true, the duplicate block-identity repair pass does NOT dispatch a
+   * transaction. The compiler still detects duplicates and throws
+   * `DOCUMENT_IDENTITY_CONFLICT` if any are found, so callers that need a
+   * read-only signal (notably `previewPlan`, which must never mutate the
+   * editor) can surface the conflict without rewriting paraIds.
+   *
+   * The production mutation path (`executeCompiledPlan` → `mutations.apply`)
+   * leaves this unset / false so the repair runs and the mutation succeeds.
+   */
+  skipIdentityRepair?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -1497,6 +1510,10 @@ function validateStepInteractions(steps: CompiledStep[], index: BlockIndex): voi
 /**
  * Detects duplicate block IDs in the block index before compilation.
  * Throws `DOCUMENT_IDENTITY_CONFLICT` if any two blocks share the same ID.
+ *
+ * The error message embeds the colliding IDs and the duplicate count because
+ * the Python SDK error surface drops `details`; only the message string
+ * survives across that boundary.
  */
 function assertNoDuplicateBlockIds(index: BlockIndex): void {
   const seen = new Map<string, number>();
@@ -1509,14 +1526,16 @@ function assertNoDuplicateBlockIds(index: BlockIndex): void {
   }
 
   if (duplicates.length > 0) {
+    const preview = duplicates.slice(0, 4).join(', ');
+    const previewSuffix = duplicates.length > 4 ? `, +${duplicates.length - 4} more` : '';
     throw planError(
       'DOCUMENT_IDENTITY_CONFLICT',
-      'Document contains blocks with duplicate identities. This must be resolved before mutations can be applied.',
+      `Document contains ${duplicates.length} block identit${duplicates.length === 1 ? 'y' : 'ies'} shared by multiple blocks (${preview}${previewSuffix}). Re-import the document via doc.open to assign unique identities.`,
       undefined,
       {
         duplicateBlockIds: duplicates,
         blockCount: duplicates.length,
-        remediation: 'Re-import the document or call document.repair() to assign unique identities.',
+        remediation: 'Re-import the document via doc.open to assign unique identities.',
       },
     );
   }
@@ -1567,12 +1586,52 @@ export function compilePlan(editor: Editor, steps: MutationStep[], options: Comp
     throw planError('INVALID_INPUT', `plan contains ${steps.length} steps, maximum is ${MAX_PLAN_STEPS}`);
   }
 
-  // Capture revision at compile start — single read point for consistency (D3)
+  let index = getBlockIndex(editor);
+
+  // E1: Pre-compilation identity integrity check.
+  //
+  // Yjs restores and `loadFromSchema` JSON loaders bypass the import-time
+  // `normalizeDuplicateBlockIdentitiesInContent` pass, so a long-lived collab
+  // session can carry duplicate `paraId` values forward from a base document
+  // imported by an older SuperDoc build. Repair in place using the same
+  // deterministic allocator as the import pass, then rebuild the index before
+  // the assertion fires.
+  //
+  // The fast-path early-exit for clean docs lives inside `planRepairs` itself:
+  // it walks the explicit identity attrs (the same set the planner inspects)
+  // and returns immediately if none collide. That is the single source of
+  // truth for "the doc has duplicates to repair" — and it avoids the false
+  // negative an `index.candidates[].nodeId`-based gate would have on
+  // `sdBlockId`-only collisions, because `resolveBlockNodeId` projects via
+  // paraId first and the index-level scan never observes the sdBlockId.
+  if (!options.skipIdentityRepair) {
+    const repair = repairDuplicateBlockIdentities(editor);
+    if (repair) {
+      // `dispatch` swapped `editor.state.doc`, so the cached block index is
+      // stale. Force a rebuild from the freshly repaired doc.
+      clearIndexCache(editor);
+      index = getBlockIndex(editor);
+      // Best-effort signal so we can measure how often the runtime safety net
+      // fires in production. Kept as console.warn to avoid coupling the plan
+      // engine to a specific telemetry transport — matches the convention used
+      // by header-footer-slot-materialization.
+      console.warn(
+        `[plan-engine] Repaired ${repair.repairedBlockCount} block(s) with duplicate identities ` +
+          `before plan compilation. Original ids: ${repair.duplicateBlockIds.slice(0, 4).join(', ')}` +
+          `${repair.duplicateBlockIds.length > 4 ? `, +${repair.duplicateBlockIds.length - 4} more` : ''}.`,
+      );
+    }
+  }
+
+  // Capture revision AFTER any repair dispatch. The repair transaction is
+  // tagged with `superdoc/block-identity-repair` and is therefore exempt from
+  // the revision tracker (`revision-tracker.ts` short-circuits on that meta),
+  // so the captured value here is the same as it would have been pre-repair.
+  // The ordering is preserved defensively: should the repair tr ever lose its
+  // meta tag, capturing after avoids `REVISION_CHANGED_SINCE_COMPILE` failures
+  // on every corrupted doc.
   const compiledRevision = getRevision(editor);
 
-  const index = getBlockIndex(editor);
-
-  // E1: Pre-compilation identity integrity check
   assertNoDuplicateBlockIds(index);
   const mutationSteps: CompiledStep[] = [];
   const assertSteps: AssertStep[] = [];

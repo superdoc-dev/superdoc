@@ -649,9 +649,14 @@ export function selectionMutationWrapper(
     const step = buildSelectionStepDef(stepId, request, where);
 
     // Compile the one-step plan through the real compiler.
-    // Compilation is side-effect-free — it resolves targets against the current
-    // document state without mutating anything. The story editor is used so that
-    // the compiler resolves against the correct story's document state.
+    // Compilation is side-effect-free on clean docs: it resolves targets
+    // against the current document state without mutating anything. On a doc
+    // carrying duplicate block identities (e.g. older Yjs restore),
+    // the compiler dispatches an in-place identity-repair transaction before
+    // assembling the plan; pass `{ skipIdentityRepair: true }` if a strictly
+    // non-mutating compile is required (as `previewPlan` does). The story
+    // editor is used so that the compiler resolves against the correct
+    // story's document state.
     const compiled = compilePlan(storyEditor, [step]);
 
     // Text inserts require a position inside a textblock. Node-edge targets

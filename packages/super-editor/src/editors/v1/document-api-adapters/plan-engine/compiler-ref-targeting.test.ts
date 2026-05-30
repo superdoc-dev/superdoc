@@ -773,8 +773,12 @@ describe('compilePlan block identity pre-check', () => {
       expect((error as PlanError).details).toEqual({
         duplicateBlockIds: ['p1'],
         blockCount: 1,
-        remediation: 'Re-import the document or call document.repair() to assign unique identities.',
+        remediation: 'Re-import the document via doc.open to assign unique identities.',
       });
+      // Message text now embeds the colliding IDs so the Python SDK error
+      // surface (which drops `details`) still exposes them.
+      expect((error as PlanError).message).toContain('p1');
+      expect((error as PlanError).message).toContain('1 block identity');
       return;
     }
 

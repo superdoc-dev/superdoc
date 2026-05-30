@@ -44,6 +44,23 @@ function buildItems(availableWidth, superToolbarOverrides = {}) {
   });
 }
 
+describe('makeDefaultItems table of contents button opt-in', () => {
+  it('does not include tableOfContents in the default toolbar items', () => {
+    const { defaultItems, overflowItems } = buildItems(2000);
+    expect(getItem(defaultItems, overflowItems, 'tableOfContents')).toBeUndefined();
+  });
+
+  it('includes tableOfContents when showTableOfContentsButton is true', () => {
+    const { defaultItems, overflowItems } = buildItems(2000, {
+      config: { showTableOfContentsButton: true },
+    });
+    const tableOfContents = getItem(defaultItems, overflowItems, 'tableOfContents');
+
+    expect(tableOfContents).toBeDefined();
+    expect(tableOfContents.command).toBe('insertTableOfContents');
+  });
+});
+
 describe('makeDefaultItems formatting marks button opt-in', () => {
   it('does not include formattingMarks in the default toolbar items', () => {
     const { defaultItems, overflowItems } = buildItems(2000);
@@ -73,7 +90,7 @@ describe('makeDefaultItems formatting marks button opt-in', () => {
 describe('makeDefaultItems XL overflow boundary (SD-2328)', () => {
   const XL_OVERFLOW_SAFETY_BUFFER = 20;
   const XL_CUTOFF = RESPONSIVE_BREAKPOINTS.xl + XL_OVERFLOW_SAFETY_BUFFER;
-  const XL_ITEMS = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'tableOfContents'];
+  const XL_ITEMS = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler'];
 
   it(`moves XL items into overflow at ${XL_CUTOFF - 1}px (below cutoff)`, () => {
     const { defaultItems, overflowItems } = buildItems(XL_CUTOFF - 1);

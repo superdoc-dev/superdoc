@@ -34,7 +34,30 @@ button { cursor: pointer; }
 
 .app { display: grid; grid-template-columns: 1fr 360px; height: 100vh; }
 .editor-area { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.editor-area #editor { flex: 1; overflow: auto; padding: 12px; }
+/* SuperDoc's formatting toolbar, rendered into #superdoc-toolbar. Clip to the
+   editor column so overflowing items can't paint over the sidebar (they collapse
+   into the responsive overflow menu instead; popovers append to <body>). */
+#superdoc-toolbar {
+  border-bottom: 1px solid var(--demo-border);
+  background: var(--demo-bg);
+  overflow: hidden;
+  min-width: 0;
+}
+/* Center the page horizontally; align to top so multi-page docs scroll. */
+.editor-area #editor {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+/* Drop zone: highlight the editor while a field chip is dragged over it. */
+.editor-area #editor.drop-target {
+  outline: 2px dashed var(--demo-accent);
+  outline-offset: -4px;
+  background: var(--demo-accent-soft);
+}
 
 .toolbar {
   display: flex;
@@ -136,9 +159,9 @@ input:focus {
 }
 .btn:disabled { color: var(--demo-text-muted); cursor: not-allowed; opacity: 0.55; }
 
-/* "Locate" — scroll a control into view (ui.contentControls.scrollIntoView);
-   "Focus" — scroll AND place the caret inside it (ui.contentControls.focus). */
-.clause-actions { display: flex; align-items: center; gap: 8px; }
+/* Field rows (Values tab): "Locate" scrolls a control into view
+   (ui.contentControls.scrollIntoView); "Focus" scrolls AND places the caret
+   inside it (ui.contentControls.focus). */
 .row-actions { display: flex; align-items: center; gap: 6px; }
 .locate,
 .focus {
@@ -161,96 +184,71 @@ input:focus {
 #fields-panel .btn { width: 100%; margin-top: 12px; }
 
 /* -----------------------------------------------------------------------
-   Clauses panel
+   Clause library (Template tab)
+
+   A single-use catalog of governed clauses. Each card echoes the in-document
+   block clause (blue left rail, soft border, faint blue fill) and shows its
+   metadata plus a status: an available clause ("Add clause") drags or clicks in,
+   while one already in the contract ("In contract") is a quieter card that
+   clicks to reveal the existing section. The clauses themselves are locked blocks.
    ----------------------------------------------------------------------- */
 
+.clauses-section { margin-top: 16px; }
+
 .clause {
-  border: 1px solid var(--demo-border);
-  border-radius: var(--sd-radius-100, 6px);
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  background: var(--demo-bg);
+  border: 1px solid var(--tag-block-border);
+  border-left: 4px solid var(--tag-color);
+  border-radius: var(--tag-radius);
+  background-color: var(--tag-block-bg);
+  padding: 7px 10px;
+  margin-bottom: 6px;
 }
-.clause.current {
-  background: transparent;
-  border-color: var(--demo-border);
-}
-.clause.stale {
-  background: var(--demo-stale-soft);
-  border-color: var(--demo-accent);
-}
-.clause-header {
+.clause:hover { background-color: var(--tag-block-bg-hover); }
+.clause.is-active { box-shadow: 0 0 0 2px var(--tag-color); }
+/* Available clauses drag/click to add; clauses already in the contract are a
+   quieter card you click to reveal the existing section. */
+.clause.is-available { cursor: grab; }
+.clause.is-available:active { cursor: grabbing; }
+.clause.is-present { cursor: pointer; }
+.clause.is-present { background-color: var(--tag-block-bg); }
+.clause-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 4px;
 }
 .clause-label {
   margin: 0;
+  flex: 1;
+  min-width: 0;
   font-size: var(--sd-font-size-300, 13px);
   font-weight: 600;
   color: var(--demo-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .clause-status {
-  font-size: var(--sd-font-size-200, 11px);
+  flex-shrink: 0;
+  font-size: var(--sd-font-size-100, 10px);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--demo-accent);
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
 }
-.clause-status.muted { color: var(--demo-text-muted); }
-.clause-summary {
-  margin: 0 0 6px;
-  font-size: var(--sd-font-size-300, 13px);
-  color: var(--demo-text);
-  line-height: 1.4;
+.clause.is-present .clause-status {
+  color: var(--demo-text-muted);
+  background: color-mix(in srgb, var(--demo-text-muted) 14%, transparent);
+}
+.clause.is-available .clause-status {
+  color: var(--tag-fg);
+  background: var(--tag-bg);
 }
 .clause-meta {
-  margin: 0 0 8px;
-  font-size: var(--sd-font-size-200, 12px);
+  margin: 2px 0 0;
+  font-size: var(--sd-font-size-100, 11px);
   color: var(--demo-text-muted);
-}
-.clause .btn { width: 100%; }
-.clause-review-panel {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--demo-accent);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.review-label {
-  font-size: var(--sd-font-size-200, 11px);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--demo-text-muted);
-}
-.clause-preview {
-  margin: 0;
-  padding: 10px 12px;
-  background: var(--demo-bg);
-  border: 1px solid var(--demo-border);
-  border-radius: var(--sd-radius-50, 4px);
-  font-size: var(--sd-font-size-300, 13px);
-  line-height: 1.5;
-  color: var(--demo-text);
-}
-.clause-preview ins {
-  background: color-mix(in srgb, #15803d 18%, transparent);
-  color: var(--demo-text);
-  text-decoration: none;
-  padding: 0 2px;
-  border-radius: 2px;
-}
-.clause-preview del {
-  color: var(--demo-text-muted);
-  text-decoration: line-through;
-  text-decoration-color: #d92e2e;
-  background: color-mix(in srgb, #d92e2e 12%, transparent);
-  padding: 0 2px;
-  border-radius: 2px;
 }
 
 .status {
@@ -273,52 +271,116 @@ input:focus {
    exists under chrome-none, so there is nothing to style for it.
    ----------------------------------------------------------------------- */
 
-/* Inline smart fields: blue pill */
+/* Smart-tag token look, shared by the in-editor inline SDT and the Smart-tags
+   palette chips so a sidebar tag and the field it inserts read as one object. */
+:root {
+  /* Template fields use the SuperDoc brand blue (brand.md: blue-500 / blue-600),
+     via the --sd-color-blue-* tokens. One token set, applied to both the palette
+     chip and the painted in-editor field. Fields read as tinted/outlined pills,
+     so they stay distinct from the solid-blue primary buttons. */
+  --tag-color: var(--sd-color-blue-500, #1355ff);
+  --tag-border: var(--tag-color);
+  --tag-bg: color-mix(in srgb, var(--tag-color) 12%, transparent);
+  --tag-fg: var(--sd-color-blue-600, #0f44cc);
+  --tag-bg-hover: color-mix(in srgb, var(--tag-color) 22%, transparent);
+  /* Block clauses are large regions, so they wear the same blue quietly:
+     a left rail + a faint fill + a soft border, lighter than the inline pill. */
+  --tag-block-border: color-mix(in srgb, var(--tag-color) 30%, var(--demo-border));
+  --tag-block-bg: color-mix(in srgb, var(--tag-color) 4%, var(--demo-bg));
+  --tag-block-bg-hover: color-mix(in srgb, var(--tag-color) 8%, var(--demo-bg));
+  --tag-radius: 6px;
+}
+/* Inline smart fields: token pill (painted SDT wrapper under chrome:'none').
+   The box (border width + padding) is identical in every state so clicking /
+   hovering a field never shifts layout. Hover changes only the fill. */
 .superdoc-cc-chrome-none .superdoc-structured-content-inline[data-sdt-tag*='smartField'] {
-  padding: 1px 4px;
-  border: 1px solid var(--demo-accent);
-  border-radius: 4px;
-  background-color: var(--demo-accent-soft);
+  padding: 1px 6px;
+  border: 1px solid var(--tag-border);
+  border-radius: var(--tag-radius);
+  background-color: var(--tag-bg);
+  color: var(--tag-fg);
+}
+.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-sdt-tag*='smartField']:hover {
+  /* Under chrome:'none' SuperDoc resets the field's border + fill (including on
+     hover) so the consumer owns the look. We re-assert the box so hover
+     never moves or recolors the field. The !important wins over that reset
+     without coupling to SuperDoc's selector specificity — a custom-UI styling
+     rough edge today (no first-class per-control styling hook yet). */
+  border: 1px solid var(--tag-border) !important;
+  background-color: var(--tag-bg-hover) !important;
+}
+/* Selecting a field is a ProseMirror NodeSelection (.ProseMirror-selectednode).
+   Under chrome:'none' SuperDoc resets the border + fill to transparent in that
+   state too; without re-asserting, the field loses its fill and the box can
+   shift (~2px) on click. Keep the same box and a controlled blue "selected"
+   fill so hover/click/selected stay on-brand and never move the field. */
+.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-sdt-tag*='smartField'].ProseMirror-selectednode {
+  /* !important to win over the chrome-none reset; same rough edge as hover. */
+  border: 1px solid var(--tag-border) !important;
+  background-color: var(--tag-bg-hover) !important;
+  color: var(--tag-fg) !important;
 }
 
-/* Block clauses: bordered card with soft background */
-.superdoc-cc-chrome-none .superdoc-structured-content-block[data-sdt-tag*='reusableSection'] {
+/* Smart-tags palette (sidebar). Chips reuse the --tag-* token look above, so a
+   palette chip and the field it inserts are visually identical. */
+.smart-tags { margin-bottom: 14px; }
+.smart-tags-hint { margin: 0 0 8px; font-size: var(--sd-font-size-200, 12px); color: var(--demo-text-muted); }
+.smart-tags-search {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  margin-bottom: 10px;
   border: 1px solid var(--demo-border);
-  border-radius: 4px;
-  background-color: var(--demo-bg);
+  border-radius: var(--sd-radius-50, 4px);
+  background: var(--demo-bg);
+  color: var(--demo-text);
 }
-
-/*
- * Contextual smart-field chip (SD-3157 / SD-3232). Floats over the active
- * smart-field SDT showing field label + live value. Wired in field-chip.ts
- * against the public `content-control:active-change` event (what's active)
- * + `ui.contentControls.getRect` (where to draw). With built-in chrome off
- * (SD-3159), the chip is the smart field's active-state affordance: custom
- * UI anchored to the SDT via public events and the geometry API.
- */
-.sd-field-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 500;
-  background: var(--demo-bg, #ffffff);
-  border: 1px solid var(--demo-accent, #2563eb);
-  color: var(--demo-accent, #2563eb);
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  white-space: nowrap;
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sd-field-chip__label {
+.smart-tags-group {
+  font-size: var(--sd-font-size-100, 11px);
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--demo-text-muted);
+  margin-bottom: 6px;
 }
+.smart-tags-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.smart-tag {
+  font: inherit;
+  /* Match the in-editor field pill (which inherits the ~11pt document font) so
+     a chip and the token it inserts read as the same size, not just color. */
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: grab;
+  padding: 1px 6px;
+  border: 1px solid var(--tag-border);
+  border-radius: var(--tag-radius);
+  background: var(--tag-bg);
+  color: var(--tag-fg);
+  white-space: nowrap;
+}
+.smart-tag:hover { background: var(--tag-bg-hover); }
+.smart-tag:active { cursor: grabbing; }
+.smart-tag.is-active { box-shadow: 0 0 0 2px var(--demo-accent); }
+.smart-tag:focus-visible { outline: 1px solid var(--demo-accent); outline-offset: 1px; }
 
-.sd-field-chip__value {
-  color: var(--demo-text, #18181b);
-  font-weight: 400;
+/* Block clauses: a quiet card with a blue left rail, same field language as
+   the inline pills, but a region not a token: soft border, faint fill, a 4px
+   blue spine. */
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-sdt-tag*='reusableSection'] {
+  border: 1px solid var(--tag-block-border);
+  border-left: 4px solid var(--tag-color);
+  border-radius: var(--tag-radius);
+  background-color: var(--tag-block-bg);
+}
+/* Under chrome:'none' SuperDoc resets the block's border + fill on hover
+   (.sdt-group-hover) and select (.ProseMirror-selectednode) — via ::before/
+   ::after pseudo-elements, different mechanics than inline. Re-assert the exact
+   box (no jitter) and lift the fill slightly to show activity. !important wins
+   over the reset; same custom-UI rough edge as the inline rules above. */
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-sdt-tag*='reusableSection'].sdt-group-hover,
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-sdt-tag*='reusableSection'].ProseMirror-selectednode {
+  border: 1px solid var(--tag-block-border) !important;
+  border-left: 4px solid var(--tag-color) !important;
+  background-color: var(--tag-block-bg-hover) !important;
 }

@@ -352,6 +352,30 @@ describe('ensureSdtContainerStyles', () => {
       'border-left: var(--sd-content-controls-custom-block-border-left, var(--sd-content-controls-custom-block-border, 0 solid transparent));',
     );
   });
+
+  it('locked-hover under chrome-none follows the custom hover background, not the built-in lock-hover (SD-3322)', () => {
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    // The base lock-hover rules (built-in tint on inline, transparent on block)
+    // come first and have equal specificity to the plain custom hover rules, so
+    // they would otherwise win for locked controls.
+    const baseInlineLockHover = cssText.indexOf('background-color: var(--sd-content-controls-lock-hover-bg');
+    const baseBlockLockHover = cssText.indexOf(
+      '.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode) {',
+    );
+    expect(baseInlineLockHover).toBeGreaterThan(-1);
+    expect(baseBlockLockHover).toBeGreaterThan(-1);
+
+    // The chrome-none lock-hover reset re-asserts the custom hover background
+    // AFTER them (extra .superdoc-cc-chrome-none class + later source order wins),
+    // so a locked control under chrome:'none' uses the custom variable.
+    const customInlineHoverReassert = cssText.lastIndexOf('--sd-content-controls-custom-inline-hover-bg');
+    const customBlockHoverReassert = cssText.lastIndexOf('--sd-content-controls-custom-block-hover-bg');
+    expect(customInlineHoverReassert).toBeGreaterThan(baseInlineLockHover);
+    expect(customBlockHoverReassert).toBeGreaterThan(baseBlockLockHover);
+  });
 });
 
 describe('ensureTrackChangeStyles', () => {

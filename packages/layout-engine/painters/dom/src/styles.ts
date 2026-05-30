@@ -885,11 +885,20 @@ const SDT_CONTAINER_STYLES = `
   border: none;
 }
 
-/* Reset the lock-hover z-index boost so a suppressed SDT does not stack
- * above host-attached custom UI. Mirrors the base lock-hover selectors with
- * the chrome-none prefix so specificity stays above the boost rule. */
-.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode),
+/* Chrome opt-out for the lock-hover affordance. The base lock-hover rules above
+ * paint a built-in tint and boost z-index on hovered locked controls; under
+ * chrome:'none' that would override the custom hover background and stack above
+ * host-attached UI. Re-assert the custom hover background (so a locked control
+ * follows --sd-content-controls-custom-*-hover-bg, defaulting to empty - no tint
+ * leaks) and reset the z-index. Mirrors the base lock-hover selectors with the
+ * chrome-none prefix, so the extra class wins over the base rules. Split inline
+ * vs block because each reads its own hover variable. */
 .superdoc-cc-chrome-none .superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode, [data-appearance='hidden']) {
+  background: var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none));
+  z-index: auto;
+}
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode) {
+  background: var(--sd-content-controls-custom-block-hover-bg, var(--sd-content-controls-custom-block-bg, none));
   z-index: auto;
 }
 

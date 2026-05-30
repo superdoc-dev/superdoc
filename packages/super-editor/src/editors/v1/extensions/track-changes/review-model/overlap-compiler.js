@@ -104,6 +104,10 @@ const SUPPORTED_KINDS = new Set(['text-insert', 'text-delete', 'text-replace', '
 const EMPTY_STRUCTURAL_GAP_REFINEMENT_MAX_DISTANCE = 4;
 
 /**
+ * @typedef {false|'different-user'|'all'} ExistingDeletionReassignMode
+ */
+
+/**
  * Compile a tracked edit against an accumulated transaction.
  *
  * The compiler mutates `tr` in place. Callers MUST inspect `result.ok`
@@ -544,7 +548,8 @@ const compileTextDelete = (ctx, intent) => {
     replacementSideId: '',
     sharedDeletionId: intent.replacementGroupHint || null,
     recordSharedDeletionId: Boolean(intent.replacementGroupHint),
-    reassignExistingDeletions: intent.source !== 'native' && !intent.preserveExistingReviewState,
+    reassignExistingDeletions:
+      intent.source !== 'native' && !intent.preserveExistingReviewState ? 'different-user' : false,
   });
   if (result.ok === false) return result;
 
@@ -571,7 +576,7 @@ const compileTextDelete = (ctx, intent) => {
  * @param {*} ctx
  * @param {number} from
  * @param {number} to
- * @param {{ replacementGroupId: string, replacementSideId: string, sharedDeletionId: string | null, recordSharedDeletionId?: boolean, recordCollapsedIds?: boolean, reassignExistingDeletions?: boolean }} options
+ * @param {{ replacementGroupId: string, replacementSideId: string, sharedDeletionId: string | null, recordSharedDeletionId?: boolean, recordCollapsedIds?: boolean, reassignExistingDeletions?: ExistingDeletionReassignMode }} options
  * @returns {{ ok: true, deletionMarks: import('prosemirror-model').Mark[], deletionNodes: import('prosemirror-model').Node[], deletionId: string, mintedThisCall: boolean } | TrackedEditFailure}
  */
 const applyTrackedDelete = (
@@ -653,7 +658,10 @@ const applyTrackedDelete = (
         change: getChangeAuthorIdentity(existingDelete.attrs),
       });
       const isDifferentUserDeletion = !isSameUserHighConfidence(deleteOwnership);
-      if (reassignExistingDeletions && isDifferentUserDeletion) {
+      const shouldReassignExistingDeletion =
+        reassignExistingDeletions === 'all' ||
+        (reassignExistingDeletions === 'different-user' && isDifferentUserDeletion);
+      if (shouldReassignExistingDeletion) {
         ops.push({
           kind: 'reassign',
           from: segFrom,
@@ -1018,7 +1026,7 @@ const compileOrdinaryTextReplace = (ctx, intent, sanitizedSlice, replacementPare
       replacementGroupId,
       replacementSideId: sharedId ? `${sharedId}#deleted` : '',
       sharedDeletionId: sharedId,
-      reassignExistingDeletions: Boolean(sharedId) || Boolean(replacementParentId),
+      reassignExistingDeletions: sharedId || replacementParentId ? 'all' : false,
     });
     if (delResult.ok === false) return delResult;
     deletionMarks = delResult.deletionMarks;

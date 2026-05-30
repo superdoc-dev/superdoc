@@ -10,6 +10,8 @@ import { MARK_KEYS } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { planError } from './errors.js';
 import { TOGGLE_MARK_SPECS, applyDirectiveToMarks } from './mark-directives.js';
+import type { TextOffsetOptions } from '../helpers/text-offset-resolver.js';
+import { TrackDeleteMarkName } from '../../extensions/track-changes/constants.js';
 
 // ---------------------------------------------------------------------------
 // Run types — describes contiguous spans sharing identical marks within a block
@@ -71,7 +73,13 @@ const METADATA_MARK_NAMES = new Set([
  * to the block-relative `from`/`to` offsets, collecting each inline text node
  * as a run with its marks.
  */
-export function captureRunsInRange(editor: Editor, blockPos: number, from: number, to: number): CapturedStyle {
+export function captureRunsInRange(
+  editor: Editor,
+  blockPos: number,
+  from: number,
+  to: number,
+  options?: TextOffsetOptions,
+): CapturedStyle {
   const doc = editor.state.doc;
   const blockNode = doc.nodeAt(blockPos);
   if (!blockNode || from < 0 || to < from || from === to) {
@@ -98,11 +106,14 @@ export function captureRunsInRange(editor: Editor, blockPos: number, from: numbe
     if (node.isText) {
       const text = node.text ?? '';
       if (text.length > 0) {
-        const start = offset;
-        const end = offset + text.length;
         const marks = Array.isArray((node as { marks?: unknown }).marks)
           ? ((node as unknown as { marks: PmMark[] }).marks as readonly PmMark[])
           : [];
+        if (options?.textModel === 'visible' && marks.some((mark) => mark.type.name === TrackDeleteMarkName)) {
+          return;
+        }
+        const start = offset;
+        const end = offset + text.length;
         maybePushRun(start, end, marks);
         offset = end;
       }

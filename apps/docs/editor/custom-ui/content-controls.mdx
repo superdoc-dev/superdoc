@@ -82,8 +82,19 @@ This is the path for `chrome: 'none'`. To theme the **built-in** chrome instead 
 
 You build your UI *over* the control, not inside it. SuperDoc owns how the control's content is painted in the document; you turn off its built-in chrome and draw your own (chips, badges, panels) anchored with `getRect`, react with the events, and change content through `editor.doc.contentControls.*`. Custom field types are expressed as a `tag` - for example `{ kind: 'smartField', key: 'party_name' }`, interpreted by your own UI - the underlying control stays a standard Word SDT so it round-trips to `.docx`.
 
+## Build a custom field system
+
+Putting it together into a fillable template, the way the contract-templates demo does:
+
+1. **Define a tag schema.** Give each control a JSON `tag` your app owns - e.g. `{ kind: 'smartField', key }` for inline variables and `{ kind: 'reusableSection', sectionId }` for clauses.
+2. **Insert from a palette.** Drop a control at a point with `editor.doc.create.contentControl({ kind, at, content, tag, lockMode })`, resolving the drop point with `ui.viewport.positionAt({ x, y })`. A clause can wrap its `{ field }` slots as nested inline controls.
+3. **Style it.** Set the `--sd-content-controls-custom-*` variables on a `data-sdt-tag` selector (see [Style the controls in place](#style-the-controls-in-place)). The sidebar chips can reuse the same tokens, so palette and document match.
+4. **React.** Highlight the active control from `content-control:active-change` / `:click`, and anchor overlays with `getRect` + `ui.viewport.observe`.
+5. **Fill by tag.** A form edits a value and fans it to every occurrence: `editor.doc.contentControls.selectByTag({ tag })`, then `text.setValue` per occurrence.
+6. **Govern with locks.** Keep controls `contentLocked` so users can't edit them, and have the form unlock → write → relock (see [Lock modes](/document-api/features/content-controls#lock-modes)). For a field nested in a locked clause, unlock the parent for the write.
+
 ## See also
 
-- [Contract templates demo](https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates) - a working field chip built on these APIs.
+- [Contract templates demo](https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates) - a full custom contract-template UI: a field + clause library, custom SDT styling, locks, form-driven values, events, insert, and export.
 - [Configuration](/editor/superdoc/configuration) - the `modules.contentControls.chrome` option.
 - [Document API: content controls](/document-api/features/content-controls) - read and change controls.

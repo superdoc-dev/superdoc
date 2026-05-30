@@ -632,7 +632,7 @@ vi.mock('./editors/v1/core/Editor', () => ({
   })),
 }));
 
-vi.mock('@superdoc/layout-adapter', async (importOriginal) => {
+vi.mock('@core/layout-adapter', async (importOriginal) => {
   const { buildLayoutDocumentAdapterVitestMock } = await import(
     './editors/v1/core/presentation-editor/tests/mock-layout-document-adapter-vitest.js'
   );

@@ -5,15 +5,20 @@ Pagination and rendering pipeline for SuperDoc's presentation/viewing mode.
 ## Pipeline Overview
 
 ```
-ProseMirror Doc → pm-adapter → FlowBlock[] → layout-engine → Layout[] → painter-dom → DOM
+ProseMirror Doc → v1 layout-adapter (super-editor) → FlowBlock[] → layout-engine → Layout[] → painter-dom → DOM
 ```
+
+The PM → `FlowBlock[]` adapter is owned by `@superdoc/super-editor`
+(`src/editors/v1/core/layout-adapter`), not by this package. The layout-engine
+packages consume `FlowBlock[]` and the shared layout contracts only and must
+never import the concrete adapter or `@superdoc/super-editor`.
 
 ## Sub-packages
 
 | Package | Purpose | Key Entry |
 |---------|---------|-----------|
 | `contracts/` | Shared types (FlowBlock, Layout, etc.) | `contracts/src/index.ts` |
-| `packages/pm-adapter` (`@superdoc/pm-adapter`) | PM document → FlowBlocks conversion | `../pm-adapter/src/internal.ts` |
+| v1 layout-adapter (super-editor) | PM document → FlowBlocks conversion | `../super-editor/src/editors/v1/core/layout-adapter/internal.ts` |
 | `layout-engine/` | Pagination algorithms | `layout-engine/src/index.ts` |
 | `layout-bridge/` | Layout orchestration & bridge utilities | `layout-bridge/src/incrementalLayout.ts` |
 | `painters/dom/` | DOM rendering | `painters/dom/src/renderer.ts` |
@@ -23,14 +28,14 @@ ProseMirror Doc → pm-adapter → FlowBlock[] → layout-engine → Layout[] �
 ## Key Insight: DomPainter Receives Paint-Ready Data
 
 DomPainter receives a single paint-ready input — `ResolvedLayout` — and
-renders it to DOM. It does not do layout logic, measurement, or pm-adapter
+renders it to DOM. It does not do layout logic, measurement, or PM → FlowBlock
 conversion. Those decisions happen upstream in `layout-engine/`,
-`layout-resolved/`, and `pm-adapter/`.
+`layout-resolved/`, and the v1 layout-adapter (super-editor).
 
 This is enforced as two hard invariants, not aspirational language:
 
 1. **No upstream package imports.** The painter has zero runtime imports
-   from `@superdoc/pm-adapter`, `@superdoc/layout-bridge`, or
+   from the v1 adapter (`@superdoc/super-editor`), `@superdoc/layout-bridge`, or
    `@superdoc/layout-resolved`. Guard D in
    `tests/src/architecture-boundaries.test.ts` enforces this (SD-2836).
 2. **No paint-time DOM measurement.** The painter never reads
@@ -53,11 +58,11 @@ reads.
 | Change how OOXML element renders | `painters/dom/src/features/feature-registry.ts` → feature module |
 | Change rendering orchestration | `painters/dom/src/renderer.ts` |
 | Change pagination/layout | `layout-engine/src/index.ts` |
-| Add new block type | `pm-adapter/src/converters/` + `painters/dom/` |
+| Add new block type | v1 `core/layout-adapter/converters/` + `painters/dom/` |
 | Change style resolution | `style-engine/` |
 | Change text measurement | `measuring-dom/` |
 
-AIDEV-NOTE: `pm-adapter` must preserve shared `SdtMetadata` object identity for sibling blocks in one id-less SDT container; see `contracts/src/sdt-container.ts` before changing SDT imports.
+AIDEV-NOTE: the v1 layout-adapter must preserve shared `SdtMetadata` object identity for sibling blocks in one id-less SDT container; see `contracts/src/sdt-container.ts` before changing SDT imports.
 
 ## Style Engine (`style-engine/`)
 
@@ -138,14 +143,14 @@ Rendering logic for specific OOXML features is extracted into **feature modules*
 - `painters/dom/src/features/feature-registry.ts` - OOXML element → feature module lookup
 - `painters/dom/src/styles.ts` - CSS class definitions
 - `layout-bridge/src/incrementalLayout.ts` - Layout orchestration (called by PresentationEditor)
-- `../pm-adapter/src/internal.ts` - PM → FlowBlock conversion
+- `../super-editor/src/editors/v1/core/layout-adapter/internal.ts` - PM → FlowBlock conversion (super-editor-owned)
 
 ## Layer Ownership
 
 See root `CLAUDE.md` for the full placement map. This package owns the
 layout and rendering pipeline.
 
-- Style-resolved properties flow through `style-engine` → `pm-adapter` →
+- Style-resolved properties flow through `style-engine` → v1 layout-adapter →
   DomPainter.
 - Static document visuals belong in layout data plus DomPainter rendering, not
   ProseMirror decorations.
@@ -154,9 +159,9 @@ layout and rendering pipeline.
 - `PresentationEditor` bridges editor state into layout and paint state. It
   should not resolve OOXML semantics.
 - Direction work keeps OOXML axes separate. `style-engine` resolves cascades,
-  `pm-adapter` writes typed direction/table attrs, and DomPainter owns
+  the v1 layout-adapter writes typed direction/table attrs, and DomPainter owns
   paint-time visual mirroring. For `w:bidiVisual`, upstream layers keep table
   sides in LTR-default form and DomPainter mirrors once.
 
 For the full direction taxonomy, see
-`../pm-adapter/src/direction/README.md`.
+`../super-editor/src/editors/v1/core/layout-adapter/direction/README.md`.

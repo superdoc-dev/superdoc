@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { EditorState } from 'prosemirror-state';
 import { buildFootnotesInput, type ConverterLike } from '../layout/FootnotesBuilder.js';
-import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
-import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
+import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
+import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@core/layout-adapter/constants.js';
 
 const { mockFootnoteToFlowBlocks } = vi.hoisted(() => ({
   mockFootnoteToFlowBlocks: vi.fn((_doc: unknown, opts?: { blockIdPrefix?: string }) => {
@@ -22,7 +22,7 @@ const { mockFootnoteToFlowBlocks } = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock('@superdoc/layout-adapter', async (importOriginal) => {
+vi.mock('@core/layout-adapter', async (importOriginal) => {
   const { buildLayoutDocumentAdapterVitestMock } = await import('./mock-layout-document-adapter-vitest.js');
   return buildLayoutDocumentAdapterVitestMock(importOriginal, { toFlowBlocks: mockFootnoteToFlowBlocks });
 });

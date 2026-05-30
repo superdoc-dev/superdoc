@@ -1,5 +1,4 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import '../setup-layout-adapter.js';
 import type {
   SectionAddress,
   SectionDomain,
@@ -9,8 +8,8 @@ import type {
   SectionsListResult,
 } from '@superdoc/document-api';
 import { buildDiscoveryItem, buildDiscoveryResult, buildResolvedHandle } from '@superdoc/document-api';
-import { getLayoutDocumentAdapter } from '@superdoc/layout-adapter';
-import { SectionType, type SectionRange } from '@superdoc/pm-adapter/sections/types.js';
+import { analyzeSectionRanges, type PMNode } from '@core/layout-adapter';
+import { SectionType, type SectionRange } from '@core/layout-adapter/sections/types.js';
 import type { Editor } from '../../core/Editor.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { getRevision } from '../plan-engine/revision-tracker.js';
@@ -318,7 +317,7 @@ export function resolveSectionProjections(editor: Editor): SectionProjection[] {
   const bodySectPr = getBodySectPrFromEditor(editor);
   const oddEvenHeadersFooters = readOddEvenHeadersFlag(editor);
   const analysisDoc = resolveAnalysisDoc(editor, paragraphs);
-  const analyzed = getLayoutDocumentAdapter().analyzeSectionRanges(analysisDoc, bodySectPr ?? undefined);
+  const analyzed = analyzeSectionRanges(analysisDoc as PMNode, bodySectPr ?? undefined);
   const ranges = analyzed.length > 0 ? analyzed : [createSyntheticRange(bodySectPr, paragraphs.length)];
 
   return ranges.map((range, index) => {

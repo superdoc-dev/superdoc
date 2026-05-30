@@ -33,7 +33,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * @returns ProseMirror document
  */
 function loadPMJsonFixture(fixtureName: string): PMNode {
-  const fixturePath = path.join(__dirname, '../../../pm-adapter/src/fixtures', fixtureName);
+  const fixturePath = path.join(
+    __dirname,
+    '../../../super-editor/src/editors/v1/core/layout-adapter/fixtures',
+    fixtureName,
+  );
 
   if (!fs.existsSync(fixturePath)) {
     throw new Error(`Fixture not found: ${fixturePath}`);

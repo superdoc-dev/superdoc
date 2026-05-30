@@ -108,10 +108,8 @@ import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/r
 import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
-import '@superdoc/pm-adapter/register';
-import { getLayoutDocumentAdapter } from '@superdoc/layout-adapter';
-import type { FlowBlockCacheLike } from '@superdoc/layout-adapter';
-import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
+import { toFlowBlocks, FlowBlockCache } from '@core/layout-adapter';
+import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
@@ -458,9 +456,7 @@ export class PresentationEditor extends EventEmitter {
   #layoutLookupBlocks: FlowBlock[] = [];
   #layoutLookupMeasures: Measure[] = [];
   /** Cache for incremental toFlowBlocks conversion */
-  #flowBlockCache: FlowBlockCacheLike = getLayoutDocumentAdapter().createFlowBlockCache?.() ?? {
-    clear() {},
-  };
+  #flowBlockCache: FlowBlockCache = new FlowBlockCache();
   #footnoteNumberSignature: string | null = null;
   #endnoteNumberSignature: string | null = null;
   #painterAdapter = new PresentationPainterAdapter();
@@ -6374,7 +6370,7 @@ export class PresentationEditor extends EventEmitter {
         const commentsEnabled =
           this.#documentMode !== 'viewing' || this.#layoutOptions.enableCommentsInViewing === true;
         const toFlowBlocksStart = perfNow();
-        const result = getLayoutDocumentAdapter().toFlowBlocks(docJson, {
+        const result = toFlowBlocks(docJson, {
           mediaFiles: (this.#editor?.storage?.image as { media?: Record<string, string> })?.media,
           emitSectionBreaks: true,
           sectionMetadata,

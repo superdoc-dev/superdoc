@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { layoutDocument } from '@superdoc/layout-engine';
-import type { ConverterContext } from '@superdoc/pm-adapter';
+import type { ConverterContext } from '@core/layout-adapter';
 import { toFlowBlocks } from './test-helpers/to-flow-blocks.js';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type { FlowBlock, PMNode } from '@superdoc/contracts';

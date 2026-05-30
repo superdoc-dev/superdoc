@@ -20,9 +20,9 @@
 
 import type { EditorState } from 'prosemirror-state';
 import type { FlowBlock } from '@superdoc/contracts';
-import { getLayoutDocumentAdapter } from '@superdoc/layout-adapter';
-import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
-import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
+import { toFlowBlocks } from '@core/layout-adapter';
+import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
+import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@core/layout-adapter/constants.js';
 
 import type { ProseMirrorJSON } from '../../types/EditorTypes.js';
 import type { FootnoteReference, FootnotesLayoutInput } from '../types.js';
@@ -125,10 +125,6 @@ export function buildFootnotesInput(
 
   if (refs.length === 0) return null;
 
-  // Resolve adapter once so missing registration fails loudly instead of being
-  // swallowed inside per-footnote conversion error handling.
-  const layoutAdapter = getLayoutDocumentAdapter();
-
   // Build blocks for each footnote
   const blocksById = new Map<string, FlowBlock[]>();
 
@@ -137,7 +133,7 @@ export function buildFootnotesInput(
       const footnoteDoc = resolveNoteDocJson(id, importedFootnotes, renderOverride);
       if (!footnoteDoc) return;
 
-      const result = layoutAdapter.toFlowBlocks(footnoteDoc, {
+      const result = toFlowBlocks(footnoteDoc, {
         blockIdPrefix: `footnote-${id}-`,
         storyKey: buildStoryKey({ kind: 'story', storyType: 'footnote', noteId: id }),
         enableRichHyperlinks: true,

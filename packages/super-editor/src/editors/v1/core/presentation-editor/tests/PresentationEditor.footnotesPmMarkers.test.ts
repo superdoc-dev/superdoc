@@ -46,7 +46,7 @@ vi.mock('../../Editor', () => ({
   })),
 }));
 
-vi.mock('@superdoc/layout-adapter', async (importOriginal) => {
+vi.mock('@core/layout-adapter', async (importOriginal) => {
   const { buildLayoutDocumentAdapterVitestMock } = await import('./mock-layout-document-adapter-vitest.js');
   return buildLayoutDocumentAdapterVitestMock(importOriginal, {
     toFlowBlocks: vi.fn((_: unknown, opts?: any) => {

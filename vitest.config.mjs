@@ -22,7 +22,6 @@ export default defineConfig({
       './packages/layout-engine/layout-bridge',
       './packages/layout-engine/measuring/dom',
       './packages/layout-engine/painters/dom',
-      './packages/pm-adapter',
       './packages/layout-engine/tests',
       './apps/vscode-ext',
     ],

@@ -9,6 +9,8 @@ import { describe, it, expect } from 'vitest';
 import { toFlowBlocks as baseToFlowBlocks, toFlowBlocksMap } from './index.js';
 import type { PMNode, AdapterOptions, PMDocumentMap } from './index.js';
 import { measureBlock } from '@superdoc/measuring-dom';
+import { resolveCanvas } from '@superdoc/measuring-dom/canvas-resolver';
+import { installNodeCanvasPolyfill } from '@superdoc/measuring-dom';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { createDomPainter } from '@superdoc/painter-dom';
 import { resolveLayout } from '@superdoc/layout-resolved';
@@ -21,6 +23,13 @@ import tabsDecimalFixture from './fixtures/tabs-decimal.json';
 import tabsCenterEndFixture from './fixtures/tabs-center-end.json';
 import paragraphPPrVariationsFixture from './fixtures/paragraph_pPr_variations.json';
 import { twipsToPx } from './utilities.js';
+
+// This suite drives the real measurer (no mock), so the moved adapter tests
+// need node-canvas wired into the happy-dom document. The old standalone adapter
+// package did this via its vitest.setup.ts; super-editor has no global canvas
+// setup, so install it locally for this integration suite.
+const { Canvas } = resolveCanvas();
+installNodeCanvasPolyfill({ document, Canvas });
 
 const DEFAULT_CONVERTER_CONTEXT = {
   docx: {},

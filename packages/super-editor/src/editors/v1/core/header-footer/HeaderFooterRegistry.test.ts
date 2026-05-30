@@ -99,7 +99,7 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('@superdoc/layout-adapter', async (importOriginal) => {
+vi.mock('@core/layout-adapter', async (importOriginal) => {
   const { buildLayoutDocumentAdapterVitestMock } = await import(
     '../presentation-editor/tests/mock-layout-document-adapter-vitest.js'
   );

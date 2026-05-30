@@ -2,9 +2,8 @@
 /**
  * Extract ProseMirror JSON from DOCX input.
  *
- * Run via Vite's Node runner so Super Editor's path aliases resolve:
- *   npx vite-node --config ../../super-editor/vite.config.js --mode test \
- *     scripts/extract-pm-json.mjs --input ../../super-editor/src/editors/v1/tests/data/your.docx
+ * Run from packages/super-editor:
+ *   pnpm run extract:docx -- --input src/editors/v1/tests/data/your.docx
  *
  * The script loads the DOCX file using the Super Editor import machinery
  * and writes a ProseMirror JSON fixture file.
@@ -13,9 +12,9 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, dirname, resolve, basename } from 'path';
 import { fileURLToPath } from 'url';
-import { createDocumentJson } from "@superdoc/super-editor/src/editors/v1/core/super-converter/v2/importer/docxImporter.js";
-import DocxZipper from "@superdoc/super-editor/src/editors/v1/core/DocxZipper.js";
-import { parseXmlToJson } from "@superdoc/super-editor/src/editors/v1/core/super-converter/v2/docxHelper.js";
+import { createDocumentJson } from '@core/super-converter/v2/importer/docxImporter.js';
+import DocxZipper from '@core/DocxZipper.js';
+import { parseXmlToJson } from '@core/super-converter/v2/docxHelper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -62,17 +61,16 @@ function parseArgs(argv) {
 
 async function extractPMJson() {
   const { input, output } = parseArgs(process.argv.slice(2));
+  const fixturesDir = join(__dirname, '../fixtures');
 
-  const defaultDocxPath = join(
-    __dirname,
-    '../../../super-editor/src/editors/v1/tests/data/basic-paragraph.docx'
-  );
+  const defaultDocxPath = join(__dirname, '../../../tests/data/basic-paragraph.docx');
   const docxPath = resolve(input ?? defaultDocxPath);
-  const fixtureName =
-    output ??
-    (docxPath.endsWith('.docx')
-      ? `${basename(docxPath, '.docx')}.json`
-      : 'basic-paragraph.json');
+  const fixtureName = docxPath.endsWith('.docx') ? `${basename(docxPath, '.docx')}.json` : 'basic-paragraph.json';
+  const outputPath = output
+    ? output.includes('/') || output.includes('\\')
+      ? resolve(output)
+      : join(fixturesDir, output)
+    : join(fixturesDir, fixtureName);
 
   console.log(`Loading DOCX from ${docxPath}...`);
 
@@ -104,10 +102,8 @@ async function extractPMJson() {
   console.log('Extracted PM document with', result.pmDoc.content?.length || 0, 'nodes');
 
   // Write to fixtures directory
-  const fixturesDir = join(__dirname, '../src/fixtures');
-  await mkdir(fixturesDir, { recursive: true });
+  await mkdir(dirname(outputPath), { recursive: true });
 
-  const outputPath = join(fixturesDir, fixtureName);
   await writeFile(outputPath, JSON.stringify(result.pmDoc, null, 2));
 
   console.log('✓ Written to:', outputPath);
@@ -117,7 +113,7 @@ async function extractPMJson() {
   console.log(JSON.stringify(result.pmDoc, null, 2).slice(0, 500) + '...');
 }
 
-extractPMJson().catch(err => {
+extractPMJson().catch((err) => {
   console.error('Error:', err);
   process.exit(1);
 });

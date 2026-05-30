@@ -1,9 +1,6 @@
-import {
-  getLayoutDocumentAdapter,
-  type DocumentAdapterConvertOptions,
-  type FlowBlocksResult,
-} from '@superdoc/layout-adapter';
+import { toFlowBlocks as adapterToFlowBlocks } from '@core/layout-adapter';
+import type { AdapterOptions, FlowBlocksResult, PMNode } from '@core/layout-adapter';
 
-export function toFlowBlocks(input: unknown, options?: DocumentAdapterConvertOptions): FlowBlocksResult {
-  return getLayoutDocumentAdapter().toFlowBlocks(input, options);
+export function toFlowBlocks(input: PMNode | object, options?: AdapterOptions): FlowBlocksResult {
+  return adapterToFlowBlocks(input, options);
 }

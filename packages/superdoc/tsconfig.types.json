@@ -6,7 +6,6 @@
     "rootDir": "../.."
   },
   "references": [
-    { "path": "../pm-adapter/tsconfig.json" },
     { "path": "../super-editor/tsconfig.types.json" },
     { "path": "../collaboration-yjs/tsconfig.json" },
     { "path": "../../shared/common/tsconfig.json" }

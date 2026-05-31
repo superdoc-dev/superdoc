@@ -264,13 +264,14 @@ const tryCompileStep = ({
   let intent;
   try {
     const preserveExistingReviewState = tr.getMeta('protectTrackedReviewState') === true;
+    const source = tr.getMeta('inputType') === 'programmatic' ? 'document-api' : 'native';
     if (step.from === step.to && step.slice.content.size > 0) {
       intent = makeTextInsertIntent({
         at: step.from,
         content: step.slice,
         user,
         date,
-        source: 'native',
+        source,
         preserveExistingReviewState,
       });
     } else if (step.from !== step.to && step.slice.content.size === 0) {
@@ -279,7 +280,7 @@ const tryCompileStep = ({
         to: step.to,
         user,
         date,
-        source: 'native',
+        source,
         preserveExistingReviewState,
       });
     } else if (step.from !== step.to && step.slice.content.size > 0) {
@@ -290,7 +291,7 @@ const tryCompileStep = ({
         replacements,
         user,
         date,
-        source: 'native',
+        source,
         preserveExistingReviewState,
       });
       // Single-step user actions (text replace from one ReplaceStep) probe

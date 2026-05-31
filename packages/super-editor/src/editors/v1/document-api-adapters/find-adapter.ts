@@ -249,12 +249,12 @@ function projectMatchToSDNodeResult(
       const found = blockIndex.candidates.find((c) => c.nodeType === address.nodeType && c.nodeId === address.nodeId);
       if (!found) return null;
       return {
-        node: projectContentNode(found.node),
+        node: projectContentNode(found.node, { textModel: 'visible' }),
         address,
       };
     }
     return {
-      node: projectContentNode(candidate.node),
+      node: projectContentNode(candidate.node, { textModel: 'visible' }),
       address,
     };
   }

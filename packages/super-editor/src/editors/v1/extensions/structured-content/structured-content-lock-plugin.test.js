@@ -4,6 +4,10 @@ import { Slice } from 'prosemirror-model';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import { handleBackspace, handleDelete } from '@core/extensions/keymap.js';
+import {
+  findFirstContentCursorPosInNode,
+  findLastContentCursorPosInNode,
+} from '@core/commands/helpers/textPositions.js';
 import { STRUCTURED_CONTENT_LOCK_KEY } from './structured-content-lock-plugin.js';
 
 /**
@@ -31,6 +35,18 @@ function findSDTNode(doc, nodeType = 'structuredContent') {
 // Helper to check if SDT node exists in document
 function sdtNodeExists(doc, nodeType = 'structuredContent') {
   return findSDTNode(doc, nodeType) !== null;
+}
+
+function findTextPos(doc, text, offset = 0) {
+  let found = null;
+  doc.descendants((node, pos) => {
+    if (!node.isText || found != null) return found == null;
+    const index = node.text.indexOf(text);
+    if (index === -1) return true;
+    found = pos + index + offset;
+    return false;
+  });
+  return found;
 }
 
 describe('StructuredContentLockPlugin', () => {
@@ -634,6 +650,65 @@ describe('StructuredContentLockPlugin', () => {
 
         expect(invokeLockHandleKeyDown('Backspace').handled).toBe(true);
         expect(sdtNodeExists(editor.state.doc, 'structuredContent')).toBe(false);
+      });
+
+      it('contentLocked + Backspace at the start of the following paragraph selects block SDT content, then deletes the wrapper', () => {
+        const doc = createDocWithSDTAndSurroundingText('contentLocked', 'structuredContentBlock');
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContentBlock');
+        const afterStart = findTextPos(state.doc, ' After');
+        expect(afterStart).not.toBeNull();
+
+        placeCaretAt(state, afterStart);
+
+        handleBackspace(editor);
+
+        let selection = editor.state.selection;
+        expect(selection).toBeInstanceOf(TextSelection);
+        expect(selection.from).toBe(findFirstContentCursorPosInNode(sdtInfo.node, sdtInfo.pos));
+        expect(selection.to).toBe(findLastContentCursorPosInNode(sdtInfo.node, sdtInfo.pos));
+
+        expect(invokeLockHandleKeyDown('Backspace').handled).toBe(true);
+        expect(sdtNodeExists(editor.state.doc, 'structuredContentBlock')).toBe(false);
+      });
+
+      it.each(['contentLocked', 'sdtLocked', 'sdtContentLocked'])(
+        '%s + Delete at the end of the preceding paragraph lets keymap select block SDT content',
+        (lockMode) => {
+          const doc = createDocWithSDTAndSurroundingText(lockMode, 'structuredContentBlock');
+          const state = applyDocToEditor(doc);
+          const sdtInfo = findSDTNode(state.doc, 'structuredContentBlock');
+          const beforeEnd = findTextPos(state.doc, 'Before ', 'Before '.length);
+          expect(beforeEnd).not.toBeNull();
+
+          placeCaretAt(state, beforeEnd);
+
+          const lockResult = invokeLockHandleKeyDown('Delete');
+          expect(lockResult.handled).toBe(false);
+          expect(lockResult.prevented).toBe(false);
+
+          handleDelete(editor);
+
+          const selection = editor.state.selection;
+          expect(selection).toBeInstanceOf(TextSelection);
+          expect(selection.from).toBe(findFirstContentCursorPosInNode(sdtInfo.node, sdtInfo.pos));
+          expect(selection.to).toBe(findLastContentCursorPosInNode(sdtInfo.node, sdtInfo.pos));
+        },
+      );
+
+      it('contentLocked + Delete at selected block SDT content deletes the wrapper', () => {
+        const doc = createDocWithSDTAndSurroundingText('contentLocked', 'structuredContentBlock');
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContentBlock');
+        const contentStart = findFirstContentCursorPosInNode(sdtInfo.node, sdtInfo.pos);
+        const contentEnd = findLastContentCursorPosInNode(sdtInfo.node, sdtInfo.pos);
+        expect(contentStart).not.toBeNull();
+        expect(contentEnd).not.toBeNull();
+
+        setSelection(state, TextSelection.create(state.doc, contentStart, contentEnd));
+
+        expect(invokeLockHandleKeyDown('Delete').handled).toBe(true);
+        expect(sdtNodeExists(editor.state.doc, 'structuredContentBlock')).toBe(false);
       });
 
       it.each([

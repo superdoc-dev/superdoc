@@ -68,6 +68,8 @@ import type {
   CanPerformPermissionParams,
   CollaborationProvider,
   Config,
+  ContentControlActiveChangePayload,
+  ContentControlClickPayload,
   DocumentMode,
   Editor,
   EditorUpdateEvent,
@@ -142,6 +144,8 @@ interface SuperDocEventMap {
   'pagination-update': [SuperDocPaginationPayload];
   'list-definitions-change': [ListDefinitionsPayload];
   'comments-update': [SuperDocCommentsUpdatePayload];
+  'content-control:active-change': [ContentControlActiveChangePayload];
+  'content-control:click': [ContentControlClickPayload];
   'collaboration-ready': [SuperDocEditorPayload];
   'awareness-update': [SuperDocAwarenessUpdatePayload];
   locked: [SuperDocLockedPayload];
@@ -412,6 +416,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     onContentError: () => null,
     onReady: () => null,
     onCommentsUpdate: () => null,
+    onContentControlActiveChange: () => null,
+    onContentControlClick: () => null,
     onAwarenessUpdate: () => null,
     onLocked: () => null,
     onPdfDocumentReady: () => null,
@@ -841,6 +847,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.#onConfig('editorDestroy', this.config.onEditorDestroy);
     this.#onConfig('ready', this.config.onReady);
     this.#onConfig('comments-update', this.config.onCommentsUpdate);
+    this.#onConfig('content-control:active-change', this.config.onContentControlActiveChange);
+    this.#onConfig('content-control:click', this.config.onContentControlClick);
     this.#onConfig('awareness-update', this.config.onAwarenessUpdate);
     this.#onConfig('locked', this.config.onLocked);
     this.#onConfig('pdf:document-ready', this.config.onPdfDocumentReady);

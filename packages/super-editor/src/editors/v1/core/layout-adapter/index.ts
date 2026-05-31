@@ -40,6 +40,9 @@ export { SectionType } from './types.js';
 // Re-export public API functions from internal implementation
 export { toFlowBlocks, toFlowBlocksMap } from './internal.js';
 
+// Re-export section range analysis for direct (registry-free) consumers
+export { analyzeSectionRanges } from './sections/analysis.js';
+
 // Re-export run type guards and run utilities
 export { isTextRun } from './converters/paragraph.js';
 export { expandRunsForInlineNewlines } from '@superdoc/contracts';

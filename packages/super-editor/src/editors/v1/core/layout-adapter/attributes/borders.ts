@@ -17,7 +17,7 @@ import type {
 } from '@superdoc/contracts';
 import type { OoxmlBorder } from '../types.js';
 import { normalizeColor, pickNumber, isFiniteNumber, normalizeCellPaddingTopBottom } from '../utilities.js';
-import { eighthPointsToPixels } from '@superdoc/super-editor/converter/internal/helpers.js';
+import { eighthPointsToPixels } from '@converter/helpers.js';
 
 const MIN_BORDER_SIZE_PX = 0.5; // Minimum visible border
 const MAX_BORDER_SIZE_PX = 100; // Reasonable maximum

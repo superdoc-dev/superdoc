@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-26T11:53:56.060Z",
+  "generatedAt": "2026-05-29T09:44:23.077Z",
   "ticket": "SD-3212 PR A0",
   "package": "superdoc",
   "rootExport": {
@@ -42,6 +42,8 @@
         "CommentsPluginKey",
         "CommentsType",
         "Config",
+        "ContentControlActiveChangePayload",
+        "ContentControlClickPayload",
         "ContextMenu",
         "ContextMenuConfig",
         "ContextMenuContext",
@@ -154,6 +156,7 @@
         "Schema",
         "ScrollIntoViewInput",
         "ScrollIntoViewOutput",
+        "SdtRef",
         "SearchMatch",
         "SectionHelpers",
         "SectionMetadata",
@@ -262,6 +265,8 @@
         "CommentsPluginKey",
         "CommentsType",
         "Config",
+        "ContentControlActiveChangePayload",
+        "ContentControlClickPayload",
         "ContextMenu",
         "ContextMenuConfig",
         "ContextMenuContext",
@@ -374,6 +379,7 @@
         "Schema",
         "ScrollIntoViewInput",
         "ScrollIntoViewOutput",
+        "SdtRef",
         "SearchMatch",
         "SectionHelpers",
         "SectionMetadata",
@@ -547,11 +553,11 @@
     }
   },
   "counts": {
-    "types.import": 214,
-    "types.require": 214,
+    "types.import": 217,
+    "types.require": 217,
     "import": 41,
     "require": 41,
-    "union": 214
+    "union": 217
   },
   "divergences": {
     "typesImportVsRequire": {
@@ -588,6 +594,8 @@
         "CommentsPayload",
         "CommentsType",
         "Config",
+        "ContentControlActiveChangePayload",
+        "ContentControlClickPayload",
         "ContextMenuConfig",
         "ContextMenuContext",
         "ContextMenuItem",
@@ -692,6 +700,7 @@
         "Schema",
         "ScrollIntoViewInput",
         "ScrollIntoViewOutput",
+        "SdtRef",
         "SearchMatch",
         "SectionMetadata",
         "SelectionApi",

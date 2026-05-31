@@ -1,11 +1,15 @@
-# @superdoc/pm-adapter
+# v1 layout-adapter (ProseMirror → FlowBlock[])
+
+The v1 ProseMirror adapter, owned by `@superdoc/super-editor`. It projects the
+hidden ProseMirror document and resolved styles into `FlowBlock[]` for the
+layout-engine pipeline. Internal consumers import it via `@core/layout-adapter`.
 
 ## DOCX → PM JSON fixtures
 
-Use the shared Vite configuration from Super Editor to extract ProseMirror JSON directly from DOCX files:
+Use the Super Editor extraction script to extract ProseMirror JSON directly from DOCX files. From `packages/super-editor`:
 
 ```bash
-pnpm run extract:docx --workspace=@superdoc/pm-adapter -- --input ../../super-editor/src/editors/v1/tests/data/restart-numbering-sub-list.docx --output lists-docx.json
+pnpm run extract:docx -- --input src/editors/v1/tests/data/restart-numbering-sub-list.docx --output src/editors/v1/core/layout-adapter/fixtures/lists-docx.json
 ```
 
 Pass `--input` and `--output` to control which DOCX file is converted and where the fixture is written.

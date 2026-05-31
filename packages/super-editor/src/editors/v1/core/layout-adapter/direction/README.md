@@ -34,7 +34,7 @@ import {
   resolveLogicalAlignment,
   resolveLogicalIndent,
   isRtl,
-} from '@superdoc/pm-adapter/direction';
+} from '@core/layout-adapter/direction';
 ```
 
 Each resolver consumes its parent context and returns its own:
@@ -89,7 +89,7 @@ Use the helpers instead of mapping sides inline:
 
 ```ts
 import { resolveLogicalAlignment, resolveLogicalIndent } from
-  '@superdoc/pm-adapter/direction';
+  '@core/layout-adapter/direction';
 
 const physicalAlignment = resolveLogicalAlignment(
   resolvedJustification, // 'start' | 'end' | 'left' | ...
@@ -187,16 +187,16 @@ Use these searches before adding a new direction-aware path:
 ```bash
 # Suspicious: upstream table-side pre-mirroring.
 rg "rightToLeft.*\\?.*'(left|right)'|rightToLeft.*\\?.*\\\"(left|right)\\\"" \
-  packages/layout-engine/pm-adapter/src packages/super-editor/src/editors/v1/core/super-converter
+  packages/super-editor/src/editors/v1/core/layout-adapter packages/super-editor/src/editors/v1/core/super-converter
 
 # Review: downstream consumers reading raw direction fields.
 rg "sectionDirection|rightToLeft" \
   packages/layout-engine/layout-bridge/src packages/layout-engine/painters/dom/src
 
 # Suspicious: painter importing direction logic from upstream packages.
-rg "@superdoc/(pm-adapter|style-engine)" packages/layout-engine/painters/dom/src
+rg "@superdoc/(super-editor|style-engine)" packages/layout-engine/painters/dom/src
 ```
 
-Resolver files under `pm-adapter/src/direction/` are expected to read raw
+Resolver files under `super-editor/src/editors/v1/core/layout-adapter/direction/` are expected to read raw
 direction fields. The checks above are for new local direction decisions
 outside the resolver.

@@ -38,6 +38,7 @@ describe('handleBackspace chain ordering', () => {
       undoInputRule: make('undoInputRule'),
       deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
       selectInlineSdtBeforeRunStart: make('selectInlineSdtBeforeRunStart'),
+      selectBlockSdtBeforeTextBlockStart: make('selectBlockSdtBeforeTextBlockStart'),
       moveIntoBlockSdtBeforeTextBlockStart: make('moveIntoBlockSdtBeforeTextBlockStart'),
       backspaceEmptyRunParagraph: make('backspaceEmptyRunParagraph'),
       backspaceSkipEmptyRun: make('backspaceSkipEmptyRun'),
@@ -76,6 +77,7 @@ describe('handleBackspace chain ordering', () => {
       // step 2 sets inputType meta and returns false (no command call)
       'deleteBlockSdtAtTextBlockStart',
       'selectInlineSdtBeforeRunStart',
+      'selectBlockSdtBeforeTextBlockStart',
       'moveIntoBlockSdtBeforeTextBlockStart',
       'backspaceEmptyRunParagraph',
       'backspaceSkipEmptyRun',
@@ -107,7 +109,8 @@ describe('handleBackspace chain ordering', () => {
     expect(callLog[0]).toBe('undoInputRule');
     expect(callLog[1]).toBe('deleteBlockSdtAtTextBlockStart');
     expect(callLog[2]).toBe('selectInlineSdtBeforeRunStart');
-    expect(callLog[3]).toBe('moveIntoBlockSdtBeforeTextBlockStart');
+    expect(callLog[3]).toBe('selectBlockSdtBeforeTextBlockStart');
+    expect(callLog[4]).toBe('moveIntoBlockSdtBeforeTextBlockStart');
   });
 
   it('places mixedBidiBackspace after backspaceAcrossRuns and before deleteSelection', () => {
@@ -179,6 +182,7 @@ describe('handleDelete chain ordering', () => {
     const commands = {
       deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
       selectInlineSdtAfterRunEnd: make('selectInlineSdtAfterRunEnd'),
+      selectBlockSdtAfterTextBlockEnd: make('selectBlockSdtAfterTextBlockEnd'),
       moveIntoBlockSdtAfterTextBlockEnd: make('moveIntoBlockSdtAfterTextBlockEnd'),
       deleteSkipEmptyRun: make('deleteSkipEmptyRun'),
       deleteAtomAfter: make('deleteAtomAfter'),
@@ -212,6 +216,7 @@ describe('handleDelete chain ordering', () => {
     expect(callLog).toEqual([
       'deleteBlockSdtAtTextBlockStart',
       'selectInlineSdtAfterRunEnd',
+      'selectBlockSdtAfterTextBlockEnd',
       'moveIntoBlockSdtAfterTextBlockEnd',
       'deleteSkipEmptyRun',
       'deleteAtomAfter',

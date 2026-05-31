@@ -64,6 +64,8 @@ type CoreCommandNames =
   | 'backspaceAtomBefore'
   | 'selectInlineSdtBeforeRunStart'
   | 'selectInlineSdtAfterRunEnd'
+  | 'selectBlockSdtBeforeTextBlockStart'
+  | 'selectBlockSdtAfterTextBlockEnd'
   | 'deleteBlockSdtAtTextBlockStart'
   | 'moveIntoBlockSdtBeforeTextBlockStart'
   | 'moveIntoBlockSdtAfterTextBlockEnd'

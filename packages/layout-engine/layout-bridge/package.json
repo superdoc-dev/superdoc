@@ -31,7 +31,6 @@
   "devDependencies": {
     "@superdoc/layout-resolved": "workspace:*",
     "@superdoc/painter-dom": "workspace:*",
-    "@superdoc/pm-adapter": "workspace:*",
     "@types/node": "catalog:",
     "tsup": "catalog:",
     "typescript": "catalog:",

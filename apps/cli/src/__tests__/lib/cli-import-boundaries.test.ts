@@ -20,7 +20,7 @@ const BANNED_IMPORT_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }>
     reason: 'CLI modules must not import super-editor source internals directly.',
   },
   {
-    pattern: /(?:^|\/)layout-engine\/(?:pm-adapter|layout-engine|painters|style-engine)\//,
+    pattern: /(?:^|\/)layout-engine\/(?:layout-engine|painters|style-engine)\//,
     reason: 'CLI modules must not import layout-engine internals directly.',
   },
   {

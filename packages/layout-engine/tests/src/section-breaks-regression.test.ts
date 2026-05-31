@@ -461,7 +461,10 @@ describe('Section Breaks - Regression Tests', () => {
   describe('Verification against real DOCX fixture', () => {
     it('should match expected output for multi_section_doc.json fixture', () => {
       // Load the actual fixture
-      const fixturePath = path.join(__dirname, '../../pm-adapter/src/fixtures/multi_section_doc.json');
+      const fixturePath = path.join(
+        __dirname,
+        '../../../super-editor/src/editors/v1/core/layout-adapter/fixtures/multi_section_doc.json',
+      );
 
       if (!fs.existsSync(fixturePath)) {
         console.warn(`Fixture not found: ${fixturePath}, skipping test`);

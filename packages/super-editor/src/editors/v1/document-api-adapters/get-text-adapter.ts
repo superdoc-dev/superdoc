@@ -16,5 +16,5 @@ import { textBetweenWithTabs } from './helpers/text-with-tabs.js';
 export function getTextAdapter(editor: Editor, input: GetTextInput): string {
   const runtime = resolveStoryRuntime(editor, input.in);
   const doc = runtime.editor.state.doc;
-  return textBetweenWithTabs(doc, 0, doc.content.size, '\n', '\n');
+  return textBetweenWithTabs(doc, 0, doc.content.size, '\n', '\n', { textModel: 'visible' });
 }

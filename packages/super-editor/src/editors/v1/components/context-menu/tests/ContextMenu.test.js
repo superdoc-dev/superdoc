@@ -594,7 +594,7 @@ describe('ContextMenu.vue', () => {
       await onContextMenuOpen({ menuPosition: { left: '100px', top: '200px' } });
       await nextTick();
 
-      expect(wrapper.find('.context-menu-item.is-selected').exists()).toBe(true);
+      expect(wrapper.find('.context-menu-item.sd-is-selected').exists()).toBe(true);
     });
 
     it('should navigate with arrow keys', async () => {
@@ -609,13 +609,13 @@ describe('ContextMenu.vue', () => {
       await searchInput.trigger('keydown', { key: 'ArrowDown' });
       await nextTick();
 
-      const selectedItems = wrapper.findAll('.context-menu-item.is-selected');
+      const selectedItems = wrapper.findAll('.context-menu-item.sd-is-selected');
       expect(selectedItems).toHaveLength(1);
 
       await searchInput.trigger('keydown', { key: 'ArrowUp' });
       await nextTick();
 
-      expect(wrapper.findAll('.context-menu-item.is-selected')).toHaveLength(1);
+      expect(wrapper.findAll('.context-menu-item.sd-is-selected')).toHaveLength(1);
     });
 
     it('should execute selected item on Enter', async () => {

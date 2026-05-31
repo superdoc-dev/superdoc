@@ -86,7 +86,7 @@ const superdoc = new SuperDoc({
       Exact color overrides keyed by author email or author name. Email matches first, then name.
     </ParamField>
     <ParamField path="modules.trackChanges.authorColors.resolve" type="(author) => string | undefined">
-      Callback for authors discovered in the document. Receives `{ name, email, image }`. Return any CSS color string, or `undefined` to use SuperDoc's deterministic fallback color.
+      Callback for authors not covered by `overrides`. Receives `{ name, email, image }`. Return any CSS color string, or `undefined` to use SuperDoc's deterministic fallback color.
     </ParamField>
   </Expandable>
 </ParamField>

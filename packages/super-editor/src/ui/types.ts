@@ -64,8 +64,8 @@ export interface SuperDocLike {
     modules?: {
       trackChanges?: {
         authorColors?: import('@superdoc/contracts').AuthorColorsConfig;
-      } & Record<string, unknown>;
-    } & Record<string, unknown>;
+      };
+    };
   };
   /**
    * Optional setter for documentMode. Consumed by `ui.document.setMode`

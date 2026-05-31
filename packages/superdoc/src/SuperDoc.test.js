@@ -118,13 +118,16 @@ const getTrackedChangeIndexMock = vi.fn(() => createTrackedChangeIndexStub());
 const resolveTrackedChangeColorMock = vi.fn(() => '#123456');
 const composeAuthorColorResolverMock = vi.fn((config) => (config ? resolveTrackedChangeColorMock : undefined));
 
+vi.mock('@superdoc/contracts', () => ({
+  composeAuthorColorResolver: composeAuthorColorResolverMock,
+}));
+
 // Mock @superdoc/super-editor with stubs and PresentationEditor class
 vi.mock('@superdoc/super-editor', () => ({
   SuperEditor: SuperEditorStub,
   AIWriter: AIWriterStub,
   getTrackedChangeIndex: getTrackedChangeIndexMock,
   TrackChangesBasePluginKey: 'TrackChangesBasePluginKey',
-  composeAuthorColorResolver: composeAuthorColorResolverMock,
   PresentationEditor: class PresentationEditorMock {
     static getInstance(documentId) {
       return mockState.instances.get(documentId);

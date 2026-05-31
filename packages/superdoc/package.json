@@ -195,6 +195,7 @@
     "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
     "@types/uuid": "catalog:",
     "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",

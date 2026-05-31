@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-29T09:44:23.077Z",
+  "generatedAt": "2026-05-31T20:12:13.686Z",
   "ticket": "SD-3212 PR A0",
   "package": "superdoc",
   "rootExport": {
@@ -198,6 +198,8 @@
         "TextSegment",
         "TextTarget",
         "Toolbar",
+        "TrackChangeAuthor",
+        "TrackChangesAuthorColorsConfig",
         "TrackChangesBasePluginKey",
         "TrackChangesModuleConfig",
         "TrackedChangeAddress",
@@ -421,6 +423,8 @@
         "TextSegment",
         "TextTarget",
         "Toolbar",
+        "TrackChangeAuthor",
+        "TrackChangesAuthorColorsConfig",
         "TrackChangesBasePluginKey",
         "TrackChangesModuleConfig",
         "TrackedChangeAddress",
@@ -553,11 +557,11 @@
     }
   },
   "counts": {
-    "types.import": 217,
-    "types.require": 217,
+    "types.import": 219,
+    "types.require": 219,
     "import": 41,
     "require": 41,
-    "union": 217
+    "union": 219
   },
   "divergences": {
     "typesImportVsRequire": {
@@ -734,6 +738,8 @@
         "TextAddress",
         "TextSegment",
         "TextTarget",
+        "TrackChangeAuthor",
+        "TrackChangesAuthorColorsConfig",
         "TrackChangesModuleConfig",
         "TrackedChangeAddress",
         "TrackedChangesMode",

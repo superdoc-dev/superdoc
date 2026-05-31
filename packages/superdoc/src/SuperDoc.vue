@@ -33,13 +33,13 @@ import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
+import { composeAuthorColorResolver } from '@superdoc/contracts';
 import {
   SuperEditor,
   AIWriter,
   PresentationEditor,
   getTrackedChangeIndex,
   TrackChangesBasePluginKey,
-  composeAuthorColorResolver,
 } from '@superdoc/super-editor';
 import { ySyncPluginKey } from 'y-prosemirror';
 import HtmlViewer from './components/HtmlViewer/HtmlViewer.vue';

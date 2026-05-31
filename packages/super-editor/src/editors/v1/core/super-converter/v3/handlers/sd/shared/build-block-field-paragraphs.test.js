@@ -49,4 +49,24 @@ describe('wrapParagraphsAsComplexField', () => {
     const types = result[0].elements.flatMap(fldCharTypesOf);
     expect(types).toEqual(['begin', 'separate', 'end']);
   });
+
+  it('restores wrapper paragraph properties before inserting field runs', () => {
+    const wrapperPPr = {
+      name: 'w:pPr',
+      elements: [
+        { name: 'w:pStyle', attributes: { 'w:val': 'Index1' } },
+        { name: 'w:sectPr', elements: [] },
+      ],
+    };
+    const only = {
+      name: 'w:p',
+      elements: [{ name: 'w:pPr', elements: [{ name: 'w:pStyle', attributes: { 'w:val': 'IndexVisual' } }] }],
+    };
+
+    const result = wrapParagraphsAsComplexField([only], instr, wrapperPPr);
+
+    expect(result[0].elements[0]).toEqual(wrapperPPr);
+    expect(fldCharTypesOf(result[0].elements[1])).toEqual(['begin']);
+    expect(result[0].elements[2]).toEqual({ name: 'w:r', elements: instr });
+  });
 });

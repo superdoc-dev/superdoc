@@ -30,6 +30,10 @@ export const Bibliography = Node.create({
         default: null,
         rendered: false,
       },
+      wrapperParagraphProperties: {
+        default: null,
+        rendered: false,
+      },
       style: {
         default: null,
         rendered: false,

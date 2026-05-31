@@ -30,6 +30,10 @@ export const TableOfAuthorities = Node.create({
         default: null,
         rendered: false,
       },
+      wrapperParagraphProperties: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 

@@ -28,6 +28,7 @@ const encode = (params) => {
     attrs: {
       instruction: node.attributes?.instruction || '',
       instructionTokens: node.attributes?.instructionTokens || null,
+      wrapperParagraphProperties: node.attributes?.wrapperParagraphProperties || null,
     },
     content: processedContent,
   };
@@ -46,7 +47,11 @@ const decode = (params) => {
   const contentNodes = (node.content ?? []).map((n) => exportSchemaToJson({ ...params, node: n }));
   const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens);
 
-  return wrapParagraphsAsComplexField(contentNodes, instructionElements);
+  return wrapParagraphsAsComplexField(
+    contentNodes,
+    instructionElements,
+    node.attrs?.wrapperParagraphProperties ?? null,
+  );
 };
 
 /** @type {import('@translator').NodeTranslatorConfig} */

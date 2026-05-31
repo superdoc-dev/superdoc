@@ -227,7 +227,18 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
       }
       return;
     }
-    if (child.type === 'documentPartObject' && Array.isArray(child.content)) {
+    // SD-1333: documentPartObject is a transparent wrapper - recurse its content.
+    // SD-3005: a block field (bibliography / index / table of authorities) generated
+    // inside this content control is likewise transparent here; render its entry
+    // paragraphs without advancing currentParagraphIndex, since
+    // findParagraphsWithSectPr does not recurse structuredContentBlock.
+    if (
+      Array.isArray(child.content) &&
+      (child.type === 'documentPartObject' ||
+        child.type === 'bibliography' ||
+        child.type === 'index' ||
+        child.type === 'tableOfAuthorities')
+    ) {
       child.content.forEach(visitChild);
     }
   };

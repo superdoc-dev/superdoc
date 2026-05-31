@@ -617,7 +617,7 @@ describe('internal', () => {
         };
 
         vi.mocked(handleParagraphNode).mockImplementationOnce((node, context) => {
-          context.blocks.push({ kind: 'paragraph', id: '0-paragraph' } as never);
+          context.blocks.push({ kind: 'paragraph', id: '0-paragraph', runs: [] } as never);
           context.recordBlockKind('paragraph');
         });
 

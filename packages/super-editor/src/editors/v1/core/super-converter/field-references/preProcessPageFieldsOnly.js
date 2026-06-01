@@ -226,7 +226,7 @@ function scanFieldSequence(nodes, beginIndex) {
  * @returns {Function | null}
  */
 function getHeaderFooterFieldPreprocessor(fieldType) {
-  switch (extractFieldKeyword(fieldType)) {
+  switch (fieldType) {
     case 'PAGE':
       return preProcessPageInstruction;
     case 'NUMPAGES':

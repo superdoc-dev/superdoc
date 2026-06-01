@@ -31,6 +31,10 @@ describe('formatPageNumber', () => {
     it('should truncate fractional numbers before formatting', () => {
       expect(formatPageNumber(4.9, 'decimal')).toBe('4');
     });
+
+    it('should fall back to decimal for unsupported runtime formats', () => {
+      expect(formatPageNumber(5, 'chicago' as never)).toBe('5');
+    });
   });
 
   describe('numberInDash format', () => {

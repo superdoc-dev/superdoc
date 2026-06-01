@@ -18,6 +18,10 @@ describe('page number formatting', () => {
     expect(formatPageNumber(Number.NaN, 'decimal')).toBe('1');
   });
 
+  it('falls back to decimal for unsupported runtime formats', () => {
+    expect(formatPageNumber(5, 'chicago' as never)).toBe('5');
+  });
+
   it('falls back to decimal for roman numerals beyond 3999', () => {
     expect(formatPageNumber(4000, 'upperRoman')).toBe('4000');
   });

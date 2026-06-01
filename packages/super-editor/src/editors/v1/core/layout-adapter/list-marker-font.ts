@@ -94,17 +94,20 @@ const resolveContentFont = (
   return source === 'paragraph' ? mergeContentFont(fromPara, fromRuns) : (fromRuns ?? fromPara);
 };
 
-const numberingDefinesMarkerFontFamily = (
+const getNumberingMarkerFontOverrides = (
   numberingProperties: { numId?: number; ilvl?: number } | null | undefined,
   converterContext?: ConverterContext,
-): boolean => {
+): { fontFamily: boolean; fontSize: boolean } => {
   const numId = numberingProperties?.numId;
   if (numId == null || numId === 0 || !converterContext) {
-    return false;
+    return { fontFamily: false, fontSize: false };
   }
   const ilvl = numberingProperties?.ilvl ?? 0;
   const numberingRunProps = getNumberingProperties<RunProperties>('runProperties', converterContext, ilvl, numId);
-  return numberingRunProps.fontFamily != null;
+  return {
+    fontFamily: numberingRunProps.fontFamily != null,
+    fontSize: numberingRunProps.fontSize != null || numberingRunProps.fontSizeCs != null,
+  };
 };
 
 /**
@@ -122,12 +125,12 @@ export const syncListMarkerFontFromParagraphRuns = ({
   const contentFont = resolveContentFont(block, para, contentFontSource);
   if (!contentFont) return;
 
-  const preserveMarkerFontFamily = numberingDefinesMarkerFontFamily(block.attrs?.numberingProperties, converterContext);
+  const numberingOverrides = getNumberingMarkerFontOverrides(block.attrs?.numberingProperties, converterContext);
 
-  if (!preserveMarkerFontFamily && contentFont.fontFamily) {
+  if (!numberingOverrides.fontFamily && contentFont.fontFamily) {
     markerRun.fontFamily = contentFont.fontFamily;
   }
-  if (contentFont.fontSize) {
+  if (!numberingOverrides.fontSize && contentFont.fontSize) {
     markerRun.fontSize = contentFont.fontSize;
   }
 };

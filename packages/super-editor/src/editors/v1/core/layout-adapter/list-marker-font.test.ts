@@ -139,7 +139,7 @@ describe('syncListMarkerFontFromParagraphRuns', () => {
     expect(block.attrs.wordLayout?.marker?.run?.fontSize).toBe(40);
   });
 
-  it('preserves numbering-defined marker font family but still syncs font size', () => {
+  it('preserves numbering-defined marker font family but still syncs font size when size is unset', () => {
     const block = listBlock({
       runs: [{ text: 'item', fontFamily: 'Georgia, serif', fontSize: 30 }],
       markerFamily: 'Symbol',
@@ -150,6 +150,75 @@ describe('syncListMarkerFontFromParagraphRuns', () => {
 
     expect(block.attrs.wordLayout?.marker?.run?.fontFamily).toContain('Symbol');
     expect(block.attrs.wordLayout?.marker?.run?.fontSize).toBe(30);
+  });
+
+  it('preserves numbering-defined marker font size from w:sz', () => {
+    const sizedSymbolContext = {
+      ...symbolContext,
+      translatedNumbering: {
+        definitions: { '1': { numId: 1, abstractNumId: 1 } },
+        abstracts: {
+          '1': {
+            abstractNumId: 1,
+            levels: {
+              '0': {
+                ilvl: 0,
+                runProperties: {
+                  fontFamily: { ascii: 'Symbol' },
+                  fontSize: 20,
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const block = listBlock({
+      runs: [{ text: 'item', fontFamily: 'Georgia, serif', fontSize: 30 }],
+      markerFamily: 'Symbol',
+      markerSize: 10,
+      markerText: '•',
+    });
+
+    syncListMarkerFontFromParagraphRuns({ block, converterContext: sizedSymbolContext as never });
+
+    expect(block.attrs.wordLayout?.marker?.run?.fontFamily).toContain('Symbol');
+    expect(block.attrs.wordLayout?.marker?.run?.fontSize).toBe(10);
+  });
+
+  it('preserves numbering-defined marker font size from w:szCs', () => {
+    const sizedSymbolContext = {
+      ...symbolContext,
+      translatedNumbering: {
+        definitions: { '1': { numId: 1, abstractNumId: 1 } },
+        abstracts: {
+          '1': {
+            abstractNumId: 1,
+            levels: {
+              '0': {
+                ilvl: 0,
+                runProperties: {
+                  fontFamily: { ascii: 'Symbol' },
+                  fontSizeCs: 20,
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const block = listBlock({
+      runs: [{ text: 'item', fontFamily: 'Georgia, serif', fontSize: 30 }],
+      markerFamily: 'Symbol',
+      markerSize: 10,
+      markerText: '•',
+    });
+
+    syncListMarkerFontFromParagraphRuns({ block, converterContext: sizedSymbolContext as never });
+
+    expect(block.attrs.wordLayout?.marker?.run?.fontSize).toBe(10);
   });
 
   it('reads numbering from block attrs on cache hits so Symbol font is preserved', () => {

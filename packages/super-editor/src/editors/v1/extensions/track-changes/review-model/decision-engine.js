@@ -21,7 +21,7 @@
  */
 
 import { Slice } from 'prosemirror-model';
-import { AddMarkStep, RemoveMarkStep, ReplaceStep, Mapping } from 'prosemirror-transform';
+import { AddMarkStep, RemoveMarkStep, ReplaceStep, Mapping, canJoin } from 'prosemirror-transform';
 
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
@@ -376,7 +376,7 @@ const runPermissionPreflight = ({ editor, decision, selections }) => {
 
 /**
  * @typedef {Object} MutationOp
- * @property {'removeContent'|'removeMark'|'addMark'|'unwrapInsert'|'restoreFormat'|'removeFormat'} kind
+ * @property {'removeContent'|'removeMark'|'addMark'|'unwrapInsert'|'restoreFormat'|'removeFormat'|'rejectParagraphSplit'} kind
  * @property {number} from
  * @property {number} to
  * @property {string} [changeId]
@@ -384,6 +384,7 @@ const runPermissionPreflight = ({ editor, decision, selections }) => {
  * @property {import('prosemirror-model').Mark} [mark]
  * @property {Array<unknown>} [beforeMarks]
  * @property {Array<unknown>} [afterMarks]
+ * @property {'inserted'|'source'} [anchor]
  */
 
 /**
@@ -726,8 +727,22 @@ const planFormattingDecision = ({ ops, change, decision, retired }) => {
         changeId: change.id,
         side: SegmentSide.Formatting,
       });
-    } else {
-      for (const run of getSegmentMarkRuns(seg)) {
+      continue;
+    }
+
+    for (const run of getSegmentMarkRuns(seg)) {
+      const paragraphSplit = snapshotAttrsForType(run.mark.attrs?.before, 'paragraphSplit');
+      if (paragraphSplit) {
+        ops.push({
+          kind: 'rejectParagraphSplit',
+          from: run.from,
+          to: run.to,
+          changeId: change.id,
+          side: SegmentSide.Formatting,
+          mark: run.mark,
+          anchor: paragraphSplit.anchor === 'source' ? 'source' : 'inserted',
+        });
+      } else {
         ops.push({
           kind: 'restoreFormat',
           from: run.from,
@@ -742,6 +757,12 @@ const planFormattingDecision = ({ ops, change, decision, retired }) => {
     }
   }
   retired.add(change.id);
+};
+
+const snapshotAttrsForType = (snapshots, type) => {
+  if (!Array.isArray(snapshots)) return null;
+  const snapshot = snapshots.find((entry) => entry?.type === type);
+  return snapshot?.attrs && typeof snapshot.attrs === 'object' ? snapshot.attrs : null;
 };
 
 const planPartialTextDecision = ({ ops, change, selection, decision, removedRanges, retired }) => {
@@ -898,6 +919,27 @@ const deterministicSuccessorId = ({ sourceId, revisionGroupId, side, offsetStart
   return `${sourceId}~${side}~${(hash >>> 0).toString(36)}`;
 };
 
+const findTextblockAt = (doc, pos) => {
+  const bounded = Math.max(0, Math.min(pos, doc.content.size));
+  const $pos = doc.resolve(bounded);
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    const node = $pos.node(depth);
+    if (node.isTextblock) {
+      return { pos: $pos.before(depth), node };
+    }
+  }
+  return null;
+};
+
+const rejectParagraphSplitAt = (tr, from, anchor = 'inserted') => {
+  const block = findTextblockAt(tr.doc, from);
+  if (!block) return false;
+  const joinPos = anchor === 'source' ? block.pos + block.node.nodeSize : block.pos;
+  if (joinPos <= 0 || joinPos >= tr.doc.content.size || !canJoin(tr.doc, joinPos)) return false;
+  tr.join(joinPos);
+  return true;
+};
+
 // ---------------------------------------------------------------------------
 // Plan application
 // ---------------------------------------------------------------------------
@@ -914,6 +956,13 @@ const applyPlan = ({ state, plan }) => {
   const sortedOps = [...plan.ops].sort((a, b) => a.from - b.from || a.to - b.to);
   const markOps = sortedOps.filter((op) => op.kind !== 'removeContent');
   const contentOps = sortedOps.filter((op) => op.kind === 'removeContent').reverse();
+  // Structural paragraph joins are NOT position-stable mark operations: tr.join()
+  // changes document structure and shifts every later position. Doing the join
+  // inside the mark pass invalidates the source positions of later mark ops, which
+  // breaks decisions that reject multiple paragraph splits in one transaction.
+  // We therefore remove the track-format mark in the position-stable mark pass and
+  // defer the join to a mapped structural phase below.
+  const splitJoinOps = sortedOps.filter((op) => op.kind === 'rejectParagraphSplit').reverse();
 
   try {
     for (const op of markOps) {
@@ -947,9 +996,25 @@ const applyPlan = ({ state, plan }) => {
         tr.step(new RemoveMarkStep(op.from, op.to, op.mark));
         continue;
       }
+      if (op.kind === 'rejectParagraphSplit' && op.mark) {
+        // Position-stable part only: drop the tracked-format mark here. The join
+        // runs in the structural phase after content removal.
+        tr.step(new RemoveMarkStep(op.from, op.to, op.mark));
+        continue;
+      }
     }
     for (const op of contentOps) {
       tr.step(new ReplaceStep(op.from, op.to, Slice.empty));
+    }
+    // Structural phase: apply paragraph-split joins in reverse document order,
+    // mapping each original source position through the accumulated transaction
+    // mapping so prior content removals / earlier joins do not desync positions.
+    // Fail closed if a join cannot be applied so the whole decision aborts.
+    for (const op of splitJoinOps) {
+      const mappedFrom = tr.mapping.map(op.from, 1);
+      if (!rejectParagraphSplitAt(tr, mappedFrom, op.anchor)) {
+        throw new Error(`could not join paragraph split for tracked change "${op.changeId ?? ''}".`);
+      }
     }
   } catch (error) {
     return {

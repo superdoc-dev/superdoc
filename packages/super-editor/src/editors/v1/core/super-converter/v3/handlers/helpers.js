@@ -1,10 +1,40 @@
 import { processOutputMarks } from '@converter/exporter.js';
 import { TrackFormatMarkName } from '@extensions/track-changes/constants.js';
 
+export const ParagraphSplitSnapshotType = 'paragraphSplit';
+
 const getMarkType = (mark) => mark?.type?.name ?? mark?.type ?? null;
+const getSnapshotType = (snapshot) => snapshot?.type?.name ?? snapshot?.type ?? null;
+const isDecimalString = (value) => typeof value === 'string' && /^\d+$/.test(value);
 
 const toRunPropertyElements = (marks = []) =>
   processOutputMarks(marks).filter((element) => element && typeof element === 'object' && element.name);
+
+const hashStringToDecimalId = (value) => {
+  const source = String(value || '0');
+  let hash = 0;
+  for (let i = 0; i < source.length; i++) {
+    hash = (hash * 31 + source.charCodeAt(i)) >>> 0;
+  }
+  return String(hash || 1);
+};
+
+const getTrackFormatChangeWordId = (trackFormatMark, options = {}) => {
+  const allocator = options?.wordIdAllocator || null;
+  const partPath = options?.partPath || 'word/document.xml';
+  const sourceId = trackFormatMark.attrs?.sourceId == null ? '' : String(trackFormatMark.attrs.sourceId);
+  const logicalId = trackFormatMark.attrs?.id == null ? '' : String(trackFormatMark.attrs.id);
+
+  if (allocator) return allocator.allocate({ partPath, sourceId, logicalId });
+  if (isDecimalString(sourceId)) return sourceId;
+  if (isDecimalString(logicalId)) return logicalId;
+  return hashStringToDecimalId(sourceId || logicalId);
+};
+
+const getTrackChangeAuthor = (trackFormatMark) => {
+  const author = trackFormatMark.attrs?.author;
+  return author == null ? '' : String(author);
+};
 
 /**
  * Return the first trackFormat mark from a mark list.
@@ -14,6 +44,35 @@ const toRunPropertyElements = (marks = []) =>
  */
 export const findTrackFormatMark = (marks = []) =>
   marks.find((mark) => getMarkType(mark) === TrackFormatMarkName) ?? null;
+
+export const findSnapshotByType = (snapshots = [], type) =>
+  Array.isArray(snapshots) ? (snapshots.find((snapshot) => getSnapshotType(snapshot) === type) ?? null) : null;
+
+export const findParagraphSplitSnapshot = (trackFormatMark) => {
+  if (!trackFormatMark) return null;
+  return (
+    findSnapshotByType(trackFormatMark.attrs?.before, ParagraphSplitSnapshotType) ||
+    findSnapshotByType(trackFormatMark.attrs?.after, ParagraphSplitSnapshotType)
+  );
+};
+
+export const isParagraphSplitTrackFormatMark = (mark) =>
+  getMarkType(mark) === TrackFormatMarkName && Boolean(findParagraphSplitSnapshot(mark));
+
+export const createParagraphSplitInsertionElement = (trackFormatMark, options = {}) => {
+  const paragraphSplit = findParagraphSplitSnapshot(trackFormatMark);
+  if (!paragraphSplit) return undefined;
+
+  return {
+    type: 'element',
+    name: 'w:ins',
+    attributes: {
+      'w:id': getTrackFormatChangeWordId(trackFormatMark, options),
+      'w:author': getTrackChangeAuthor(trackFormatMark),
+      'w:date': trackFormatMark.attrs?.date,
+    },
+  };
+};
 
 /**
  * Build a valid OOXML <w:rPrChange> node from a trackFormat mark.
@@ -35,22 +94,21 @@ export const createRunPropertiesChangeElement = (trackFormatMark, options = {}) 
     elements: toRunPropertyElements(beforeMarks),
   };
 
-  // Phase 005 — if an allocator was passed in, mint a Word-native decimal
-  // `w:id`. Legacy callers (no `options.wordIdAllocator`) keep the prior
-  // `sourceId || id` behavior so the exported byte stream is unchanged.
-  const allocator = options?.wordIdAllocator || null;
-  const partPath = options?.partPath || 'word/document.xml';
-  const sourceId = trackFormatMark.attrs?.sourceId;
-  const logicalId = trackFormatMark.attrs?.id;
-  const wordId = allocator ? allocator.allocate({ partPath, sourceId, logicalId }) : sourceId || logicalId;
+  // Prefer the export allocator for Word-native revision ids. Legacy callers
+  // without an allocator still need decimal OOXML ids, so they use a decimal
+  // source/logical id when available and a deterministic decimal fallback
+  // otherwise.
+  const wordId = getTrackFormatChangeWordId(trackFormatMark, options);
 
+  // w:authorEmail is not part of the OOXML CT_TrackChange attribute set, so it is
+  // intentionally omitted from <w:rPrChange>. The author email remains available on
+  // the internal trackFormat mark attrs for editor-side use; it is just not serialized.
   return {
     type: 'element',
     name: 'w:rPrChange',
     attributes: {
       'w:id': wordId,
-      'w:author': trackFormatMark.attrs?.author,
-      'w:authorEmail': trackFormatMark.attrs?.authorEmail,
+      'w:author': getTrackChangeAuthor(trackFormatMark),
       'w:date': trackFormatMark.attrs?.date,
     },
     elements: [previousRunProperties],

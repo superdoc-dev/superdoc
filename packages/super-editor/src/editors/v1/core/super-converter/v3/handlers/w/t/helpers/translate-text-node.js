@@ -10,6 +10,14 @@ import { translator as wRPrNodeTranslator } from '../../rpr/rpr-translator.js';
 import { combineRunProperties, decodeRPrFromMarks } from '@converter/styles.js';
 import { appendTrackFormatChangeToRunProperties, findTrackFormatMark } from '@converter/v3/handlers/helpers.js';
 
+function resolveExportPartPath(params = {}) {
+  if (typeof params.currentPartPath === 'string' && params.currentPartPath.length > 0) return params.currentPartPath;
+  if (typeof params.filename === 'string' && params.filename.length > 0) {
+    return params.filename.startsWith('word/') ? params.filename : `word/${params.filename}`;
+  }
+  return 'word/document.xml';
+}
+
 export function getTextNodeForExport(text, marks, params) {
   const normalizedMarks = Array.isArray(marks) ? marks : [];
   const hasLeadingOrTrailingSpace = /^\s|\s$/.test(text);
@@ -31,7 +39,10 @@ export function getTextNodeForExport(text, marks, params) {
     };
   }
 
-  appendTrackFormatChangeToRunProperties(rPrNode, normalizedMarks);
+  appendTrackFormatChangeToRunProperties(rPrNode, normalizedMarks, {
+    wordIdAllocator: params?.converter?.wordIdAllocator || null,
+    partPath: resolveExportPartPath(params),
+  });
 
   textNodes.push({
     name: 'w:t',

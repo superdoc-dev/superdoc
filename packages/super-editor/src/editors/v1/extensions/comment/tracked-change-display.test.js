@@ -3,6 +3,7 @@ import {
   resolveTrackedFormatDisplay,
   HyperlinkAddedDisplayType,
   HyperlinkModifiedDisplayType,
+  ParagraphSplitDisplayType,
 } from './tracked-change-display.js';
 
 const makeNode = ({ text = '', marks = [] } = {}) => ({
@@ -39,6 +40,20 @@ describe('resolveTrackedFormatDisplay', () => {
     expect(result).toEqual({
       trackedChangeDisplayType: HyperlinkAddedDisplayType,
       trackedChangeText: 'https://example.com',
+    });
+  });
+
+  it('detects paragraph splits as new-line display changes', () => {
+    const result = resolveTrackedFormatDisplay({
+      attrs: {
+        before: [{ type: 'paragraphSplit', attrs: { anchor: 'inserted', offset: 2 } }],
+        after: [{ type: 'paragraphSplit', attrs: { anchor: 'inserted' } }],
+      },
+      nodes: [makeNode({ text: 'llo' })],
+    });
+    expect(result).toEqual({
+      trackedChangeDisplayType: ParagraphSplitDisplayType,
+      trackedChangeText: 'new line',
     });
   });
 

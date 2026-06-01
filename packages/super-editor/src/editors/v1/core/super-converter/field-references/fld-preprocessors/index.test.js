@@ -20,6 +20,14 @@ describe('getInstructionPreProcessor', () => {
     expect(processor).toBe(preProcessPageInstruction);
   });
 
+  it.each(['page \\* arabic', 'Page', 'PAGE'])(
+    'should return preProcessPageInstruction for case-insensitive PAGE instruction %s',
+    (instruction) => {
+      const processor = getInstructionPreProcessor(instruction);
+      expect(processor).toBe(preProcessPageInstruction);
+    },
+  );
+
   it('should return preProcessNumPagesInstruction for NUMPAGES instruction', () => {
     const instruction = 'NUMPAGES';
     const processor = getInstructionPreProcessor(instruction);
@@ -31,6 +39,14 @@ describe('getInstructionPreProcessor', () => {
     const processor = getInstructionPreProcessor(instruction);
     expect(processor).toBe(preProcessNumPagesInstruction);
   });
+
+  it.each(['numpages', 'NumPages', 'NUMPAGES'])(
+    'should return preProcessNumPagesInstruction for case-insensitive NUMPAGES instruction %s',
+    (instruction) => {
+      const processor = getInstructionPreProcessor(instruction);
+      expect(processor).toBe(preProcessNumPagesInstruction);
+    },
+  );
 
   it('should return preProcessPageRefInstruction for PAGEREF instruction', () => {
     const instruction = 'PAGEREF _Toc123456789 h';
@@ -44,6 +60,14 @@ describe('getInstructionPreProcessor', () => {
     expect(processor).toBe(preProcessHyperlinkInstruction);
     // Test that the processor can be called with docx
     expect(processor([], instruction, mockDocx)).toBeDefined();
+  });
+
+  it.each([
+    ['pageref _Toc123456789 h', preProcessPageRefInstruction],
+    ['hyperlink "http://example.com"', preProcessHyperlinkInstruction],
+  ])('should dispatch non-page field instruction case-insensitively: %s', (instruction, expectedProcessor) => {
+    const processor = getInstructionPreProcessor(instruction);
+    expect(processor).toBe(expectedProcessor);
   });
 
   it('should return preProcessTocInstruction for TOC instruction', () => {

@@ -3,6 +3,7 @@
  */
 import { getInstructionPreProcessor } from './fld-preprocessors';
 import { resolveHyperlinkAttributes } from './fld-preprocessors/hyperlink-preprocessor.js';
+import { extractFieldKeyword } from './field-keyword.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { isTrackChangeElement, isConstructiveTrackChangeElement } from '../v2/importer/trackChangeElements.js';
 
@@ -138,8 +139,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     if (node.name === 'w:fldSimple') {
       const instr = node.attributes?.['w:instr'];
       if (typeof instr === 'string') {
-        const instructionType = instr.trim().split(/\s+/)[0];
-        const instructionPreProcessor = getInstructionPreProcessor(instructionType);
+        const instructionPreProcessor = getInstructionPreProcessor(instr);
         if (instructionPreProcessor) {
           const processed = instructionPreProcessor(node.elements ?? [], instr, { docx });
           if (collecting) {
@@ -324,8 +324,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
  * @returns {{ nodes: OpenXmlNode[], handled: boolean }} The processed nodes and whether a preprocessor handled them.
  */
 const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, instructionTokens, fieldRunRPr) => {
-  const instructionType = instrText.trim().split(/\s+/)[0];
-  const instructionPreProcessor = getInstructionPreProcessor(instructionType);
+  const instructionPreProcessor = getInstructionPreProcessor(instrText);
   if (instructionPreProcessor) {
     return {
       nodes: instructionPreProcessor(nodesToCombine, instrText, { docx, instructionTokens, fieldRunRPr }),
@@ -349,7 +348,7 @@ const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, i
  * @param {ParsedDocx} docx
  */
 const applyConstructiveFieldInterpretation = (rawNodes, instrText, docx) => {
-  const instructionType = instrText.trim().split(/\s+/)[0];
+  const instructionType = extractFieldKeyword(instrText);
   if (instructionType !== 'HYPERLINK') return;
 
   const linkAttributes = resolveHyperlinkAttributes(instrText, docx);

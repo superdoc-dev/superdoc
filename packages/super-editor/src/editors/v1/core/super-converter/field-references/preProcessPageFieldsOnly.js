@@ -4,6 +4,7 @@
 import { preProcessPageInstruction } from './fld-preprocessors/page-preprocessor.js';
 import { preProcessNumPagesInstruction } from './fld-preprocessors/num-pages-preprocessor.js';
 import { preProcessDocumentStatInstruction } from './fld-preprocessors/document-stat-preprocessor.js';
+import { extractFieldKeyword } from './field-keyword.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -47,7 +48,7 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
     // fldSimple has the instruction in an attribute, not nested elements
     if (node.name === 'w:fldSimple') {
       const instrAttr = node.attributes?.['w:instr'] || '';
-      const fieldType = instrAttr.trim().split(/\s+/)[0];
+      const fieldType = extractFieldKeyword(instrAttr);
 
       const fldSimplePreprocessor = getHeaderFooterFieldPreprocessor(fieldType);
       if (fldSimplePreprocessor) {
@@ -206,7 +207,7 @@ function scanFieldSequence(nodes, beginIndex) {
     return null; // Incomplete field
   }
 
-  const fieldType = instrText.trim().split(/\s+/)[0];
+  const fieldType = extractFieldKeyword(instrText);
 
   return {
     fieldType,
@@ -225,7 +226,7 @@ function scanFieldSequence(nodes, beginIndex) {
  * @returns {Function | null}
  */
 function getHeaderFooterFieldPreprocessor(fieldType) {
-  switch (fieldType) {
+  switch (extractFieldKeyword(fieldType)) {
     case 'PAGE':
       return preProcessPageInstruction;
     case 'NUMPAGES':

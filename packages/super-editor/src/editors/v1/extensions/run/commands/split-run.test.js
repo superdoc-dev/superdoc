@@ -2,9 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vite
 import { TextSelection, EditorState } from 'prosemirror-state';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import * as converterStyles from '@core/super-converter/styles.js';
+import { TrackFormatMarkName } from '../../track-changes/constants.js';
+import { buildReviewGraph } from '../../track-changes/review-model/review-graph.js';
 
 let splitRunToParagraph;
 let splitRunAtCursor;
+const ALICE = { name: 'Alice', email: 'alice@example.com' };
 
 beforeAll(async () => {
   ({ splitRunToParagraph, splitRunAtCursor } = await import('@extensions/run/commands/split-run.js'));
@@ -55,13 +58,23 @@ const getRunTexts = (doc) => {
   return texts;
 };
 
+const getOnlyTrackedChange = (state) => {
+  const graph = buildReviewGraph({ state });
+  expect(graph.changes.size).toBe(1);
+  return [...graph.changes.values()][0];
+};
+
 describe('splitRunToParagraph command', () => {
   let editor;
   let originalMatchMedia;
 
-  const loadDoc = (json) => {
+  const loadDoc = (json, { plugins = false } = {}) => {
     const docNode = editor.schema.nodeFromJSON(json);
-    const state = EditorState.create({ schema: editor.schema, doc: docNode });
+    const state = EditorState.create({
+      schema: editor.schema,
+      doc: docNode,
+      ...(plugins ? { plugins: editor.state.plugins } : {}),
+    });
     editor.setState(state);
   };
 
@@ -105,7 +118,7 @@ describe('splitRunToParagraph command', () => {
   });
 
   it('returns false when selection is not empty', () => {
-    loadDoc(RUN_DOC);
+    loadDoc(RUN_DOC, { plugins: true });
 
     const start = findTextPos('Hello');
     expect(start).not.toBeNull();
@@ -127,7 +140,7 @@ describe('splitRunToParagraph command', () => {
   });
 
   it('delegates to splitBlock when cursor is inside a run', () => {
-    loadDoc(RUN_DOC);
+    loadDoc(RUN_DOC, { plugins: true });
 
     const start = findTextPos('Hello');
     expect(start).not.toBeNull();
@@ -141,6 +154,63 @@ describe('splitRunToParagraph command', () => {
 
     const paragraphTexts = getParagraphTexts(editor.view.state.doc);
     expect(paragraphTexts).toEqual(['He', 'llo']);
+  });
+
+  it('records Enter as a tracked paragraph split in suggesting mode', () => {
+    editor.options.user = ALICE;
+    loadDoc(RUN_DOC, { plugins: true });
+    editor.commands.enableTrackChanges();
+
+    const start = findTextPos('Hello');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 2);
+
+    const handled = editor.commands.splitRunToParagraph();
+
+    expect(handled).toBe(true);
+    expect(getParagraphTexts(editor.view.state.doc)).toEqual(['He', 'llo']);
+
+    const change = getOnlyTrackedChange(editor.view.state);
+    expect(change.type).toBe('formatting');
+    expect(change.before).toEqual([{ type: 'paragraphSplit', attrs: { anchor: 'source', offset: 2 } }]);
+    expect(change.formattingSegments[0]?.mark.type.name).toBe(TrackFormatMarkName);
+  });
+
+  it('rejects a tracked paragraph split from the UI Enter path', () => {
+    editor.options.user = ALICE;
+    loadDoc(RUN_DOC, { plugins: true });
+    editor.commands.enableTrackChanges();
+
+    const start = findTextPos('Hello');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 2);
+
+    expect(editor.commands.splitRunToParagraph()).toBe(true);
+    const change = getOnlyTrackedChange(editor.view.state);
+
+    expect(editor.commands.rejectTrackedChangeById(change.id)).toBe(true);
+    expect(getParagraphTexts(editor.view.state.doc)).toEqual(['Hello']);
+    expect(buildReviewGraph({ state: editor.view.state }).changes.size).toBe(0);
+  });
+
+  it('rejects a tracked paragraph split that created an empty tail paragraph', () => {
+    editor.options.user = ALICE;
+    loadDoc(RUN_DOC, { plugins: true });
+    editor.commands.enableTrackChanges();
+
+    const start = findTextPos('Hello');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 'Hello'.length);
+
+    expect(editor.commands.splitRunToParagraph()).toBe(true);
+    expect(getParagraphTexts(editor.view.state.doc)).toEqual(['Hello', '']);
+
+    const change = getOnlyTrackedChange(editor.view.state);
+    expect(change.before).toEqual([{ type: 'paragraphSplit', attrs: { anchor: 'source', offset: 5 } }]);
+
+    expect(editor.commands.rejectTrackedChangeById(change.id)).toBe(true);
+    expect(getParagraphTexts(editor.view.state.doc)).toEqual(['Hello']);
+    expect(buildReviewGraph({ state: editor.view.state }).changes.size).toBe(0);
   });
 
   it('uses paragraph split metadata instead of copying DOCX identities', () => {
@@ -334,9 +404,13 @@ describe('splitRunToParagraph with style marks', () => {
     },
   });
 
-  const loadDoc = (json) => {
+  const loadDoc = (json, { plugins = false } = {}) => {
     const docNode = editor.schema.nodeFromJSON(json);
-    const state = EditorState.create({ schema: editor.schema, doc: docNode });
+    const state = EditorState.create({
+      schema: editor.schema,
+      doc: docNode,
+      ...(plugins ? { plugins: editor.state.plugins } : {}),
+    });
     editor.setState(state);
   };
 

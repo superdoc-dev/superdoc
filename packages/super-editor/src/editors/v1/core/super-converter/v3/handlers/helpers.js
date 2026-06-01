@@ -1,10 +1,26 @@
 import { processOutputMarks } from '@converter/exporter.js';
 import { TrackFormatMarkName } from '@extensions/track-changes/constants.js';
 
+export const ParagraphSplitSnapshotType = 'paragraphSplit';
+export const SuperDocRevisionNamespace = 'https://superdoc.dev/ooxml/revisions/2026';
+export const SuperDocRevisionNamespaceAttr = 'superdocXmlns';
+export const SuperDocParagraphSplitAttr = 'superdocParagraphSplit';
+export const SuperDocParagraphSplitAnchorAttr = 'superdocParagraphSplitAnchor';
+
 const getMarkType = (mark) => mark?.type?.name ?? mark?.type ?? null;
+const getSnapshotType = (snapshot) => snapshot?.type?.name ?? snapshot?.type ?? null;
 
 const toRunPropertyElements = (marks = []) =>
   processOutputMarks(marks).filter((element) => element && typeof element === 'object' && element.name);
+
+const getTrackFormatChangeWordId = (trackFormatMark, options = {}) => {
+  const allocator = options?.wordIdAllocator || null;
+  const partPath = options?.partPath || 'word/document.xml';
+  const sourceId = trackFormatMark.attrs?.sourceId;
+  const logicalId = trackFormatMark.attrs?.id;
+
+  return allocator ? allocator.allocate({ partPath, sourceId, logicalId }) : sourceId || logicalId;
+};
 
 /**
  * Return the first trackFormat mark from a mark list.
@@ -14,6 +30,52 @@ const toRunPropertyElements = (marks = []) =>
  */
 export const findTrackFormatMark = (marks = []) =>
   marks.find((mark) => getMarkType(mark) === TrackFormatMarkName) ?? null;
+
+export const findSnapshotByType = (snapshots = [], type) =>
+  Array.isArray(snapshots) ? (snapshots.find((snapshot) => getSnapshotType(snapshot) === type) ?? null) : null;
+
+export const findParagraphSplitSnapshot = (trackFormatMark) => {
+  if (!trackFormatMark) return null;
+  return (
+    findSnapshotByType(trackFormatMark.attrs?.before, ParagraphSplitSnapshotType) ||
+    findSnapshotByType(trackFormatMark.attrs?.after, ParagraphSplitSnapshotType)
+  );
+};
+
+export const isParagraphSplitTrackFormatMark = (mark) =>
+  getMarkType(mark) === TrackFormatMarkName && Boolean(findParagraphSplitSnapshot(mark));
+
+export const createParagraphSplitPropertiesChange = (trackFormatMark, options = {}) => {
+  const paragraphSplit = findParagraphSplitSnapshot(trackFormatMark);
+  if (!paragraphSplit) return undefined;
+
+  const anchor = paragraphSplit.attrs?.anchor === 'source' ? 'source' : 'inserted';
+
+  return {
+    id: getTrackFormatChangeWordId(trackFormatMark, options),
+    author: trackFormatMark.attrs?.author,
+    date: trackFormatMark.attrs?.date,
+    [SuperDocRevisionNamespaceAttr]: SuperDocRevisionNamespace,
+    [SuperDocParagraphSplitAttr]: '1',
+    [SuperDocParagraphSplitAnchorAttr]: anchor,
+    paragraphProperties: {},
+  };
+};
+
+export const createParagraphSplitInsertionElement = (trackFormatMark, options = {}) => {
+  const paragraphSplit = findParagraphSplitSnapshot(trackFormatMark);
+  if (!paragraphSplit) return undefined;
+
+  return {
+    type: 'element',
+    name: 'w:ins',
+    attributes: {
+      'w:id': getTrackFormatChangeWordId(trackFormatMark, options),
+      'w:author': trackFormatMark.attrs?.author,
+      'w:date': trackFormatMark.attrs?.date,
+    },
+  };
+};
 
 /**
  * Build a valid OOXML <w:rPrChange> node from a trackFormat mark.
@@ -38,11 +100,7 @@ export const createRunPropertiesChangeElement = (trackFormatMark, options = {}) 
   // Phase 005 — if an allocator was passed in, mint a Word-native decimal
   // `w:id`. Legacy callers (no `options.wordIdAllocator`) keep the prior
   // `sourceId || id` behavior so the exported byte stream is unchanged.
-  const allocator = options?.wordIdAllocator || null;
-  const partPath = options?.partPath || 'word/document.xml';
-  const sourceId = trackFormatMark.attrs?.sourceId;
-  const logicalId = trackFormatMark.attrs?.id;
-  const wordId = allocator ? allocator.allocate({ partPath, sourceId, logicalId }) : sourceId || logicalId;
+  const wordId = getTrackFormatChangeWordId(trackFormatMark, options);
 
   return {
     type: 'element',

@@ -10,6 +10,12 @@ export const HyperlinkAddedDisplayType = 'hyperlinkAdded';
  */
 export const HyperlinkModifiedDisplayType = 'hyperlinkModified';
 
+/**
+ * Display token for tracked format changes that represent splitting a paragraph
+ * from the UI Enter path.
+ */
+export const ParagraphSplitDisplayType = 'paragraphSplit';
+
 const getMarkSnapshots = (attrs = {}) => {
   const before = Array.isArray(attrs.before) ? attrs.before : [];
   const after = Array.isArray(attrs.after) ? attrs.after : [];
@@ -109,6 +115,14 @@ const snapshotAttrsEqual = (a, b) => {
  */
 export const resolveTrackedFormatDisplay = ({ attrs = {}, nodes = [] }) => {
   const { before, after } = getMarkSnapshots(attrs);
+  const paragraphSplit = findSnapshotByType(before, 'paragraphSplit') || findSnapshotByType(after, 'paragraphSplit');
+  if (paragraphSplit) {
+    return {
+      trackedChangeDisplayType: ParagraphSplitDisplayType,
+      trackedChangeText: 'new line',
+    };
+  }
+
   const beforeLink = findSnapshotByType(before, 'link');
   const afterLink = findSnapshotByType(after, 'link');
   const inferredLiveLink =

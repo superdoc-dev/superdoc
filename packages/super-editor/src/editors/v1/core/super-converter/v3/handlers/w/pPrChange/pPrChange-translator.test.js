@@ -84,6 +84,29 @@ describe('w:pPrChange translator', () => {
       });
     });
 
+    it('should encode SuperDoc paragraphSplit metadata attributes', () => {
+      const xmlNode = {
+        name: 'w:pPrChange',
+        attributes: {
+          'w:id': '7',
+          'xmlns:sd': 'https://superdoc.dev/ooxml/revisions/2026',
+          'sd:paragraphSplit': '1',
+          'sd:paragraphSplitAnchor': 'source',
+        },
+        elements: [{ name: 'w:pPr', elements: [] }],
+      };
+
+      const result = translator.encode({ nodes: [xmlNode] });
+
+      expect(result).toEqual({
+        id: '7',
+        superdocXmlns: 'https://superdoc.dev/ooxml/revisions/2026',
+        superdocParagraphSplit: '1',
+        superdocParagraphSplitAnchor: 'source',
+        paragraphProperties: {},
+      });
+    });
+
     it('should encode nested sectPr from the changed paragraph properties', () => {
       const sectPr = {
         name: 'w:sectPr',
@@ -213,6 +236,34 @@ describe('w:pPrChange translator', () => {
           'w:date': '2026-01-01T00:00:00Z',
         },
         elements: [],
+      });
+    });
+
+    it('should decode SuperDoc paragraphSplit metadata attributes', () => {
+      const superDocNode = {
+        attrs: {
+          change: {
+            id: '7',
+            superdocXmlns: 'https://superdoc.dev/ooxml/revisions/2026',
+            superdocParagraphSplit: '1',
+            superdocParagraphSplitAnchor: 'source',
+            paragraphProperties: {},
+          },
+        },
+      };
+
+      const result = translator.decode({ node: superDocNode });
+
+      expect(result).toEqual({
+        name: 'w:pPrChange',
+        type: 'element',
+        attributes: {
+          'w:id': '7',
+          'xmlns:sd': 'https://superdoc.dev/ooxml/revisions/2026',
+          'sd:paragraphSplit': '1',
+          'sd:paragraphSplitAnchor': 'source',
+        },
+        elements: [{ name: 'w:pPr', type: 'element', attributes: {}, elements: [] }],
       });
     });
 

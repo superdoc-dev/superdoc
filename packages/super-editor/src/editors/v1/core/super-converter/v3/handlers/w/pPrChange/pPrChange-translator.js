@@ -2,6 +2,11 @@ import { NodeTranslator } from '@translator';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { createNestedPropertiesTranslator, createAttributeHandler } from '@converter/v3/handlers/utils.js';
 import { basePropertyTranslators } from '../pPr/pPr-base-translators.js';
+import {
+  SuperDocParagraphSplitAnchorAttr,
+  SuperDocParagraphSplitAttr,
+  SuperDocRevisionNamespaceAttr,
+} from '../../helpers.js';
 
 const pPrTranslator = NodeTranslator.from(
   createNestedPropertiesTranslator('w:pPr', 'paragraphProperties', basePropertyTranslators),
@@ -11,6 +16,9 @@ const ATTRIBUTE_HANDLERS = [
   createAttributeHandler('w:id'),
   createAttributeHandler('w:author'),
   createAttributeHandler('w:date'),
+  createAttributeHandler('xmlns:sd', SuperDocRevisionNamespaceAttr),
+  createAttributeHandler('sd:paragraphSplit', SuperDocParagraphSplitAttr),
+  createAttributeHandler('sd:paragraphSplitAnchor', SuperDocParagraphSplitAnchorAttr),
 ];
 
 function getSectPr(pPrNode) {

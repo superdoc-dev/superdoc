@@ -4,6 +4,37 @@ import { getHexColorFromDocxSystem, isValidHexColor, twipsToInches, twipsToLines
 import { translator as wRPrTranslator } from '../../v3/handlers/w/rpr/index.js';
 import { encodeMarksFromRPr } from '@converter/styles.js';
 import { resolveTrackedChangeImportIds, stampImportTrackingAttrs } from './importTrackingContext.js';
+import {
+  ParagraphSplitSnapshotType,
+  SuperDocParagraphSplitAnchorAttr,
+  SuperDocParagraphSplitAttr,
+} from '../../v3/handlers/helpers.js';
+
+function getInlineParagraphChange(params) {
+  return params?.extraParams?.inlineParagraphProperties?.change || null;
+}
+
+function isMatchingParagraphSplitChange(change, ids) {
+  if (!change || typeof change !== 'object') return false;
+  if (String(change[SuperDocParagraphSplitAttr] ?? '') !== '1') return false;
+
+  const changeId = change.id;
+  if (changeId == null) return false;
+  return ids.some((id) => id != null && String(id) === String(changeId));
+}
+
+function createParagraphSplitSnapshots(change) {
+  const anchor = change?.[SuperDocParagraphSplitAnchorAttr] === 'source' ? 'source' : 'inserted';
+  const snapshot = {
+    type: ParagraphSplitSnapshotType,
+    attrs: { anchor },
+  };
+
+  return {
+    before: [snapshot],
+    after: [{ ...snapshot, attrs: { ...snapshot.attrs } }],
+  };
+}
 
 /**
  *
@@ -133,6 +164,12 @@ export function handleStyleChangeMarksV2(rPrChange, currentMarks, params) {
   if (rPr) {
     const runProperties = wRPrTranslator.encode({ ...params, nodes: [rPr] }) || {};
     submarks = encodeMarksFromRPr(runProperties, params?.docx);
+  }
+
+  const paragraphChange = getInlineParagraphChange(params);
+  if (isMatchingParagraphSplitChange(paragraphChange, [attributes['w:id'], sourceId, logicalId])) {
+    const snapshots = createParagraphSplitSnapshots(paragraphChange);
+    return [{ type: TrackFormatMarkName, attrs: { ...mappedAttributes, ...snapshots } }];
   }
 
   return [{ type: TrackFormatMarkName, attrs: { ...mappedAttributes, before: submarks, after: [...currentMarks] } }];

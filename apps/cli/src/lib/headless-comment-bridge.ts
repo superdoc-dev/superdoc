@@ -147,6 +147,7 @@ export interface HeadlessCommentBridgeResult {
   /** Options to spread into Editor.open() call */
   editorOptions: {
     isCommentsEnabled: true;
+    shouldLoadComments: true;
     documentMode: 'editing';
     onCommentsUpdate: (params: Record<string, unknown>) => void;
     onCommentsLoaded: (params: { editor: unknown; comments: unknown[] }) => void;
@@ -348,6 +349,7 @@ export function buildHeadlessCommentBridge(ydoc: unknown, user?: UserIdentity): 
   return {
     editorOptions: {
       isCommentsEnabled: true,
+      shouldLoadComments: true,
       documentMode: 'editing',
       onCommentsUpdate: handleCommentsUpdate,
       onCommentsLoaded: handleCommentsLoaded,

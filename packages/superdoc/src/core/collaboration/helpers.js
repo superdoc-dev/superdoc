@@ -5,6 +5,25 @@ import { actorIdentitiesMatch } from '@superdoc/common';
 import { addYComment, updateYComment, deleteYComment } from './collaboration-comments';
 
 /**
+ * Queue for comment events that arrive before collaboration is ready.
+ * Flushed when provider syncs via flushPendingCommentEvents().
+ */
+let pendingCommentEvents = [];
+
+/**
+ * Flush any queued comment events to Y.Array.
+ * Called when collaboration becomes ready (provider synced).
+ *
+ * @param {Object} superdoc The SuperDoc instance
+ */
+const flushPendingCommentEvents = (superdoc) => {
+  if (!pendingCommentEvents.length) return;
+  const events = pendingCommentEvents;
+  pendingCommentEvents = [];
+  events.forEach((event) => syncCommentsToClients(superdoc, event));
+};
+
+/**
  * Load comments from the ydoc into the comments store.
  *
  * @param {Object} superdoc The SuperDoc instance
@@ -68,6 +87,12 @@ export const initCollaborationComments = (superdoc) => {
   const updateCommentsStore = () => loadCommentsFromYdoc(superdoc);
 
   const onSuperDocYdocSynced = () => {
+    // Flush queued comment events to Y.Array BEFORE loading.
+    // When comments are imported before collaboration is fully wired
+    // (isCollaborative is false), they get queued. Flushing now ensures
+    // the Y.Array is seeded so other clients receive them.
+    flushPendingCommentEvents(superdoc);
+
     if (!updateCommentsStore()) {
       setTimeout(updateCommentsStore, 0);
     }
@@ -86,6 +111,10 @@ export const initCollaborationComments = (superdoc) => {
   superdoc.provider.on('synced', onSuperDocYdocSynced);
 
   // Load any existing comments immediately (in case provider synced before we subscribed)
+  // If provider is already synced, flush queued events first
+  if (superdoc.provider?.synced) {
+    flushPendingCommentEvents(superdoc);
+  }
   if (!updateCommentsStore()) {
     setTimeout(updateCommentsStore, 0);
   }
@@ -169,7 +198,13 @@ export const makeDocumentsCollaborative = (superdoc) => {
  * @returns {void}
  */
 export const syncCommentsToClients = (superdoc, event) => {
-  if (!superdoc.isCollaborative || !superdoc.config.modules.comments) return;
+  if (!superdoc.config.modules.comments) return;
+
+  // Queue events until collaboration is ready
+  if (!superdoc.isCollaborative) {
+    pendingCommentEvents.push(event);
+    return;
+  }
 
   const yArray = superdoc.ydoc.getArray('comments');
   const user = superdoc.config.user;

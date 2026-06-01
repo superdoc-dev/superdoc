@@ -359,7 +359,9 @@ export async function openCollaborativeDocument(
       documentId: profile.documentId,
       ydoc: runtime.ydoc,
       collaborationProvider: runtime.provider,
-      isNewFile: shouldSeed,
+      // When seeding from a document, we need isNewFile: false so that
+      // #initComments() runs and emits commentsLoaded, pushing comments to Y.Array.
+      isNewFile: shouldSeed && !docForEditor,
       editorOpenOptions: options.editorOpenOptions,
       user: options.user,
     });

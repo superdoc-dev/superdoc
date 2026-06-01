@@ -8,7 +8,7 @@ import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers
 import type { CommentInput } from '../algorithm/comment-diffing.ts';
 import { captureHeaderFooterState } from '../algorithm/header-footer-diffing.ts';
 import { applyDiffPayload, captureSnapshot, compareToSnapshot } from './index.ts';
-import { buildCanonicalDiffableState } from './canonicalize.ts';
+import { buildCanonicalDiffableState, buildLegacyCanonicalDiffableState } from './canonicalize.ts';
 import { computeFingerprint } from './fingerprint.ts';
 import { V1_COVERAGE } from './coverage.ts';
 
@@ -569,6 +569,185 @@ describe('diff-service tracked apply', () => {
       expect(() => applyDiffPayload(baseEditor, invalidV1Diff, { changeMode: 'direct' })).toThrowError(
         /coverage mismatch/i,
       );
+    } finally {
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+});
+
+// SD-3279: cross-editor diff handoff. A diff produced by one editor instance
+// must be applicable to a second editor instance that holds the same document
+// content. Previously the fingerprint included session-local block IDs, so
+// the apply would throw PRECONDITION_FAILED even for identical content.
+describe('diff-service cross-editor handoff (SD-3279)', () => {
+  it('applies a diff produced by one editor to a second editor with the same content', async () => {
+    const editorMain = await openBlankDocxWithText('Base document.');
+    const editorPreview = await openBlankDocxWithText('Base document.');
+    const targetEditor = await openBlankDocxWithText('Base document. Renewal requires written approval.');
+
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      const diff = compareToSnapshot(editorMain, snapshot);
+
+      const { tr } = applyDiffPayload(editorPreview, diff, { changeMode: 'tracked' });
+      editorPreview.dispatch(tr);
+
+      expect(editorPreview.state.doc.textContent).toBe(targetEditor.state.doc.textContent);
+      expect(getTrackChanges(editorPreview.state).length).toBeGreaterThan(0);
+    } finally {
+      editorMain.destroy?.();
+      editorPreview.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
+  it('keeps the same-editor capture/compare/apply path working (regression guard)', async () => {
+    const editor = await openBlankDocxWithText('Base document.');
+    const targetEditor = await openBlankDocxWithText('Base document. Renewal.');
+
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      const diff = compareToSnapshot(editor, snapshot);
+      const { tr } = applyDiffPayload(editor, diff, { changeMode: 'tracked' });
+      editor.dispatch(tr);
+
+      expect(editor.state.doc.textContent).toBe(targetEditor.state.doc.textContent);
+      expect(getTrackChanges(editor.state).length).toBeGreaterThan(0);
+    } finally {
+      editor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
+  // Customer flow: main editor mutates → exports current state → preview loads
+  // the exported DOCX → applies the diff. This exercises the full converter
+  // round-trip. Stripping sdBlockId / sdBlockRev from the fingerprint (this
+  // fix) is necessary but not sufficient: a second canonical-state divergence
+  // is introduced during export → re-import that still trips the fingerprint
+  // check. Tracked separately as SD-3282; the cross-editor same-blob path
+  // above is fixed by this change.
+  it('exposes the known export → reimport fingerprint divergence (regression marker)', async () => {
+    const editorMain = await openBlankDocxWithText('Base document.');
+    const targetEditor = await openBlankDocxWithText('Base document. Renewal requires written approval.');
+
+    let editorPreview: Editor | undefined;
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      const diff = compareToSnapshot(editorMain, snapshot);
+
+      const exported = await editorMain.exportDocument();
+      editorPreview = await reopenExportedDocument(exported);
+
+      // Expected to throw today; flip this assertion to a success expectation
+      // once the export/reimport canonical-state divergence is resolved.
+      expect(() => applyDiffPayload(editorPreview!, diff, { changeMode: 'tracked' })).toThrowError(
+        /fingerprint mismatch/i,
+      );
+    } finally {
+      editorPreview?.destroy?.();
+      editorMain.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+});
+
+// SD-3279 backward compatibility: snapshots and diff payloads captured under
+// the pre-fix algorithm carry a fingerprint that included session-local
+// sdBlockId / sdBlockRev values. The fix changes the canonical state without
+// bumping the snapshot/payload version, which would invalidate already
+// persisted artifacts in the customer's revision-history workflow. The
+// validation paths in compareToSnapshot and applyDiffPayload accept either
+// the new or the legacy fingerprint, so old artifacts remain usable.
+describe('diff-service legacy fingerprint fallback (SD-3279 backward compat)', () => {
+  function legacyFingerprintForEditor(editor: Editor, snapshot: ReturnType<typeof captureSnapshot>): string {
+    const payload = snapshot.payload as {
+      doc: Record<string, unknown>;
+      comments: CommentInput[];
+      styles: Record<string, unknown> | null;
+      numbering: Record<string, unknown> | null;
+      headerFooters: Record<string, unknown> | null;
+      partsState: Record<string, unknown> | null;
+    };
+    const parsedDoc = editor.state.schema.nodeFromJSON(payload.doc);
+    const legacyCanonical = buildLegacyCanonicalDiffableState(
+      parsedDoc,
+      payload.comments,
+      payload.styles as any,
+      payload.numbering as any,
+      payload.headerFooters as any,
+      payload.partsState as any,
+    );
+    return computeFingerprint(legacyCanonical);
+  }
+
+  it('accepts a snapshot whose fingerprint was computed under the legacy normalizer', async () => {
+    const baseEditor = await openBlankDocxWithText('Base document.');
+    const targetEditor = await openBlankDocxWithText('Base document. Renewal.');
+
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      const legacyFingerprint = legacyFingerprintForEditor(targetEditor, snapshot);
+
+      // Confirm the algorithms produce different fingerprints — otherwise the
+      // test isn't exercising the fallback.
+      expect(legacyFingerprint).not.toBe(snapshot.fingerprint);
+
+      const legacySnapshot = { ...snapshot, fingerprint: legacyFingerprint };
+      const diff = compareToSnapshot(baseEditor, legacySnapshot);
+      expect(diff.summary.hasChanges).toBe(true);
+    } finally {
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
+  it('accepts a same-editor diff payload whose baseFingerprint was computed under the legacy normalizer', async () => {
+    const baseEditor = await openBlankDocxWithText('Base document.');
+    const targetEditor = await openBlankDocxWithText('Base document. Renewal.');
+
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      const diff = compareToSnapshot(baseEditor, snapshot);
+
+      // Synthesize a legacy-style payload by computing the legacy fingerprint
+      // of the current base editor and swapping it in for baseFingerprint.
+      const baseSnapshot = captureSnapshot(baseEditor);
+      const legacyBaseFingerprint = legacyFingerprintForEditor(baseEditor, baseSnapshot);
+      expect(legacyBaseFingerprint).not.toBe(diff.baseFingerprint);
+
+      const legacyDiff = { ...diff, baseFingerprint: legacyBaseFingerprint };
+
+      const { tr } = applyDiffPayload(baseEditor, legacyDiff, { changeMode: 'tracked' });
+      baseEditor.dispatch(tr);
+
+      expect(baseEditor.state.doc.textContent).toBe(targetEditor.state.doc.textContent);
+      expect(getTrackChanges(baseEditor.state).length).toBeGreaterThan(0);
+    } finally {
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
+  it('still rejects a genuinely tampered snapshot (both new and legacy fingerprints mismatch)', async () => {
+    const baseEditor = await openBlankDocxWithText('Base document.');
+    const targetEditor = await openBlankDocxWithText('Base document. Renewal.');
+
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      // Keep the original fingerprint but replace the body payload with
+      // unrelated content. Neither the new nor the legacy normalizer will
+      // produce a hash matching the kept fingerprint.
+      const tamperedPayload = {
+        ...(snapshot.payload as Record<string, unknown>),
+        doc: {
+          type: 'doc',
+          content: [{ type: 'paragraph', attrs: {}, content: [{ type: 'text', text: 'Unrelated' }] }],
+        },
+      };
+      const tamperedSnapshot = { ...snapshot, payload: tamperedPayload };
+
+      expect(() => compareToSnapshot(baseEditor, tamperedSnapshot)).toThrowError(/may have been tampered/i);
     } finally {
       baseEditor.destroy?.();
       targetEditor.destroy?.();

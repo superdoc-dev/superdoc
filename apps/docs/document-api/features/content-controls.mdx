@@ -66,7 +66,9 @@ for (const control of items) {
 }
 ```
 
-Composed runtime: [`demos/contract-templates`](https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates).
+Or keep clauses **single-use and governed**: a clause is either in the contract or available to add from a library, and it appears once. Track inclusion by querying `contentControls.list` for the `sectionId` instead of comparing versions, and lock each placed clause (`contentLocked`) so its prose is fixed. A clause can also carry nested smart fields - inline controls inside the block - that fill from one place.
+
+The [`demos/contract-templates`](https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates) runtime composes the single-use approach: a clause library that inserts locked block clauses (some with nested fields), each filled by tag from a form.
 
 ## Why `tag`, not `nodeId`
 
@@ -134,10 +136,12 @@ Set `lockMode` when you create a control to govern which changes are allowed.
 |---|---|
 | `unlocked` | Content and properties can be updated through the Document API. |
 | `sdtLocked` | The wrapper is preserved through user edits. |
-| `contentLocked` | The content can't be modified through the editor surface. |
+| `contentLocked` | The user can't edit the content, **and** content writes through the Document API (`text.setValue`, `replaceContent`) are rejected too - they return a `LOCK_VIOLATION`. |
 | `sdtContentLocked` | Both wrapper and content are preserved. |
 
-For controls your app drives with `text.setValue`, `replaceContent`, or `patch`, use `lockMode: 'unlocked'`.
+For controls your app drives freely with `text.setValue` or `replaceContent`, use `lockMode: 'unlocked'`.
+
+For a **locked template** - controls the user can't touch, but your app still updates - keep them `contentLocked` and unlock around each write: `setLockMode({ lockMode: 'unlocked' })`, write, then `setLockMode({ lockMode: 'contentLocked' })`. Use `try`/`finally` so a failed write never leaves a control unlocked. `setLockMode` and `patch` are not blocked by `contentLocked`, so only the content write needs the unlock window. A smart field nested inside a locked block control needs the **parent** unlocked for the write too, since the parent's content lock vetoes writes to anything inside it.
 
 ## Data binding
 

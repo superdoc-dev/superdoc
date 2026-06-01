@@ -2,9 +2,9 @@
  * Architecture boundary guardrails.
  *
  * These tests enforce the one-way import flow of the layout-engine pipeline:
- *   super-converter → pm-adapter → layout-engine / layout-bridge → painter-dom
- *                         ↑
- *                    style-engine (consumed ONLY by pm-adapter at runtime)
+ *   super-converter → v1 layout-adapter (super-editor) → FlowBlock[]
+ *                                                    ↓
+ *                      layout-engine / layout-bridge → painter-dom
  *
  * Violations mean the pipeline has become circular or rendering logic has
  * leaked into data preparation (or vice versa).
@@ -15,6 +15,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const LAYOUT_ENGINE_ROOT = path.resolve(__dirname, '../../');
+// SD-3222: the v1 ProseMirror adapter now lives inside @superdoc/super-editor
+// (it is v1 SuperEditor's projection from hidden PM state into FlowBlock[]),
+// not in a standalone layout-engine package.
+const V1_ADAPTER_ROOT = path.resolve(__dirname, '../../../super-editor/src/editors/v1/core/layout-adapter');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -121,7 +125,12 @@ function expectNoViolations(violations: { file: string; line: string }[]) {
 // ---------------------------------------------------------------------------
 
 describe('architecture boundaries', () => {
-  describe('Guard A: style-engine is only consumed by pm-adapter', () => {
+  it('sanity check: architecture guard source roots exist', () => {
+    expect(fs.existsSync(LAYOUT_ENGINE_ROOT)).toBe(true);
+    expect(fs.existsSync(V1_ADAPTER_ROOT)).toBe(true);
+  });
+
+  describe('Guard A: style-engine does not leak into layout runtime packages', () => {
     it('painter-dom runtime src does not import @superdoc/style-engine', () => {
       const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'painters/dom/src');
       expectNoViolations(findImportViolations(srcDir, '@superdoc/style-engine'));
@@ -153,45 +162,39 @@ describe('architecture boundaries', () => {
     });
   });
 
-  describe('Guard B: painter-dom internals are not imported by pm-adapter', () => {
-    it('pm-adapter runtime src does not import @superdoc/painter-dom', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
-      expectNoViolations(findImportViolations(srcDir, '@superdoc/painter-dom'));
+  describe('Guard B: painter-dom internals are not imported by the v1 adapter', () => {
+    it('v1 adapter runtime src does not import @superdoc/painter-dom', () => {
+      expectNoViolations(findImportViolations(V1_ADAPTER_ROOT, '@superdoc/painter-dom'));
     });
 
-    it('pm-adapter runtime src does not import relative painter paths', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
+    it('v1 adapter runtime src does not import relative painter paths', () => {
       // Catch any relative import reaching into painters/ directory
-      expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*painters\//));
+      expectNoViolations(findRelativeImportViolations(V1_ADAPTER_ROOT, /from\s+['"].*painters\//));
     });
   });
 
-  describe('Guard C: data flows one direction — pm-adapter does not import downstream', () => {
-    it('pm-adapter runtime src does not import @superdoc/layout-bridge', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
-      expectNoViolations(findImportViolations(srcDir, '@superdoc/layout-bridge'));
+  describe('Guard C: data flows one direction — the v1 adapter does not import downstream', () => {
+    it('v1 adapter runtime src does not import @superdoc/layout-bridge', () => {
+      expectNoViolations(findImportViolations(V1_ADAPTER_ROOT, '@superdoc/layout-bridge'));
     });
 
-    it('pm-adapter runtime src does not import @superdoc/layout-engine', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
-      expectNoViolations(findImportViolations(srcDir, '@superdoc/layout-engine'));
+    it('v1 adapter runtime src does not import @superdoc/layout-engine', () => {
+      expectNoViolations(findImportViolations(V1_ADAPTER_ROOT, '@superdoc/layout-engine'));
     });
 
-    it('pm-adapter runtime src does not import relative layout-bridge paths', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
-      expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*layout-bridge\//));
+    it('v1 adapter runtime src does not import relative layout-bridge paths', () => {
+      expectNoViolations(findRelativeImportViolations(V1_ADAPTER_ROOT, /from\s+['"].*layout-bridge\//));
     });
 
-    it('pm-adapter runtime src does not import relative layout-engine paths', () => {
-      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'pm-adapter/src');
-      expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*layout-engine\//));
+    it('v1 adapter runtime src does not import relative layout-engine paths', () => {
+      expectNoViolations(findRelativeImportViolations(V1_ADAPTER_ROOT, /from\s+['"].*layout-engine\//));
     });
   });
 
   describe('Guard D: painter-dom is a dumb final renderer with no upstream dependencies', () => {
-    it('painter-dom runtime src does not import @superdoc/pm-adapter', () => {
+    it('painter-dom runtime src does not import @superdoc/super-editor', () => {
       const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'painters/dom/src');
-      expectNoViolations(findImportViolations(srcDir, '@superdoc/pm-adapter'));
+      expectNoViolations(findImportViolations(srcDir, '@superdoc/super-editor'));
     });
 
     it('painter-dom runtime src does not import @superdoc/layout-bridge', () => {
@@ -220,9 +223,9 @@ describe('architecture boundaries', () => {
       expectNoViolations(violations);
     });
 
-    it('painter-dom runtime src does not import relative pm-adapter paths', () => {
+    it('painter-dom runtime src does not import the relative v1 layout-adapter path', () => {
       const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'painters/dom/src');
-      expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*pm-adapter\//));
+      expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*super-editor\/.*layout-adapter/));
     });
 
     it('painter-dom runtime src does not import relative layout-bridge paths', () => {
@@ -352,5 +355,38 @@ describe('architecture boundaries', () => {
         );
       }
     });
+  });
+
+  describe('Guard H: layout runtime packages do not import concrete adapters (SD-3222)', () => {
+    const LAYOUT_RUNTIME_DIRS = [
+      'layout-engine/src',
+      'layout-bridge/src',
+      'painters/dom/src',
+      'contracts/src',
+      'dom-contract/src',
+      'layout-resolved/src',
+    ];
+
+    for (const dir of LAYOUT_RUNTIME_DIRS) {
+      // The v1 ProseMirror adapter is owned by @superdoc/super-editor. Layout
+      // runtime packages consume FlowBlock[] and layout contracts only — they
+      // must never reach back into the concrete editor adapter, whether via the
+      // package specifier, source alias, or a relative path into super-editor's
+      // adapter source.
+      it(`${dir} does not import @superdoc/super-editor`, () => {
+        const srcDir = path.join(LAYOUT_ENGINE_ROOT, dir);
+        expectNoViolations(findImportViolations(srcDir, '@superdoc/super-editor'));
+      });
+
+      it(`${dir} does not import @core/layout-adapter`, () => {
+        const srcDir = path.join(LAYOUT_ENGINE_ROOT, dir);
+        expectNoViolations(findImportViolations(srcDir, '@core/layout-adapter'));
+      });
+
+      it(`${dir} does not import the relative v1 super-editor layout-adapter path`, () => {
+        const srcDir = path.join(LAYOUT_ENGINE_ROOT, dir);
+        expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*super-editor\/.*layout-adapter/));
+      });
+    }
   });
 });

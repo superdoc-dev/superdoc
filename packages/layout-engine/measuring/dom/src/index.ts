@@ -61,7 +61,9 @@ import {
   type CellSpacing,
   type TableBorders,
   type TableBorderValue,
+  EMPTY_SDT_PLACEHOLDER_TEXT,
   effectiveTableCellSpacing,
+  isEmptySdtPlaceholderRun,
   LeaderDecoration,
   resolveBaseFontSizeForVerticalText,
 } from '@superdoc/contracts';
@@ -208,7 +210,6 @@ const FIELD_ANNOTATION_VERTICAL_PADDING = 6; // Vertical padding/border for pill
 const DEFAULT_FIELD_ANNOTATION_FONT_SIZE = 16; // Default font size for field annotations
 const DEFAULT_PARAGRAPH_FONT_SIZE = 12;
 const DEFAULT_PARAGRAPH_FONT_FAMILY = 'Arial';
-
 const isValidFontSize = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
 
@@ -1032,7 +1033,11 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   }
 
   const emptyParagraphRun =
-    normalizedRuns.length === 1 && isEmptyTextRun(normalizedRuns[0] as Run) ? (normalizedRuns[0] as TextRun) : null;
+    normalizedRuns.length === 1 &&
+    isEmptyTextRun(normalizedRuns[0] as Run) &&
+    !isEmptySdtPlaceholderRun(normalizedRuns[0] as Run)
+      ? (normalizedRuns[0] as TextRun)
+      : null;
   if (emptyParagraphRun) {
     const fontSize = emptyParagraphRun.fontSize ?? DEFAULT_PARAGRAPH_FONT_SIZE;
     const metrics = calculateEmptyParagraphMetrics(fontSize, spacing, getFontInfoFromRun(emptyParagraphRun));
@@ -2008,6 +2013,84 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     // The remaining run must be TextRun (which has text, fontSize, etc.)
     if (!('text' in run) || !('fontSize' in run)) {
       // Safety check - skip if this isn't a TextRun
+      pendingRunSpacing = 0;
+      continue;
+    }
+
+    if (isEmptySdtPlaceholderRun(run)) {
+      const placeholderFont = buildFontString(run).font;
+      const placeholderText = applyTextTransform(EMPTY_SDT_PLACEHOLDER_TEXT, run);
+      const measuredPlaceholderWidth = getMeasuredTextWidth(
+        placeholderText,
+        placeholderFont,
+        run.letterSpacing ?? 0,
+        ctx,
+      );
+      const fallbackPlaceholderWidth = placeholderText.length * run.fontSize * 0.45;
+      const placeholderWidth =
+        run.sdt?.type === 'structuredContent' && run.sdt.appearance === 'hidden'
+          ? 0
+          : measuredPlaceholderWidth > 0
+            ? measuredPlaceholderWidth
+            : fallbackPlaceholderWidth;
+
+      if (!currentLine) {
+        currentLine = {
+          fromRun: runIndex,
+          fromChar: 0,
+          toRun: runIndex,
+          toChar: 0,
+          width: placeholderWidth,
+          maxFontSize: lineHeightFontSize(run),
+          maxFontInfo: getFontInfoFromRun(run),
+          maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
+          segments: [{ runIndex, fromChar: 0, toChar: 0, width: placeholderWidth }],
+          spaceCount: 0,
+        };
+      } else {
+        const boundarySpacing = resolveBoundarySpacing(currentLine.width, true, run);
+        if (
+          currentLine.width + boundarySpacing + placeholderWidth > currentLine.maxWidth - WIDTH_FUDGE_PX &&
+          currentLine.width > 0
+        ) {
+          trimTrailingWrapSpaces(currentLine);
+          const metrics = finalizeLineMetrics(currentLine, spacing);
+          const completedLine: Line = {
+            ...currentLine,
+            ...metrics,
+          };
+          addBarTabsToLine(completedLine);
+          lines.push(completedLine);
+          tabStopCursor = 0;
+          pendingTabAlignment = null;
+          pendingLeader = null;
+          lastAppliedTabAlign = null;
+          activeTabGroup = null;
+
+          currentLine = {
+            fromRun: runIndex,
+            fromChar: 0,
+            toRun: runIndex,
+            toChar: 0,
+            width: placeholderWidth,
+            maxFontSize: lineHeightFontSize(run),
+            maxFontInfo: getFontInfoFromRun(run),
+            maxWidth: getEffectiveWidth(bodyContentWidth),
+            segments: [{ runIndex, fromChar: 0, toChar: 0, width: placeholderWidth }],
+            spaceCount: 0,
+          };
+        } else {
+          currentLine.toRun = runIndex;
+          currentLine.toChar = 0;
+          currentLine.width = roundValue(currentLine.width + boundarySpacing + placeholderWidth);
+          currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
+          currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
+          appendSegment(currentLine.segments, runIndex, 0, 0, placeholderWidth);
+        }
+      }
+
+      lastFontSize = run.fontSize;
+      hasSeenTextRun = true;
       pendingRunSpacing = 0;
       continue;
     }

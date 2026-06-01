@@ -26,6 +26,13 @@ def main() -> None:
             result.pop('tools', None)
             print(json.dumps({'ok': True, 'result': result}))
 
+        elif action == 'listPresets':
+            from superdoc import DEFAULT_PRESET, list_presets
+            print(json.dumps({'ok': True, 'result': {
+                'defaultPreset': DEFAULT_PRESET,
+                'presets': list_presets(),
+            }}))
+
         elif action == 'resolveIntentDispatch':
             from superdoc.tools.intent_dispatch_generated import dispatch_intent_tool
             tool_name = command['toolName']

@@ -3,7 +3,8 @@
 /**
  * @typedef {'review' | 'original' | 'final' | 'off'} TrackChangesMode
  * @typedef {'paired' | 'independent'} TrackChangesReplacements
- * @typedef {{ visible: boolean, mode: TrackChangesMode, enabled: boolean, replacements: TrackChangesReplacements }} NormalizedTrackChangesConfig
+ * @typedef {{ enabled?: boolean, overrides?: Record<string, string>, resolve?: (author: { name?: string, email?: string, image?: string }) => (string | undefined) }} AuthorColorsConfig
+ * @typedef {{ visible: boolean, mode: TrackChangesMode, enabled: boolean, replacements: TrackChangesReplacements, authorColors?: AuthorColorsConfig }} NormalizedTrackChangesConfig
  */
 
 /** @type {ReadonlyArray<TrackChangesMode>} */
@@ -123,6 +124,13 @@ export function normalizeTrackChangesConfig(config) {
   // buckets never exposed this knob, so there's no alias to resolve.
   const replacements = coerceReplacements(fromCanonical?.replacements) ?? 'paired';
 
+  // Per-author colors live only on the canonical path. Preserve the object by
+  // reference (it may carry a `resolve` function) rather than cloning, so the
+  // composed resolver SuperDoc builds keeps the host's callback intact.
+  const authorColors = pickObject(fromCanonical?.authorColors)
+    ? /** @type {AuthorColorsConfig} */ (/** @type {Record<string, unknown>} */ (fromCanonical).authorColors)
+    : undefined;
+
   // Default mode derives from documentMode + visibility so a viewing-mode
   // document without an explicit mode falls back to 'original' unless the
   // consumer asked for tracked changes to be visible.
@@ -133,6 +141,9 @@ export function normalizeTrackChangesConfig(config) {
 
   /** @type {NormalizedTrackChangesConfig} */
   const normalized = { visible, mode, enabled, replacements };
+  if (authorColors) {
+    normalized.authorColors = authorColors;
+  }
 
   // Write-through to every path so all existing internal reads see the same
   // resolved values without needing to migrate each call site in this pass.

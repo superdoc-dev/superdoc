@@ -11,7 +11,7 @@ test('adding a row after bold cell preserves formatting in new row', async ({ su
   await superdoc.type('Bold header');
   await superdoc.waitForStable();
 
-  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/active/);
+  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/sd-active/);
 
   // Add a row after the current one
   await superdoc.executeCommand('addRowAfter');
@@ -26,5 +26,5 @@ test('adding a row after bold cell preserves formatting in new row', async ({ su
   await superdoc.assertTextContains('Bold header');
 
   // The new text inherits bold from the row it was cloned from.
-  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/active/);
+  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/sd-active/);
 });

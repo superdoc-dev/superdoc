@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { defaultNodeListHandler } from './docxImporter';
+import { stableHexHash } from '@core/utilities/hash.js';
 
 /**
  * Parse comments.xml into SuperDoc-ready comments
@@ -602,21 +603,6 @@ const applyParentRelationships = (comments, parentMap, trackedChangeParentMap = 
 };
 
 /**
- * Lightweight, non-cryptographic FNV-1a 32-bit hash for stable identifiers.
- *
- * @param {string} input
- * @returns {string} 8-char hex string
- */
-const simpleHash = (input) => {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0');
-};
-
-/**
  * Resolve a stable comment ID for imported comments.
  * - Prefer the explicit internal ID when present.
  * - If the comment has an imported ID, derive a stable hash from imported ID + created time.
@@ -625,6 +611,6 @@ const simpleHash = (input) => {
 const getCommentId = (internalId, importedId, createdTime) => {
   if (internalId != null) return internalId;
   if (importedId == null || !Number.isFinite(createdTime)) return uuidv4();
-  const hash = simpleHash(`${importedId}-${createdTime}`);
+  const hash = stableHexHash(`${importedId}-${createdTime}`);
   return `imported-${hash}`;
 };

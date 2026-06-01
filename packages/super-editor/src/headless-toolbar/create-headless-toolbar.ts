@@ -6,6 +6,7 @@ import type {
   ToolbarSubscriptionEvent,
 } from './types.js';
 import { createToolbarSnapshot } from './create-toolbar-snapshot.js';
+import { hasContentLockedStructuredContentSelection } from './helpers/context.js';
 import { subscribeToolbarEvents } from './subscribe-toolbar-events.js';
 import { createToolbarRegistry } from './toolbar-registry.js';
 import type { BuiltInToolbarRegistryEntry } from './internal-types.js';
@@ -43,6 +44,38 @@ const executeRegistryCommand = (
     });
   }
   return executeDirectCommand(id, snapshot, toolbarRegistry, payload);
+};
+
+const CONTENT_LOCK_EXECUTION_EXEMPT_IDS = new Set<PublicToolbarItemId>([
+  'undo',
+  'redo',
+  'ruler',
+  'formatting-marks',
+  'zoom',
+  'document-mode',
+]);
+
+const isToolbarCommandExecutionDisabled = (
+  id: PublicToolbarItemId,
+  superdoc: CreateHeadlessToolbarOptions['superdoc'],
+  snapshot: ToolbarSnapshot,
+  toolbarRegistry: Partial<Record<PublicToolbarItemId, BuiltInToolbarRegistryEntry>>,
+): boolean => {
+  const snapshotState = snapshot.commands[id];
+  if (snapshotState) return snapshotState.disabled;
+
+  if (CONTENT_LOCK_EXECUTION_EXEMPT_IDS.has(id) || !hasContentLockedStructuredContentSelection(snapshot.context)) {
+    return false;
+  }
+
+  const entry = toolbarRegistry[id];
+  if (!entry) return false;
+
+  try {
+    return entry.state({ context: snapshot.context, superdoc }).disabled;
+  } catch {
+    return true;
+  }
 };
 
 export const createHeadlessToolbar = (options: CreateHeadlessToolbarOptions): HeadlessToolbarController => {
@@ -107,6 +140,10 @@ export const createHeadlessToolbar = (options: CreateHeadlessToolbarOptions): He
     },
 
     execute(id: PublicToolbarItemId, payload?: unknown) {
+      if (isToolbarCommandExecutionDisabled(id, options.superdoc, snapshot, toolbarRegistry)) {
+        return false;
+      }
+
       const result = executeRegistryCommand(id, options.superdoc, snapshot, toolbarRegistry, payload);
       if (result && !destroyed) {
         refreshControllerState();

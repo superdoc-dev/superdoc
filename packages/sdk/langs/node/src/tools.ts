@@ -1,127 +1,41 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+/**
+ * Public LLM-tools API. Thin layer over the preset registry — every call here
+ * resolves a preset (defaulting to `legacy` for backwards compat) and delegates
+ * to it.
+ *
+ * Presets are the unit of swapping. To add a new tool surface (e.g. handwritten
+ * "core" tools, prompt-caching variant, lazy-load experiment), register a new
+ * descriptor in `presets.ts` — no changes here required.
+ */
+
 import type { BoundDocApi } from './generated/client.js';
 import type { InvokeOptions } from './runtime/process.js';
-import { SuperDocCliError } from './runtime/errors.js';
-import { dispatchIntentTool } from './generated/intent-dispatch.generated.js';
+import {
+  DEFAULT_PRESET,
+  getPreset,
+  listPresets,
+  type CacheStrategy,
+  type ToolCatalog,
+  type ToolCatalogEntry,
+  type ToolCatalogOperation,
+  type ToolProvider,
+} from './presets.js';
 
-export type ToolProvider = 'openai' | 'anthropic' | 'vercel' | 'generic';
+export { DEFAULT_PRESET, getPreset, listPresets };
+export type { CacheStrategy, ToolCatalog, ToolCatalogEntry, ToolCatalogOperation, ToolProvider };
 
-// Resolve tools directory relative to package root (works from both src/ and dist/)
-const toolsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'tools');
-const providerFileByName: Record<ToolProvider, string> = {
-  openai: 'tools.openai.json',
-  anthropic: 'tools.anthropic.json',
-  vercel: 'tools.vercel.json',
-  generic: 'tools.generic.json',
-};
-
-export type ToolCatalog = {
-  contractVersion: string;
-  generatedAt: string | null;
-  toolCount: number;
-  tools: ToolCatalogEntry[];
-};
-
-type OperationEntry = {
-  operationId: string;
-  intentAction: string;
-  required?: string[];
-  requiredOneOf?: string[][];
-};
-
-type ToolCatalogEntry = {
-  toolName: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-  mutates: boolean;
-  operations: OperationEntry[];
-};
-
-const STRIP_EMPTY_OPTIONAL_ARGS = new Set(['parentId', 'parentCommentId', 'id', 'status']);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value != null && !Array.isArray(value);
-}
-
-function isObviouslyCorruptedToolArgKey(key: string): boolean {
-  const trimmed = key.trim();
-  return trimmed.length === 0 || !/[\p{L}\p{N}]/u.test(trimmed);
-}
-
-function stripCorruptedToolArgKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => stripCorruptedToolArgKeys(item));
-  }
-
-  if (!isRecord(value)) return value;
-
-  const clean: Record<string, unknown> = {};
-  for (const [key, entryValue] of Object.entries(value)) {
-    if (isObviouslyCorruptedToolArgKey(key)) continue;
-    clean[key] = stripCorruptedToolArgKeys(entryValue);
-  }
-  return clean;
-}
-
-async function readJson<T>(fileName: string): Promise<T> {
-  const filePath = path.join(toolsDir, fileName);
-  let raw = '';
-  try {
-    raw = await readFile(filePath, 'utf8');
-  } catch (error) {
-    throw new SuperDocCliError('Unable to load packaged tool artifact.', {
-      code: 'TOOLS_ASSET_NOT_FOUND',
-      details: {
-        filePath,
-        message: error instanceof Error ? error.message : String(error),
-      },
-    });
-  }
-
-  try {
-    return JSON.parse(raw) as T;
-  } catch (error) {
-    throw new SuperDocCliError('Packaged tool artifact is invalid JSON.', {
-      code: 'TOOLS_ASSET_INVALID',
-      details: {
-        filePath,
-        message: error instanceof Error ? error.message : String(error),
-      },
-    });
-  }
-}
-
-async function loadProviderBundle(provider: ToolProvider): Promise<{
-  contractVersion: string;
-  tools: unknown[];
-}> {
-  return readJson(providerFileByName[provider]);
-}
-
-async function loadCatalog(): Promise<ToolCatalog> {
-  return readJson<ToolCatalog>('catalog.json');
-}
-
-export async function getToolCatalog(): Promise<ToolCatalog> {
-  return getCachedCatalog();
-}
-
-export async function listTools(provider: ToolProvider): Promise<unknown[]> {
-  const bundle = await loadProviderBundle(provider);
-  const tools = bundle.tools;
-  if (!Array.isArray(tools)) {
-    throw new SuperDocCliError('Tool provider bundle is missing tools array.', {
-      code: 'TOOLS_ASSET_INVALID',
-      details: { provider },
-    });
-  }
-  return tools;
-}
+// ---------------------------------------------------------------------------
+// chooseTools — provider-shaped tool list with optional cache markers
+// ---------------------------------------------------------------------------
 
 export type ToolChooserInput = {
   provider: ToolProvider;
+  /**
+   * Preset ID to load tools from. Defaults to {@link DEFAULT_PRESET}
+   * (`'legacy'`) for backwards compatibility. Use {@link listPresets} to
+   * discover available presets.
+   */
+  preset?: string;
   /**
    * When `true`, applies provider-specific prompt-caching markers to the
    * returned tools so subsequent identical requests reuse the cached prefix.
@@ -139,220 +53,79 @@ export type ToolChooserInput = {
   cache?: boolean;
 };
 
-export type CacheStrategy = 'explicit' | 'automatic' | 'unsupported' | 'disabled';
-
 /**
- * Select all intent tools for a specific provider.
- *
- * Returns all intent tools in the requested provider format. Pass
- * `cache: true` to apply provider-specific caching markers (see
- * {@link ToolChooserInput.cache}).
+ * Select tools for a specific provider from a preset.
  *
  * @example
  * ```ts
+ * // Default — legacy preset, no cache markers.
+ * const { tools, meta } = await chooseTools({ provider: 'vercel' });
+ *
  * // Anthropic — last tool gets cache_control automatically.
  * const { tools, meta } = await chooseTools({ provider: 'anthropic', cache: true });
  *
- * // OpenAI — caching is automatic when prompts exceed 1024 tokens.
- * const { tools } = await chooseTools({ provider: 'openai', cache: true });
+ * // Pick a specific preset by ID.
+ * const { tools, meta } = await chooseTools({ provider: 'openai', preset: 'legacy' });
  * ```
  */
 export async function chooseTools(input: ToolChooserInput): Promise<{
   tools: unknown[];
   meta: {
     provider: ToolProvider;
+    preset: string;
     toolCount: number;
     cacheStrategy: CacheStrategy;
   };
 }> {
-  const bundle = await loadProviderBundle(input.provider);
-  const rawTools = Array.isArray(bundle.tools) ? bundle.tools : [];
-  const cacheRequested = input.cache === true;
-
-  const { tools, cacheStrategy } = applyCacheMarkers(rawTools, input.provider, cacheRequested);
-
+  const presetId = input.preset ?? DEFAULT_PRESET;
+  const preset = getPreset(presetId);
+  const { tools, cacheStrategy } = await preset.getTools(input.provider, {
+    cache: input.cache === true,
+  });
   return {
     tools,
     meta: {
       provider: input.provider,
+      preset: presetId,
       toolCount: tools.length,
       cacheStrategy,
     },
   };
 }
 
-/**
- * Apply provider-specific caching markers to the tools array. Mutates a clone,
- * never the input. Anthropic gets an explicit `cache_control` on the last
- * tool; other providers pass through.
- */
-function applyCacheMarkers(
-  tools: unknown[],
-  provider: ToolProvider,
-  cacheRequested: boolean,
-): { tools: unknown[]; cacheStrategy: CacheStrategy } {
-  if (!cacheRequested) {
-    return { tools, cacheStrategy: 'disabled' };
-  }
+// ---------------------------------------------------------------------------
+// Catalog + listings (preset-scoped; default to legacy)
+// ---------------------------------------------------------------------------
 
-  if (provider === 'anthropic') {
-    if (tools.length === 0) return { tools, cacheStrategy: 'explicit' };
-    // Anthropic: marking the LAST tool with cache_control caches the entire
-    // tools block (and everything before it in the request — system prompt
-    // first if it also has cache_control). Shallow-spread the last entry so we
-    // don't mutate the cached bundle in place.
-    const next = tools.slice(0, -1);
-    const last = {
-      ...(tools[tools.length - 1] as Record<string, unknown>),
-      cache_control: { type: 'ephemeral' },
-    };
-    next.push(last);
-    return { tools: next, cacheStrategy: 'explicit' };
-  }
-
-  if (provider === 'openai') {
-    // OpenAI caches prompts ≥ 1024 tokens automatically. No marker needed,
-    // but we still report cacheStrategy:'automatic' so callers can branch on
-    // it (e.g. for measurement).
-    return { tools, cacheStrategy: 'automatic' };
-  }
-
-  // vercel / generic — depends on underlying model.
-  return { tools, cacheStrategy: 'unsupported' };
-}
-
-function resolveDocApiMethod(
-  documentHandle: BoundDocApi,
-  operationId: string,
-): (args: unknown, options?: InvokeOptions) => Promise<unknown> {
-  const tokens = operationId.split('.').slice(1);
-  let cursor: unknown = documentHandle;
-
-  for (const token of tokens) {
-    if (!isRecord(cursor) || !(token in cursor)) {
-      throw new SuperDocCliError(`No SDK doc method found for operation ${operationId}.`, {
-        code: 'TOOL_DISPATCH_NOT_FOUND',
-        details: { operationId, token },
-      });
-    }
-    cursor = cursor[token];
-  }
-
-  if (typeof cursor !== 'function') {
-    throw new SuperDocCliError(`Resolved member for ${operationId} is not callable.`, {
-      code: 'TOOL_DISPATCH_NOT_FOUND',
-      details: { operationId },
-    });
-  }
-
-  return cursor as (args: unknown, options?: InvokeOptions) => Promise<unknown>;
-}
-
-// Cached catalog instance — loaded once per process.
-let _catalogCache: ToolCatalog | null = null;
-
-async function getCachedCatalog(): Promise<ToolCatalog> {
-  if (_catalogCache == null) {
-    _catalogCache = await loadCatalog();
-  }
-  return _catalogCache;
+/** Return the full tool catalog for a preset (default: legacy). */
+export async function getToolCatalog(preset?: string): Promise<ToolCatalog> {
+  return getPreset(preset ?? DEFAULT_PRESET).getCatalog();
 }
 
 /**
- * Validate tool arguments against the catalog schema.
+ * Return the raw tool array for a provider from a preset (default: legacy).
  *
- * Checks three things in order:
- * 1. No unknown keys (additionalProperties: false in merged schema)
- * 2. All universally-required keys present (merged schema `required`)
- * 3. All action-specific required keys present (per-operation `required`)
+ * No cache markers are applied. Use {@link chooseTools} when you need cache
+ * markers and metadata.
  */
-function validateToolArgs(toolName: string, args: Record<string, unknown>, tool: ToolCatalogEntry): void {
-  const schema = tool.inputSchema;
-  const properties = isRecord(schema.properties) ? schema.properties : {};
-  const required: string[] = Array.isArray(schema.required) ? (schema.required as string[]) : [];
-
-  // 1. Reject unknown keys
-  const knownKeys = new Set(Object.keys(properties));
-  const unknownKeys = Object.keys(args).filter((k) => !knownKeys.has(k));
-  if (unknownKeys.length > 0) {
-    throw new SuperDocCliError(`Unknown argument(s) for ${toolName}: ${unknownKeys.join(', ')}`, {
-      code: 'INVALID_ARGUMENT',
-      details: { toolName, unknownKeys, knownKeys: [...knownKeys] },
-    });
-  }
-
-  // 2. Reject missing universally-required keys
-  const missingKeys = required.filter((k) => args[k] == null);
-  if (missingKeys.length > 0) {
-    throw new SuperDocCliError(`Missing required argument(s) for ${toolName}: ${missingKeys.join(', ')}`, {
-      code: 'INVALID_ARGUMENT',
-      details: { toolName, missingKeys },
-    });
-  }
-
-  // 3. Reject missing per-operation required keys.
-  //    For multi-action tools, resolve the operation by action; for single-op
-  //    tools, use the sole operation entry.
-  const action = args.action;
-  let op: OperationEntry | undefined;
-  if (typeof action === 'string' && tool.operations.length > 1) {
-    op = tool.operations.find((o) => o.intentAction === action);
-  } else if (tool.operations.length === 1) {
-    op = tool.operations[0];
-  }
-
-  if (op) {
-    validateOperationRequired(toolName, action, args, op);
-  }
+export async function listTools(provider: ToolProvider, preset?: string): Promise<unknown[]> {
+  const { tools } = await getPreset(preset ?? DEFAULT_PRESET).getTools(provider, { cache: false });
+  return tools;
 }
 
-/**
- * Check per-operation required constraints.
- *
- * Handles two shapes emitted by the codegen:
- *   - `required: string[]`        — all listed keys must be present
- *   - `requiredOneOf: string[][]`  — at least one branch must be fully satisfied
- *     (mirrors JSON Schema `oneOf` with per-branch `required` arrays)
- */
-function validateOperationRequired(
-  toolName: string,
-  action: unknown,
-  args: Record<string, unknown>,
-  op: OperationEntry,
-): void {
-  const actionLabel = typeof action === 'string' ? ` action "${action}"` : '';
-
-  if (op.requiredOneOf && op.requiredOneOf.length > 0) {
-    const satisfied = op.requiredOneOf.some((branch) => branch.every((k) => args[k] != null));
-    if (!satisfied) {
-      const options = op.requiredOneOf.map((b) => b.join(' + ')).join(' | ');
-      throw new SuperDocCliError(
-        `Missing required argument(s) for ${toolName}${actionLabel}: must provide one of: ${options}`,
-        {
-          code: 'INVALID_ARGUMENT',
-          details: { toolName, action, requiredOneOf: op.requiredOneOf },
-        },
-      );
-    }
-  } else if (op.required && op.required.length > 0) {
-    const missingActionKeys = op.required.filter((k) => args[k] == null);
-    if (missingActionKeys.length > 0) {
-      throw new SuperDocCliError(
-        `Missing required argument(s) for ${toolName}${actionLabel}: ${missingActionKeys.join(', ')}`,
-        {
-          code: 'INVALID_ARGUMENT',
-          details: { toolName, action, missingKeys: missingActionKeys },
-        },
-      );
-    }
-  }
-}
+// ---------------------------------------------------------------------------
+// Dispatch
+// ---------------------------------------------------------------------------
 
 /**
- * Dispatch a tool call against a bound document handle.
+ * Dispatch a tool call against a bound document handle using the default
+ * preset (`legacy`).
  *
- * The document handle injects session targeting automatically.
- * Tool arguments should not contain `doc` or `sessionId`.
+ * The document handle injects session targeting automatically; tool arguments
+ * should not contain `doc` or `sessionId`.
+ *
+ * For preset-aware dispatch — e.g. when comparing two presets — call
+ * `getPreset('id').dispatch(...)` directly.
  */
 export async function dispatchSuperDocTool(
   documentHandle: BoundDocApi,
@@ -360,81 +133,32 @@ export async function dispatchSuperDocTool(
   args: Record<string, unknown> = {},
   invokeOptions?: InvokeOptions,
 ): Promise<unknown> {
-  if (!isRecord(args)) {
-    throw new SuperDocCliError(`Tool arguments for ${toolName} must be an object.`, {
-      code: 'INVALID_ARGUMENT',
-      details: { toolName },
-    });
-  }
+  return getPreset(DEFAULT_PRESET).dispatch(documentHandle, toolName, args, invokeOptions);
+}
 
-  const sanitizedArgs = stripCorruptedToolArgKeys(args);
-  if (!isRecord(sanitizedArgs)) {
-    throw new SuperDocCliError(`Tool arguments for ${toolName} must be an object.`, {
-      code: 'INVALID_ARGUMENT',
-      details: { toolName },
-    });
-  }
+// ---------------------------------------------------------------------------
+// System prompts (preset-scoped; default to legacy)
+// ---------------------------------------------------------------------------
 
-  // Validate against the tool schema before dispatch.
-  const catalog = await getCachedCatalog();
-  const tool = catalog.tools.find((t) => t.toolName === toolName);
-  if (tool == null) {
-    throw new SuperDocCliError(`Unknown tool: ${toolName}`, {
-      code: 'TOOL_DISPATCH_NOT_FOUND',
-      details: { toolName },
-    });
-  }
-  validateToolArgs(toolName, sanitizedArgs, tool);
-
-  // Strip empty strings for known optional ID/enum params that LLMs fill with ""
-  // instead of omitting. Only target params where "" is never a valid value.
-  const cleanArgs: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(sanitizedArgs)) {
-    if (value === '' && STRIP_EMPTY_OPTIONAL_ARGS.has(key)) continue;
-    cleanArgs[key] = value;
-  }
-
-  return dispatchIntentTool(toolName, cleanArgs, (operationId, input) => {
-    const method = resolveDocApiMethod(documentHandle, operationId);
-    return method(input, invokeOptions);
-  });
+/**
+ * Read the packaged SDK system prompt (default preset: legacy).
+ *
+ * Includes a persona preamble ("You are a document editing assistant…")
+ * suitable for embedded LLM usage (OpenAI, Anthropic, Vercel APIs). For MCP
+ * server instructions, use {@link getMcpPrompt} instead.
+ */
+export async function getSystemPrompt(preset?: string): Promise<string> {
+  return getPreset(preset ?? DEFAULT_PRESET).getSystemPrompt();
 }
 
 /**
- * Read the bundled SDK system prompt for intent tools.
+ * Read the packaged MCP system prompt for intent tools (default preset: legacy).
  *
- * This prompt includes a persona preamble ("You are a document editing assistant…")
- * suitable for embedded LLM usage (OpenAI, Anthropic, Vercel APIs).
- * For MCP server instructions, use {@link getMcpPrompt} instead.
+ * Omits the persona preamble and includes session lifecycle instructions
+ * (open/save/close) suitable for MCP server `instructions`.
  */
-export async function getSystemPrompt(): Promise<string> {
-  const promptPath = path.join(toolsDir, 'system-prompt.md');
-  try {
-    return await readFile(promptPath, 'utf8');
-  } catch {
-    throw new SuperDocCliError('System prompt not found.', {
-      code: 'TOOLS_ASSET_NOT_FOUND',
-      details: { filePath: promptPath },
-    });
-  }
-}
-
-/**
- * Read the bundled MCP system prompt for intent tools.
- *
- * This prompt omits the persona preamble and includes session lifecycle
- * instructions (open/save/close) suitable for MCP server `instructions`.
- */
-export async function getMcpPrompt(): Promise<string> {
-  const promptPath = path.join(toolsDir, 'system-prompt-mcp.md');
-  try {
-    return await readFile(promptPath, 'utf8');
-  } catch {
-    throw new SuperDocCliError('MCP system prompt not found.', {
-      code: 'TOOLS_ASSET_NOT_FOUND',
-      details: { filePath: promptPath },
-    });
-  }
+export async function getMcpPrompt(preset?: string): Promise<string> {
+  return getPreset(preset ?? DEFAULT_PRESET).getMcpPrompt();
 }
 
 // ---------------------------------------------------------------------------
@@ -481,9 +205,10 @@ export type SystemPromptForProviderResult =
  */
 export async function getSystemPromptForProvider(input: {
   provider: ToolProvider;
+  preset?: string;
   cache?: boolean;
 }): Promise<SystemPromptForProviderResult> {
-  const text = await getSystemPrompt();
+  const text = await getSystemPrompt(input.preset);
   const cacheRequested = input.cache === true;
 
   if (input.provider === 'anthropic') {

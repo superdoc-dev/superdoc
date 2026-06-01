@@ -25,7 +25,7 @@ test('bold inside a table cell', async ({ superdoc }) => {
   await boldButton.click();
   await superdoc.waitForStable();
 
-  await expect(boldButton).toHaveClass(/active/);
+  await expect(boldButton).toHaveClass(/sd-active/);
   await superdoc.snapshot('bold applied in cell');
 
   await superdoc.assertTextHasMarks('table text', ['bold']);
@@ -46,12 +46,12 @@ test('multiple styles in one cell', async ({ superdoc }) => {
   // Open color dropdown and pick red
   await superdoc.page.locator('[data-item="btn-color"]').click();
   await superdoc.waitForStable();
-  await superdoc.page.locator('.option[aria-label="red"]').first().click();
+  await superdoc.page.locator('.sd-option[aria-label="red"]').first().click();
   await superdoc.waitForStable();
 
   // Assert all toolbar states
-  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/active/);
+  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/sd-active/);
   const colorBar = superdoc.page.locator('[data-item="btn-color"] .color-bar');
   await expect(colorBar).toHaveCSS('background-color', 'rgb(210, 0, 63)');
   await superdoc.snapshot('bold + italic + red color applied');
@@ -117,7 +117,7 @@ test('font family and size in a table cell', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   // Assert toolbar
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Georgia');
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText('Georgia');
   await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('24');
   await superdoc.snapshot('Georgia 24pt applied in cell');
 

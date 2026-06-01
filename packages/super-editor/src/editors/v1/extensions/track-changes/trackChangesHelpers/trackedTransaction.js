@@ -32,6 +32,29 @@ const DEAD_KEY_PLACEHOLDER_MARKS = new Map([
   ['¨', '\u0308'],
 ]);
 
+const TRACKABLE_META_KEYS = [
+  'inputType',
+  'uiEvent',
+  'paste',
+  'pointer',
+  'composition',
+  'superdocSlicePaste',
+  'forceTrackChanges',
+  'protectTrackedReviewState',
+];
+
+const PASSTHROUGH_META_KEYS = [
+  'inputType',
+  'uiEvent',
+  'paste',
+  'pointer',
+  'composition',
+  'addToHistory',
+  'superdocSlicePaste',
+];
+
+const ALLOWED_META_KEYS = new Set([...TRACKABLE_META_KEYS, ySyncPluginKey.key]);
+
 const getTextNodeAtPos = ({ doc, pos }) => {
   let found = null;
 
@@ -275,6 +298,15 @@ const mergeTrackChangesMeta = (tr, extraMeta) => {
   tr.setMeta(TrackChangesBasePluginKey, { ...existingMeta, ...extraMeta });
 };
 
+const copyPassthroughMeta = (sourceTr, targetTr) => {
+  PASSTHROUGH_META_KEYS.forEach((key) => {
+    const value = sourceTr.getMeta(key);
+    if (value !== undefined) {
+      targetTr.setMeta(key, value);
+    }
+  });
+};
+
 const getPendingDeadKeyPlaceholder = ({ tr, newTr, user }) => {
   if (!isCompositionTransaction(tr) || tr.steps.length !== 1) {
     return null;
@@ -343,18 +375,11 @@ const getPendingDeadKeyPlaceholder = ({ tr, newTr, user }) => {
  *   transaction ready to dispatch.
  */
 export const trackedTransaction = ({ tr, state, user, replacements = 'paired' }) => {
-  const onlyInputTypeMeta = ['inputType', 'uiEvent', 'paste', 'pointer', 'composition'];
   const notAllowedMeta = ['historyUndo', 'historyRedo', 'acceptReject'];
   const isProgrammaticInput = tr.getMeta('inputType') === 'programmatic';
   const ySyncMeta = tr.getMeta(ySyncPluginKey);
   const pendingDeadKeyPlaceholder = TrackChangesBasePluginKey.getState(state)?.pendingDeadKeyPlaceholder ?? null;
-  const allowedMeta = new Set([
-    ...onlyInputTypeMeta,
-    ySyncPluginKey.key,
-    'forceTrackChanges',
-    'protectTrackedReviewState',
-  ]);
-  const hasDisallowedMeta = tr.meta && Object.keys(tr.meta).some((meta) => !allowedMeta.has(meta));
+  const hasDisallowedMeta = tr.meta && Object.keys(tr.meta).some((meta) => !ALLOWED_META_KEYS.has(meta));
 
   if (
     ySyncMeta?.isChangeOrigin || // Skip Yjs-origin transactions (remote/rehydration).
@@ -442,21 +467,7 @@ export const trackedTransaction = ({ tr, state, user, replacements = 'paired' })
     }
   });
 
-  if (tr.getMeta('inputType')) {
-    newTr.setMeta('inputType', tr.getMeta('inputType'));
-  }
-
-  if (tr.getMeta('uiEvent')) {
-    newTr.setMeta('uiEvent', tr.getMeta('uiEvent'));
-  }
-
-  if (tr.getMeta('composition') !== undefined) {
-    newTr.setMeta('composition', tr.getMeta('composition'));
-  }
-
-  if (tr.getMeta('addToHistory') !== undefined) {
-    newTr.setMeta('addToHistory', tr.getMeta('addToHistory'));
-  }
+  copyPassthroughMeta(tr, newTr);
 
   mergeTrackChangesMeta(newTr, {
     pendingDeadKeyPlaceholder: getPendingDeadKeyPlaceholder({ tr, newTr, user }),

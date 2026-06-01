@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { historyKey } from 'prosemirror-history';
-import { NodeSelection } from 'prosemirror-state';
+import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
+import { Schema } from 'prosemirror-model';
 
 const getActiveFormattingMock = vi.hoisted(() => vi.fn(() => []));
 
@@ -87,6 +88,81 @@ describe('createHeadlessToolbar', () => {
     controller.destroy();
   });
 
+  it('does not execute commands that are currently reported disabled', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: {
+          group: 'block',
+          content: 'inline*',
+          toDOM: () => ['p', 0],
+          parseDOM: [{ tag: 'p' }],
+        },
+        text: { group: 'inline' },
+        structuredContent: {
+          group: 'inline',
+          inline: true,
+          content: 'inline*',
+          attrs: {
+            lockMode: { default: 'unlocked' },
+          },
+          toDOM: () => ['span', 0],
+          parseDOM: [{ tag: 'span' }],
+        },
+      },
+    });
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [
+        schema.text('A '),
+        schema.node('structuredContent', { lockMode: 'contentLocked' }, [schema.text('Locked')]),
+      ]),
+    ]);
+    const baseState = EditorState.create({ schema, doc });
+    const state = baseState.apply(baseState.tr.setSelection(TextSelection.create(doc, 5)));
+    const toggleBold = vi.fn(() => true);
+    const insertTable = vi.fn(() => true);
+    const superdoc = createActiveEditorHost({
+      commands: { toggleBold, insertTable },
+      state,
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['bold'],
+    });
+
+    expect(controller.getSnapshot().commands.bold?.disabled).toBe(true);
+    expect(controller.execute?.('bold')).toBe(false);
+    expect(toggleBold).not.toHaveBeenCalled();
+    expect(controller.execute?.('table-insert', { rows: 1, cols: 1 })).toBe(false);
+    expect(insertTable).not.toHaveBeenCalled();
+
+    controller.destroy();
+  });
+
+  it('does not execute disabled mutation commands in viewing mode', () => {
+    const toggleBold = vi.fn(() => true);
+    const superdoc = createActiveEditorHost({
+      commands: { toggleBold },
+      extra: {
+        options: {
+          documentMode: 'viewing',
+        },
+      },
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['bold'],
+    });
+
+    expect(controller.getSnapshot().commands.bold?.disabled).toBe(true);
+    expect(controller.execute?.('bold')).toBe(false);
+    expect(toggleBold).not.toHaveBeenCalled();
+
+    controller.destroy();
+  });
+
   it('executes track-changes accept-selection through the registry direct command path', () => {
     const acceptTrackedChangeFromToolbar = vi.fn(() => true);
     const superdoc = createActiveEditorHost({
@@ -95,7 +171,6 @@ describe('createHeadlessToolbar', () => {
 
     const controller = createHeadlessToolbar({
       superdoc,
-      commands: ['track-changes-accept-selection'],
     });
 
     expect(controller.execute?.('track-changes-accept-selection')).toBe(true);
@@ -112,7 +187,6 @@ describe('createHeadlessToolbar', () => {
 
     const controller = createHeadlessToolbar({
       superdoc,
-      commands: ['track-changes-reject-selection'],
     });
 
     expect(controller.execute?.('track-changes-reject-selection')).toBe(true);
@@ -693,7 +767,6 @@ describe('createHeadlessToolbar', () => {
 
     const controller = createHeadlessToolbar({
       superdoc,
-      commands: ['undo'],
     });
 
     expect(controller.execute?.('undo')).toBe(true);
@@ -720,7 +793,6 @@ describe('createHeadlessToolbar', () => {
 
     const controller = createHeadlessToolbar({
       superdoc,
-      commands: ['redo'],
     });
 
     expect(controller.execute?.('redo')).toBe(true);
@@ -938,7 +1010,6 @@ describe('createHeadlessToolbar', () => {
 
     const controller = createHeadlessToolbar({
       superdoc,
-      commands: ['linked-style'],
     });
 
     expect(controller.execute?.('linked-style', { id: 'Heading1' })).toBe(true);
@@ -997,7 +1068,6 @@ describe('createHeadlessToolbar', () => {
 
     const controller = createHeadlessToolbar({
       superdoc,
-      commands: [id],
     });
 
     expect(controller.execute?.(id)).toBe(true);

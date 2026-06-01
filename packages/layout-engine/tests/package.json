@@ -10,7 +10,6 @@
     "test:integration": "vitest run --grep 'Integration'"
   },
   "dependencies": {
-    "@superdoc/pm-adapter": "workspace:*",
     "@superdoc/layout-engine": "workspace:*",
     "@superdoc/measuring-dom": "workspace:*",
     "@superdoc/contracts": "workspace:*",

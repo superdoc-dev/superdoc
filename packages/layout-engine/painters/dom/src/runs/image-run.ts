@@ -5,19 +5,7 @@ import { applyImageClipPath, readImageClipPathValue } from '../images/image-clip
 import type { RunRenderContext } from './types.js';
 import { applyRunDataAttributes } from './hash.js';
 import { sanitizeUrl } from './links.js';
-
-/**
- * Maximum allowed length for data URLs (10MB).
- * Prevents denial of service attacks from extremely large embedded images.
- */
-const MAX_DATA_URL_LENGTH = 10 * 1024 * 1024; // 10MB
-
-/**
- * Regular expression to validate data URL format for images.
- * Only allows common, safe image MIME types with base64 encoding.
- * Prevents XSS and malformed data URL attacks.
- */
-const VALID_IMAGE_DATA_URL = /^data:image\/(png|jpeg|jpg|gif|svg\+xml|webp|bmp|ico|tiff?);base64,/i;
+import { isValidImageDataUrl } from '@superdoc/url-validation';
 
 /**
  * Maximum resize multiplier for image metadata.
@@ -116,9 +104,9 @@ export const buildImageFilters = (source: ImageFilterSource): string[] => {
  * Renders an ImageRun as an inline <img> element.
  *
  * SECURITY NOTES:
- * - Data URLs are validated against VALID_IMAGE_DATA_URL regex to ensure proper format
- * - Size limit (MAX_DATA_URL_LENGTH) prevents DoS attacks from extremely large images
- * - Only allows safe image MIME types (png, jpeg, gif, etc.) with base64 encoding
+ * - Data URLs are validated against an allowlist of image MIME types
+ * - Size limit prevents DoS attacks from extremely large images
+ * - Only allows safe image MIME types; non-base64 data URLs are limited to SVG
  * - Non-data URLs are sanitized through sanitizeUrl to prevent XSS
  *
  * METADATA ATTRIBUTE:
@@ -147,13 +135,8 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
   // but are safe for <img> elements when properly validated
   const isDataUrl = typeof run.src === 'string' && run.src.startsWith('data:');
   if (isDataUrl) {
-    // SECURITY: Validate data URL format and size
-    if (run.src.length > MAX_DATA_URL_LENGTH) {
-      // Reject data URLs that are too large (DoS prevention)
-      return null;
-    }
-    if (!VALID_IMAGE_DATA_URL.test(run.src)) {
-      // Reject data URLs with invalid MIME types or encoding
+    // SECURITY: Validate data URL MIME type, encoding, and size.
+    if (!isValidImageDataUrl(run.src)) {
       return null;
     }
     img.src = run.src;
@@ -219,8 +202,7 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
   // When we don't use a wrapper (no clipPath, or clipPath with width/height 0), apply them on the img so layout is correct.
   const useWrapper = hasClipPath && run.width > 0 && run.height > 0;
   if (!useWrapper) {
-    // Apply vertical alignment (bottom-aligned to text baseline)
-    img.style.verticalAlign = run.verticalAlign ?? 'bottom';
+    img.style.verticalAlign = run.verticalAlign ?? 'top';
 
     // Apply spacing as CSS margins
     if (run.distTop) {
@@ -297,7 +279,7 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
     wrapper.style.height = `${run.height}px`;
     wrapper.style.boxSizing = 'border-box';
     wrapper.style.overflow = 'hidden';
-    wrapper.style.verticalAlign = run.verticalAlign ?? 'bottom';
+    wrapper.style.verticalAlign = run.verticalAlign ?? 'top';
     if (run.distTop) wrapper.style.marginTop = `${run.distTop}px`;
     if (run.distBottom) wrapper.style.marginBottom = `${run.distBottom}px`;
     if (run.distLeft) wrapper.style.marginLeft = `${run.distLeft}px`;
@@ -347,7 +329,7 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
     wrapper.style.display = 'inline-block';
     wrapper.style.width = `${run.width}px`;
     wrapper.style.height = `${run.height}px`;
-    wrapper.style.verticalAlign = run.verticalAlign ?? 'bottom';
+    wrapper.style.verticalAlign = run.verticalAlign ?? 'top';
     wrapper.style.position = 'relative';
     wrapper.style.zIndex = '1';
     if (run.distTop) wrapper.style.marginTop = `${run.distTop}px`;
@@ -370,5 +352,3 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
 
   return context.buildImageHyperlinkAnchor(img, run.hyperlink, 'inline-block');
 };
-
-export { MAX_DATA_URL_LENGTH, VALID_IMAGE_DATA_URL };

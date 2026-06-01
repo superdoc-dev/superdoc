@@ -36,15 +36,14 @@ vi.mock('../../Editor', () => ({
   })),
 }));
 
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
-  return {
-    ...actual,
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const { buildLayoutDocumentAdapterVitestMock } = await import('./mock-layout-document-adapter-vitest.js');
+  return buildLayoutDocumentAdapterVitestMock(importOriginal, {
     toFlowBlocks: vi.fn((_, opts) => {
       capturedMediaFiles = opts?.mediaFiles;
       return { blocks: [], bookmarks: new Map() };
     }),
-  };
+  });
 });
 
 vi.mock('@superdoc/layout-bridge', () => ({

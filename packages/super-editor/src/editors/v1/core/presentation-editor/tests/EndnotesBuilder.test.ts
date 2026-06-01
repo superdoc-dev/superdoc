@@ -6,10 +6,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { EditorState } from 'prosemirror-state';
 import { buildEndnoteBlocks } from '../layout/EndnotesBuilder.js';
-import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
+import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
 
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@core/layout-adapter')>();
   return {
     ...actual,
     toFlowBlocks: vi.fn((_doc: unknown, opts?: { blockIdPrefix?: string }) => {

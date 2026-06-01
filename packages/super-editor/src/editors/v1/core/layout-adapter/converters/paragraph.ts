@@ -1147,15 +1147,15 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     // get() returns both the entry (if hit) and pre-computed nodeJson to avoid double serialization
     const { entry: cached, nodeJson, nodeRev } = flowBlockCache.get(prefixedStableId, node);
     if (cached) {
-      // Cache hit: reuse blocks with position adjustment
-      // Cache hit reuses previously-converted blocks as-is. That means we don't
-      // recompute previousParagraphFont (used for empty list items without
-      // explicit run properties). If the user changes the font on the prior
-      // paragraph (e.g. paragraph A), an empty list item (paragraph B) can keep
-      // the old font until the cache entry is invalidated. Narrow case, but
-      // avoids confusing incremental-edit behavior.
+      // Cache hit: reuse blocks with position adjustment, then re-sync marker font
+      // from live PM state. Empty list items have no textStyle marks, so pass
+      // previousParagraphFont instead of falling back to stale cached runs.
       const delta = pmStart - cached.pmStart;
       const reusedBlocks = shiftCachedBlocks(cached.blocks, delta);
+      const paragraphProps = node.attrs?.paragraphProperties as ParagraphProperties | undefined;
+      const previousParagraphFont = !hasExplicitParagraphRunProperties(paragraphProps)
+        ? getLastParagraphFont(blocks)
+        : undefined;
       reusedBlocks.forEach((block) => {
         if (block.kind === 'paragraph') {
           syncListMarkerFontFromParagraphRuns({
@@ -1163,6 +1163,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
             converterContext,
             para: node,
             contentFontSource: 'paragraph',
+            previousParagraphFont,
           });
         }
       });

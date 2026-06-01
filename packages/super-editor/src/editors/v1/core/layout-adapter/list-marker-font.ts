@@ -15,6 +15,8 @@ export type SyncListMarkerFontParams = {
   converterContext?: ConverterContext;
   para?: PMNode;
   contentFontSource?: ListMarkerContentFontSource;
+  /** Used on cache hits for empty list items with no live textStyle marks. */
+  previousParagraphFont?: ParagraphFont;
 };
 
 const isTextRun = (run: Run): run is TextRun => 'text' in run;
@@ -88,10 +90,16 @@ const resolveContentFont = (
   block: { runs: ReadonlyArray<Run> },
   para: PMNode | undefined,
   source: ListMarkerContentFontSource,
+  previousParagraphFont?: ParagraphFont,
 ): Partial<ParagraphFont> | undefined => {
   const fromRuns = getFontFromRuns(block.runs);
   const fromPara = para ? getFontFromParagraphContent(para) : undefined;
-  return source === 'paragraph' ? mergeContentFont(fromPara, fromRuns) : (fromRuns ?? fromPara);
+  if (source === 'paragraph') {
+    // Cache hits must not fall back to stale cached runs. Empty list items have no
+    // textStyle marks, so inherit from the preceding paragraph when available.
+    return mergeContentFont(fromPara, previousParagraphFont);
+  }
+  return fromRuns ?? fromPara;
 };
 
 const getNumberingMarkerFontOverrides = (
@@ -118,11 +126,12 @@ export const syncListMarkerFontFromParagraphRuns = ({
   converterContext,
   para,
   contentFontSource = 'runs',
+  previousParagraphFont,
 }: SyncListMarkerFontParams): void => {
   const markerRun = block.attrs?.wordLayout?.marker?.run;
   if (!markerRun) return;
 
-  const contentFont = resolveContentFont(block, para, contentFontSource);
+  const contentFont = resolveContentFont(block, para, contentFontSource, previousParagraphFont);
   if (!contentFont) return;
 
   const numberingOverrides = getNumberingMarkerFontOverrides(block.attrs?.numberingProperties, converterContext);

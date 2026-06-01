@@ -123,7 +123,7 @@ describe('syncListMarkerFontFromParagraphRuns', () => {
     expect(block.attrs.wordLayout?.marker?.run?.fontSize).toBe(40);
   });
 
-  it('merges partial PM textStyle with cached runs on cache hits', () => {
+  it('syncs only live PM textStyle properties on cache hits without using cached runs', () => {
     const block = listBlock({
       runs: [{ text: 'item', fontFamily: 'Georgia, serif', fontSize: 12 }],
     });
@@ -135,8 +135,44 @@ describe('syncListMarkerFontFromParagraphRuns', () => {
       contentFontSource: 'paragraph',
     });
 
-    expect(block.attrs.wordLayout?.marker?.run?.fontFamily).toContain('Georgia');
+    expect(block.attrs.wordLayout?.marker?.run?.fontFamily).toContain('Times New Roman');
     expect(block.attrs.wordLayout?.marker?.run?.fontSize).toBe(40);
+  });
+
+  it('uses previousParagraphFont on cache hits when empty list items have no textStyle marks', () => {
+    const block = listBlock({
+      runs: [{ text: '', fontFamily: 'Times New Roman, serif', fontSize: 12 }],
+      markerSize: 12,
+    });
+
+    syncListMarkerFontFromParagraphRuns({
+      block,
+      converterContext: minimalContext as never,
+      para: { content: { forEach: () => {} } } as never,
+      contentFontSource: 'paragraph',
+      previousParagraphFont: { fontFamily: 'Georgia, serif', fontSize: 30 },
+    });
+
+    expect(block.attrs.wordLayout?.marker?.run?.fontFamily).toContain('Georgia');
+    expect(block.attrs.wordLayout?.marker?.run?.fontSize).toBe(30);
+  });
+
+  it('does not fall back to stale cached runs on cache hits without textStyle or previousParagraphFont', () => {
+    const block = listBlock({
+      runs: [{ text: '', fontFamily: 'Times New Roman, serif', fontSize: 12 }],
+      markerFamily: 'Times New Roman, serif',
+      markerSize: 12,
+    });
+
+    syncListMarkerFontFromParagraphRuns({
+      block,
+      converterContext: minimalContext as never,
+      para: { content: { forEach: () => {} } } as never,
+      contentFontSource: 'paragraph',
+    });
+
+    expect(block.attrs.wordLayout?.marker?.run?.fontFamily).toContain('Times New Roman');
+    expect(block.attrs.wordLayout?.marker?.run?.fontSize).toBe(12);
   });
 
   it('preserves numbering-defined marker font family but still syncs font size when size is unset', () => {

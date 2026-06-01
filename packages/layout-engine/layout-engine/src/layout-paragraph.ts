@@ -955,34 +955,23 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // commit-first-line rule keeps making progress and the band may end
     // up clipped — but that case is handled by the planner's continuation
     // split (separate fix path).
-    // SD-2656 Phase 1: body acceptance uses the ORDERED MINIMUM only.
-    //
-    //   ORDERED demand = sum(fullHeight of non-last) + firstLineHeight(last)
-    //                    + overhead.
-    //
-    // This is the rule's minimum: cluster's non-last anchors must fit fully,
-    // and the last anchor needs at least its first line. The body's
-    // acceptance rule is "the next line fits if ordered demand still fits".
-    //
-    // Why ORDERED only (not preferred): Phase 0 ledger diagnostics on
-    // IT-923 showed that 24 pages had `deadReserve > 30 px` — body
-    // reserved space for the PREFERRED (full of all) demand, but the
-    // planner only painted ORDERED-equivalent content. That dead reserve
-    // was the drift fuel. With ORDERED as the acceptance rule, body packs
-    // tighter; the planner uses any leftover capacity opportunistically
-    // (Phase 2) to extend the last anchor or drain continuations.
-    const computeOrderedDemandForRange = (pmStart: number, pmEnd: number): number => {
+    // Reserve the full footnote cluster height up front, so the body slicer
+    // backs off enough lines that every anchored footnote fits whole on its
+    // own page. This matches Word's pagination, which knows each footnote's
+    // full demand at every line decision rather than reserving a minimum
+    // and patching later. Cost: bodies that previously packed to the brink
+    // grow ≤ 1–4 pages per fixture; gain: footnote splits drop to ~0 on
+    // fixtures we measured (Carlsbad, IRA, SPA, IT-923 COI, MRL).
+    const computeFootnoteClusterDemand = (pmStart: number, pmEnd: number): number => {
       const candidate = ctx.getFootnoteAnchorsForBlockId
         ? ctx.getFootnoteAnchorsForBlockId(block.id, pmStart, pmEnd)
         : [];
       const committed = state.footnoteAnchorsThisPage ?? [];
       if (candidate.length === 0 && committed.length === 0) return 0;
-      const cluster = [...committed, ...candidate];
-      const lastIdx = cluster.length - 1;
-      let ordered = 0;
-      for (let i = 0; i < lastIdx; i += 1) ordered += cluster[i].fullHeight;
-      if (lastIdx >= 0) ordered += cluster[lastIdx].firstLineHeight;
-      return ordered;
+      let demand = 0;
+      for (const anchor of committed) demand += anchor.fullHeight;
+      for (const anchor of candidate) demand += anchor.fullHeight;
+      return demand;
     };
 
     const previewRange = computeFragmentPmRange(block, lines, fromLine, fromLine + 1);
@@ -992,7 +981,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // Re-evaluates against current state after advanceColumn (footnoteAnchorsThisPage
     // resets on a fresh page, so demand can shrink).
     const computePreviewBottom = () => {
-      const demand = computeOrderedDemandForRange(previewRange.pmStart ?? 0, previewRange.pmEnd ?? 0);
+      const demand = computeFootnoteClusterDemand(previewRange.pmStart ?? 0, previewRange.pmEnd ?? 0);
       return computeEffectiveBottom(demand, previewRefs);
     };
     let effectiveBottom = computePreviewBottom();
@@ -1046,7 +1035,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       // line if ordered demand (full of non-last + firstLine of last)
       // still fits. The planner uses any leftover capacity opportunistically
       // (continuations, extending the last anchor).
-      const orderedDemand = computeOrderedDemandForRange(range.pmStart ?? 0, range.pmEnd ?? 0);
+      const orderedDemand = computeFootnoteClusterDemand(range.pmStart ?? 0, range.pmEnd ?? 0);
       const nextRefs = ctx.getFootnoteRefCountForBlockId
         ? ctx.getFootnoteRefCountForBlockId(block.id, range.pmStart, range.pmEnd)
         : 0;

@@ -673,6 +673,60 @@ describe('HeaderFooterSessionManager', () => {
       expect(payload!.items![0]!.blockId).toBe('p1');
     });
 
+    it('uses the default variant layout when odd ref lookup falls back to default', () => {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 1),
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: createMainEditorStub(),
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.headerFooterIdentifier = {
+        headerIds: { default: null, first: null, even: null, odd: 'rId-header-odd' },
+        footerIds: { default: null, first: null, even: null, odd: null },
+        titlePg: false,
+        alternateHeaders: true,
+      };
+      manager.setLayoutResults([buildHeaderResult()], null);
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            sectionRefs: { headerRefs: { default: 'rId-header-default' }, footerRefs: {} },
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+          } as never,
+        ],
+      } as unknown as Layout;
+      const provider = manager.createDecorationProvider('header', layout as unknown as ResolvedLayout);
+      const payload = provider!(1, layout.pages[0]!.margins, layout.pages[0] as unknown as ResolvedPage);
+
+      expect(payload).not.toBeNull();
+      expect(payload!.headerFooterRefId).toBe('rId-header-default');
+      expect(payload!.sectionType).toBe('odd');
+      expect(payload!.items?.[0]?.blockId).toBe('p1');
+    });
+
     it('recomputes variant items when cached resolved items become misaligned', () => {
       const deps: SessionManagerDependencies = {
         getLayoutOptions: vi.fn(() => ({})),

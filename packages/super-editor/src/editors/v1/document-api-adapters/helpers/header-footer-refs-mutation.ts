@@ -19,6 +19,8 @@ import {
   type ConverterWithHeaderFooterParts,
 } from './header-footer-parts.js';
 
+type HeaderFooterRefs = Partial<Record<HeaderFooterVariant, string | null>>;
+
 // ---------------------------------------------------------------------------
 // Shared resolver
 // ---------------------------------------------------------------------------
@@ -34,12 +36,17 @@ export function resolveEffectiveRef(
   kind: HeaderFooterKind,
   variant: HeaderFooterVariant,
 ): { refId: string; resolvedFromSection: SectionAddress; resolvedVariant: HeaderFooterVariant } | null {
+  const refsFor = (section: SectionProjection, refKind: HeaderFooterKind): HeaderFooterRefs | undefined =>
+    refKind === 'header'
+      ? ((section.range.headerRefs ?? section.domain.headerRefs) as HeaderFooterRefs | undefined)
+      : ((section.range.footerRefs ?? section.domain.footerRefs) as HeaderFooterRefs | undefined);
+
   const resolved = resolveEffectiveHeaderFooterRef({
     sections: sections.map((section) => ({
       sectionIndex: section.range.sectionIndex,
       titlePg: section.range.titlePg,
-      headerRefs: section.range.headerRefs,
-      footerRefs: section.range.footerRefs,
+      headerRefs: refsFor(section, 'header'),
+      footerRefs: refsFor(section, 'footer'),
     })),
     sectionIndex: startSectionIndex - 1,
     kind,

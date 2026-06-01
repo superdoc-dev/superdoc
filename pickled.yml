@@ -2,9 +2,8 @@
 #
 # Pickled runs the scenarios below across a matrix of interfaces,
 # sources, and toolsets, then scores answers with deterministic checks.
-# Each cell isolates one context-delivery path (docs link / web tools /
-# MCP server) so the report shows where agents do well and where they
-# do not.
+# Each cell isolates one context-delivery path so the report shows where
+# agents do well and where they do not.
 #
 # Quick start:
 #   bunx @pickled-dev/cli check .
@@ -18,8 +17,7 @@ tool:
 docs:
   sources:
     # Official SuperDoc docs bundle. Injected only in cells where
-    # `source: superdoc_docs` is selected; the MCP and web cells use
-    # `source: none` so the toolset is the only delivery path.
+    # `source: superdoc_docs` is selected.
     superdoc_docs: https://docs.superdoc.dev/llms-full.txt
 
 targets:
@@ -70,10 +68,24 @@ toolsets:
           CONTEXT7_API_KEY: ${CONTEXT7_API_KEY}
 
 scenarios:
-  # Custom React toolbar. The correct answer names SuperDocUIProvider
-  # and useSuperDocUI from the superdoc/ui/react surface. The wrong
-  # answers name the legacy headless toolbar (createHeadlessToolbar)
-  # or reach for activeEditor.commands.
+  # Custom React toolbar. The correct surface is SuperDocUIProvider plus a
+  # hook from superdoc/ui/react (e.g. useSuperDocCommand / useSuperDocToolbar).
+  # The matrix crosses two interfaces with four context-delivery paths:
+  #   source: none  + toolset: none     -> model-prior baseline (no SuperDoc context)
+  #   source: docs  + toolset: none     -> injected canonical docs
+  #   source: none  + toolset: web/mcp  -> open discovery (agent must find the answer)
+  #   source: docs  + toolset: web/mcp  -> guided discovery (canonical source named as a hint)
+  #
+  # Scoring is positives-only: the answer must name the modern surface
+  # (SuperDocUIProvider + superdoc/ui/react). No traps here. The prompt asks
+  # what to avoid, so a correct answer references the legacy APIs in code form
+  # (createHeadlessToolbar(), activeEditor.commands.X()) while advising against
+  # them, and a hard-veto trap cannot tell that apart from a recommendation -
+  # confirmed on a real run where the docs-backed correct answer false-fired
+  # both traps. Limitation: a mixed answer that names the modern surface AND
+  # recommends legacy still passes; catch that with a separate scenario whose
+  # prompt asks whether the legacy approach is right, scored on positive
+  # constraints (legacy / new React UI / superdoc/ui/react), not on traps.
   - name: "Custom React toolbar surface"
     prompt: "I am building with SuperDoc in React and want to add a custom toolbar. Which SuperDoc surface should I use, what should I import, and what should I avoid?"
     matrix:
@@ -81,11 +93,57 @@ scenarios:
       sources: [none, superdoc_docs]
       toolsets: [none, web, superdoc_mintlify_mcp, context7_mcp]
     expected:
+      # Required, deterministic, and unambiguous across every cell. The
+      # specific hook is intentionally not required: several are valid
+      # (useSuperDocUI, useSuperDocCommand, useSuperDocToolbar), and the docs
+      # bundle names useSuperDocCommand rather than useSuperDocUI, so requiring
+      # any single name would false-negative valid answers that pick another.
       symbols:
         - "SuperDocUIProvider"
-        - "useSuperDocUI"
       paths:
         - "superdoc/ui/react"
-      excludes:
-        - "createHeadlessToolbar"
-        - "activeEditor.commands"
+
+  # Programmatic document edits use the Document API (editor.doc.*), not the
+  # React UI hooks. Docs: "Document API (editor.doc.*): comments, tracked
+  # changes, formatting, insert/replace/delete. Use this for any document
+  # mutation." Both terms verified present in llms-full.txt.
+  - name: "Programmatic edits: Document API vs UI"
+    prompt: "In SuperDoc, how do I programmatically add comments, replace text, and apply formatting from server or agent code (no custom UI)? Which API should I use?"
+    matrix:
+      interfaces: [quick, openai_api]
+      sources: [none, superdoc_docs]
+      toolsets: [none, web, superdoc_mintlify_mcp, context7_mcp]
+    expected:
+      includes:
+        - "Document API"
+      symbols:
+        - "editor.doc"
+
+  # Real-time collaboration is configured via modules.collaboration and uses
+  # Yjs (CRDT), provider-agnostic. Both terms verified present in the docs.
+  - name: "Enable real-time collaboration"
+    prompt: "How do I enable real-time collaborative editing in SuperDoc? What do I configure, and what does it use under the hood?"
+    matrix:
+      interfaces: [quick, openai_api]
+      sources: [none, superdoc_docs]
+      toolsets: [none, web, superdoc_mintlify_mcp, context7_mcp]
+    expected:
+      includes:
+        - "Yjs"
+      options:
+        - "modules.collaboration"
+
+  # Legacy-recommendation check. The prompt names the legacy APIs, so they
+  # appear in any answer; that is why this uses a positive check (does it point
+  # to the modern superdoc/ui/react surface?) and NO traps - the lesson from
+  # the toolbar scenario, where legacy-name traps false-fired on correct
+  # "avoid" answers.
+  - name: "Is createHeadlessToolbar right for new React UI?"
+    prompt: "A teammate suggested building a new React toolbar with createHeadlessToolbar and activeEditor.commands. Is that the right approach for new React work in SuperDoc, or is there a better surface?"
+    matrix:
+      interfaces: [quick, openai_api]
+      sources: [none, superdoc_docs]
+      toolsets: [none, web, superdoc_mintlify_mcp, context7_mcp]
+    expected:
+      paths:
+        - "superdoc/ui/react"

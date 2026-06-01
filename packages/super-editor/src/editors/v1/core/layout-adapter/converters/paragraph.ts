@@ -37,6 +37,7 @@ import { applyTrackedChangesModeToRuns } from '../tracked-changes.js';
 import { textNodeToRun } from './inline-converters/text-run.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { computeRunAttrs, hasExplicitParagraphRunProperties } from '../attributes/paragraph.js';
+import { syncListMarkerFontFromParagraphRuns } from '../list-marker-font.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
 import { endnoteReferenceToBlock } from './inline-converters/endnote-reference.js';
@@ -604,6 +605,19 @@ export function paragraphToFlowBlocks({
   const defaultSize =
     usePreviousFont && previousParagraphFont.fontSize ? previousParagraphFont.fontSize : extracted.defaultSize;
 
+  const finalizeParagraphBlocks = (outputBlocks: FlowBlock[]): FlowBlock[] => {
+    outputBlocks.forEach((block) => {
+      if (block.kind === 'paragraph') {
+        syncListMarkerFontFromParagraphRuns({
+          block,
+          converterContext,
+          para,
+        });
+      }
+    });
+    return outputBlocks;
+  };
+
   if (paragraphAttrs.pageBreakBefore) {
     blocks.push({
       kind: 'pageBreak',
@@ -615,7 +629,7 @@ export function paragraphToFlowBlocks({
 
   if (!para.content || para.content.length === 0) {
     if (paragraphProps.runProperties?.vanish) {
-      return blocks;
+      return finalizeParagraphBlocks(blocks);
     }
     const paragraphMarkTrackedChange = getParagraphMarkTrackedChange(paragraphProps, storyKey);
     // Get the PM position of the empty paragraph for caret rendering
@@ -650,12 +664,12 @@ export function paragraphToFlowBlocks({
       sourceAnchor,
     });
     if (!trackedChangesConfig) {
-      return blocks;
+      return finalizeParagraphBlocks(blocks);
     }
 
     const paragraphBlock = blocks[blocks.length - 1];
     if (paragraphBlock?.kind !== 'paragraph') {
-      return blocks;
+      return finalizeParagraphBlocks(blocks);
     }
 
     const filteredRuns = applyTrackedChangesModeToRuns(
@@ -682,7 +696,7 @@ export function paragraphToFlowBlocks({
 
     if (trackedChangesConfig.enabled && (filteredRuns.length === 0 || isGhostTrackedListArtifact)) {
       blocks.pop();
-      return blocks;
+      return finalizeParagraphBlocks(blocks);
     }
 
     paragraphBlock.runs = filteredRuns;
@@ -691,7 +705,7 @@ export function paragraphToFlowBlocks({
       trackedChangesMode: trackedChangesConfig.mode,
       trackedChangesEnabled: trackedChangesConfig.enabled,
     };
-    return blocks;
+    return finalizeParagraphBlocks(blocks);
   }
 
   let currentRuns: Run[] = [];
@@ -914,7 +928,7 @@ export function paragraphToFlowBlocks({
   });
 
   if (!trackedChangesConfig) {
-    return blocks;
+    return finalizeParagraphBlocks(blocks);
   }
 
   const processedBlocks: FlowBlock[] = [];
@@ -944,7 +958,7 @@ export function paragraphToFlowBlocks({
     processedBlocks.push(block);
   });
 
-  return processedBlocks;
+  return finalizeParagraphBlocks(processedBlocks);
 }
 
 type InlineConverterSpec = {
@@ -1142,6 +1156,16 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       // avoids confusing incremental-edit behavior.
       const delta = pmStart - cached.pmStart;
       const reusedBlocks = shiftCachedBlocks(cached.blocks, delta);
+      reusedBlocks.forEach((block) => {
+        if (block.kind === 'paragraph') {
+          syncListMarkerFontFromParagraphRuns({
+            block,
+            converterContext,
+            para: node,
+            contentFontSource: 'paragraph',
+          });
+        }
+      });
       applyTrackedGhostListAdjustments(node, reusedBlocks, context);
 
       reusedBlocks.forEach((block) => {

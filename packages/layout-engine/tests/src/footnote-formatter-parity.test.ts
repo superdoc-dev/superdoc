@@ -1,9 +1,9 @@
 /**
  * SD-2986/B1: drift-detection parity test.
  *
- * `pm-adapter/src/footnote-formatting.ts` deliberately inlines its number-format
+ * `v1 layout-adapter/footnote-formatting.ts` deliberately inlines its number-format
  * switch instead of reusing layout-engine's `formatPageNumber` — the package
- * graph forbids pm-adapter from importing layout-engine at runtime (Guard C in
+ * graph forbids the adapter from importing layout-engine at runtime (Guard C in
  * `architecture-boundaries.test.ts`). To keep the two implementations in sync
  * we assert here that they agree on every supported format for cardinals 1..100.
  *
@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { formatPageNumber } from '@superdoc/layout-engine';
-import { formatFootnoteCardinal } from '@superdoc/pm-adapter/footnote-formatting.js';
+import { formatFootnoteCardinal } from '@core/layout-adapter/footnote-formatting.js';
 
 const FORMATS = ['decimal', 'upperRoman', 'lowerRoman', 'upperLetter', 'lowerLetter', 'numberInDash'] as const;
 

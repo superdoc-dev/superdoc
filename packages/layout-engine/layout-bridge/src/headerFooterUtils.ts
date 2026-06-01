@@ -269,8 +269,20 @@ export function buildMultiSectionIdentifier(
   sectionMetadata: SectionMetadata[],
   pageStyles?: { alternateHeaders?: boolean },
   converterIds?: {
-    headerIds?: { default?: string | null; first?: string | null; even?: string | null; odd?: string | null };
-    footerIds?: { default?: string | null; first?: string | null; even?: string | null; odd?: string | null };
+    headerIds?: {
+      default?: string | null;
+      first?: string | null;
+      even?: string | null;
+      odd?: string | null;
+      titlePg?: boolean;
+    };
+    footerIds?: {
+      default?: string | null;
+      first?: string | null;
+      even?: string | null;
+      odd?: string | null;
+      titlePg?: boolean;
+    };
   },
 ): MultiSectionHeaderFooterIdentifier {
   const identifier = defaultMultiSectionIdentifier();
@@ -302,12 +314,11 @@ export function buildMultiSectionIdentifier(
       });
     }
 
-    // Track per-section titlePg from section metadata (w:titlePg element in OOXML)
-    // Note: The presence of a 'first' header/footer reference does NOT mean titlePg is enabled.
-    // The w:titlePg element must be present in sectPr to use first page headers/footers.
-    // Track per-section titlePg from section metadata (w:titlePg element in OOXML)
-    // Store explicit false so later sections don't inherit section 0's value.
-    identifier.sectionTitlePg.set(idx, section.titlePg === true);
+    // Track per-section titlePg from section metadata (w:titlePg element in OOXML).
+    // The presence of a 'first' header/footer reference does NOT mean titlePg is enabled.
+    if (Object.prototype.hasOwnProperty.call(section, 'titlePg')) {
+      identifier.sectionTitlePg.set(idx, section.titlePg === true);
+    }
   }
 
   // Set legacy fields from section 0 for backward compatibility
@@ -325,7 +336,7 @@ export function buildMultiSectionIdentifier(
   // Only fill in null values - don't override existing refs from section metadata
   // Also fall back to converter's titlePg if not set from section metadata
   if (converterIds?.headerIds) {
-    if (!identifier.titlePg && (converterIds.headerIds as { titlePg?: boolean }).titlePg) {
+    if (!identifier.titlePg && converterIds.headerIds.titlePg) {
       identifier.titlePg = true;
     }
     identifier.headerIds.default = identifier.headerIds.default ?? converterIds.headerIds.default ?? null;
@@ -334,7 +345,7 @@ export function buildMultiSectionIdentifier(
     identifier.headerIds.odd = identifier.headerIds.odd ?? converterIds.headerIds.odd ?? null;
   }
   if (converterIds?.footerIds) {
-    if (!identifier.titlePg && (converterIds.footerIds as { titlePg?: boolean }).titlePg) {
+    if (!identifier.titlePg && converterIds.footerIds.titlePg) {
       identifier.titlePg = true;
     }
     identifier.footerIds.default = identifier.footerIds.default ?? converterIds.footerIds.default ?? null;

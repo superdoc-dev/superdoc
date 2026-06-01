@@ -2615,6 +2615,37 @@ export async function incrementalLayout(
           }
         }
 
+        // Absorb one-line footnote widows by bumping their reserve to
+        // preferred. The scorer would reject this as a page-count regression;
+        // for one-line tails the cost is bounded and Word's pagination always
+        // absorbs them.
+        const ONE_LINE_TAIL_PX = 24;
+        const runWidowOrphanAbsorb = async () => {
+          const ledgers = buildFootnoteLedgers(finalPlan, reservesAppliedToLayout, layout.pages.length);
+          const target = reservesAppliedToLayout.slice();
+          let bumped = 0;
+          for (const ledger of ledgers) {
+            const tailPx = ledger.continuationOut.reduce((s, e) => s + (e.remainingHeightPx || 0), 0);
+            if (tailPx <= 0 || tailPx > ONE_LINE_TAIL_PX) continue;
+            const requested = capReserveForRelayout(
+              ledger.preferredReservePx,
+              ledger.pageIndex,
+              layout,
+              reservesAppliedToLayout,
+            );
+            if (requested > (target[ledger.pageIndex] ?? 0)) {
+              target[ledger.pageIndex] = requested;
+              bumped += 1;
+            }
+          }
+          if (bumped === 0) return;
+          const safeApplied = reservesAppliedToLayout.slice();
+          await applyReserves(target);
+          if (!(await growReserves(GROW_MAX_PASSES))) {
+            await applyReserves(safeApplied);
+          }
+        };
+        await runWidowOrphanAbsorb();
         await runPreferredReserveTrials();
 
         const blockById = new Map<string, FlowBlock>();

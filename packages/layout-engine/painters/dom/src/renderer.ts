@@ -268,6 +268,25 @@ function pageContextSignature(context: FragmentRenderContext): string {
   ].join('|');
 }
 
+function hasPageContextTokenInShapeText(textContent: ShapeTextContent | undefined): boolean {
+  return (
+    Array.isArray(textContent?.parts) &&
+    textContent.parts.some((part) => part.fieldType === 'PAGE' || part.fieldType === 'NUMPAGES')
+  );
+}
+
+function hasPageContextTokenInShapeGroup(shapes: readonly ShapeGroupChild[] | undefined): boolean {
+  return (
+    Array.isArray(shapes) &&
+    shapes.some((shape) => {
+      if (shape.shapeType !== 'vectorShape') {
+        return false;
+      }
+      return hasPageContextTokenInShapeText(shape.attrs.textContent);
+    })
+  );
+}
+
 function hasPageContextTokenInBlock(block: FlowBlock | undefined): boolean {
   if (!block) return false;
   if (block.kind === 'paragraph') {
@@ -296,6 +315,14 @@ function hasPageContextTokenInBlock(block: FlowBlock | undefined): boolean {
           return true;
         }
       }
+    }
+  } else if (block.kind === 'drawing') {
+    const drawing = block as DrawingBlock;
+    if (drawing.drawingKind === 'vectorShape') {
+      return hasPageContextTokenInShapeText(drawing.textContent);
+    }
+    if (drawing.drawingKind === 'shapeGroup') {
+      return hasPageContextTokenInShapeGroup(drawing.shapes);
     }
   }
   return false;

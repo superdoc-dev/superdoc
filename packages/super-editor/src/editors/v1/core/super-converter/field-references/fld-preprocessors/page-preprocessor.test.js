@@ -22,6 +22,7 @@ describe('preProcessPageInstruction', () => {
     ['PAGE', undefined],
     ['PAGE \\* roman', 'lowerRoman'],
     ['PAGE \\* Roman \\* MERGEFORMAT', 'upperRoman'],
+    ['PAGE \\* ROMAN', 'upperRoman'],
     ['page \\* Arabic', 'decimal'],
     ['PAGE \\* Unsupported \\* MERGEFORMAT', undefined],
   ])('preserves PAGE instruction and parses supported value format: %s', (instruction, pageNumberFormat) => {

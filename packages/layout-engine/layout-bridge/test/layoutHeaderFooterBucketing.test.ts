@@ -89,6 +89,23 @@ const makePageTokenBlock = (id: string): FlowBlock => ({
   ],
 });
 
+const makeFormattedPageTokenBlock = (
+  id: string,
+  pageNumberFieldFormat: NonNullable<TextRun['pageNumberFieldFormat']>,
+): FlowBlock => ({
+  kind: 'paragraph',
+  id,
+  runs: [
+    {
+      text: '0',
+      token: 'pageNumber',
+      pageNumberFieldFormat,
+      fontFamily: 'Arial',
+      fontSize: 12,
+    } as TextRun,
+  ],
+});
+
 describe('getBucketForPageNumber', () => {
   it('should return d1 for single-digit page numbers (1-9)', () => {
     expect(getBucketForPageNumber(1)).toBe('d1');
@@ -439,6 +456,34 @@ describe('layoutHeaderFooterWithCache - Digit Bucketing (Large Docs)', () => {
     expect(result.default?.layout.pages).toHaveLength(3);
     expect(measureBlock).toHaveBeenCalledTimes(3);
     expect((result.default?.layout.pages[0].blocks?.[0] as ParagraphBlock).runs[1].text).toBe('005');
+  });
+
+  it.each([
+    ['decimal', { format: 'decimal' }],
+    ['numberInDash', { format: 'numberInDash' }],
+  ] as const)('should keep bucketing for %s run-local page number format', async (_name, pageNumberFieldFormat) => {
+    const sections = {
+      default: [makeFormattedPageTokenBlock(`header-${pageNumberFieldFormat.format}`, pageNumberFieldFormat)],
+    };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: String(pageNum),
+      displayNumber: pageNum,
+      totalPages: 150,
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(3);
+    expect(measureBlock).toHaveBeenCalledTimes(3);
   });
 });
 

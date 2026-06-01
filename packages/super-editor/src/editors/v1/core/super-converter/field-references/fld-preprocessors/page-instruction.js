@@ -1,6 +1,7 @@
 const PAGE_VALUE_FORMAT_SWITCHES = {
   Arabic: 'decimal',
   Roman: 'upperRoman',
+  ROMAN: 'upperRoman',
   roman: 'lowerRoman',
   ALPHABETIC: 'upperLetter',
   alphabetic: 'lowerLetter',

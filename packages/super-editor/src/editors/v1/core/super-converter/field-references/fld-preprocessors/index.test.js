@@ -7,6 +7,7 @@ import { preProcessPageRefInstruction } from './page-ref-preprocessor.js';
 import { preProcessHyperlinkInstruction } from './hyperlink-preprocessor.js';
 import { preProcessTocInstruction } from './toc-preprocessor.js';
 import { preProcessRefInstruction } from './ref-preprocessor.js';
+import { preProcessSeqInstruction } from './seq-preprocessor.js';
 
 describe('getInstructionPreProcessor', () => {
   const mockDocx = {
@@ -71,6 +72,16 @@ describe('getInstructionPreProcessor', () => {
   ])('should dispatch non-page field instruction case-insensitively: %s', (instruction, expectedProcessor) => {
     const processor = getInstructionPreProcessor(instruction);
     expect(processor).toBe(expectedProcessor);
+  });
+
+  it('should dispatch uppercase SEQ fields', () => {
+    const processor = getInstructionPreProcessor('SEQ Figure \\* ARABIC');
+    expect(processor).toBe(preProcessSeqInstruction);
+  });
+
+  it('should leave lowercase seq fields unprocessed to preserve cached numbering results', () => {
+    const processor = getInstructionPreProcessor('seq level2 \\*arabic');
+    expect(processor).toBeNull();
   });
 
   it('should return preProcessTocInstruction for TOC instruction', () => {

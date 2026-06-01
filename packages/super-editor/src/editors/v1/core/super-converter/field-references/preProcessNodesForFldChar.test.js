@@ -120,6 +120,17 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
+  it('should preserve cached visible result runs for lowercase seq fields', () => {
+    const { processedNodes } = preProcessNodesForFldChar(complexFieldNodes('seq level2 \\*arabic', '1'), mockDocx);
+
+    expect(processedNodes).toHaveLength(5);
+    expect(processedNodes.some((node) => node.name === 'sd:sequenceField')).toBe(false);
+    expect(processedNodes[3]).toEqual({
+      name: 'w:r',
+      elements: [{ name: 'w:t', elements: [{ type: 'text', text: '1' }] }],
+    });
+  });
+
   it('should handle nested fields (PAGEREF within HYPERLINK)', () => {
     const nodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },

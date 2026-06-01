@@ -455,6 +455,8 @@ export type ResolvedHeaderFooterPage = {
   /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
   displayNumber?: number;
   numberText?: string;
+  /** Section-aware numeric page value before formatting. */
+  displayNumber?: number;
   items: ResolvedPaintItem[];
 };
 

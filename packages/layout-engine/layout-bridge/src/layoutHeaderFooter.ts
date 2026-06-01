@@ -332,6 +332,8 @@ export async function layoutHeaderFooterWithCache(
       blocks: FlowBlock[];
       measures: Measure[];
       fragments: HeaderFooterLayout['pages'][0]['fragments'];
+      numberText?: string;
+      displayNumber?: number;
     }> = [];
 
     for (const pageNum of pagesToLayout) {
@@ -372,6 +374,8 @@ export async function layoutHeaderFooterWithCache(
         blocks: clonedBlocks,
         measures,
         fragments: fragmentsWithLines,
+        numberText: displayText,
+        displayNumber,
       });
     }
 
@@ -390,6 +394,8 @@ export async function layoutHeaderFooterWithCache(
         number: p.number,
         displayNumber: p.displayNumber,
         fragments: p.fragments,
+        numberText: p.numberText,
+        displayNumber: p.displayNumber,
         blocks: p.blocks,
         measures: p.measures,
       })),

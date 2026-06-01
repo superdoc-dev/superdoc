@@ -46,6 +46,18 @@ describe('tokenNodeToRun', () => {
     expect(result.token).toBe('totalPageCount');
   });
 
+  it('carries PAGE field-local page number format', () => {
+    const tokenNode: PMNode = {
+      type: 'page-number',
+      attrs: { pageNumberFormat: 'lowerRoman' },
+    };
+    const positions: PositionMap = new WeakMap();
+
+    const result = tokenNodeToRun(tokenNode, positions, 'Arial', 16, [], 'pageNumber');
+
+    expect(result.pageNumberFieldFormat).toEqual({ format: 'lowerRoman' });
+  });
+
   it('attaches PM position tracking when position exists', () => {
     const tokenNode: PMNode = {
       type: 'page-number',

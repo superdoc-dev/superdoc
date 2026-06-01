@@ -208,11 +208,11 @@ function cloneBlockWithResolvedTokens(
     if ('token' in run && run.token) {
       if (run.token === 'pageNumber') {
         // Clone the run and resolve the token
-        const { token: _token, ...runWithoutToken } = run;
+        const { token: _token, pageNumberFieldFormat, ...runWithoutToken } = run;
         return {
           ...runWithoutToken,
-          text: run.pageNumberFieldFormat
-            ? formatPageNumberFieldValue(displayPageInfo.displayNumber, run.pageNumberFieldFormat)
+          text: pageNumberFieldFormat
+            ? formatPageNumberFieldValue(displayPageInfo.displayNumber, pageNumberFieldFormat)
             : displayPageInfo.displayText,
         };
       } else if (run.token === 'totalPageCount') {
@@ -284,9 +284,12 @@ export function resolveTokensInBlock(block: ParagraphBlock, pageNumber: number, 
     if ('token' in run && run.token) {
       if (run.token === 'pageNumber') {
         // Replace placeholder text with actual page number
-        run.text = pageNumberStr;
+        run.text = run.pageNumberFieldFormat
+          ? formatPageNumberFieldValue(pageNumber, run.pageNumberFieldFormat)
+          : pageNumberStr;
         // Clear token metadata to treat as normal text after resolution
         delete run.token;
+        delete run.pageNumberFieldFormat;
         blockModified = true;
       } else if (run.token === 'totalPageCount') {
         // Replace placeholder text with total page count

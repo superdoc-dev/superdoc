@@ -7,7 +7,8 @@ describe('page number formatting', () => {
     expect(formatPageNumber(5, 'upperRoman')).toBe('V');
     expect(formatPageNumber(5, 'lowerRoman')).toBe('v');
     expect(formatPageNumber(27, 'upperLetter')).toBe('AA');
-    expect(formatPageNumber(703, 'lowerLetter')).toBe('aaa');
+    expect(formatPageNumber(28, 'upperLetter')).toBe('BB');
+    expect(formatPageNumber(703, 'lowerLetter')).toBe('a'.repeat(28));
     expect(formatPageNumber(12, 'numberInDash')).toBe('-12-');
   });
 

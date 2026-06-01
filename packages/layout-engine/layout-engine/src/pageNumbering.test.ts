@@ -35,12 +35,12 @@ describe('formatPageNumber', () => {
 
   describe('numberInDash format', () => {
     it('should wrap numbers in dashes', () => {
-      expect(formatPageNumber(1, 'numberInDash')).toBe('-1-');
-      expect(formatPageNumber(12, 'numberInDash')).toBe('-12-');
+      expect(formatPageNumber(1, 'numberInDash')).toBe('- 1 -');
+      expect(formatPageNumber(12, 'numberInDash')).toBe('- 12 -');
     });
 
     it('should clamp zero to 1', () => {
-      expect(formatPageNumber(0, 'numberInDash')).toBe('-1-');
+      expect(formatPageNumber(0, 'numberInDash')).toBe('- 1 -');
     });
   });
 

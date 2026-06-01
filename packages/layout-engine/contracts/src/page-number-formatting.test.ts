@@ -9,7 +9,7 @@ describe('page number formatting', () => {
     expect(formatPageNumber(27, 'upperLetter')).toBe('AA');
     expect(formatPageNumber(28, 'upperLetter')).toBe('BB');
     expect(formatPageNumber(703, 'lowerLetter')).toBe('a'.repeat(28));
-    expect(formatPageNumber(12, 'numberInDash')).toBe('-12-');
+    expect(formatPageNumber(12, 'numberInDash')).toBe('- 12 -');
   });
 
   it('normalizes page numbers before formatting', () => {

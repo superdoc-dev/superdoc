@@ -43,7 +43,7 @@ export function formatPageNumber(pageNumber: number, format: PageNumberFormat): 
     case 'lowerLetter':
       return toUpperLetter(value).toLowerCase();
     case 'numberInDash':
-      return `-${value}-`;
+      return `- ${value} -`;
     case 'decimal':
     default:
       return String(value);

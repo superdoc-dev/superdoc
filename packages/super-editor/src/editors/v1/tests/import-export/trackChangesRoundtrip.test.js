@@ -321,7 +321,8 @@ describe('tracked format import/export round trip', () => {
 
       const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
       const exportedBody = await loadExportedDocumentBody(exportedBuffer);
-      expect(collectRunPropertyChangeIdsFromXml(exportedBody)).toEqual(['format-1']);
+      const [exportedFormatChangeId] = collectRunPropertyChangeIdsFromXml(exportedBody);
+      expect(exportedFormatChangeId).toMatch(/^\d+$/);
 
       const [reimportedDocx, reimportedMedia, reimportedMediaFiles, reimportedFonts] = await Editor.loadXmlData(
         exportedBuffer,
@@ -336,8 +337,8 @@ describe('tracked format import/export round trip', () => {
       });
 
       try {
-        expect(collectTrackFormatMarkIds(reimportedEditor.state.doc)).toEqual(['format-1']);
-        expect(collectTextsWithTrackFormatId(reimportedEditor.state.doc, 'format-1')).toEqual(['styles']);
+        expect(collectTrackFormatMarkIds(reimportedEditor.state.doc)).toEqual([exportedFormatChangeId]);
+        expect(collectTextsWithTrackFormatId(reimportedEditor.state.doc, exportedFormatChangeId)).toEqual(['styles']);
       } finally {
         reimportedEditor.destroy();
       }

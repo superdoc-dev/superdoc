@@ -8,6 +8,7 @@ vi.mock('../../pPr/pPr-translator.js', () => ({
 
 import { generateParagraphProperties } from './generate-paragraph-properties.js';
 import { translator as wPPrNodeTranslator } from '../../pPr/pPr-translator.js';
+import { TrackFormatMarkName } from '@extensions/track-changes/constants.js';
 
 describe('generateParagraphProperties', () => {
   beforeEach(() => {
@@ -174,6 +175,140 @@ describe('generateParagraphProperties', () => {
     const node = { type: 'paragraph', attrs: { paragraphProperties } };
     wPPrNodeTranslator.decode.mockImplementation(({ node: decodeNode }) => {
       expect(decodeNode.attrs.paragraphProperties.runProperties).toBeUndefined();
+      return { type: 'element', name: 'w:pPr', elements: [] };
+    });
+
+    generateParagraphProperties({ node });
+  });
+
+  it('adds only a Word-visible paragraph mark insertion for paragraphSplit tracking', () => {
+    const node = {
+      type: 'paragraph',
+      attrs: { paragraphProperties: {} },
+      content: [
+        {
+          type: 'text',
+          text: 'llo',
+          marks: [
+            {
+              type: TrackFormatMarkName,
+              attrs: {
+                id: 'logical-change-id',
+                author: 'Reviewer',
+                date: '2026-06-01T17:00:00Z',
+                before: [{ type: 'paragraphSplit', attrs: { anchor: 'inserted', offset: 2 } }],
+                after: [{ type: 'paragraphSplit', attrs: { anchor: 'inserted' } }],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    wPPrNodeTranslator.decode.mockImplementation(({ node: decodeNode }) => {
+      expect(decodeNode.attrs.paragraphProperties.change).toBeUndefined();
+      return {
+        type: 'element',
+        name: 'w:pPr',
+        elements: [],
+      };
+    });
+
+    const result = generateParagraphProperties({
+      node,
+    });
+
+    expect(result.elements).toEqual([
+      {
+        type: 'element',
+        name: 'w:rPr',
+        elements: [
+          {
+            type: 'element',
+            name: 'w:ins',
+            attributes: {
+              'w:id': expect.stringMatching(/^\d+$/),
+              'w:author': 'Reviewer',
+              'w:date': '2026-06-01T17:00:00Z',
+            },
+          },
+        ],
+      },
+    ]);
+    expect(result.elements[0].elements[0].attributes['w:id']).toMatch(/^\d+$/);
+  });
+
+  it('uses the Word revision id allocator for paragraphSplit export elements', () => {
+    const allocate = vi.fn(() => '12');
+    const node = {
+      type: 'paragraph',
+      attrs: { paragraphProperties: {} },
+      content: [
+        {
+          type: 'text',
+          text: 'Beta',
+          marks: [
+            {
+              type: TrackFormatMarkName,
+              attrs: {
+                id: 'logical-change-id',
+                sourceId: '',
+                author: 'Reviewer',
+                date: '2026-06-01T17:00:00Z',
+                before: [{ type: 'paragraphSplit', attrs: { anchor: 'inserted', offset: 2 } }],
+                after: [{ type: 'paragraphSplit', attrs: { anchor: 'inserted' } }],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    wPPrNodeTranslator.decode.mockImplementation(({ node: decodeNode }) => {
+      expect(decodeNode.attrs.paragraphProperties.change).toBeUndefined();
+      return {
+        type: 'element',
+        name: 'w:pPr',
+        elements: [],
+      };
+    });
+
+    const result = generateParagraphProperties({
+      node,
+      converter: { wordIdAllocator: { allocate } },
+      currentPartPath: 'word/header1.xml',
+    });
+
+    expect(allocate).toHaveBeenCalledTimes(1);
+    expect(allocate).toHaveBeenCalledWith({
+      partPath: 'word/header1.xml',
+      sourceId: '',
+      logicalId: 'logical-change-id',
+    });
+    expect(result.elements[0].elements[0].attributes['w:id']).toBe('12');
+  });
+
+  it('does not add paragraphSplit export elements for ordinary tracked formatting', () => {
+    const node = {
+      type: 'paragraph',
+      attrs: { paragraphProperties: {} },
+      content: [
+        {
+          type: 'text',
+          text: 'Hello',
+          marks: [
+            {
+              type: TrackFormatMarkName,
+              attrs: {
+                id: 'format-change-id',
+                before: [{ type: 'bold', attrs: { value: true } }],
+                after: [],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    wPPrNodeTranslator.decode.mockImplementation(({ node: decodeNode }) => {
+      expect(decodeNode.attrs.paragraphProperties.change).toBeUndefined();
       return { type: 'element', name: 'w:pPr', elements: [] };
     });
 

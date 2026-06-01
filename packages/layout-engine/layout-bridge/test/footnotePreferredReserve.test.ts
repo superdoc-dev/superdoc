@@ -158,9 +158,17 @@ describe('SD-2656 Phase 7: preferred-reserve body acceptance', () => {
     expect(ledger.continuationOut).toEqual([]);
   });
 
-  it('mandatory minimum: huge footnote keeps body anchor on page; remainder continues to later page', async () => {
-    // 50 body paragraphs + 30-line footnote. Phase 1 ordered-minimum behavior:
-    // body packs to mandatory (firstLine), footnote continues across pages.
+  it('mandatory minimum: huge footnote keeps body anchor on page', async () => {
+    // 50 body paragraphs + 30-line footnote. Tests the Phase 1 ordered-minimum
+    // invariant: regardless of how much of the footnote actually fits on page 0,
+    // the body anchor must remain there (no migration to a later page).
+    //
+    // SD-2656 (post-Vivienne+Carlsbad p43): under the +1-page-if-eliminates-split
+    // relaxation, the scorer may accept a one-page growth that fully fits the
+    // 30-line footnote on the anchor page, eliminating the continuation. So
+    // continuationOut may be empty under V1 (full fit) or non-empty under
+    // tighter scenarios — both are valid. The invariant under test is that the
+    // body anchor stays on page 0 either way.
     const { layout } = await runScenario({
       bodyParagraphs: 50,
       footnotes: [{ lines: 30 }],
@@ -174,7 +182,5 @@ describe('SD-2656 Phase 7: preferred-reserve body acceptance', () => {
     // The body anchor must remain on page 0 (no migration to a later page).
     const bodyOnPage0 = layout.pages[0].fragments.some((f) => f.blockId === 'body-0');
     expect(bodyOnPage0).toBe(true);
-    // FN doesn't fit on anchor page — continuation must reach a later page.
-    expect(ledger.continuationOut.length).toBeGreaterThan(0);
   });
 });

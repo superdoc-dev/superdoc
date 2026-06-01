@@ -344,8 +344,24 @@ export const scoreFootnoteWindow = (input: FootnoteWindowScoreInput): FootnoteWi
     mandatoryOnlyTolerancePx,
   );
 
+  // SD-2656 (Vivienne feedback): a trial that ELIMINATES a cluster split is a
+  // direct user-visible win. Trade a larger dead-reserve growth for fewer
+  // footnotes splitting across pages. Without this relaxation the scorer
+  // accepts a smaller partial bump that improves mandatory-only count but
+  // leaves the split intact — the user sees no change.
+  const eliminatesSplitInWindow = beforeWindowDiagnostics.clusterSplitCount > afterWindowDiagnostics.clusterSplitCount;
+  const eliminatesSplitInDoc = beforeDocumentDiagnostics.clusterSplitCount > afterDocumentDiagnostics.clusterSplitCount;
+
   if (after.totalPages > before.totalPages) {
-    return { accept: false, reason: 'page-count-grew', before, after };
+    // SD-2656 (post-Vivienne+Carlsbad p43): allow exactly +1 page when the
+    // trial eliminates a doc-level cluster split. Mirrors Word's behavior of
+    // growing the document by one page to keep a footnote together when body
+    // content is densely packed. Larger growth caps measured no improvement
+    // on Carlsbad (4 remaining splits hit other gates regardless).
+    const grewByOne = after.totalPages === before.totalPages + 1;
+    if (!(grewByOne && eliminatesSplitInDoc)) {
+      return { accept: false, reason: 'page-count-grew', before, after };
+    }
   }
   if (
     after.clusterSplitCount > before.clusterSplitCount ||
@@ -365,13 +381,6 @@ export const scoreFootnoteWindow = (input: FootnoteWindowScoreInput): FootnoteWi
   if (hasNewId(afterDocumentDiagnostics.mandatoryOnlyAnchorIds, beforeDocumentDiagnostics.mandatoryOnlyAnchorIds)) {
     return { accept: false, reason: 'new-mandatory-only', before, after };
   }
-  // SD-2656 (Vivienne feedback): a trial that ELIMINATES a cluster split is a
-  // direct user-visible win. Trade a larger dead-reserve growth for fewer
-  // footnotes splitting across pages. Without this relaxation the scorer
-  // accepts a smaller partial bump that improves mandatory-only count but
-  // leaves the split intact — the user sees no change.
-  const eliminatesSplitInWindow = beforeWindowDiagnostics.clusterSplitCount > afterWindowDiagnostics.clusterSplitCount;
-  const eliminatesSplitInDoc = beforeDocumentDiagnostics.clusterSplitCount > afterDocumentDiagnostics.clusterSplitCount;
   const windowDeadAllowance = eliminatesSplitInWindow ? deadReserveBloatThresholdPx * 2 : deadReserveBloatThresholdPx;
   const docDeadAllowance = eliminatesSplitInDoc
     ? wholeDocumentDeadReserveBloatThresholdPx * 2

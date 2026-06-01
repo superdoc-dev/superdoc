@@ -1610,14 +1610,17 @@ export async function incrementalLayout(
             // already used so placeFootnote sees the lowered ceiling.
             usedHeight += clusterReserve;
             const pending = pendingForPage.get(columnIndex) ?? [];
-            for (const entry of pending) {
+            for (let pendingIdx = 0; pendingIdx < pending.length; pendingIdx += 1) {
+              const entry = pending[pendingIdx];
               if (!entry.ranges || entry.ranges.length === 0) continue;
               const result = placeFootnote(entry.id, entry.ranges, true, false);
               if (!result.placed) {
                 // Continuation doesn't fit alongside the cluster reservation
-                // — defer this and all later continuations to next page.
-                nextPending.push(entry);
-                continue;
+                // — defer this and all later continuations to preserve order.
+                for (let deferIdx = pendingIdx; deferIdx < pending.length; deferIdx += 1) {
+                  nextPending.push(pending[deferIdx]);
+                }
+                break;
               }
               if (result.remaining.length > 0) {
                 nextPending.push({ id: entry.id, ranges: result.remaining });
@@ -2351,7 +2354,9 @@ export async function incrementalLayout(
           return true;
         };
         const applyReserves = async (target: number[]) => {
-          layout = relayout(target);
+          // Planner sized the band with the measured separator spacing; the
+          // body slicer must match or it packs too much and the band overflows.
+          layout = relayout(target, finalPlan.separatorSpacingBefore);
           reservesAppliedToLayout = target;
           ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));
           ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(allFootnoteIds));

@@ -180,6 +180,10 @@ export function createPaginator(opts: PaginatorOptions) {
       state.trailingSpacing = 0;
       state.lastParagraphStyleId = undefined;
       state.lastParagraphContextualSpacing = false;
+      // Footnotes are reserved per-column; the body slicer's demand formula
+      // must reset per-column. Field names retain "ThisPage" for back-compat.
+      state.footnoteAnchorsThisPage = [];
+      state.footnoteRefsThisPage = 0;
       return state;
     }
     return startNewPage();

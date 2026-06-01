@@ -375,6 +375,15 @@ function storyIdFromHeaderFooterLayoutKey(key: string): string {
   return key.replace(/::s\d+$/, '');
 }
 
+function refForVariant(
+  refs: Partial<Record<'default' | 'first' | 'even' | 'odd', string | null | undefined>> | undefined,
+  variant: 'default' | 'first' | 'even' | 'odd',
+): string | undefined {
+  const ref = refs?.[variant];
+  if (ref) return ref;
+  return variant === 'odd' ? (refs?.default ?? undefined) : undefined;
+}
+
 function resolveResult(result: HeaderFooterLayoutResult, storyId?: string | null): ResolvedHeaderFooterLayout {
   const story = buildHeaderFooterStory(result.kind, storyId ?? String(result.type));
   return resolveHeaderFooterLayout(result.layout, result.blocks, result.measures, story);
@@ -2417,7 +2426,7 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
-      const effectiveRef = multiSectionId
+      const effectiveRef = multiSectionId?.sections?.length
         ? resolveEffectiveHeaderFooterRef({
             sections: multiSectionId.sections,
             sectionIndex,
@@ -2425,8 +2434,12 @@ export class HeaderFooterSessionManager {
             variant: headerFooterType,
           })
         : null;
-      const legacyIds = kind === 'header' ? legacyIdentifier.headerIds : legacyIdentifier.footerIds;
-      const sectionRId = effectiveRef?.refId ?? legacyIds[headerFooterType] ?? undefined;
+      const pageSectionRefs = kind === 'header' ? page?.sectionRefs?.headerRefs : page?.sectionRefs?.footerRefs;
+      const legacyRefs = kind === 'header' ? legacyIdentifier.headerIds : legacyIdentifier.footerIds;
+      const sectionRId =
+        effectiveRef?.refId ??
+        refForVariant(pageSectionRefs, headerFooterType) ??
+        refForVariant(legacyRefs, headerFooterType);
       const layoutVariantType = effectiveRef?.matchedVariant ?? headerFooterType;
 
       // PRIORITY 1: Try per-rId layout (composite key first for per-section margins, then plain rId)

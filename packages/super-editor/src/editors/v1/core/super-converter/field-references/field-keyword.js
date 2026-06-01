@@ -7,10 +7,8 @@
  * @returns {string}
  */
 export function extractFieldKeyword(instruction) {
-  return (
-    String(instruction ?? '')
-      .trim()
-      .split(/\s+/)[0]
-      ?.toUpperCase() ?? ''
-  );
+  return String(instruction ?? '')
+    .trim()
+    .split(/\s+/)[0]
+    .toUpperCase();
 }

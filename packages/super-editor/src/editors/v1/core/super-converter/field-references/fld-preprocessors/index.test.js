@@ -6,6 +6,7 @@ import { preProcessNumPagesInstruction } from './num-pages-preprocessor.js';
 import { preProcessPageRefInstruction } from './page-ref-preprocessor.js';
 import { preProcessHyperlinkInstruction } from './hyperlink-preprocessor.js';
 import { preProcessTocInstruction } from './toc-preprocessor.js';
+import { preProcessRefInstruction } from './ref-preprocessor.js';
 
 describe('getInstructionPreProcessor', () => {
   const mockDocx = {
@@ -65,6 +66,8 @@ describe('getInstructionPreProcessor', () => {
   it.each([
     ['pageref _Toc123456789 h', preProcessPageRefInstruction],
     ['hyperlink "http://example.com"', preProcessHyperlinkInstruction],
+    ['toc \\o "1-3" \\h \\z \\u', preProcessTocInstruction],
+    ['ref BookmarkName \\h', preProcessRefInstruction],
   ])('should dispatch non-page field instruction case-insensitively: %s', (instruction, expectedProcessor) => {
     const processor = getInstructionPreProcessor(instruction);
     expect(processor).toBe(expectedProcessor);

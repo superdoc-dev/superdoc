@@ -53,9 +53,7 @@ describe('preProcessIndexInstruction', () => {
 
     const result = preProcessIndexInstruction([r1, r2], 'INDEX \\c "2"');
 
-    expect(result[0].elements).toEqual([
-      { name: 'w:p', type: 'element', elements: [r1, r2] },
-    ]);
+    expect(result[0].elements).toEqual([{ name: 'w:p', type: 'element', elements: [r1, r2] }]);
   });
 
   it('preserves complex instruction text with switches', () => {

@@ -50,6 +50,39 @@ import { getPageElementByIndex } from '../../dom-observer/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
 import { buildFootnotesInput, type NoteRenderOverride } from './layout/FootnotesBuilder.js';
+import { computeNoteNumbering, type SectionNoteConfig } from './layout/computeNoteNumbering.js';
+
+/** Stable serialization of section-level note configs for the flow-block cache key. */
+function serializeSectionConfigs(map: Map<number, SectionNoteConfig>): string {
+  if (map.size === 0) return '';
+  return [...map.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([i, c]) => `${i}:${c.numFmt ?? ''}/${c.numStart ?? ''}/${c.numRestart ?? ''}`)
+    .join(';');
+}
+
+/**
+ * Stable serialization of per-ref numbering / format maps for the flow-block
+ * cache key. The set of ids appears in `order` already, but the *values*
+ * (computed ordinals + per-id format overrides) must also vary the key —
+ * otherwise toggling `customMarkFollows` on a middle ref, or moving a ref
+ * across a section that changes its numFmt, leaves the cached reference
+ * runs out of date with the live numbering.
+ */
+function serializePerIdNumbering(
+  order: string[],
+  numberById: Record<string, number>,
+  formatById: Record<string, string> | undefined,
+): string {
+  if (order.length === 0) return '';
+  const parts: string[] = [];
+  for (const id of order) {
+    const n = numberById[id];
+    const f = formatById?.[id] ?? '';
+    parts.push(`${id}:${n ?? ''}/${f}`);
+  }
+  return parts.join(';');
+}
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import {
@@ -110,7 +143,19 @@ import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
 import { toFlowBlocks, FlowBlockCache } from '@core/layout-adapter';
 import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
-import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
+import {
+  readSettingsRoot,
+  readDefaultTableStyle,
+  readFootnoteNumberFormat,
+  readEndnoteNumberFormat,
+  readFootnoteNumberStart,
+  readEndnoteNumberStart,
+  readFootnoteNumberRestart,
+  readEndnoteNumberRestart,
+  readFootnotePosition,
+  readEndnotePosition,
+  readSectionNoteConfigs,
+} from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
   selectionToRects,
@@ -459,6 +504,13 @@ export class PresentationEditor extends EventEmitter {
   #flowBlockCache: FlowBlockCache = new FlowBlockCache();
   #footnoteNumberSignature: string | null = null;
   #endnoteNumberSignature: string | null = null;
+  // §17.11.19 eachPage requires a two-pass pagination handshake that the
+  // layout pipeline does not yet implement; we coerce eachPage → continuous
+  // and emit a single warning per kind per editor instance.
+  #warnedUnsupportedRestart: { footnote: boolean; endnote: boolean } = {
+    footnote: false,
+    endnote: false,
+  };
   #painterAdapter = new PresentationPainterAdapter();
   #pageGeometryHelper: PageGeometryHelper | null = null;
   #dragDropManager: DragDropManager | null = null;
@@ -961,6 +1013,14 @@ export class PresentationEditor extends EventEmitter {
    * - Skips wrapping if the focus function has a `mock` property (Vitest/Jest mocks)
    * - Prevents interference with test assertions and mock function tracking
    */
+  #warnUnsupportedNumberingRestart(kind: 'footnote' | 'endnote'): void {
+    if (this.#warnedUnsupportedRestart[kind]) return;
+    this.#warnedUnsupportedRestart[kind] = true;
+    console.warn(
+      `[PresentationEditor] ${kind} numRestart="eachPage" is not yet supported (requires a two-pass pagination handshake). Falling back to "continuous". Tracked for follow-up.`,
+    );
+  }
+
   #wrapOffscreenEditorFocus(editor: Editor | null | undefined): void {
     const view = editor?.view;
     if (!view || !view.dom || typeof view.focus !== 'function') {
@@ -6276,63 +6336,105 @@ export class PresentationEditor extends EventEmitter {
       const sectionMetadata: SectionMetadata[] = [];
       let blocks: FlowBlock[] | undefined;
       let bookmarks: Map<string, number> = new Map();
+      // TODO(footnote): the block below (settings read → numbering → cache
+      // signatures → converterContext) is OOXML-semantics work that doesn't
+      // belong in PresentationEditor (see layout-engine CLAUDE.md). Extract
+      // a `buildFootnoteConverterContext` helper alongside computeNoteNumbering
+      // so the cache-signature dance lives in one place and is testable in
+      // isolation. Deferred from PR SD-2656 review per reviewer's offer.
       let converterContext: ConverterContext | undefined = undefined;
       try {
         const converter = (this.#editor as Editor & { converter?: Record<string, unknown> }).converter;
-        // Compute visible footnote numbering (1-based) by first appearance in the document.
-        // This matches Word behavior even when OOXML ids are non-contiguous or start at 0.
-        const footnoteNumberById: Record<string, number> = {};
-        const footnoteOrder: string[] = [];
-        try {
-          const seen = new Set<string>();
-          let counter = 1;
-          this.#editor?.state?.doc?.descendants?.((node: any) => {
-            if (node?.type?.name !== 'footnoteReference') return;
-            const rawId = node?.attrs?.id;
-            if (rawId == null) return;
-            const key = String(rawId);
-            if (!key || seen.has(key)) return;
-            seen.add(key);
-            footnoteNumberById[key] = counter;
-            footnoteOrder.push(key);
-            counter += 1;
-          });
-        } catch (e) {
-          // Log traversal errors - footnote numbering may be incorrect if this fails
-          if (typeof console !== 'undefined' && console.warn) {
-            console.warn('[PresentationEditor] Failed to compute footnote numbering:', e);
+
+        // §17.11.12 (document-wide) + §17.11.11 (section-level) — read both layers.
+        let defaultTableStyleId: string | undefined;
+        let footnoteNumberFormat: string | undefined;
+        let endnoteNumberFormat: string | undefined;
+        let footnoteNumberStart = 1;
+        let endnoteNumberStart = 1;
+        let footnoteNumberRestart: 'continuous' | 'eachPage' | 'eachSect' | undefined;
+        let endnoteNumberRestart: 'continuous' | 'eachPage' | 'eachSect' | undefined;
+        let footnotePosition: 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd' | undefined;
+        let endnotePosition: 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd' | undefined;
+        let footnoteSectionConfigs = new Map<number, SectionNoteConfig>();
+        let endnoteSectionConfigs = new Map<number, SectionNoteConfig>();
+        if (converter) {
+          const settingsRoot = readSettingsRoot(converter);
+          if (settingsRoot) {
+            defaultTableStyleId = readDefaultTableStyle(settingsRoot) ?? undefined;
+            footnoteNumberFormat = readFootnoteNumberFormat(settingsRoot) ?? undefined;
+            endnoteNumberFormat = readEndnoteNumberFormat(settingsRoot) ?? undefined;
+            footnoteNumberStart = readFootnoteNumberStart(settingsRoot) ?? 1;
+            endnoteNumberStart = readEndnoteNumberStart(settingsRoot) ?? 1;
+            footnoteNumberRestart = readFootnoteNumberRestart(settingsRoot) ?? undefined;
+            endnoteNumberRestart = readEndnoteNumberRestart(settingsRoot) ?? undefined;
+            // §17.11.21 — document-level only; section-level pos is ignored.
+            footnotePosition = readFootnotePosition(settingsRoot) ?? undefined;
+            endnotePosition = readEndnotePosition(settingsRoot) ?? undefined;
+          }
+          const documentPart = (converter.convertedXml as Record<string, unknown> | undefined)?.['word/document.xml'];
+          if (documentPart) {
+            footnoteSectionConfigs = readSectionNoteConfigs(documentPart as never, 'w:footnotePr');
+            endnoteSectionConfigs = readSectionNoteConfigs(documentPart as never, 'w:endnotePr');
           }
         }
-        // Invalidate flow block cache when footnote order changes, since footnote
-        // numbers are embedded in cached blocks and must be recomputed.
-        const footnoteSignature = footnoteOrder.join('|');
+
+        // §17.11.19 numRestart=eachPage — requires a per-ref page-assignment
+        // map from a prior layout pass. The numbering runs BEFORE pagination,
+        // so refPageById is not available here. Coerce to `continuous` and
+        // warn once so the doc renders deterministic ordinals instead of
+        // silently rendering "continuous-looking but supposedly per-page"
+        // numbers. Wiring a real eachPage pass requires a two-pass handshake
+        // (number → layout → re-number → re-layout).
+        if (footnoteNumberRestart === 'eachPage') {
+          this.#warnUnsupportedNumberingRestart('footnote');
+          footnoteNumberRestart = 'continuous';
+        }
+        if (endnoteNumberRestart === 'eachPage') {
+          this.#warnUnsupportedNumberingRestart('endnote');
+          endnoteNumberRestart = 'continuous';
+        }
+        // Section-level overrides may also request eachPage; coerce the same
+        // way so the helper never sees a value it cannot honor.
+        for (const [secIndex, cfg] of footnoteSectionConfigs) {
+          if (cfg.numRestart === 'eachPage') {
+            footnoteSectionConfigs.set(secIndex, { ...cfg, numRestart: 'continuous' });
+            this.#warnUnsupportedNumberingRestart('footnote');
+          }
+        }
+        for (const [secIndex, cfg] of endnoteSectionConfigs) {
+          if (cfg.numRestart === 'eachPage') {
+            endnoteSectionConfigs.set(secIndex, { ...cfg, numRestart: 'continuous' });
+            this.#warnUnsupportedNumberingRestart('endnote');
+          }
+        }
+
+        // §17.11.14 / §17.11.20 / §17.11.19 / §17.11.11.
+        const footnoteNumbering = computeNoteNumbering(this.#editor?.state, 'footnoteReference', {
+          startCounter: footnoteNumberStart,
+          defaultNumFmt: footnoteNumberFormat,
+          defaultRestart: footnoteNumberRestart,
+          sectionConfigs: footnoteSectionConfigs,
+        });
+        const footnoteNumberById = footnoteNumbering.numberById;
+        const footnoteFormatById = footnoteNumbering.formatById;
+        const footnoteOrder = footnoteNumbering.order;
+        // Cache key: anything baked into cached reference runs.
+        const footnoteSignature = `${footnoteNumberStart}|${footnoteNumberFormat ?? ''}|${footnoteNumberRestart ?? ''}|${serializeSectionConfigs(footnoteSectionConfigs)}|${serializePerIdNumbering(footnoteOrder, footnoteNumberById, footnoteFormatById)}`;
         if (footnoteSignature !== this.#footnoteNumberSignature) {
           this.#flowBlockCache.clear();
           this.#footnoteNumberSignature = footnoteSignature;
         }
-        // Compute visible endnote numbering (same approach as footnotes).
-        const endnoteNumberById: Record<string, number> = {};
-        const endnoteOrder: string[] = [];
-        try {
-          const seen = new Set<string>();
-          let counter = 1;
-          this.#editor?.state?.doc?.descendants?.((node: any) => {
-            if (node?.type?.name !== 'endnoteReference') return;
-            const rawId = node?.attrs?.id;
-            if (rawId == null) return;
-            const key = String(rawId);
-            if (!key || seen.has(key)) return;
-            seen.add(key);
-            endnoteNumberById[key] = counter;
-            endnoteOrder.push(key);
-            counter += 1;
-          });
-        } catch (e) {
-          if (typeof console !== 'undefined' && console.warn) {
-            console.warn('[PresentationEditor] Failed to compute endnote numbering:', e);
-          }
-        }
-        const endnoteSignature = endnoteOrder.join('|');
+        const endnoteNumbering = computeNoteNumbering(this.#editor?.state, 'endnoteReference', {
+          startCounter: endnoteNumberStart,
+          defaultNumFmt: endnoteNumberFormat,
+          defaultRestart: endnoteNumberRestart,
+          sectionConfigs: endnoteSectionConfigs,
+        });
+        const endnoteNumberById = endnoteNumbering.numberById;
+        const endnoteFormatById = endnoteNumbering.formatById;
+        const endnoteOrder = endnoteNumbering.order;
+        const endnoteSignature = `${endnoteNumberStart}|${endnoteNumberFormat ?? ''}|${endnoteNumberRestart ?? ''}|${serializeSectionConfigs(endnoteSectionConfigs)}|${serializePerIdNumbering(endnoteOrder, endnoteNumberById, endnoteFormatById)}`;
         if (endnoteSignature !== this.#endnoteNumberSignature) {
           this.#flowBlockCache.clear();
           this.#endnoteNumberSignature = endnoteSignature;
@@ -6346,14 +6448,6 @@ export class PresentationEditor extends EventEmitter {
           }
         } catch {}
 
-        let defaultTableStyleId: string | undefined;
-        if (converter) {
-          const settingsRoot = readSettingsRoot(converter);
-          if (settingsRoot) {
-            defaultTableStyleId = readDefaultTableStyle(settingsRoot) ?? undefined;
-          }
-        }
-
         // SD-3240: converter.convertedXml / translatedLinkedStyles /
         // translatedNumbering are typed on the public surface as
         // narrower (unknown-bearing) shapes than ConverterContext
@@ -6364,6 +6458,12 @@ export class PresentationEditor extends EventEmitter {
               docx: converter.convertedXml,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
               ...(Object.keys(endnoteNumberById).length ? { endnoteNumberById } : {}),
+              ...(footnoteNumberFormat ? { footnoteNumberFormat } : {}),
+              ...(endnoteNumberFormat ? { endnoteNumberFormat } : {}),
+              ...(footnoteFormatById && Object.keys(footnoteFormatById).length ? { footnoteFormatById } : {}),
+              ...(endnoteFormatById && Object.keys(endnoteFormatById).length ? { endnoteFormatById } : {}),
+              ...(footnotePosition ? { footnotePosition } : {}),
+              ...(endnotePosition ? { endnotePosition } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
               ...(defaultTableStyleId ? { defaultTableStyleId } : {}),

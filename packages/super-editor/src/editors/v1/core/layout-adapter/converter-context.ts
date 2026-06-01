@@ -41,10 +41,41 @@ export type ConverterContext = {
    */
   footnoteNumberById?: Record<string, number>;
   /**
+   * SD-2986/B1: Document-wide footnote number format from
+   * `w:settings/w:footnotePr/w:numFmt[@val]`. Drives how the cardinal
+   * stored in `footnoteNumberById` is rendered (Roman, letter, decimal, …).
+   * When omitted or unrecognized, defaults to decimal.
+   */
+  footnoteNumberFormat?: string;
+  /**
    * Optional mapping from OOXML endnote id -> display number.
    * Same semantics as footnoteNumberById but for endnotes.
    */
   endnoteNumberById?: Record<string, number>;
+  /**
+   * SD-2986/B1: Document-wide endnote number format. Same semantics as
+   * `footnoteNumberFormat`. Endnote default is `lowerRoman` per OOXML spec
+   * but here we still default to `decimal` if absent — caller is responsible
+   * for providing the OOXML default when known.
+   */
+  endnoteNumberFormat?: string;
+  /**
+   * §17.11.11 — per-ref OOXML numFmt resolved from section-level w:footnotePr
+   * overrides (when set). When present for an id, supersedes the document-wide
+   * `footnoteNumberFormat`. Absent for documents that use only the document
+   * default — consumers fall back to `footnoteNumberFormat`.
+   */
+  footnoteFormatById?: Record<string, string>;
+  /** §17.11.11 — same as `footnoteFormatById` but for endnotes. */
+  endnoteFormatById?: Record<string, string>;
+  /**
+   * §17.11.21 — document-wide footnote placement (`w:pos`). Section-level
+   * is ignored per spec. Default `'pageBottom'`. `'sectEnd'` and `'docEnd'`
+   * currently fall back to `'pageBottom'` rendering (deferred).
+   */
+  footnotePosition?: 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd';
+  /** §17.11.22 — endnote placement counterpart. */
+  endnotePosition?: 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd';
   /**
    * Paragraph properties inherited from the containing table's style.
    * Per OOXML spec, table styles can define pPr that applies to all

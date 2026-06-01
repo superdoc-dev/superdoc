@@ -14,6 +14,8 @@ const handleLowerAlpha: NumberingHandler = (path, lvlText) => {
   return result ? result.toLowerCase() : null;
 };
 const handleOrdinal: NumberingHandler = (path, lvlText) => generateNumbering(path, lvlText, ordinalFormatter);
+const handleOrdinalText: NumberingHandler = (path, lvlText) => generateNumbering(path, lvlText, ordinalTextFormatter);
+const handleCardinalText: NumberingHandler = (path, lvlText) => generateNumbering(path, lvlText, cardinalTextFormatter);
 const handleCustom: NumberingHandler = (path, lvlText, customFormat) =>
   generateFromCustom(path, lvlText, customFormat as string);
 const handleJapaneseCounting: NumberingHandler = (path, lvlText) =>
@@ -28,6 +30,8 @@ const listIndexMap: Record<string, NumberingHandler> = {
   lowerLetter: handleLowerAlpha,
   upperLetter: handleAlpha,
   ordinal: handleOrdinal,
+  ordinalText: handleOrdinalText,
+  cardinalText: handleCardinalText,
   custom: handleCustom,
   japaneseCounting: handleJapaneseCounting,
 };
@@ -69,6 +73,94 @@ const ordinalFormatter: NumberFormatter = (value) => {
   const lastTwo = value % 100;
   const suffix = suffixes[(lastTwo - 20) % 10] || suffixes[lastTwo] || suffixes[0];
   return `${value}${suffix}`;
+};
+
+// OOXML w:numFmt values per ECMA-376 §17.18.59:
+//   ordinalText  -> "First", "Second", "Third", ...
+//   cardinalText -> "One", "Two", "Three", ...
+// Used by legal/contract templates (e.g., FIRST: SECOND: section markers).
+// The <w:caps/> mark on the run elevates these to "FIRST", "SECOND", etc.
+const ONES_ORDINAL = [
+  '',
+  'First',
+  'Second',
+  'Third',
+  'Fourth',
+  'Fifth',
+  'Sixth',
+  'Seventh',
+  'Eighth',
+  'Ninth',
+  'Tenth',
+  'Eleventh',
+  'Twelfth',
+  'Thirteenth',
+  'Fourteenth',
+  'Fifteenth',
+  'Sixteenth',
+  'Seventeenth',
+  'Eighteenth',
+  'Nineteenth',
+];
+const TENS_ORDINAL = [
+  '',
+  '',
+  'Twentieth',
+  'Thirtieth',
+  'Fortieth',
+  'Fiftieth',
+  'Sixtieth',
+  'Seventieth',
+  'Eightieth',
+  'Ninetieth',
+];
+const ONES_CARDINAL = [
+  '',
+  'One',
+  'Two',
+  'Three',
+  'Four',
+  'Five',
+  'Six',
+  'Seven',
+  'Eight',
+  'Nine',
+  'Ten',
+  'Eleven',
+  'Twelve',
+  'Thirteen',
+  'Fourteen',
+  'Fifteen',
+  'Sixteen',
+  'Seventeen',
+  'Eighteen',
+  'Nineteen',
+];
+const TENS_CARDINAL = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+const ordinalTextFormatter: NumberFormatter = (value) => {
+  if (!Number.isFinite(value) || value < 1) return '';
+  if (value < ONES_ORDINAL.length) return ONES_ORDINAL[value];
+  if (value < 100) {
+    const t = Math.floor(value / 10);
+    const o = value % 10;
+    if (o === 0) return TENS_ORDINAL[t];
+    return `${TENS_CARDINAL[t]}-${ONES_ORDINAL[o]}`;
+  }
+  // Fallback for 100+: numeric ordinal (kept simple).
+  return ordinalFormatter(value);
+};
+
+const cardinalTextFormatter: NumberFormatter = (value) => {
+  if (!Number.isFinite(value) || value < 1) return '';
+  if (value < ONES_CARDINAL.length) return ONES_CARDINAL[value];
+  if (value < 100) {
+    const t = Math.floor(value / 10);
+    const o = value % 10;
+    if (o === 0) return TENS_CARDINAL[t];
+    return `${TENS_CARDINAL[t]}-${ONES_CARDINAL[o]}`;
+  }
+  return String(value);
 };
 
 const decimalZeroFormatter: NumberFormatter = (value, idx) => {

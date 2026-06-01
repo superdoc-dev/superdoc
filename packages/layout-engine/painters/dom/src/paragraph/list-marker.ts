@@ -73,6 +73,11 @@ type MarkerRunStyle = {
   color?: string | null;
   letterSpacing?: number | null;
   vanish?: boolean | null;
+  // SD-2656: caps marks from the level rPr. allCaps -> "FIRST" (uppercase);
+  // smallCaps -> small-caps. Without these the legal list markers render as
+  // plain "First" / "Second" / "Third" instead of Word's "FIRST" / "SECOND".
+  allCaps?: boolean | null;
+  smallCaps?: boolean | null;
 };
 
 const isMarkerSuffix = (suffix: unknown): suffix is 'tab' | 'space' | 'nothing' =>
@@ -106,6 +111,14 @@ export const createListMarkerElement = (
   }
   if (run.letterSpacing != null) {
     markerEl.style.letterSpacing = `${run.letterSpacing}px`;
+  }
+  // SD-2656: caps marks on the level rPr — uppercase for w:caps,
+  // small-caps for w:smallCaps. Without these legal/contract markers
+  // ("FIRST:", "SECOND:") would render verbatim as "First", "Second".
+  if (run.allCaps) {
+    markerEl.style.textTransform = 'uppercase';
+  } else if (run.smallCaps) {
+    markerEl.style.fontVariant = 'small-caps';
   }
 
   markerContainer.appendChild(markerEl);
@@ -225,7 +238,13 @@ export const renderLegacyListMarker = (params: {
     }
   }
 
-  prependMarkerSuffix(doc, lineEl, isMarkerSuffix(suffix) ? suffix : undefined, suffixWidthPx, markerLayout?.run?.fontSize);
+  prependMarkerSuffix(
+    doc,
+    lineEl,
+    isMarkerSuffix(suffix) ? suffix : undefined,
+    suffixWidthPx,
+    markerLayout?.run?.fontSize,
+  );
   lineEl.prepend(markerContainer);
 };
 

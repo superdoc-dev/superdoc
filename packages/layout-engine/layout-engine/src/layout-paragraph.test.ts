@@ -61,6 +61,9 @@ const makePageState = (): PageState => ({
   lastParagraphStyleId: undefined,
   lastParagraphContextualSpacing: false,
   maxCursorY: 50,
+  pageFootnoteReserve: 0,
+  footnoteDemandThisPage: 0,
+  footnoteRefsThisPage: 0,
 });
 
 /**
@@ -1442,5 +1445,60 @@ describe('layoutParagraphBlock - keepLines', () => {
     // Paragraph (600px) + collapsed spacing (10px) = 610px fits in 650px remaining
     // So it should NOT advance (it fits on current page)
     expect(advanceColumn).not.toHaveBeenCalled();
+  });
+});
+
+describe('SD-3049: footnote demand survives advanceColumn within one iteration', () => {
+  it('charges the block demand onto the page advanceColumn lands on', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'block-x',
+      runs: [{ text: 'Spilled block.', fontFamily: 'Arial', fontSize: 12 }],
+    };
+    // 3 lines that easily fit on the next page; the block only spills because
+    // the starting cursor is near the page bottom on P.
+    const measure = makeMeasure([
+      { width: 100, lineHeight: 20, maxWidth: 200 },
+      { width: 100, lineHeight: 20, maxWidth: 200 },
+      { width: 100, lineHeight: 20, maxWidth: 200 },
+    ]);
+
+    // P starts near the bottom so the first break decision must advance.
+    const pageP: PageState = {
+      ...makePageState(),
+      page: { number: 1, fragments: [] },
+      cursorY: 600,
+      contentBottom: 620,
+    };
+
+    // Mirror the paginator: a fresh page Q with demand reset to 0 and cursor
+    // back at topMargin. Hold a reference so the test can read final state.
+    const pageQ: PageState = {
+      ...makePageState(),
+      page: { number: 2, fragments: [] },
+      cursorY: 50,
+      contentBottom: 620,
+    };
+
+    const BLOCK_DEMAND = 100;
+
+    layoutParagraphBlock({
+      block,
+      measure,
+      columnWidth: 200,
+      ensurePage: mock(() => pageP),
+      advanceColumn: mock(() => pageQ),
+      columnX: mock(() => 50),
+      floatManager: makeFloatManager(),
+      // Phase 1 (SD-2656): body uses ORDERED minimum from anchors, not the
+      // legacy block-demand getter. Demand transfer on spill must still hold
+      // — express it via anchors whose ordered-minimum equals BLOCK_DEMAND.
+      getFootnoteAnchorsForBlockId: (blockId) =>
+        blockId === 'block-x'
+          ? [{ pmPos: 0, refId: 'r1', fullHeight: BLOCK_DEMAND, firstLineHeight: BLOCK_DEMAND }]
+          : [],
+    });
+
+    expect(pageQ.footnoteDemandThisPage).toBe(BLOCK_DEMAND);
   });
 });

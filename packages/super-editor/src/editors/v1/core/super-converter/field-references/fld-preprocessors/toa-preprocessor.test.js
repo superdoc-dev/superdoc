@@ -16,7 +16,10 @@ describe('preProcessToaInstruction', () => {
   });
 
   it('includes instructionTokens when provided', () => {
-    const tokens = [{ type: 'text', text: 'TOA \\h \\c "' }, { type: 'text', text: '1"' }];
+    const tokens = [
+      { type: 'text', text: 'TOA \\h \\c "' },
+      { type: 'text', text: '1"' },
+    ];
 
     const result = preProcessToaInstruction([], 'TOA \\h \\c "1"', null, tokens);
 

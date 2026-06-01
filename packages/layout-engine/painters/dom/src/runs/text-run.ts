@@ -7,7 +7,10 @@ import type { RunRenderContext, TrackedChangesRenderConfig } from './types.js';
 import { applyRunDataAttributes } from './hash.js';
 import { applyLinkAttributes, applyLinkDataset, buildLinkRenderData, enhanceAccessibility } from './links.js';
 import { setTextContentWithFormattingSpaceMarks } from './formatting-marks.js';
-import { normalizeRtlDateTokenForWordParity, resolveRunDirectionAttribute } from '../features/inline-direction/index.js';
+import {
+  normalizeRtlDateTokenForWordParity,
+  resolveRunDirectionAttribute,
+} from '../features/inline-direction/index.js';
 
 const DEFAULT_SUPERSCRIPT_RAISE_RATIO = 0.33;
 const DEFAULT_SUBSCRIPT_LOWER_RATIO = 0.14;

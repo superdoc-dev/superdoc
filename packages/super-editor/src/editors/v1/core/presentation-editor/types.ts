@@ -413,6 +413,10 @@ export type FootnotesLayoutInput = {
   topPadding?: number;
   dividerHeight?: number;
   separatorSpacingBefore?: number;
+  // SD-2656: per-footnote first valid line/run height. Used by the body
+  // paginator's ordered-cluster demand model: the last anchor on a page only
+  // needs to fit its first line, all earlier anchors must fit fully.
+  firstLineHeightById?: Map<string, number>;
 };
 
 export type LayoutMetrics = {

@@ -94,4 +94,62 @@ describe('endnoteReferenceToBlock', () => {
 
     expect(run.fontSize).toBe(16 * SUBSCRIPT_SUPERSCRIPT_SCALE);
   });
+
+  // SD-2986/B1: numFmt support — mirror footnoteReferenceToBlock.
+  describe('numFmt formatting', () => {
+    it('formats with upperRoman when context specifies it', () => {
+      const node: PMNode = { type: 'endnoteReference', attrs: { id: '5' } };
+      const run = endnoteReferenceToBlock(
+        makeParams({
+          node,
+          converterContext: {
+            endnoteNumberById: { '5': 4 },
+            endnoteNumberFormat: 'upperRoman',
+          } as unknown as InlineConverterParams['converterContext'],
+        }),
+      );
+      expect(run.text).toBe('IV');
+    });
+
+    it('formats with lowerRoman when context specifies it (OOXML endnote default family)', () => {
+      const node: PMNode = { type: 'endnoteReference', attrs: { id: '3' } };
+      const run = endnoteReferenceToBlock(
+        makeParams({
+          node,
+          converterContext: {
+            endnoteNumberById: { '3': 3 },
+            endnoteNumberFormat: 'lowerRoman',
+          } as unknown as InlineConverterParams['converterContext'],
+        }),
+      );
+      expect(run.text).toBe('iii');
+    });
+
+    it('falls back to decimal when format is omitted', () => {
+      const node: PMNode = { type: 'endnoteReference', attrs: { id: '2' } };
+      const run = endnoteReferenceToBlock(
+        makeParams({
+          node,
+          converterContext: {
+            endnoteNumberById: { '2': 2 },
+          } as unknown as InlineConverterParams['converterContext'],
+        }),
+      );
+      expect(run.text).toBe('2');
+    });
+
+    it('falls back to decimal when format is unrecognized', () => {
+      const node: PMNode = { type: 'endnoteReference', attrs: { id: '2' } };
+      const run = endnoteReferenceToBlock(
+        makeParams({
+          node,
+          converterContext: {
+            endnoteNumberById: { '2': 2 },
+            endnoteNumberFormat: 'chickenLetters',
+          } as unknown as InlineConverterParams['converterContext'],
+        }),
+      );
+      expect(run.text).toBe('2');
+    });
+  });
 });

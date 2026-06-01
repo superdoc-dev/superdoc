@@ -1452,10 +1452,14 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         return {
           sectionIndex,
           titlePg: metadata?.titlePg === true,
-          headerRefs: metadata?.headerRefs ?? runtimeRefs?.headerRefs,
-          footerRefs: metadata?.footerRefs ?? runtimeRefs?.footerRefs,
+          headerRefs: runtimeRefs?.headerRefs ?? metadata?.headerRefs,
+          footerRefs: runtimeRefs?.footerRefs ?? metadata?.footerRefs,
         };
       });
+  };
+  const hasAnyHeaderFooterRefs = (sections: HeaderFooterResolutionSection[], kind: 'header' | 'footer'): boolean => {
+    const refKey = kind === 'header' ? 'headerRefs' : 'footerRefs';
+    return sections.some((section) => Object.values(section[refKey] ?? {}).some(Boolean));
   };
   const initialSectionMetadata = sectionMetadataList[0];
   if (initialSectionMetadata?.numbering?.format) {
@@ -1663,14 +1667,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             variant: variantType,
           });
 
+        const hasHeaderRefs = hasAnyHeaderFooterRefs(resolutionSections, 'header');
+        const hasFooterRefs = hasAnyHeaderFooterRefs(resolutionSections, 'footer');
         const headerHeight = headerResolved
           ? getHeaderHeightForPage(headerResolved.matchedVariant, headerResolved.refId, activeSectionIndex)
-          : variantType
+          : variantType && !hasHeaderRefs
             ? getHeaderHeightForPage(variantType, undefined, activeSectionIndex)
             : 0;
         const footerHeight = footerResolved
           ? getFooterHeightForPage(footerResolved.matchedVariant, footerResolved.refId, activeSectionIndex)
-          : variantType
+          : variantType && !hasFooterRefs
             ? getFooterHeightForPage(variantType, undefined, activeSectionIndex)
             : 0;
 

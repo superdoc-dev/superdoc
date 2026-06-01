@@ -6486,6 +6486,45 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(layout.pages[0].fragments.find((f) => f.blockId === 'p1')?.y).toBeCloseTo(90, 0);
   });
 
+  it('uses variant header heights when no section refs are available', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      headerContentHeights: {
+        default: 100,
+      },
+    };
+
+    const layout = layoutDocument([tallBlock('p1')], [tallMeasure], options);
+
+    expect(layout.pages[0].fragments.find((f) => f.blockId === 'p1')?.y).toBeCloseTo(130, 0);
+    expect(layout.pages[0].margins?.top).toBeCloseTo(130, 0);
+  });
+
+  it('prefers runtime section refs over stale metadata for margin heights', () => {
+    const sb0: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb0-runtime-refs',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      headerRefs: { default: 'h-runtime' },
+      margins: {},
+    };
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'h-metadata' } }],
+      headerContentHeightsByRId: new Map([
+        ['h-metadata', 20],
+        ['h-runtime', 100],
+      ]),
+    };
+
+    const layout = layoutDocument([sb0, tallBlock('p1')], [{ kind: 'sectionBreak' }, tallMeasure], options);
+
+    expect(layout.pages[0].fragments.find((f) => f.blockId === 'p1')?.y).toBeCloseTo(130, 0);
+    expect(layout.pages[0].margins?.top).toBeCloseTo(130, 0);
+  });
+
   it('prefers section-aware header heights over the plain rId fallback', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },

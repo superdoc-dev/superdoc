@@ -54,6 +54,10 @@ export const DocumentIndex = Node.create({
           return attrs.sdBlockId ? { 'data-sd-block-id': attrs.sdBlockId } : {};
         },
       },
+      wrapperParagraphProperties: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 });

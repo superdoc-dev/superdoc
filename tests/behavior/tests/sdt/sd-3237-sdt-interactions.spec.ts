@@ -515,10 +515,10 @@ test.describe('SD-3237 structured content interactions', () => {
     });
   });
 
-  test('Backspace at paragraph after block SDT table moves into SDT without deleting following text', async ({
+  test('Backspace at paragraph after block SDT table selects SDT content without deleting following text', async ({
     superdoc,
   }) => {
-    const { afterStart, b2End } = await loadBlockSdtTableBackspaceFixture(superdoc.page);
+    const { afterStart, a1Start, b2End } = await loadBlockSdtTableBackspaceFixture(superdoc.page);
     await superdoc.waitForStable();
 
     await superdoc.setTextSelection(afterStart);
@@ -544,17 +544,17 @@ test.describe('SD-3237 structured content interactions', () => {
 
     expect(result).toMatchObject({
       text: 'BeforeA1B1A2B2After',
-      from: b2End,
+      from: a1Start,
       to: b2End,
-      empty: true,
+      empty: false,
     });
     expect(result.parentTypes).toContain('structuredContentBlock');
   });
 
-  test('Delete at paragraph before block SDT table moves into SDT without deleting preceding text', async ({
+  test('Delete at paragraph before block SDT table selects SDT content without deleting preceding text', async ({
     superdoc,
   }) => {
-    const { beforeEnd, a1Start } = await loadBlockSdtTableBackspaceFixture(superdoc.page);
+    const { beforeEnd, a1Start, b2End } = await loadBlockSdtTableBackspaceFixture(superdoc.page);
     await superdoc.waitForStable();
 
     await superdoc.setTextSelection(beforeEnd);
@@ -581,8 +581,8 @@ test.describe('SD-3237 structured content interactions', () => {
     expect(result).toMatchObject({
       text: 'BeforeA1B1A2B2After',
       from: a1Start,
-      to: a1Start,
-      empty: true,
+      to: b2End,
+      empty: false,
     });
     expect(result.parentTypes).toContain('structuredContentBlock');
   });

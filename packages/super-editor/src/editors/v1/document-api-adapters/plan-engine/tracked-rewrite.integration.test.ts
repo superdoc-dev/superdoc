@@ -48,6 +48,41 @@ function paragraphTexts(editor: any): string[] {
   return paragraphs;
 }
 
+function findTextRange(editor: any, text: string): { from: number; to: number } {
+  let range: { from: number; to: number } | null = null;
+  editor.state.doc.descendants((node: any, pos: number) => {
+    if (!node.isText || !node.text) return true;
+    const index = node.text.indexOf(text);
+    if (index === -1) return true;
+    range = { from: pos + index, to: pos + index + text.length };
+    return false;
+  });
+  if (!range) throw new Error(`Could not find text "${text}"`);
+  return range;
+}
+
+function markTextAsOtherUserDeletion(editor: any, text: string): void {
+  const range = findTextRange(editor, text);
+  const mark = editor.schema.marks[TrackDeleteMarkName].create({
+    id: 'alice-delete',
+    author: 'Alice Reviewer',
+    authorEmail: 'alice@example.com',
+    date: '2024-01-01T00:00:00.000Z',
+  });
+  editor.dispatch(editor.state.tr.addMark(range.from, range.to, mark));
+}
+
+function markedTextByAuthor(editor: any, markName: string, authorEmail: string): string {
+  const parts: string[] = [];
+  editor.state.doc.descendants((node: any) => {
+    if (!node.isText || !node.text) return;
+    if (node.marks.some((mark: any) => mark.type.name === markName && mark.attrs.authorEmail === authorEmail)) {
+      parts.push(node.text);
+    }
+  });
+  return parts.join('');
+}
+
 function compileSingleRewrite(editor: any, pattern: string, text: string) {
   const step = {
     id: 'rewrite-step',
@@ -219,6 +254,62 @@ describe('doc.replace multi-paragraph integration', () => {
     });
 
     expect(insertedTexts).toEqual(expect.arrayContaining(['Alpha', 'Beta']));
+  });
+
+  it('resolves tracked rewrite selectors against unresolved deletion text without changing public query refs', () => {
+    editor = makeEditor(['The quick brown fox jumps over the lazy dog.']);
+    markTextAsOtherUserDeletion(editor, 'lazy ');
+
+    const receipt = editor.doc.mutations.apply({
+      atomic: true,
+      changeMode: 'tracked',
+      steps: [
+        {
+          id: 'replace-inside-delete',
+          op: 'text.rewrite',
+          where: {
+            by: 'select',
+            select: { type: 'text', pattern: 'lazy' },
+            require: 'first',
+          },
+          args: {
+            replacement: { text: 'OO' },
+            style: { inline: { mode: 'preserve' } },
+          },
+        },
+      ],
+    });
+
+    expect(receipt.success).toBe(true);
+    expect(markedTextByAuthor(editor, TrackInsertMarkName, 'integration@example.com')).toContain('OO');
+    expect(markedTextByAuthor(editor, TrackDeleteMarkName, 'integration@example.com')).toContain('lazy');
+    expect(markedTextByAuthor(editor, TrackDeleteMarkName, 'alice@example.com')).toBe(' ');
+  });
+
+  it('resolves tracked delete selectors against unresolved deletion text as a child deletion', () => {
+    editor = makeEditor(['The quick brown fox jumps over the lazy dog.']);
+    markTextAsOtherUserDeletion(editor, 'lazy ');
+
+    const receipt = editor.doc.mutations.apply({
+      atomic: true,
+      changeMode: 'tracked',
+      steps: [
+        {
+          id: 'delete-inside-delete',
+          op: 'text.delete',
+          where: {
+            by: 'select',
+            select: { type: 'text', pattern: 'lazy' },
+            require: 'first',
+          },
+          args: { behavior: 'exact' },
+        },
+      ],
+    });
+
+    expect(receipt.success).toBe(true);
+    expect(markedTextByAuthor(editor, TrackDeleteMarkName, 'integration@example.com')).toContain('lazy');
+    expect(markedTextByAuthor(editor, TrackDeleteMarkName, 'alice@example.com')).toBe(' ');
   });
 
   it('creates an empty paragraph before the replacement when text has a leading newline (direct)', () => {

@@ -19,6 +19,8 @@ import type {
   TextTarget,
   TrackChangesListResult,
 } from '@superdoc/document-api';
+import { composeAuthorColorResolver } from '@superdoc/contracts';
+import type { TrackChangeAuthorColorResolver } from '@superdoc/contracts';
 import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
 import { resolvePositionAt } from './position-at.js';
@@ -66,6 +68,8 @@ import type {
   ViewportPositionAtInput,
   ViewportPositionHit,
   ViewportHandle,
+  ViewportGeometryEvent,
+  ContentControlFocusResult,
   ViewportRect,
   ViewportRectResult,
 } from './types.js';
@@ -525,6 +529,15 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
   refreshTrackChangesListCache();
 
+  // Per-author tracked-change color resolver. Built once from the host
+  // `modules.trackChanges.authorColors` config so the snapshot colors match
+  // exactly what the layout engine paints (both go through
+  // `composeAuthorColorResolver`). `undefined` when colors are disabled /
+  // unconfigured, in which case items carry no `authorColor`.
+  const authorColorResolver: TrackChangeAuthorColorResolver | undefined = composeAuthorColorResolver(
+    superdoc.config?.modules?.trackChanges?.authorColors,
+  );
+
   // Content-controls slice cache (SD-3157). Same posture as comments
   // and tracked changes: list reads are O(N), so cache the list and
   // refresh on document-changing events. `activeIds` derives from the
@@ -794,17 +807,40 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     ) {
       trackChangesSlice = trackChangesMemo.slice;
     } else {
-      const items: TrackChangesItem[] = trackChangesListCache.items.map((change) => ({
-        id: change.id,
-        change,
-      }));
+      // Resolve per-author colors (when configured) for each change, plus the
+      // ordered unique author list. Resolution mirrors the layout-engine paint
+      // path so snapshot colors match what is rendered.
+      const authors: TrackChangesSlice['authors'] = [];
+      const seenAuthorKeys = new Set<string>();
+      const items: TrackChangesItem[] = trackChangesListCache.items.map((change) => {
+        if (!authorColorResolver) {
+          return { id: change.id, change };
+        }
+        const author = {
+          name: typeof change.author === 'string' ? change.author : undefined,
+          email: typeof change.authorEmail === 'string' ? change.authorEmail : undefined,
+          image: typeof change.authorImage === 'string' ? change.authorImage : undefined,
+        };
+        const authorColor = authorColorResolver(author);
+        if (authorColor && (author.name || author.email)) {
+          const key = JSON.stringify([author.name ?? '', author.email ?? '']);
+          if (!seenAuthorKeys.has(key)) {
+            seenAuthorKeys.add(key);
+            authors.push({ ...author, color: authorColor });
+          }
+        }
+        if (!authorColor) {
+          return { id: change.id, change };
+        }
+        return { id: change.id, change: { ...change, authorColor }, authorColor };
+      });
       // If the previously active id dropped out of the feed (e.g. an
       // accept/reject), reset to null. Compute *after* items is built
       // so the final slice matches the eventual activeTrackChangeId.
       if (activeTrackChangeId && !items.some((item) => item.id === activeTrackChangeId)) {
         activeTrackChangeId = null;
       }
-      trackChangesSlice = { items, total: items.length, activeId: activeTrackChangeId };
+      trackChangesSlice = { items, total: items.length, activeId: activeTrackChangeId, authors };
       trackChangesMemo = {
         changesRef: trackChangesListCache.items,
         activeId: activeTrackChangeId,
@@ -958,6 +994,81 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     };
   };
 
+  // --- Viewport geometry-invalidation signal (ui.viewport.observe) ---------
+  // One "your cached getRect() coords may be stale, re-query" notification.
+  // Sources: layout/pagination repaints (post-paint), zoom, and DOM scroll /
+  // resize. rAF-coalesced, so a burst collapses to one notification per frame.
+  const geometryListeners = new Set<(event: ViewportGeometryEvent) => void>();
+  const pendingGeometryReasons = new Set<Exclude<ViewportGeometryEvent['reason'], 'mixed'>>();
+  let geometryRaf: number | null = null;
+  let zoomPending = false;
+
+  const cancelGeometryFrame = () => {
+    if (geometryRaf == null) return;
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(geometryRaf);
+    else clearTimeout(geometryRaf as unknown as ReturnType<typeof setTimeout>);
+    geometryRaf = null;
+  };
+  const flushGeometry = () => {
+    geometryRaf = null;
+    const reasons = [...pendingGeometryReasons];
+    pendingGeometryReasons.clear();
+    if (geometryListeners.size === 0 || reasons.length === 0) return;
+    const reason: ViewportGeometryEvent['reason'] = reasons.length === 1 ? reasons[0] : 'mixed';
+    [...geometryListeners].forEach((listener) => {
+      try {
+        listener({ reason });
+      } catch {
+        // Isolate a faulty consumer; the others still get notified.
+      }
+    });
+  };
+  const scheduleGeometry = (reason: Exclude<ViewportGeometryEvent['reason'], 'mixed'>) => {
+    if (geometryListeners.size === 0) return;
+    pendingGeometryReasons.add(reason);
+    if (geometryRaf != null) return;
+    geometryRaf =
+      typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame(flushGeometry)
+        : (setTimeout(flushGeometry, 0) as unknown as number);
+  };
+  // zoomChange fires *before* the re-render, so notifying then would hand
+  // consumers stale rects. Tag the next post-paint layout flush as 'zoom'.
+  const onGeometryZoom = () => {
+    zoomPending = true;
+  };
+  const onGeometryLayout = () => {
+    if (zoomPending) {
+      zoomPending = false;
+      scheduleGeometry('zoom');
+    } else {
+      scheduleGeometry('layout');
+    }
+  };
+  const onWindowScrollGeometry = () => scheduleGeometry('scroll');
+  const onWindowResizeGeometry = () => scheduleGeometry('resize');
+  let domGeometryAttached = false;
+  const attachDomGeometryListeners = () => {
+    if (domGeometryAttached || typeof window === 'undefined') return;
+    domGeometryAttached = true;
+    // Capture phase so scrolls inside the editor's own scroll container
+    // (scroll events don't bubble) are still observed.
+    window.addEventListener('scroll', onWindowScrollGeometry, true);
+    window.addEventListener('resize', onWindowResizeGeometry);
+  };
+  const detachDomGeometryListeners = () => {
+    if (!domGeometryAttached || typeof window === 'undefined') return;
+    domGeometryAttached = false;
+    window.removeEventListener('scroll', onWindowScrollGeometry, true);
+    window.removeEventListener('resize', onWindowResizeGeometry);
+  };
+  teardown.push(() => {
+    detachDomGeometryListeners();
+    cancelGeometryFrame();
+    geometryListeners.clear();
+    pendingGeometryReasons.clear();
+  });
+
   // Wire SuperDoc-instance events. The wrapper-side bus (editorCreate /
   // document-mode-change / zoomChange) is the only path for some of
   // these signals today; if the wrapper migrates them to the editor
@@ -966,8 +1077,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     SUPERDOC_EVENTS.forEach((name) => {
       superdoc.on?.(name, scheduleNotify);
     });
+    // zoom drives geometry (post-paint, tagged via onGeometryLayout) — separate
+    // from the slice recompute that SUPERDOC_EVENTS triggers.
+    superdoc.on?.('zoomChange', onGeometryZoom);
     teardown.push(() => {
       SUPERDOC_EVENTS.forEach((name) => superdoc.off?.(name, scheduleNotify));
+      superdoc.off?.('zoomChange', onGeometryZoom);
     });
   }
 
@@ -1089,8 +1204,18 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     PRESENTATION_EVENTS.forEach((name) => {
       next.on?.(name, onPresentationChange);
     });
+    // Geometry-only: layout repaints move painted rects without a body
+    // `transaction`. Drive the viewport geometry signal, NOT the slice
+    // recompute (which would re-attach editor listeners on every repaint).
+    // Listen to `layoutUpdated` only: `paginationUpdate` is emitted
+    // back-to-back with the same payload for the same paint
+    // (PresentationEditor.ts:6491-6492), so subscribing to both would
+    // double-count one repaint — a zoom would coalesce to 'mixed' instead of
+    // 'zoom'. `layoutUpdated` alone covers every repaint.
+    next.on?.('layoutUpdated', onGeometryLayout);
     currentPresentationTeardown = () => {
       PRESENTATION_EVENTS.forEach((name) => next.off?.(name, onPresentationChange));
+      next.off?.('layoutUpdated', onGeometryLayout);
     };
   };
 
@@ -1927,6 +2052,21 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       };
     },
 
+    observe(listener: (event: ViewportGeometryEvent) => void): () => void {
+      geometryListeners.add(listener);
+      // Attach the DOM scroll/resize listeners only while someone is observing.
+      if (geometryListeners.size === 1) attachDomGeometryListeners();
+      return () => {
+        if (!geometryListeners.delete(listener)) return;
+        if (geometryListeners.size === 0) {
+          detachDomGeometryListeners();
+          cancelGeometryFrame();
+          pendingGeometryReasons.clear();
+          zoomPending = false;
+        }
+      };
+    },
+
     async scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> {
       return runScrollIntoView(input);
     },
@@ -2249,6 +2389,70 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       return viewport.getRect({
         target: { kind: 'entity', entityType: 'contentControl', entityId: id },
       });
+    },
+    async scrollIntoView({
+      id,
+      block,
+      behavior,
+    }: {
+      id: string;
+      block?: 'start' | 'center' | 'end' | 'nearest';
+      behavior?: 'auto' | 'smooth';
+    }): Promise<ScrollIntoViewOutput> {
+      if (typeof id !== 'string' || id.length === 0) return { success: false };
+      // Resolve through the host editor — `presentationEditor` lives on the
+      // body/host, not a routed child story editor. Same posture as
+      // `viewport.getRect` / `runScrollIntoView`. The model-aware scroll is
+      // body-only, so a control in a header/footer/note resolves to a no-op
+      // `{ success: false }`. We call the presentation method directly rather
+      // than routing a content-control target through `viewport.scrollIntoView`
+      // — content controls are UI-local and deliberately absent from the
+      // Document API `ScrollIntoViewInput` address union (mirrors `getRect`).
+      const editor = resolveHostEditor(superdoc);
+      const presentation = editor?.presentationEditor as
+        | {
+            scrollContentControlIntoView?: (
+              id: string,
+              opts: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: 'auto' | 'smooth' },
+            ) => Promise<boolean>;
+          }
+        | null
+        | undefined;
+      if (!presentation || typeof presentation.scrollContentControlIntoView !== 'function') {
+        return { success: false };
+      }
+      const ok = await presentation.scrollContentControlIntoView(id, {
+        block: block ?? 'center',
+        behavior: behavior ?? 'smooth',
+      });
+      return { success: Boolean(ok) };
+    },
+    async focus({
+      id,
+      block,
+      behavior,
+    }: {
+      id: string;
+      block?: 'start' | 'center' | 'end' | 'nearest';
+      behavior?: 'auto' | 'smooth';
+    }): Promise<ContentControlFocusResult> {
+      if (typeof id !== 'string' || id.length === 0) return { success: false, reason: 'invalid-id' };
+      // Same host-editor resolution as scrollIntoView. focus places the caret
+      // (selection) and scrolls; locks / viewing mode don't block it.
+      const editor = resolveHostEditor(superdoc);
+      const presentation = editor?.presentationEditor as
+        | {
+            focusContentControl?: (
+              id: string,
+              opts: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: 'auto' | 'smooth' },
+            ) => Promise<ContentControlFocusResult>;
+          }
+        | null
+        | undefined;
+      if (!presentation || typeof presentation.focusContentControl !== 'function') {
+        return { success: false, reason: 'not-ready' };
+      }
+      return presentation.focusContentControl(id, { block: block ?? 'center', behavior: behavior ?? 'smooth' });
     },
   };
 

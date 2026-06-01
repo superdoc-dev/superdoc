@@ -222,6 +222,8 @@ describe('DomPainter virtualization (vertical)', () => {
 
     mount.scrollTop = 3 * (500 + 72);
     mount.dispatchEvent(new Event('scroll'));
+    // Page 0 must actually evict before we can prove it remounts; without this
+    // the test would pass even if virtualization silently stopped evicting.
     expect(mount.querySelector('.superdoc-page[data-page-index="0"]')).toBeNull();
 
     mount.scrollTop = 0;
@@ -231,6 +233,67 @@ describe('DomPainter virtualization (vertical)', () => {
       '.superdoc-page[data-page-index="0"] .superdoc-structured-content__label',
     ) as HTMLElement | null;
     expect(remountedLabel).toBeTruthy();
+  });
+
+  it('keeps content-control labels suppressed after remount when chrome is none', () => {
+    const sdtBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'virtual-sdt-block-none',
+      runs: [{ text: 'SDT content', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 11 }],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'scb-virtual-none',
+          alias: 'Virtual Label',
+          tag: 'virtual',
+        },
+      },
+    };
+
+    const sdtMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 90, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const sdtLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: Array.from({ length: 6 }, (_, i) => ({
+        number: i + 1,
+        fragments: [
+          {
+            kind: 'para',
+            blockId: 'virtual-sdt-block-none',
+            fromLine: 0,
+            toLine: 1,
+            x: 24,
+            y: 24,
+            width: 220,
+            pmStart: 0,
+            pmEnd: 11,
+          },
+        ],
+      })),
+    };
+
+    const painter = createTestPainter({
+      blocks: [sdtBlock],
+      measures: [sdtMeasure],
+      contentControlsChrome: 'none',
+      virtualization: { enabled: true, window: 1, overscan: 0, gap: 72, paddingTop: 0 },
+    });
+
+    painter.paint(sdtLayout, mount);
+    expect(mount.classList.contains('superdoc-cc-chrome-none')).toBe(true);
+    expect(mount.querySelector('.superdoc-page[data-page-index="0"] .superdoc-structured-content__label')).toBeNull();
+
+    mount.scrollTop = 3 * (500 + 72);
+    mount.dispatchEvent(new Event('scroll'));
+
+    mount.scrollTop = 0;
+    mount.dispatchEvent(new Event('scroll'));
+    expect(mount.querySelector('.superdoc-page[data-page-index="0"] .superdoc-structured-content__label')).toBeNull();
   });
 
   it('handles window size larger than total pages', () => {

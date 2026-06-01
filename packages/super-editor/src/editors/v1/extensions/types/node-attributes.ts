@@ -1084,6 +1084,8 @@ export interface DocumentIndexAttrs extends BlockNodeAttributes {
   instructionTokens?: unknown;
   /** SuperDoc block tracking ID */
   sdBlockId?: string | null;
+  /** @internal Original generated-reference wrapper paragraph properties for export preservation */
+  wrapperParagraphProperties?: unknown;
 }
 
 /** Index entry node attributes */

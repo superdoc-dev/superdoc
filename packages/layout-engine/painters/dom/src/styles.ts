@@ -784,6 +784,61 @@ const SDT_CONTAINER_STYLES = `
   background-color: transparent;
 }
 
+/* Global content-control chrome opt-out: preserve SDT wrappers/datasets while
+ * suppressing built-in visual chrome on structured-content controls. Their
+ * label elements are not emitted by renderer/helpers when this class is
+ * present (DOM non-emission). documentSection chrome (e.g. the locked-section
+ * tooltip) is intentionally preserved and not in scope.
+ *
+ * Custom styling surface (SD-3322): instead of fully erasing the look, these
+ * rules read --sd-content-controls-custom-* variables whose defaults reproduce
+ * the empty look (0-width transparent border, no background, no radius/padding).
+ * So chrome:'none' stays visually empty by default, but a consumer can paint
+ * their own field/clause look by setting those variables on the painted wrapper
+ * (target it via data-sdt-* attributes) - no !important, and no need to fight
+ * the .ProseMirror-selectednode / .sdt-group-hover state classes, because the
+ * painter reads the variables across rest, hover, and selected. The border is a
+ * full shorthand (e.g. "1px solid #1355ff"); its default "0 solid transparent"
+ * is identical in layout to no border. It's re-asserted in every state so the
+ * box never shifts (no jitter); only the background changes on hover/selected.
+ * Block controls add a -border-left override for an accent rail. */
+.superdoc-cc-chrome-none .superdoc-structured-content-inline {
+  padding: var(--sd-content-controls-custom-inline-padding, 0);
+  border: var(--sd-content-controls-custom-inline-border, 0 solid transparent);
+  border-radius: var(--sd-content-controls-custom-inline-radius, 0);
+  background: var(--sd-content-controls-custom-inline-bg, none);
+}
+.superdoc-cc-chrome-none .superdoc-structured-content-block {
+  padding: var(--sd-content-controls-custom-block-padding, 0);
+  border: var(--sd-content-controls-custom-block-border, 0 solid transparent);
+  border-left: var(--sd-content-controls-custom-block-border-left, var(--sd-content-controls-custom-block-border, 0 solid transparent));
+  border-radius: var(--sd-content-controls-custom-block-radius, 0);
+  background: var(--sd-content-controls-custom-block-bg, none);
+}
+
+.superdoc-cc-chrome-none .superdoc-structured-content-inline:hover,
+.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-lock-mode]:hover {
+  border: var(--sd-content-controls-custom-inline-border, 0 solid transparent);
+  background: var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none));
+}
+.superdoc-cc-chrome-none .superdoc-structured-content-block:hover,
+.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover,
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover {
+  border: var(--sd-content-controls-custom-block-border, 0 solid transparent);
+  border-left: var(--sd-content-controls-custom-block-border-left, var(--sd-content-controls-custom-block-border, 0 solid transparent));
+  background: var(--sd-content-controls-custom-block-hover-bg, var(--sd-content-controls-custom-block-bg, none));
+}
+
+.superdoc-cc-chrome-none .superdoc-structured-content-inline.ProseMirror-selectednode {
+  border: var(--sd-content-controls-custom-inline-border, 0 solid transparent);
+  background: var(--sd-content-controls-custom-inline-selected-bg, var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none)));
+}
+.superdoc-cc-chrome-none .superdoc-structured-content-block.ProseMirror-selectednode {
+  border: var(--sd-content-controls-custom-block-border, 0 solid transparent);
+  border-left: var(--sd-content-controls-custom-block-border-left, var(--sd-content-controls-custom-block-border, 0 solid transparent));
+  background: var(--sd-content-controls-custom-block-selected-bg, var(--sd-content-controls-custom-block-hover-bg, var(--sd-content-controls-custom-block-bg, none)));
+}
+
 /* Hover highlight for SDT containers.
  * Hover adds background highlight and z-index boost.
  * Block SDTs use .sdt-group-hover class (event delegation for multi-fragment coordination).
@@ -807,6 +862,44 @@ const SDT_CONTAINER_STYLES = `
 
 .superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode)::before {
   background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
+}
+
+/* Chrome opt-out for block SDTs. Main paints block chrome through ::before
+ * (background) and ::after (border) pseudo-elements, which the element-level
+ * .superdoc-cc-chrome-none rules above cannot reach. Suppress the pseudo
+ * chrome directly, including the selected-node border and the lock-hover
+ * ::before background. Declared after every chrome-showing pseudo rule so
+ * source order resolves equal-specificity ties, the same way the
+ * viewing-mode rules below do. */
+.superdoc-cc-chrome-none .superdoc-structured-content-block::before,
+.superdoc-cc-chrome-none .superdoc-structured-content-block:hover::before,
+.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover::before,
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover::before {
+  background: none;
+}
+
+.superdoc-cc-chrome-none .superdoc-structured-content-block::after,
+.superdoc-cc-chrome-none .superdoc-structured-content-block:hover::after,
+.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover::after,
+.superdoc-cc-chrome-none .superdoc-structured-content-block.ProseMirror-selectednode::after {
+  border: none;
+}
+
+/* Chrome opt-out for the lock-hover affordance. The base lock-hover rules above
+ * paint a built-in tint and boost z-index on hovered locked controls; under
+ * chrome:'none' that would override the custom hover background and stack above
+ * host-attached UI. Re-assert the custom hover background (so a locked control
+ * follows --sd-content-controls-custom-*-hover-bg, defaulting to empty - no tint
+ * leaks) and reset the z-index. Mirrors the base lock-hover selectors with the
+ * chrome-none prefix, so the extra class wins over the base rules. Split inline
+ * vs block because each reads its own hover variable. */
+.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode, [data-appearance='hidden']) {
+  background: var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none));
+  z-index: auto;
+}
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode) {
+  background: var(--sd-content-controls-custom-block-hover-bg, var(--sd-content-controls-custom-block-bg, none));
+  z-index: auto;
 }
 
 /* Viewing mode: remove structured content affordances */

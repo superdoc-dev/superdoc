@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { toFlowBlocks } from '@core/layout-adapter';
 import { createDomPainter } from '@superdoc/painter-dom';
 import { resolveLayout } from '@superdoc/layout-resolved';
 import { Editor } from '@core/Editor.js';

@@ -22,7 +22,15 @@ export const Bibliography = Node.create({
         default: '',
         rendered: false,
       },
+      instructionTokens: {
+        default: null,
+        rendered: false,
+      },
       sdBlockId: {
+        default: null,
+        rendered: false,
+      },
+      wrapperParagraphProperties: {
         default: null,
         rendered: false,
       },

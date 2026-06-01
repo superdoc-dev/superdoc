@@ -4178,6 +4178,103 @@ describe('renderTableCell', () => {
       expect(tableChrome?.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Nested Table');
     });
 
+    it('omits the nested table SDT label but keeps the wrapper when chrome is none', () => {
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-sdt-para-none',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-sdt-table-none',
+        attrs: {
+          sdt: {
+            type: 'structuredContent',
+            scope: 'block',
+            id: 'nested-table-sdt-none',
+            alias: 'Nested Table',
+          },
+        },
+        rows: [
+          {
+            id: 'nested-row-none',
+            cells: [
+              {
+                id: 'nested-cell-none',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+      const cellMeasure: TableCellMeasure = {
+        blocks: [nestedMeasure],
+        width: 120,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+      const cell: TableCell = {
+        id: 'cell-nested-table-sdt-none',
+        blocks: [nestedTable],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+        chrome: 'none',
+      });
+
+      const tableChrome = cellElement.querySelector('[data-block-id="nested-sdt-table-none"]') as HTMLElement;
+      // Wrapper survives so host/custom UI and the geometry APIs still resolve it...
+      expect(tableChrome?.classList.contains('superdoc-structured-content-block')).toBe(true);
+      // ...but the built-in label is not emitted under chrome: 'none'.
+      expect(tableChrome?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
     it('should set overflow:visible when only rendered nested descendants have SDT chrome', () => {
       const descendantSdt: SdtMetadata = {
         type: 'structuredContent',

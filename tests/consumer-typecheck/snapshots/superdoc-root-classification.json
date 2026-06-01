@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-05-19T11:33:50.546Z",
   "summary": {
-    "total": 214,
+    "total": 216,
     "byBucket": {
       "legacy-root": 60,
       "internal-candidate": 8,
-      "supported-root": 146
+      "supported-root": 148
     },
     "byConfidence": {
-      "high": 111,
+      "high": 113,
       "medium": 101,
       "low": 2
     }
@@ -2004,6 +2004,28 @@
       "inDcts": true,
       "inEsm": true,
       "inCjs": true
+    },
+    {
+      "name": "TrackChangeAuthor",
+      "bucket": "supported-root",
+      "rationale": "Structured author identity passed to modules.trackChanges.authorColors.resolve.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "TrackChangesAuthorColorsConfig",
+      "bucket": "supported-root",
+      "rationale": "Module config for per-author tracked-change colors (modules.trackChanges.authorColors). Documented at the module-config layer.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
     },
     {
       "name": "TrackChangesBasePluginKey",

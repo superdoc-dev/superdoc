@@ -102,6 +102,14 @@ import type { LayoutSourceIdentity } from './layout-identity.js';
 export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
 export type { NormalizedColumnLayout } from './column-layout.js';
 export {
+  composeAuthorColorResolver,
+  fallbackAuthorColor,
+  authorIdentityKey,
+  authorFromTrackedChangeMeta,
+  stampTrackedChangeColors,
+} from './author-colors.js';
+export type { AuthorColorsConfig, TrackChangeAuthorColorResolver } from './author-colors.js';
+export {
   getSdtContainerKey,
   getSdtContainerKeyForBlock,
   getSdtContainerMetadata,
@@ -255,6 +263,20 @@ export type TrackedChangeKind = 'insert' | 'delete' | 'format';
 
 export type TrackedChangesMode = 'review' | 'original' | 'final' | 'off';
 
+/**
+ * Identity of a tracked-change author, used to resolve a per-author color.
+ *
+ * Mirrors the author metadata carried on {@link TrackedChangeMeta}
+ * (`author` → `name`, `authorEmail` → `email`, `authorImage` → `image`).
+ * Hosts configure per-author colors through this shape (see the
+ * `modules.trackChanges.authorColors` config on the `superdoc` package).
+ */
+export type TrackChangeAuthor = {
+  name?: string;
+  email?: string;
+  image?: string;
+};
+
 /** Formatting mark for track-format metadata. */
 export type RunMark = {
   type: string;
@@ -281,6 +303,15 @@ export type TrackedChangeMeta = {
   date?: string;
   before?: RunMark[];
   after?: RunMark[];
+  /**
+   * Paint-ready per-author color, resolved upstream (in/around the
+   * pm-adapter data-preparation pass) from the author identity. DomPainter
+   * reads only this field and stamps the element-scoped tracked-change CSS
+   * variables from it — it never invokes resolvers or touches app config.
+   * Undefined when per-author colors are disabled or unconfigured, in which
+   * case the static default tracked-change palette applies.
+   */
+  color?: string;
 };
 
 export type FlowRunLinkTarget = '_blank' | '_self' | '_parent' | '_top';

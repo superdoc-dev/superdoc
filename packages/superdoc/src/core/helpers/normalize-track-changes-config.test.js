@@ -68,6 +68,20 @@ describe('normalizeTrackChangesConfig', () => {
       expect(config.modules.trackChanges.mode).toBe('review');
       expect(config.modules.trackChanges.enabled).toBe(true);
     });
+
+    it('preserves authorColors by reference on the canonical path', () => {
+      const resolve = vi.fn();
+      const authorColors = { overrides: { Alice: '#123456' }, resolve };
+      const config = {
+        modules: { trackChanges: { authorColors } },
+      };
+
+      const result = normalizeTrackChangesConfig(config);
+
+      expect(result.authorColors).toBe(authorColors);
+      expect(config.modules.trackChanges.authorColors).toBe(authorColors);
+      expect(config.layoutEngineOptions.trackedChanges).toEqual({ mode: 'review', enabled: true });
+    });
   });
 
   describe('legacy config.trackChanges (visibility alias)', () => {

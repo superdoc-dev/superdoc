@@ -134,6 +134,35 @@ export interface TrackedChangesChangedPayload {
   source?: string;
 }
 
+export interface SdtRef {
+  id: string;
+  tag?: string;
+  alias?: string;
+  controlType: string;
+  scope: 'inline' | 'block';
+}
+
+export interface ContentControlFocusPayload {
+  active: SdtRef;
+  previous: SdtRef | null;
+  /** Active control stack, innermost first (matches ui.contentControls activeIds). */
+  activePath: SdtRef[];
+  source: 'keyboard' | 'pointer';
+}
+
+export interface ContentControlBlurPayload {
+  active: null;
+  previous: SdtRef;
+  /** Empty on blur: selection left all controls. */
+  activePath: SdtRef[];
+  source: 'keyboard' | 'pointer';
+}
+
+export interface ContentControlClickPayload {
+  target: SdtRef;
+  source: 'pointer';
+}
+
 /**
  * Event map for the Editor class
  */
@@ -205,6 +234,15 @@ export interface EditorEventMap extends DefaultEventMap {
 
   /** Called when all fonts used in the document are determined */
   'fonts-resolved': [FontsResolvedPayload];
+
+  /** Called when active content control changes to a new control (or A -> B). */
+  contentControlFocus: [ContentControlFocusPayload];
+
+  /** Called when selection leaves content controls (A -> null). */
+  contentControlBlur: [ContentControlBlurPayload];
+
+  /** Called on pointer click inside an active content control. */
+  contentControlClick: [ContentControlClickPayload];
 
   // Document Lifecycle Events
 

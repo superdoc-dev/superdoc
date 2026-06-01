@@ -11,7 +11,7 @@ sync.
   `TrackedChangeMeta` types
 - `TextRun` now exposes an optional `trackedChange` payload carrying author/date
   metadata plus format deltas for track-change marks
-- `AdapterOptions` (in `@superdoc/pm-adapter`) accepts `trackedChangesMode` and
+- `AdapterOptions` (in the v1 SuperEditor layout adapter) accepts `trackedChangesMode` and
   `enableTrackedChanges` so callers can opt into the new metadata
 - Versioned `FlowRunLink` schema with extended metadata (target, rel, anchor, docLocation, etc.)
 

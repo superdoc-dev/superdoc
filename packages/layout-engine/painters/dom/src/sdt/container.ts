@@ -112,6 +112,7 @@ export function applySdtContainerChrome(
   containerSdt?: SdtMetadata | null | undefined,
   boundaryOptions?: SdtBoundaryOptions,
   options?: SdtAncestorOptions,
+  chrome?: 'default' | 'none',
 ): boolean {
   if (!shouldRenderSdtContainerChrome(sdt, containerSdt, options)) return false;
 
@@ -143,6 +144,9 @@ export function applySdtContainerChrome(
   const shouldShowLabel = boundaryOptions?.showLabel ?? isStart;
 
   if (shouldShowLabel) {
+    if (chrome === 'none' && isStructuredContentMetadata(metadata)) {
+      return true;
+    }
     const labelEl = doc.createElement('div');
     labelEl.className = config.labelClassName;
     const labelText = doc.createElement('span');

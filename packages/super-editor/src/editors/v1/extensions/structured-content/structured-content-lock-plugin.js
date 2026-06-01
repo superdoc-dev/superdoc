@@ -1,5 +1,9 @@
 import { NodeSelection, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { ySyncPluginKey } from 'y-prosemirror';
+import {
+  findFirstContentCursorPosInNode,
+  findLastContentCursorPosInNode,
+} from '@core/commands/helpers/textPositions.js';
 import { BLOCK_NODE_METADATA_UPDATE_META } from '../block-node/block-node.js';
 
 export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock');
@@ -27,6 +31,7 @@ function collectSDTNodes(doc) {
     if (node.type.name === 'structuredContent' || node.type.name === 'structuredContentBlock') {
       sdtNodes.push({
         type: node.type.name,
+        node,
         lockMode: node.attrs.lockMode,
         pos,
         end: pos + node.nodeSize,
@@ -91,6 +96,16 @@ function isAtBlockSdtWrapperDeletePosition(state, sdt, pos) {
   return $pos.before(textblockDepth) === $pos.start(sdtDepth);
 }
 
+function selectionCoversSdtContent(sdt, from, to) {
+  if (from === sdt.pos + 1 && to === sdt.end - 1) return true;
+
+  if (sdt.type !== 'structuredContentBlock') return false;
+
+  const contentStart = findFirstContentCursorPosInNode(sdt.node, sdt.pos);
+  const contentEnd = findLastContentCursorPosInNode(sdt.node, sdt.pos);
+  return contentStart != null && contentEnd != null && from === contentStart && to === contentEnd;
+}
+
 export function createStructuredContentLockPlugin() {
   return new Plugin({
     key: STRUCTURED_CONTENT_LOCK_KEY,
@@ -138,7 +153,7 @@ export function createStructuredContentLockPlugin() {
         // modes, let the normal command chain delete the selected content while
         // preserving the SDT wrapper.
         if (from !== to && !(selection instanceof NodeSelection)) {
-          const exactContentSDT = sdtNodes.find((s) => from === s.pos + 1 && to === s.end - 1);
+          const exactContentSDT = sdtNodes.find((s) => selectionCoversSdtContent(s, from, to));
           if (exactContentSDT) {
             const isContentLocked =
               exactContentSDT.lockMode === 'contentLocked' || exactContentSDT.lockMode === 'sdtContentLocked';

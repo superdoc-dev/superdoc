@@ -15,6 +15,9 @@ function makeStubs(
       id: string;
       type?: 'insert' | 'delete' | 'format';
       excerpt?: string;
+      author?: string;
+      authorEmail?: string;
+      authorImage?: string;
       story?: unknown;
     }>;
     activeCommentIds?: string[];
@@ -57,6 +60,9 @@ function makeStubs(
       },
       type: tc.type ?? ('insert' as const),
       excerpt: tc.excerpt,
+      author: tc.author,
+      authorEmail: tc.authorEmail,
+      authorImage: tc.authorImage,
     })),
     page: { limit: 50, offset: 0, returned: changesList.length },
   }));
@@ -165,6 +171,39 @@ describe('ui.trackChanges — snapshot', () => {
     expect(item.id).toBe('tc1');
     expect(item.change.type).toBe('insert');
     expect(item.change.excerpt).toBe('hi');
+
+    ui.destroy();
+  });
+
+  it('resolves per-author colors onto items and ordered authors', () => {
+    const { superdoc } = makeStubs({
+      trackedChanges: [
+        { id: 'tc1', type: 'insert', author: 'Alice Reviewer', authorEmail: 'alice@example.test' },
+        { id: 'tc2', type: 'delete', author: 'Bob Reviewer' },
+        { id: 'tc3', type: 'format', author: 'Alice Reviewer', authorEmail: 'alice@example.test' },
+      ],
+    });
+    superdoc.config = {
+      documentMode: 'editing',
+      modules: {
+        trackChanges: {
+          authorColors: {
+            overrides: { 'alice@example.test': '#123456' },
+            resolve: (author) => (author.name === 'Bob Reviewer' ? '#654321' : undefined),
+          },
+        },
+      },
+    };
+    const ui = createSuperDocUI({ superdoc });
+
+    const snap = ui.trackChanges.getSnapshot();
+
+    expect(snap.items.map((item) => item.authorColor)).toEqual(['#123456', '#654321', '#123456']);
+    expect(snap.items.map((item) => item.change.authorColor)).toEqual(['#123456', '#654321', '#123456']);
+    expect(snap.authors).toEqual([
+      { name: 'Alice Reviewer', email: 'alice@example.test', image: undefined, color: '#123456' },
+      { name: 'Bob Reviewer', email: undefined, image: undefined, color: '#654321' },
+    ]);
 
     ui.destroy();
   });

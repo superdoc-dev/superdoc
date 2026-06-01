@@ -16,7 +16,7 @@ import { resolve } from 'path';
 import { Editor } from '../../../core/Editor.js';
 import { initTestEditor } from '../helpers/helpers.js';
 import { computeParagraphReferenceSnapshot } from '../helpers/paragraphReference.js';
-import { computeParagraphAttrs } from '@superdoc/pm-adapter/attributes/paragraph.js';
+import { computeParagraphAttrs } from '@core/layout-adapter/attributes/paragraph.js';
 import {
   buildStyleContextFromEditor,
   buildConverterContextFromEditor,

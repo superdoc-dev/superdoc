@@ -49,6 +49,7 @@ import { insertTableOfContentsAtSelection } from '@extensions/table-of-contents/
  * @property {string} [aiEndpoint] - Endpoint for AI integration
  * @property {Array<Record<string, unknown>> | ToolbarItem[]} [customButtons=[]] - Custom buttons to add to the toolbar. SuperDoc forwards the structural `Array<Record<string, unknown>>` shape from `Modules.toolbar.customButtons`; the runtime wraps each entry into a full `ToolbarItem` via `useToolbarItem`.
  * @property {boolean} [showFormattingMarksButton=false] - Show the formatting marks (pilcrow) button in the toolbar. Distinct from `layoutEngineOptions.showFormattingMarks`, which controls whether the marks render in the document.
+ * @property {boolean} [showTableOfContentsButton=false] - Show the table of contents insert button in the toolbar. Off by default until the feature is generally available.
  * @property {boolean} [isDev] - Dev-mode flag forwarded from `SuperDoc.isDev`; gates debug tooltips and overlays.
  * @property {object} [superdoc] - The owning SuperDoc instance. Set by SuperDoc when constructing the toolbar; the toolbar uses it to dispatch commands back through the parent.
  * @property {boolean} [responsiveToContainer=false] - When `true`, the toolbar measures the container width instead of the document width when deciding which items to collapse.
@@ -169,6 +170,7 @@ export class SuperToolbar extends EventEmitter {
     aiEndpoint: null,
     customButtons: [],
     showFormattingMarksButton: false,
+    showTableOfContentsButton: false,
   };
 
   /**

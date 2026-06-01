@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { base64ToFile, getBase64FileMeta } from './handleBase64.js';
 
@@ -26,10 +26,10 @@ describe('handleBase64', () => {
   });
 
   it('uses shared url-validation helpers directly instead of converter helpers', () => {
-    const source = readFileSync(
-      resolve(process.cwd(), 'src/editors/v1/extensions/image/imageHelpers/handleBase64.js'),
-      'utf8',
-    );
+    const packageRelativePath = 'src/editors/v1/extensions/image/imageHelpers/handleBase64.js';
+    const rootRelativePath = `packages/super-editor/${packageRelativePath}`;
+    const sourcePath = existsSync(resolve(process.cwd(), packageRelativePath)) ? packageRelativePath : rootRelativePath;
+    const source = readFileSync(resolve(process.cwd(), sourcePath), 'utf8');
 
     expect(source).toContain("from '@superdoc/url-validation'");
     expect(source).not.toContain("from '@converter/helpers/mediaHelpers.js'");

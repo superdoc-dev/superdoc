@@ -1,32 +1,30 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { EditorState } from 'prosemirror-state';
 import { buildFootnotesInput, type ConverterLike } from '../layout/FootnotesBuilder.js';
-import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
-import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
+import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@core/layout-adapter/constants.js';
 
-// Mock toFlowBlocks
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
-  return {
-    ...actual,
-    toFlowBlocks: vi.fn((_doc: unknown, opts?: { blockIdPrefix?: string }) => {
-      // Return mock blocks based on blockIdPrefix
-      if (typeof opts?.blockIdPrefix === 'string') {
-        const id = opts.blockIdPrefix.replace('footnote-', '').replace('-', '');
-        return {
-          blocks: [
-            {
-              kind: 'paragraph',
-              runs: [{ kind: 'text', text: `Footnote ${id} text`, pmStart: 0, pmEnd: 10 }],
-            },
-          ],
-          bookmarks: new Map(),
-        };
-      }
-      return { blocks: [], bookmarks: new Map() };
-    }),
-  };
+const { mockFootnoteToFlowBlocks } = vi.hoisted(() => ({
+  mockFootnoteToFlowBlocks: vi.fn((_doc: unknown, opts?: { blockIdPrefix?: string }) => {
+    if (typeof opts?.blockIdPrefix === 'string') {
+      const id = opts.blockIdPrefix.replace('footnote-', '').replace('-', '');
+      return {
+        blocks: [
+          {
+            kind: 'paragraph',
+            runs: [{ kind: 'text', text: `Footnote ${id} text`, pmStart: 0, pmEnd: 10 }],
+          },
+        ],
+        bookmarks: new Map(),
+      };
+    }
+    return { blocks: [], bookmarks: new Map() };
+  }),
+}));
+
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const { buildLayoutDocumentAdapterVitestMock } = await import('./mock-layout-document-adapter-vitest.js');
+  return buildLayoutDocumentAdapterVitestMock(importOriginal, { toFlowBlocks: mockFootnoteToFlowBlocks });
 });
 
 // =============================================================================
@@ -157,8 +155,9 @@ describe('buildFootnotesInput', () => {
       buildFootnotesInput(editorState, converter, undefined, undefined);
 
       const [, options] =
-        (toFlowBlocks as unknown as { mock: { calls: Array<[unknown, Record<string, unknown>]> } }).mock.calls.at(-1) ??
-        [];
+        (
+          mockFootnoteToFlowBlocks as unknown as { mock: { calls: Array<[unknown, Record<string, unknown>]> } }
+        ).mock.calls.at(-1) ?? [];
       expect(options?.storyKey).toBe('fn:1');
     });
 
@@ -179,7 +178,7 @@ describe('buildFootnotesInput', () => {
         },
       });
 
-      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
+      const docArg = (mockFootnoteToFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
       expect(docArg).toEqual({
         type: 'doc',
         content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Live note' }] }],
@@ -247,7 +246,7 @@ describe('buildFootnotesInput', () => {
 
       buildFootnotesInput(editorState, converter, undefined, undefined);
 
-      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
+      const docArg = (mockFootnoteToFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
       expect(docArg?.content?.[0]?.content).toEqual([
         {
           type: 'run',
@@ -278,7 +277,7 @@ describe('buildFootnotesInput', () => {
 
       buildFootnotesInput(editorState, converter, undefined, undefined);
 
-      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
+      const docArg = (mockFootnoteToFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
       expect(docArg?.content?.[0]?.content).toEqual([
         {
           type: 'run',
@@ -316,7 +315,7 @@ describe('buildFootnotesInput', () => {
 
       buildFootnotesInput(editorState, converter, undefined, undefined);
 
-      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
+      const docArg = (mockFootnoteToFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
       expect(docArg?.content?.[0]?.content).toEqual([
         {
           type: 'run',

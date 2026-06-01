@@ -12,6 +12,9 @@ import {
   computeLinePmRange,
   expandRunsForInlineNewlines,
   expandRunsForInlineTabs,
+  isEmptyInlineSdtPlaceholderRun,
+  isEmptySdtPlaceholderRun,
+  normalizeBaselineShift,
   shouldApplyJustify,
   sliceRunsForLine,
   SPACE_CHARS,
@@ -59,6 +62,17 @@ const isWhitespaceOnly = (text: string): boolean => {
     if (!SPACE_CHARS.has(text[i])) return false;
   }
   return true;
+};
+
+const alignNormalTextBesideInlineImage = (element: HTMLElement, run: Run, lineContainsInlineImage: boolean): void => {
+  if (!lineContainsInlineImage) return;
+  if ((run.kind !== 'text' && run.kind !== undefined) || !('text' in run)) return;
+
+  const textRun = run as TextRun;
+  if (normalizeBaselineShift(textRun.baselineShift) != null || textRun.vertAlign != null) return;
+
+  element.style.lineHeight = 'normal';
+  element.style.verticalAlign = 'bottom';
 };
 
 const cloneTextRun = (run: TextRun): TextRun => ({
@@ -310,6 +324,7 @@ export const renderLine = ({
     spaceCount,
     shouldJustify: justifyShouldApply,
   });
+  const lineContainsInlineImage = runsForLine.some((run) => isImageRun(run));
   const resolveLineIndentOffset = (): number => {
     if (indentOffsetOverride != null) {
       return indentOffsetOverride;
@@ -357,6 +372,7 @@ export const renderLine = ({
       styleId,
       runContext,
       trackedConfig,
+      lineContainsInlineImage,
     });
   } else {
     renderInlineRuns({
@@ -367,6 +383,7 @@ export const renderLine = ({
       styleId,
       runContext,
       trackedConfig,
+      lineContainsInlineImage,
     });
   }
 
@@ -402,6 +419,7 @@ type RunRenderBranchParams = {
   styleId?: string;
   runContext: RenderLineParams['runContext'];
   trackedConfig: ReturnType<RenderLineParams['runContext']['resolveTrackedChangesConfig']>;
+  lineContainsInlineImage: boolean;
 };
 
 const renderExplicitlyPositionedRuns = ({
@@ -414,6 +432,7 @@ const renderExplicitlyPositionedRuns = ({
   styleId,
   runContext,
   trackedConfig,
+  lineContainsInlineImage,
 }: RunRenderBranchParams & {
   block: ParagraphBlock;
   lineTextStartOffsetPx: number;
@@ -510,6 +529,9 @@ const renderExplicitlyPositionedRuns = ({
     if (resolved) {
       if (!geoSdtWrapper) {
         geoSdtWrapper = runContext.createInlineSdtWrapper(resolved.sdt);
+        if (isEmptyInlineSdtPlaceholderRun(runForSdt)) {
+          geoSdtWrapper.dataset.empty = 'true';
+        }
         geoSdtId = thisRunSdtId;
         geoSdtWrapperLeft = elemLeftPx;
         geoSdtMaxRight = elemLeftPx;
@@ -517,6 +539,9 @@ const renderExplicitlyPositionedRuns = ({
         geoSdtWrapper.style.left = `${elemLeftPx}px`;
         geoSdtWrapper.style.top = '0px';
         geoSdtWrapper.style.height = `${line.lineHeight}px`;
+      }
+      if (isImageRun(runForSdt)) {
+        geoSdtWrapper.dataset.containsInlineImage = 'true';
       }
       runContext.syncInlineSdtWrapperTypography(geoSdtWrapper, runForSdt);
       elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
@@ -645,6 +670,23 @@ const renderExplicitlyPositionedRuns = ({
       continue;
     }
 
+    if (isEmptySdtPlaceholderRun(baseRun)) {
+      const elem = renderRun(baseRun, context, runContext, trackedConfig);
+      if (elem) {
+        if (styleId) {
+          elem.setAttribute('styleid', styleId);
+        }
+        const segment = runSegments[0]!;
+        const baseX = segment.x !== undefined ? segment.x : cumulativeX;
+        const xPos = baseX + indentOffset;
+        elem.style.position = 'absolute';
+        elem.style.left = `${xPos}px`;
+        appendToLineGeo(elem, baseRun, xPos, segment.width);
+        cumulativeX = baseX + segment.width;
+      }
+      continue;
+    }
+
     // At this point, baseRun must be TextRun (has .text property)
     if (!('text' in baseRun)) {
       continue;
@@ -673,6 +715,7 @@ const renderExplicitlyPositionedRuns = ({
         if (styleId) {
           elem.setAttribute('styleid', styleId);
         }
+        alignNormalTextBesideInlineImage(elem, segmentRun, lineContainsInlineImage);
         // Determine X position for this segment
         // Layout positions are relative to content area start (0).
         // Add indentOffset to position content at the correct paragraph indent.
@@ -710,6 +753,7 @@ const renderInlineRuns = ({
   styleId,
   runContext,
   trackedConfig,
+  lineContainsInlineImage,
 }: RunRenderBranchParams & { runsForLine: Run[] }): void => {
   // Use run-based rendering for normal text flow
   // Track current inline SDT wrapper to group adjacent runs with the same SDT id
@@ -744,13 +788,20 @@ const renderInlineRuns = ({
       if (styleId) {
         elem.setAttribute('styleid', styleId);
       }
+      alignNormalTextBesideInlineImage(elem, run, lineContainsInlineImage);
 
       // If this run has inline SDT, add to or create wrapper
       if (resolved) {
         if (!currentInlineSdtWrapper) {
           currentInlineSdtWrapper = runContext.createInlineSdtWrapper(resolved.sdt);
+          if (isEmptyInlineSdtPlaceholderRun(run)) {
+            currentInlineSdtWrapper.dataset.empty = 'true';
+          }
           runContext.syncInlineSdtWrapperTypography(currentInlineSdtWrapper, run);
           currentInlineSdtId = runSdtId;
+        }
+        if (isImageRun(run)) {
+          currentInlineSdtWrapper.dataset.containsInlineImage = 'true';
         }
         // Typography is set when wrapper is created from the first run.
         // Follow-up (SD-2744): define a deterministic mixed-typography rule.

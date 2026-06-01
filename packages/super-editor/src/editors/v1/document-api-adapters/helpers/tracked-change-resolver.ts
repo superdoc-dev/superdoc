@@ -47,7 +47,26 @@ export type GroupedTrackedChange = {
 export type TrackedChangeProjectedSide = 'inserted' | 'deleted';
 
 type ChangeTypeInput = Pick<GroupedTrackedChange, 'hasInsert' | 'hasDelete' | 'hasFormat'>;
-type GroupedTrackedChangeDraft = Omit<GroupedTrackedChange, 'id' | 'excerpt'> & { excerptParts: string[] };
+type GroupedTrackedChangeDraft = Omit<GroupedTrackedChange, 'id' | 'excerpt'> & {
+  excerptParts: string[];
+  /**
+   * Half-open `[from, to)` ranges already counted toward `excerptParts`. One
+   * tracked change can carry more than one mark of the same group over
+   * overlapping ranges — e.g. an imported format change whose run-level mark
+   * (`[2, 9)`) and paragraph-level mark (`[1, 10)`) both describe the same
+   * "Format " text, with {@link getTrackChanges} yielding one entry per mark.
+   * Without this guard the overlapping spans concatenate their text twice
+   * ("Format Format "), which both misrepresents the excerpt and breaks
+   * downstream text-based element location. Skip a span whose range overlaps
+   * one already counted so each region of text contributes once.
+   */
+  excerptRanges: Array<[number, number]>;
+};
+
+/** True when two half-open `[from, to)` ranges share any position. */
+function rangesOverlap(a: readonly [number, number], b: readonly [number, number]): boolean {
+  return a[0] < b[1] && b[0] < a[1];
+}
 type InternalTrackChangeOverlapLayer = TrackChangeOverlapLayer & {
   rawId?: string;
   commandRawId?: string;
@@ -303,6 +322,7 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
     const wordRevisionIdKey = getWordRevisionIdKey(markType);
     const contributesToExcerpt = !wordRevisionId || !hasChildTrackedMarkOnNode(item, id);
     const excerptText = contributesToExcerpt ? getTrackedMarkText(editor, item) : '';
+    const range: [number, number] = [item.from, item.to];
 
     if (!existing) {
       byRawId.set(groupKey, {
@@ -315,6 +335,7 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
         hasFormat: nextHasFormat,
         attrs: { ...attrs },
         excerptParts: excerptText ? [excerptText] : [],
+        excerptRanges: excerptText ? [range] : [],
         wordRevisionIds: wordRevisionIdKey
           ? mergeWordRevisionId(undefined, wordRevisionIdKey, wordRevisionId ?? undefined)
           : undefined,
@@ -330,7 +351,8 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
     if (Object.keys(existing.attrs).length === 0 && Object.keys(attrs).length > 0) {
       existing.attrs = { ...attrs };
     }
-    if (excerptText) {
+    if (excerptText && !existing.excerptRanges.some((counted) => rangesOverlap(counted, range))) {
+      existing.excerptRanges.push(range);
       existing.excerptParts.push(excerptText);
     }
     if (wordRevisionIdKey) {
@@ -343,7 +365,7 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
   }
 
   const grouped = Array.from(byRawId.values())
-    .map(({ excerptParts, ...change }) => {
+    .map(({ excerptParts, excerptRanges: _excerptRanges, ...change }) => {
       const hasWordSourceId = Boolean(toNonEmptyString(change.attrs.sourceId));
       const rawExcerpt = excerptParts.join('');
       const withExcerpt = {

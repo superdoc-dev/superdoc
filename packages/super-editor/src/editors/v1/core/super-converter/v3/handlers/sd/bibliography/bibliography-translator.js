@@ -1,7 +1,7 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
 import { exportSchemaToJson } from '../../../../exporter.js';
-import { buildInstructionElements } from '../shared/index.js';
+import { buildInstructionElements, wrapParagraphsAsComplexField } from '../shared/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'sd:bibliography';
@@ -27,6 +27,8 @@ const encode = (params) => {
     type: SD_NODE_NAME,
     attrs: {
       instruction: node.attributes?.instruction || '',
+      instructionTokens: node.attributes?.instructionTokens || null,
+      wrapperParagraphProperties: node.attributes?.wrapperParagraphProperties || null,
     },
     content: processedContent,
   };
@@ -43,45 +45,13 @@ const decode = (params) => {
 
   /** @type {any[]} */
   const contentNodes = (node.content ?? []).map((n) => exportSchemaToJson({ ...params, node: n }));
-  const instructionElements = buildInstructionElements(node.attrs?.instruction, null);
+  const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens ?? null);
 
-  const beginElements = [
-    {
-      name: 'w:r',
-      elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' }, elements: [] }],
-    },
-    {
-      name: 'w:r',
-      elements: instructionElements,
-    },
-    { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' }, elements: [] }] },
-  ];
-
-  if (contentNodes.length > 0) {
-    const firstParagraph = contentNodes[0];
-    let insertIndex = 0;
-    if (firstParagraph.elements) {
-      const pPrIndex = firstParagraph.elements.findIndex((el) => el.name === 'w:pPr');
-      insertIndex = pPrIndex >= 0 ? pPrIndex + 1 : 0;
-    } else {
-      firstParagraph.elements = [];
-    }
-    firstParagraph.elements.splice(insertIndex, 0, ...beginElements);
-  } else {
-    contentNodes.push({ name: 'w:p', elements: beginElements });
-  }
-
-  const endElements = [
-    { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' }, elements: [] }] },
-  ];
-  const lastParagraph = contentNodes[contentNodes.length - 1];
-  if (lastParagraph.elements) {
-    lastParagraph.elements.push(...endElements);
-  } else {
-    lastParagraph.elements = [...endElements];
-  }
-
-  return contentNodes;
+  return wrapParagraphsAsComplexField(
+    contentNodes,
+    instructionElements,
+    node.attrs?.wrapperParagraphProperties ?? null,
+  );
 };
 
 /** @type {import('@translator').NodeTranslatorConfig} */

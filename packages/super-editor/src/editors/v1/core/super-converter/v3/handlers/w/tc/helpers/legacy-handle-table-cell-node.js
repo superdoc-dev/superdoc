@@ -1,6 +1,7 @@
 import { twipsToPixels, resolveShadingFillColor } from '@converter/helpers';
 import { translator as tcPrTranslator } from '../../tcPr';
 import { isInlineNode } from '../../../helpers/is-inline-node.js';
+import { normalizeRowCellChildren } from '../../tr/row-cell-children.js';
 
 /**
  * @param {Object} options
@@ -258,7 +259,13 @@ const getTableCellGridSpan = (node) => {
 };
 
 const findTableCellAtColumn = (row, targetColumn) => {
-  const cells = row.elements?.filter((el) => el.name === 'w:tc') ?? [];
+  // Use the SDT-aware row-child normalizer so cell-level structured document
+  // tags (ECMA-376 §17.5.2.32) are unwrapped here too. Without this, a vMerge
+  // continuation cell inside `<w:sdt><w:sdtContent><w:tc/></w:sdtContent></w:sdt>`
+  // would be invisible to the merge pre-pass and never marked `_vMergeConsumed`,
+  // breaking the merge on import. The wrapper metadata (cellSdt) is not
+  // relevant for merge tracking and is discarded here.
+  const cells = normalizeRowCellChildren(row).map((entry) => entry.node);
   let currentColumn = getGridBefore(row);
 
   for (const cell of cells) {

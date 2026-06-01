@@ -1,6 +1,7 @@
 import { Fragment, Slice } from 'prosemirror-model';
 import { ReplaceStep } from 'prosemirror-transform';
 
+import { applyAttrsDiff } from '../algorithm/attributes-diffing';
 import { replayInlineDiff } from './replay-inline';
 import { ReplayResult } from './replay-types';
 
@@ -98,12 +99,9 @@ export function replayParagraphDiff({
     }
 
     if (diff.attrsDiff) {
-      if (!diff.newNodeJSON?.attrs) {
-        skipWithWarning(`Missing newNodeJSON attrs at pos ${pos} for paragraph modification.`);
-        return result;
-      }
       try {
-        tr.setNodeMarkup(pos, undefined, diff.newNodeJSON.attrs, node.marks);
+        const mergedAttrs = applyAttrsDiff(node.attrs as Record<string, unknown>, diff.attrsDiff);
+        tr.setNodeMarkup(pos, undefined, mergedAttrs, node.marks);
         result.applied += 1;
       } catch (error) {
         skipWithWarning(`Failed to update paragraph attrs at pos ${pos}.`);

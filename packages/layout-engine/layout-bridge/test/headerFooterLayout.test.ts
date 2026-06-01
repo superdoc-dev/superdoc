@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FlowBlock, Measure } from '@superdoc/contracts';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { toFlowBlocks } from '@core/layout-adapter';
 import { layoutHeaderFooterWithCache, HeaderFooterLayoutCache } from '../src/layoutHeaderFooter';
 
 const makeBlock = (id: string, text = 'Hello'): FlowBlock => ({
@@ -141,7 +141,7 @@ describe('layoutHeaderFooterWithCache', () => {
         ],
       };
 
-      // 2. Convert PM JSON to FlowBlocks using PM adapter
+      // 2. Convert PM JSON to FlowBlocks using the v1 layout adapter
       const { blocks: headerBlocks } = toFlowBlocks(headerPmDoc, { blockIdPrefix: 'header-default-' });
       const { blocks: footerBlocks } = toFlowBlocks(footerPmDoc, { blockIdPrefix: 'footer-default-' });
 

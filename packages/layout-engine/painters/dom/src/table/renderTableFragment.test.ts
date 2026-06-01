@@ -364,6 +364,43 @@ describe('renderTableFragment', () => {
     expect(chromeElements[0].querySelector('.superdoc-structured-content__label')?.textContent).toBe('Idless Table');
   });
 
+  it('omits the table SDT label but keeps the wrapper when chrome is none', () => {
+    const block = createTestTableBlock();
+    block.attrs = {
+      sdt: {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'table-sdt-none',
+        alias: 'Table Control',
+      },
+    };
+
+    const element = renderTableFragment({
+      doc,
+      fragment: createTestTableFragment(),
+      context,
+      block,
+      measure: createTestTableMeasure(),
+      cellSpacingPx: 0,
+      effectiveColumnWidths: [100],
+      chrome: 'none',
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {},
+      applySdtDataset: () => {},
+      applyStyles: (el, styles) => Object.assign(el.style, styles),
+    });
+
+    const chromeElements = [
+      ...(element.classList.contains('superdoc-structured-content-block') ? [element] : []),
+      ...Array.from(element.querySelectorAll('.superdoc-structured-content-block')),
+    ];
+    // Wrapper is still produced (proves the SDT path ran; host/custom UI and
+    // the geometry APIs depend on it)...
+    expect(chromeElements.length).toBeGreaterThanOrEqual(1);
+    // ...but the built-in label is not emitted under chrome: 'none'.
+    expect(element.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+  });
+
   describe('merged-cell border ownership', () => {
     it('renders the outer right border for a merged header cell in collapsed mode', () => {
       const block: TableBlock = {

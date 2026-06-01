@@ -117,7 +117,14 @@ describe('goToSearchResult — scroll behavior', () => {
     const result = goToSearchResultFactory(match)(ctx);
 
     expect(result).toBe(true);
-    expect(scrollToPosition).toHaveBeenCalledWith(10, { block: 'center' });
+    // SD-3315: per-match navigation opts into "scroll only if needed" and owns the scroll across
+    // the find-input focus restore (suppressSelectionSyncScroll), so selection-sync can't yank
+    // the viewport to the reverted caret.
+    expect(scrollToPosition).toHaveBeenCalledWith(10, {
+      block: 'center',
+      ifNeeded: true,
+      suppressSelectionSyncScroll: true,
+    });
     // Async and DOM fallback should NOT fire when sync succeeds
     expect(scrollToPositionAsync).not.toHaveBeenCalled();
     expect(ctx._domNode.scrollIntoView).not.toHaveBeenCalled();
@@ -136,7 +143,11 @@ describe('goToSearchResult — scroll behavior', () => {
     expect(result).toBe(true);
     expect(scrollToPosition).toHaveBeenCalled();
     // Async should fire for virtualized pages
-    expect(scrollToPositionAsync).toHaveBeenCalledWith(10, { block: 'center' });
+    expect(scrollToPositionAsync).toHaveBeenCalledWith(10, {
+      block: 'center',
+      ifNeeded: true,
+      suppressSelectionSyncScroll: true,
+    });
     // DOM fallback should also fire
     expect(ctx._domNode.scrollIntoView).toHaveBeenCalledWith({
       block: 'center',
@@ -168,7 +179,11 @@ describe('goToSearchResult — scroll behavior', () => {
     const result = goToSearchResultFactory(match)(ctx);
 
     expect(result).toBe(true);
-    expect(scrollToPositionAsync).toHaveBeenCalledWith(10, { block: 'center' });
+    expect(scrollToPositionAsync).toHaveBeenCalledWith(10, {
+      block: 'center',
+      ifNeeded: true,
+      suppressSelectionSyncScroll: true,
+    });
     // Give the microtask queue a tick so the .catch() runs — no unhandled rejection
     await new Promise((r) => setTimeout(r, 0));
   });
@@ -184,7 +199,11 @@ describe('goToSearchResult — scroll behavior', () => {
 
     expect(result).toBe(true);
     // scrollToPosition is undefined, so sync returns false (via ?. → undefined → ?? false)
-    expect(scrollToPositionAsync).toHaveBeenCalledWith(10, { block: 'center' });
+    expect(scrollToPositionAsync).toHaveBeenCalledWith(10, {
+      block: 'center',
+      ifNeeded: true,
+      suppressSelectionSyncScroll: true,
+    });
     // DOM fallback should also fire since sync didn't succeed
     expect(ctx._domNode.scrollIntoView).toHaveBeenCalled();
   });

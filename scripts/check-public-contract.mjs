@@ -252,6 +252,17 @@ const stages = [
       'Closure gate: no supported-root or legacy-root export references an ' +
       'internal-candidate type in its public declared shape (SD-3212 A1b).',
   },
+  {
+    name: 'docs-snippet-typecheck',
+    cwd: REPO_ROOT,
+    cmd: 'pnpm',
+    args: ['--filter', '@superdoc/docs', 'run', 'check:types'],
+    blurb:
+      'Docs snippet type-check (SD-673): extracts "Full Example" code blocks under ' +
+      'apps/docs/editor/superdoc/** (JS + TS fences) and runs `tsc --noEmit --strict` ' +
+      '(with allowJs + checkJs for JS) against packages/superdoc/dist. Catches drift ' +
+      'between docs examples and the typed public surface.',
+  },
 ];
 
 const HR = '='.repeat(72);

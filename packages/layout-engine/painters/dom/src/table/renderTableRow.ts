@@ -208,6 +208,8 @@ type TableRowRenderDependencies = {
    * Applied to cell x positions and row y advancement.
    */
   cellSpacingPx?: number;
+  /** Built-in SDT chrome rendering mode. */
+  chrome?: 'default' | 'none';
 };
 
 /**
@@ -272,6 +274,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     continuesOnNext,
     partialRow,
     cellSpacingPx = 0,
+    chrome,
   } = deps;
 
   const totalCols = columnWidths.length;
@@ -449,6 +452,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       tableIndent,
       isRtl,
       cellWidth: computedCellWidth > 0 ? computedCellWidth : undefined,
+      chrome,
     });
 
     container.appendChild(cellElement);

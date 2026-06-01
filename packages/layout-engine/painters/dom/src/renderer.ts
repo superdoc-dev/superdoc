@@ -244,6 +244,8 @@ type PainterOptions = {
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
   /** Render nonprinting formatting marks such as spaces, tabs, and paragraph marks. */
   showFormattingMarks?: boolean;
+  /** Built-in SDT chrome rendering mode. */
+  contentControlsChrome?: 'default' | 'none';
 };
 
 type FragmentDomState = {
@@ -836,6 +838,7 @@ export class DomPainter {
   /** Resolved layout for the next-gen paint pipeline. */
   private resolvedLayout: ResolvedLayout | null = null;
   private showFormattingMarks = false;
+  private contentControlsChrome: 'default' | 'none' = 'default';
 
   constructor(options: PainterOptions = {}) {
     this.options = options;
@@ -844,6 +847,7 @@ export class DomPainter {
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
     this.showFormattingMarks = options.showFormattingMarks === true;
+    this.contentControlsChrome = options.contentControlsChrome ?? 'default';
 
     // Initialize page gap (defaults: 24px vertical, 20px horizontal)
     const defaultGap = this.layoutMode === 'horizontal' ? 20 : 24;
@@ -888,6 +892,7 @@ export class DomPainter {
 
   private applyFormattingMarksClass(mount: HTMLElement | null = this.mount): void {
     mount?.classList.toggle('superdoc-show-formatting-marks', this.showFormattingMarks);
+    mount?.classList.toggle('superdoc-cc-chrome-none', this.contentControlsChrome === 'none');
   }
 
   private invalidateRenderedContent(): void {
@@ -2579,6 +2584,7 @@ export class DomPainter {
           sourceAnchor: options?.sourceAnchor,
         });
       },
+      contentControlsChrome: this.contentControlsChrome,
       createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
     });
   }
@@ -3741,6 +3747,7 @@ export class DomPainter {
         measure: tableRenderData.measure,
         cellSpacingPx: tableRenderData.cellSpacingPx,
         effectiveColumnWidths: tableRenderData.effectiveColumnWidths,
+        chrome: this.contentControlsChrome,
         sdtBoundary,
         renderLine: renderLineForTableCell,
         captureLineSnapshot: (lineEl, lineContext, options) => {
@@ -3815,6 +3822,7 @@ export class DomPainter {
       doc: this.doc,
       layoutEpoch: this.layoutEpoch,
       showFormattingMarks: this.showFormattingMarks,
+      contentControlsChrome: this.contentControlsChrome,
       pendingTooltips: this.pendingTooltips,
       getNextLinkId: () => `superdoc-link-${++this.linkIdCounter}`,
       applySdtDataset,

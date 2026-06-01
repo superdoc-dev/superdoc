@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/mcp",
-  "version": "0.8.1",
+  "version": "0.10.0",
   "type": "module",
   "engines": {
     "node": ">=20"

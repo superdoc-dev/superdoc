@@ -95,7 +95,8 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
+    if (!superdoc.activeEditor) return;
     superdoc.activeEditor.commands.insertContent(content, {
       contentType: 'html'  // 'html' | 'markdown' | 'text' | 'schema'
     });
@@ -145,7 +146,7 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: async (superdoc) => {
+  onReady: async ({ superdoc }) => {
     // Download as .docx file
     await superdoc.export();
 
@@ -215,11 +216,12 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
     // Returns array of HTML strings (one per document)
     const htmlArray = superdoc.getHTML();
 
     // From the active editor (single string)
+    if (!superdoc.activeEditor) return;
     const html = superdoc.activeEditor.getHTML();
   },
 });
@@ -235,7 +237,7 @@ HTML export is structure-only. Custom CSS styling and Word-specific formatting a
 <CodeGroup>
 ```javascript Usage
 // From the active editor
-const json = superdoc.activeEditor.getJSON();
+const json = superdoc.activeEditor?.getJSON();
 ```
 
 ```javascript Full Example
@@ -245,7 +247,8 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: (superdoc) => {
+  onReady: ({ superdoc }) => {
+    if (!superdoc.activeEditor) return;
     const json = superdoc.activeEditor.getJSON();
   },
 });
@@ -259,7 +262,7 @@ JSON export preserves the full document structure and can be re-imported with `j
 <CodeGroup>
 ```javascript Usage
 // From the active editor
-const markdown = await superdoc.activeEditor.getMarkdown();
+const markdown = await superdoc.activeEditor?.getMarkdown();
 ```
 
 ```javascript Full Example
@@ -269,7 +272,8 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  onReady: async (superdoc) => {
+  onReady: async ({ superdoc }) => {
+    if (!superdoc.activeEditor) return;
     const markdown = await superdoc.activeEditor.getMarkdown();
   },
 });

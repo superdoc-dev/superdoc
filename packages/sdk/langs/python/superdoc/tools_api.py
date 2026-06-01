@@ -1,141 +1,104 @@
+"""Public LLM-tools API (Python SDK). Thin layer over the preset registry.
+
+Every call here resolves a preset (defaulting to ``legacy`` for backwards
+compat) and delegates to it. Mirrors ``packages/sdk/langs/node/src/tools.ts``.
+"""
+
 from __future__ import annotations
 
-import inspect
-import json
-import re
-from importlib import resources
-from typing import Any, Dict, List, Literal, Optional, TypedDict, cast
+from typing import Any, Dict, List, Optional, TypedDict, cast
 
+from .presets import DEFAULT_PRESET, ToolProvider, get_preset, list_presets
 from .errors import SuperDocError
-from .tools.intent_dispatch_generated import dispatch_intent_tool
 
-ToolProvider = Literal['openai', 'anthropic', 'vercel', 'generic']
+__all__ = [
+    'DEFAULT_PRESET',
+    'ToolChooserInput',
+    'ToolProvider',
+    'choose_tools',
+    'dispatch_superdoc_tool',
+    'dispatch_superdoc_tool_async',
+    'get_preset',
+    'get_mcp_prompt',
+    'get_system_prompt',
+    'get_tool_catalog',
+    'list_presets',
+    'list_tools',
+]
 
 
 class ToolChooserInput(TypedDict, total=False):
     provider: ToolProvider
+    # Preset ID to load tools from. Defaults to DEFAULT_PRESET ('legacy')
+    # for backwards compatibility. Use list_presets() to discover presets.
+    preset: str
+    # When True, applies provider-specific prompt-cache markers (Anthropic
+    # ``cache_control: { type: "ephemeral" }`` on the last tool, etc).
+    cache: bool
 
 
-PROVIDER_FILE: Dict[ToolProvider, str] = {
-    'openai': 'tools.openai.json',
-    'anthropic': 'tools.anthropic.json',
-    'vercel': 'tools.vercel.json',
-    'generic': 'tools.generic.json',
-}
+def get_tool_catalog(preset: Optional[str] = None) -> Dict[str, Any]:
+    """Return the full tool catalog for a preset (default: legacy)."""
+    return get_preset(preset).get_catalog()
 
 
-def _read_json_asset(name: str) -> Dict[str, Any]:
-    resource = resources.files('superdoc').joinpath('tools', name)
-    try:
-        raw = resource.read_text(encoding='utf-8')
-    except FileNotFoundError as error:
+def list_tools(provider: ToolProvider, preset: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Return the raw tool array for a provider from a preset (default: legacy).
+
+    No cache markers applied. Use :func:`choose_tools` for cache markers and metadata.
+    """
+    if provider not in ('openai', 'anthropic', 'vercel', 'generic'):
         raise SuperDocError(
-            'Unable to load packaged tool artifact.',
-            code='TOOLS_ASSET_NOT_FOUND',
-            details={'file': name},
-        ) from error
-    except Exception as error:
-        raise SuperDocError(
-            'Unable to read packaged tool artifact.',
-            code='TOOLS_ASSET_NOT_FOUND',
-            details={'file': name, 'message': str(error)},
-        ) from error
-
-    try:
-        parsed = json.loads(raw)
-    except Exception as error:
-        raise SuperDocError(
-            'Packaged tool artifact is invalid JSON.',
-            code='TOOLS_ASSET_INVALID',
-            details={'file': name, 'message': str(error)},
-        ) from error
-
-    if not isinstance(parsed, dict):
-        raise SuperDocError(
-            'Packaged tool artifact root must be an object.',
-            code='TOOLS_ASSET_INVALID',
-            details={'file': name},
-        )
-
-    return cast(Dict[str, Any], parsed)
-
-
-def get_tool_catalog() -> Dict[str, Any]:
-    return _read_json_asset('catalog.json')
-
-
-def list_tools(provider: ToolProvider) -> List[Dict[str, Any]]:
-    bundle = _read_json_asset(PROVIDER_FILE[provider])
-    tools = bundle.get('tools')
-    if not isinstance(tools, list):
-        raise SuperDocError(
-            'Tool provider bundle is missing tools array.',
-            code='TOOLS_ASSET_INVALID',
+            'provider is required.',
+            code='INVALID_ARGUMENT',
             details={'provider': provider},
         )
+    result = get_preset(preset).get_tools(provider, cache=False)
+    tools = result.get('tools') if isinstance(result.get('tools'), list) else []
     return cast(List[Dict[str, Any]], tools)
 
 
 def choose_tools(input: ToolChooserInput) -> Dict[str, Any]:
-    """Select all intent tools for a specific provider.
-
-    Returns all intent tools in the requested provider format.
+    """Select tools for a specific provider from a preset.
 
     Example::
 
+        # Default — legacy preset.
         result = choose_tools({'provider': 'openai'})
+
+        # Pick a specific preset.
+        result = choose_tools({'provider': 'anthropic', 'preset': 'legacy', 'cache': True})
     """
     provider = input.get('provider')
     if provider not in ('openai', 'anthropic', 'vercel', 'generic'):
-        raise SuperDocError('provider is required.', code='INVALID_ARGUMENT', details={'provider': provider})
+        raise SuperDocError(
+            'provider is required.',
+            code='INVALID_ARGUMENT',
+            details={'provider': provider},
+        )
 
-    bundle = _read_json_asset(PROVIDER_FILE[provider])
-    tools = bundle.get('tools') if isinstance(bundle.get('tools'), list) else []
+    # Default only when `preset` is absent. An explicit empty string is passed
+    # through to get_preset() so it raises PRESET_NOT_FOUND, matching Node/MCP
+    # fail-fast behavior. Using `or DEFAULT_PRESET` would silently treat
+    # `preset: ''` as legacy and hide misconfiguration.
+    preset_arg = input.get('preset')
+    preset_id = preset_arg if preset_arg is not None else DEFAULT_PRESET
+    cache_requested = bool(input.get('cache'))
+
+    preset = get_preset(preset_id)
+    result = preset.get_tools(cast(ToolProvider, provider), cache=cache_requested)
+    tools = result.get('tools') if isinstance(result.get('tools'), list) else []
+    cache_strategy = result.get('cacheStrategy', 'disabled')
 
     return {
         'tools': tools,
         'meta': {
             'provider': provider,
-            'toolCount': len(tools),
+            'preset': preset_id,
+            'toolCount': len(tools) if isinstance(tools, list) else 0,
+            'cacheStrategy': cache_strategy,
         },
     }
-
-
-def _resolve_doc_method(document_handle: Any, operation_id: str) -> Any:
-    def _snake_case(token: str) -> str:
-        token = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', token)
-        token = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', token)
-        return token.replace('-', '_').lower()
-
-    cursor = document_handle
-    for token in operation_id.split('.')[1:]:
-        candidates = [token]
-        snake_token = _snake_case(token)
-        if snake_token != token:
-            candidates.append(snake_token)
-
-        resolved = None
-        for candidate in candidates:
-            if hasattr(cursor, candidate):
-                resolved = getattr(cursor, candidate)
-                break
-
-        if resolved is None:
-            raise SuperDocError(
-                'No SDK doc method found for operation.',
-                code='TOOL_DISPATCH_NOT_FOUND',
-                details={'operationId': operation_id, 'token': token},
-            )
-        cursor = resolved
-
-    if not callable(cursor):
-        raise SuperDocError(
-            'Resolved SDK doc member is not callable.',
-            code='TOOL_DISPATCH_NOT_FOUND',
-            details={'operationId': operation_id},
-        )
-
-    return cursor
 
 
 def dispatch_superdoc_tool(
@@ -144,31 +107,12 @@ def dispatch_superdoc_tool(
     args: Optional[Dict[str, Any]] = None,
     invoke_options: Optional[Dict[str, Any]] = None,
 ) -> Any:
-    """Dispatch a tool call against a bound document handle.
+    """Dispatch a tool call against a bound document handle using the default preset.
 
-    The document handle injects session targeting automatically.
-    Tool arguments should not contain doc or sessionId — those are
-    stripped if present for backwards compatibility with older tool schemas.
+    The handle injects session targeting automatically; arguments should not
+    contain ``doc`` or ``sessionId`` — those are stripped if present.
     """
-    payload = args or {}
-    if not isinstance(payload, dict):
-        raise SuperDocError('Tool arguments must be an object.', code='INVALID_ARGUMENT', details={'toolName': tool_name})
-
-    # Strip doc/sessionId if present — the document handle manages targeting.
-    payload = {k: v for k, v in payload.items() if k not in ('doc', 'sessionId')}
-
-    def execute(operation_id: str, input_args: Dict[str, Any]) -> Any:
-        method = _resolve_doc_method(document_handle, operation_id)
-        if inspect.iscoroutinefunction(method):
-            raise SuperDocError(
-                'dispatch_superdoc_tool cannot call async methods. Use dispatch_superdoc_tool_async.',
-                code='INVALID_ARGUMENT',
-                details={'toolName': tool_name, 'operationId': operation_id},
-            )
-        kwargs = dict(invoke_options or {})
-        return method(input_args, **kwargs)
-
-    return dispatch_intent_tool(tool_name, payload, execute)
+    return get_preset(DEFAULT_PRESET).dispatch(document_handle, tool_name, args, invoke_options)
 
 
 async def dispatch_superdoc_tool_async(
@@ -177,55 +121,25 @@ async def dispatch_superdoc_tool_async(
     args: Optional[Dict[str, Any]] = None,
     invoke_options: Optional[Dict[str, Any]] = None,
 ) -> Any:
-    """Async version of dispatch_superdoc_tool. Dispatches against a bound document handle."""
-    payload = args or {}
-    if not isinstance(payload, dict):
-        raise SuperDocError('Tool arguments must be an object.', code='INVALID_ARGUMENT', details={'toolName': tool_name})
-
-    # Strip doc/sessionId if present — the document handle manages targeting.
-    payload = {k: v for k, v in payload.items() if k not in ('doc', 'sessionId')}
-
-    def execute(operation_id: str, input_args: Dict[str, Any]) -> Any:
-        method = _resolve_doc_method(document_handle, operation_id)
-        kwargs = dict(invoke_options or {})
-        return method(input_args, **kwargs)
-
-    result = dispatch_intent_tool(tool_name, payload, execute)
-    if inspect.isawaitable(result):
-        return await result
-    return result
+    """Async version of :func:`dispatch_superdoc_tool`."""
+    return await get_preset(DEFAULT_PRESET).dispatch_async(
+        document_handle, tool_name, args, invoke_options,
+    )
 
 
-def get_system_prompt() -> str:
-    """Read the bundled SDK system prompt for intent tools.
+def get_system_prompt(preset: Optional[str] = None) -> str:
+    """Read the packaged SDK system prompt (default preset: legacy).
 
-    This prompt includes a persona preamble suitable for embedded LLM usage
-    (OpenAI, Anthropic APIs). For MCP server instructions, use
-    :func:`get_mcp_prompt` instead.
+    Includes a persona preamble suitable for embedded LLM usage. For MCP
+    server instructions, use :func:`get_mcp_prompt` instead.
     """
-    resource = resources.files('superdoc').joinpath('tools', 'system-prompt.md')
-    try:
-        return resource.read_text(encoding='utf-8')
-    except FileNotFoundError as error:
-        raise SuperDocError(
-            'System prompt not found.',
-            code='TOOLS_ASSET_NOT_FOUND',
-            details={'file': 'system-prompt.md'},
-        ) from error
+    return get_preset(preset).get_system_prompt()
 
 
-def get_mcp_prompt() -> str:
-    """Read the bundled MCP system prompt for intent tools.
+def get_mcp_prompt(preset: Optional[str] = None) -> str:
+    """Read the packaged MCP system prompt for intent tools (default preset: legacy).
 
-    This prompt omits the persona preamble and includes session lifecycle
-    instructions (open/save/close) suitable for MCP server ``instructions``.
+    Omits the persona preamble and includes session lifecycle instructions
+    (open/save/close) suitable for MCP server ``instructions``.
     """
-    resource = resources.files('superdoc').joinpath('tools', 'system-prompt-mcp.md')
-    try:
-        return resource.read_text(encoding='utf-8')
-    except FileNotFoundError as error:
-        raise SuperDocError(
-            'MCP system prompt not found.',
-            code='TOOLS_ASSET_NOT_FOUND',
-            details={'file': 'system-prompt-mcp.md'},
-        ) from error
+    return get_preset(preset).get_mcp_prompt()

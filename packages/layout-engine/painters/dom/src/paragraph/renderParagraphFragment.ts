@@ -32,6 +32,7 @@ type RenderParagraphFragmentParams = {
     options?: { sourceAnchor?: ResolvedFragmentItem['sourceAnchor']; wrapperEl?: HTMLElement },
   ) => void;
   createErrorPlaceholder: (blockId: string, error: unknown) => HTMLElement;
+  contentControlsChrome?: 'default' | 'none';
 };
 
 const isMinimalWordLayout = (value: unknown): value is MinimalWordLayout => isMinimalWordLayoutShared(value);
@@ -51,6 +52,7 @@ export const renderParagraphFragment = (params: RenderParagraphFragmentParams): 
     renderLine,
     captureLineSnapshot,
     createErrorPlaceholder,
+    contentControlsChrome,
   } = params;
 
   try {
@@ -132,6 +134,7 @@ export const renderParagraphFragment = (params: RenderParagraphFragmentParams): 
         });
       },
       sourceAnchor: resolvedItem?.sourceAnchor,
+      contentControlsChrome,
     });
 
     return fragmentEl;

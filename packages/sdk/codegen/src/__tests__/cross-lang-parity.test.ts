@@ -54,7 +54,7 @@ function callPython(command: Record<string, unknown>): Promise<unknown> {
 
 /** Import Node SDK chooseTools (cached). */
 let _nodeTools: typeof import('../../../langs/node/src/tools.js') | null = null;
-async function nodeTools() {
+async function nodeTools(): Promise<typeof import('../../../langs/node/src/tools.js')> {
   if (!_nodeTools) {
     _nodeTools = await import(path.join(REPO_ROOT, 'packages/sdk/langs/node/src/tools.ts'));
   }
@@ -77,6 +77,43 @@ describe('chooseTools parity', () => {
     expect(pyResult.meta.provider).toBe(nodeResult.meta.provider);
     expect(pyResult.meta.toolCount).toBe(nodeResult.meta.toolCount);
     expect(nodeResult.meta.toolCount).toBeGreaterThan(0);
+  });
+
+  test('returns same tool count when preset: legacy is explicit (parity)', async () => {
+    const input = { provider: 'generic' as const, preset: 'legacy' };
+
+    const { chooseTools } = await nodeTools();
+    const nodeResult = await chooseTools(input);
+
+    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult & {
+      meta: { preset?: string };
+    };
+
+    expect(pyResult.meta.provider).toBe(nodeResult.meta.provider);
+    expect(pyResult.meta.toolCount).toBe(nodeResult.meta.toolCount);
+    expect(pyResult.meta.preset).toBe('legacy');
+    expect(nodeResult.meta.preset).toBe('legacy');
+  });
+});
+
+// --------------------------------------------------------------------------
+// Preset registry parity
+// --------------------------------------------------------------------------
+
+describe('Preset registry parity', () => {
+  test('Node and Python expose the same DEFAULT_PRESET and registered ids', async () => {
+    const { DEFAULT_PRESET: nodeDefault, listPresets: nodeList } = await nodeTools();
+    const nodePresets = nodeList();
+
+    const pyResult = (await callPython({ action: 'listPresets' })) as {
+      defaultPreset: string;
+      presets: string[];
+    };
+
+    expect(pyResult.defaultPreset).toBe(nodeDefault);
+    expect(nodeDefault).toBe('legacy');
+    // Both runtimes register the same preset set (order-agnostic).
+    expect([...pyResult.presets].sort()).toEqual([...nodePresets].sort());
   });
 });
 

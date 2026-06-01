@@ -29,6 +29,7 @@ const superdoc = new SuperDoc({
   document: yourFile,
 });
 
+/** @param {import('superdoc').SuperDocReadyPayload} payload */
 const handler = ({ superdoc }) => {
   console.log('Handler called');
 };
@@ -154,6 +155,7 @@ When editor content changes. Use this to refresh live UI state like word counts 
 <CodeGroup>
 ```javascript Usage
 superdoc.on('editor-update', ({ editor }) => {
+  if (!editor) return;
   autoSave(editor.getJSON());
 });
 ```
@@ -168,6 +170,7 @@ const superdoc = new SuperDoc({
 });
 
 superdoc.on('editor-update', ({ editor }) => {
+  if (!editor) return;
   autoSave(editor.getJSON());
 });
 ```
@@ -190,7 +193,7 @@ When content processing fails.
 
 <CodeGroup>
 ```javascript Usage
-superdoc.on('content-error', ({ error, editor, documentId }) => {
+superdoc.on('content-error', ({ error, editor }) => {
   console.error('Content error:', error);
 });
 ```
@@ -204,7 +207,7 @@ const superdoc = new SuperDoc({
   document: yourFile,
 });
 
-superdoc.on('content-error', ({ error, editor, documentId }) => {
+superdoc.on('content-error', ({ error, editor }) => {
   console.error('Content error:', error);
 });
 ```
@@ -240,6 +243,55 @@ superdoc.on('fonts-resolved', ({ documentFonts, unsupportedFonts }) => {
 ```
 </CodeGroup>
 
+## Content controls (SDT fields)
+
+### `content-control:active-change`
+
+Fires when selection enters a content control, switches between controls, or leaves all controls.
+
+```javascript
+superdoc.on('content-control:active-change', ({ active, previous, activePath, source }) => {
+  // source: 'keyboard' | 'pointer'
+  // active / previous: SdtRef | null
+  // activePath: SdtRef[] - full active stack, innermost first ([] when none)
+});
+```
+
+`SdtRef` shape:
+
+```ts
+type SdtRef = {
+  id: string;
+  tag?: string;
+  alias?: string;
+  controlType: string;
+  scope: 'inline' | 'block';
+};
+```
+
+`active` is the deepest control (`activePath[0]`); `activePath` holds the full stack, innermost first. Controls without an `id` do not emit these events.
+
+How to interpret:
+
+1. Focus (`null -> A`): `previous === null && active !== null`
+2. Switch (`A -> B`): `previous !== null && active !== null && previous.id !== active.id`
+3. Blur (`A -> null`): `previous !== null && active === null`
+
+### `content-control:click`
+
+Fires on pointer click inside a content control.
+
+```javascript
+superdoc.on('content-control:click', ({ target, source }) => {
+  // source is always 'pointer'
+  // target: SdtRef
+});
+```
+
+Both are also available as config callbacks: `onContentControlActiveChange` and `onContentControlClick`.
+
+To build your own content-control UI on these events, see [Custom UI > Content controls](/editor/custom-ui/content-controls).
+
 ## Comments events
 
 ### `comments-update`
@@ -248,8 +300,10 @@ When comments are modified.
 
 <CodeGroup>
 ```javascript Usage
-superdoc.on('comments-update', ({ type, data }) => {
+superdoc.on('comments-update', ({ type, comment, changes }) => {
   // type: 'add', 'update', 'deleted', 'resolved'
+  // comment: the comment object (when applicable)
+  // changes: per-field change set (when the update is a mutation)
 });
 ```
 
@@ -262,8 +316,10 @@ const superdoc = new SuperDoc({
   document: yourFile,
 });
 
-superdoc.on('comments-update', ({ type, data }) => {
+superdoc.on('comments-update', ({ type, comment, changes }) => {
   // type: 'add', 'update', 'deleted', 'resolved'
+  // comment: the comment object (when applicable)
+  // changes: per-field change set (when the update is a mutation)
 });
 ```
 </CodeGroup>
@@ -302,9 +358,8 @@ When user presence changes.
 
 <CodeGroup>
 ```javascript Usage
-superdoc.on('awareness-update', ({ context, states }) => {
-  const users = Array.from(states.values());
-  updateUserCursors(users);
+superdoc.on('awareness-update', ({ states, added, removed }) => {
+  updateUserCursors(states);
 });
 ```
 
@@ -317,9 +372,8 @@ const superdoc = new SuperDoc({
   document: yourFile,
 });
 
-superdoc.on('awareness-update', ({ context, states }) => {
-  const users = Array.from(states.values());
-  updateUserCursors(users);
+superdoc.on('awareness-update', ({ states, added, removed }) => {
+  updateUserCursors(states);
 });
 ```
 </CodeGroup>
@@ -331,7 +385,7 @@ When document lock state changes.
 <CodeGroup>
 ```javascript Usage
 superdoc.on('locked', ({ isLocked, lockedBy }) => {
-  if (isLocked) {
+  if (isLocked && lockedBy) {
     showLockBanner(`Locked by ${lockedBy.name}`);
   }
 });
@@ -347,7 +401,7 @@ const superdoc = new SuperDoc({
 });
 
 superdoc.on('locked', ({ isLocked, lockedBy }) => {
-  if (isLocked) {
+  if (isLocked && lockedBy) {
     showLockBanner(`Locked by ${lockedBy.name}`);
   }
 });
@@ -374,7 +428,6 @@ import 'superdoc/style.css';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: yourFile,
-  pagination: true,
 });
 
 superdoc.on('pagination-update', ({ totalPages, superdoc }) => {
@@ -445,8 +498,10 @@ When an error occurs during document processing or runtime.
 
 <CodeGroup>
 ```javascript Usage
-superdoc.on('exception', ({ error, document, editor }) => {
-  console.error('SuperDoc error:', error);
+superdoc.on('exception', (payload) => {
+  // `payload` is a discriminated union; narrow before reading variant-specific fields.
+  // `code` is only on the editor-lifecycle variant; `stage` is only on document-init.
+  console.error('SuperDoc error:', payload.error);
 });
 ```
 
@@ -459,8 +514,10 @@ const superdoc = new SuperDoc({
   document: yourFile,
 });
 
-superdoc.on('exception', ({ error, document, editor }) => {
-  console.error('SuperDoc error:', error);
+superdoc.on('exception', (payload) => {
+  // `payload` is a discriminated union; narrow before reading variant-specific fields.
+  // `code` is only on the editor-lifecycle variant; `stage` is only on document-init.
+  console.error('SuperDoc error:', payload.error);
 });
 ```
 </CodeGroup>

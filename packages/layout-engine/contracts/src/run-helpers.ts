@@ -9,6 +9,20 @@
 
 import type { FlowBlock, Line, ParagraphIndent, Run, TabRun, TabStop, TextRun } from './index.js';
 
+export function isEmptySdtPlaceholderRun(
+  run: Run,
+): run is TextRun & { visualPlaceholder: 'emptyInlineSdt' | 'emptyBlockSdt' } {
+  return (
+    (run.kind === 'text' || run.kind === undefined) &&
+    'text' in run &&
+    ((run as TextRun).visualPlaceholder === 'emptyInlineSdt' || (run as TextRun).visualPlaceholder === 'emptyBlockSdt')
+  );
+}
+
+export function isEmptyInlineSdtPlaceholderRun(run: Run): run is TextRun & { visualPlaceholder: 'emptyInlineSdt' } {
+  return isEmptySdtPlaceholderRun(run) && run.visualPlaceholder === 'emptyInlineSdt';
+}
+
 /**
  * Expands text runs that contain inline newlines into multiple runs.
  *
@@ -228,6 +242,11 @@ export function sliceRunsForLine(block: FlowBlock, line: Line): Run[] {
     }
 
     const text = run.text ?? '';
+    if (isEmptySdtPlaceholderRun(run)) {
+      result.push(run);
+      continue;
+    }
+
     const isFirstRun = runIndex === line.fromRun;
     const isLastRun = runIndex === line.toRun;
 

@@ -33,7 +33,7 @@ test('apply Courier New font to selected text in loaded document', async ({ supe
   await superdoc.assertTextContains(originalText.substring(0, 20));
 
   // Verify font applied via toolbar state for the current selection.
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Courier New');
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText('Courier New');
 
   await superdoc.snapshot('apply-font-courier');
 });

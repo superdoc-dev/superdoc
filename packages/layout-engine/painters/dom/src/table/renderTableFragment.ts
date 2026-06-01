@@ -58,6 +58,8 @@ export type TableRenderDependencies = {
   ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   /** Receives notification when this table fragment or descendants render SDT container chrome */
   onSdtContainerChrome?: () => void;
+  /** Built-in SDT chrome rendering mode. */
+  chrome?: 'default' | 'none';
   /** Function to render a line of paragraph content */
   renderLine: (
     block: ParagraphBlock,
@@ -158,6 +160,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     measure,
     cellSpacingPx,
     effectiveColumnWidths,
+    chrome,
     context,
     sdtBoundary,
     ancestorContainerKey,
@@ -225,12 +228,20 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   // Apply SDT container styling (document sections, structured content blocks)
   if (
-    applySdtContainerChrome(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary, {
-      ancestorContainerKey,
-      ancestorContainerSdt,
-      ancestorContainerKeys,
-      ancestorContainerSdts,
-    })
+    applySdtContainerChrome(
+      doc,
+      container,
+      block.attrs?.sdt,
+      block.attrs?.containerSdt,
+      sdtBoundary,
+      {
+        ancestorContainerKey,
+        ancestorContainerSdt,
+        ancestorContainerKeys,
+        ancestorContainerSdts,
+      },
+      chrome,
+    )
   ) {
     onSdtContainerChrome?.();
   }
@@ -433,6 +444,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         ancestorContainerKeys: nextAncestorContainerKeys,
         ancestorContainerSdts: nextAncestorContainerSdts,
         onSdtContainerChrome,
+        chrome,
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
@@ -599,6 +611,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       ancestorContainerKeys: nextAncestorContainerKeys,
       ancestorContainerSdts: nextAncestorContainerSdts,
       onSdtContainerChrome,
+      chrome,
       // Draw top border if table continues from previous fragment (MS Word behavior)
       continuesFromPrev: isFirstRenderedBodyRow && fragment.continuesFromPrev === true,
       // Draw bottom border if table continues on next fragment (MS Word behavior)

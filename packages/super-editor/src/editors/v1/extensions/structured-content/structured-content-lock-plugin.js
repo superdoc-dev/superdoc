@@ -1,5 +1,10 @@
-import { NodeSelection, Plugin, PluginKey } from 'prosemirror-state';
+import { NodeSelection, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { ySyncPluginKey } from 'y-prosemirror';
+import {
+  findFirstContentCursorPosInNode,
+  findLastContentCursorPosInNode,
+} from '@core/commands/helpers/textPositions.js';
+import { BLOCK_NODE_METADATA_UPDATE_META } from '../block-node/block-node.js';
 
 export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock');
 
@@ -26,6 +31,7 @@ function collectSDTNodes(doc) {
     if (node.type.name === 'structuredContent' || node.type.name === 'structuredContentBlock') {
       sdtNodes.push({
         type: node.type.name,
+        node,
         lockMode: node.attrs.lockMode,
         pos,
         end: pos + node.nodeSize,
@@ -68,6 +74,38 @@ function checkLockViolation(sdtNodes, from, to) {
   return { blocked: false };
 }
 
+function isAtBlockSdtWrapperDeletePosition(state, sdt, pos) {
+  if (sdt.type !== 'structuredContentBlock') return false;
+
+  const $pos = state.doc.resolve(pos);
+  let sdtDepth = null;
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    if ($pos.node(depth).type.name === 'structuredContentBlock' && $pos.before(depth) === sdt.pos) {
+      sdtDepth = depth;
+      break;
+    }
+  }
+  if (sdtDepth == null) return false;
+
+  const textblockDepth = sdtDepth + 1;
+  if ($pos.depth < textblockDepth) return false;
+  if (!$pos.node(textblockDepth).isTextblock) return false;
+  if ($pos.node(textblockDepth).type.name !== 'paragraph') return false;
+  if ($pos.pos !== $pos.start(textblockDepth)) return false;
+
+  return $pos.before(textblockDepth) === $pos.start(sdtDepth);
+}
+
+function selectionCoversSdtContent(sdt, from, to) {
+  if (from === sdt.pos + 1 && to === sdt.end - 1) return true;
+
+  if (sdt.type !== 'structuredContentBlock') return false;
+
+  const contentStart = findFirstContentCursorPosInNode(sdt.node, sdt.pos);
+  const contentEnd = findLastContentCursorPosInNode(sdt.node, sdt.pos);
+  return contentStart != null && contentEnd != null && from === contentStart && to === contentEnd;
+}
+
 export function createStructuredContentLockPlugin() {
   return new Plugin({
     key: STRUCTURED_CONTENT_LOCK_KEY,
@@ -107,26 +145,35 @@ export function createStructuredContentLockPlugin() {
         }
 
         // Path 1 — non-collapsed selection that exactly covers the editable
-        // content of an SDT (e.g., the select-plugin's first-click select-all,
-        // a triple-click that lands on the content range, or precise keyboard
-        // selection). For wrapper-deletable lock modes, promote to a
+        // content of an SDT (e.g., a label/handle selection, a triple-click
+        // that lands on the content range, or precise keyboard selection).
+        // For wrapper-deletable but content-locked modes, promote to a
         // NodeSelection on the wrapper so the next operation targets the whole
-        // field. For Backspace/Delete we stop here — the user sees the wrapper
-        // highlighted and presses again to confirm (matches Word's "click to
-        // select, key to delete"). For Cut we let the event continue so PM's
-        // clipboard handler runs against the just-installed NodeSelection and
-        // the wrapper is cut in a single keystroke.
+        // field instead of trying to edit locked content. For content-editable
+        // modes, let the normal command chain delete the selected content while
+        // preserving the SDT wrapper.
         if (from !== to && !(selection instanceof NodeSelection)) {
-          const exactContentSDT = sdtNodes.find((s) => from === s.pos + 1 && to === s.end - 1);
+          const exactContentSDT = sdtNodes.find((s) => selectionCoversSdtContent(s, from, to));
           if (exactContentSDT) {
-            const isSdtLocked =
-              exactContentSDT.lockMode === 'sdtLocked' || exactContentSDT.lockMode === 'sdtContentLocked';
-            if (!isSdtLocked) {
-              const tr = state.tr.setSelection(NodeSelection.create(state.doc, exactContentSDT.pos));
-              view.dispatch(tr);
+            const isContentLocked =
+              exactContentSDT.lockMode === 'contentLocked' || exactContentSDT.lockMode === 'sdtContentLocked';
+            const isWrapperDeletable =
+              exactContentSDT.lockMode !== 'sdtLocked' && exactContentSDT.lockMode !== 'sdtContentLocked';
+            const isFullyLocked = exactContentSDT.lockMode === 'sdtContentLocked';
+            if (isFullyLocked && exactContentSDT.type === 'structuredContent' && (isBackspace || isDelete)) {
+              const collapsePos = isBackspace ? exactContentSDT.pos : exactContentSDT.end;
+              view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, collapsePos)));
+              event.preventDefault();
+              return true;
+            }
+            if (isContentLocked && isWrapperDeletable) {
               if (isCut) {
+                const tr = state.tr.setSelection(NodeSelection.create(state.doc, exactContentSDT.pos));
+                view.dispatch(tr);
                 return false;
               }
+              const tr = state.tr.delete(exactContentSDT.pos, exactContentSDT.end);
+              view.dispatch(tr);
               event.preventDefault();
               return true;
             }
@@ -137,28 +184,70 @@ export function createStructuredContentLockPlugin() {
         let affectedFrom = from;
         let affectedTo = to;
 
-        // If selection is collapsed, backspace/delete affects adjacent position.
-        // Note: this is a single-character approximation. joinBackward at paragraph
-        // boundaries can span wider ranges, but filterTransaction catches the real
-        // step range as a safety net (with a possible brief cursor jump).
+        // If selection is collapsed, Backspace/Delete affects adjacent content.
+        // Inline SDT wrapper boundaries are handed to keymap commands so both
+        // directions can select the SDT content before a destructive action.
+        // Other positions use a single-character approximation here;
+        // filterTransaction catches wider step ranges as a safety net.
         if (from === to) {
+          const emptyInlineSDT = sdtNodes.find(
+            (s) => s.type === 'structuredContent' && s.pos + 1 === from && s.end - 1 === from,
+          );
+          if ((isBackspace || isDelete) && emptyInlineSDT) {
+            const isWrapperDeletable =
+              emptyInlineSDT.lockMode !== 'sdtLocked' && emptyInlineSDT.lockMode !== 'sdtContentLocked';
+            event.preventDefault();
+            if (isWrapperDeletable) {
+              view.dispatch(state.tr.delete(emptyInlineSDT.pos, emptyInlineSDT.end));
+            }
+            return true;
+          }
+
+          const blockSdtAtWrapperDeletePosition = sdtNodes.find((s) =>
+            isAtBlockSdtWrapperDeletePosition(state, s, from),
+          );
+          if ((isBackspace || isDelete) && blockSdtAtWrapperDeletePosition) {
+            return false;
+          }
+
+          const inlineSdtAncestor = sdtNodes.find(
+            (s) => s.type === 'structuredContent' && from > s.pos && from < s.end,
+          );
+          const inlineSdtContentEditable =
+            inlineSdtAncestor &&
+            inlineSdtAncestor.lockMode !== 'contentLocked' &&
+            inlineSdtAncestor.lockMode !== 'sdtContentLocked';
+          if ((isBackspace || isDelete) && inlineSdtContentEditable && selection.$from.parent.type.name === 'run') {
+            const deleteFrom = isBackspace ? from - 1 : from;
+            const deleteTo = isBackspace ? from : from + 1;
+            const staysInsideInlineSdt = deleteFrom > inlineSdtAncestor.pos && deleteTo < inlineSdtAncestor.end;
+            const staysInsideRun = isBackspace ? from > selection.$from.start() : from < selection.$from.end();
+
+            if (staysInsideInlineSdt && staysInsideRun) {
+              view.dispatch(state.tr.delete(deleteFrom, deleteTo).scrollIntoView());
+              event.preventDefault();
+              return true;
+            }
+          }
+
           if (isBackspace && from > 0) {
             affectedFrom = from - 1;
             // Path 2 — caret is exactly at the trailing wrapper boundary of an
-            // SDT. Backspace here is a wrapper-touching action (PM's keymap
-            // chains through to selectNodeBackward, which produces a
-            // NodeSelection on the wrapper). Expand the affected range so
-            // contentLocked alone — which only locks content edits — doesn't
-            // mistake this for an in-content edit and block it.
+            // SDT. The Backspace keymap has a specialized command that selects
+            // the inline SDT content, so let that run instead of treating this
+            // as an attempted wrapper deletion.
             const adjacentSDT = sdtNodes.find((s) => s.end === from);
             if (adjacentSDT) {
-              affectedFrom = adjacentSDT.pos;
-              affectedTo = adjacentSDT.end;
+              return false;
             }
           } else if (isDelete && to < state.doc.content.size) {
             affectedTo = to + 1;
-            // Symmetric: caret immediately before an SDT.
+            // Symmetric: caret immediately before an inline SDT. Let the
+            // Delete keymap select its content, mirroring trailing Backspace.
             const adjacentSDT = sdtNodes.find((s) => s.pos === to);
+            if (adjacentSDT?.type === 'structuredContent') {
+              return false;
+            }
             if (adjacentSDT) {
               affectedFrom = adjacentSDT.pos;
               affectedTo = adjacentSDT.end;
@@ -208,6 +297,15 @@ export function createStructuredContentLockPlugin() {
       // always be applied locally to keep every client converged, even if the
       // incoming step spans locked SDTs.
       if (tr.getMeta?.(ySyncPluginKey)) {
+        return true;
+      }
+
+      const inputType = tr.getMeta?.('inputType');
+      if (inputType === 'historyUndo' || inputType === 'historyRedo') {
+        return true;
+      }
+
+      if (tr.getMeta?.(BLOCK_NODE_METADATA_UPDATE_META)) {
         return true;
       }
 

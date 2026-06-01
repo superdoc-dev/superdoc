@@ -632,9 +632,11 @@ vi.mock('./editors/v1/core/Editor', () => ({
   })),
 }));
 
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
-  return { ...actual, toFlowBlocks: mockToFlowBlocks };
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const { buildLayoutDocumentAdapterVitestMock } = await import(
+    './editors/v1/core/presentation-editor/tests/mock-layout-document-adapter-vitest.js'
+  );
+  return buildLayoutDocumentAdapterVitestMock(importOriginal, { toFlowBlocks: mockToFlowBlocks });
 });
 
 // Mock PositionHitResolver

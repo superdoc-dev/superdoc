@@ -185,6 +185,8 @@ import type {
   TextAddress,
   TextSegment,
   TextTarget,
+  TrackChangeAuthor,
+  TrackChangesAuthorColorsConfig,
   TrackChangesModuleConfig,
   TrackedChangeAddress,
   TrackedChangesMode,
@@ -367,6 +369,8 @@ const _real_TelemetryEvent: AssertNotAny<TelemetryEvent> = true;
 const _real_TextAddress: AssertNotAny<TextAddress> = true;
 const _real_TextSegment: AssertNotAny<TextSegment> = true;
 const _real_TextTarget: AssertNotAny<TextTarget> = true;
+const _real_TrackChangeAuthor: AssertNotAny<TrackChangeAuthor> = true;
+const _real_TrackChangesAuthorColorsConfig: AssertNotAny<TrackChangesAuthorColorsConfig> = true;
 const _real_TrackChangesModuleConfig: AssertNotAny<TrackChangesModuleConfig> = true;
 const _real_TrackedChangeAddress: AssertNotAny<TrackedChangeAddress> = true;
 const _real_TrackedChangesMode: AssertNotAny<TrackedChangesMode> = true;

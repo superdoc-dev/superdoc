@@ -164,6 +164,17 @@ export const TableHeader = Node.create({
         rendered: false,
       },
 
+      /**
+       * @private
+       * Cell-level structured document tag metadata (ECMA-376 §17.5.2.32, CT_SdtCell).
+       * Set when the source OOXML wrapped this cell in `<w:sdt>`; reconstructed on export.
+       * Shape: `{ scope: 'cell', sdtPr, sdtEndPr }`.
+       */
+      cellSdt: {
+        default: null,
+        rendered: false,
+      },
+
       __placeholder: {
         default: null,
         parseDOM: (element) => {

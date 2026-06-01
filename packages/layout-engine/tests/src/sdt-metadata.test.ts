@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { toFlowBlocks } from './test-helpers/to-flow-blocks.js';
 import type { FlowBlock, SdtMetadata } from '@superdoc/contracts';
 import docFixture from '../fixtures/sdt-flow-input.json' assert { type: 'json' };
 

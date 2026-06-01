@@ -6,10 +6,10 @@ import { generateDocxRandomId } from '@core/helpers/index.js';
 import { findOrCreateRelationship } from '@core/parts/adapters/relationships-mutation.js';
 import { resolveHeaderFooterRelsPartIdFromRefId } from '@core/parts/adapters/header-footer-sync.js';
 
-const fileTooLarge = (file) => {
-  let fileSizeMb = Number((file.size / (1024 * 1024)).toFixed(4));
+export const MAX_IMAGE_FILE_BYTES = 5 * 1024 * 1024;
 
-  if (fileSizeMb > 5) {
+const fileTooLarge = (file) => {
+  if (file.size > MAX_IMAGE_FILE_BYTES) {
     window.alert('Image size must be less than 5MB');
     return true;
   }

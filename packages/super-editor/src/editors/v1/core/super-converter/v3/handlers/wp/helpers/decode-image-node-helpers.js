@@ -1,14 +1,69 @@
 import { emuToPixels, pixelsToEmu, degreesToRot } from '@converter/helpers.js';
-import { getFallbackImageNameFromDataUri, sanitizeDocxMediaName } from '@converter/helpers/mediaHelpers.js';
+import {
+  getDataUriMetadata,
+  getFallbackImageNameFromDataUri,
+  sanitizeDocxMediaName,
+} from '@converter/helpers/mediaHelpers.js';
 import { prepareTextAnnotation } from '@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js';
 import { wrapTextInRun } from '@converter/exporter.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
 import { readImageDimensionsFromDataUri } from '@converter/image-dimensions.js';
+import { simpleStringHash } from '@core/utilities/hash.js';
+import { isValidImageDataUrl } from '@superdoc/url-validation';
 
 const DECORATIVE_EXT_URI = '{C183D7F6-B498-43B3-948B-1728B52AA6E4}';
 const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/decorative';
 const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const IMAGE_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+
+function createMediaTargetForDataUri(params, src) {
+  if (!isValidImageDataUrl(src)) return null;
+
+  const metadata = getDataUriMetadata(src);
+
+  const extension = metadata.extension;
+  if (!extension) return null;
+
+  if (!params.media) params.media = {};
+  if (!params.dataUriMediaTargets) params.dataUriMediaTargets = new Map();
+  const cachedPackagePath = params.dataUriMediaTargets.get(src);
+  if (cachedPackagePath && params.media[cachedPackagePath] === src) {
+    return cachedPackagePath.slice('word/'.length);
+  }
+
+  const fileBaseName = sanitizeDocxMediaName(`image-${simpleStringHash(src)}`, 'image');
+  let fileName = `${fileBaseName}.${extension}`;
+  let packagePath = `word/media/${fileName}`;
+  if (params.media[packagePath] === src) {
+    params.dataUriMediaTargets.set(src, packagePath);
+    return `media/${fileName}`;
+  }
+
+  if (params.media[packagePath] && params.media[packagePath] !== src) {
+    fileName = `${fileBaseName}_${generateDocxRandomId(8)}.${extension}`;
+    packagePath = `word/media/${fileName}`;
+  }
+  const relationshipTarget = `media/${fileName}`;
+
+  params.media[packagePath] = src;
+  params.dataUriMediaTargets.set(src, packagePath);
+
+  return relationshipTarget;
+}
+
+function getMediaTargetForImageSrc(params, src) {
+  return src?.startsWith('data:') ? createMediaTargetForDataUri(params, src) : src?.split('word/')[1];
+}
+
+function fallbackForMissingMediaTarget(params) {
+  if (params.node.type === 'fieldAnnotation') return prepareTextAnnotation(params);
+
+  console.warn('Skipping image export because media target could not be resolved.', {
+    nodeType: params.node.type,
+    src: params.node.attrs?.src,
+  });
+  return null;
+}
 
 /**
  * Resolve the hyperlink relationship rId for an image, if applicable.
@@ -179,7 +234,7 @@ export const translateImageNode = (params) => {
   // For fieldAnnotations without a recognizable MIME type, fall back to text
   // annotation before attempting size resolution (they have no image data).
   if (params.node.type === 'fieldAnnotation' && !imageId) {
-    const type = src?.split(';')[0].split('/')[1];
+    const type = getDataUriMetadata(src)?.extension;
     if (!type) {
       return prepareTextAnnotation(params);
     }
@@ -217,25 +272,21 @@ export const translateImageNode = (params) => {
     if (w && h) size = { w, h };
   }
 
-  if (imageId) {
-    const path = src?.split('word/')[1];
-    const relationships = params.isHeaderFooter ? params.existingRelationships : getDocumentRelationships(params);
-    const existingRelation = findImageRelationship(relationships, {
-      id: imageId,
-      target: path,
-    });
+  if (imageId || params.node.type === 'image') {
+    const path = getMediaTargetForImageSrc(params, src);
+    if (!path) return fallbackForMissingMediaTarget(params);
 
-    if (existingRelation) {
-      imageId = existingRelation.attributes.Id;
-    } else {
-      addImageRelationshipForId(params, imageId, path);
-    }
-  } else if (params.node.type === 'image' && !imageId) {
-    const path = src?.split('word/')[1];
-    imageId = addNewImageRelationship(params, path);
+    imageId = resolveImageRelationshipId(params, {
+      id: imageId,
+      path,
+    });
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
     // We already handled the no-type case above; here the type IS valid.
-    const type = src?.split(';')[0].split('/')[1];
+    if (!isValidImageDataUrl(src)) return prepareTextAnnotation(params);
+
+    const metadata = getDataUriMetadata(src);
+
+    const type = metadata.extension;
 
     const sanitizedHash = sanitizeDocxMediaName(attrs.hash, generateDocxRandomId(4));
     const fileName = `${imageName}_${sanitizedHash}.${type}`;
@@ -510,12 +561,31 @@ function addImageRelationshipForId(params, id, imagePath) {
     },
   };
   params.relationships.push(newRel);
+  return id;
 }
 
 function getDocumentRelationships(params) {
   const docx = params.converter?.convertedXml || {};
   const rels = docx['word/_rels/document.xml.rels'];
   return rels?.elements?.find((el) => el.name === 'Relationships')?.elements ?? [];
+}
+
+function getImageRelationshipLookup(params) {
+  return [
+    ...(params.relationships || []),
+    ...(params.isHeaderFooter ? params.existingRelationships || [] : getDocumentRelationships(params)),
+  ];
+}
+
+function resolveImageRelationshipId(params, { id, path }) {
+  const existingRelation = findImageRelationship(getImageRelationshipLookup(params), {
+    ...(id ? { id } : {}),
+    target: path,
+  });
+
+  if (existingRelation) return existingRelation.attributes.Id;
+  if (id) return addImageRelationshipForId(params, id, path);
+  return addNewImageRelationship(params, path);
 }
 
 function findImageRelationship(relationships = [], { id, target }) {

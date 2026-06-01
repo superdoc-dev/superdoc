@@ -1,3 +1,5 @@
+import { buildBlockFieldNode } from './build-block-field-node.js';
+
 /**
  * Processes an INDEX instruction and creates an `sd:index` node.
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine The nodes to combine.
@@ -7,15 +9,5 @@
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  */
 export function preProcessIndexInstruction(nodesToCombine, instrText, _docx, instructionTokens = null) {
-  return [
-    {
-      name: 'sd:index',
-      type: 'element',
-      attributes: {
-        instruction: instrText,
-        ...(instructionTokens ? { instructionTokens } : {}),
-      },
-      elements: nodesToCombine,
-    },
-  ];
+  return buildBlockFieldNode('sd:index', nodesToCombine, instrText, instructionTokens);
 }

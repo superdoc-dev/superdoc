@@ -700,6 +700,37 @@ describe('trackChangesHelpers', () => {
     expect(result).toBe(tr);
   });
 
+  it('trackedTransaction does not treat addToHistory as tracking intent by itself', () => {
+    const state = createState(createDocWithText('abc'));
+    const tr = state.tr.insertText('!', 1);
+    tr.setMeta('addToHistory', false);
+
+    const result = trackedTransaction({ tr, state, user });
+
+    expect(result).toBe(tr);
+  });
+
+  it('trackedTransaction tracks SuperDoc slice paste transactions and preserves paste metadata', () => {
+    const state = createState(createDocWithText('abc'));
+    const tr = state.tr.insertText('Pasted', 2);
+    tr.setMeta('superdocSlicePaste', true);
+    tr.setMeta('paste', true);
+    tr.setMeta('uiEvent', 'paste');
+
+    const tracked = trackedTransaction({ tr, state, user });
+    const nextState = state.apply(tracked);
+
+    expect(tracked).not.toBe(tr);
+    expect(tracked.getMeta('superdocSlicePaste')).toBe(true);
+    expect(tracked.getMeta('paste')).toBe(true);
+    expect(tracked.getMeta('uiEvent')).toBe('paste');
+
+    const hasTrackedPastedText = documentHelpers
+      .findInlineNodes(nextState.doc)
+      .some(({ node }) => node.text === 'Pasted' && node.marks.some((mark) => mark.type.name === TrackInsertMarkName));
+    expect(hasTrackedPastedText).toBe(true);
+  });
+
   it('trackedTransaction skips Yjs-origin transactions', () => {
     const state = createState(createDocWithText('abc'));
     const tr = state.tr.insertText('!', 1);

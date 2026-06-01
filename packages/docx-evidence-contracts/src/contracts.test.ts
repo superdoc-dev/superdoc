@@ -188,7 +188,7 @@ describe('public DOCX evidence contracts', () => {
 
       expect(text).not.toMatch(/from ['"]node:/);
       expect(text).not.toMatch(/from ['"].*\.\.\/\.\.\/\.\.\/labs/);
-      expect(text).not.toMatch(/from ['"]@superdoc\/(super-editor|painter-dom|layout-engine|pm-adapter)/);
+      expect(text).not.toMatch(/from ['"]@superdoc\/(super-editor|painter-dom|layout-engine)/);
     }
   });
 });

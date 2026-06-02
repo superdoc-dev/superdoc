@@ -1,4 +1,11 @@
-import type { FlowBlock, HeaderFooterLayout, Layout, SectionMetadata } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  HeaderFooterLayout,
+  Layout,
+  PageNumberChapterSeparator,
+  PageNumberFormat,
+  SectionMetadata,
+} from '@superdoc/contracts';
 import {
   computeDisplayPageNumber,
   layoutHeaderFooterWithCache,
@@ -25,6 +32,9 @@ type PageResolver = (pageNumber: number) => {
   displayNumber: number;
   totalPages: number;
   sectionPageCount: number;
+  pageFormat?: PageNumberFormat;
+  chapterNumberText?: string;
+  chapterSeparator?: PageNumberChapterSeparator;
 };
 
 /**
@@ -52,16 +62,21 @@ export async function layoutPerRIdHeaderFooters(
   const { headerBlocksByRId, footerBlocksByRId, constraints } = headerFooterInput;
 
   const displayPages = computeDisplayPageNumber(layout.pages, sectionMetadata);
+  const pageByNumber = new Map(layout.pages.map((page) => [page.number, page]));
   const totalPages = layout.pages.length;
 
-  const pageResolver: PageResolver = (pageNumber) => {
+  const pageResolver: PageResolver = (pageNumber: number) => {
     const pageIndex = pageNumber - 1;
     const displayInfo = displayPages[pageIndex];
+    const page = pageByNumber.get(pageNumber);
     return {
-      displayText: displayInfo?.displayText ?? String(pageNumber),
-      displayNumber: displayInfo?.displayNumber ?? pageNumber,
+      displayText: page?.numberText ?? displayInfo?.displayText ?? String(pageNumber),
+      displayNumber: page?.displayNumber ?? displayInfo?.displayNumber ?? pageNumber,
       totalPages,
       sectionPageCount: displayInfo?.sectionPageCount ?? totalPages ?? 1,
+      pageFormat: page?.pageNumberFormat,
+      chapterNumberText: page?.pageNumberChapterText,
+      chapterSeparator: page?.pageNumberChapterSeparator,
     };
   };
 

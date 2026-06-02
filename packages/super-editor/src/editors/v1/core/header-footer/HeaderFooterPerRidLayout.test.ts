@@ -191,6 +191,61 @@ describe('layoutPerRIdHeaderFooters', () => {
     });
   });
 
+  it('passes chapter-aware page context to per-rId header/footer layout', async () => {
+    const headerBlocksByRId = new Map<string, FlowBlock[]>([['rId-header-default', [makeBlock('block-default')]]]);
+    const headerFooterInput = {
+      headerBlocksByRId,
+      footerBlocksByRId: undefined,
+      headerBlocks: undefined,
+      footerBlocks: undefined,
+      constraints: {
+        width: 400,
+        height: 80,
+        pageWidth: 600,
+        pageHeight: 800,
+        margins: { top: 50, right: 50, bottom: 50, left: 50, header: 20 },
+      },
+    };
+    const layout = {
+      pages: [
+        {
+          number: 1,
+          fragments: [],
+          sectionIndex: 0,
+          numberText: '3\u20111',
+          displayNumber: 1,
+          pageNumberFormat: 'decimal',
+          pageNumberChapterText: '3',
+          pageNumberChapterSeparator: 'hyphen',
+        },
+      ],
+    } as unknown as Layout;
+    const sectionMetadata: SectionMetadata[] = [
+      {
+        sectionIndex: 0,
+        numbering: { chapterStyle: 1, chapterSeparator: 'hyphen' },
+        headerRefs: { default: 'rId-header-default' },
+      },
+    ];
+    const deps = {
+      headerLayoutsByRId: new Map(),
+      footerLayoutsByRId: new Map(),
+    };
+
+    await layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata, deps);
+
+    const pageResolver = mockLayoutHeaderFooterWithCache.mock.calls[0][5] as (pageNumber: number) => unknown;
+    expect(pageResolver(1)).toEqual({
+      displayText: '3\u20111',
+      displayNumber: 1,
+      totalPages: 1,
+      sectionPageCount: 1,
+      pageFormat: 'decimal',
+      chapterNumberText: '3',
+      chapterSeparator: 'hyphen',
+    });
+  });
+
   it('lays out first-page header refs in multi-section documents with per-section constraints', async () => {
     const headerBlocksByRId = new Map<string, FlowBlock[]>([
       ['rId-header-default', [makeBlock('block-default')]],

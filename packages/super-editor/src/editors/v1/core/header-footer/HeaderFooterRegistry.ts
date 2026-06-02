@@ -977,10 +977,14 @@ export class HeaderFooterEditorManager extends EventEmitter {
     if (options.currentPageDisplayNumber !== undefined) {
       updateOptions.currentPageDisplayNumber = options.currentPageDisplayNumber;
     }
-    if (options.currentPageChapterNumberText !== undefined) {
+    const hasPageContext =
+      options.currentPageNumber !== undefined ||
+      options.currentPageNumberText !== undefined ||
+      options.currentPageDisplayNumber !== undefined;
+    if (hasPageContext || options.currentPageChapterNumberText !== undefined) {
       updateOptions.currentPageChapterNumberText = options.currentPageChapterNumberText;
     }
-    if (options.currentPageChapterSeparator !== undefined) {
+    if (hasPageContext || options.currentPageChapterSeparator !== undefined) {
       updateOptions.currentPageChapterSeparator = options.currentPageChapterSeparator;
     }
     if (options.totalPageCount !== undefined) {

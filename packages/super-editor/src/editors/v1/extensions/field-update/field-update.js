@@ -144,7 +144,9 @@ export const FieldUpdate = Extension.create({
 });
 
 function resolveSectionPageCountFieldValue(editor, node) {
-  const sectionPageCount = editor?.options?.sectionPageCount ?? editor?.options?.totalPageCount ?? 1;
+  const sectionPageCount = editor?.options?.sectionPageCount;
+  if (sectionPageCount == null) return null;
+
   if (node?.attrs?.pageNumberFormat) {
     return formatPageNumber(Number(sectionPageCount) || 1, node.attrs.pageNumberFormat);
   }

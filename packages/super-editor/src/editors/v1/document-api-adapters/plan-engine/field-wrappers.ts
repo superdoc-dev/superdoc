@@ -381,6 +381,7 @@ function rebuildSectionPageCount(
   if (!node) return fieldFailure('TARGET_NOT_FOUND', 'Node not found.');
 
   const freshValue = resolveSectionPageCountFieldValue(editor, node);
+  if (freshValue == null) return fieldSuccess(address);
 
   const receipt = executeDomainCommand(
     editor,
@@ -403,8 +404,10 @@ function rebuildSectionPageCount(
   return fieldSuccess(address);
 }
 
-function resolveSectionPageCountFieldValue(editor: Editor, node: { attrs?: Record<string, unknown> }): string {
-  const sectionPageCount = editor.options?.sectionPageCount ?? editor.options?.totalPageCount ?? 1;
+function resolveSectionPageCountFieldValue(editor: Editor, node: { attrs?: Record<string, unknown> }): string | null {
+  const sectionPageCount = editor.options?.sectionPageCount;
+  if (sectionPageCount == null) return null;
+
   const pageNumberFormat = node.attrs?.pageNumberFormat;
   if (typeof pageNumberFormat === 'string' && pageNumberFormat) {
     return formatPageNumber(Number(sectionPageCount) || 1, pageNumberFormat as PageNumberFormat);

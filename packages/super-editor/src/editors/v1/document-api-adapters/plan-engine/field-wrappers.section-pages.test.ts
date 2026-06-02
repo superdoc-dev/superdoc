@@ -33,18 +33,19 @@ const schema = new Schema({
   },
 });
 
-function createEditorWithSectionPageCount(sectionPageCount: number): Editor {
+function createEditorWithSectionPageCount(sectionPageCount?: number, initialValue = '1'): Editor {
   const field = schema.nodes['section-page-count'].create(
-    { instruction: 'SECTIONPAGES', resolvedText: '1' },
-    schema.text('1'),
+    { instruction: 'SECTIONPAGES', resolvedText: initialValue },
+    schema.text(initialValue),
   );
   const paragraph = schema.nodes.paragraph.create({ sdBlockId: 'block-1' }, field);
   const doc = schema.nodes.doc.create(null, paragraph);
+  const options = sectionPageCount == null ? {} : { sectionPageCount };
 
   const editor = {
     schema,
     state: EditorState.create({ schema, doc }),
-    options: { sectionPageCount },
+    options,
     view: { dispatch: () => {} },
     dispatch(tr) {
       this.state = this.state.apply(tr);
@@ -67,5 +68,19 @@ describe('fieldsRebuildWrapper SECTIONPAGES fields', () => {
     expect(updatedField?.type.name).toBe('section-page-count');
     expect(updatedField?.attrs.resolvedText).toBe('4');
     expect(updatedField?.textContent).toBe('4');
+  });
+
+  it('preserves existing section-page-count text when section page context is unavailable', () => {
+    const editor = createEditorWithSectionPageCount(undefined, '3');
+
+    const result = fieldsRebuildWrapper(editor, {
+      target: { kind: 'field', blockId: 'block-1', occurrenceIndex: 0, nestingDepth: 0 },
+    });
+
+    expect(result.success).toBe(true);
+    const updatedField = editor.state.doc.nodeAt(1);
+    expect(updatedField?.type.name).toBe('section-page-count');
+    expect(updatedField?.attrs.resolvedText).toBe('3');
+    expect(updatedField?.textContent).toBe('3');
   });
 });

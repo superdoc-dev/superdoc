@@ -143,6 +143,8 @@ export {
   type PageNumberFieldFormat,
   type PageNumberFormat,
 } from './page-number-formatting.js';
+
+export type PageNumberChapterSeparator = 'hyphen' | 'period' | 'colon' | 'emDash' | 'enDash';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -1210,10 +1212,7 @@ export type SectionBreakBlock = {
     /** Left page margin */
     left?: number;
   };
-  numbering?: {
-    format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
-    start?: number;
-  };
+  numbering?: SectionNumbering;
   headerRefs?: {
     default?: string;
     first?: string;
@@ -1252,8 +1251,10 @@ export type SectionRefs = {
 };
 
 export type SectionNumbering = {
-  format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
+  format?: PageNumberFormat;
   start?: number;
+  chapterStyle?: number;
+  chapterSeparator?: PageNumberChapterSeparator;
 };
 
 export type SectionMetadata = {

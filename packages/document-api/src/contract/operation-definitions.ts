@@ -1259,8 +1259,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'sections.setPageNumbering': {
     memberPath: 'sections.setPageNumbering',
-    description: 'Set page numbering format/start for a section.',
-    expectedResult: 'Returns a SectionMutationResult receipt; reports NO_OP if page numbering format already matches.',
+    description: 'Set page numbering format/start and chapter numbering settings for a section.',
+    expectedResult: 'Returns a SectionMutationResult receipt; reports NO_OP if page numbering settings already match.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',

@@ -274,6 +274,56 @@ const findAdjacentInsertedSegment = (ctx, pos) => {
   );
 };
 
+/**
+ * Find the current user's own unresolved tracked deletion adjacent to the
+ * delete range [from, to], so contiguous keystroke deletions coalesce into one
+ * logical change. A Backspace run leaves the caret at the left edge of the
+ * prior deletion, so the next range's `to` meets that deletion's `from`
+ * (right-adjacent); forward Delete extends the other way (left-adjacent).
+ *
+ * Adjacency is checked exactly first (contiguous within a single run), then
+ * across an empty structural gap. Multi-run paragraphs — e.g. Google Docs
+ * exports that split "Open comment " and "from Google Docs." into separate
+ * runs — separate the prior deletion from this range by run open/close tokens
+ * with no intervening text; without the gap-tolerant pass, deleting the space
+ * at the run seam would mint a new change. The gap is bounded and gated on
+ * `isEmptyStructuralGap`, so a live character between two deletions still
+ * splits them. Mirrors the insertion refinement in `compileTextInsert`
+ * (`findAdjacentInsertedSegment` + `findSegmentAcrossEmptyStructuralGap`).
+ *
+ * @param {*} ctx
+ * @param {number} from
+ * @param {number} to
+ */
+const findAdjacentDeletedSegment = (ctx, from, to) => {
+  const sameUserDeleted = (segment) => segment.side === SegmentSide.Deleted && isSameUserForRefinement(ctx, segment);
+
+  const exactLeft = ctx.graph.segments.find((segment) => sameUserDeleted(segment) && segment.to === from);
+  if (exactLeft) return exactLeft;
+  const exactRight = ctx.graph.segments.find((segment) => sameUserDeleted(segment) && segment.from === to);
+  if (exactRight) return exactRight;
+
+  let nearest = null;
+  let nearestDistance = Infinity;
+  for (const segment of ctx.graph.segments) {
+    if (!sameUserDeleted(segment)) continue;
+    if (segment.from > to) {
+      const distance = segment.from - to;
+      if (distance < nearestDistance && isCoalescibleDeletionGap(ctx, to, segment.from)) {
+        nearest = segment;
+        nearestDistance = distance;
+      }
+    } else if (segment.to < from) {
+      const distance = from - segment.to;
+      if (distance < nearestDistance && isCoalescibleDeletionGap(ctx, segment.to, from)) {
+        nearest = segment;
+        nearestDistance = distance;
+      }
+    }
+  }
+  return nearest;
+};
+
 const isEmptyStructuralGap = (ctx, from, to) => {
   if (to <= from) return false;
   if (!sharesTextblock(ctx.tr.doc, from, to)) return false;
@@ -289,6 +339,49 @@ const isEmptyStructuralGap = (ctx, from, to) => {
     }
   });
   return !hasInlineLeaf;
+};
+
+/**
+ * Zero-width review/anchor marker node types. They occupy a document position
+ * but render no visible content, so a contiguous visible-text deletion spans
+ * them. They must not block deletion coalescing — e.g. Google Docs anchors
+ * comments with inline marker nodes that sit between runs.
+ */
+const ZERO_WIDTH_ANCHOR_NODE_NAMES = new Set([
+  'commentRangeStart',
+  'commentRangeEnd',
+  'commentReference',
+  'bookmarkStart',
+  'bookmarkEnd',
+]);
+
+/**
+ * Whether [from, to] separates two same-author tracked deletions that should
+ * still coalesce: same textblock, no other tracked change in range, no live
+ * text, and any inline-leaf nodes present are zero-width anchors (comment /
+ * bookmark markers) — run-wrapper boundaries carry no inline leaf at all.
+ * Strictly more permissive than `isEmptyStructuralGap`, which rejects any
+ * inline leaf and so would split a deletion at a Google-Docs comment seam.
+ *
+ * @param {*} ctx
+ * @param {number} from
+ * @param {number} to
+ */
+const isCoalescibleDeletionGap = (ctx, from, to) => {
+  if (to <= from) return false;
+  if (!sharesTextblock(ctx.tr.doc, from, to)) return false;
+  if (ctx.graph.segmentsInRange(from, to).length) return false;
+  if (ctx.tr.doc.textBetween(from, to, '', '')) return false;
+
+  let blocked = false;
+  ctx.tr.doc.nodesBetween(from, to, (node, pos) => {
+    if (pos < from || pos >= to) return;
+    if (node.isInline && node.isLeaf && !ZERO_WIDTH_ANCHOR_NODE_NAMES.has(node.type.name)) {
+      blocked = true;
+      return false;
+    }
+  });
+  return !blocked;
 };
 
 const sharesTextblock = (doc, from, to) => {
@@ -543,15 +636,36 @@ const compileTextDelete = (ctx, intent) => {
     return failure('INVALID_TARGET', 'text-delete requires a non-empty range.');
   }
 
+  // Coalesce contiguous same-user keystroke deletions. When this delete range
+  // is immediately adjacent to the current user's own unresolved tracked
+  // deletion, reuse that change's id so a run deleted character-by-character
+  // (e.g. holding Backspace) surfaces as ONE logical tracked deletion rather
+  // than one review object per keystroke — mirroring the same-user insertion
+  // refinement in compileTextInsert (TC-EDIT-018). Replacement-driven deletes
+  // keep their caller-provided pairing id; preserve-review-state edits never
+  // fold into an existing change.
+  const coalesceTarget =
+    intent.replacementGroupHint || intent.preserveExistingReviewState
+      ? null
+      : findAdjacentDeletedSegment(ctx, intent.from, intent.to);
+  const sharedDeletionId = intent.replacementGroupHint || coalesceTarget?.changeId || null;
+
   const result = applyTrackedDelete(ctx, intent.from, intent.to, {
     replacementGroupId: '',
     replacementSideId: '',
-    sharedDeletionId: intent.replacementGroupHint || null,
+    sharedDeletionId,
     recordSharedDeletionId: Boolean(intent.replacementGroupHint),
     reassignExistingDeletions:
       intent.source !== 'native' && !intent.preserveExistingReviewState ? 'different-user' : false,
   });
   if (result.ok === false) return result;
+
+  // Folding into an existing deletion is an update to that change, not a new
+  // one. applyTrackedDelete suppresses the created-id record when a shared id
+  // is supplied without recordSharedDeletionId, so surface it as updated here.
+  if (coalesceTarget && !ctx.updatedChangeIds.includes(coalesceTarget.changeId)) {
+    ctx.updatedChangeIds.push(coalesceTarget.changeId);
+  }
 
   // Caret at original `from`: matches Word's behavior where the cursor sits
   // at the left edge of a tracked deletion.

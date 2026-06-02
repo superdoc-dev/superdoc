@@ -247,15 +247,15 @@ describe('formatSectionPageNumberText', () => {
 });
 
 describe('chapter page context', () => {
-  it('normalizes common single-token visible heading markers', () => {
+  it('normalizes common visible heading markers', () => {
     expect(normalizeChapterMarkerText('1.')).toBe('1');
+    expect(normalizeChapterMarkerText('1.2.')).toBe('1.2');
     expect(normalizeChapterMarkerText('1)')).toBe('1');
     expect(normalizeChapterMarkerText('A.')).toBe('A');
     expect(normalizeChapterMarkerText('III.')).toBe('III');
   });
 
-  it('omits unsupported multi-level or custom marker text', () => {
-    expect(normalizeChapterMarkerText('1.2.')).toBeUndefined();
+  it('omits unsupported custom marker text', () => {
     expect(normalizeChapterMarkerText('Article 1.')).toBeUndefined();
     expect(normalizeChapterMarkerText('1-2')).toBeUndefined();
   });
@@ -388,6 +388,35 @@ describe('chapter page context', () => {
     expect(result.get(4)).toEqual({ chapterNumberText: '4', chapterStyle: 1 });
   });
 
+  it('uses clean multi-level heading markers for matching chapter style', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'heading-1',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '1.' } } },
+      },
+      {
+        kind: 'paragraph',
+        id: 'heading-2',
+        runs: [],
+        attrs: { styleId: 'Heading2', wordLayout: { marker: { markerText: '1.2.' } } },
+      },
+    ] as FlowBlock[];
+    const layout = {
+      pages: [
+        { number: 1, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-1' }] },
+        { number: 2, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-2' }] },
+      ],
+    } as Layout;
+    const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 2 } }];
+
+    const result = buildChapterContextByPage(layout, blocks, sections);
+
+    expect(result.get(1)).toEqual({ chapterNumberText: '1', chapterStyle: 1 });
+    expect(result.get(2)).toEqual({ chapterNumberText: '1.2', chapterStyle: 2 });
+  });
+
   it('omits chapter context when the matching heading marker is not a clean single token', () => {
     const blocks: FlowBlock[] = [
       {
@@ -415,7 +444,7 @@ describe('chapter page context', () => {
           styleId: 'Heading2',
           headingLevel: 2,
           listLevelOrdinal: 2,
-          wordLayout: { marker: { markerText: '1.2.' } },
+          wordLayout: { marker: { markerText: 'Article 1.' } },
         },
       },
     ] as FlowBlock[];

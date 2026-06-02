@@ -57,8 +57,7 @@ export interface DisplayPageInfo {
 }
 
 const HEADING_STYLE_PREFIX = 'heading';
-const SINGLE_TOKEN_CHAPTER_MARKER_RE = /^[A-Za-z0-9]+$/;
-const INTERNAL_CHAPTER_SEPARATOR_RE = /[.\-:)\u2013\u2014]/;
+const CLEAN_CHAPTER_MARKER_RE = /^[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*$/;
 
 function normalizeHeadingStyleId(styleId: unknown): string | undefined {
   if (typeof styleId !== 'string') {
@@ -103,11 +102,11 @@ export function normalizeChapterMarkerText(markerText: unknown): string | undefi
     .trim()
     .replace(/[.)]\s*$/, '')
     .trim();
-  if (!withoutSuffix || INTERNAL_CHAPTER_SEPARATOR_RE.test(withoutSuffix)) {
+  if (!withoutSuffix) {
     return undefined;
   }
 
-  return SINGLE_TOKEN_CHAPTER_MARKER_RE.test(withoutSuffix) ? withoutSuffix : undefined;
+  return CLEAN_CHAPTER_MARKER_RE.test(withoutSuffix) ? withoutSuffix : undefined;
 }
 
 function getChapterMarkerText(block: FlowBlock, headingLevel: number): string | undefined {
@@ -117,7 +116,7 @@ function getChapterMarkerText(block: FlowBlock, headingLevel: number): string | 
 
   const attrs = (block as ParagraphBlock).attrs;
   const markerText = normalizeChapterMarkerText(attrs?.wordLayout?.marker?.markerText);
-  if (markerText) {
+  if (markerText && markerText.split('.').length <= headingLevel) {
     return markerText;
   }
 

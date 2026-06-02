@@ -10,6 +10,8 @@ import type {
   ListBlock,
   ListMeasure,
   PageMargins,
+  PageNumberChapterSeparator,
+  PageNumberFormat,
   ParagraphBlock,
   ParagraphBorders,
   ParagraphMeasure,
@@ -60,6 +62,12 @@ export type ResolvedPage = {
   numberText?: string;
   /** Numeric page number after section page numbering settings are applied. */
   effectivePageNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   /** Vertical alignment of content within this page. */
   vAlign?: SectionVerticalAlign;
   /** Base section margins before header/footer inflation. Used for vAlign centering calculations. */
@@ -455,6 +463,12 @@ export type ResolvedHeaderFooterPage = {
   numberText?: string;
   /** Section-aware numeric page value before formatting. */
   displayNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   items: ResolvedPaintItem[];
 };
 

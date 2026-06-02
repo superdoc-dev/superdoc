@@ -15,6 +15,8 @@ import type {
   Line,
   LineSegment,
   PageMargins,
+  PageNumberChapterSeparator,
+  PageNumberFormat,
   ParaFragment,
   ParagraphBlock,
   PositionedDrawingGeometry,
@@ -45,6 +47,7 @@ import {
   buildLayoutSourceIdentityForFragment,
   expandRunsForInlineNewlines,
   formatPageNumber,
+  formatSectionPageNumberText,
   getCellSpacingPx,
   normalizeColumnLayout,
 } from '@superdoc/contracts';
@@ -267,6 +270,9 @@ function pageContextSignature(context: FragmentRenderContext): string {
     context.sectionPageCount ?? '',
     context.pageNumberText ?? '',
     context.displayPageNumber ?? '',
+    context.pageNumberFormat ?? '',
+    context.pageNumberChapterText ?? '',
+    context.pageNumberChapterSeparator ?? '',
   ].join('|');
 }
 
@@ -365,6 +371,9 @@ export type FragmentRenderContext = {
   story?: LayoutStoryLocator;
   pageNumberText?: string;
   displayPageNumber?: number;
+  pageNumberFormat?: PageNumberFormat;
+  pageNumberChapterText?: string;
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   sectionPageCount?: number;
   pageIndex?: number;
 };
@@ -1818,6 +1827,9 @@ export class DomPainter {
       section: 'body',
       pageNumberText: page.numberText,
       displayPageNumber: page.displayNumber,
+      pageNumberFormat: page.pageNumberFormat,
+      pageNumberChapterText: page.pageNumberChapterText,
+      pageNumberChapterSeparator: page.pageNumberChapterSeparator,
       sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
@@ -2174,6 +2186,9 @@ export class DomPainter {
       story: resolveDecorationStory(kind, data),
       pageNumberText: page.numberText,
       displayPageNumber: page.displayNumber,
+      pageNumberFormat: page.pageNumberFormat,
+      pageNumberChapterText: page.pageNumberChapterText,
+      pageNumberChapterSeparator: page.pageNumberChapterSeparator,
       sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
@@ -2383,6 +2398,9 @@ export class DomPainter {
       section: 'body',
       pageNumberText: page.numberText,
       displayPageNumber: page.displayNumber,
+      pageNumberFormat: page.pageNumberFormat,
+      pageNumberChapterText: page.pageNumberChapterText,
+      pageNumberChapterSeparator: page.pageNumberChapterSeparator,
       sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
@@ -2547,6 +2565,9 @@ export class DomPainter {
       section: 'body',
       pageNumberText: page.numberText,
       displayPageNumber: page.displayNumber,
+      pageNumberFormat: page.pageNumberFormat,
+      pageNumberChapterText: page.pageNumberChapterText,
+      pageNumberChapterSeparator: page.pageNumberChapterSeparator,
       sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
@@ -3116,8 +3137,13 @@ export class DomPainter {
 
   private resolveShapeTextPartText(part: ShapeTextContent['parts'][number], context?: FragmentRenderContext): string {
     if (part.fieldType === 'PAGE') {
-      if (part.pageNumberFormat) {
-        return formatPageNumber(context?.displayPageNumber ?? context?.pageNumber ?? 1, part.pageNumberFormat);
+      if (part.pageNumberFormat || context?.pageNumberChapterText) {
+        return formatSectionPageNumberText({
+          displayNumber: context?.displayPageNumber ?? context?.pageNumber ?? 1,
+          pageFormat: part.pageNumberFormat ?? context?.pageNumberFormat ?? 'decimal',
+          chapterNumberText: context?.pageNumberChapterText,
+          chapterSeparator: context?.pageNumberChapterSeparator,
+        });
       }
       return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
     }

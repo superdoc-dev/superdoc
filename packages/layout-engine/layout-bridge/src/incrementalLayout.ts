@@ -9,6 +9,8 @@ import type {
   ColumnLayout,
   SectionBreakBlock,
   NormalizedColumnLayout,
+  PageNumberChapterSeparator,
+  PageNumberFormat,
 } from '@superdoc/contracts';
 import { cloneColumnLayout, normalizeColumnLayout, rescaleColumnWidths } from '@superdoc/contracts';
 import {
@@ -19,6 +21,8 @@ import {
   computeDisplayPageNumber,
   resolvePageNumberTokens,
   type NumberingContext,
+  buildChapterContextByPage,
+  type ChapterPageInfo,
   SEMANTIC_PAGE_HEIGHT_PX,
   SINGLE_COLUMN_DEFAULT,
   resolveTableFrame,
@@ -1228,6 +1232,10 @@ export async function incrementalLayout(
   let currentBlocks = nextBlocks;
   let currentMeasures = measures;
   let iteration = 0;
+  // Chapter context only reads stable paragraph style/marker metadata; PAGE
+  // token convergence clones run text but does not change those block attrs.
+  const chapterBlockById = buildBlockById(currentBlocks);
+  const chapterContextCache: ChapterContextCache = {};
 
   const pageTokenStart = performance.now();
   let totalAffectedBlocks = 0;
@@ -1240,7 +1248,7 @@ export async function incrementalLayout(
     while (iteration < maxIterations) {
       // Build numbering context from current layout
       const sections = options.sectionMetadata ?? [];
-      const numberingCtx = buildNumberingContext(layout, sections);
+      const numberingCtx = buildNumberingContext(layout, sections, chapterBlockById, chapterContextCache);
 
       // Log iteration start
       PageTokenLogger.logIterationStart(iteration, layout.pages.length);
@@ -1311,6 +1319,10 @@ export async function incrementalLayout(
       // Early exit if page count is stable (common case: no change or minor text adjustment)
       if (newPageCount === oldPageCount && iteration > 0) {
         perfLog(`[Perf] 4.3 Page count stable at ${newPageCount} - breaking convergence loop`);
+        // This convergence check predates chapter-aware PAGE prefixes. It is
+        // page-count based, so a same-count heading/page-boundary reassignment
+        // can require another pass for body-baked PAGE text. Keep maxIterations
+        // bounded and revisit if same-page chapter fixtures require exactness.
         break;
       }
 
@@ -2677,6 +2689,9 @@ export async function incrementalLayout(
 
   let headers: HeaderFooterLayoutResult[] | undefined;
   let footers: HeaderFooterLayoutResult[] | undefined;
+  const sections = options.sectionMetadata ?? [];
+  const numberingCtx = buildNumberingContext(layout, sections, chapterBlockById, chapterContextCache);
+  applyNumberingContextToLayout(layout, numberingCtx);
 
   if (headerFooter?.constraints && (headerFooter.headerBlocks || headerFooter.footerBlocks)) {
     const hfStart = performance.now();
@@ -2693,16 +2708,20 @@ export async function incrementalLayout(
       options.sectionMetadata,
     );
 
-    // Build numbering context from final layout for header/footer token resolution
-    const sections = options.sectionMetadata ?? [];
-    const numberingCtx = buildNumberingContext(layout, sections);
-
     // Create page resolver for section-aware header/footer numbering
     // Only use page resolver if feature flag is enabled
     const pageResolver = FeatureFlags.HEADER_FOOTER_PAGE_TOKENS
       ? (
           pageNumber: number,
-        ): { displayText: string; displayNumber: number; totalPages: number; sectionPageCount: number } => {
+        ): {
+          displayText: string;
+          displayNumber: number;
+          totalPages: number;
+          sectionPageCount: number;
+          pageFormat?: PageNumberFormat;
+          chapterNumberText?: string;
+          chapterSeparator?: PageNumberChapterSeparator;
+        } => {
           const pageIndex = pageNumber - 1;
           const displayInfo = numberingCtx.displayPages[pageIndex];
           return {
@@ -2710,6 +2729,9 @@ export async function incrementalLayout(
             displayNumber: displayInfo?.displayNumber ?? pageNumber,
             totalPages: numberingCtx.totalPages,
             sectionPageCount: displayInfo?.sectionPageCount ?? numberingCtx.totalPages ?? 1,
+            pageFormat: displayInfo?.pageFormat,
+            chapterNumberText: displayInfo?.chapterNumberText,
+            chapterSeparator: displayInfo?.chapterSeparator,
           };
         }
       : undefined;
@@ -3009,6 +3031,92 @@ const serializeHeaderFooterResults = (
   return results;
 };
 
+type ChapterContextCache = {
+  signature?: string;
+  context?: Map<number, ChapterPageInfo>;
+};
+
+function buildBlockById(blocks: FlowBlock[]): ReadonlyMap<string, FlowBlock> {
+  const blockById = new Map<string, FlowBlock>();
+  for (const block of blocks) {
+    blockById.set(block.id, block);
+  }
+  return blockById;
+}
+
+function getFragmentBlockId(fragment: unknown): string {
+  if (
+    typeof fragment === 'object' &&
+    fragment !== null &&
+    'blockId' in fragment &&
+    typeof (fragment as { blockId?: unknown }).blockId === 'string'
+  ) {
+    return (fragment as { blockId: string }).blockId;
+  }
+  return '';
+}
+
+function buildChapterContextSignature(layout: Layout): string {
+  return layout.pages
+    .map((page) => {
+      const firstFragment = page.fragments[0];
+      const lastFragment = page.fragments[page.fragments.length - 1];
+      return [
+        page.number,
+        page.sectionIndex ?? 0,
+        page.fragments.length,
+        firstFragment ? getFragmentBlockId(firstFragment) : '',
+        lastFragment ? getFragmentBlockId(lastFragment) : '',
+      ].join(':');
+    })
+    .join('|');
+}
+
+function sectionsHaveChapterNumbering(sections: SectionMetadata[]): boolean {
+  return sections.some((section) => {
+    const chapterStyle = section.numbering?.chapterStyle;
+    return typeof chapterStyle === 'number' && Number.isInteger(chapterStyle) && chapterStyle > 0;
+  });
+}
+
+function getChapterContextByPage(
+  layout: Layout,
+  sections: SectionMetadata[],
+  blockById: ReadonlyMap<string, FlowBlock>,
+  cache: ChapterContextCache,
+): Map<number, ChapterPageInfo> | undefined {
+  if (!sectionsHaveChapterNumbering(sections)) {
+    return undefined;
+  }
+
+  const signature = buildChapterContextSignature(layout);
+  if (cache.signature === signature && cache.context) {
+    return cache.context;
+  }
+
+  const context = buildChapterContextByPage(layout, blockById, sections);
+  cache.signature = signature;
+  cache.context = context;
+  return context;
+}
+
+function applyNumberingContextToLayout(layout: Layout, numberingCtx: NumberingContext): void {
+  const displayInfoByPage = new Map(numberingCtx.displayPages.map((page) => [page.physicalPage, page]));
+  for (const page of layout.pages) {
+    const displayInfo = displayInfoByPage.get(page.number);
+    if (!displayInfo) {
+      continue;
+    }
+    if (displayInfo.chapterNumberText) {
+      page.numberText = displayInfo.displayText;
+      page.displayNumber = displayInfo.displayNumber;
+      page.pageNumberFormat = displayInfo.pageFormat;
+    }
+    page.pageNumberChapterText = displayInfo.chapterNumberText;
+    page.pageNumberChapterSeparator = displayInfo.chapterSeparator;
+  }
+}
+
 /**
  * Builds numbering context from layout and section metadata.
  *
@@ -3019,9 +3127,15 @@ const serializeHeaderFooterResults = (
  * @param sections - Section metadata array
  * @returns Numbering context with total pages and display page info
  */
-function buildNumberingContext(layout: Layout, sections: SectionMetadata[]): NumberingContext {
+function buildNumberingContext(
+  layout: Layout,
+  sections: SectionMetadata[],
+  blockById: ReadonlyMap<string, FlowBlock>,
+  chapterContextCache: ChapterContextCache,
+): NumberingContext {
   const totalPages = layout.pages.length;
-  const displayPages = computeDisplayPageNumber(layout.pages, sections);
+  const chapterInfoByPage = getChapterContextByPage(layout, sections, blockById, chapterContextCache);
+  const displayPages = computeDisplayPageNumber(layout.pages, sections, chapterInfoByPage);
 
   return {
     totalPages,

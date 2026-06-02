@@ -1,5 +1,9 @@
 import type { TabStop } from './engines/tabs.js';
-import type { PageNumberFieldFormat, PageNumberFormat } from './page-number-formatting.js';
+import type {
+  PageNumberChapterSeparator,
+  PageNumberFieldFormat,
+  PageNumberFormat,
+} from './page-number-formatting.js';
 export { computeTabStops, layoutWithTabs, calculateTabWidth } from './engines/tabs.js';
 
 // Re-export TabStop for external consumers
@@ -138,13 +142,14 @@ export {
   type ResolveInheritedHeaderFooterRefInput,
 } from './header-footer-inheritance.js';
 export {
+  formatChapterPageNumberText,
   formatPageNumber,
   formatPageNumberFieldValue,
+  formatSectionPageNumberText,
   type PageNumberFieldFormat,
+  type PageNumberChapterSeparator,
   type PageNumberFormat,
 } from './page-number-formatting.js';
-
-export type PageNumberChapterSeparator = 'hyphen' | 'period' | 'colon' | 'emDash' | 'enDash';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -1636,6 +1641,10 @@ export type ParagraphAttrs = {
   dropCapDescriptor?: DropCapDescriptor;
   frame?: ParagraphFrame;
   numberingProperties?: { ilvl?: number; numId?: number } | null;
+  /** Built-in heading level resolved from style metadata, where 1 means Heading 1. */
+  headingLevel?: number;
+  /** Current list level ordinal from structured numbering metadata. */
+  listLevelOrdinal?: number;
   borders?: ParagraphBorders;
   shading?: ParagraphShading;
   tabs?: TabStop[];
@@ -2030,13 +2039,19 @@ export type Page = {
    * SD-2656: page-level footnote planning ledger. Populated by the layout
    * bridge when footnotes are present. Read by the diagnostic toolkit and
    * (in later phases) by body pagination itself.
-   */
+  */
   footnoteLedger?: FootnotePageLedger;
   /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
   displayNumber?: number;
   numberText?: string;
   /** Numeric page number after section page numbering settings are applied. */
   effectivePageNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';
   sectionRefs?: {
@@ -2266,6 +2281,12 @@ export type HeaderFooterPage = {
   numberText?: string;
   /** Section-aware numeric page value before formatting. */
   displayNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   /**
    * Optional page-local block clones backing this page's resolved fragments.
    * Present when header/footer tokens were laid out per page or per bucket.

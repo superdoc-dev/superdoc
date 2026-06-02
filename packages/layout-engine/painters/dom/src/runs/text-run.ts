@@ -1,6 +1,8 @@
 import type { FlowRunLink, Run, TextRun } from '@superdoc/contracts';
 import {
+  formatChapterPageNumberText,
   formatPageNumberFieldValue,
+  formatSectionPageNumberText,
   normalizeBaselineShift,
   resolveBaseFontSizeForVerticalText,
 } from '@superdoc/contracts';
@@ -142,7 +144,19 @@ export const resolveRunText = (run: Run, context: FragmentRenderContext): string
   }
   if (runToken === 'pageNumber') {
     if (run.pageNumberFieldFormat) {
-      return formatPageNumberFieldValue(context.displayPageNumber ?? context.pageNumber, run.pageNumberFieldFormat);
+      return formatChapterPageNumberText({
+        pageComponent: formatPageNumberFieldValue(context.displayPageNumber ?? context.pageNumber, run.pageNumberFieldFormat),
+        chapterNumberText: context.pageNumberChapterText,
+        chapterSeparator: context.pageNumberChapterSeparator,
+      });
+    }
+    if (context.pageNumberChapterText) {
+      return formatSectionPageNumberText({
+        displayNumber: context.displayPageNumber ?? context.pageNumber,
+        pageFormat: context.pageNumberFormat ?? 'decimal',
+        chapterNumberText: context.pageNumberChapterText,
+        chapterSeparator: context.pageNumberChapterSeparator,
+      });
     }
     return context.pageNumberText ?? String(context.pageNumber);
   }

@@ -10,8 +10,17 @@
  * page number is used when calculating dimensions and caching layouts.
  */
 
-import type { FlowBlock, ListBlock, ParagraphBlock, TableBlock } from '@superdoc/contracts';
-import { formatPageNumberFieldValue } from '@superdoc/layout-engine';
+import {
+  formatChapterPageNumberText,
+  formatPageNumberFieldValue,
+  formatSectionPageNumberText,
+  type FlowBlock,
+  type ListBlock,
+  type PageNumberChapterSeparator,
+  type PageNumberFormat,
+  type ParagraphBlock,
+  type TableBlock,
+} from '@superdoc/contracts';
 
 /**
  * Walk every paragraph block reachable through `blocks`, including those
@@ -80,6 +89,9 @@ export function resolveHeaderFooterTokens(
   pageNumberText?: string,
   displayPageNumber?: number,
   sectionPageCount?: number,
+  pageNumberFormat?: PageNumberFormat,
+  chapterNumberText?: string,
+  chapterSeparator?: PageNumberChapterSeparator,
 ): void {
   // Validate inputs
   if (!blocks || blocks.length === 0) {
@@ -99,6 +111,7 @@ export function resolveHeaderFooterTokens(
   const pageNumberStr = pageNumberText ?? String(pageNumber);
   const totalPagesStr = String(totalPages);
   const displayNumber = displayPageNumber ?? pageNumber;
+  const sectionPageNumberFormat = pageNumberFormat ?? 'decimal';
   const sectionPageCountNumber = sectionPageCount || totalPages || 1;
   const sectionPageCountStr = String(sectionPageCountNumber);
 
@@ -116,8 +129,19 @@ export function resolveHeaderFooterTokens(
           // re-resolve the correct page number at render time for each page.
           // The text here is for measurement purposes (digit width).
           run.text = run.pageNumberFieldFormat
-            ? formatPageNumberFieldValue(displayNumber, run.pageNumberFieldFormat)
-            : pageNumberStr;
+            ? formatChapterPageNumberText({
+                pageComponent: formatPageNumberFieldValue(displayNumber, run.pageNumberFieldFormat),
+                chapterNumberText,
+                chapterSeparator,
+              })
+            : chapterNumberText
+              ? formatSectionPageNumberText({
+                  displayNumber,
+                  pageFormat: sectionPageNumberFormat,
+                  chapterNumberText,
+                  chapterSeparator,
+                })
+              : pageNumberStr;
         } else if (run.token === 'totalPageCount') {
           // Replace placeholder text with total page count for measurement.
           // IMPORTANT: Keep token for painter to re-resolve if needed.

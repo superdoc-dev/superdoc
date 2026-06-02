@@ -458,6 +458,36 @@ describe('layoutHeaderFooterWithCache - Digit Bucketing (Large Docs)', () => {
     expect((result.default?.layout.pages[0].blocks?.[0] as ParagraphBlock).runs[1].text).toBe('005');
   });
 
+  it('should disable bucketing for chapter-prefixed page number text', async () => {
+    const sections = {
+      default: [makePageTokenBlock('header-chapter-page')],
+    };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: pageNum < 75 ? `1-${pageNum}` : `12-${pageNum}`,
+      displayNumber: pageNum,
+      totalPages: 150,
+      pageFormat: 'decimal',
+      chapterNumberText: pageNum < 75 ? '1' : '12',
+      chapterSeparator: 'hyphen',
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(150);
+    expect(measureBlock).toHaveBeenCalledTimes(150);
+    expect(result.default?.layout.pages[0].numberText).toBe('1-1');
+    expect(result.default?.layout.pages[100].numberText).toBe('12-101');
+  });
+
   it.each([
     ['decimal', { format: 'decimal' }],
     ['numberInDash', { format: 'numberInDash' }],

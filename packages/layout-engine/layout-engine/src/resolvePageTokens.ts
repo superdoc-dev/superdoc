@@ -14,8 +14,16 @@
  * - Integrates with two-pass convergence loop in incrementalLayout
  */
 
-import type { Layout, FlowBlock, ParagraphBlock, Measure } from '@superdoc/contracts';
-import { formatPageNumberFieldValue, type DisplayPageInfo } from './pageNumbering';
+import {
+  formatChapterPageNumberText,
+  formatPageNumberFieldValue,
+  formatSectionPageNumberText,
+  type Layout,
+  type FlowBlock,
+  type ParagraphBlock,
+  type Measure,
+} from '@superdoc/contracts';
+import type { DisplayPageInfo } from './pageNumbering';
 
 /**
  * Numbering context for page token resolution.
@@ -218,8 +226,19 @@ function cloneBlockWithResolvedTokens(
         return {
           ...runWithoutToken,
           text: pageNumberFieldFormat
-            ? formatPageNumberFieldValue(displayPageInfo.displayNumber, pageNumberFieldFormat)
-            : displayPageInfo.displayText,
+            ? formatChapterPageNumberText({
+                pageComponent: formatPageNumberFieldValue(displayPageInfo.displayNumber, pageNumberFieldFormat),
+                chapterNumberText: displayPageInfo.chapterNumberText,
+                chapterSeparator: displayPageInfo.chapterSeparator,
+              })
+            : displayPageInfo.chapterNumberText
+              ? formatSectionPageNumberText({
+                  displayNumber: displayPageInfo.displayNumber,
+                  pageFormat: displayPageInfo.pageFormat ?? 'decimal',
+                  chapterNumberText: displayPageInfo.chapterNumberText,
+                  chapterSeparator: displayPageInfo.chapterSeparator,
+                })
+              : displayPageInfo.displayText,
         };
       } else if (run.token === 'totalPageCount') {
         // Clone the run and resolve the token

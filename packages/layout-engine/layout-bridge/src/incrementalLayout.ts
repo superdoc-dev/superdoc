@@ -3044,14 +3044,11 @@ function getFragmentBlockId(fragment: unknown): string {
 function buildChapterContextSignature(layout: Layout): string {
   return layout.pages
     .map((page) => {
-      const firstFragment = page.fragments[0];
-      const lastFragment = page.fragments[page.fragments.length - 1];
       return [
         page.number,
         page.sectionIndex ?? 0,
         page.fragments.length,
-        firstFragment ? getFragmentBlockId(firstFragment) : '',
-        lastFragment ? getFragmentBlockId(lastFragment) : '',
+        page.fragments.map((fragment) => getFragmentBlockId(fragment)).join(','),
       ].join(':');
     })
     .join('|');

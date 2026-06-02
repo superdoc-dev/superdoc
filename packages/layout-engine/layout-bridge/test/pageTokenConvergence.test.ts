@@ -27,6 +27,13 @@ const makeParagraph = (text: string): FlowBlock => ({
   runs: [{ kind: 'text', text, token: 'pageNumber' }],
 });
 
+const makeHeading = (id: string, markerText: string): FlowBlock => ({
+  kind: 'paragraph',
+  id,
+  runs: [{ text: markerText }],
+  attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText } } },
+});
+
 const makeMeasure = (): Measure => ({
   kind: 'paragraph',
   hasPageTokens: true,
@@ -69,5 +76,64 @@ describe('page token convergence', () => {
     );
 
     expect(layoutEngineMocks.resolvePageNumberTokens).toHaveBeenCalledTimes(3);
+  });
+
+  it('recomputes chapter context when middle page fragments change', async () => {
+    const firstLayout: Layout = {
+      pages: [
+        {
+          number: 1,
+          sectionIndex: 0,
+          fragments: [
+            { kind: 'para', blockId: 'body-start' },
+            { kind: 'para', blockId: 'heading-1' },
+            { kind: 'para', blockId: 'body-end' },
+          ],
+        },
+      ],
+    };
+    const secondLayout: Layout = {
+      pages: [
+        {
+          number: 1,
+          sectionIndex: 0,
+          fragments: [
+            { kind: 'para', blockId: 'body-start' },
+            { kind: 'para', blockId: 'heading-2' },
+            { kind: 'para', blockId: 'body-end' },
+          ],
+        },
+      ],
+    };
+    layoutEngineMocks.layoutDocument.mockReturnValueOnce(firstLayout).mockReturnValue(secondLayout);
+
+    const chapterTexts: Array<string | undefined> = [];
+    layoutEngineMocks.resolvePageNumberTokens.mockImplementation((_layout, blocks: FlowBlock[], _measures, ctx) => {
+      chapterTexts.push(ctx.displayPages[0]?.chapterNumberText);
+      if (chapterTexts.length === 1) {
+        return {
+          affectedBlockIds: new Set(['body-start']),
+          updatedBlocks: new Map([['body-start', blocks[0]]]),
+        };
+      }
+
+      return { affectedBlockIds: new Set(), updatedBlocks: new Map() };
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure());
+
+    await incrementalLayout(
+      [],
+      null,
+      [makeParagraph('0'), makeHeading('heading-1', '1.'), makeHeading('heading-2', '2.'), makeParagraph('tail')],
+      {
+        pageSize: { w: 300, h: 300 },
+        margins: { top: 20, right: 20, bottom: 20, left: 20 },
+        sectionMetadata: [{ sectionIndex: 0, numbering: { chapterStyle: 1 } }],
+      },
+      measureBlock,
+    );
+
+    expect(chapterTexts).toEqual(['1', '2']);
   });
 });

@@ -271,6 +271,46 @@ describe('HeaderFooterEditorManager', () => {
     expect(sectionPages.textContent).toBe('3');
   });
 
+  it('refreshes section page count DOM text when section context is available', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host });
+    expect(sectionEditor).toBeDefined();
+    const sectionPages = document.createElement('span');
+    sectionPages.dataset.id = 'auto-section-pages';
+    sectionPages.textContent = '3';
+    sectionEditor!.view.dom.appendChild(sectionPages);
+
+    manager.ensureEditorSync(descriptor, { editorHost: host, sectionPageCount: 5 });
+
+    expect(sectionPages.textContent).toBe('5');
+  });
+
+  it('refreshes section page count DOM text with node pageNumberFormat', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host });
+    expect(sectionEditor).toBeDefined();
+    const sectionPages = document.createElement('span');
+    sectionPages.dataset.id = 'auto-section-pages';
+    sectionPages.textContent = '3';
+    sectionEditor!.view.dom.appendChild(sectionPages);
+    (sectionEditor!.view as unknown as { posAtDOM: ReturnType<typeof vi.fn> }).posAtDOM = vi.fn(() => 0);
+    (sectionEditor as unknown as { state: { doc: { nodeAt: ReturnType<typeof vi.fn> } } }).state = {
+      doc: { nodeAt: vi.fn(() => ({ attrs: { pageNumberFormat: 'upperRoman' } })) },
+    };
+
+    manager.ensureEditorSync(descriptor, { editorHost: host, sectionPageCount: 4 });
+
+    expect(sectionPages.textContent).toBe('IV');
+  });
+
   it('emits contentChanged and syncs converter/Yjs data when section editor updates', async () => {
     const editor = createMockEditor();
     const manager = new HeaderFooterEditorManager(editor);

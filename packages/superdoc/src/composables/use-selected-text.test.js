@@ -63,9 +63,9 @@ describe('useSelectedText', () => {
     expect(selectedText.value).toBe('editor-read');
   });
 
-  it('still returns empty string without consulting the runtime when the editor ref is null', () => {
+  it('routes the read through the active runtime even when the editor ref is null', () => {
     const runtime = makeRuntime('runtime-selection');
     const { selectedText } = useSelectedText(ref(null), { getActiveRuntime: () => runtime });
-    expect(selectedText.value).toBe('');
+    expect(selectedText.value).toBe('runtime-selection');
   });
 });

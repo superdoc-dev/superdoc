@@ -149,7 +149,8 @@ export class EditorRuntimeRegistry {
    * The currently active runtime, or `null` when none is active.
    */
   getActive(): EditorRuntime | null {
-    return this.#activeId === null ? null : (this.#runtimes.get(this.#activeId) ?? null);
+    if (this.#activeId === null) return null;
+    return this.#runtimes.get(this.#activeId)!;
   }
 
   /**

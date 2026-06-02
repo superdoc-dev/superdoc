@@ -66,6 +66,7 @@ export function createFakeV2Runtime(options: FakeV2RuntimeOptions = {}): EditorR
 
   let state: EditorRuntimeState = options.initialState ?? 'review-ready';
   let epoch = 0; // staleness discriminator, like a v2 receipt epoch
+  let zoomPercent = 100;
   const listeners = new Set<EditorRuntimeListener>();
 
   const positions = new Map<string, FakeSdPosition>();
@@ -242,7 +243,7 @@ export function createFakeV2Runtime(options: FakeV2RuntimeOptions = {}): EditorR
       return { activeMarks: [], disabled: ['formatting.applyMark'] };
     },
     getLayoutSnapshot(): EditorRuntimeLayoutSnapshot | null {
-      return { pageCount: 1, currentPage: 1, zoom: 100 };
+      return { pageCount: 1, currentPage: 1, zoom: zoomPercent };
     },
 
     async save(): Promise<ArrayBuffer> {
@@ -260,7 +261,8 @@ export function createFakeV2Runtime(options: FakeV2RuntimeOptions = {}): EditorR
 
     async setZoom(percent: number): Promise<EditorRuntimeCommandResult> {
       if (percent < 25 || percent > 400) return { status: 'rejected', reason: 'target-unsupported' };
-      emit({ type: 'layout-change', layout: { pageCount: 1, currentPage: 1, zoom: percent } });
+      zoomPercent = percent;
+      emit({ type: 'layout-change', layout: { pageCount: 1, currentPage: 1, zoom: zoomPercent } });
       return { status: 'committed' };
     },
     async reveal(target: EditorRuntimeNavigationTarget): Promise<EditorRuntimeCommandResult> {

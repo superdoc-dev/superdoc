@@ -3000,6 +3000,65 @@ describe('SuperDoc core', () => {
       expect(editor.focus).not.toHaveBeenCalled();
     });
 
+    it('focus falls back to the active legacy editor when no focusable runtime is active', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({ selector: '#host', document: 'https://example.com/doc.docx' });
+      await flushMicrotasks();
+
+      const focus = vi.fn();
+      instance.activeEditor = { focus };
+
+      instance.focus();
+
+      expect(focus).toHaveBeenCalledTimes(1);
+    });
+
+    it('focus warns when the active runtime rejects focus', async () => {
+      createAppHarness();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const instance = new SuperDoc({ selector: '#host', document: 'https://example.com/doc.docx' });
+      await flushMicrotasks();
+
+      const focusError = new Error('focus failed');
+      const runtime = createFakeV1Runtime({
+        id: 'v1-focus-fail',
+        documentId: 'doc-1',
+        root: document.createElement('div'),
+      });
+      vi.spyOn(runtime, 'focus').mockRejectedValue(focusError);
+
+      try {
+        instance.registerEditorRuntime(runtime);
+        instance.setActiveRuntime('v1-focus-fail', 'focus');
+
+        instance.focus();
+        await flushMicrotasks();
+
+        expect(warnSpy).toHaveBeenCalledWith('[SuperDoc] active editor runtime focus failed', focusError);
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('focus falls back to the first document editor when no runtime or active editor is available', async () => {
+      const { superdocStore } = createAppHarness();
+      const instance = new SuperDoc({ selector: '#host', document: 'https://example.com/doc.docx' });
+      await flushMicrotasks();
+
+      const firstFocus = vi.fn();
+      const secondFocus = vi.fn();
+      superdocStore.documents = [
+        { id: 'doc-a', getEditor: vi.fn(() => null) },
+        { id: 'doc-b', getEditor: vi.fn(() => ({ focus: firstFocus })) },
+        { id: 'doc-c', getEditor: vi.fn(() => ({ focus: secondFocus })) },
+      ];
+
+      instance.focus();
+
+      expect(firstFocus).toHaveBeenCalledTimes(1);
+      expect(secondFocus).not.toHaveBeenCalled();
+    });
+
     it('event-target activation routes shell commands to the selected v1 root', async () => {
       createAppHarness();
       const instance = new SuperDoc({

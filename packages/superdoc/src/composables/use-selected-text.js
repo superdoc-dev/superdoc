@@ -19,14 +19,13 @@ export function useSelectedText(editorRef, options = {}) {
   // Create a computed property that will update when the editor selection changes
   const selectedText = computed(() => {
     const editor = editorRef.value;
-    if (!editor) return '';
 
     const runtime = getActiveRuntime?.();
     if (runtime?.getCapabilities?.().selection?.canReadSelectedText) {
       return runtime.getSelectedText();
     }
 
-    if (!editor.state) return ''; // reach-in-allow: legacy selected-text fallback guard
+    if (!editor?.state) return ''; // reach-in-allow: legacy selected-text fallback guard
     return editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' '); // reach-in-allow: legacy selected-text fallback
   });
 

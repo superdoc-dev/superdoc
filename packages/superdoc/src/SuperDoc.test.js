@@ -371,6 +371,32 @@ const createSuperdocStub = () => {
   };
 };
 
+const createRuntimeEditorMock = (documentId = 'doc-1') => ({
+  options: { documentId },
+  editorVersion: 1,
+  state: {
+    doc: { textBetween: vi.fn(() => '') },
+    selection: { from: 0, to: 0, empty: true },
+  },
+  commands: {
+    insertContent: vi.fn(() => true),
+  },
+  view: { focus: vi.fn() },
+  focus: vi.fn(),
+  on: vi.fn(),
+  off: vi.fn(),
+  exportDocx: vi.fn(async () => new ArrayBuffer(0)),
+});
+
+const createPresentationEditorMock = () => ({
+  focus: vi.fn(),
+  setZoom: vi.fn(),
+  setContextMenuDisabled: vi.fn(),
+  on: vi.fn(),
+  off: vi.fn(),
+  getCommentBounds: vi.fn(() => ({})),
+});
+
 const createFloatingCommentsSchema = () =>
   new Schema({
     nodes: {
@@ -912,6 +938,97 @@ describe('SuperDoc.vue', () => {
     expect(superdocStub.activateRuntimeFromEventTarget).toHaveBeenCalledWith(document.body, 'pointerdown');
 
     wrapper.unmount();
+  });
+
+  it('skips v1 runtime registration when the document host root is unavailable', async () => {
+    const superdocStub = createSuperdocStub();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const doc = superdocStoreStub.documents.value[0];
+    wrapper.vm.$.setupState.setSubDocumentRoot(doc, null);
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[SuperDoc] v1 runtime host root unavailable; skipping runtime registration for',
+      'doc-1',
+    );
+    expect(superdocStub.registerEditorRuntime).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+  });
+
+  it('registers a v1 runtime, attaches the presentation editor, and activates it on focus', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const editor = createRuntimeEditorMock('doc-1');
+    const presentationEditor = createPresentationEditorMock();
+    const editorComponent = wrapper.findComponent(SuperEditorStub);
+    const options = editorComponent.props('options');
+    superdocStoreStub.documents.value[0].setPresentationEditor = vi.fn();
+
+    options.onCreate({ editor });
+    const runtime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+
+    expect(runtime.documentId).toBe('doc-1');
+    expect(superdocStub.setActiveRuntime).toHaveBeenLastCalledWith(runtime.id, 'v1-editor-create');
+
+    editorComponent.vm.$emit('editor-ready', { editor, presentationEditor });
+    await nextTick();
+    expect(runtime.getSnapshot().state).toBe('editing-ready');
+    expect(presentationEditor.on).toHaveBeenCalledWith('paginationUpdate', expect.any(Function));
+    expect(presentationEditor.setContextMenuDisabled).toHaveBeenCalledWith(false);
+
+    superdocStub.setActiveRuntime.mockClear();
+    options.onFocus({ editor });
+    expect(superdocStub.setActiveRuntime).toHaveBeenCalledWith(runtime.id, 'v1-editor-focus');
+
+    runtime.dispose();
+    expect(superdocStub.unregisterEditorRuntime).toHaveBeenCalledWith(runtime.id);
+
+    wrapper.unmount();
+  });
+
+  it('disposes an existing v1 runtime before registering a replacement for the same document', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+    const firstRuntime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+    const disposeSpy = vi.spyOn(firstRuntime, 'dispose');
+
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+    const secondRuntime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(superdocStub.unregisterEditorRuntime).toHaveBeenCalledWith(firstRuntime.id);
+    expect(superdocStub.registerEditorRuntime).toHaveBeenCalledTimes(2);
+    expect(secondRuntime.id).not.toBe(firstRuntime.id);
+
+    wrapper.unmount();
+  });
+
+  it('disposes registered v1 runtimes on component unmount', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+    const runtime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+    const disposeSpy = vi.spyOn(runtime, 'dispose');
+
+    wrapper.unmount();
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(superdocStub.unregisterEditorRuntime).toHaveBeenCalledWith(runtime.id);
   });
 
   it('forwards configured passwords to SuperEditor options', async () => {

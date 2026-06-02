@@ -13,6 +13,7 @@ import type {
   EditorRuntime,
   EditorRuntimeCapabilities,
   EditorRuntimeCommand,
+  EditorRuntimeCommandKind,
   EditorRuntimeCommandResult,
   EditorRuntimeEvent,
   EditorRuntimeFindSessionSnapshot,
@@ -33,7 +34,34 @@ export interface FakeV1RuntimeOptions {
   id?: EditorRuntimeId;
   documentId?: string;
   root?: HTMLElement;
+  initialState?: EditorRuntimeState;
 }
+
+const SUPPORTED_COMMAND_KINDS: readonly EditorRuntimeCommandKind[] = [
+  'text.insert',
+  'text.replace',
+  'text.deleteBackward',
+  'text.deleteForward',
+  'text.paste',
+  'history.undo',
+  'history.redo',
+  'structural.splitBlock',
+  'structural.indent',
+  'structural.outdent',
+  'formatting.applyMark',
+  'formatting.applyParagraph',
+  'comments.create',
+  'comments.resolve',
+  'comments.reopen',
+  'comments.delete',
+  'comments.reply',
+  'comments.edit',
+  'trackedChanges.accept',
+  'trackedChanges.reject',
+  'trackedChanges.acceptAll',
+  'trackedChanges.rejectAll',
+  'trackedChanges.setAuthoringMode',
+];
 
 /** Minimal stand-in for an element when no DOM root is provided (node tests). */
 function fallbackRoot(): HTMLElement {
@@ -47,8 +75,9 @@ export function createFakeV1Runtime(options: FakeV1RuntimeOptions = {}): EditorR
   const documentId = options.documentId ?? 'doc-v1';
   const root = options.root ?? fallbackRoot();
 
-  let state: EditorRuntimeState = 'editing-ready';
+  let state: EditorRuntimeState = options.initialState ?? 'editing-ready';
   let revision = 0; // bumped on every mutation; tokens carry the revision they were minted at
+  let zoomPercent = 100;
   const selectionText = 'hello';
   const listeners = new Set<EditorRuntimeListener>();
 
@@ -89,16 +118,7 @@ export function createFakeV1Runtime(options: FakeV1RuntimeOptions = {}): EditorR
       selection: { canReadSelectedText: true, canReadSelectionSnapshot: true, canMintPositionTokens: true },
       commands: {
         canDispatch: state === 'editing-ready' || state === 'review-ready',
-        supportedCommands: [
-          'text.insert',
-          'text.replace',
-          'text.deleteBackward',
-          'text.deleteForward',
-          'history.undo',
-          'history.redo',
-          'structural.splitBlock',
-          'formatting.applyMark',
-        ],
+        supportedCommands: SUPPORTED_COMMAND_KINDS,
       },
       layout: { supported: true, hasSyncSnapshot: true },
       zoom: { supported: true, min: 25, max: 400 },
@@ -168,6 +188,17 @@ export function createFakeV1Runtime(options: FakeV1RuntimeOptions = {}): EditorR
         case 'structural.splitBlock':
         case 'structural.indent':
         case 'structural.outdent':
+        case 'comments.create':
+        case 'comments.resolve':
+        case 'comments.reopen':
+        case 'comments.delete':
+        case 'comments.reply':
+        case 'comments.edit':
+        case 'trackedChanges.accept':
+        case 'trackedChanges.reject':
+        case 'trackedChanges.acceptAll':
+        case 'trackedChanges.rejectAll':
+        case 'trackedChanges.setAuthoringMode':
           revision += 1;
           return { status: 'committed', receipt: { revision } };
         default:
@@ -195,7 +226,7 @@ export function createFakeV1Runtime(options: FakeV1RuntimeOptions = {}): EditorR
       return { activeMarks: [], disabled: [] };
     },
     getLayoutSnapshot(): EditorRuntimeLayoutSnapshot | null {
-      return { pageCount: 1, currentPage: 1, zoom: 100 };
+      return { pageCount: 1, currentPage: 1, zoom: zoomPercent };
     },
 
     async save(): Promise<ArrayBuffer> {
@@ -207,7 +238,8 @@ export function createFakeV1Runtime(options: FakeV1RuntimeOptions = {}): EditorR
 
     async setZoom(percent: number): Promise<EditorRuntimeCommandResult> {
       if (percent < 25 || percent > 400) return { status: 'rejected', reason: 'target-unsupported' };
-      emit({ type: 'layout-change', layout: { pageCount: 1, currentPage: 1, zoom: percent } });
+      zoomPercent = percent;
+      emit({ type: 'layout-change', layout: { pageCount: 1, currentPage: 1, zoom: zoomPercent } });
       return { status: 'committed' };
     },
     async reveal(target: EditorRuntimeNavigationTarget): Promise<EditorRuntimeCommandResult> {

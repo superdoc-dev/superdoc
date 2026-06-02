@@ -2617,9 +2617,9 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     } else {
       this.#requireSuperdocStore('focus').documents.find((doc: RuntimeDocument) => {
         const editor = doc.getEditor?.();
-        if (editor) {
-          editor.focus?.();
-        }
+        if (!editor) return false;
+        editor.focus?.();
+        return true;
       });
     }
   }

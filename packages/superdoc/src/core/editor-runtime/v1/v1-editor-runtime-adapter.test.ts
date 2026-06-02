@@ -329,6 +329,33 @@ describe('V1EditorRuntimeAdapter  -  command dispatch result mapping ', () => {
     expect(insertContent).not.toHaveBeenCalled();
   });
 
+  it('rejects range-positioned dispatch instead of replacing the current selection', async () => {
+    const insertContent = vi.fn(() => true);
+    const editor = createFakeEditor({
+      selectedText: 'hi',
+      selectionFrom: 2,
+      selectionTo: 4,
+      commands: { insertContent },
+    });
+    const adapter = createV1EditorRuntimeAdapter({
+      id: 'rt-1',
+      documentId: 'doc-1',
+      root: makeRoot(),
+      editor,
+    });
+    adapter.attachPresentationEditor(createFakePresentationEditor());
+    const token = adapter.runtime.getSelectionSnapshot()!.anchor!;
+
+    const result = await adapter.runtime.dispatch({ kind: 'text.replace', text: 'abc', range: token });
+
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'target-unsupported',
+      detail: 'positioned v1 dispatch is deferred until selection/range placement is explicitly supported',
+    });
+    expect(insertContent).not.toHaveBeenCalled();
+  });
+
   it('history undo no-op vs committed maps to history-* statuses', async () => {
     const { runtime } = ready({ undo: () => false, redo: () => true });
     expect(await runtime.dispatch({ kind: 'history.undo' })).toEqual({

@@ -1293,9 +1293,6 @@ export async function incrementalLayout(
       perfLog(`[Perf] 4.3.${iteration + 1}.1 Re-measure: ${remeasureTime.toFixed(2)}ms`);
       PageTokenLogger.logRemeasure(tokenResult.affectedBlockIds.size, remeasureTime);
 
-      // Check if page count has stabilized
-      const oldPageCount = layout.pages.length;
-
       // Re-run pagination with updated measures
       const relayoutStart = performance.now();
       layout = layoutDocument(currentBlocks, currentMeasures, {
@@ -1313,18 +1310,6 @@ export async function incrementalLayout(
       const relayoutTime = relayoutEnd - relayoutStart;
       totalRelayoutTime += relayoutTime;
       perfLog(`[Perf] 4.3.${iteration + 1}.2 Re-layout: ${relayoutTime.toFixed(2)}ms`);
-
-      const newPageCount = layout.pages.length;
-
-      // Early exit if page count is stable (common case: no change or minor text adjustment)
-      if (newPageCount === oldPageCount && iteration > 0) {
-        perfLog(`[Perf] 4.3 Page count stable at ${newPageCount} - breaking convergence loop`);
-        // This convergence check predates chapter-aware PAGE prefixes. It is
-        // page-count based, so a same-count heading/page-boundary reassignment
-        // can require another pass for body-baked PAGE text. Keep maxIterations
-        // bounded and revisit if same-page chapter fixtures require exactness.
-        break;
-      }
 
       iteration++;
     }

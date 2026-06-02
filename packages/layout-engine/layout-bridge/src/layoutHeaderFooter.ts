@@ -258,6 +258,15 @@ function hasChapterNumberTextForAnyPage(totalPages: number, pageResolver: PageRe
   return false;
 }
 
+function hasSectionAwarePageTextForAnyPage(totalPages: number, pageResolver: PageResolver): boolean {
+  for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+    if (pageResolver(pageNumber).displayText !== String(pageNumber)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export class HeaderFooterLayoutCache {
   private readonly cache = new MeasureCache<Measure>();
 
@@ -383,11 +392,12 @@ export async function layoutHeaderFooterWithCache(
       useBucketing &&
       !hasPageNumberTokensRequiringPerPageLayout(blocks) &&
       !hasSectionPageCountTokens(blocks) &&
-      !hasChapterNumberTextForAnyPage(docTotalPages, pageResolver);
+      !hasChapterNumberTextForAnyPage(docTotalPages, pageResolver) &&
+      !hasSectionAwarePageTextForAnyPage(docTotalPages, pageResolver);
 
     if (!useBucketingForVariant) {
       // Per-page layout: small docs, disabled bucketing, SECTIONPAGES, chapter prefixes,
-      // or non-digit-bucket-compatible PAGE formats.
+      // section-aware display text, or non-digit-bucket-compatible PAGE formats.
       pagesToLayout = Array.from({ length: docTotalPages }, (_, i) => i + 1);
       HeaderFooterCacheLogger.logBucketingDecision(docTotalPages, false);
     } else {
@@ -500,7 +510,6 @@ export async function layoutHeaderFooterWithCache(
       renderHeight,
       pages: pages.map((p) => ({
         number: p.number,
-        displayNumber: p.displayNumber,
         fragments: p.fragments,
         numberText: p.numberText,
         pageNumberFormat: p.pageNumberFormat,

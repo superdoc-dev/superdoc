@@ -488,6 +488,32 @@ describe('layoutHeaderFooterWithCache - Digit Bucketing (Large Docs)', () => {
     expect(result.default?.layout.pages[100].numberText).toBe('12-101');
   });
 
+  it('should disable bucketing for section-restarted page number text', async () => {
+    const sections = {
+      default: [makePageTokenBlock('header-section-restart')],
+    };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: String(pageNum >= 100 ? pageNum - 99 : pageNum),
+      displayNumber: pageNum >= 100 ? pageNum - 99 : pageNum,
+      totalPages: 150,
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(150);
+    expect(measureBlock.mock.calls.length).toBeGreaterThan(3);
+    expect(result.default?.layout.pages[99].numberText).toBe('1');
+  });
+
   it.each([
     ['decimal', { format: 'decimal' }],
     ['numberInDash', { format: 'numberInDash' }],

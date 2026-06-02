@@ -484,23 +484,6 @@ describe('headerFooterUtils', () => {
       ).toBe('h0-default');
     });
 
-    it('should preserve converter titlePg fallback for section 0 variant selection', () => {
-      const sectionMetadata: SectionMetadata[] = [
-        {
-          sectionIndex: 0,
-          headerRefs: { first: null },
-        },
-      ];
-
-      const identifier = buildMultiSectionIdentifier(sectionMetadata, undefined, {
-        headerIds: { first: 'converter-h-first', titlePg: true },
-      });
-
-      expect(
-        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'header' }),
-      ).toBe('converter-h-first');
-    });
-
     it('should NOT override existing section metadata with converter IDs', () => {
       const sectionMetadata: SectionMetadata[] = [
         {

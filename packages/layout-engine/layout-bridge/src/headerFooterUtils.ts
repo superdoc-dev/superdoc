@@ -182,48 +182,39 @@ export const defaultMultiSectionIdentifier = (): MultiSectionHeaderFooterIdentif
   sections: [],
 });
 
-function mergeSection0FallbackRefs(
-  sectionRefs: SectionHeaderFooterIds | undefined,
-  fallbackRefs: SectionHeaderFooterIds,
-): SectionHeaderFooterIds {
-  return {
-    default: sectionRefs?.default ?? fallbackRefs.default,
-    first: sectionRefs?.first ?? fallbackRefs.first,
-    even: sectionRefs?.even ?? fallbackRefs.even,
-    odd: sectionRefs?.odd ?? fallbackRefs.odd,
-  };
-}
-
 function refreshResolutionSections(identifier: MultiSectionHeaderFooterIdentifier): void {
+  if (
+    identifier.sectionCount === 0 &&
+    identifier.sectionHeaderIds.size === 0 &&
+    identifier.sectionFooterIds.size === 0 &&
+    identifier.sectionTitlePg.size === 0
+  ) {
+    identifier.sections = [];
+    return;
+  }
+
   const maxIndex = Math.max(
     identifier.sectionCount - 1,
     ...Array.from(identifier.sectionHeaderIds.keys()),
     ...Array.from(identifier.sectionFooterIds.keys()),
     ...Array.from(identifier.sectionTitlePg.keys()),
-    0,
   );
 
   const sections: HeaderFooterResolutionSection[] = [];
   for (let sectionIndex = 0; sectionIndex <= maxIndex; sectionIndex += 1) {
     sections.push({
       sectionIndex,
-      titlePg: identifier.sectionTitlePg.has(sectionIndex)
-        ? identifier.sectionTitlePg.get(sectionIndex)
-        : sectionIndex === 0
-          ? identifier.titlePg
-          : false,
-      headerRefs:
-        sectionIndex === 0
-          ? mergeSection0FallbackRefs(identifier.sectionHeaderIds.get(sectionIndex), identifier.headerIds)
-          : identifier.sectionHeaderIds.get(sectionIndex),
-      footerRefs:
-        sectionIndex === 0
-          ? mergeSection0FallbackRefs(identifier.sectionFooterIds.get(sectionIndex), identifier.footerIds)
-          : identifier.sectionFooterIds.get(sectionIndex),
+      titlePg: identifier.sectionTitlePg.get(sectionIndex) ?? false,
+      headerRefs: identifier.sectionHeaderIds.get(sectionIndex),
+      footerRefs: identifier.sectionFooterIds.get(sectionIndex),
     });
   }
 
   identifier.sections = sections;
+}
+
+function getSectionTitlePg(identifier: MultiSectionHeaderFooterIdentifier, sectionIndex: number): boolean {
+  return identifier.sectionTitlePg.get(sectionIndex) ?? false;
 }
 
 /**
@@ -404,10 +395,9 @@ export function getHeaderFooterTypeForSection(
   const sectionPageNumber = options?.sectionPageNumber ?? pageNumber;
   const parityPageNumber = options?.parityPageNumber ?? pageNumber;
 
-  // Check titlePg for this specific section
-  const sectionTitlePg = identifier.sectionTitlePg.has(sectionIndex)
-    ? identifier.sectionTitlePg.get(sectionIndex)!
-    : identifier.titlePg;
+  // Check titlePg for this specific section. Omitted section metadata means false;
+  // legacy converter titlePg is only used by the non-section-aware path.
+  const sectionTitlePg = getSectionTitlePg(identifier, sectionIndex);
   const variant = selectHeaderFooterVariantForPage({
     documentPageNumber: parityPageNumber,
     sectionPageNumber,
@@ -453,9 +443,7 @@ export function getHeaderFooterIdForPage(
   const sectionIndex = page.sectionIndex ?? 0;
   const sectionPageNumber = options?.sectionPageNumber ?? page.number;
   const parityPageNumber = options?.parityPageNumber ?? page.displayNumber ?? page.number;
-  const sectionTitlePg = identifier.sectionTitlePg.has(sectionIndex)
-    ? identifier.sectionTitlePg.get(sectionIndex)!
-    : identifier.titlePg;
+  const sectionTitlePg = getSectionTitlePg(identifier, sectionIndex);
   const variantType = selectHeaderFooterVariantForPage({
     documentPageNumber: parityPageNumber,
     sectionPageNumber,
@@ -528,9 +516,7 @@ export function resolveHeaderFooterForPageAndSection(
   const sectionPageNumber = typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
   const parityPageNumber = options?.parityPageNumber ?? page.displayNumber ?? pageNumber;
 
-  const sectionTitlePg = identifier.sectionTitlePg.has(sectionIndex)
-    ? identifier.sectionTitlePg.get(sectionIndex)!
-    : identifier.titlePg;
+  const sectionTitlePg = getSectionTitlePg(identifier, sectionIndex);
   const type = selectHeaderFooterVariantForPage({
     documentPageNumber: parityPageNumber,
     sectionPageNumber,

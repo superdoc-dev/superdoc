@@ -395,7 +395,7 @@ describe('headerFooterUtils', () => {
       expect(identifier.footerIds.even).toBe('converter-f-even');
     });
 
-    it('should expose converter fallbacks through section-aware resolution', () => {
+    it('keeps converter fallbacks on legacy fields without exposing them through section-aware resolution', () => {
       const sectionMetadata: SectionMetadata[] = [
         {
           sectionIndex: 0,
@@ -409,17 +409,44 @@ describe('headerFooterUtils', () => {
         footerIds: { default: 'converter-f-default' },
       });
 
-      expect(getHeaderFooterTypeForSection(1, 0, identifier, { kind: 'header' })).toBe('default');
+      expect(identifier.headerIds.default).toBe('converter-h-default');
+      expect(identifier.footerIds.default).toBe('converter-f-default');
+      expect(getHeaderFooterTypeForSection(1, 0, identifier, { kind: 'header' })).toBeNull();
       expect(
         getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'header' }),
-      ).toBe('converter-h-default');
-      expect(getHeaderFooterTypeForSection(1, 0, identifier, { kind: 'footer' })).toBe('default');
+      ).toBeNull();
+      expect(getHeaderFooterTypeForSection(1, 0, identifier, { kind: 'footer' })).toBeNull();
       expect(
         getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'footer' }),
-      ).toBe('converter-f-default');
+      ).toBeNull();
     });
 
-    it('should preserve converter titlePg fallback for section 0 variant selection', () => {
+    it('does not apply a legacy converter default footer to a footerless first section', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          titlePg: false,
+        },
+        {
+          sectionIndex: 15,
+          footerRefs: { default: 'rId22' },
+          titlePg: false,
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, undefined, {
+        footerIds: { default: 'rId22' },
+      });
+
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'footer' }),
+      ).toBeNull();
+      expect(
+        getHeaderFooterIdForPage({ number: 2, fragments: [], sectionIndex: 15 }, identifier, { kind: 'footer' }),
+      ).toBe('rId22');
+    });
+
+    it('keeps converter titlePg fallback on legacy fields without exposing first refs through section-aware resolution', () => {
       const sectionMetadata: SectionMetadata[] = [
         {
           sectionIndex: 0,
@@ -431,9 +458,30 @@ describe('headerFooterUtils', () => {
         headerIds: { first: 'converter-h-first', titlePg: true },
       });
 
+      expect(identifier.titlePg).toBe(true);
+      expect(identifier.headerIds.first).toBe('converter-h-first');
       expect(
         getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'header' }),
-      ).toBe('converter-h-first');
+      ).toBeNull();
+    });
+
+    it('does not apply legacy converter titlePg to section-aware variant selection when titlePg is omitted', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default' },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, undefined, {
+        headerIds: { first: 'legacy-first', titlePg: true },
+      });
+
+      expect(identifier.titlePg).toBe(true);
+      expect(getHeaderFooterTypeForSection(1, 0, identifier, { kind: 'header', sectionPageNumber: 1 })).toBe('default');
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'header' }),
+      ).toBe('h0-default');
     });
 
     it('should NOT override existing section metadata with converter IDs', () => {
@@ -1049,7 +1097,7 @@ describe('headerFooterUtils', () => {
       expect(resolved?.contentId).toBe('h0-default');
     });
 
-    it('uses converter fallback refs when section metadata has no explicit refs', () => {
+    it('does not use converter fallback refs when section metadata has no explicit refs', () => {
       const identifier = buildMultiSectionIdentifier([{ sectionIndex: 0 }], undefined, {
         headerIds: { default: 'converter-default' },
       });
@@ -1063,11 +1111,10 @@ describe('headerFooterUtils', () => {
 
       const resolved = resolveHeaderFooterForPageAndSection(layout, 0, identifier, { kind: 'header' });
 
-      expect(resolved?.type).toBe('default');
-      expect(resolved?.contentId).toBe('converter-default');
+      expect(resolved).toBeNull();
     });
 
-    it('uses converter fallback refs when only later sections define refs', () => {
+    it('does not use converter fallback refs when only later sections define refs', () => {
       const identifier = buildMultiSectionIdentifier(
         [{ sectionIndex: 0 }, { sectionIndex: 1, headerRefs: { default: 'section-1-default' } }],
         undefined,
@@ -1083,11 +1130,10 @@ describe('headerFooterUtils', () => {
 
       const resolved = resolveHeaderFooterForPageAndSection(layout, 0, identifier, { kind: 'header' });
 
-      expect(resolved?.type).toBe('default');
-      expect(resolved?.contentId).toBe('converter-default');
+      expect(resolved).toBeNull();
     });
 
-    it('inherits converter fallback refs into later sections with partial refs', () => {
+    it('does not inherit converter fallback refs into later sections with partial refs', () => {
       const identifier = buildMultiSectionIdentifier(
         [{ sectionIndex: 0 }, { sectionIndex: 1, headerRefs: { even: 'section-1-even' } }],
         undefined,
@@ -1106,8 +1152,7 @@ describe('headerFooterUtils', () => {
 
       const resolved = resolveHeaderFooterForPageAndSection(layout, 1, identifier, { kind: 'header' });
 
-      expect(resolved?.type).toBe('default');
-      expect(resolved?.contentId).toBe('converter-default');
+      expect(resolved).toBeNull();
     });
 
     it('gets an inherited first content id from section 0 when section 1 omits it', () => {

@@ -77,6 +77,14 @@ type SurfacePmEntry = {
   el: HTMLElement;
 };
 
+function hasSectionRefsForKind(
+  identifier: MultiSectionHeaderFooterIdentifier | null | undefined,
+  kind: 'header' | 'footer',
+): identifier is MultiSectionHeaderFooterIdentifier {
+  const refKey = kind === 'header' ? 'headerRefs' : 'footerRefs';
+  return Boolean(identifier?.sections?.some((section) => section[refKey] !== undefined));
+}
+
 // AIDEV-NOTE: compat-fallback - header/footer session interaction still keys
 // off `data-pm-*` (prep-002). DomPainter also stamps the parallel neutral
 // dataset (`data-layout-fragment-id` etc.) which a future v2 consumer can
@@ -2407,6 +2415,7 @@ export class HeaderFooterSessionManager {
         sectionFirstPageNumbers.set(idx, p.number);
       }
     }
+    const hasSectionResolution = hasSectionRefsForKind(multiSectionId, kind);
 
     return (pageNumber, pageMargins, page) => {
       const sectionIndex = page?.sectionIndex ?? 0;
@@ -2414,7 +2423,7 @@ export class HeaderFooterSessionManager {
       const sectionPageNumber =
         typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
       const parityPageNumber = page?.displayNumber ?? pageNumber;
-      const headerFooterType = multiSectionId
+      const headerFooterType = hasSectionResolution
         ? getHeaderFooterTypeForSection(pageNumber, sectionIndex, multiSectionId, {
             kind,
             sectionPageNumber,
@@ -2426,7 +2435,7 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
-      const effectiveRef = multiSectionId?.sections?.length
+      const effectiveRef = hasSectionResolution
         ? resolveEffectiveHeaderFooterRef({
             sections: multiSectionId.sections,
             sectionIndex,
@@ -2437,7 +2446,8 @@ export class HeaderFooterSessionManager {
       const pageSectionRefs = kind === 'header' ? page?.sectionRefs?.headerRefs : page?.sectionRefs?.footerRefs;
       const legacyRefs = kind === 'header' ? legacyIdentifier.headerIds : legacyIdentifier.footerIds;
       const fallbackRef =
-        refForVariant(pageSectionRefs, headerFooterType) ?? refForVariant(legacyRefs, headerFooterType);
+        refForVariant(pageSectionRefs, headerFooterType) ??
+        (!hasSectionResolution ? refForVariant(legacyRefs, headerFooterType) : undefined);
       const sectionRId = effectiveRef?.refId ?? fallbackRef?.refId;
       const layoutVariantType = effectiveRef?.matchedVariant ?? fallbackRef?.matchedVariant ?? headerFooterType;
 

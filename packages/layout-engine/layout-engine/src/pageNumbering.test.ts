@@ -348,6 +348,46 @@ describe('chapter page context', () => {
     expect(result.get(3)?.chapterNumberText).toBe('4');
   });
 
+  it('clears stale child heading markers when a new parent heading appears', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'heading-1-a',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '3.' } } },
+      },
+      {
+        kind: 'paragraph',
+        id: 'heading-2-a',
+        runs: [],
+        attrs: { styleId: 'Heading2', wordLayout: { marker: { markerText: '2.' } } },
+      },
+      {
+        kind: 'paragraph',
+        id: 'heading-1-b',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '4.' } } },
+      },
+      { kind: 'paragraph', id: 'body-after-heading-1-b', runs: [] },
+    ] as FlowBlock[];
+    const layout = {
+      pages: [
+        { number: 1, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-1-a' }] },
+        { number: 2, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-2-a' }] },
+        { number: 3, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-1-b' }] },
+        { number: 4, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'body-after-heading-1-b' }] },
+      ],
+    } as Layout;
+    const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 2 } }];
+
+    const result = buildChapterContextByPage(layout, blocks, sections);
+
+    expect(result.get(1)).toEqual({ chapterNumberText: '3', chapterStyle: 1 });
+    expect(result.get(2)).toEqual({ chapterNumberText: '2', chapterStyle: 2 });
+    expect(result.get(3)).toEqual({ chapterNumberText: '4', chapterStyle: 1 });
+    expect(result.get(4)).toEqual({ chapterNumberText: '4', chapterStyle: 1 });
+  });
+
   it('omits chapter context when the matching heading marker is not a clean single token', () => {
     const blocks: FlowBlock[] = [
       {

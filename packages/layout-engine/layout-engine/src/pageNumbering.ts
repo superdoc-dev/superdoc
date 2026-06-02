@@ -175,6 +175,14 @@ function getActiveChapterNumberText(
   return undefined;
 }
 
+function clearChildChapterNumberText(activeChapterByStyle: Map<number, string>, headingLevel: number): void {
+  for (const activeHeadingLevel of activeChapterByStyle.keys()) {
+    if (activeHeadingLevel > headingLevel) {
+      activeChapterByStyle.delete(activeHeadingLevel);
+    }
+  }
+}
+
 export function buildChapterContextByPage(
   layout: Layout,
   blocks: FlowBlock[] | ReadonlyMap<string, FlowBlock>,
@@ -219,6 +227,7 @@ export function buildChapterContextByPage(
 
       const chapterNumberText = getChapterMarkerText(block, headingLevel);
       if (chapterNumberText) {
+        clearChildChapterNumberText(activeChapterByStyle, headingLevel);
         activeChapterByStyle.set(headingLevel, chapterNumberText);
       }
     }

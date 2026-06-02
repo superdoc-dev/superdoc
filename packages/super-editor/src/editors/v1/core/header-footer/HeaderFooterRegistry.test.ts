@@ -219,6 +219,22 @@ describe('HeaderFooterEditorManager', () => {
     expect(host.children).toHaveLength(1);
   });
 
+  it('does not synthesize section page count when creating a header/footer editor without section context', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host, totalPageCount: 9 });
+
+    expect(sectionEditor).toBeDefined();
+    expect(mockCreateHeaderFooterEditor).toHaveBeenCalledTimes(1);
+    expect(mockCreateHeaderFooterEditor.mock.calls[0][0]).toMatchObject({
+      totalPageCount: 9,
+      sectionPageCount: undefined,
+    });
+  });
+
   it('ensureEditorSync reattaches the cached editor container to a new host', () => {
     const editor = createMockEditor();
     const manager = new HeaderFooterEditorManager(editor);

@@ -803,7 +803,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
         currentPageNumberText: options?.currentPageNumberText,
         currentPageDisplayNumber: options?.currentPageDisplayNumber,
         totalPageCount: options?.totalPageCount ?? 1,
-        sectionPageCount: options?.sectionPageCount ?? options?.totalPageCount ?? 1,
+        sectionPageCount: options?.sectionPageCount,
       }) as Editor;
     } catch (error) {
       console.error('[HeaderFooterEditorManager] Editor creation failed:', error);

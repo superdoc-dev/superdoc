@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { getInstructionPreProcessor } from './index.js';
 import { preProcessPageInstruction } from './page-preprocessor.js';
 import { preProcessNumPagesInstruction } from './num-pages-preprocessor.js';
+import { preProcessSectionPagesInstruction } from './section-pages-preprocessor.js';
 import { preProcessPageRefInstruction } from './page-ref-preprocessor.js';
 import { preProcessHyperlinkInstruction } from './hyperlink-preprocessor.js';
 import { preProcessTocInstruction } from './toc-preprocessor.js';
@@ -47,6 +48,14 @@ describe('getInstructionPreProcessor', () => {
     (instruction) => {
       const processor = getInstructionPreProcessor(instruction);
       expect(processor).toBe(preProcessNumPagesInstruction);
+    },
+  );
+
+  it.each(['sectionpages', 'SectionPages', 'SECTIONPAGES \\* roman'])(
+    'should return preProcessSectionPagesInstruction for case-insensitive SECTIONPAGES instruction %s',
+    (instruction) => {
+      const processor = getInstructionPreProcessor(instruction);
+      expect(processor).toBe(preProcessSectionPagesInstruction);
     },
   );
 

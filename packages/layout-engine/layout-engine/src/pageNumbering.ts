@@ -36,6 +36,8 @@ export interface DisplayPageInfo {
   displayText: string;
   /** Index of the section this page belongs to */
   sectionIndex: number;
+  /** Physical page count in the current section */
+  sectionPageCount: number;
 }
 
 /**
@@ -92,6 +94,12 @@ export function computeDisplayPageNumber(pages: Page[], sections: SectionMetadat
     sectionMap.set(section.sectionIndex, section);
   }
 
+  const sectionPageCounts = new Map<number, number>();
+  for (const page of pages) {
+    const sectionIndex = page.sectionIndex ?? 0;
+    sectionPageCounts.set(sectionIndex, (sectionPageCounts.get(sectionIndex) ?? 0) + 1);
+  }
+
   // Track running page counter across sections
   let runningCounter = 1;
   let currentSectionIndex = -1;
@@ -136,6 +144,7 @@ export function computeDisplayPageNumber(pages: Page[], sections: SectionMetadat
       displayNumber,
       displayText,
       sectionIndex: pageSectionIndex,
+      sectionPageCount: sectionPageCounts.get(pageSectionIndex) ?? pages.length,
     });
 
     // Increment counters

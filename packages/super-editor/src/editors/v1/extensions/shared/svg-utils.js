@@ -1,3 +1,5 @@
+import { formatPageNumber } from '@superdoc/layout-engine';
+
 /**
  * Shared utility functions for SVG shape rendering
  * Used by VectorShapeView and ShapeGroupView
@@ -67,7 +69,8 @@ export function createGradient(gradientData, gradientId) {
  * @param {Array<Object>} textContent.parts - Array of text parts with formatting
  * @param {string} textContent.parts[].text - The text content
  * @param {Object} [textContent.parts[].formatting] - Formatting options (bold, italic, color, fontSize, fontFamily)
- * @param {'PAGE'|'NUMPAGES'} [textContent.parts[].fieldType] - Field type for dynamic content resolution
+ * @param {'PAGE'|'NUMPAGES'|'SECTIONPAGES'} [textContent.parts[].fieldType] - Field type for dynamic content resolution
+ * @param {string} [textContent.parts[].pageNumberFormat] - PAGE/SECTIONPAGES field-local value formatting override
  * @param {boolean} [textContent.parts[].isLineBreak] - Whether this part represents a line break
  * @param {boolean} [textContent.parts[].isEmptyParagraph] - Whether this line break follows an empty paragraph
  * @param {string} textAlign - Text alignment ('left', 'center', 'right', 'r')
@@ -78,10 +81,11 @@ export function createGradient(gradientData, gradientId) {
  * @param {'top'|'center'|'bottom'} [options.textVerticalAlign] - Vertical alignment of text content
  * @param {number} [options.pageNumber] - Current page number for PAGE field resolution
  * @param {number} [options.totalPages] - Total page count for NUMPAGES field resolution
+ * @param {number} [options.sectionPageCount] - Current section page count for SECTIONPAGES field resolution
  * @returns {SVGForeignObjectElement} The created foreignObject element containing the formatted text
  */
 export function createTextElement(textContent, textAlign, width, height, options = {}) {
-  const { textInsets, textVerticalAlign, pageNumber, totalPages } = options;
+  const { textInsets, textVerticalAlign, pageNumber, totalPages, sectionPageCount } = options;
   // Use foreignObject with HTML for proper text wrapping
   const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
   foreignObject.setAttribute('x', '0');
@@ -134,6 +138,10 @@ export function createTextElement(textContent, textAlign, width, height, options
     }
     if (part.fieldType === 'NUMPAGES') {
       return totalPages != null ? String(totalPages) : '1';
+    }
+    if (part.fieldType === 'SECTIONPAGES') {
+      const count = sectionPageCount ?? totalPages ?? 1;
+      return part.pageNumberFormat ? formatPageNumber(count, part.pageNumberFormat) : String(count);
     }
     return part.text;
   };

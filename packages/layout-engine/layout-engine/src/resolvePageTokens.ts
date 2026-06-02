@@ -1,7 +1,7 @@
 /**
  * Page Number Token Resolution Module
  *
- * Resolves dynamic page number tokens (pageNumber, totalPageCount) in layout fragments.
+ * Resolves dynamic page number tokens (pageNumber, totalPageCount, sectionPageCount) in layout fragments.
  * This module follows the same pattern as resolvePageRefs.ts for PAGEREF token resolution.
  *
  * Tokens are created during PM-to-FlowBlock conversion with placeholder text ('0'),
@@ -118,6 +118,7 @@ export function resolvePageNumberTokens(
       continue;
     }
 
+    const sectionPageCount = displayPageInfo.sectionPageCount || numberingCtx.totalPages || 1;
     for (const fragment of page.fragments) {
       // Paragraph fragments — original behaviour.
       if (fragment.kind === 'para') {
@@ -140,6 +141,7 @@ export function resolvePageNumberTokens(
           displayPageInfo,
           totalPagesStr,
           numberingCtx.totalPages,
+          sectionPageCount,
         );
         updatedBlocks.set(blockId, clonedBlock);
         affectedBlockIds.add(blockId);
@@ -174,11 +176,14 @@ export function resolvePageNumberTokens(
  * Checks if a paragraph block contains any page number tokens.
  *
  * @param block - Paragraph block to check
- * @returns True if block contains pageNumber or totalPageCount tokens
+ * @returns True if block contains pageNumber, totalPageCount, or sectionPageCount tokens
  */
 function hasPageTokens(block: ParagraphBlock): boolean {
   for (const run of block.runs) {
-    if ('token' in run && (run.token === 'pageNumber' || run.token === 'totalPageCount')) {
+    if (
+      'token' in run &&
+      (run.token === 'pageNumber' || run.token === 'totalPageCount' || run.token === 'sectionPageCount')
+    ) {
       return true;
     }
   }
@@ -201,6 +206,7 @@ function cloneBlockWithResolvedTokens(
   displayPageInfo: DisplayPageInfo,
   totalPagesStr: string,
   totalPages: number,
+  sectionPageCount: number,
 ): ParagraphBlock {
   // Clone the runs array and resolve tokens
   const clonedRuns = block.runs.map((run) => {
@@ -223,6 +229,14 @@ function cloneBlockWithResolvedTokens(
           text: run.pageNumberFieldFormat
             ? formatPageNumberFieldValue(totalPages, run.pageNumberFieldFormat)
             : totalPagesStr,
+        };
+      } else if (run.token === 'sectionPageCount') {
+        const { token: _token, pageNumberFieldFormat, ...runWithoutToken } = run;
+        return {
+          ...runWithoutToken,
+          text: pageNumberFieldFormat
+            ? formatPageNumberFieldValue(sectionPageCount, pageNumberFieldFormat)
+            : String(sectionPageCount),
         };
       }
     }
@@ -258,7 +272,12 @@ function cloneBlockWithResolvedTokens(
  * }
  * ```
  */
-export function resolveTokensInBlock(block: ParagraphBlock, pageNumber: number, totalPages: number): boolean {
+export function resolveTokensInBlock(
+  block: ParagraphBlock,
+  pageNumber: number,
+  totalPages: number,
+  sectionPageCount: number = totalPages,
+): boolean {
   if (block.kind !== 'paragraph') {
     return false;
   }
@@ -276,6 +295,7 @@ export function resolveTokensInBlock(block: ParagraphBlock, pageNumber: number, 
 
   const pageNumberStr = String(pageNumber);
   const totalPagesStr = String(totalPages);
+  const sectionPageCountStr = String(sectionPageCount);
   let blockModified = false;
 
   // Iterate through runs in the paragraph
@@ -296,6 +316,13 @@ export function resolveTokensInBlock(block: ParagraphBlock, pageNumber: number, 
         run.text = totalPagesStr;
         // Clear token metadata to treat as normal text after resolution
         delete run.token;
+        blockModified = true;
+      } else if (run.token === 'sectionPageCount') {
+        run.text = run.pageNumberFieldFormat
+          ? formatPageNumberFieldValue(sectionPageCount, run.pageNumberFieldFormat)
+          : sectionPageCountStr;
+        delete run.token;
+        delete run.pageNumberFieldFormat;
         blockModified = true;
       }
       // Note: pageReference tokens are handled by resolvePageRefs.ts

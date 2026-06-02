@@ -188,6 +188,70 @@ describe('resolvePageNumberTokens', () => {
       expect(updatedBlock.runs[1].token).toBeUndefined();
     });
 
+    it('should resolve formatted sectionPageCount tokens', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: 'Section pages: ',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            },
+            {
+              text: '0',
+              token: 'sectionPageCount',
+              pageNumberFieldFormat: { format: 'upperRoman' },
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+      const numberingCtx: NumberingContext = {
+        totalPages: 9,
+        displayPages: [
+          {
+            physicalPage: 1,
+            displayNumber: 1,
+            displayText: '1',
+            sectionIndex: 0,
+            sectionPageCount: 4,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+      const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
+
+      expect(result.affectedBlockIds.has('para-1')).toBe(true);
+      expect(updatedBlock.runs[1].text).toBe('IV');
+      expect(updatedBlock.runs[1].token).toBeUndefined();
+      expect(updatedBlock.runs[1].pageNumberFieldFormat).toBeUndefined();
+    });
+
     it('should resolve both pageNumber and totalPageCount in same paragraph', () => {
       const blocks: FlowBlock[] = [
         {

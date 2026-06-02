@@ -33,6 +33,7 @@ export type PageResolver = (pageNumber: number) => {
   displayText: string;
   displayNumber?: number;
   totalPages: number;
+  sectionPageCount: number;
 };
 
 /**
@@ -117,11 +118,23 @@ export function getBucketRepresentative(bucket: DigitBucket): number {
  * for header/footer variants that don't contain page tokens.
  *
  * @param blocks - FlowBlocks to check for tokens
- * @returns True if any block contains pageNumber or totalPageCount tokens
+ * @returns True if any block contains pageNumber, totalPageCount, or sectionPageCount tokens
  */
 function paragraphHasPageToken(para: ParagraphBlock): boolean {
   for (const run of para.runs) {
-    if ('token' in run && (run.token === 'pageNumber' || run.token === 'totalPageCount')) {
+    if (
+      'token' in run &&
+      (run.token === 'pageNumber' || run.token === 'totalPageCount' || run.token === 'sectionPageCount')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function paragraphHasSectionPageCountToken(para: ParagraphBlock): boolean {
+  for (const run of para.runs) {
+    if ('token' in run && run.token === 'sectionPageCount') {
       return true;
     }
   }
@@ -169,6 +182,32 @@ function hasPageTokens(blocks: FlowBlock[]): boolean {
               ? [cell.paragraph]
               : [];
           if (hasPageTokens(cellBlocks)) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function hasSectionPageCountTokens(blocks: FlowBlock[]): boolean {
+  for (const block of blocks) {
+    if (block.kind === 'paragraph') {
+      if (paragraphHasSectionPageCountToken(block as ParagraphBlock)) return true;
+    } else if (block.kind === 'list') {
+      const list = block as ListBlock;
+      for (const item of list.items ?? []) {
+        if (paragraphHasSectionPageCountToken(item.paragraph)) return true;
+      }
+    } else if (block.kind === 'table') {
+      const table = block as TableBlock;
+      for (const row of table.rows ?? []) {
+        for (const cell of row.cells ?? []) {
+          const cellBlocks: FlowBlock[] = cell.blocks
+            ? (cell.blocks as FlowBlock[])
+            : cell.paragraph
+              ? [cell.paragraph]
+              : [];
+          if (hasSectionPageCountTokens(cellBlocks)) return true;
         }
       }
     }
@@ -323,10 +362,11 @@ export async function layoutHeaderFooterWithCache(
     // Determine which pages to create layouts for
     let pagesToLayout: number[];
 
-    const useBucketingForVariant = useBucketing && !hasPageNumberTokensRequiringPerPageLayout(blocks);
+    const useBucketingForVariant =
+      useBucketing && !hasPageNumberTokensRequiringPerPageLayout(blocks) && !hasSectionPageCountTokens(blocks);
 
     if (!useBucketingForVariant) {
-      // Per-page layout: small docs, disabled bucketing, or non-digit-bucket-compatible PAGE formats.
+      // Per-page layout: small docs, disabled bucketing, SECTIONPAGES, or non-digit-bucket-compatible PAGE formats.
       pagesToLayout = Array.from({ length: docTotalPages }, (_, i) => i + 1);
       HeaderFooterCacheLogger.logBucketingDecision(docTotalPages, false);
     } else {
@@ -357,9 +397,9 @@ export async function layoutHeaderFooterWithCache(
       const clonedBlocks = cloneHeaderFooterBlocks(blocks);
 
       // Resolve page number tokens for this specific page
-      const { displayText, displayNumber, totalPages: totalPagesForPage } = pageResolver(pageNum);
+      const { displayText, displayNumber, totalPages: totalPagesForPage, sectionPageCount } = pageResolver(pageNum);
 
-      resolveHeaderFooterTokens(clonedBlocks, pageNum, totalPagesForPage, displayText, displayNumber);
+      resolveHeaderFooterTokens(clonedBlocks, pageNum, totalPagesForPage, displayText, displayNumber, sectionPageCount);
 
       // Measure and layout
       const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock);

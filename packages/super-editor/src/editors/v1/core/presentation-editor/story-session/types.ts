@@ -119,6 +119,7 @@ export interface ActivateStorySessionOptions {
     availableHeight?: number;
     currentPageNumber?: number;
     totalPageCount?: number;
+    sectionPageCount?: number;
     surfaceKind?: 'header' | 'footer' | 'note' | 'endnote';
   };
 

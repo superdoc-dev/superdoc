@@ -806,11 +806,13 @@ export class HeaderFooterSessionManager {
 
     // Build section first page numbers map
     const sectionFirstPageNumbers = new Map<number, number>();
+    const sectionPageCounts = new Map<number, number>();
     for (const p of resolvedLayout.pages) {
       const idx = p.sectionIndex ?? 0;
       if (!sectionFirstPageNumbers.has(idx)) {
         sectionFirstPageNumbers.set(idx, p.number);
       }
+      sectionPageCounts.set(idx, (sectionPageCounts.get(idx) ?? 0) + 1);
     }
 
     // Resolve section projections to map sectionIndex → sectionId
@@ -823,6 +825,7 @@ export class HeaderFooterSessionManager {
       const actualPageHeight = page.height ?? fallbackPageHeight;
       const sectionIndex = page.sectionIndex ?? 0;
       const sectionId = sectionIdBySectionIndex.get(sectionIndex) ?? `section-${sectionIndex}`;
+      const sectionPageCount = sectionPageCounts.get(sectionIndex) ?? resolvedLayout.pages.length ?? 1;
 
       // Header region
       const headerPayload = this.#headerDecorationProvider?.(page.number, margins, page);
@@ -839,6 +842,7 @@ export class HeaderFooterSessionManager {
         pageIndex,
         pageNumber: page.number,
         displayPageNumber,
+        sectionPageCount,
         localX: headerPayload?.hitRegion?.x ?? headerBox.x,
         localY: headerPayload?.hitRegion?.y ?? headerBox.offset,
         width: headerPayload?.hitRegion?.width ?? headerBox.width,
@@ -859,6 +863,7 @@ export class HeaderFooterSessionManager {
         pageIndex,
         pageNumber: page.number,
         displayPageNumber,
+        sectionPageCount,
         localX: footerPayload?.hitRegion?.x ?? footerBox.x,
         localY: footerPayload?.hitRegion?.y ?? footerBox.offset,
         width: footerPayload?.hitRegion?.width ?? footerBox.width,
@@ -1092,6 +1097,7 @@ export class HeaderFooterSessionManager {
         availableHeight: Math.max(1, region.height),
         currentPageNumber: Math.max(1, region.pageNumber ?? 1),
         totalPageCount: Math.max(1, bodyPageCount),
+        sectionPageCount: Math.max(1, region.sectionPageCount ?? bodyPageCount),
         surfaceKind: region.kind,
       },
     });

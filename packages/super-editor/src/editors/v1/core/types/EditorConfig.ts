@@ -453,6 +453,15 @@ export interface EditorOptions {
   /** OOXML relationship id for this header/footer part (e.g. `rId7`). */
   headerFooterRefId?: string;
 
+  /** Current page number for PAGE field rendering in story editors */
+  currentPageNumber?: number;
+
+  /** Total document page count for NUMPAGES field rendering in story editors */
+  totalPageCount?: number;
+
+  /** Current section page count for SECTIONPAGES field rendering in story editors */
+  sectionPageCount?: number;
+
   /** Optional pagination metadata */
   lastSelection?: unknown | null;
 

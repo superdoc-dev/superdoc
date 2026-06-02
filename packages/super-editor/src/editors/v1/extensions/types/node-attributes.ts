@@ -968,6 +968,20 @@ export interface TotalPageCountAttrs extends InlineNodeAttributes {
   pageNumberZeroPadding?: number | null;
 }
 
+/** Section page count node attributes */
+export interface SectionPageCountAttrs extends InlineNodeAttributes {
+  /** @internal Marks stored as attributes */
+  marksAsAttrs?: unknown[] | null;
+  /** Imported cached field result */
+  importedCachedText?: string | null;
+  /** Cached display value set by an explicit field update */
+  resolvedText?: string | null;
+  /** Imported or synthesized SECTIONPAGES field instruction */
+  instruction?: string | null;
+  /** PAGE/SECTIONPAGES field-local value formatting override */
+  pageNumberFormat?: PageNumberFormat | null;
+}
+
 // ============================================
 // FIELD ANNOTATION
 // ============================================
@@ -1291,6 +1305,7 @@ declare module '../../core/types/NodeAttributesMap.js' {
     pageReference: PageReferenceAttrs;
     'page-number': PageNumberAttrs;
     'total-page-number': TotalPageCountAttrs;
+    'section-page-count': SectionPageCountAttrs;
 
     // Field annotations
     fieldAnnotation: FieldAnnotationAttrs;

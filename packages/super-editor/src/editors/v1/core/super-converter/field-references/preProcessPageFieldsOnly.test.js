@@ -146,6 +146,17 @@ describe('preProcessPageFieldsOnly', () => {
         expect(result.processedNodes[0].name).toBe('sd:totalPageNumber');
       },
     );
+
+    it.each([' sectionpages ', ' SectionPages ', ' SECTIONPAGES \\* roman '])(
+      'should process SECTIONPAGES field case-insensitively with fldChar syntax: %s',
+      (instruction) => {
+        const result = preProcessPageFieldsOnly(complexFieldNodes(instruction, '4'));
+
+        expect(result.processedNodes).toHaveLength(1);
+        expect(result.processedNodes[0].name).toBe('sd:sectionPageCount');
+        expect(result.processedNodes[0].attributes.importedCachedText).toBe('4');
+      },
+    );
   });
 
   describe('simple field syntax (w:fldSimple)', () => {
@@ -237,6 +248,34 @@ describe('preProcessPageFieldsOnly', () => {
         expect(result.processedNodes[0].name).toBe('sd:totalPageNumber');
       },
     );
+
+    it('should process SECTIONPAGES field with fldSimple syntax and preserve format', () => {
+      const nodes = [
+        {
+          name: 'w:fldSimple',
+          attributes: { 'w:instr': ' SECTIONPAGES  \\* roman \\* MERGEFORMAT ' },
+          elements: [
+            {
+              name: 'w:r',
+              elements: [
+                { name: 'w:rPr', elements: [{ name: 'w:noProof' }] },
+                { name: 'w:t', elements: [{ type: 'text', text: 'iv' }] },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const result = preProcessPageFieldsOnly(nodes);
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0].name).toBe('sd:sectionPageCount');
+      expect(result.processedNodes[0].attributes).toMatchObject({
+        instruction: 'SECTIONPAGES  \\* roman \\* MERGEFORMAT',
+        pageNumberFormat: 'lowerRoman',
+        importedCachedText: 'iv',
+      });
+    });
 
     it('should preserve rPr styling from fldSimple content', () => {
       const nodes = [

@@ -1,5 +1,6 @@
 import { preProcessPageInstruction } from './page-preprocessor.js';
 import { preProcessNumPagesInstruction } from './num-pages-preprocessor.js';
+import { preProcessSectionPagesInstruction } from './section-pages-preprocessor.js';
 import { preProcessPageRefInstruction } from './page-ref-preprocessor.js';
 import { preProcessHyperlinkInstruction } from './hyperlink-preprocessor.js';
 import { preProcessTocInstruction } from './toc-preprocessor.js';
@@ -47,6 +48,8 @@ export const getInstructionPreProcessor = (instruction) => {
       return preProcessPageInstruction;
     case 'NUMPAGES':
       return preProcessNumPagesInstruction;
+    case 'SECTIONPAGES':
+      return preProcessSectionPagesInstruction;
     case 'NUMWORDS':
     case 'NUMCHARS':
       return preProcessDocumentStatInstruction;

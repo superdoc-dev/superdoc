@@ -200,6 +200,7 @@ describe('computeDisplayPageNumber', () => {
         displayNumber: 1,
         displayText: '1',
         sectionIndex: 0,
+        sectionPageCount: 1,
       });
     });
 
@@ -219,18 +220,21 @@ describe('computeDisplayPageNumber', () => {
         displayNumber: 1,
         displayText: '1',
         sectionIndex: 0,
+        sectionPageCount: 3,
       });
       expect(result[1]).toEqual({
         physicalPage: 2,
         displayNumber: 2,
         displayText: '2',
         sectionIndex: 0,
+        sectionPageCount: 3,
       });
       expect(result[2]).toEqual({
         physicalPage: 3,
         displayNumber: 3,
         displayText: '3',
         sectionIndex: 0,
+        sectionPageCount: 3,
       });
     });
 
@@ -281,18 +285,21 @@ describe('computeDisplayPageNumber', () => {
         displayNumber: 5,
         displayText: '5',
         sectionIndex: 0,
+        sectionPageCount: 3,
       });
       expect(result[1]).toEqual({
         physicalPage: 2,
         displayNumber: 6,
         displayText: '6',
         sectionIndex: 0,
+        sectionPageCount: 3,
       });
       expect(result[2]).toEqual({
         physicalPage: 3,
         displayNumber: 7,
         displayText: '7',
         sectionIndex: 0,
+        sectionPageCount: 3,
       });
     });
   });
@@ -530,12 +537,14 @@ describe('computeDisplayPageNumber', () => {
         displayNumber: 1,
         displayText: 'i',
         sectionIndex: 0,
+        sectionPageCount: 2,
       });
       expect(result[1]).toEqual({
         physicalPage: 2,
         displayNumber: 2,
         displayText: 'ii',
         sectionIndex: 0,
+        sectionPageCount: 2,
       });
       // Section 1: pages 3-4 in decimal (restarted at 1)
       expect(result[2]).toEqual({
@@ -543,12 +552,14 @@ describe('computeDisplayPageNumber', () => {
         displayNumber: 1,
         displayText: '1',
         sectionIndex: 1,
+        sectionPageCount: 2,
       });
       expect(result[3]).toEqual({
         physicalPage: 4,
         displayNumber: 2,
         displayText: '2',
         sectionIndex: 1,
+        sectionPageCount: 2,
       });
       // Section 2: page 5 in upperLetter (restarted at 1)
       expect(result[4]).toEqual({
@@ -556,6 +567,7 @@ describe('computeDisplayPageNumber', () => {
         displayNumber: 1,
         displayText: 'A',
         sectionIndex: 2,
+        sectionPageCount: 1,
       });
     });
 

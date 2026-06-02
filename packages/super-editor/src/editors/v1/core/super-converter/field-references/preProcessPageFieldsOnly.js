@@ -3,6 +3,7 @@
  */
 import { preProcessPageInstruction } from './fld-preprocessors/page-preprocessor.js';
 import { preProcessNumPagesInstruction } from './fld-preprocessors/num-pages-preprocessor.js';
+import { preProcessSectionPagesInstruction } from './fld-preprocessors/section-pages-preprocessor.js';
 import { preProcessDocumentStatInstruction } from './fld-preprocessors/document-stat-preprocessor.js';
 import { extractFieldKeyword } from './field-keyword.js';
 
@@ -11,7 +12,7 @@ const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has(node?.name);
 
 /**
- * Pre-processes nodes to convert PAGE and NUMPAGES field codes for header/footer rendering.
+ * Pre-processes nodes to convert PAGE, NUMPAGES, and SECTIONPAGES field codes for header/footer rendering.
  *
  * NOTE: This function is used exclusively when constructing a standalone header/footer
  * editor for on-screen display/editing. It is NOT part of the DOCX import pipeline.
@@ -20,6 +21,7 @@ const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has
  * This function specifically handles:
  * - PAGE fields → sd:autoPageNumber (displays current page number)
  * - NUMPAGES fields → sd:totalPageNumber (displays total page count)
+ * - SECTIONPAGES fields → sd:sectionPageCount (displays current section page count)
  * - Unhandled fldSimple fields (FILENAME, DOCPROPERTY, etc.) → unwrapped to their
  *   cached display text (the value Word rendered when the document was last saved),
  *   so the header renders meaningful content rather than an empty box.
@@ -231,6 +233,8 @@ function getHeaderFooterFieldPreprocessor(fieldType) {
       return preProcessPageInstruction;
     case 'NUMPAGES':
       return preProcessNumPagesInstruction;
+    case 'SECTIONPAGES':
+      return preProcessSectionPagesInstruction;
     case 'NUMWORDS':
     case 'NUMCHARS':
       return preProcessDocumentStatInstruction;

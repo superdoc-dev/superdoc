@@ -97,6 +97,7 @@ const getSectionHeight = async (editor, data) => {
  * @param {number} [params.availableHeight] - The height of the editing region in pixels. Must be positive.
  * @param {number} [params.currentPageNumber] - The current page number for PAGE field resolution. Must be a positive integer.
  * @param {number} [params.totalPageCount] - The total page count for NUMPAGES field resolution. Must be a positive integer.
+ * @param {number} [params.sectionPageCount] - The current section page count for SECTIONPAGES field resolution. Must be a positive integer.
  * @returns {Editor} The created header/footer editor instance
  *
  * @throws {TypeError} If required parameters are missing or have invalid types
@@ -113,6 +114,7 @@ export const createHeaderFooterEditor = ({
   availableHeight,
   currentPageNumber,
   totalPageCount,
+  sectionPageCount,
 }) => {
   // Validate required parameters
   if (!editor) {
@@ -157,6 +159,12 @@ export const createHeaderFooterEditor = ({
   if (totalPageCount !== undefined) {
     if (typeof totalPageCount !== 'number' || !Number.isInteger(totalPageCount) || totalPageCount < 1) {
       throw new RangeError('totalPageCount must be a positive integer');
+    }
+  }
+
+  if (sectionPageCount !== undefined) {
+    if (typeof sectionPageCount !== 'number' || !Number.isInteger(sectionPageCount) || sectionPageCount < 1) {
+      throw new RangeError('sectionPageCount must be a positive integer');
     }
   }
 
@@ -206,6 +214,7 @@ export const createHeaderFooterEditor = ({
     isHeaderOrFooter: true,
     currentPageNumber,
     totalPageCount,
+    sectionPageCount,
     element: editorContainer,
     editorOptions: {
       headerFooterRefId,

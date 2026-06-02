@@ -9,17 +9,18 @@ const PAGE_VALUE_FORMAT_SWITCHES = {
 };
 
 /**
- * Parses the supported PAGE value-format switches from an OOXML field instruction.
+ * Parses the supported PAGE/SECTIONPAGES value-format switches from an OOXML field instruction.
  * Field dispatch is case-insensitive; value-format switches preserve ECMA casing.
  *
  * @param {string} instruction
+ * @param {string} [expectedKeyword='PAGE']
  * @returns {{ instruction: string, pageNumberFormat?: string }}
  */
-export function parsePageInstruction(instruction) {
+export function parsePageInstruction(instruction, expectedKeyword = 'PAGE') {
   const rawInstruction = String(instruction ?? '').trim();
   const tokens = rawInstruction.match(/"[^"]*"|'[^']*'|\\\*|\\[^\s]+|[^\s]+/g) ?? [];
   const keyword = tokens[0]?.toUpperCase();
-  if (keyword !== 'PAGE') {
+  if (keyword !== expectedKeyword.toUpperCase()) {
     return { instruction: rawInstruction };
   }
 

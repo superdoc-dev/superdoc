@@ -283,11 +283,13 @@ export class ShapeGroupView {
       if (attrs.textContent && attrs.textContent.parts) {
         const pageNumber = this.editor?.options?.currentPageNumber;
         const totalPages = this.editor?.options?.totalPageCount;
+        const sectionPageCount = this.editor?.options?.sectionPageCount;
         const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
           textVerticalAlign: attrs.textVerticalAlign,
           textInsets: attrs.textInsets,
           pageNumber,
           totalPages,
+          sectionPageCount,
         });
         if (textGroup) {
           g.appendChild(textGroup);
@@ -358,11 +360,13 @@ export class ShapeGroupView {
       if (attrs.textContent && attrs.textContent.parts) {
         const pageNumber = this.editor?.options?.currentPageNumber;
         const totalPages = this.editor?.options?.totalPageCount;
+        const sectionPageCount = this.editor?.options?.sectionPageCount;
         const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
           textVerticalAlign: attrs.textVerticalAlign,
           textInsets: attrs.textInsets,
           pageNumber,
           totalPages,
+          sectionPageCount,
         });
         if (textGroup) {
           g.appendChild(textGroup);
@@ -484,11 +488,13 @@ export class ShapeGroupView {
     if (attrs.textContent && attrs.textContent.parts) {
       const pageNumber = this.editor?.options?.currentPageNumber;
       const totalPages = this.editor?.options?.totalPageCount;
+      const sectionPageCount = this.editor?.options?.sectionPageCount;
       const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
         textVerticalAlign: attrs.textVerticalAlign,
         textInsets: attrs.textInsets,
         pageNumber,
         totalPages,
+        sectionPageCount,
       });
       if (textGroup) {
         g.appendChild(textGroup);

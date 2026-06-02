@@ -5679,6 +5679,7 @@ export class PresentationEditor extends EventEmitter {
             availableHeight: editorContext.availableHeight,
             currentPageNumber: editorContext.currentPageNumber,
             totalPageCount: editorContext.totalPageCount,
+            sectionPageCount: editorContext.sectionPageCount,
           }) ?? null)
         : null;
 
@@ -5710,6 +5711,7 @@ export class PresentationEditor extends EventEmitter {
       element: hostElement,
       currentPageNumber: editorContext.currentPageNumber,
       totalPageCount: editorContext.totalPageCount,
+      sectionPageCount: editorContext.sectionPageCount,
       editorOptions: headerFooterRefId ? { headerFooterRefId } : undefined,
     });
 

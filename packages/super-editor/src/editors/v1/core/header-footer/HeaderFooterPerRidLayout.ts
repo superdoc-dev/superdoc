@@ -20,7 +20,12 @@ export type HeaderFooterPerRidLayoutInput = {
 };
 
 type Constraints = HeaderFooterConstraints;
-type PageResolver = (pageNumber: number) => { displayText: string; displayNumber: number; totalPages: number };
+type PageResolver = (pageNumber: number) => {
+  displayText: string;
+  displayNumber: number;
+  totalPages: number;
+  sectionPageCount: number;
+};
 
 /**
  * Layout header/footer blocks per rId, respecting per-section margins.
@@ -56,6 +61,7 @@ export async function layoutPerRIdHeaderFooters(
       displayText: displayInfo?.displayText ?? String(pageNumber),
       displayNumber: displayInfo?.displayNumber ?? pageNumber,
       totalPages,
+      sectionPageCount: displayInfo?.sectionPageCount ?? totalPages ?? 1,
     };
   };
 

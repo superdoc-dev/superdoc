@@ -28,6 +28,7 @@ const INLINE_FALLBACK_TYPES = new Set([
   'passthroughInline',
   'page-number',
   'total-page-number',
+  'section-page-count',
   'pageReference',
   'crossReference',
   'citation',

@@ -14,7 +14,7 @@ import { lineBreakNodeHandlerEntity } from './lineBreakImporter.js';
 import { bookmarkStartNodeHandlerEntity } from './bookmarkStartImporter.js';
 import { bookmarkEndNodeHandlerEntity } from './bookmarkEndImporter.js';
 import { alternateChoiceHandler } from './alternateChoiceImporter.js';
-import { autoPageHandlerEntity, autoTotalPageCountEntity } from './autoPageNumberImporter.js';
+import { autoPageHandlerEntity, autoTotalPageCountEntity, sectionPageCountEntity } from './autoPageNumberImporter.js';
 import { documentStatFieldHandlerEntity } from './documentStatFieldImporter.js';
 import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { crossReferenceEntity } from './crossReferenceImporter.js';
@@ -349,6 +349,7 @@ export const defaultNodeListHandler = () => {
     indexEntryHandlerEntity,
     autoPageHandlerEntity,
     autoTotalPageCountEntity,
+    sectionPageCountEntity,
     documentStatFieldHandlerEntity,
     pageReferenceEntity,
     crossReferenceEntity,
@@ -928,6 +929,7 @@ export function filterOutRootInlineNodes(content = []) {
     'hardBreak',
     'pageNumber',
     'totalPageCount',
+    'sectionPageCount',
     'runItem',
     'image',
     'tab',

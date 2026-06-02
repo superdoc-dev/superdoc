@@ -42,6 +42,13 @@ export interface StoryEditorOptions {
   totalPageCount?: number;
 
   /**
+   * The current section's physical page count for SECTIONPAGES field resolution.
+   * Must be a positive integer.
+   * @default 1
+   */
+  sectionPageCount?: number;
+
+  /**
    * The container element to mount the editor into.
    * Required for non-headless mode; ignored when headless.
    */
@@ -115,6 +122,7 @@ export function createStoryEditor(
     headless,
     currentPageNumber = 1,
     totalPageCount = 1,
+    sectionPageCount = 1,
     element = null,
     editorOptions = {},
   } = options;
@@ -156,6 +164,7 @@ export function createStoryEditor(
     annotations: true,
     currentPageNumber,
     totalPageCount,
+    sectionPageCount,
     editable: false,
     documentMode: 'viewing',
 

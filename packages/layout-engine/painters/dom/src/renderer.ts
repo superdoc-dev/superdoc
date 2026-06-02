@@ -44,6 +44,7 @@ import {
   LAYOUT_BOUNDARY_SCHEMA,
   buildLayoutSourceIdentityForFragment,
   expandRunsForInlineNewlines,
+  formatPageNumber,
   getCellSpacingPx,
   normalizeColumnLayout,
 } from '@superdoc/contracts';
@@ -260,15 +261,21 @@ type PageDomState = {
 };
 
 function pageContextSignature(context: FragmentRenderContext): string {
-  return [context.pageNumber, context.totalPages, context.pageNumberText ?? '', context.displayPageNumber ?? ''].join(
-    '|',
-  );
+  return [
+    context.pageNumber,
+    context.totalPages,
+    context.sectionPageCount ?? '',
+    context.pageNumberText ?? '',
+    context.displayPageNumber ?? '',
+  ].join('|');
 }
 
 function hasPageContextTokenInShapeText(textContent: ShapeTextContent | undefined): boolean {
   return (
     Array.isArray(textContent?.parts) &&
-    textContent.parts.some((part) => part.fieldType === 'PAGE' || part.fieldType === 'NUMPAGES')
+    textContent.parts.some(
+      (part) => part.fieldType === 'PAGE' || part.fieldType === 'NUMPAGES' || part.fieldType === 'SECTIONPAGES',
+    )
   );
 }
 
@@ -288,7 +295,10 @@ function hasPageContextTokenInBlock(block: FlowBlock | undefined): boolean {
   if (!block) return false;
   if (block.kind === 'paragraph') {
     for (const run of (block as ParagraphBlock).runs) {
-      if ('token' in run && (run.token === 'pageNumber' || run.token === 'totalPageCount')) {
+      if (
+        'token' in run &&
+        (run.token === 'pageNumber' || run.token === 'totalPageCount' || run.token === 'sectionPageCount')
+      ) {
         return true;
       }
     }
@@ -346,6 +356,7 @@ function needsRebuildForPageContext(
  * @property {'body'|'header'|'footer'} section - Document section being rendered
  * @property {string} [pageNumberText] - Optional formatted page number text (e.g., "Page 1 of 10")
  * @property {number} [displayPageNumber] - Section-aware numeric page value before formatting
+ * @property {number} [sectionPageCount] - Physical page count in the current section
  */
 export type FragmentRenderContext = {
   pageNumber: number;
@@ -354,8 +365,18 @@ export type FragmentRenderContext = {
   story?: LayoutStoryLocator;
   pageNumberText?: string;
   displayPageNumber?: number;
+  sectionPageCount?: number;
   pageIndex?: number;
 };
+
+function buildSectionPageCounts(pages: ResolvedPage[]): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const page of pages) {
+    const sectionIndex = page.sectionIndex ?? 0;
+    counts.set(sectionIndex, (counts.get(sectionIndex) ?? 0) + 1);
+  }
+  return counts;
+}
 
 export type PaintSnapshotLineStyle = {
   paddingLeftPx?: number;
@@ -855,6 +876,7 @@ export class DomPainter {
   private headerProvider?: PageDecorationProvider;
   private footerProvider?: PageDecorationProvider;
   private totalPages = 0;
+  private sectionPageCounts = new Map<number, number>();
   private linkIdCounter = 0; // Counter for generating unique link IDs
   private sdtLabelsRendered = new Set<string>(); // Tracks SDT labels rendered across pages
 
@@ -1281,6 +1303,7 @@ export class DomPainter {
     this.beginPaintSnapshot(resolvedLayout);
 
     this.totalPages = resolvedLayout.pages.length;
+    this.sectionPageCounts = buildSectionPageCounts(resolvedLayout.pages);
     if (this.isSemanticFlow) {
       // Semantic mode always renders as a single continuous surface.
       applyStyles(mount, containerStyles);
@@ -1795,6 +1818,7 @@ export class DomPainter {
       section: 'body',
       pageNumberText: page.numberText,
       displayPageNumber: page.displayNumber,
+      sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
 
@@ -2150,6 +2174,7 @@ export class DomPainter {
       story: resolveDecorationStory(kind, data),
       pageNumberText: page.numberText,
       displayPageNumber: page.displayNumber,
+      sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
 
@@ -2292,6 +2317,10 @@ export class DomPainter {
     this.mountedPageIndices = [];
   }
 
+  private getSectionPageCount(page: ResolvedPage): number {
+    return this.sectionPageCounts.get(page.sectionIndex ?? 0) ?? this.totalPages ?? 1;
+  }
+
   private fullRender(layout: ResolvedLayout): void {
     if (!this.mount || !this.doc) return;
     this.mount.innerHTML = '';
@@ -2354,6 +2383,7 @@ export class DomPainter {
       section: 'body',
       pageNumberText: page.numberText,
       displayPageNumber: page.displayNumber,
+      sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
 
@@ -2517,6 +2547,7 @@ export class DomPainter {
       section: 'body',
       pageNumberText: page.numberText,
       displayPageNumber: page.displayNumber,
+      sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
 
@@ -3089,6 +3120,12 @@ export class DomPainter {
     }
     if (part.fieldType === 'NUMPAGES') {
       return String(context?.totalPages ?? 1);
+    }
+    if (part.fieldType === 'SECTIONPAGES') {
+      const sectionPageCount = context?.sectionPageCount ?? context?.totalPages ?? 1;
+      return part.pageNumberFormat
+        ? formatPageNumber(sectionPageCount, part.pageNumberFormat)
+        : String(sectionPageCount);
     }
     return part.text;
   }

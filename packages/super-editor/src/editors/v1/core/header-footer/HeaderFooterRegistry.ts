@@ -1,6 +1,6 @@
 import { toFlowBlocks } from '@core/layout-adapter';
 import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from '../presentation-editor/utils/SchemaNodeTypes.js';
-import type { FlowBlock, TrackedChangesMode } from '@superdoc/contracts';
+import { formatPageNumber, type FlowBlock, type PageNumberFormat, type TrackedChangesMode } from '@superdoc/contracts';
 import type { HeaderFooterBatch } from '@superdoc/layout-bridge';
 import type { Editor } from '@core/Editor.js';
 import { EventEmitter } from '@core/EventEmitter.js';
@@ -264,6 +264,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
    * @param options.availableHeight - The height of the editing region in pixels. Must be a positive number if provided.
    * @param options.currentPageNumber - The current page number for PAGE field resolution. Must be a positive integer if provided.
    * @param options.totalPageCount - The total page count for NUMPAGES field resolution. Must be a positive integer if provided.
+   * @param options.sectionPageCount - The current section page count for SECTIONPAGES field resolution. Must be a positive integer if provided.
    * @returns The editor instance, or null if creation failed
    *
    * @throws Never throws - errors are logged and emitted as events. Invalid parameters return null with error logged.
@@ -276,6 +277,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableHeight?: number;
       currentPageNumber?: number;
       totalPageCount?: number;
+      sectionPageCount?: number;
     },
   ): Promise<Editor | null> {
     if (!descriptor?.id) return null;
@@ -348,6 +350,21 @@ export class HeaderFooterEditorManager extends EventEmitter {
           this.emit('error', {
             descriptor,
             error: new TypeError('totalPageCount must be a positive integer'),
+          });
+          return null;
+        }
+      }
+
+      if (options.sectionPageCount !== undefined) {
+        if (
+          typeof options.sectionPageCount !== 'number' ||
+          !Number.isInteger(options.sectionPageCount) ||
+          options.sectionPageCount < 1
+        ) {
+          console.error('[HeaderFooterEditorManager] sectionPageCount must be a positive integer');
+          this.emit('error', {
+            descriptor,
+            error: new TypeError('sectionPageCount must be a positive integer'),
           });
           return null;
         }
@@ -426,6 +443,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableHeight?: number;
       currentPageNumber?: number;
       totalPageCount?: number;
+      sectionPageCount?: number;
     },
   ): Editor | null {
     if (!descriptor?.id) return null;
@@ -461,9 +479,11 @@ export class HeaderFooterEditorManager extends EventEmitter {
 
     const currentPage = String(opts.currentPageNumber || '1');
     const totalPages = String(opts.totalPageCount || parentEditor?.currentTotalPages || '1');
+    const sectionPages = Number(opts.sectionPageCount || opts.totalPageCount || parentEditor?.currentTotalPages || 1);
 
     const pageNumberEls = container.querySelectorAll('[data-id="auto-page-number"]');
     const totalPagesEls = container.querySelectorAll('[data-id="auto-total-pages"]');
+    const sectionPagesEls = container.querySelectorAll('[data-id="auto-section-pages"]');
 
     pageNumberEls.forEach((el) => {
       if (el.textContent !== currentPage) el.textContent = currentPage;
@@ -471,6 +491,22 @@ export class HeaderFooterEditorManager extends EventEmitter {
     totalPagesEls.forEach((el) => {
       if (el.textContent !== totalPages) el.textContent = totalPages;
     });
+    sectionPagesEls.forEach((el) => {
+      const pageNumberFormat = this.#getPageNumberFormatForDomNode(editor, el);
+      const text = pageNumberFormat ? formatPageNumber(sectionPages, pageNumberFormat) : String(sectionPages);
+      if (el.textContent !== text) el.textContent = text;
+    });
+  }
+
+  #getPageNumberFormatForDomNode(editor: Editor, el: Element): PageNumberFormat | null {
+    try {
+      const pos = editor.view.posAtDOM(el, 0);
+      const node = editor.state.doc.nodeAt(pos);
+      const format = node?.attrs?.pageNumberFormat;
+      return typeof format === 'string' ? (format as PageNumberFormat) : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -731,6 +767,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableHeight?: number;
       currentPageNumber?: number;
       totalPageCount?: number;
+      sectionPageCount?: number;
     },
   ): HeaderFooterEditorEntry | null {
     const json = this.getDocumentJson(descriptor);
@@ -751,6 +788,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
         availableHeight: options?.availableHeight ?? DEFAULT_HEADER_FOOTER_HEIGHT,
         currentPageNumber: options?.currentPageNumber ?? 1,
         totalPageCount: options?.totalPageCount ?? 1,
+        sectionPageCount: options?.sectionPageCount ?? options?.totalPageCount ?? 1,
       }) as Editor;
     } catch (error) {
       console.error('[HeaderFooterEditorManager] Editor creation failed:', error);
@@ -867,6 +905,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableHeight?: number;
       currentPageNumber?: number;
       totalPageCount?: number;
+      sectionPageCount?: number;
     },
   ): void {
     if (entry.container && options?.editorHost && entry.container.parentElement !== options.editorHost) {
@@ -883,6 +922,9 @@ export class HeaderFooterEditorManager extends EventEmitter {
     }
     if (options.totalPageCount !== undefined) {
       updateOptions.totalPageCount = options.totalPageCount;
+    }
+    if (options.sectionPageCount !== undefined) {
+      updateOptions.sectionPageCount = options.sectionPageCount;
     }
     if (options.availableWidth !== undefined) {
       updateOptions.availableWidth = options.availableWidth;

@@ -1,5 +1,5 @@
 import type { TabStop } from './engines/tabs.js';
-import type { PageNumberFieldFormat } from './page-number-formatting.js';
+import type { PageNumberFieldFormat, PageNumberFormat } from './page-number-formatting.js';
 export { computeTabStops, layoutWithTabs, calculateTabWidth } from './engines/tabs.js';
 
 // Re-export TabStop for external consumers
@@ -416,7 +416,7 @@ export type TextRun = RunMarks & {
   visualPlaceholder?: SdtVisualPlaceholder;
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
-  token?: 'pageNumber' | 'totalPageCount' | 'pageReference';
+  token?: 'pageNumber' | 'totalPageCount' | 'pageReference' | 'sectionPageCount';
   /** Explicit formatting requested by PAGE/NUMPAGES field switches. */
   pageNumberFieldFormat?: PageNumberFieldFormat;
   /** Absolute ProseMirror position (inclusive) of first character in this run. */
@@ -949,8 +949,10 @@ export type TextFormatting = {
 export type TextPart = {
   text: string;
   formatting?: TextFormatting;
-  /** Optional field token (e.g., PAGE/NUMPAGES) resolved at render time. */
-  fieldType?: 'PAGE' | 'NUMPAGES';
+  /** Optional field token (e.g., PAGE/NUMPAGES/SECTIONPAGES) resolved at render time. */
+  fieldType?: 'PAGE' | 'NUMPAGES' | 'SECTIONPAGES';
+  /** PAGE/SECTIONPAGES field-local value formatting override. */
+  pageNumberFormat?: PageNumberFormat;
   /** Indicates this part represents a line break between paragraphs. */
   isLineBreak?: boolean;
   /** Indicates this line break follows an empty paragraph (creates extra spacing). */

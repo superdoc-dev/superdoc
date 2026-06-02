@@ -187,6 +187,7 @@ describe('layoutPerRIdHeaderFooters', () => {
       displayText: 'i',
       displayNumber: 1,
       totalPages: 10,
+      sectionPageCount: 10,
     });
   });
 

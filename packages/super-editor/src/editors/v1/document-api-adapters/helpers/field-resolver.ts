@@ -52,8 +52,19 @@ const FIELD_NODE_TYPES = new Set([
  * Node types that represent fields but derive their instruction synthetically
  * rather than from an `instruction` attribute.
  */
-const SYNTHETIC_FIELD_NODE_TYPES: Record<string, { fieldType: string; instruction: string }> = {
+const SYNTHETIC_FIELD_NODE_TYPES: Record<
+  string,
+  { fieldType: string; instruction: string; resolveInstruction?: (node: ProseMirrorNode) => string }
+> = {
   'total-page-number': { fieldType: 'NUMPAGES', instruction: 'NUMPAGES' },
+  'section-page-count': {
+    fieldType: 'SECTIONPAGES',
+    instruction: 'SECTIONPAGES',
+    resolveInstruction: (node) =>
+      typeof node.attrs?.instruction === 'string' && node.attrs.instruction.trim()
+        ? node.attrs.instruction
+        : 'SECTIONPAGES',
+  },
 };
 
 export function findAllFields(doc: ProseMirrorNode): ResolvedField[] {
@@ -82,7 +93,7 @@ export function findAllFields(doc: ProseMirrorNode): ResolvedField[] {
         blockId,
         occurrenceIndex: counter,
         nestingDepth: 0,
-        instruction: synthetic.instruction,
+        instruction: synthetic.resolveInstruction?.(node) ?? synthetic.instruction,
         fieldType: synthetic.fieldType,
         resolvedText,
       });

@@ -930,7 +930,6 @@ export function filterOutRootInlineNodes(content = []) {
     'pageNumber',
     'totalPageCount',
     'section-page-count',
-    'sectionPageCount',
     'runItem',
     'image',
     'tab',

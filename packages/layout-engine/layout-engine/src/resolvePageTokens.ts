@@ -151,6 +151,10 @@ export function resolvePageNumberTokens(
           numberingCtx.totalPages,
           sectionPageCount,
         );
+        if (!clonedBlock) {
+          processedBlocks.add(blockId);
+          continue;
+        }
         updatedBlocks.set(blockId, clonedBlock);
         affectedBlockIds.add(blockId);
         processedBlocks.add(blockId);
@@ -202,7 +206,8 @@ function hasPageTokens(block: ParagraphBlock): boolean {
  * Clones a paragraph block and resolves all page number tokens in its runs.
  *
  * This creates a deep clone of the block's runs array and resolves any pageNumber
- * or totalPageCount tokens by replacing the text and clearing the token metadata.
+ * or totalPageCount tokens by replacing the text while preserving token metadata
+ * for later convergence passes.
  *
  * @param block - Original paragraph block (will not be mutated)
  * @param displayPageInfo - Section-aware page number data for this physical page
@@ -215,19 +220,17 @@ function cloneBlockWithResolvedTokens(
   totalPagesStr: string,
   totalPages: number,
   sectionPageCount: number,
-): ParagraphBlock {
+): ParagraphBlock | undefined {
+  let changed = false;
   // Clone the runs array and resolve tokens
   const clonedRuns = block.runs.map((run) => {
     // Check if this run has a page token
     if ('token' in run && run.token) {
       if (run.token === 'pageNumber') {
-        // Clone the run and resolve the token
-        const { token: _token, pageNumberFieldFormat, ...runWithoutToken } = run;
-        return {
-          ...runWithoutToken,
-          text: pageNumberFieldFormat
+        const resolvedText =
+          run.pageNumberFieldFormat
             ? formatChapterPageNumberText({
-                pageComponent: formatPageNumberFieldValue(displayPageInfo.displayNumber, pageNumberFieldFormat),
+                pageComponent: formatPageNumberFieldValue(displayPageInfo.displayNumber, run.pageNumberFieldFormat),
                 chapterNumberText: displayPageInfo.chapterNumberText,
                 chapterSeparator: displayPageInfo.chapterSeparator,
               })
@@ -238,24 +241,29 @@ function cloneBlockWithResolvedTokens(
                   chapterNumberText: displayPageInfo.chapterNumberText,
                   chapterSeparator: displayPageInfo.chapterSeparator,
                 })
-              : displayPageInfo.displayText,
+              : displayPageInfo.displayText;
+        changed ||= run.text !== resolvedText;
+        return {
+          ...run,
+          text: resolvedText,
         };
       } else if (run.token === 'totalPageCount') {
-        // Clone the run and resolve the token
-        const { token: _token, ...runWithoutToken } = run;
+        const resolvedText = run.pageNumberFieldFormat
+          ? formatPageNumberFieldValue(totalPages, run.pageNumberFieldFormat)
+          : totalPagesStr;
+        changed ||= run.text !== resolvedText;
         return {
-          ...runWithoutToken,
-          text: run.pageNumberFieldFormat
-            ? formatPageNumberFieldValue(totalPages, run.pageNumberFieldFormat)
-            : totalPagesStr,
+          ...run,
+          text: resolvedText,
         };
       } else if (run.token === 'sectionPageCount') {
-        const { token: _token, pageNumberFieldFormat, ...runWithoutToken } = run;
+        const resolvedText = run.pageNumberFieldFormat
+          ? formatPageNumberFieldValue(sectionPageCount, run.pageNumberFieldFormat)
+          : String(sectionPageCount);
+        changed ||= run.text !== resolvedText;
         return {
-          ...runWithoutToken,
-          text: pageNumberFieldFormat
-            ? formatPageNumberFieldValue(sectionPageCount, pageNumberFieldFormat)
-            : String(sectionPageCount),
+          ...run,
+          text: resolvedText,
         };
       }
     }
@@ -265,10 +273,12 @@ function cloneBlockWithResolvedTokens(
   });
 
   // Return cloned block with new runs
-  return {
-    ...block,
-    runs: clonedRuns,
-  };
+  return changed
+    ? {
+        ...block,
+        runs: clonedRuns,
+      }
+    : undefined;
 }
 
 /**

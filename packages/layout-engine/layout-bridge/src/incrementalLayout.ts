@@ -3107,11 +3107,9 @@ function applyNumberingContextToLayout(layout: Layout, numberingCtx: NumberingCo
     if (!displayInfo) {
       continue;
     }
-    if (displayInfo.chapterNumberText) {
-      page.numberText = displayInfo.displayText;
-      page.displayNumber = displayInfo.displayNumber;
-      page.pageNumberFormat = displayInfo.pageFormat;
-    }
+    page.numberText = displayInfo.displayText;
+    page.displayNumber = displayInfo.displayNumber;
+    page.pageNumberFormat = displayInfo.pageFormat;
     page.pageNumberChapterText = displayInfo.chapterNumberText;
     page.pageNumberChapterSeparator = displayInfo.chapterSeparator;
   }
@@ -3135,7 +3133,11 @@ function buildNumberingContext(
 ): NumberingContext {
   const totalPages = layout.pages.length;
   const chapterInfoByPage = getChapterContextByPage(layout, sections, blockById, chapterContextCache);
-  const displayPages = computeDisplayPageNumber(layout.pages, sections, chapterInfoByPage);
+  const sectionByIndex = new Map(sections.map((section) => [section.sectionIndex, section]));
+  const displayPages = computeDisplayPageNumber(layout.pages, sections, chapterInfoByPage).map((displayPage) => ({
+    ...displayPage,
+    pageFormat: sectionByIndex.get(displayPage.sectionIndex)?.numbering?.format ?? 'decimal',
+  }));
 
   return {
     totalPages,

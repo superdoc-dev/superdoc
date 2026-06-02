@@ -86,6 +86,30 @@ describe('preProcessNodesForFldChar', () => {
     },
   );
 
+  it('preserves SECTIONPAGES field run properties when cached result has no run properties', () => {
+    const fieldRunRPr = { name: 'w:rPr', elements: [{ name: 'w:i' }] };
+    const { processedNodes } = preProcessNodesForFldChar(
+      [
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+        {
+          name: 'w:r',
+          elements: [fieldRunRPr, { name: 'w:instrText', elements: [{ type: 'text', text: 'SECTIONPAGES' }] }],
+        },
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+        { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '4' }] }] },
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+      ],
+      mockDocx,
+    );
+
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toMatchObject({
+      name: 'sd:sectionPageCount',
+      attributes: { importedCachedText: '4' },
+      elements: [fieldRunRPr],
+    });
+  });
+
   it('should process non-page field instructions case-insensitively', () => {
     const docx = {
       'word/_rels/document.xml.rels': {

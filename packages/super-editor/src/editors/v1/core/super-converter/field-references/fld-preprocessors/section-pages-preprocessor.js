@@ -5,10 +5,18 @@ import { parsePageInstruction } from './page-instruction.js';
  *
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine The nodes between separate and end.
  * @param {string} [instrText] The SECTIONPAGES instruction text.
+ * @param {import('../../v2/docxHelper').ParsedDocx} [_docx] The docx object.
+ * @param {Array<{type: string, text?: string}> | null} [_instructionTokens] Raw instruction tokens.
  * @param {import('../../v2/types/index.js').OpenXmlNode | null} [fieldRunRPr=null] The w:rPr node captured from field sequence nodes.
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  */
-export function preProcessSectionPagesInstruction(nodesToCombine, instrText = '', fieldRunRPr = null) {
+export function preProcessSectionPagesInstruction(
+  nodesToCombine,
+  instrText = '',
+  _docx,
+  _instructionTokens,
+  fieldRunRPr = null,
+) {
   const parsedInstruction = parsePageInstruction(instrText, 'SECTIONPAGES');
   const sectionPageCountNode = {
     name: 'sd:sectionPageCount',

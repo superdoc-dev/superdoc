@@ -43,7 +43,7 @@ describe('preProcessSectionPagesInstruction', () => {
 
   it('uses fieldRunRPr when cached content has no run properties', () => {
     const fieldRunRPr = { name: 'w:rPr', elements: [{ name: 'w:i' }] };
-    const result = preProcessSectionPagesInstruction([], 'SECTIONPAGES', fieldRunRPr);
+    const result = preProcessSectionPagesInstruction([], 'SECTIONPAGES', undefined, null, fieldRunRPr);
 
     expect(result[0].elements).toEqual([fieldRunRPr]);
   });

@@ -389,6 +389,7 @@ export async function layoutHeaderFooterWithCache(
       blocks: FlowBlock[];
       measures: Measure[];
       fragments: HeaderFooterLayout['pages'][0]['fragments'];
+      layout: HeaderFooterLayout;
       numberText?: string;
     }> = [];
 
@@ -430,21 +431,25 @@ export async function layoutHeaderFooterWithCache(
         blocks: clonedBlocks,
         measures,
         fragments: fragmentsWithLines,
+        layout: pageLayout,
         numberText: displayText,
       });
     }
 
     // Construct final HeaderFooterLayout with all pages
-    // Use the first page's measurements for overall dimensions
-    const firstPageLayout = pages[0]
-      ? layoutHeaderFooter(pages[0].blocks, pages[0].measures, constraints, kind)
-      : { height: 0, pages: [] };
+    // Use the widest visual/measurement bounds from the page-specific layouts.
+    const pageLayouts = pages.map((page) => page.layout);
+    const minYValues = pageLayouts.map((layout) => layout.minY).filter((value): value is number => value !== undefined);
+    const maxYValues = pageLayouts.map((layout) => layout.maxY).filter((value): value is number => value !== undefined);
+    const minY = minYValues.length > 0 ? Math.min(...minYValues) : undefined;
+    const maxY = maxYValues.length > 0 ? Math.max(...maxYValues) : undefined;
+    const renderHeight = minY !== undefined && maxY !== undefined ? maxY - minY : undefined;
 
     const finalLayout: HeaderFooterLayout = {
-      height: firstPageLayout.height,
-      minY: firstPageLayout.minY,
-      maxY: firstPageLayout.maxY,
-      renderHeight: firstPageLayout.renderHeight,
+      height: pageLayouts.reduce((maxHeight, layout) => Math.max(maxHeight, layout.height), 0),
+      minY,
+      maxY,
+      renderHeight,
       pages: pages.map((p) => ({
         number: p.number,
         displayNumber: p.displayNumber,

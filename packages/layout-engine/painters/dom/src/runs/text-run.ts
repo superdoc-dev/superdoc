@@ -153,7 +153,10 @@ export const resolveRunText = (run: Run, context: FragmentRenderContext): string
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
   }
   if (runToken === 'sectionPageCount') {
-    const sectionPageCount = context.sectionPageCount ?? context.totalPages ?? 1;
+    const sectionPageCount = context.sectionPageCount;
+    if (sectionPageCount == null) {
+      return run.text ?? '';
+    }
     if (run.pageNumberFieldFormat) {
       return formatPageNumberFieldValue(sectionPageCount, run.pageNumberFieldFormat);
     }

@@ -379,10 +379,14 @@ const getNodeAttributes = (nodeName, editor, node = null) => {
         ariaLabel: 'Total page count node',
       };
     case 'section-page-count': {
-      const sectionPageCount = editor.options.sectionPageCount || editor.options.totalPageCount || '1';
-      const text = node?.attrs?.pageNumberFormat
-        ? formatPageNumber(Number(sectionPageCount) || 1, node.attrs.pageNumberFormat)
-        : sectionPageCount;
+      const sectionPageCount = editor.options.sectionPageCount;
+      const cachedText = node?.attrs?.resolvedText ?? node?.attrs?.importedCachedText ?? node?.textContent ?? '1';
+      const text =
+        sectionPageCount != null
+          ? node?.attrs?.pageNumberFormat
+            ? formatPageNumber(Number(sectionPageCount) || 1, node.attrs.pageNumberFormat)
+            : sectionPageCount
+          : cachedText;
       return {
         text,
         className: 'sd-editor-auto-section-pages',

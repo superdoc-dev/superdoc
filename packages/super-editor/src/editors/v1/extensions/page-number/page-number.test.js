@@ -313,4 +313,45 @@ describe('AutoPageNumberNodeView', () => {
     expect(nodeView.dom.className).toBe('sd-editor-auto-section-pages');
     expect(nodeView.dom.getAttribute('data-id')).toBe('auto-section-pages');
   });
+
+  it('renders imported SECTIONPAGES cached text when section page context is unavailable', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: {},
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'section-page-count' }, attrs: { importedCachedText: '3' } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('3');
+  });
+
+  it('renders resolved SECTIONPAGES text before imported cached text when section context is unavailable', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: {},
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = {
+      type: { name: 'section-page-count' },
+      attrs: { resolvedText: '4', importedCachedText: '3' },
+    };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('4');
+  });
 });

@@ -1,7 +1,7 @@
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
 import { isHeadless } from '@utils/headless-helpers.js';
-import { formatPageNumber } from '@superdoc/layout-engine';
+import { formatPageNumber } from '@superdoc/contracts';
 /**
  * Configuration options for PageNumber
  * @typedef {Object} PageNumberOptions

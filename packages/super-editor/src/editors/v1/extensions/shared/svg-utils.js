@@ -1,4 +1,4 @@
-import { formatPageNumber } from '@superdoc/layout-engine';
+import { formatPageNumber } from '@superdoc/contracts';
 
 /**
  * Shared utility functions for SVG shape rendering

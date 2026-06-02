@@ -19,6 +19,8 @@ import type {
   TextTarget,
   TrackChangesListResult,
 } from '@superdoc/document-api';
+import { composeAuthorColorResolver } from '@superdoc/contracts';
+import type { TrackChangeAuthorColorResolver } from '@superdoc/contracts';
 import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
 import { resolvePositionAt } from './position-at.js';
@@ -527,6 +529,15 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
   refreshTrackChangesListCache();
 
+  // Per-author tracked-change color resolver. Built once from the host
+  // `modules.trackChanges.authorColors` config so the snapshot colors match
+  // exactly what the layout engine paints (both go through
+  // `composeAuthorColorResolver`). `undefined` when colors are disabled /
+  // unconfigured, in which case items carry no `authorColor`.
+  const authorColorResolver: TrackChangeAuthorColorResolver | undefined = composeAuthorColorResolver(
+    superdoc.config?.modules?.trackChanges?.authorColors,
+  );
+
   // Content-controls slice cache (SD-3157). Same posture as comments
   // and tracked changes: list reads are O(N), so cache the list and
   // refresh on document-changing events. `activeIds` derives from the
@@ -796,17 +807,40 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     ) {
       trackChangesSlice = trackChangesMemo.slice;
     } else {
-      const items: TrackChangesItem[] = trackChangesListCache.items.map((change) => ({
-        id: change.id,
-        change,
-      }));
+      // Resolve per-author colors (when configured) for each change, plus the
+      // ordered unique author list. Resolution mirrors the layout-engine paint
+      // path so snapshot colors match what is rendered.
+      const authors: TrackChangesSlice['authors'] = [];
+      const seenAuthorKeys = new Set<string>();
+      const items: TrackChangesItem[] = trackChangesListCache.items.map((change) => {
+        if (!authorColorResolver) {
+          return { id: change.id, change };
+        }
+        const author = {
+          name: typeof change.author === 'string' ? change.author : undefined,
+          email: typeof change.authorEmail === 'string' ? change.authorEmail : undefined,
+          image: typeof change.authorImage === 'string' ? change.authorImage : undefined,
+        };
+        const authorColor = authorColorResolver(author);
+        if (authorColor && (author.name || author.email)) {
+          const key = JSON.stringify([author.name ?? '', author.email ?? '']);
+          if (!seenAuthorKeys.has(key)) {
+            seenAuthorKeys.add(key);
+            authors.push({ ...author, color: authorColor });
+          }
+        }
+        if (!authorColor) {
+          return { id: change.id, change };
+        }
+        return { id: change.id, change: { ...change, authorColor }, authorColor };
+      });
       // If the previously active id dropped out of the feed (e.g. an
       // accept/reject), reset to null. Compute *after* items is built
       // so the final slice matches the eventual activeTrackChangeId.
       if (activeTrackChangeId && !items.some((item) => item.id === activeTrackChangeId)) {
         activeTrackChangeId = null;
       }
-      trackChangesSlice = { items, total: items.length, activeId: activeTrackChangeId };
+      trackChangesSlice = { items, total: items.length, activeId: activeTrackChangeId, authors };
       trackChangesMemo = {
         changesRef: trackChangesListCache.items,
         activeId: activeTrackChangeId,

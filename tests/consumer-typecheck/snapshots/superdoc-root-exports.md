@@ -1,17 +1,17 @@
 # superdoc root export inventory (SD-3212 PR A0)
 
-Generated: 2026-05-29T09:44:23.077Z
+Generated: 2026-05-31T20:12:13.686Z
 Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 
 ## Counts
 
 | Source | Path | Count |
 |---|---|---|
-| types.import | `./dist/superdoc/src/public/index.d.ts` | 217 |
-| types.require | `./dist/superdoc/src/public/index.d.cts` | 217 |
+| types.import | `./dist/superdoc/src/public/index.d.ts` | 219 |
+| types.require | `./dist/superdoc/src/public/index.d.cts` | 219 |
 | import | `./dist/superdoc.es.js` | 41 |
 | require | `./dist/superdoc.cjs` | 41 |
-| **union** |  | **217** |
+| **union** |  | **219** |
 
 ## Divergences
 
@@ -19,7 +19,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - types.require only (not in types.import): 0
 - ESM only (not in CJS): 0
 - CJS only (not in ESM): 0
-- typed but no runtime export (phantom risk): 176
+- typed but no runtime export (phantom risk): 178
 - runtime export but not typed (silent shadow on root): 0
 
 ### Type-only names (no runtime)
@@ -188,6 +188,8 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - `TextAddress`
 - `TextSegment`
 - `TextTarget`
+- `TrackChangeAuthor`
+- `TrackChangesAuthorColorsConfig`
 - `TrackChangesModuleConfig`
 - `TrackedChangeAddress`
 - `TrackedChangesMode`
@@ -241,10 +243,10 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `ContextMenuItem` | ✓ | ✓ |   |   | 2 | ✓ | 4 | 0 | 5 |   |
 | `ContextMenuSection` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
 | `CoreCommandMap` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 | ✓ |
-| `DOCX` | ✓ | ✓ | ✓ | ✓ | 2 |   | 149 | 24 | 59 | ✓ |
+| `DOCX` | ✓ | ✓ | ✓ | ✓ | 2 |   | 151 | 24 | 55 | ✓ |
 | `DirectSurfaceRequest` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
 | `DocRange` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
-| `Document` | ✓ | ✓ |   |   | 2 |   | 288 | 56 | 111 | ✓ |
+| `Document` | ✓ | ✓ |   |   | 2 |   | 290 | 56 | 110 | ✓ |
 | `DocumentApi` | ✓ | ✓ |   |   | 3 | ✓ | 0 | 11 | 4 | ✓ |
 | `DocumentMode` | ✓ | ✓ |   |   | 3 | ✓ | 2 | 16 | 3 |   |
 | `DocumentProtectionState` | ✓ | ✓ |   |   | 1 | ✓ | 1 | 0 | 1 |   |
@@ -347,7 +349,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `Schema` | ✓ | ✓ |   |   | 4 | ✓ | 5 | 0 | 4 | ✓ |
 | `ScrollIntoViewInput` | ✓ | ✓ |   |   | 2 | ✓ | 1 | 0 | 0 |   |
 | `ScrollIntoViewOutput` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
-| `SdtRef` | ✓ | ✓ |   |   | 0 |   | 4 | 0 | 0 |   |
+| `SdtRef` | ✓ | ✓ |   |   | 0 |   | 6 | 0 | 0 |   |
 | `SearchMatch` | ✓ | ✓ |   |   | 2 | ✓ | 3 | 0 | 0 |   |
 | `SectionHelpers` | ✓ | ✓ | ✓ | ✓ | 1 |   | 0 | 0 | 1 |   |
 | `SectionMetadata` | ✓ | ✓ |   |   | 3 | ✓ | 0 | 0 | 0 |   |
@@ -359,7 +361,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `SlashMenu` | ✓ | ✓ | ✓ | ✓ | 1 |   | 0 | 0 | 1 |   |
 | `StoryLocator` | ✓ | ✓ |   |   | 1 | ✓ | 123 | 0 | 3 |   |
 | `SuperConverter` | ✓ | ✓ | ✓ | ✓ | 1 |   | 0 | 0 | 3 | ✓ |
-| `SuperDoc` | ✓ | ✓ | ✓ | ✓ | 21 |   | 1021 | 187 | 245 | ✓ |
+| `SuperDoc` | ✓ | ✓ | ✓ | ✓ | 21 |   | 1034 | 187 | 249 | ✓ |
 | `SuperDocAwarenessUpdatePayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocCommentsUpdatePayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocEditorPayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
@@ -387,8 +389,10 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `TelemetryEvent` | ✓ | ✓ |   |   | 3 | ✓ | 0 | 0 | 0 |   |
 | `TextAddress` | ✓ | ✓ |   |   | 3 | ✓ | 404 | 0 | 7 |   |
 | `TextSegment` | ✓ | ✓ |   |   | 3 | ✓ | 8 | 0 | 4 |   |
-| `TextTarget` | ✓ | ✓ |   |   | 3 | ✓ | 45 | 0 | 9 |   |
+| `TextTarget` | ✓ | ✓ |   |   | 3 | ✓ | 45 | 0 | 10 |   |
 | `Toolbar` | ✓ | ✓ | ✓ | ✓ | 1 |   | 35 | 7 | 15 |   |
+| `TrackChangeAuthor` | ✓ | ✓ |   |   | 0 | ✓ | 0 | 0 | 0 |   |
+| `TrackChangesAuthorColorsConfig` | ✓ | ✓ |   |   | 0 | ✓ | 0 | 0 | 0 |   |
 | `TrackChangesBasePluginKey` | ✓ | ✓ | ✓ | ✓ | 2 |   | 0 | 0 | 1 | ✓ |
 | `TrackChangesModuleConfig` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
 | `TrackedChangeAddress` | ✓ | ✓ |   |   | 1 | ✓ | 13 | 0 | 3 |   |

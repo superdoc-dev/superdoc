@@ -52,7 +52,21 @@ export interface SuperDocLike {
   on?(event: SuperDocUIHostEvent, handler: (...args: unknown[]) => void): unknown;
   off?(event: SuperDocUIHostEvent, handler: (...args: unknown[]) => void): unknown;
   activeEditor?: SuperDocEditorLike | null;
-  config?: { documentMode?: 'editing' | 'suggesting' | 'viewing' };
+  config?: {
+    documentMode?: 'editing' | 'suggesting' | 'viewing';
+    /**
+     * Track-changes module config. The controller reads
+     * `modules.trackChanges.authorColors` to resolve per-author colors for
+     * the `ui.trackChanges` snapshot (authors + per-item `authorColor`),
+     * matching the colors the layout engine paints. Loosely typed so test
+     * stubs need not model the full module config.
+     */
+    modules?: {
+      trackChanges?: {
+        authorColors?: import('@superdoc/contracts').AuthorColorsConfig;
+      };
+    };
+  };
   /**
    * Optional setter for documentMode. Consumed by `ui.document.setMode`
    * (SD-2816) and reserved for future `ui.<domain>` surfaces (SD-2799)
@@ -630,8 +644,35 @@ export interface CommentsSlice {
 export interface TrackChangesItem {
   /** Tracked-change id. */
   id: string;
-  /** Full change record from `editor.doc.trackChanges.list()`. */
-  change: import('@superdoc/document-api').TrackChangesListResult['items'][number];
+  /**
+   * Full change record from `editor.doc.trackChanges.list()`, augmented with
+   * the resolved per-author `authorColor` when per-author colors are
+   * configured on `modules.trackChanges.authorColors`.
+   */
+  change: import('@superdoc/document-api').TrackChangesListResult['items'][number] & {
+    /** Resolved per-author color for this change. Absent when unconfigured. */
+    authorColor?: string;
+  };
+  /**
+   * Resolved per-author color for this change, mirroring `change.authorColor`.
+   * Absent when per-author colors are disabled or unconfigured.
+   */
+  authorColor?: string;
+}
+
+/**
+ * One unique tracked-change author exposed on `state.trackChanges.authors`.
+ * Authors appear in the order their first change is seen in `items`.
+ */
+export interface TrackChangesAuthor {
+  /** Author display name. */
+  name?: string;
+  /** Author email, when available. */
+  email?: string;
+  /** Author avatar image URL, when available. */
+  image?: string;
+  /** Resolved per-author color. Absent when per-author colors are unconfigured. */
+  color?: string;
 }
 
 /**
@@ -652,6 +693,12 @@ export interface TrackChangesSlice {
    * scrollTo` calls. `null` when nothing is focused.
    */
   activeId: string | null;
+  /**
+   * Unique tracked-change authors seen across `items`, in first-seen
+   * document order, each carrying its resolved per-author `color`. Empty
+   * when there are no authored changes or per-author colors are unconfigured.
+   */
+  authors: TrackChangesAuthor[];
 }
 
 export interface SuperDocUIOptions {

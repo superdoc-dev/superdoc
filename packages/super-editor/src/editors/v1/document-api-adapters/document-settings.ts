@@ -99,6 +99,221 @@ export function removeDefaultTableStyle(settingsRoot: XmlElement): void {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// w:footnotePr / w:endnotePr  — number format
+// (SD-2986/B1)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Reads the document-wide footnote number format from
+ * `w:settings/w:footnotePr/w:numFmt[@val]`. Returns the OOXML format
+ * string (e.g., "decimal", "upperRoman") or null if not present.
+ *
+ * Section-level overrides (`w:sectPr/w:footnotePr/w:numFmt`) are not yet
+ * honored — they require per-page numbering context which is tracked in
+ * SD-2986/B2.
+ */
+export function readFootnoteNumberFormat(settingsRoot: XmlElement): string | null {
+  return readNoteNumberFormat(settingsRoot, 'w:footnotePr');
+}
+
+/**
+ * Reads the document-wide endnote number format from
+ * `w:settings/w:endnotePr/w:numFmt[@val]`. Returns the OOXML format
+ * string or null if not present.
+ */
+export function readEndnoteNumberFormat(settingsRoot: XmlElement): string | null {
+  return readNoteNumberFormat(settingsRoot, 'w:endnotePr');
+}
+
+function readNoteNumberFormat(settingsRoot: XmlElement, containerName: 'w:footnotePr' | 'w:endnotePr'): string | null {
+  const container = settingsRoot.elements?.find((entry) => entry.name === containerName);
+  if (!container || !Array.isArray(container.elements)) return null;
+  const numFmt = container.elements.find((entry) => entry.name === 'w:numFmt');
+  if (!numFmt) return null;
+  const val = (numFmt.attributes as Record<string, unknown> | undefined)?.['w:val'];
+  return typeof val === 'string' && val.length > 0 ? val : null;
+}
+
+/**
+ * SD-2986/B2: Reads `w:settings/w:footnotePr/w:numStart[@val]`. Returns the
+ * starting cardinal (1-based) or null if not specified. Word's default is 1.
+ */
+export function readFootnoteNumberStart(settingsRoot: XmlElement): number | null {
+  return readNoteNumberStart(settingsRoot, 'w:footnotePr');
+}
+
+/**
+ * SD-2986/B2: Reads `w:settings/w:endnotePr/w:numStart[@val]`. Returns the
+ * starting cardinal or null. Word's endnote default is 1 (not the lowerRoman
+ * default that endnotes typically use for *format*).
+ */
+export function readEndnoteNumberStart(settingsRoot: XmlElement): number | null {
+  return readNoteNumberStart(settingsRoot, 'w:endnotePr');
+}
+
+function readNoteNumberStart(settingsRoot: XmlElement, containerName: 'w:footnotePr' | 'w:endnotePr'): number | null {
+  const container = settingsRoot.elements?.find((entry) => entry.name === containerName);
+  if (!container || !Array.isArray(container.elements)) return null;
+  const numStart = container.elements.find((entry) => entry.name === 'w:numStart');
+  if (!numStart) return null;
+  const val = (numStart.attributes as Record<string, unknown> | undefined)?.['w:val'];
+  if (typeof val !== 'string' && typeof val !== 'number') return null;
+  const n = Number(val);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// w:footnotePr / w:endnotePr  — w:pos (§17.11.21, ST_FtnPos §17.18.34)
+// Document-level only — section-level pos shall be ignored per §17.11.21.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type FootnotePosition = 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd';
+
+export function readFootnotePosition(settingsRoot: XmlElement): FootnotePosition | null {
+  return readNotePosition(settingsRoot, 'w:footnotePr');
+}
+
+export function readEndnotePosition(settingsRoot: XmlElement): FootnotePosition | null {
+  return readNotePosition(settingsRoot, 'w:endnotePr');
+}
+
+function readNotePosition(
+  settingsRoot: XmlElement,
+  containerName: 'w:footnotePr' | 'w:endnotePr',
+): FootnotePosition | null {
+  const container = settingsRoot.elements?.find((entry) => entry.name === containerName);
+  if (!container || !Array.isArray(container.elements)) return null;
+  const el = container.elements.find((entry) => entry.name === 'w:pos');
+  if (!el) return null;
+  const val = (el.attributes as Record<string, unknown> | undefined)?.['w:val'];
+  if (val === 'pageBottom' || val === 'beneathText' || val === 'sectEnd' || val === 'docEnd') return val;
+  return null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// w:footnotePr / w:endnotePr  — w:numRestart (§17.11.19, ST_RestartNumber §17.18.74)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type NoteNumberRestart = 'continuous' | 'eachPage' | 'eachSect';
+
+export function readFootnoteNumberRestart(settingsRoot: XmlElement): NoteNumberRestart | null {
+  return readNoteNumberRestart(settingsRoot, 'w:footnotePr');
+}
+
+export function readEndnoteNumberRestart(settingsRoot: XmlElement): NoteNumberRestart | null {
+  return readNoteNumberRestart(settingsRoot, 'w:endnotePr');
+}
+
+function readNoteNumberRestart(
+  settingsRoot: XmlElement,
+  containerName: 'w:footnotePr' | 'w:endnotePr',
+): NoteNumberRestart | null {
+  const container = settingsRoot.elements?.find((entry) => entry.name === containerName);
+  if (!container || !Array.isArray(container.elements)) return null;
+  const el = container.elements.find((entry) => entry.name === 'w:numRestart');
+  if (!el) return null;
+  const val = (el.attributes as Record<string, unknown> | undefined)?.['w:val'];
+  if (val === 'continuous' || val === 'eachPage' || val === 'eachSect') return val;
+  return null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Section-level w:sectPr/w:footnotePr (§17.11.11) — per-section overrides for
+// numFmt, numStart, numRestart. Section-level w:pos is parsed for round-trip but
+// must be IGNORED at render per §17.11.21.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type SectionNoteConfig = {
+  numFmt?: string;
+  numStart?: number;
+  numRestart?: NoteNumberRestart;
+};
+
+/**
+ * Walks `word/document.xml` for `w:sectPr` blocks (both standalone at body level
+ * and inside `w:p/w:pPr`), extracts their `w:footnotePr` / `w:endnotePr`
+ * children, and returns the per-section override config keyed by 0-based
+ * section index. Sections without overrides are absent from the map.
+ *
+ * Per §17.11.11: each property is an override of the document-wide value. Per
+ * §17.11.21: section-level `w:pos` is ignored at render time (we omit it here).
+ */
+export function readSectionNoteConfigs(
+  documentRoot: XmlElement | undefined,
+  containerName: 'w:footnotePr' | 'w:endnotePr',
+): Map<number, SectionNoteConfig> {
+  const result = new Map<number, SectionNoteConfig>();
+  if (!documentRoot) return result;
+
+  const bodyEl = findBody(documentRoot);
+  if (!bodyEl) return result;
+
+  let sectionIndex = 0;
+  for (const child of bodyEl.elements ?? []) {
+    if (child.name === 'w:sectPr') {
+      const config = extractSectionNoteConfig(child, containerName);
+      if (config) result.set(sectionIndex, config);
+      sectionIndex += 1;
+    } else if (child.name === 'w:p') {
+      const sectPr = findChildByName(findChildByName(child, 'w:pPr'), 'w:sectPr');
+      if (sectPr) {
+        const config = extractSectionNoteConfig(sectPr, containerName);
+        if (config) result.set(sectionIndex, config);
+        sectionIndex += 1;
+      }
+    }
+  }
+
+  return result;
+}
+
+function findBody(root: XmlElement): XmlElement | null {
+  if (root.name === 'w:body') return root;
+  if (!Array.isArray(root.elements)) return null;
+  for (const child of root.elements) {
+    if (child.name === 'w:body') return child;
+    const inner = child.elements?.find((g) => g.name === 'w:body');
+    if (inner) return inner;
+  }
+  return null;
+}
+
+function findChildByName(parent: XmlElement | null | undefined, name: string): XmlElement | null {
+  if (!parent) return null;
+  return parent.elements?.find((entry) => entry.name === name) ?? null;
+}
+
+function extractSectionNoteConfig(
+  sectPr: XmlElement,
+  containerName: 'w:footnotePr' | 'w:endnotePr',
+): SectionNoteConfig | null {
+  const container = findChildByName(sectPr, containerName);
+  if (!container) return null;
+  const config: SectionNoteConfig = {};
+
+  const numFmt = findChildByName(container, 'w:numFmt');
+  if (numFmt) {
+    const val = (numFmt.attributes as Record<string, unknown> | undefined)?.['w:val'];
+    if (typeof val === 'string' && val.length > 0) config.numFmt = val;
+  }
+
+  const numStart = findChildByName(container, 'w:numStart');
+  if (numStart) {
+    const val = (numStart.attributes as Record<string, unknown> | undefined)?.['w:val'];
+    const n = typeof val === 'string' || typeof val === 'number' ? Number(val) : NaN;
+    if (Number.isFinite(n) && n >= 1) config.numStart = Math.floor(n);
+  }
+
+  const numRestart = findChildByName(container, 'w:numRestart');
+  if (numRestart) {
+    const val = (numRestart.attributes as Record<string, unknown> | undefined)?.['w:val'];
+    if (val === 'continuous' || val === 'eachPage' || val === 'eachSect') config.numRestart = val;
+  }
+
+  return Object.keys(config).length > 0 ? config : null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // w:evenAndOddHeaders
 // ──────────────────────────────────────────────────────────────────────────────
 

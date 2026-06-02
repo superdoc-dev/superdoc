@@ -22,6 +22,7 @@ dependencies = [
 packages = [
   "superdoc",
   "superdoc.generated",
+  "superdoc.presets",
   "superdoc.skills",
   "superdoc.tools",
 ]

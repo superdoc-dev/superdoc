@@ -33,6 +33,7 @@ import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
+import { composeAuthorColorResolver } from '@superdoc/contracts';
 import {
   SuperEditor,
   AIWriter,
@@ -850,6 +851,9 @@ const editorOptions = (doc) => {
           emitCommentPositionsInViewing: isViewingMode() && shouldRenderCommentsInViewing.value,
           enableCommentsInViewing: isViewingCommentsVisible.value,
           contentControlsChrome: proxy.$superdoc.config.modules?.contentControls?.chrome,
+          resolveTrackedChangeColor: composeAuthorColorResolver(
+            proxy.$superdoc.config.modules?.trackChanges?.authorColors,
+          ),
         }
       : undefined,
     permissionResolver: (payload = {}) =>

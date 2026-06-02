@@ -190,6 +190,39 @@ describe('handleStyleChangeMarksV2', () => {
     expect(result[0].attrs.after).toEqual([]);
   });
 
+  it('restores paragraphSplit snapshots from matching paragraph mark insertion metadata', () => {
+    const currentMarks = [{ type: 'bold', attrs: { value: true } }];
+    const rPrChange = {
+      name: 'w:rPrChange',
+      attributes: {
+        'w:id': '7',
+        'w:date': '2026-06-01T17:00:00Z',
+        'w:author': 'Reviewer',
+      },
+      elements: [{ name: 'w:rPr', elements: [] }],
+    };
+
+    const result = handleStyleChangeMarksV2(rPrChange, currentMarks, {
+      docx: {},
+      extraParams: {
+        inlineParagraphProperties: {
+          runProperties: {
+            trackInsert: {
+              id: '7',
+              author: 'Reviewer',
+              date: '2026-06-01T17:00:00Z',
+            },
+          },
+        },
+      },
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe(TrackFormatMarkName);
+    expect(result[0].attrs.before).toEqual([{ type: 'paragraphSplit', attrs: { anchor: 'source' } }]);
+    expect(result[0].attrs.after).toEqual([{ type: 'paragraphSplit', attrs: { anchor: 'source' } }]);
+  });
+
   it('remaps format change ids and stamps overlapParentId through import tracking context', () => {
     const context = createImportTrackingContext({});
     context.pushParent({

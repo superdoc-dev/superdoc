@@ -134,7 +134,9 @@ test('@behavior SD-3310: scrolls an off-screen block content control into view',
   expect(after.inViewport).toBe(true);
 });
 
-test('@behavior SD-3310: resolves a control whose PM id attr is numeric (id passed as its string form)', async ({ superdoc }) => {
+test('@behavior SD-3310: resolves a control whose PM id attr is numeric (id passed as its string form)', async ({
+  superdoc,
+}) => {
   // Consumers always receive a string id (from the list / painted
   // `data-sdt-id`), but the PM node attr can be numeric. Build a node with a
   // genuinely numeric id and confirm scrollIntoView still resolves it by the
@@ -149,7 +151,10 @@ test('@behavior SD-3310: resolves a control whose PM id attr is numeric (id pass
   await superdoc.page.evaluate(() => {
     const ed = (window as any).editor;
     const { schema, doc, tr } = ed.state;
-    const node = schema.nodes.structuredContent.create({ id: 909042, controlType: 'text' }, schema.text('numeric-id target'));
+    const node = schema.nodes.structuredContent.create(
+      { id: 909042, controlType: 'text' },
+      schema.text('numeric-id target'),
+    );
     // Insert inside the last paragraph (a valid inline insertion point).
     ed.view.dispatch(tr.insert(doc.content.size - 1, node));
   });

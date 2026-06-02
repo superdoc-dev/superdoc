@@ -82,7 +82,8 @@
       "types": "./dist/superdoc/src/public/legacy/file-zipper.d.ts",
       "import": "./dist/super-editor/file-zipper.es.js"
     },
-    "./style.css": "./dist/style.css"
+    "./style.css": "./dist/style.css",
+    "./style.layered.css": "./dist/style.layered.css"
   },
   "types": "./dist/superdoc/src/public/index.d.ts",
   "typesVersions": {
@@ -194,6 +195,7 @@
     "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
     "@types/uuid": "catalog:",
     "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",

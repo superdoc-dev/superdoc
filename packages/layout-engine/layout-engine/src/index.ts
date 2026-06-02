@@ -38,7 +38,7 @@ import {
   applyPendingToActive,
   SINGLE_COLUMN_DEFAULT,
 } from './section-breaks.js';
-import { layoutParagraphBlock } from './layout-paragraph.js';
+import { layoutParagraphBlock, type FootnoteAnchorRef } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
 import { layoutDrawingBlock } from './layout-drawing.js';
 import { layoutTableBlock, createAnchoredTableFragment, ANCHORED_TABLE_FULL_WIDTH_RATIO } from './layout-table.js';
@@ -476,10 +476,30 @@ export type LayoutOptions = {
    */
   footnoteReservedByPageIndex?: number[];
   /**
-   * Optional footnote metadata consumed by higher-level orchestration (e.g. layout-bridge).
-   * The core layout engine does not interpret this field directly.
+   * Footnote metadata. The core layout engine consumes only the fields below
+   * (SD-3049: ref positions + per-footnote body heights for block-aware breaks).
+   * Higher-level orchestration (layout-bridge) attaches additional fields
+   * (`blocksById`, separator dimensions, etc.) which the engine ignores.
    */
-  footnotes?: unknown;
+  footnotes?: {
+    refs?: Array<{ id: string; pos: number }>;
+    /**
+     * SD-3049: total measured body height per footnote id (sum of measured
+     * paragraph heights + per-paragraph spacingAfter + inter-footnote gap +
+     * separator overhead). Used by the body paginator to consult footnote
+     * demand at fragment-commit time so body packs tight to the demand.
+     */
+    bodyHeightById?: Map<string, number>;
+    /**
+     * SD-2656: per-footnote first valid line/run height. The ordered-cluster
+     * rule (Word-style) requires only the LAST anchor on a page to fit its
+     * first line; all earlier anchors must fit fully (bodyHeightById). When
+     * present, the body slicer uses this value for the last anchor in the
+     * candidate cluster, otherwise falls back to bodyHeightById.
+     */
+    firstLineHeightById?: Map<string, number>;
+    [key: string]: unknown;
+  };
   /**
    * Actual measured header content heights per variant type.
    * When provided, the layout engine will ensure body content starts below
@@ -1190,6 +1210,226 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   // Pending-to-active application moved to section-breaks.applyPendingToActive
 
+  /**
+   * SD-3049: per-block footnote demand lookup. Resolves each footnote ref's pos
+   * to the body block whose pm range contains it; sums those refs' measured
+   * body heights into a `Map<blockId, demandPx>`. The body paragraph layout
+   * consults this map at fragment-commit time to keep body packing tight to
+   * footnote demand instead of relying on the post-hoc page-level reserve.
+   *
+   * Builds once per layoutDocument call. Empty-map fallback when there are
+   * no footnotes — the consumer's lookup is a no-op in that case.
+   *
+   * Recurses into table cells so refs inside table-cell paragraphs are
+   * charged to the *containing table block* (the unit `layoutTableBlock` lays
+   * out and breaks at). This is a conservative approximation: demand from a
+   * cell ref is charged to the whole table even if the table spans pages, so
+   * the table may break one row earlier than strictly necessary. The existing
+   * `footnoteBandOverflow.test.ts` is the safety net guaranteeing the band
+   * never overflows the page bottom margin.
+   */
+  // SD-2656: per-block footnote anchor entries. Stored as a sorted list of
+  // {pmPos, height} so the slicer can ask range-aware questions ("how much
+  // footnote demand is anchored in lines [pmStart, pmEnd) of this block?").
+  // Word's body break respects per-line anchor positions; charging the whole
+  // block's demand at block entry (the old behavior) over-defers paragraphs
+  // that have multiple anchors but where the first line only contains one of
+  // them.
+  // SD-2656: each anchor carries both full body height and first-line height.
+  // The body slicer applies the ordered-cluster rule at break time:
+  //   demand = sum(fullHeight of cluster[0..N-1]) + firstLineHeight(cluster[N-1])
+  // i.e. all anchors except the last must fit fully; only the last may split.
+  // Aliased to the public FootnoteAnchorRef so callers across packages share
+  // one type.
+  type FootnoteAnchorEntry = FootnoteAnchorRef;
+  const footnoteAnchorsByBlockId: Map<string, FootnoteAnchorEntry[]> = (() => {
+    const out = new Map<string, FootnoteAnchorEntry[]>();
+    const refs = options.footnotes?.refs;
+    const bodyHeights = options.footnotes?.bodyHeightById;
+    const firstLineHeights = options.footnotes?.firstLineHeightById;
+    if (!Array.isArray(refs) || refs.length === 0 || !bodyHeights) return out;
+
+    /**
+     * Resolve `(pmStart, pmEnd)` for a block. Falls back to scanning paragraph
+     * runs when `attrs.pmStart` is absent — the converter sometimes attaches
+     * positions only to runs rather than to block.attrs.
+     */
+    const resolveBlockPmRange = (block: FlowBlock): { pmStart: number; pmEnd: number } | null => {
+      const attrsRange = (block as { attrs?: { pmStart?: number; pmEnd?: number } }).attrs;
+      let pmStart = typeof attrsRange?.pmStart === 'number' ? attrsRange.pmStart : undefined;
+      let pmEnd = typeof attrsRange?.pmEnd === 'number' ? attrsRange.pmEnd : undefined;
+      if (pmStart == null && block.kind === 'paragraph') {
+        const runs = block.runs;
+        if (Array.isArray(runs)) {
+          for (const run of runs) {
+            const rs = (run as { pmStart?: number }).pmStart;
+            const re = (run as { pmEnd?: number }).pmEnd;
+            if (typeof rs === 'number') pmStart = pmStart == null ? rs : Math.min(pmStart, rs);
+            if (typeof re === 'number') pmEnd = pmEnd == null ? re : Math.max(pmEnd, re);
+          }
+        }
+      }
+      if (pmStart == null) return null;
+      return { pmStart, pmEnd: pmEnd ?? pmStart + 1 };
+    };
+
+    /**
+     * For each ref, walk the block tree to find the top-level FlowBlock whose
+     * pm range contains the ref. Tables: walks rows → cells → cell.blocks /
+     * cell.paragraph; demand is attributed to the *table* block, not the cell,
+     * because the table is the unit the body paginator places on a page.
+     */
+    // Dedupe refs by footnote id: the rendered footnote band only carries each id
+    // once per page, so charging body demand once is the matching accounting.
+    // Keeping the first ref position is sufficient — block-aware breaks only care
+    // that the demand lands on *some* containing block.
+    const refByPos = new Map<number, string>();
+    const seenIds = new Set<string>();
+    for (const ref of refs) {
+      if (seenIds.has(ref.id)) continue;
+      seenIds.add(ref.id);
+      refByPos.set(ref.pos, ref.id);
+    }
+
+    const recordIfHit = (range: { pmStart: number; pmEnd: number }, topLevelId: string): void => {
+      for (const [pos, refId] of refByPos.entries()) {
+        if (pos < range.pmStart || pos > range.pmEnd) continue;
+        const fullHeight = bodyHeights.get(refId);
+        if (typeof fullHeight !== 'number' || !Number.isFinite(fullHeight) || fullHeight <= 0) continue;
+        const firstLineRaw = firstLineHeights?.get(refId);
+        // SD-2656: firstLine defaults to fullHeight when not provided — i.e.
+        // legacy callers / atomic footnotes (image, drawing) get the safe
+        // upper bound. Real paragraph footnotes provide a smaller value.
+        const firstLineHeight =
+          typeof firstLineRaw === 'number' && Number.isFinite(firstLineRaw) && firstLineRaw > 0
+            ? Math.min(firstLineRaw, fullHeight)
+            : fullHeight;
+        const list = out.get(topLevelId) ?? [];
+        list.push({ pmPos: pos, refId, fullHeight, firstLineHeight });
+        out.set(topLevelId, list);
+        refByPos.delete(pos);
+      }
+    };
+
+    for (const block of blocks) {
+      if (refByPos.size === 0) break;
+      const range = resolveBlockPmRange(block);
+      if (range) recordIfHit(range, block.id);
+
+      if (block.kind === 'table') {
+        for (const row of block.rows ?? []) {
+          for (const cell of row.cells ?? []) {
+            const cellChildren: FlowBlock[] = cell.blocks
+              ? (cell.blocks as FlowBlock[])
+              : cell.paragraph
+                ? [cell.paragraph as FlowBlock]
+                : [];
+            for (const child of cellChildren) {
+              const childRange = resolveBlockPmRange(child);
+              if (childRange) recordIfHit(childRange, block.id);
+            }
+          }
+        }
+      }
+    }
+
+    // Keep each block's anchors sorted by pmPos so range queries are linear.
+    for (const list of out.values()) list.sort((a, b) => a.pmPos - b.pmPos);
+    return out;
+  })();
+
+  /**
+   * SD-2656: return the ordered list of footnote anchor entries in
+   * `[pmStart, pmEnd]` of the given block (or the whole block if no range).
+   * Each entry carries `fullHeight` and `firstLineHeight`. The body slicer
+   * combines this candidate list with PageState's committed anchors and
+   * applies the ordered-cluster rule.
+   */
+  const getFootnoteAnchorsForBlockId = (blockId: string, pmStart?: number, pmEnd?: number): FootnoteAnchorEntry[] => {
+    const entries = footnoteAnchorsByBlockId.get(blockId);
+    if (!entries || entries.length === 0) return [];
+    if (pmStart == null || pmEnd == null) return entries;
+    const out: FootnoteAnchorEntry[] = [];
+    for (const e of entries) {
+      if (e.pmPos >= pmStart && e.pmPos <= pmEnd) out.push(e);
+    }
+    return out;
+  };
+
+  /**
+   * Range-aware demand lookup under the ordered-cluster rule:
+   *
+   *   demand = sum(fullHeight of cluster[0..N-1]) + firstLineHeight(cluster[N-1])
+   *
+   * where `cluster` = committed anchors on the current page followed by the
+   * candidate anchors in this block range. With no committed list provided,
+   * treats the in-range entries as the full cluster.
+   */
+  const getFootnoteDemandForBlockId = (
+    blockId: string,
+    pmStart?: number,
+    pmEnd?: number,
+    committed?: ReadonlyArray<FootnoteAnchorEntry>,
+  ): number => {
+    const candidate = getFootnoteAnchorsForBlockId(blockId, pmStart, pmEnd);
+    if (candidate.length === 0 && (!committed || committed.length === 0)) return 0;
+    const cluster = committed && committed.length > 0 ? [...committed, ...candidate] : candidate;
+    if (cluster.length === 0) return 0;
+    let total = 0;
+    for (let i = 0; i < cluster.length - 1; i += 1) total += cluster[i].fullHeight;
+    total += cluster[cluster.length - 1].firstLineHeight;
+    return total;
+  };
+
+  /**
+   * Range-aware ref count. Used by the slicer to compute band overhead
+   * (separator + per-extra-ref gap + safety margin) for the candidate slice.
+   */
+  const getFootnoteRefCountForBlockId = (blockId: string, pmStart?: number, pmEnd?: number): number => {
+    const entries = footnoteAnchorsByBlockId.get(blockId);
+    if (!entries || entries.length === 0) return 0;
+    if (pmStart == null || pmEnd == null) return entries.length;
+    let count = 0;
+    for (const e of entries) {
+      if (e.pmPos >= pmStart && e.pmPos <= pmEnd) count += 1;
+    }
+    return count;
+  };
+
+  /**
+   * SD-2656: per-page footnote-band overhead in pixels. Matches the planner's
+   * data-driven formula (incrementalLayout.ts:1488 — `separatorBefore +
+   * separatorHeight + topPadding + (refs-1)*gap`). The slicer consults this
+   * via ctx so its body-fit budget matches the planner's band-size budget
+   * exactly. The defaults below mirror the planner's defaults so legacy /
+   * test callers that don't populate overhead fields still get correct math.
+   */
+  const getFootnoteBandOverhead = (() => {
+    const fn = options.footnotes as
+      | {
+          topPadding?: number;
+          dividerHeight?: number;
+          separatorSpacingBefore?: number;
+          gap?: number;
+        }
+      | undefined;
+    const safeNum = (v: number | undefined, fallback: number): number =>
+      typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback;
+    // Defaults match incrementalLayout.ts:1330-1342 (gap=2, topPadding=6,
+    // dividerHeight=6) and DEFAULT_FOOTNOTE_SEPARATOR_SPACING_BEFORE=12.
+    // The planner threads its measured `separatorSpacingBefore` (typically
+    // the first-fn lineHeight) through `options.footnotes` so subsequent
+    // passes converge with this slicer.
+    const topPadding = safeNum(fn?.topPadding, 6);
+    const dividerHeight = safeNum(fn?.dividerHeight, 6);
+    const separatorSpacingBefore = safeNum(fn?.separatorSpacingBefore, 12);
+    const gap = safeNum(fn?.gap, 2);
+    return (refsTotal: number): number => {
+      if (refsTotal <= 0) return 0;
+      return topPadding + dividerHeight + separatorSpacingBefore + Math.max(0, refsTotal - 1) * gap;
+    };
+  })();
+
   // Paginator encapsulation for page/column helpers
   let pageCount = 0;
   // Page numbering state
@@ -1246,16 +1486,23 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Map<sectionIndex, firstPageNumber>
   const sectionFirstPageNumbers = new Map<number, number>();
 
+  // SD-3049: read the page-level reserve via a single helper so the same
+  // value flows into both `getActiveBottomMargin` (existing behavior) and
+  // `getFootnoteReserveForPage` (new — for the block-aware break decision).
+  const readFootnoteReserveForPageIndex = (pageIndex: number): number => {
+    const reserves = options.footnoteReservedByPageIndex;
+    const reserve = Array.isArray(reserves) ? reserves[pageIndex] : 0;
+    return typeof reserve === 'number' && Number.isFinite(reserve) && reserve > 0 ? reserve : 0;
+  };
+
   const paginator = createPaginator({
     margins: paginatorMargins,
     getActiveTopMargin: () => activeTopMargin,
     getActiveBottomMargin: () => {
-      const reserves = options.footnoteReservedByPageIndex;
       const pageIndex = Math.max(0, pageCount - 1);
-      const reserve = Array.isArray(reserves) ? reserves[pageIndex] : 0;
-      const reservePx = typeof reserve === 'number' && Number.isFinite(reserve) && reserve > 0 ? reserve : 0;
-      return activeBottomMargin + reservePx;
+      return activeBottomMargin + readFootnoteReserveForPageIndex(pageIndex);
     },
+    getFootnoteReserveForPage: (pageIndex: number) => readFootnoteReserveForPageIndex(pageIndex),
     getActiveHeaderDistance: () => activeHeaderDistance,
     getActiveFooterDistance: () => activeFooterDistance,
     getActivePageSize: () => activePageSize,
@@ -2365,6 +2612,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           floatManager,
           remeasureParagraph: options.remeasureParagraph,
           overrideSpacingAfter,
+          getFootnoteDemandForBlockId,
+          getFootnoteRefCountForBlockId,
+          getFootnoteBandOverhead,
+          getFootnoteAnchorsForBlockId,
         },
         anchorsForPara
           ? {
@@ -2941,6 +3192,28 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       });
     }
     state.page.columnRegions = regions;
+  }
+
+  // SD-2656: stash each page's actual body-bottom on the Page so the band
+  // painter can render the separator immediately under the last body
+  // fragment instead of at the legacy reserve-derived position. Trailing
+  // paragraph spacing is subtracted because it's "below the last line" and
+  // shouldn't push the separator down by that much — but only when the
+  // current column's cursorY is the one that set maxCursorY. In a multi-
+  // column page, `advanceColumn` preserves maxCursorY across columns while
+  // resetting trailingSpacing to 0; the trailingSpacing observed at the
+  // page tail belongs to the last column's last fragment, not to whichever
+  // fragment set maxCursorY. Subtracting it unconditionally would clip the
+  // band up into the body of an earlier, taller column.
+  for (let i = 0; i < pages.length && i < paginator.states.length; i++) {
+    const s = paginator.states[i];
+    const maxY = s.maxCursorY ?? 0;
+    const cursorY = s.cursorY ?? 0;
+    const trailing = s.trailingSpacing ?? 0;
+    const raw = Math.max(maxY, cursorY);
+    const trailingAttachedToMax = cursorY >= maxY;
+    const adjusted = raw - (trailingAttachedToMax ? trailing : 0);
+    (pages[i] as { bodyMaxY?: number }).bodyMaxY = Math.max(s.topMargin ?? 0, adjusted);
   }
 
   return {

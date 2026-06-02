@@ -628,8 +628,18 @@ function makeEmitter() {
 function makeGeometryStub() {
   const sd = makeEmitter();
   const pres = makeEmitter();
-  const emptyList = () => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } });
-  const editor: { on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn>; doc: unknown; presentationEditor: unknown } = {
+  const emptyList = () => ({
+    evaluatedRevision: 'r1',
+    total: 0,
+    items: [],
+    page: { limit: 0, offset: 0, returned: 0 },
+  });
+  const editor: {
+    on: ReturnType<typeof vi.fn>;
+    off: ReturnType<typeof vi.fn>;
+    doc: unknown;
+    presentationEditor: unknown;
+  } = {
     on: vi.fn(),
     off: vi.fn(),
     doc: {

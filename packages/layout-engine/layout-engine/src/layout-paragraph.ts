@@ -17,7 +17,6 @@ import type {
 import {
   computeFragmentPmRange,
   normalizeLines,
-  sliceLines,
   extractBlockPmRange,
   isEmptyTextParagraph,
   shouldSuppressOwnSpacing,
@@ -29,6 +28,19 @@ import { getFragmentZIndex } from '@superdoc/contracts';
 const PX_PER_PT = 96 / 72;
 
 const spacingDebugEnabled = false;
+
+/**
+ * SD-2656: ordered footnote anchor entry. The body slicer reads the candidate
+ * anchors for a given PM range and pushes them onto `PageState.footnoteAnchorsThisPage`
+ * after committing the slice; the demand formula consumes the resulting list.
+ */
+export type FootnoteAnchorRef = {
+  pmPos: number;
+  refId: string;
+  fullHeight: number;
+  firstLineHeight: number;
+};
+
 /**
  * Type definition for Word layout attributes attached to paragraph blocks.
  * This is a subset of the WordParagraphLayoutOutput from @superdoc/word-layout.
@@ -293,6 +305,54 @@ export type ParagraphLayoutContext = {
    * When undefined, uses the value from block.attrs.spacing.after.
    */
   overrideSpacingAfter?: number;
+  /**
+   * SD-3049 / SD-2656: footnote demand under the ordered-cluster rule.
+   *
+   *   demand = sum(fullHeight of cluster[0..N-1]) + firstLineHeight(cluster[N-1])
+   *
+   * where `cluster` is the ordered list of footnote anchors on the page. The
+   * caller passes the already-committed anchors (from PageState) plus the
+   * candidate range; this returns the demand assuming the candidate range is
+   * appended to the page's cluster.
+   *
+   * With no committed list, the in-range anchors are treated as the full
+   * cluster. With no range, returns the whole-block demand.
+   */
+  getFootnoteDemandForBlockId?: (
+    blockId: string,
+    pmStart?: number,
+    pmEnd?: number,
+    committed?: ReadonlyArray<FootnoteAnchorRef>,
+  ) => number;
+
+  /**
+   * SD-2656: returns the ordered anchor entries in `[pmStart, pmEnd]` so the
+   * slicer can push them onto PageState after accepting a candidate line.
+   */
+  getFootnoteAnchorsForBlockId?: (
+    blockId: string,
+    pmStart?: number,
+    pmEnd?: number,
+  ) => ReadonlyArray<FootnoteAnchorRef>;
+
+  /**
+   * SD-2656: companion to getFootnoteDemandForBlockId — returns the number
+   * of footnote refs anchored in a given PM range of this block. Used to
+   * compute band overhead (separator + per-extra-ref gap + safety margin)
+   * for the candidate slice.
+   */
+  getFootnoteRefCountForBlockId?: (blockId: string, pmStart?: number, pmEnd?: number) => number;
+
+  /**
+   * SD-2656: per-page footnote-band overhead in pixels for a given number of
+   * anchored refs. The slicer's `effectiveBottom` budget must match the
+   * planner's, otherwise body packs onto a page whose band cannot fit the
+   * refs. Source of truth lives in the planner (incrementalLayout.ts) and
+   * derives from `topPadding + dividerHeight + separatorSpacingBefore +
+   * (refs-1)*gap`. When not provided, the slicer falls back to a default
+   * formula that matches the planner's default values.
+   */
+  getFootnoteBandOverhead?: (refsTotal: number) => number;
 };
 
 export type AnchoredDrawingEntry = {
@@ -818,19 +878,130 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     } else {
       state.trailingSpacing = 0;
     }
-    if (state.cursorY >= state.contentBottom) {
+    // SD-2656: footnote band overhead. Source of truth is the planner
+    // (incrementalLayout.ts), which derives overhead from data-driven
+    // separator dimensions (`topPadding`, `dividerHeight`,
+    // `separatorSpacingBefore`, inter-ref `gap`). The planner threads its
+    // formula through `ctx.getFootnoteBandOverhead` so the slicer's
+    // `effectiveBottom` budget matches the planner's exactly — otherwise
+    // body packs onto a page whose band can't actually fit the refs.
+    //
+    // The fallback formula below matches the planner's *default* values
+    // (topPadding=6, dividerHeight=6, separatorSpacingBefore≈14, gap=2)
+    // and is only used when ctx doesn't supply the overhead function (e.g.
+    // tests that don't exercise footnotes).
+    const FN_SAFETY_MARGIN_PX = 1;
+    const fallbackBandOverhead = (refsTotal: number): number =>
+      refsTotal > 0 ? 22 + Math.max(0, refsTotal - 1) * 2 : 0;
+    const bandOverhead = (refsTotal: number): number => {
+      if (refsTotal <= 0) return 0;
+      const fromCtx = ctx.getFootnoteBandOverhead?.(refsTotal);
+      const base =
+        typeof fromCtx === 'number' && Number.isFinite(fromCtx) && fromCtx >= 0
+          ? fromCtx
+          : fallbackBandOverhead(refsTotal);
+      return base + FN_SAFETY_MARGIN_PX;
+    };
+
+    /**
+     * SD-2656: effective bottom for a candidate slice.
+     *
+     * Critical: we ignore `state.pageFootnoteReserve` here and use the
+     * page's raw content area (contentBottom + reserve). With range-aware
+     * demand, the slicer knows exactly which fns are anchored on this
+     * page — the planner's pre-allocated reserve is no longer needed and
+     * actively harmful when it over-allocates. Body shrinkage is driven
+     * entirely by what THIS page's slices have charged so far + what the
+     * candidate slice would charge.
+     *
+     * `extraDemand` IS the total ordered-cluster demand for the page after
+     * the candidate slice is committed (i.e., the demand function already
+     * received state.footnoteAnchorsThisPage as `committed` and returned the
+     * full cluster demand). Do NOT add state.footnoteDemandThisPage — that
+     * would double-count the already-committed anchors (e.g. fn4 contributes
+     * `firstLine(fn4)` to state.footnoteDemandThisPage when first committed,
+     * then `full(fn4)` to extraDemand when fn5 arrives and upgrades fn4 from
+     * "last" to "non-last"). Trust extraDemand as the total.
+     */
+    const rawContentBottom = state.contentBottom + state.pageFootnoteReserve;
+    const computeEffectiveBottom = (extraDemand: number, extraRefs: number): number => {
+      const totalDemand = extraDemand;
+      const totalRefs = state.footnoteRefsThisPage + extraRefs;
+      const demandWithOverhead = totalDemand > 0 ? totalDemand + bandOverhead(totalRefs) : 0;
+      // SD-2656: respect the planner's per-page reserve as a floor. The
+      // convergence loop sets `state.pageFootnoteReserve` to communicate
+      // continuation demand from prior pages (fn body content that was
+      // deferred because it didn't fit on its anchor page). Range-aware
+      // demand alone misses this — the slicer only knows about fns anchored
+      // in THIS page's body, not about fn bodies migrating in from previous
+      // pages. Taking the max of (continuation-reserve, anchored-demand+
+      // overhead) ensures body leaves room for whichever is larger.
+      const reservedSpace = Math.max(state.pageFootnoteReserve, demandWithOverhead);
+      const minBodyLineHeight = lines[fromLine]?.lineHeight ?? 0;
+      const maxAdditional = Math.max(0, rawContentBottom - state.topMargin - minBodyLineHeight);
+      return rawContentBottom - Math.min(reservedSpace, maxAdditional);
+    };
+
+    // SD-2656: pre-slicer advance check must preview the FIRST candidate
+    // line's footnote demand. Without this preview, the in-slicer force-
+    // commit-first-line rule would unconditionally place line 0 even when
+    // its fn anchors push the band off the page. This was the band-overflow
+    // bug seen on the reference fixture's p19 (two fns ended up in the band
+    // on top of a prior fn, pushing the band ~140 px past pageH).
+    //
+    // The pre-slicer check is allowed to defer the entire block to next
+    // page only when the page already has body content (otherwise we'd
+    // deadlock on oversized fns). On an empty page, the slicer's force-
+    // commit-first-line rule keeps making progress and the band may end
+    // up clipped — but that case is handled by the planner's continuation
+    // split (separate fix path).
+    // Reserve the full footnote cluster height up front, so the body slicer
+    // backs off enough lines that every anchored footnote fits whole on its
+    // own page. This matches Word's pagination, which knows each footnote's
+    // full demand at every line decision rather than reserving a minimum
+    // and patching later. Cost: bodies that previously packed to the brink
+    // grow ≤ 1–4 pages per fixture; gain: footnote splits drop to ~0 on
+    // fixtures we measured (Carlsbad, IRA, SPA, IT-923 COI, MRL).
+    const computeFootnoteClusterDemand = (pmStart: number, pmEnd: number): number => {
+      const candidate = ctx.getFootnoteAnchorsForBlockId
+        ? ctx.getFootnoteAnchorsForBlockId(block.id, pmStart, pmEnd)
+        : [];
+      const committed = state.footnoteAnchorsThisPage ?? [];
+      if (candidate.length === 0 && committed.length === 0) return 0;
+      let demand = 0;
+      for (const anchor of committed) demand += anchor.fullHeight;
+      for (const anchor of candidate) demand += anchor.fullHeight;
+      return demand;
+    };
+
+    const previewRange = computeFragmentPmRange(block, lines, fromLine, fromLine + 1);
+    const previewRefs = ctx.getFootnoteRefCountForBlockId
+      ? ctx.getFootnoteRefCountForBlockId(block.id, previewRange.pmStart, previewRange.pmEnd)
+      : 0;
+    // Re-evaluates against current state after advanceColumn (footnoteAnchorsThisPage
+    // resets on a fresh page, so demand can shrink).
+    const computePreviewBottom = () => {
+      const demand = computeFootnoteClusterDemand(previewRange.pmStart ?? 0, previewRange.pmEnd ?? 0);
+      return computeEffectiveBottom(demand, previewRefs);
+    };
+    let effectiveBottom = computePreviewBottom();
+
+    if (state.cursorY >= effectiveBottom) {
       state = advanceColumn(state);
+      effectiveBottom = computePreviewBottom();
     }
 
-    const availableHeight = state.contentBottom - state.cursorY;
+    const availableHeight = effectiveBottom - state.cursorY;
     if (availableHeight <= 0) {
       state = advanceColumn(state);
+      effectiveBottom = computePreviewBottom();
     }
 
     const nextLineHeight = lines[fromLine].lineHeight || 0;
-    const remainingHeight = state.contentBottom - state.cursorY;
+    const remainingHeight = effectiveBottom - state.cursorY;
     if (state.page.fragments.length > 0 && remainingHeight < nextLineHeight) {
       state = advanceColumn(state);
+      effectiveBottom = computePreviewBottom();
     }
 
     // Use the narrowest width and offset if we remeasured
@@ -841,12 +1012,80 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       offsetX = narrowestOffsetX;
     }
 
-    // Reserve border expansion from available height so sliceLines doesn't accept
+    // Reserve border expansion from available height so the slicer doesn't accept
     // lines that would overflow the page once border space is added.
+    // SD-3049: use `effectiveBottom` (which already accounts for any
+    // additional footnote demand above the page-level reserve) so we don't
+    // greedily add a line that would push body content into the footnote area.
     const borderVertical = borderExpansion.top + borderExpansion.bottom;
-    const availableForSlice = Math.max(0, state.contentBottom - state.cursorY - borderVertical);
-    const slice = sliceLines(lines, fromLine, availableForSlice);
+    // SD-2656: range-aware slicer. Commit lines one at a time, charging the
+    // fn refs each line anchors. The first line always commits (otherwise
+    // a paragraph with oversized fns could deadlock); subsequent lines must
+    // pass the fit check (cursor + cumulative height + border + cumulative
+    // demand + band overhead ≤ contentBottom). When the next line would
+    // overflow, stop — the rest spills to the next page.
+    let toLine = fromLine;
+    let height = 0;
+    let sliceDemand = 0;
+    let sliceRefs = 0;
+    while (toLine < lines.length) {
+      const lineHeight = lines[toLine].lineHeight || 0;
+      const range = computeFragmentPmRange(block, lines, fromLine, toLine + 1);
+      // SD-2656 Phase 1: ordered-minimum acceptance. The body accepts a
+      // line if ordered demand (full of non-last + firstLine of last)
+      // still fits. The planner uses any leftover capacity opportunistically
+      // (continuations, extending the last anchor).
+      const orderedDemand = computeFootnoteClusterDemand(range.pmStart ?? 0, range.pmEnd ?? 0);
+      const nextRefs = ctx.getFootnoteRefCountForBlockId
+        ? ctx.getFootnoteRefCountForBlockId(block.id, range.pmStart, range.pmEnd)
+        : 0;
+
+      if (toLine === fromLine) {
+        // First line: commit unconditionally. The pre-slicer checks above
+        // already advanced the column if even a single line couldn't fit.
+        height = lineHeight;
+        sliceDemand = orderedDemand;
+        sliceRefs = nextRefs;
+        toLine = fromLine + 1;
+        continue;
+      }
+
+      const candidateBottom = state.cursorY + height + lineHeight + borderVertical;
+      const effBot = computeEffectiveBottom(orderedDemand, nextRefs);
+      if (candidateBottom > effBot) break;
+      height += lineHeight;
+      sliceDemand = orderedDemand;
+      sliceRefs = nextRefs;
+      toLine += 1;
+    }
+
+    const slice = { toLine, height };
     const fragmentHeight = slice.height;
+
+    // Commit demand from this slice into page state. sliceDemand is the
+    // ordered-cluster TOTAL for the page (it already accounts for committed
+    // anchors), so the page-level tracker is replaced, not accumulated. The
+    // ref count is additive (each slice's refs are new).
+    if (sliceDemand > 0 || sliceRefs > 0) {
+      state.footnoteDemandThisPage = sliceDemand;
+      state.footnoteRefsThisPage = (state.footnoteRefsThisPage ?? 0) + sliceRefs;
+    }
+    // SD-2656: push the anchors actually introduced by this slice onto the
+    // page's ordered cluster. The demand for the NEXT slice/block will then
+    // see them as committed (so the current cluster's last anchor upgrades
+    // from firstLine to fullHeight when a new anchor is added later).
+    if (ctx.getFootnoteAnchorsForBlockId) {
+      const committedRange = computeFragmentPmRange(block, lines, fromLine, toLine);
+      const newAnchors = ctx.getFootnoteAnchorsForBlockId(block.id, committedRange.pmStart, committedRange.pmEnd);
+      if (newAnchors.length > 0) {
+        if (!state.footnoteAnchorsThisPage) state.footnoteAnchorsThisPage = [];
+        const seen = new Set(state.footnoteAnchorsThisPage.map((a) => a.refId));
+        for (const a of newAnchors) {
+          if (!seen.has(a.refId)) state.footnoteAnchorsThisPage.push(a);
+        }
+      }
+    }
+    void effectiveBottom;
 
     // Apply negative indent adjustment to fragment position and width (similar to table indent handling).
     // Negative left indent shifts content left into page margin; negative right indent extends into right margin.

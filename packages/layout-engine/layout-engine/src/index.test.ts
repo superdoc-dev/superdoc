@@ -6379,3 +6379,104 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(p6Fragment!.y).toBeCloseTo(70, 0);
   });
 });
+
+// SD-2656: bodyMaxY anchors the footnote band painter at the actual bottom
+// of body content. Without these tests the reviewer's multi-column trailing-
+// spacing bug (advanceColumn resets trailingSpacing while preserving
+// maxCursorY) regresses silently.
+describe('bodyMaxY', () => {
+  type PageWithBodyMaxY = { bodyMaxY?: number };
+
+  it('subtracts trailing paragraph spacing on a single-column page', () => {
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'p1', runs: [] },
+      { kind: 'paragraph', id: 'p2', runs: [] },
+      {
+        kind: 'paragraph',
+        id: 'p3',
+        runs: [],
+        attrs: { spacing: { after: 20 } },
+      },
+    ];
+    const measures: Measure[] = [makeMeasure([24]), makeMeasure([24]), makeMeasure([24])];
+
+    const layout = layoutDocument(blocks, measures, DEFAULT_OPTIONS);
+
+    expect(layout.pages).toHaveLength(1);
+    const bodyMaxY = (layout.pages[0] as PageWithBodyMaxY).bodyMaxY;
+    expect(bodyMaxY).toBeDefined();
+    // 3 paragraphs × 24 px + 50 px topMargin = 122. Trailing spacing.after=20
+    // is "below the last line" so it is excluded from bodyMaxY.
+    expect(bodyMaxY).toBeCloseTo(122, 1);
+  });
+
+  it('does not subtract trailing spacing when the last column does not own maxCursorY', () => {
+    // Two-column page where column 0 is taller than column 1.
+    // Column 0 should set maxCursorY high; column 1 finishes shorter and
+    // carries a non-zero trailingSpacing. advanceColumn resets trailingSpacing
+    // to 0 mid-flight but the state observed at end-of-page is column 1's.
+    // bodyMaxY must reflect column 0's max, NOT subtract column 1's trailing.
+    const measures: Measure[] = [makeMeasure([40, 40, 40, 40, 40]), makeMeasure([40])];
+
+    const buildBlocks = (trailingAfter: number): FlowBlock[] => [
+      { kind: 'paragraph', id: 'tall', runs: [] },
+      {
+        kind: 'paragraph',
+        id: 'short',
+        runs: [],
+        attrs: trailingAfter > 0 ? { spacing: { after: trailingAfter } } : undefined,
+      },
+    ];
+
+    const layoutOptions: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20 },
+    };
+
+    const layoutWithSpacing = layoutDocument(buildBlocks(30), measures, layoutOptions);
+    const layoutWithoutSpacing = layoutDocument(buildBlocks(0), measures, layoutOptions);
+
+    expect(layoutWithSpacing.pages).toHaveLength(1);
+    expect(layoutWithoutSpacing.pages).toHaveLength(1);
+    // The presence of column-1 trailing spacing must NOT change bodyMaxY,
+    // because the trailing spacing belongs to a column whose cursorY is
+    // shorter than maxCursorY (set by column 0). Without the guard, the
+    // bodyMaxY would shrink by ~30 px and the band painter would clip the
+    // last line of column 0.
+    const withSpacingBodyMaxY = (layoutWithSpacing.pages[0] as PageWithBodyMaxY).bodyMaxY;
+    const withoutSpacingBodyMaxY = (layoutWithoutSpacing.pages[0] as PageWithBodyMaxY).bodyMaxY;
+    expect(withSpacingBodyMaxY).toBeDefined();
+    expect(withoutSpacingBodyMaxY).toBeDefined();
+    expect(withSpacingBodyMaxY).toBeCloseTo(withoutSpacingBodyMaxY!, 1);
+  });
+
+  it('subtracts trailing spacing in a single-column page where last cursor == maxCursorY', () => {
+    // Sanity: in a single-column page the last fragment also sets maxCursorY,
+    // so the trailingAttachedToMax branch fires and we DO subtract.
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'only',
+        runs: [],
+        attrs: { spacing: { after: 25 } },
+      },
+    ];
+    const measures: Measure[] = [makeMeasure([30, 30])];
+
+    const layout = layoutDocument(blocks, measures, DEFAULT_OPTIONS);
+    const bodyMaxY = (layout.pages[0] as PageWithBodyMaxY).bodyMaxY;
+    expect(bodyMaxY).toBeDefined();
+    // topMargin=50, 60 px paragraph, trailing spacing.after=25 excluded → 110
+    expect(bodyMaxY).toBeCloseTo(110, 1);
+  });
+
+  it('clamps bodyMaxY to topMargin when content is empty', () => {
+    // Empty body: just an empty paragraph that produces no fragment height.
+    const layout = layoutDocument([{ kind: 'paragraph', id: 'empty', runs: [] }], [makeMeasure([0])], DEFAULT_OPTIONS);
+    expect(layout.pages.length).toBeGreaterThanOrEqual(1);
+    const bodyMaxY = (layout.pages[0] as PageWithBodyMaxY).bodyMaxY;
+    expect(bodyMaxY).toBeDefined();
+    expect(bodyMaxY).toBeGreaterThanOrEqual(DEFAULT_OPTIONS.margins!.top);
+  });
+});

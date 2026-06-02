@@ -234,6 +234,20 @@ new SuperDoc({
       - `'paired'` (default, Google Docs model): the two halves share one id and resolve together with a single accept/reject click.
       - `'independent'` (Microsoft Word / ECMA-376 §17.13.5 model): each insertion and each deletion has its own id, is addressable on its own, and resolves independently.
     </ParamField>
+    <ParamField path="modules.trackChanges.authorColors" type="Object">
+      Resolve one tracked-change highlight color per author. Use this when imported DOCX files contain reviewers your app does not know ahead of time, or when you want a stable author legend in a custom review UI.
+      <Expandable title="properties">
+        <ParamField path="modules.trackChanges.authorColors.enabled" type="boolean" default="true">
+          Set to `false` to use the default tracked-change colors.
+        </ParamField>
+        <ParamField path="modules.trackChanges.authorColors.overrides" type="Record<string, string>">
+          Exact color overrides keyed by author email or author name. Email matches first, then name.
+        </ParamField>
+        <ParamField path="modules.trackChanges.authorColors.resolve" type="(author) => string | undefined">
+          Callback for authors not covered by `overrides`. Receives `{ name, email, image }`. Return any CSS color string, or `undefined` to use SuperDoc's deterministic fallback color.
+        </ParamField>
+      </Expandable>
+    </ParamField>
   </Expandable>
 </ParamField>
 
@@ -244,6 +258,30 @@ new SuperDoc({
   documentMode: 'viewing',
   modules: {
     trackChanges: { visible: true, mode: 'review' },
+  },
+});
+```
+
+Assign per-author tracked-change colors without injecting CSS selectors:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  modules: {
+    trackChanges: {
+      visible: true,
+      authorColors: {
+        overrides: {
+          'alice@example.com': '#1f6feb',
+          'Bob Reviewer': '#d1242f',
+        },
+        resolve: (author) => {
+          if (author.email?.endsWith('@outside-counsel.com')) return '#8250df';
+          return undefined; // SuperDoc assigns a stable fallback color
+        },
+      },
+    },
   },
 });
 ```

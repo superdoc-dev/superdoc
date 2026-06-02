@@ -11,6 +11,8 @@ import { resolve, join } from 'path';
  */
 
 const SUPER_EDITOR_STYLES_DIR = resolve(__dirname, '../assets/styles');
+const SUPER_EDITOR_V1_DIR = resolve(__dirname, '..');
+const SUPERDOC_COMPONENTS_DIR = resolve(__dirname, '../../../../../superdoc/src/components');
 
 /**
  * Recursively find all .css files in a directory.
@@ -26,6 +28,33 @@ function findCssFiles(dir, prefix = '') {
     }
   }
   return results;
+}
+
+function findVueFiles(dir, prefix = '') {
+  const results = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      results.push(...findVueFiles(join(dir, entry.name), rel));
+    } else if (entry.name.endsWith('.vue')) {
+      results.push(rel);
+    }
+  }
+  return results;
+}
+
+function extractStyleBlocks(vueText) {
+  const blocks = [];
+  const styleTagPattern = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
+  let match;
+  while ((match = styleTagPattern.exec(vueText)) !== null) {
+    blocks.push(match[1] ?? '');
+  }
+  return blocks;
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -255,6 +284,73 @@ describe('CSS Bleed Prevention (SD-1850)', () => {
       const message = violations.map((v) => `  ${v.file}: @keyframes ${v.keyframe}`).join('\n');
       expect.fail(
         `Found @keyframes names not prefixed with "superdoc-" or "sd-":\n${message}\n\nRename to start with "superdoc-" or "sd-" to avoid collisions with host apps`,
+      );
+    }
+  });
+
+  it('should not reintroduce legacy un-namespaced class names in Vue SFC styles', () => {
+    const vueTargets = [
+      { root: SUPER_EDITOR_V1_DIR, label: 'super-editor' },
+      { root: SUPERDOC_COMPONENTS_DIR, label: 'superdoc' },
+    ];
+    const blockedClassNames = [
+      '.button-icon',
+      '.toolbar-item',
+      '.button-label',
+      '.dropdown-caret',
+      '.disabled',
+      '.is-disabled',
+      '.active',
+      '.selected',
+      '.error',
+      '.row',
+      '.submit',
+      '.submit-btn',
+      '.option',
+      '.option-row',
+      '.option-item',
+      '.option-state',
+      '.toolbar-button',
+      '.toolbar-icon',
+      '.caret',
+      '.visually-hidden',
+    ];
+    const allowlistedLegacyClassUsages = new Set([
+      // pdf.js applies `.selected` on text-layer highlights; keep compatibility.
+      'superdoc/PdfViewer/PdfViewerPage.vue::.selected',
+    ]);
+    const violations = [];
+
+    for (const target of vueTargets) {
+      const vueFiles = findVueFiles(target.root);
+      for (const file of vueFiles) {
+        const fullPath = join(target.root, file);
+        const vueText = readFileSync(fullPath, 'utf8');
+        const styleBlocks = extractStyleBlocks(vueText);
+
+        for (const block of styleBlocks) {
+          for (const blocked of blockedClassNames) {
+            const blockedPattern = new RegExp(`${escapeRegExp(blocked)}(?![\\w-])`);
+            if (blockedPattern.test(block)) {
+              const allowlistKey = `${target.label}/${file}::${blocked}`;
+              if (allowlistedLegacyClassUsages.has(allowlistKey)) {
+                continue;
+              }
+              violations.push({
+                file: `${target.label}/${file}`,
+                blocked,
+              });
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (violations.length > 0) {
+      const message = violations.map((v) => `  ${v.file}: contains legacy "${v.blocked}"`).join('\n');
+      expect.fail(
+        `Found legacy un-namespaced class names in Vue SFC styles:\n${message}\n\nUse sd-* class names instead.`,
       );
     }
   });

@@ -23,7 +23,8 @@ function resolveBlockId(receipt) {
   if (!receipt || typeof receipt !== 'object') return null;
   const v = receipt;
   if (typeof v.target?.blockId === 'string' && v.target.blockId) return v.target.blockId;
-  if (typeof v.resolution?.target?.blockId === 'string' && v.resolution.target.blockId) return v.resolution.target.blockId;
+  if (typeof v.resolution?.target?.blockId === 'string' && v.resolution.target.blockId)
+    return v.resolution.target.blockId;
   return null;
 }
 
@@ -59,7 +60,11 @@ describe('Editor content-control events', () => {
         editor.doc.create.contentControl({
           kind: 'inline',
           controlType: 'text',
-          at: { kind: 'selection', start: { kind: 'text', blockId, offset: start }, end: { kind: 'text', blockId, offset: end } },
+          at: {
+            kind: 'selection',
+            start: { kind: 'text', blockId, offset: start },
+            end: { kind: 'text', blockId, offset: end },
+          },
           tag,
           alias,
         }),
@@ -112,7 +117,11 @@ describe('Editor content-control events', () => {
     selectAt(editor, outsidePos(editor)); // B -> null (blur)
 
     expect(focus).toHaveBeenCalledTimes(2);
-    expect(focus.mock.calls[0][0]).toMatchObject({ active: { id: a.id, scope: 'inline' }, previous: null, source: 'keyboard' });
+    expect(focus.mock.calls[0][0]).toMatchObject({
+      active: { id: a.id, scope: 'inline' },
+      previous: null,
+      source: 'keyboard',
+    });
     expect(focus.mock.calls[0][0].activePath.map((r) => r.id)).toEqual([a.id]);
     expect(focus.mock.calls[1][0]).toMatchObject({ active: { id: b.id }, previous: { id: a.id }, source: 'keyboard' });
     expect(focus.mock.calls[1][0].activePath.map((r) => r.id)).toEqual([b.id]);
@@ -196,7 +205,12 @@ describe('Editor content-control events', () => {
     await Promise.resolve(editor.doc.insert({ value: 'Block clause body text' }));
     // kind: 'block' wraps the block containing the current selection.
     const r = await Promise.resolve(
-      editor.doc.create.contentControl({ kind: 'block', controlType: 'richText', tag: 'cc-block', alias: 'Block Control' }),
+      editor.doc.create.contentControl({
+        kind: 'block',
+        controlType: 'richText',
+        tag: 'cc-block',
+        alias: 'Block Control',
+      }),
     );
     expect(r.success).toBe(true);
 

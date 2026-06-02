@@ -102,6 +102,14 @@ import type { LayoutSourceIdentity } from './layout-identity.js';
 export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
 export type { NormalizedColumnLayout } from './column-layout.js';
 export {
+  composeAuthorColorResolver,
+  fallbackAuthorColor,
+  authorIdentityKey,
+  authorFromTrackedChangeMeta,
+  stampTrackedChangeColors,
+} from './author-colors.js';
+export type { AuthorColorsConfig, TrackChangeAuthorColorResolver } from './author-colors.js';
+export {
   getSdtContainerKey,
   getSdtContainerKeyForBlock,
   getSdtContainerMetadata,
@@ -255,6 +263,20 @@ export type TrackedChangeKind = 'insert' | 'delete' | 'format';
 
 export type TrackedChangesMode = 'review' | 'original' | 'final' | 'off';
 
+/**
+ * Identity of a tracked-change author, used to resolve a per-author color.
+ *
+ * Mirrors the author metadata carried on {@link TrackedChangeMeta}
+ * (`author` → `name`, `authorEmail` → `email`, `authorImage` → `image`).
+ * Hosts configure per-author colors through this shape (see the
+ * `modules.trackChanges.authorColors` config on the `superdoc` package).
+ */
+export type TrackChangeAuthor = {
+  name?: string;
+  email?: string;
+  image?: string;
+};
+
 /** Formatting mark for track-format metadata. */
 export type RunMark = {
   type: string;
@@ -281,6 +303,15 @@ export type TrackedChangeMeta = {
   date?: string;
   before?: RunMark[];
   after?: RunMark[];
+  /**
+   * Paint-ready per-author color, resolved upstream (in/around the
+   * pm-adapter data-preparation pass) from the author identity. DomPainter
+   * reads only this field and stamps the element-scoped tracked-change CSS
+   * variables from it — it never invokes resolvers or touches app config.
+   * Undefined when per-author colors are disabled or unconfigured, in which
+   * case the static default tracked-change palette applies.
+   */
+  color?: string;
 };
 
 export type FlowRunLinkTarget = '_blank' | '_self' | '_parent' | '_top';
@@ -1896,6 +1927,64 @@ export type Measure =
   | ColumnBreakMeasure;
 
 /** A rendered page containing positioned fragments. Page numbers are 1-indexed. */
+/**
+ * SD-2656: per-page footnote planning ledger.
+ *
+ * The single source of truth that body pagination, footnote placement, and
+ * continuation carry must all agree on. Without it the three subsystems read
+ * different numbers (body reserves X, planner paints Y, carry-forward thinks
+ * Z) and the resulting drift compounds across the document.
+ *
+ * Mandatory invariants checked by `tools/sd-2656-footnote-analyzer`:
+ *   1. `actualBandHeight <= appliedBodyReserve`  (band fits)
+ *   2. `mandatorySlices` always equals `full(non-last) + firstLine(last)` of
+ *      the page's anchored cluster (rule).
+ *   3. `continuationIn[P]` matches `continuationOut[P-1]` (carry parity).
+ *   4. `deadReserve = appliedBodyReserve - actualBandHeight` is small (drift
+ *      fuel above ~30 px is a planning bug).
+ */
+export type FootnoteContinuationEntry = {
+  /** Footnote id (OOXML id, not the Word visible number). */
+  id: string;
+  /** How many ranges remain to render. */
+  remainingRangeCount: number;
+  /** Total height of the remaining ranges. */
+  remainingHeightPx: number;
+};
+
+export type FootnotePageLedger = {
+  pageIndex: number;
+  /** Ordered footnote ids whose body refs are anchored on this page. */
+  anchorIds: string[];
+  /** Slices required by the rule: full of non-last + firstLine of last. */
+  mandatorySliceIds: string[];
+  /** Slices for content drained from prior pages. */
+  continuationSliceIds: string[];
+  /** Slices for last-anchor content beyond firstLine (rendered only if there
+   *  is leftover space after mandatory + continuation). */
+  extendedSliceIds: string[];
+  /** Continuations arriving from page-1. */
+  continuationIn: FootnoteContinuationEntry[];
+  /** Continuations deferred to page+1. */
+  continuationOut: FootnoteContinuationEntry[];
+  /** Mandatory-reserve px: mandatorySlices height + overhead. */
+  mandatoryReservePx: number;
+  /** SD-2656 Phase 7: Word-like "preferred" reserve px. Body slicer is allowed
+   *  to reserve this much when doing so does not cause cluster spill or
+   *  continuation overflow. = full(non-last) + asMuchAsFits(last) + overhead. */
+  preferredReservePx: number;
+  /** Total painted band height in px, including separator + gaps. */
+  actualBandHeightPx: number;
+  /** Body's applied reserve (i.e. `page.footnoteReserved`) for this page. */
+  appliedBodyReservePx: number;
+  /** appliedBodyReservePx - actualBandHeightPx — wasted body area. */
+  deadReservePx: number;
+  /** Number of measured lines actually rendered for the LAST anchor on this
+   *  page (0 if there is no cluster anchor). Used to flag "mandatory-only"
+   *  pages where Word would have rendered more. */
+  lastAnchorRenderedLines: number;
+};
+
 export type Page = {
   number: number;
   fragments: Fragment[];
@@ -1906,6 +1995,12 @@ export type Page = {
    * decoration boxes anchored to the real bottom margin while the body shrinks.
    */
   footnoteReserved?: number;
+  /**
+   * SD-2656: page-level footnote planning ledger. Populated by the layout
+   * bridge when footnotes are present. Read by the diagnostic toolkit and
+   * (in later phases) by body pagination itself.
+   */
+  footnoteLedger?: FootnotePageLedger;
   numberText?: string;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';

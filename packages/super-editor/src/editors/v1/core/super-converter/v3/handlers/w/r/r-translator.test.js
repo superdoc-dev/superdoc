@@ -423,7 +423,7 @@ describe('w:r r-translator (node)', () => {
     expect(runPropertiesChange).toEqual(
       expect.objectContaining({
         attributes: expect.objectContaining({
-          'w:id': 'format-1',
+          'w:id': expect.stringMatching(/^\d+$/),
           'w:author': 'Missy Fox',
         }),
       }),

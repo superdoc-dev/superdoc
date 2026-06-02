@@ -5159,6 +5159,7 @@ describe('DomPainter', () => {
             id: 'change-1',
             author: 'Reviewer 1',
             authorEmail: 'reviewer@example.com',
+            color: '#123456',
           },
         },
       ],
@@ -5183,6 +5184,9 @@ describe('DomPainter', () => {
     expect(span.dataset.trackChangeKind).toBe('insert');
     expect(span.dataset.trackChangeAuthor).toBe('Reviewer 1');
     expect(span.dataset.trackChangeAuthorEmail).toBe('reviewer@example.com');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-border')).toBe('#123456');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background')).toBe('#12345622');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background-focused')).toBe('#12345644');
   });
 
   it('renders overlapping parent insert and child delete as an insertion with delete strikethrough metadata', () => {

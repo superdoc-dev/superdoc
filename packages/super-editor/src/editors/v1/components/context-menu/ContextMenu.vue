@@ -652,7 +652,7 @@ onBeforeUnmount(() => {
         <template v-for="item in section.items" :key="item.id">
           <div
             class="context-menu-item"
-            :class="{ 'is-selected': item.id === selectedId }"
+            :class="{ 'sd-is-selected': item.id === selectedId }"
             @click="executeCommand(item)"
           >
             <!-- Custom rendered content or default rendering -->
@@ -772,7 +772,7 @@ onBeforeUnmount(() => {
   background: var(--sd-ui-menu-item-hover-bg, #f5f5f5);
 }
 
-.context-menu-item.is-selected {
+.context-menu-item.sd-is-selected {
   background: var(--sd-ui-menu-item-active-bg, #edf6ff);
   color: var(--sd-ui-menu-item-active-text, #0096fd);
   fill: var(--sd-ui-menu-item-active-text, #0096fd);
@@ -801,7 +801,7 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
-.popover {
+.sd-popover {
   background: var(--sd-ui-menu-bg, #ffffff);
   border-radius: var(--sd-ui-menu-radius, 0);
   box-shadow: var(--sd-ui-menu-shadow, 0 0 0 1px rgba(0, 0, 0, 0.05), 0px 10px 20px rgba(0, 0, 0, 0.1));

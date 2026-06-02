@@ -1,4 +1,5 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import { TrackDeleteMarkName } from '../../extensions/track-changes/constants.js';
 
 export type TextOffsetRange = {
   start: number;
@@ -9,6 +10,24 @@ export type ResolvedTextRange = {
   from: number;
   to: number;
 };
+
+export type TextOffsetModel = 'raw' | 'visible';
+
+export type TextOffsetOptions = {
+  textModel?: TextOffsetModel;
+};
+
+function isVisibleTextModel(options?: TextOffsetOptions): boolean {
+  return options?.textModel === 'visible';
+}
+
+function hasTrackDeleteMark(node: ProseMirrorNode): boolean {
+  return node.marks?.some((mark) => mark.type.name === TrackDeleteMarkName) ?? false;
+}
+
+function shouldSkipTextNode(node: ProseMirrorNode, options?: TextOffsetOptions): boolean {
+  return isVisibleTextModel(options) && hasTrackDeleteMark(node);
+}
 
 function resolveSegmentPosition(
   targetOffset: number,
@@ -35,7 +54,12 @@ function resolveSegmentPosition(
  * (`run`, etc.) or leaf atoms, because PM positions include wrapper
  * boundary tokens that the flattened model does not.
  */
-export function pmPositionToTextOffset(blockNode: ProseMirrorNode, blockPos: number, pmPos: number): number {
+export function pmPositionToTextOffset(
+  blockNode: ProseMirrorNode,
+  blockPos: number,
+  pmPos: number,
+  options?: TextOffsetOptions,
+): number {
   const contentStart = blockPos + 1;
   if (pmPos <= contentStart) return 0;
 
@@ -48,6 +72,10 @@ export function pmPositionToTextOffset(blockNode: ProseMirrorNode, blockPos: num
     if (node.isText) {
       const text = node.text ?? '';
       const endPos = docPos + text.length;
+      if (shouldSkipTextNode(node, options)) {
+        if (pmPos < endPos) done = true;
+        return;
+      }
       if (pmPos >= endPos) {
         offset += text.length;
       } else {
@@ -103,11 +131,12 @@ export function pmPositionToTextOffset(blockNode: ProseMirrorNode, blockPos: num
  * offset model as {@link resolveTextRangeInBlock}: text contributes its
  * length, leaf atoms contribute 1, block separators contribute 1.
  */
-export function computeTextContentLength(blockNode: ProseMirrorNode): number {
+export function computeTextContentLength(blockNode: ProseMirrorNode, options?: TextOffsetOptions): number {
   let length = 0;
 
   const walk = (node: ProseMirrorNode): void => {
     if (node.isText) {
+      if (shouldSkipTextNode(node, options)) return;
       length += (node.text ?? '').length;
       return;
     }
@@ -149,6 +178,7 @@ export function resolveTextRangeInBlock(
   blockNode: ProseMirrorNode,
   blockPos: number,
   range: TextOffsetRange,
+  options?: TextOffsetOptions,
 ): ResolvedTextRange | null {
   if (range.start < 0 || range.end < range.start) return null;
 
@@ -192,7 +222,7 @@ export function resolveTextRangeInBlock(
   const walkNode = (node: ProseMirrorNode, docPos: number) => {
     if (node.isText) {
       const text = node.text ?? '';
-      if (text.length > 0) {
+      if (text.length > 0 && !shouldSkipTextNode(node, options)) {
         advanceSegment(text.length, docPos, docPos + text.length);
       }
       return;
@@ -218,4 +248,40 @@ export function resolveTextRangeInBlock(
   if (range.end > offset) return null;
   if (fromPos == null || toPos == null) return null;
   return { from: fromPos, to: toPos };
+}
+
+export function textContentInBlock(blockNode: ProseMirrorNode, options?: TextOffsetOptions): string {
+  let text = '';
+
+  const walkNode = (node: ProseMirrorNode): void => {
+    if (node.isText) {
+      if (!shouldSkipTextNode(node, options)) {
+        text += node.text ?? '';
+      }
+      return;
+    }
+
+    if (node.isLeaf) {
+      text += '\ufffc';
+      return;
+    }
+
+    let isFirstChild = true;
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (child.isBlock && !isFirstChild) text += '\n';
+      walkNode(child);
+      isFirstChild = false;
+    }
+  };
+
+  let isFirstChild = true;
+  for (let i = 0; i < blockNode.childCount; i++) {
+    const child = blockNode.child(i);
+    if (child.isBlock && !isFirstChild) text += '\n';
+    walkNode(child);
+    isFirstChild = false;
+  }
+
+  return text;
 }

@@ -1,6 +1,7 @@
 // @ts-check
 import { NodeSelection, TextSelection, AllSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
+import { v4 as uuidv4 } from 'uuid';
 import { Attribute } from '@core/Attribute.js';
 import { defaultBlockAt } from '@core/helpers/defaultBlockAt.js';
 import { getSplitRunProperties, syncSplitParagraphRunProperties } from '@core/helpers/splitParagraphRunProperties.js';
@@ -11,6 +12,9 @@ import {
 } from '@core/commands/linkedStyleSplitHelpers.js';
 import { resolveRunProperties, encodeMarksFromRPr } from '@core/super-converter/styles.js';
 import { extractTableInfo } from '../calculateInlineRunPropertiesPlugin.js';
+import { TrackFormatMarkName } from '../../track-changes/constants.js';
+import { TrackChangesBasePluginKey } from '../../track-changes/plugins/index.js';
+import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 
 function isHeadingStyleId(styleId) {
   return typeof styleId === 'string' && /^heading\s*[1-6]$/i.test(styleId.trim());
@@ -29,6 +33,134 @@ function clearHeadingStyleId(attrs) {
     ...attrs,
     paragraphProperties: nextParagraphProperties,
   };
+}
+
+function isTrackChangesActive(state) {
+  return TrackChangesBasePluginKey.getState(state)?.isTrackChangesActive === true;
+}
+
+function findTextblockAt(doc, pos) {
+  const bounded = Math.max(0, Math.min(pos, doc.content.size));
+  const $pos = doc.resolve(bounded);
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    const node = $pos.node(depth);
+    if (node.isTextblock) {
+      return { pos: $pos.before(depth), node };
+    }
+  }
+  return null;
+}
+
+function findPreviousTextblock(doc, beforePos) {
+  let found = null;
+  doc.descendants((node, pos) => {
+    if (pos >= beforePos) return false;
+    if (node.isTextblock) found = { pos, node };
+    return true;
+  });
+  return found;
+}
+
+function findTrackableTextRange(doc, block) {
+  let from = null;
+  let to = null;
+  doc.nodesBetween(block.pos + 1, block.pos + block.node.nodeSize - 1, (node, pos) => {
+    if (!node.isText || !node.text) return true;
+    from ??= pos;
+    to = pos + node.nodeSize;
+    return true;
+  });
+  const resolvedFrom = from;
+  const resolvedTo = to;
+  if (typeof resolvedFrom !== 'number' || typeof resolvedTo !== 'number') return null;
+  if (resolvedFrom >= resolvedTo) return null;
+  return { from: resolvedFrom, to: resolvedTo };
+}
+
+function textOffsetInBlock($from, blockDepth) {
+  return $from.doc.textBetween($from.start(blockDepth), $from.pos, '', '\ufffc').length;
+}
+
+function collectMarkedTextNodes(doc, range, changeId) {
+  const nodes = [];
+  doc.nodesBetween(range.from, range.to, (node) => {
+    if (
+      node.isText &&
+      node.marks.some((mark) => mark.type.name === TrackFormatMarkName && mark.attrs?.id === changeId)
+    ) {
+      nodes.push(node);
+    }
+    return true;
+  });
+  return nodes;
+}
+
+function addTrackedParagraphSplitMark({ state, tr, editor, splitSelection, sourceBlockDepth }) {
+  if (!isTrackChangesActive(state)) return;
+
+  const markType = state.schema.marks[TrackFormatMarkName];
+  const user = editor?.options?.user;
+  if (!markType || !user) return;
+
+  const insertedBlock = findTextblockAt(tr.doc, tr.selection.from);
+  if (!insertedBlock) return;
+
+  const sourceBlock = findPreviousTextblock(tr.doc, insertedBlock.pos);
+  let anchor = 'source';
+  let anchorBlock = sourceBlock;
+  let range = anchorBlock ? findTrackableTextRange(tr.doc, anchorBlock) : null;
+
+  if (!range) {
+    anchor = 'inserted';
+    anchorBlock = insertedBlock;
+    range = findTrackableTextRange(tr.doc, anchorBlock);
+  }
+
+  if (!range) return;
+
+  const changeId = uuidv4();
+  const mark = markType.create({
+    id: changeId,
+    author: user.name || '',
+    authorId: user.id || '',
+    authorEmail: user.email || '',
+    authorImage: user.image || '',
+    date: new Date().toISOString(),
+    before: [
+      {
+        type: 'paragraphSplit',
+        attrs: {
+          anchor,
+          offset: textOffsetInBlock(splitSelection, sourceBlockDepth),
+        },
+      },
+    ],
+    after: [
+      {
+        type: 'paragraphSplit',
+        attrs: {
+          anchor,
+        },
+      },
+    ],
+    revisionGroupId: changeId,
+    changeType: 'formatting',
+    origin: 'superdoc',
+  });
+
+  tr.addMark(range.from, range.to, mark);
+  tr.setMeta('skipTrackChanges', true);
+  tr.setMeta(TrackChangesBasePluginKey, {
+    formatMark: mark,
+    step: {
+      slice: {
+        content: {
+          content: collectMarkedTextNodes(tr.doc, range, changeId),
+        },
+      },
+    },
+  });
+  tr.setMeta(CommentsPluginKey, { type: 'force' });
 }
 
 /**
@@ -157,6 +289,15 @@ export function splitBlockPatch(state, dispatch, editor) {
   }
 
   applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo);
+  if (splitDepth) {
+    addTrackedParagraphSplitMark({
+      state,
+      tr,
+      editor,
+      splitSelection: $from,
+      sourceBlockDepth: splitDepth,
+    });
+  }
 
   if (dispatch) dispatch(tr.scrollIntoView());
   return true;

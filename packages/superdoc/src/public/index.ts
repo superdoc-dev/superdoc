@@ -119,6 +119,8 @@ export type { SurfaceRequest } from '../core/types/index.js';
 export type { SurfaceResolution } from '../core/types/index.js';
 export type { SurfaceResolver } from '../core/types/index.js';
 export type { SurfacesModuleConfig } from '../core/types/index.js';
+export type { TrackChangeAuthor } from '../core/types/index.js';
+export type { TrackChangesAuthorColorsConfig } from '../core/types/index.js';
 export type { TrackChangesModuleConfig } from '../core/types/index.js';
 export type { TrackedChangeAddress } from '../core/types/index.js';
 export type { UpgradeToCollaborationOptions } from '../core/types/index.js';

@@ -1,22 +1,22 @@
 # SD-3212 A1 — root classification
 
 Generated: 2026-05-25T00:00:00.000Z
-Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (205 names, locked baseline)
+Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (219 names, locked baseline)
 
 ## Summary
 
 | Bucket | Count |
 |---|---|
-| supported-root | 146 |
+| supported-root | 148 |
 | legacy-root | 60 |
 | move-to-subpath | 0 |
 | internal-candidate | 8 |
 | NEEDS-REVIEW | 0 |
-| **total** | **214** |
+| **total** | **216** |
 
-Confidence: high=111, medium=101, needs-review=0.
+Confidence: high=113, medium=101, needs-review=0.
 
-## supported-root (146)
+## supported-root (148)
 
 | Name | Confidence | Source | Rationale |
 |---|---|---|---|
@@ -137,6 +137,8 @@ Confidence: high=111, medium=101, needs-review=0.
 | `TextAddress` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `TextSegment` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `TextTarget` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
+| `TrackChangeAuthor` | high | locked | Structured author identity passed to modules.trackChanges.authorColors.resolve. |
+| `TrackChangesAuthorColorsConfig` | high | locked | Module config for per-author tracked-change colors (modules.trackChanges.authorColors). Documented at the module-config layer. |
 | `TrackChangesModuleConfig` | high | locked | Module config for track-changes (modules.trackChanges). Documented at the module-config layer. |
 | `TrackedChangeAddress` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `TrackedChangesMode` | medium | comments-track | Comments/track-changes type used by Document API consumers. |
@@ -240,4 +242,3 @@ Confidence: high=111, medium=101, needs-review=0.
 | `registeredHandlers` | high | locked | Registry side-effect; 0 docs, 0 examples. Not customer-facing API. |
 | `superEditorHelpers` | high | locked | Helper namespace bag. 0 docs, 0 examples. Likely accidental export. |
 | `trackChangesHelpers` | high | locked | Track-changes helpers. Document API trackChanges.* has partial coverage; helpers are the lower-level access; no public docs. |
-

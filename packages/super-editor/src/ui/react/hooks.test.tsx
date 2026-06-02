@@ -142,7 +142,7 @@ describe('domain hooks', () => {
     );
 
     expect(comments).toEqual({ items: [], activeIds: [], total: 0 });
-    expect(trackChanges).toEqual({ items: [], total: 0, activeId: null });
+    expect(trackChanges).toEqual({ items: [], total: 0, activeId: null, authors: [] });
     expect(contentControls).toEqual({ items: [], activeIds: [], activeId: null, total: 0 });
     expect(toolbar).toEqual({ context: null, commands: {} });
   });

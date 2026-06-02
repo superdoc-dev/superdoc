@@ -40,7 +40,12 @@ import {
   type BlockCandidate,
   type BlockIndex,
 } from '../helpers/node-address-resolver.js';
-import { resolveTextRangeInBlock } from '../helpers/text-offset-resolver.js';
+import {
+  resolveTextRangeInBlock,
+  textContentInBlock,
+  type TextOffsetModel,
+  type TextOffsetOptions,
+} from '../helpers/text-offset-resolver.js';
 import { resolveSelectionTarget, resolveSelectionPointPosition } from '../helpers/selection-target-resolver.js';
 import { expandDeleteSelection } from '../helpers/expand-delete-selection.js';
 
@@ -238,6 +243,18 @@ interface ResolvedAddress {
   text: string;
   marks: readonly unknown[];
   blockPos: number;
+  textModel: TextOffsetModel;
+}
+
+export interface CompilePlanOptions {
+  /**
+   * Text model used only for `where.by = "select"` text selectors.
+   *
+   * Public discovery refs and explicit SelectionTargets stay visible-offset
+   * based. Tracked authoring selectors can opt into raw/review text so they
+   * can address unresolved deletion text without changing public read APIs.
+   */
+  selectTextModel?: TextOffsetModel;
 }
 
 // ---------------------------------------------------------------------------
@@ -250,8 +267,9 @@ function resolveAbsoluteRange(
   from: number,
   to: number,
   stepId: string,
+  options?: TextOffsetOptions,
 ): { absFrom: number; absTo: number } {
-  const resolved = resolveTextRangeInBlock(candidate.node, candidate.pos, { start: from, end: to });
+  const resolved = resolveTextRangeInBlock(candidate.node, candidate.pos, { start: from, end: to }, options);
   if (!resolved) {
     throw planError('INVALID_INPUT', `text offset [${from}, ${to}) out of range in block`, stepId);
   }
@@ -381,10 +399,11 @@ function buildRangeTarget(
   addr: ResolvedAddress,
   candidate: Pick<BlockCandidate, 'node' | 'pos'>,
 ): CompiledRangeTarget {
-  const abs = resolveAbsoluteRange(editor, candidate, addr.from, addr.to, step.id);
+  const textOffsetOptions = { textModel: addr.textModel };
+  const abs = resolveAbsoluteRange(editor, candidate, addr.from, addr.to, step.id, textOffsetOptions);
   const capturedStyle =
     step.op === 'text.rewrite' || step.op === 'format.apply'
-      ? captureRunsInRange(editor, candidate.pos, addr.from, addr.to)
+      ? captureRunsInRange(editor, candidate.pos, addr.from, addr.to, textOffsetOptions)
       : undefined;
 
   return {
@@ -412,6 +431,7 @@ function buildSpanTarget(
   step: MutationStep,
   segments: Array<{ blockId: string; from: number; to: number }>,
   matchId: string,
+  textModel: TextOffsetModel = 'visible',
 ): CompiledSpanTarget {
   // Validate segment ordering and contiguity in document order
   validateSegmentOrder(editor, index, segments, step.id);
@@ -426,7 +446,8 @@ function buildSpanTarget(
       throw planError('INVALID_INPUT', `block "${seg.blockId}" not found for span segment`, step.id);
     }
 
-    const abs = resolveAbsoluteRange(editor, candidate, seg.from, seg.to, step.id);
+    const textOffsetOptions = { textModel };
+    const abs = resolveAbsoluteRange(editor, candidate, seg.from, seg.to, step.id, textOffsetOptions);
     compiledSegments.push({
       blockId: seg.blockId,
       from: seg.from,
@@ -435,11 +456,11 @@ function buildSpanTarget(
       absTo: abs.absTo,
     });
 
-    const blockText = getBlockText(editor, candidate);
+    const blockText = getBlockText(editor, candidate, textOffsetOptions);
     textParts.push(blockText.slice(seg.from, seg.to));
 
     if (step.op === 'text.rewrite' || step.op === 'format.apply') {
-      capturedStyles.push(captureRunsInRange(editor, candidate.pos, seg.from, seg.to));
+      capturedStyles.push(captureRunsInRange(editor, candidate.pos, seg.from, seg.to, textOffsetOptions));
     }
   }
 
@@ -516,15 +537,17 @@ function resolveTextSelector(
   selector: TextSelector | NodeSelector,
   within: import('@superdoc/document-api').BlockNodeAddress | undefined,
   stepId: string,
-  options?: { allBlockTypes?: boolean },
+  options?: { allBlockTypes?: boolean; textModel?: TextOffsetModel },
 ): { addresses: ResolvedAddress[] } {
+  const textModel = options?.textModel ?? 'visible';
+  const textOffsetOptions = { textModel };
   if (selector.type === 'text') {
     const query = {
       select: selector,
       within: within as import('@superdoc/document-api').BlockNodeAddress | undefined,
       includeNodes: false,
     };
-    const result = executeTextSelector(editor, index, query, []);
+    const result = executeTextSelector(editor, index, query, [], { searchModel: textModel });
 
     const addresses: ResolvedAddress[] = [];
 
@@ -536,9 +559,9 @@ function resolveTextSelector(
         const candidate = index.candidates.find((c) => c.nodeId === coalesced.blockId);
         if (!candidate) continue;
 
-        const blockText = getBlockText(editor, candidate);
+        const blockText = getBlockText(editor, candidate, textOffsetOptions);
         const matchText = blockText.slice(coalesced.from, coalesced.to);
-        const captured = captureRunsInRange(editor, candidate.pos, coalesced.from, coalesced.to);
+        const captured = captureRunsInRange(editor, candidate.pos, coalesced.from, coalesced.to, textOffsetOptions);
 
         addresses.push({
           blockId: coalesced.blockId,
@@ -547,6 +570,7 @@ function resolveTextSelector(
           text: matchText,
           marks: captured.runs.length > 0 ? captured.runs[0].marks : [],
           blockPos: candidate.pos,
+          textModel,
         });
       }
     }
@@ -573,7 +597,7 @@ function resolveTextSelector(
     if (!candidate) continue;
 
     if (isTextBlockCandidate(candidate)) {
-      const blockText = getBlockText(editor, candidate);
+      const blockText = getBlockText(editor, candidate, textOffsetOptions);
       addresses.push({
         blockId: match.nodeId,
         from: 0,
@@ -581,6 +605,7 @@ function resolveTextSelector(
         text: blockText,
         marks: [],
         blockPos: candidate.pos,
+        textModel,
       });
     } else {
       // Non-text block (table, image wrapper, etc.): no text offsets needed.
@@ -592,6 +617,7 @@ function resolveTextSelector(
         text: '',
         marks: [],
         blockPos: candidate.pos,
+        textModel,
       });
     }
   }
@@ -599,7 +625,14 @@ function resolveTextSelector(
   return { addresses };
 }
 
-function getBlockText(editor: Editor, candidate: { pos: number; end: number }): string {
+function getBlockText(
+  editor: Editor,
+  candidate: { node?: BlockCandidate['node']; pos: number; end: number },
+  options: TextOffsetOptions = { textModel: 'visible' },
+): string {
+  if (candidate.node && candidate.node.childCount > 0) {
+    return textContentInBlock(candidate.node, options);
+  }
   const blockStart = candidate.pos + 1;
   const blockEnd = candidate.end - 1;
   return editor.state.doc.textBetween(blockStart, blockEnd, '\n', '\ufffc');
@@ -655,6 +688,7 @@ function resolveV3TextRef(editor: Editor, index: BlockIndex, step: MutationStep,
       text: matchText,
       marks: [],
       blockPos: candidate.pos,
+      textModel: 'visible',
     };
 
     const target = buildRangeTarget(editor, step, addr, candidate);
@@ -663,7 +697,7 @@ function resolveV3TextRef(editor: Editor, index: BlockIndex, step: MutationStep,
   }
 
   // Multi-segment match refs → span target
-  return [buildSpanTarget(editor, index, step, segments, refData.matchId)];
+  return [buildSpanTarget(editor, index, step, segments, refData.matchId, 'visible')];
 }
 
 /**
@@ -728,6 +762,7 @@ function resolveV4TextRef(
       text: matchText,
       marks: [],
       blockPos: candidate.pos,
+      textModel: 'visible',
     };
 
     const target = buildRangeTarget(editor, step, addr, candidate);
@@ -736,7 +771,7 @@ function resolveV4TextRef(
   }
 
   // Multi-segment → span target
-  return [buildSpanTarget(editor, index, step, segments, refData.matchId ?? `v4:${step.id}`)];
+  return [buildSpanTarget(editor, index, step, segments, refData.matchId ?? `v4:${step.id}`, 'visible')];
 }
 
 function resolveTextRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
@@ -778,6 +813,7 @@ function resolveBlockRef(editor: Editor, index: BlockIndex, step: MutationStep, 
     text: blockText,
     marks: [],
     blockPos: candidate.pos,
+    textModel: 'visible',
   };
 
   return [buildRangeTarget(editor, step, addr, candidate)];
@@ -902,6 +938,7 @@ function buildWholeBlockRangeTarget(
       text: blockText,
       marks: [],
       blockPos: candidate.pos,
+      textModel: 'visible',
     };
     return buildRangeTarget(editor, step, addr, candidate);
   }
@@ -1010,7 +1047,12 @@ function captureStyleAtAbsoluteRange(editor: Editor, absFrom: number, absTo: num
 // Step target resolution
 // ---------------------------------------------------------------------------
 
-function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationStep): CompiledTarget[] {
+function resolveStepTargets(
+  editor: Editor,
+  index: BlockIndex,
+  step: MutationStep,
+  options: CompilePlanOptions = {},
+): CompiledTarget[] {
   const where = step.where;
   const refWhere = isRefWhere(where) ? where : undefined;
   const selectWhere = isSelectWhere(where) ? where : undefined;
@@ -1030,6 +1072,7 @@ function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationSte
     const isStructuralOp = step.op === 'structural.insert' || step.op === 'structural.replace';
     const resolved = resolveTextSelector(editor, index, selectWhere.select, selectWhere.within, step.id, {
       allBlockTypes: isStructuralOp,
+      textModel: options.selectTextModel ?? 'visible',
     });
     targets = resolved.addresses.map((addr) => {
       const candidate = index.candidates.find((c) => c.nodeId === addr.blockId);
@@ -1518,7 +1561,7 @@ function assertSingleStoryKey(steps: MutationStep[]): void {
   }
 }
 
-export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan {
+export function compilePlan(editor: Editor, steps: MutationStep[], options: CompilePlanOptions = {}): CompiledPlan {
   // D8: plan step limit
   if (steps.length > MAX_PLAN_STEPS) {
     throw planError('INVALID_INPUT', `plan contains ${steps.length} steps, maximum is ${MAX_PLAN_STEPS}`);
@@ -1576,7 +1619,7 @@ export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan
       validateCreateStepPosition(step);
     }
 
-    const targets = resolveStepTargets(editor, index, step);
+    const targets = resolveStepTargets(editor, index, step, options);
 
     // Validate insertion context for create ops (B0 invariant 5)
     if (isCreateOp(step.op) && targets.length > 0) {

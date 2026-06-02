@@ -3269,7 +3269,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
   }
 
-
   #collectActiveSdtRefs(selection: EditorState['selection']): SdtRef[] {
     const refs: SdtRef[] = [];
     const seenIds = new Set<string>();

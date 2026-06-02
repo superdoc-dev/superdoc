@@ -81,7 +81,10 @@ const _onContentControlActiveChangeOk: AssertEqual<
   ParamOf<Config['onContentControlActiveChange']>,
   ContentControlActiveChangePayload
 > = true;
-const _onContentControlClickOk: AssertEqual<ParamOf<Config['onContentControlClick']>, ContentControlClickPayload> = true;
+const _onContentControlClickOk: AssertEqual<
+  ParamOf<Config['onContentControlClick']>,
+  ContentControlClickPayload
+> = true;
 
 // ─── onAwarenessUpdate ──────────────────────────────────────────────
 // Field set is `{ states, added, removed, superdoc }` - NOT `context`.

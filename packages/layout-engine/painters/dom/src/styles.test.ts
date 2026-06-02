@@ -322,6 +322,60 @@ describe('ensureSdtContainerStyles', () => {
     expect(lastChromeShowing).toBeGreaterThan(-1);
     expect(chromeNoneSuppression).toBeGreaterThan(lastChromeShowing);
   });
+
+  it('exposes a --sd-content-controls-custom-* styling surface under chrome-none (SD-3322)', () => {
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    // Inline rest reads the custom vars; the default-preserving fallbacks
+    // (0-width transparent border, no background/radius/padding) keep
+    // chrome-none visually empty when no variable is set.
+    expect(cssText).toContain('background: var(--sd-content-controls-custom-inline-bg, none);');
+    expect(cssText).toContain('border: var(--sd-content-controls-custom-inline-border, 0 solid transparent);');
+    expect(cssText).toContain('padding: var(--sd-content-controls-custom-inline-padding, 0);');
+    expect(cssText).toContain('border-radius: var(--sd-content-controls-custom-inline-radius, 0);');
+
+    // Hover and selected re-assert the SAME border var (constant box, no jitter)
+    // and read the background vars, which cascade from the rest background.
+    expect(cssText).toContain(
+      'background: var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none));',
+    );
+    expect(cssText).toContain(
+      'background: var(--sd-content-controls-custom-inline-selected-bg, var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none)));',
+    );
+
+    // Block exposes the same set plus an accent rail (-border-left) that falls
+    // back to the regular border.
+    expect(cssText).toContain('background: var(--sd-content-controls-custom-block-bg, none);');
+    expect(cssText).toContain(
+      'border-left: var(--sd-content-controls-custom-block-border-left, var(--sd-content-controls-custom-block-border, 0 solid transparent));',
+    );
+  });
+
+  it('locked-hover under chrome-none follows the custom hover background, not the built-in lock-hover (SD-3322)', () => {
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    // The base lock-hover rules (built-in tint on inline, transparent on block)
+    // come first and have equal specificity to the plain custom hover rules, so
+    // they would otherwise win for locked controls.
+    const baseInlineLockHover = cssText.indexOf('background-color: var(--sd-content-controls-lock-hover-bg');
+    const baseBlockLockHover = cssText.indexOf(
+      '.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode) {',
+    );
+    expect(baseInlineLockHover).toBeGreaterThan(-1);
+    expect(baseBlockLockHover).toBeGreaterThan(-1);
+
+    // The chrome-none lock-hover reset re-asserts the custom hover background
+    // AFTER them (extra .superdoc-cc-chrome-none class + later source order wins),
+    // so a locked control under chrome:'none' uses the custom variable.
+    const customInlineHoverReassert = cssText.lastIndexOf('--sd-content-controls-custom-inline-hover-bg');
+    const customBlockHoverReassert = cssText.lastIndexOf('--sd-content-controls-custom-block-hover-bg');
+    expect(customInlineHoverReassert).toBeGreaterThan(baseInlineLockHover);
+    expect(customBlockHoverReassert).toBeGreaterThan(baseBlockLockHover);
+  });
 });
 
 describe('ensureTrackChangeStyles', () => {

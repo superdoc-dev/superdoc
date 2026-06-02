@@ -12,10 +12,14 @@ import type {
   PageNumberChapterSeparator,
   PageNumberFormat,
 } from '@superdoc/contracts';
-import { cloneColumnLayout, normalizeColumnLayout, rescaleColumnWidths } from '@superdoc/contracts';
+import {
+  cloneColumnLayout,
+  formatSectionPageNumberText,
+  normalizeColumnLayout,
+  rescaleColumnWidths,
+} from '@superdoc/contracts';
 import {
   layoutDocument,
-  layoutHeaderFooter,
   type LayoutOptions,
   type HeaderFooterConstraints,
   computeDisplayPageNumber,
@@ -23,6 +27,7 @@ import {
   type NumberingContext,
   buildChapterContextByPage,
   type ChapterPageInfo,
+  normalizeChapterMarkerText,
   SEMANTIC_PAGE_HEIGHT_PX,
   SINGLE_COLUMN_DEFAULT,
   resolveTableFrame,
@@ -30,7 +35,12 @@ import {
 import { remeasureParagraph } from './remeasure';
 import { computeDirtyRegions } from './diff';
 import { MeasureCache } from './cache';
-import { layoutHeaderFooterWithCache, HeaderFooterLayoutCache, type HeaderFooterBatch } from './layoutHeaderFooter';
+import {
+  layoutHeaderFooterWithCache,
+  HeaderFooterLayoutCache,
+  type HeaderFooterBatch,
+  type PageResolver,
+} from './layoutHeaderFooter';
 import {
   buildSectionAwareHeaderFooterLayoutKey,
   buildSectionAwareHeaderFooterMeasurementGroups,
@@ -959,6 +969,7 @@ export async function incrementalLayout(
     blocksByRId: Map<string, FlowBlock[]> | undefined,
     constraints: HeaderFooterConstraints,
     measureFn: HeaderFooterMeasureFn,
+    pageResolver?: PageResolver,
   ): Promise<{
     heightsByRId?: Map<string, number>;
     heightsBySectionRef?: Map<string, number>;
@@ -981,13 +992,17 @@ export async function incrementalLayout(
         const blocks = blocksByRId.get(group.rId);
         if (!blocks || blocks.length === 0) continue;
 
-        const measureConstraints = {
-          maxWidth: group.sectionConstraints.width,
-          maxHeight: group.sectionConstraints.height,
-        };
-        const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-        const layout = layoutHeaderFooter(blocks, measures, group.sectionConstraints, kind);
-        if (!(layout.height > 0)) continue;
+        const layouts = await layoutHeaderFooterWithCache(
+          { default: blocks },
+          group.sectionConstraints,
+          measureFn,
+          headerMeasureCache,
+          1,
+          pageResolver,
+          kind,
+        );
+        const layout = layouts.default?.layout;
+        if (!layout || !(layout.height > 0)) continue;
 
         const nextHeight = Math.max(0, layout.height);
         const currentHeight = heightsByRId.get(group.rId) ?? 0;
@@ -1009,13 +1024,17 @@ export async function incrementalLayout(
     for (const [rId, blocks] of blocksByRId) {
       if (!blocks || blocks.length === 0) continue;
 
-      const measureConstraints = {
-        maxWidth: constraints.width,
-        maxHeight: constraints.height,
-      };
-      const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-      const layout = layoutHeaderFooter(blocks, measures, constraints, kind);
-      if (layout.height > 0) {
+      const layouts = await layoutHeaderFooterWithCache(
+        { default: blocks },
+        constraints,
+        measureFn,
+        headerMeasureCache,
+        1,
+        pageResolver,
+        kind,
+      );
+      const layout = layouts.default?.layout;
+      if (layout && layout.height > 0) {
         heightsByRId.set(rId, layout.height);
       }
     }
@@ -1045,6 +1064,7 @@ export async function incrementalLayout(
      * header height calculations. A value of 1 is sufficient as a placeholder.
      */
     const HEADER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT = 1;
+    const prelayoutPageResolver = buildConservativePrelayoutPageResolver(nextBlocks, sectionMetadata);
 
     /**
      * Type guard to check if a key is a valid header variant type.
@@ -1068,7 +1088,7 @@ export async function incrementalLayout(
         measureFn,
         headerMeasureCache,
         HEADER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT,
-        undefined, // No page resolver needed for height calculation
+        prelayoutPageResolver,
         'header',
       );
 
@@ -1092,6 +1112,7 @@ export async function incrementalLayout(
         headerFooter.headerBlocksByRId,
         headerFooter.constraints,
         measureFn,
+        prelayoutPageResolver,
       );
       headerContentHeightsByRId = measuredHeights.heightsByRId;
       headerContentHeightsBySectionRef = measuredHeights.heightsBySectionRef;
@@ -1148,6 +1169,7 @@ export async function incrementalLayout(
      * footer height calculations. A value of 1 is sufficient as a placeholder.
      */
     const FOOTER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT = 1;
+    const prelayoutPageResolver = buildConservativePrelayoutPageResolver(nextBlocks, sectionMetadata);
 
     /**
      * Type guard to check if a key is a valid footer variant type.
@@ -1172,7 +1194,7 @@ export async function incrementalLayout(
           measureFn,
           headerMeasureCache,
           FOOTER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT,
-          undefined, // No page resolver needed for height calculation
+          prelayoutPageResolver,
           'footer',
         );
 
@@ -1196,6 +1218,7 @@ export async function incrementalLayout(
           headerFooter.footerBlocksByRId,
           headerFooter.constraints,
           measureFn,
+          prelayoutPageResolver,
         );
         footerContentHeightsByRId = measuredHeights.heightsByRId;
         footerContentHeightsBySectionRef = measuredHeights.heightsBySectionRef;
@@ -3059,6 +3082,119 @@ function sectionsHaveChapterNumbering(sections: SectionMetadata[]): boolean {
     const chapterStyle = section.numbering?.chapterStyle;
     return typeof chapterStyle === 'number' && Number.isInteger(chapterStyle) && chapterStyle > 0;
   });
+}
+
+const PRELAYOUT_CHAPTER_MARKER_SEPARATOR_RE = /[.\-:\u2013\u2014]/;
+
+function getPrelayoutHeadingLevel(block: FlowBlock): number | undefined {
+  if (block.kind !== 'paragraph') {
+    return undefined;
+  }
+
+  const styleId = (block as ParagraphBlock).attrs?.styleId;
+  if (typeof styleId !== 'string') {
+    return undefined;
+  }
+
+  const normalizedStyleId = styleId.replace(/[\s_-]+/g, '').toLowerCase();
+  const match = /^heading(\d+)$/.exec(normalizedStyleId);
+  if (!match) {
+    return undefined;
+  }
+
+  const level = Number(match[1]);
+  return Number.isInteger(level) && level > 0 ? level : undefined;
+}
+
+function getPrelayoutChapterMarkerText(block: FlowBlock, chapterStyle: number): string | undefined {
+  const headingLevel = getPrelayoutHeadingLevel(block);
+  if (!headingLevel || headingLevel > chapterStyle || block.kind !== 'paragraph') {
+    return undefined;
+  }
+
+  const markerText = normalizeChapterMarkerText((block as ParagraphBlock).attrs?.wordLayout?.marker?.markerText);
+  if (!markerText) {
+    return undefined;
+  }
+
+  return markerText.split(PRELAYOUT_CHAPTER_MARKER_SEPARATOR_RE).length <= chapterStyle ? markerText : undefined;
+}
+
+function buildConservativePrelayoutPageResolver(
+  blocks: FlowBlock[],
+  sections: SectionMetadata[],
+): PageResolver | undefined {
+  if (sections.length === 0) {
+    return undefined;
+  }
+
+  type PrelayoutDisplay = {
+    displayText: string;
+    displayNumber: number;
+    totalPages: number;
+    sectionPageCount: number;
+    pageFormat: PageNumberFormat;
+    chapterNumberText?: string;
+    chapterSeparator?: PageNumberChapterSeparator;
+  };
+
+  let longestDisplay: PrelayoutDisplay | undefined;
+  const considerDisplay = (display: PrelayoutDisplay): void => {
+    if (!longestDisplay || display.displayText.length > longestDisplay.displayText.length) {
+      longestDisplay = display;
+    }
+  };
+
+  for (const section of sections) {
+    const displayNumber =
+      typeof section.numbering?.start === 'number' && Number.isFinite(section.numbering.start)
+        ? section.numbering.start
+        : 1;
+    const pageFormat = section.numbering?.format ?? 'decimal';
+
+    considerDisplay({
+      displayText: formatSectionPageNumberText({ displayNumber, pageFormat }),
+      displayNumber,
+      totalPages: 1,
+      sectionPageCount: 1,
+      pageFormat,
+    });
+
+    const chapterStyle = section.numbering?.chapterStyle;
+    if (!(typeof chapterStyle === 'number' && Number.isInteger(chapterStyle) && chapterStyle > 0)) {
+      continue;
+    }
+
+    for (const block of blocks) {
+      const chapterNumberText = getPrelayoutChapterMarkerText(block, chapterStyle);
+      if (!chapterNumberText) {
+        continue;
+      }
+
+      const chapterSeparator = section.numbering?.chapterSeparator ?? 'hyphen';
+      considerDisplay({
+        displayText: formatSectionPageNumberText({
+          displayNumber,
+          pageFormat,
+          chapterNumberText,
+          chapterSeparator,
+        }),
+        displayNumber,
+        totalPages: 1,
+        sectionPageCount: 1,
+        pageFormat,
+        chapterNumberText,
+        chapterSeparator,
+      });
+    }
+  }
+
+  if (!longestDisplay) {
+    return undefined;
+  }
+
+  const resolvedDisplay = longestDisplay;
+  return () => resolvedDisplay;
 }
 
 function getChapterContextByPage(

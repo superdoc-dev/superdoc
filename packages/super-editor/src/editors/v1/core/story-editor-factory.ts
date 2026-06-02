@@ -35,6 +35,11 @@ export interface StoryEditorOptions {
   currentPageNumber?: number;
 
   /**
+   * The current formatted PAGE field display text for section-aware story editors.
+   */
+  currentPageNumberText?: string;
+
+  /**
    * The total page count for NUMPAGES field resolution.
    * Must be a positive integer.
    * @default 1
@@ -121,6 +126,7 @@ export function createStoryEditor(
     isHeaderOrFooter = true,
     headless,
     currentPageNumber = 1,
+    currentPageNumberText,
     totalPageCount = 1,
     sectionPageCount = 1,
     element = null,
@@ -163,6 +169,7 @@ export function createStoryEditor(
     pagination: false,
     annotations: true,
     currentPageNumber,
+    currentPageNumberText,
     totalPageCount,
     sectionPageCount,
     editable: false,

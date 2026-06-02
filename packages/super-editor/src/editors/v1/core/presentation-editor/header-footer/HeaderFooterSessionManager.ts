@@ -1096,6 +1096,7 @@ export class HeaderFooterSessionManager {
         availableWidth: Math.max(1, region.width),
         availableHeight: Math.max(1, region.height),
         currentPageNumber: Math.max(1, region.pageNumber ?? 1),
+        currentPageNumberText: region.displayPageNumber,
         totalPageCount: Math.max(1, bodyPageCount),
         sectionPageCount: Math.max(1, region.sectionPageCount ?? bodyPageCount),
         surfaceKind: region.kind,

@@ -358,13 +358,20 @@ export const SectionPageCount = Node.create({
 
 const getNodeAttributes = (nodeName, editor, node = null) => {
   switch (nodeName) {
-    case 'page-number':
+    case 'page-number': {
+      const currentPageNumber = editor.options.currentPageNumber || 1;
+      const text =
+        editor.options.currentPageNumberText ||
+        (node?.attrs?.pageNumberFormat
+          ? formatPageNumber(Number(currentPageNumber) || 1, node.attrs.pageNumberFormat)
+          : currentPageNumber);
       return {
-        text: editor.options.currentPageNumber || '1',
+        text,
         className: 'sd-editor-auto-page-number',
         dataId: 'auto-page-number',
         ariaLabel: 'Page number node',
       };
+    }
     case 'total-page-number':
       return {
         text: editor.options.totalPageCount || editor.options.parentEditor?.currentTotalPages || '1',

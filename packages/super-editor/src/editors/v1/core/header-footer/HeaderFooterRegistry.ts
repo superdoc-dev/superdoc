@@ -263,6 +263,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
    * @param options.availableWidth - The width of the editing region in pixels. Must be a positive number if provided.
    * @param options.availableHeight - The height of the editing region in pixels. Must be a positive number if provided.
    * @param options.currentPageNumber - The current page number for PAGE field resolution. Must be a positive integer if provided.
+   * @param options.currentPageNumberText - The current formatted PAGE field display text if provided.
    * @param options.totalPageCount - The total page count for NUMPAGES field resolution. Must be a positive integer if provided.
    * @param options.sectionPageCount - The current section page count for SECTIONPAGES field resolution. Must be a positive integer if provided.
    * @returns The editor instance, or null if creation failed
@@ -276,6 +277,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableWidth?: number;
       availableHeight?: number;
       currentPageNumber?: number;
+      currentPageNumberText?: string;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -442,6 +444,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableWidth?: number;
       availableHeight?: number;
       currentPageNumber?: number;
+      currentPageNumberText?: string;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -477,7 +480,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
     const opts = editor.options as Record<string, unknown>;
     const parentEditor = opts.parentEditor as Record<string, unknown> | undefined;
 
-    const currentPage = String(opts.currentPageNumber || '1');
+    const currentPage = String(opts.currentPageNumberText || opts.currentPageNumber || '1');
     const totalPages = String(opts.totalPageCount || parentEditor?.currentTotalPages || '1');
     const sectionPages = Number(opts.sectionPageCount || opts.totalPageCount || parentEditor?.currentTotalPages || 1);
 
@@ -766,6 +769,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableWidth?: number;
       availableHeight?: number;
       currentPageNumber?: number;
+      currentPageNumberText?: string;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -787,6 +791,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
         availableWidth: options?.availableWidth,
         availableHeight: options?.availableHeight ?? DEFAULT_HEADER_FOOTER_HEIGHT,
         currentPageNumber: options?.currentPageNumber ?? 1,
+        currentPageNumberText: options?.currentPageNumberText,
         totalPageCount: options?.totalPageCount ?? 1,
         sectionPageCount: options?.sectionPageCount ?? options?.totalPageCount ?? 1,
       }) as Editor;
@@ -904,6 +909,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableWidth?: number;
       availableHeight?: number;
       currentPageNumber?: number;
+      currentPageNumberText?: string;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -919,6 +925,9 @@ export class HeaderFooterEditorManager extends EventEmitter {
     const updateOptions: Record<string, unknown> = {};
     if (options.currentPageNumber !== undefined) {
       updateOptions.currentPageNumber = options.currentPageNumber;
+    }
+    if (options.currentPageNumberText !== undefined) {
+      updateOptions.currentPageNumberText = options.currentPageNumberText;
     }
     if (options.totalPageCount !== undefined) {
       updateOptions.totalPageCount = options.totalPageCount;

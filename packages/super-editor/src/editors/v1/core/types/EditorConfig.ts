@@ -456,6 +456,9 @@ export interface EditorOptions {
   /** Current page number for PAGE field rendering in story editors */
   currentPageNumber?: number;
 
+  /** Current formatted PAGE display text for story editors */
+  currentPageNumberText?: string;
+
   /** Total document page count for NUMPAGES field rendering in story editors */
   totalPageCount?: number;
 

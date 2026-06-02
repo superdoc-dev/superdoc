@@ -215,6 +215,44 @@ describe('AutoPageNumberNodeView', () => {
     expect(nodeView.update({ type: { name: 'total-page-number' } })).toBe(false);
   });
 
+  it('renders page number node with section-aware display text when provided', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: { currentPageNumber: 7, currentPageNumberText: 'iii' },
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'page-number' }, attrs: { pageNumberFormat: 'lowerRoman' } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('iii');
+  });
+
+  it('formats page number node from current page number when display text is unavailable', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: { currentPageNumber: 4 },
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'page-number' }, attrs: { pageNumberFormat: 'upperRoman' } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('IV');
+  });
+
   it('renders total page count node with parent editor value', () => {
     const doc = {
       resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),

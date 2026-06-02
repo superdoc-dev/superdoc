@@ -33,9 +33,13 @@ const schema = new Schema({
   },
 });
 
-function createEditorWithSectionPageCount(sectionPageCount?: number, initialValue = '1'): Editor {
+function createEditorWithSectionPageCount(
+  sectionPageCount?: number,
+  initialValue = '1',
+  pageNumberFormat?: string,
+): Editor {
   const field = schema.nodes['section-page-count'].create(
-    { instruction: 'SECTIONPAGES', resolvedText: initialValue },
+    { instruction: 'SECTIONPAGES', resolvedText: initialValue, pageNumberFormat },
     schema.text(initialValue),
   );
   const paragraph = schema.nodes.paragraph.create({ sdBlockId: 'block-1' }, field);
@@ -68,6 +72,20 @@ describe('fieldsRebuildWrapper SECTIONPAGES fields', () => {
     expect(updatedField?.type.name).toBe('section-page-count');
     expect(updatedField?.attrs.resolvedText).toBe('4');
     expect(updatedField?.textContent).toBe('4');
+  });
+
+  it('formats rebuilt section-page-count values with pageNumberFormat', () => {
+    const editor = createEditorWithSectionPageCount(4, '1', 'upperRoman');
+
+    const result = fieldsRebuildWrapper(editor, {
+      target: { kind: 'field', blockId: 'block-1', occurrenceIndex: 0, nestingDepth: 0 },
+    });
+
+    expect(result.success).toBe(true);
+    const updatedField = editor.state.doc.nodeAt(1);
+    expect(updatedField?.type.name).toBe('section-page-count');
+    expect(updatedField?.attrs.resolvedText).toBe('IV');
+    expect(updatedField?.textContent).toBe('IV');
   });
 
   it('preserves existing section-page-count text when section page context is unavailable', () => {

@@ -6,7 +6,7 @@ import {
   resolveDocumentStatFieldValue,
   resolveMainBodyEditor,
 } from '../../document-api-adapters/helpers/word-statistics.js';
-import { formatPageNumber } from '@superdoc/contracts';
+import { resolveSectionPageCountFieldValue } from '../../document-api-adapters/helpers/section-page-count.js';
 
 /** Stat-field types refreshed by F9 when the doc has no TOCs. */
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES', 'SECTIONPAGES']);
@@ -142,13 +142,3 @@ export const FieldUpdate = Extension.create({
     };
   },
 });
-
-function resolveSectionPageCountFieldValue(editor, node) {
-  const sectionPageCount = editor?.options?.sectionPageCount;
-  if (sectionPageCount == null) return null;
-
-  if (node?.attrs?.pageNumberFormat) {
-    return formatPageNumber(Number(sectionPageCount) || 1, node.attrs.pageNumberFormat);
-  }
-  return String(sectionPageCount);
-}

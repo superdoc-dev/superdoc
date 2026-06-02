@@ -3,7 +3,6 @@
  */
 
 import type { Editor } from '../../core/Editor.js';
-import { formatPageNumber, type PageNumberFormat } from '@superdoc/contracts';
 import type {
   FieldListInput,
   FieldGetInput,
@@ -30,6 +29,7 @@ import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { getWordStatistics, resolveDocumentStatFieldValue, resolveMainBodyEditor } from '../helpers/word-statistics.js';
+import { resolveSectionPageCountFieldValue } from '../helpers/section-page-count.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -402,17 +402,6 @@ function rebuildSectionPageCount(
 
   if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Rebuild produced no change.');
   return fieldSuccess(address);
-}
-
-function resolveSectionPageCountFieldValue(editor: Editor, node: { attrs?: Record<string, unknown> }): string | null {
-  const sectionPageCount = editor.options?.sectionPageCount;
-  if (sectionPageCount == null) return null;
-
-  const pageNumberFormat = node.attrs?.pageNumberFormat;
-  if (typeof pageNumberFormat === 'string' && pageNumberFormat) {
-    return formatPageNumber(Number(sectionPageCount) || 1, pageNumberFormat as PageNumberFormat);
-  }
-  return String(sectionPageCount);
 }
 
 export function fieldsRemoveWrapper(

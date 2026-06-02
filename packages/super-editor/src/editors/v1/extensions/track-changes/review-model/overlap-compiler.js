@@ -296,7 +296,16 @@ const findAdjacentInsertedSegment = (ctx, pos) => {
  * @param {number} to
  */
 const findAdjacentDeletedSegment = (ctx, from, to) => {
-  const sameUserDeleted = (segment) => segment.side === SegmentSide.Deleted && isSameUserForRefinement(ctx, segment);
+  // Only coalesce into a PLAIN standalone deletion. A replacement's deleted
+  // side (replacementGroupId set) or an overlap child (overlapParentId set) is
+  // a structured change: reusing its id for an unrelated plain deletion would
+  // write a deletion mark with empty/mismatched replacement metadata under that
+  // id, widening or mis-typing the change and corrupting its accept/reject.
+  const sameUserDeleted = (segment) =>
+    segment.side === SegmentSide.Deleted &&
+    !segment.attrs?.replacementGroupId &&
+    !segment.attrs?.overlapParentId &&
+    isSameUserForRefinement(ctx, segment);
 
   const exactLeft = ctx.graph.segments.find((segment) => sameUserDeleted(segment) && segment.to === from);
   if (exactLeft) return exactLeft;

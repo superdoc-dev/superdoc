@@ -1,4 +1,5 @@
 import type { Line, LineSegment, Run } from '@superdoc/contracts';
+import { underlineThicknessPx } from './text-run.js';
 
 export const renderInlineTabRun = (
   run: Extract<Run, { kind: 'tab' }>,
@@ -16,19 +17,19 @@ export const renderInlineTabRun = (
   tabEl.style.display = 'inline-block';
   tabEl.style.width = `${tabWidth}px`;
   if (run.underline) {
-    // Underlined tabs render the underline as a border-bottom. A full-height,
-    // bottom-aligned box puts that border ~descent+half-leading below the
-    // text-decoration underline of adjacent text, making the combined line look
-    // broken (SD-3330). End the box at the computed underline offset and pin its
-    // top to the line-box top so the border lands flush with the text underline.
-    tabEl.style.height = `${underlineOffsetFromLineTop(line)}px`;
-    tabEl.style.verticalAlign = 'top';
+    // Draw the underline with text-decoration on a baseline-aligned box so the browser
+    // places it on the SAME baseline as adjacent text — identical vertical position AND
+    // weight, with no stepped/broken line where text meets tabs (SD-3330). A tab has no
+    // glyphs, so it is filled with clipped, transparent whitespace (see
+    // applyTabUnderlineDecoration). Matching the line height keeps the box from changing
+    // line spacing.
+    tabEl.style.lineHeight = `${line.lineHeight}px`;
+    tabEl.style.verticalAlign = 'baseline';
+    applyTabUnderlineDecoration(tabEl, run, tabWidth);
   } else {
     tabEl.style.height = `${line.lineHeight}px`;
     tabEl.style.verticalAlign = 'bottom';
   }
-
-  applyTabUnderline(tabEl, run);
 
   if (styleId) {
     tabEl.setAttribute('styleid', styleId);
@@ -66,12 +67,14 @@ export const renderPositionedTabRun = (
   // Underlined positioned tabs end the box at the text underline offset (not the full
   // line height) so the border-bottom aligns with adjacent text underlines (SD-3330).
   // Non-underlined positioned tabs keep the full line height (they are hidden below).
+  // Positioned tabs are absolutely placed, so the baseline-aligned text-decoration path
+  // used for inline tabs does not apply here; a border at the computed offset is used.
   tabEl.style.height = run.underline ? `${underlineOffsetFromLineTop(line)}px` : `${line.lineHeight}px`;
   tabEl.style.display = 'inline-block';
   tabEl.style.pointerEvents = 'none';
   tabEl.style.zIndex = '1';
 
-  applyTabUnderline(tabEl, run);
+  applyTabUnderlineBorder(tabEl, run);
   if (!run.underline) {
     tabEl.style.visibility = 'hidden';
   }
@@ -104,23 +107,48 @@ const underlineOffsetFromLineTop = (line: Line): number => {
   return baselineFromTop + underlineGap;
 };
 
-const applyTabUnderline = (tabEl: HTMLElement, run: Extract<Run, { kind: 'tab' }>): void => {
-  // Apply underline styling if present (common for signature lines)
-  //
-  // Signature line use case: In documents with signature lines, tabs are often used
-  // to create underlined blank spaces where signatures should go. The underline mark
-  // is inherited from a parent node (e.g., a paragraph with underline formatting) and
-  // applied to the tab, creating a visible underline even though the tab itself has
-  // no visible text content.
-  if (run.underline) {
-    const underlineStyle = run.underline.style ?? 'single';
-    // We must use an explicit color instead of currentColor because tab content is
-    // invisible (no text). If we used currentColor, the underline would inherit the
-    // text color, which might be transparent or the same as the background, making
-    // the underline invisible. Using an explicit color (defaulting to black) ensures
-    // the underline is always visible for signature lines.
-    const underlineColor = run.underline.color ?? '#000000';
-    const borderStyle = underlineStyle === 'double' ? 'double' : 'solid';
-    tabEl.style.borderBottom = `1px ${borderStyle} ${underlineColor}`;
-  }
+/**
+ * Inline underlined tabs (signature / fill-in lines): draw the underline with the same
+ * `text-decoration` mechanism as adjacent text. The tab box is baseline-aligned and the
+ * box is filled with transparent, horizontally-clipped whitespace, so the browser places
+ * the underline on the exact same baseline and at the same weight as the surrounding
+ * text — one continuous, even line (SD-3330).
+ */
+const applyTabUnderlineDecoration = (tabEl: HTMLElement, run: Extract<Run, { kind: 'tab' }>, widthPx: number): void => {
+  if (!run.underline) return;
+
+  const underlineStyle = run.underline.style ?? 'single';
+  // Explicit color, not currentColor: the filler glyphs are transparent, and currentColor
+  // could resolve to transparent and hide the underline.
+  const underlineColor = run.underline.color ?? '#000000';
+  const fontSize = (run as { fontSize?: number }).fontSize ?? 16;
+
+  tabEl.style.fontSize = `${fontSize}px`;
+  tabEl.style.whiteSpace = 'pre';
+  tabEl.style.color = 'transparent';
+  // Clip the filler horizontally to the tab width; the negative top/bottom insets leave
+  // the underline vertically unclipped regardless of the font's metrics.
+  tabEl.style.clipPath = 'inset(-50% 0 -50% 0)';
+  tabEl.style.textDecorationLine = 'underline';
+  tabEl.style.textDecorationStyle = underlineStyle === 'double' ? 'double' : 'solid';
+  tabEl.style.textDecorationColor = underlineColor;
+  tabEl.style.textDecorationThickness = `${underlineThicknessPx(fontSize)}px`;
+  // Enough whitespace to overfill the tab width once clipped (a space is ≥ ~2px wide for
+  // any readable font size).
+  tabEl.textContent = ' '.repeat(Math.max(8, Math.ceil(widthPx / 2) + 2));
+};
+
+/**
+ * Positioned (right/center/decimal-aligned) underlined tabs are absolutely placed, so the
+ * baseline-aligned text-decoration path used for inline tabs does not apply. They draw the
+ * underline as a border at the computed offset, with the same font-scaled weight.
+ */
+const applyTabUnderlineBorder = (tabEl: HTMLElement, run: Extract<Run, { kind: 'tab' }>): void => {
+  if (!run.underline) return;
+
+  const underlineStyle = run.underline.style ?? 'single';
+  const underlineColor = run.underline.color ?? '#000000';
+  const borderStyle = underlineStyle === 'double' ? 'double' : 'solid';
+  const fontSize = (run as { fontSize?: number }).fontSize ?? 16;
+  tabEl.style.borderBottom = `${underlineThicknessPx(fontSize)}px ${borderStyle} ${underlineColor}`;
 };

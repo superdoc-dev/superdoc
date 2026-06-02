@@ -15,8 +15,18 @@ export const renderInlineTabRun = (
 
   tabEl.style.display = 'inline-block';
   tabEl.style.width = `${tabWidth}px`;
-  tabEl.style.height = `${line.lineHeight}px`;
-  tabEl.style.verticalAlign = 'bottom';
+  if (run.underline) {
+    // Underlined tabs render the underline as a border-bottom. A full-height,
+    // bottom-aligned box puts that border ~descent+half-leading below the
+    // text-decoration underline of adjacent text, making the combined line look
+    // broken (SD-3330). End the box at the computed underline offset and pin its
+    // top to the line-box top so the border lands flush with the text underline.
+    tabEl.style.height = `${underlineOffsetFromLineTop(line)}px`;
+    tabEl.style.verticalAlign = 'top';
+  } else {
+    tabEl.style.height = `${line.lineHeight}px`;
+    tabEl.style.verticalAlign = 'bottom';
+  }
 
   applyTabUnderline(tabEl, run);
 
@@ -53,7 +63,10 @@ export const renderPositionedTabRun = (
   tabEl.style.left = `${tabStartX + indentOffset}px`;
   tabEl.style.top = '0px';
   tabEl.style.width = `${actualTabWidth}px`;
-  tabEl.style.height = `${line.lineHeight}px`;
+  // Underlined positioned tabs end the box at the text underline offset (not the full
+  // line height) so the border-bottom aligns with adjacent text underlines (SD-3330).
+  // Non-underlined positioned tabs keep the full line height (they are hidden below).
+  tabEl.style.height = run.underline ? `${underlineOffsetFromLineTop(line)}px` : `${line.lineHeight}px`;
   tabEl.style.display = 'inline-block';
   tabEl.style.pointerEvents = 'none';
   tabEl.style.zIndex = '1';
@@ -71,6 +84,24 @@ export const renderPositionedTabRun = (
   tabEl.dataset.layoutEpoch = String(layoutEpoch);
 
   return { element: tabEl, tabEndX, actualTabWidth };
+};
+
+/**
+ * Distance, in pixels from the top of the line box, at which a tab's underline
+ * (border-bottom) should be drawn so it lines up with the `text-decoration`
+ * underline of adjacent text runs.
+ *
+ * The line box places the baseline at `half-leading + ascent` from its top
+ * (the remaining `half-leading + descent` sits below). `text-decoration`
+ * underlines render slightly below the baseline, so we add a small gap that
+ * scales with font size (capped by the descent). This is geometry derived from
+ * the resolved line metrics — the painter never measures the DOM (SD-2957).
+ */
+const underlineOffsetFromLineTop = (line: Line): number => {
+  const halfLeading = Math.max(0, (line.lineHeight - line.ascent - line.descent) / 2);
+  const baselineFromTop = halfLeading + line.ascent;
+  const underlineGap = Math.min(line.descent, line.lineHeight * 0.08);
+  return baselineFromTop + underlineGap;
 };
 
 const applyTabUnderline = (tabEl: HTMLElement, run: Extract<Run, { kind: 'tab' }>): void => {

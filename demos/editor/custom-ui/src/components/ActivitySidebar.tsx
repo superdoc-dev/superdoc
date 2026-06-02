@@ -70,9 +70,19 @@ export function ActivitySidebar({ composeOpen, onCloseComposer, decided }: Props
   // (separate ticket), we'll be able to interleave by document
   // position; until then this stable two-bucket ordering matches what
   // the controller used to do internally.
+  //
+  // SuperDoc models tracked changes as comment-linked entities, so
+  // `ui.comments.items` already includes one `trackedChange: true`
+  // comment per tracked change — with the same id the change carries
+  // in `ui.trackChanges.items`. Skip those here; we render the change
+  // half from `trackChanges.items` below. Without this filter every
+  // suggestion shows twice (one comment card + one change card).
   const feed = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [];
-    for (const c of comments.items) items.push({ kind: 'comment', id: c.id, comment: c });
+    for (const c of comments.items) {
+      if (c.trackedChange) continue;
+      items.push({ kind: 'comment', id: c.id, comment: c });
+    }
     for (const tc of trackChanges.items) items.push({ kind: 'change', id: tc.id, change: tc.change });
     return items;
   }, [comments.items, trackChanges.items]);

@@ -929,6 +929,7 @@ export function filterOutRootInlineNodes(content = []) {
     'hardBreak',
     'pageNumber',
     'totalPageCount',
+    'section-page-count',
     'sectionPageCount',
     'runItem',
     'image',

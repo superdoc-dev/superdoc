@@ -72,15 +72,27 @@ export function ActivitySidebar({ composeOpen, onCloseComposer, decided }: Props
   // the controller used to do internally.
   //
   // SuperDoc models tracked changes as comment-linked entities, so
-  // `ui.comments.items` already includes one `trackedChange: true`
-  // comment per tracked change — with the same id the change carries
-  // in `ui.trackChanges.items`. Skip those here; we render the change
-  // half from `trackChanges.items` below. Without this filter every
+  // `ui.comments.items` mirrors each tracked change as a synthetic
+  // comment whose id is the tracked-change id. Without de-duping, every
   // suggestion shows twice (one comment card + one change card).
+  //
+  // We dedupe by id, NOT by the `trackedChange` flag: a real comment
+  // thread also gets `trackedChange: true` when its anchor overlaps a
+  // suggestion (`comments.list()` links it via `assignTrackedChangeLink`),
+  // so a flag filter would wrongly hide those discussions. Only the
+  // synthetic rows reuse a tracked-change id; real comments have their
+  // own. `pairedWithChangeId` covers replacement pairs that
+  // `trackChanges.list()` collapses into one row (this demo runs
+  // `replacements: 'paired'`) but which still surface as two comments.
   const feed = useMemo<ActivityItem[]>(() => {
+    const changeIds = new Set<string>();
+    for (const tc of trackChanges.items) {
+      changeIds.add(tc.id);
+      if (tc.change.pairedWithChangeId) changeIds.add(tc.change.pairedWithChangeId);
+    }
     const items: ActivityItem[] = [];
     for (const c of comments.items) {
-      if (c.trackedChange) continue;
+      if (changeIds.has(c.id)) continue;
       items.push({ kind: 'comment', id: c.id, comment: c });
     }
     for (const tc of trackChanges.items) items.push({ kind: 'change', id: tc.id, change: tc.change });

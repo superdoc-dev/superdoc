@@ -155,6 +155,8 @@ describe('syncListMarkerFontFromParagraphRuns', () => {
 
     expect(block.attrs.wordLayout?.marker?.run?.fontFamily).toContain('Georgia');
     expect(block.attrs.wordLayout?.marker?.run?.fontSize).toBe(30);
+    expect(block.runs[0]?.fontFamily).toContain('Georgia');
+    expect(block.runs[0]?.fontSize).toBe(30);
   });
 
   it('does not fall back to stale cached runs on cache hits without textStyle or previousParagraphFont', () => {

@@ -134,6 +134,16 @@ export const syncListMarkerFontFromParagraphRuns = ({
   const contentFont = resolveContentFont(block, para, contentFontSource, previousParagraphFont);
   if (!contentFont) return;
 
+  // Cache-hit path may reuse stale empty runs. Normalize empty run font so subsequent
+  // getLastParagraphFont() reads the current inherited font instead of cached values.
+  if (contentFontSource === 'paragraph') {
+    const firstRun = block.runs[0];
+    if (firstRun && isTextRun(firstRun) && firstRun.text.length === 0) {
+      if (contentFont.fontFamily) firstRun.fontFamily = contentFont.fontFamily;
+      if (contentFont.fontSize) firstRun.fontSize = contentFont.fontSize;
+    }
+  }
+
   const numberingOverrides = getNumberingMarkerFontOverrides(block.attrs?.numberingProperties, converterContext);
 
   if (!numberingOverrides.fontFamily && contentFont.fontFamily) {

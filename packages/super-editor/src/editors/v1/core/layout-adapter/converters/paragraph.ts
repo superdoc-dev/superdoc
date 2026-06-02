@@ -1077,7 +1077,10 @@ export function getLastParagraphFont(blocks: FlowBlock[]): ParagraphFont | undef
       const para = block as ParagraphBlock;
       const firstRun = para.runs?.[0];
       if (!firstRun) continue;
-      const run = firstRun as { fontFamily?: string; fontSize?: number };
+      const run = firstRun as { text?: string; fontFamily?: string; fontSize?: number };
+      if (typeof run.text === 'string' && run.text.length === 0) {
+        continue;
+      }
       const fontFamily = typeof run.fontFamily === 'string' ? run.fontFamily.trim() : '';
       const fontSize = typeof run.fontSize === 'number' && Number.isFinite(run.fontSize) ? run.fontSize : NaN;
       if (fontFamily.length > 0 && fontSize > 0) {

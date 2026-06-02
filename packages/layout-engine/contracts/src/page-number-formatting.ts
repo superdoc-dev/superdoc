@@ -80,7 +80,7 @@ export function formatChapterPageNumberText(args: {
         return '\u2013';
       case 'hyphen':
       default:
-        return '-';
+        return '\u2011';
     }
   })();
 

@@ -200,7 +200,7 @@ describe('formatSectionPageNumberText', () => {
         chapterNumberText: '3',
         chapterSeparator: 'hyphen',
       }),
-    ).toBe('3-1');
+    ).toBe('3\u20111');
     expect(
       formatSectionPageNumberText({
         displayNumber: 1,
@@ -242,7 +242,7 @@ describe('formatSectionPageNumberText', () => {
         pageFormat: 'upperRoman',
         chapterNumberText: '2',
       }),
-    ).toBe('2-IV');
+    ).toBe('2\u2011IV');
   });
 });
 
@@ -552,7 +552,7 @@ describe('computeDisplayPageNumber', () => {
 
       const result = computeDisplayPageNumber(pages, sections, new Map([[1, { chapterNumberText: 'A' }]]));
 
-      expect(result[0].displayText).toBe('A-IV');
+      expect(result[0].displayText).toBe('A\u2011IV');
       expect(result[0].pageFormat).toBe('upperRoman');
       expect(result[0].chapterSeparator).toBe('hyphen');
     });

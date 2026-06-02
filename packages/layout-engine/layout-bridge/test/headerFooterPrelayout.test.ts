@@ -60,6 +60,13 @@ const makeHeading = (id: string, markerText: string): FlowBlock => ({
   attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText } } },
 });
 
+const makeResolvedHeading = (id: string, markerText: string): FlowBlock => ({
+  kind: 'paragraph',
+  id,
+  runs: [{ text: markerText }],
+  attrs: { styleId: 'Titre1', headingLevel: 1, wordLayout: { marker: { markerText } } },
+});
+
 describe('header/footer pre-layout', () => {
   beforeEach(() => {
     measureCache.clear();
@@ -105,6 +112,33 @@ describe('header/footer pre-layout', () => {
       totalPages: 1,
       sectionPageCount: 1,
       pageFormat: 'decimal',
+      chapterNumberText: '123456789',
+      chapterSeparator: 'hyphen',
+    });
+  });
+
+  it('uses adapter-resolved heading levels for conservative chapter pre-layout', async () => {
+    await incrementalLayout(
+      [],
+      null,
+      [makeResolvedHeading('heading-1', '123456789.'), makeParagraph('body', 'Body')],
+      {
+        pageSize: { w: 300, h: 300 },
+        margins: { top: 20, right: 20, bottom: 20, left: 20 },
+        sectionMetadata: [{ sectionIndex: 0, numbering: { chapterStyle: 1, chapterSeparator: 'hyphen' } }],
+      },
+      vi.fn(async () => makeMeasure()),
+      {
+        headerBlocks: { default: [makeHeaderPageNumber()] },
+        constraints: { width: 40, height: 40 },
+      },
+    );
+
+    const prelayoutPageResolver = headerFooterMocks.layoutHeaderFooterWithCache.mock.calls[0]?.[5];
+
+    expect(prelayoutPageResolver).toBeTypeOf('function');
+    expect(prelayoutPageResolver(1)).toMatchObject({
+      displayText: '123456789\u20111',
       chapterNumberText: '123456789',
       chapterSeparator: 'hyphen',
     });

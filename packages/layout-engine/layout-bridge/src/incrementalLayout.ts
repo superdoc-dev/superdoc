@@ -3091,7 +3091,13 @@ function getPrelayoutHeadingLevel(block: FlowBlock): number | undefined {
     return undefined;
   }
 
-  const styleId = (block as ParagraphBlock).attrs?.styleId;
+  const attrs = (block as ParagraphBlock).attrs;
+  const headingLevel = attrs?.headingLevel;
+  if (typeof headingLevel === 'number' && Number.isInteger(headingLevel) && headingLevel > 0) {
+    return headingLevel;
+  }
+
+  const styleId = attrs?.styleId;
   if (typeof styleId !== 'string') {
     return undefined;
   }

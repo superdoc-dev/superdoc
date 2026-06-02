@@ -174,6 +174,18 @@ describe('svg-utils', () => {
         expect(span.textContent).toBe('III');
       });
 
+      it('should preserve SECTIONPAGES cached text when section page count is unavailable', () => {
+        const textContent = {
+          parts: [{ text: '3', fieldType: 'SECTIONPAGES', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          totalPages: 9,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('3');
+      });
+
       it('should resolve NUMPAGES field type to totalPages', () => {
         const textContent = {
           parts: [{ text: '', fieldType: 'NUMPAGES', formatting: {} }],

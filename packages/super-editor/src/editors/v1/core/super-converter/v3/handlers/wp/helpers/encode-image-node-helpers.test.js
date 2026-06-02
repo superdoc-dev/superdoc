@@ -1760,6 +1760,33 @@ describe('getVectorShape', () => {
       expect(result.attrs.textContent.parts[0].text).toBe('Hello World');
     });
 
+    it('preserves cached SECTIONPAGES text in textbox field parts', () => {
+      const graphicData = makeGraphicDataWithTextbox('');
+      const paragraph = graphicData.elements[0].elements.find((el) => el.name === 'wps:txbx').elements[0].elements[0];
+      paragraph.elements = [
+        {
+          name: 'sd:sectionPageCount',
+          attributes: {
+            importedCachedText: '3',
+            resolvedText: '4',
+          },
+        },
+      ];
+
+      const result = getVectorShape({
+        params: makeParams(),
+        node: {},
+        graphicData,
+        size: { width: 100, height: 100 },
+      });
+
+      expect(result.attrs.textContent.parts).toHaveLength(1);
+      expect(result.attrs.textContent.parts[0]).toMatchObject({
+        text: '4',
+        fieldType: 'SECTIONPAGES',
+      });
+    });
+
     it('handles [[sdspace]] at the beginning of text', () => {
       const graphicData = makeGraphicDataWithTextbox('[[sdspace]]Hello');
       const result = getVectorShape({

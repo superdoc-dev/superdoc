@@ -1026,8 +1026,12 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
   const appendFieldPart = (fieldType, node, paragraphProperties) => {
     const rPr = node?.elements?.find((el) => el.name === 'w:rPr');
     const formatting = extractRunFormatting(rPr, paragraphProperties, params);
+    const cachedText =
+      fieldType === 'SECTIONPAGES'
+        ? (node?.attributes?.resolvedText ?? node?.attributes?.importedCachedText ?? '')
+        : '';
     textParts.push({
-      text: '',
+      text: cachedText,
       formatting,
       fieldType,
       ...(node?.attributes?.pageNumberFormat ? { pageNumberFormat: node.attributes.pageNumberFormat } : {}),

@@ -151,7 +151,8 @@ export function createTextElement(textContent, textAlign, width, height, options
       return totalPages != null ? String(totalPages) : '1';
     }
     if (part.fieldType === 'SECTIONPAGES') {
-      const count = sectionPageCount ?? totalPages ?? 1;
+      if (sectionPageCount == null) return part.text ?? '1';
+      const count = sectionPageCount;
       return part.pageNumberFormat ? formatPageNumber(count, part.pageNumberFormat) : String(count);
     }
     return part.text;

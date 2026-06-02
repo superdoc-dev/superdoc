@@ -33,7 +33,7 @@ export type PageResolver = (pageNumber: number) => {
   displayText: string;
   displayNumber?: number;
   totalPages: number;
-  sectionPageCount: number;
+  sectionPageCount?: number;
 };
 
 /**

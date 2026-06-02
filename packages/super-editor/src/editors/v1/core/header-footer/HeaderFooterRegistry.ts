@@ -264,6 +264,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
    * @param options.availableHeight - The height of the editing region in pixels. Must be a positive number if provided.
    * @param options.currentPageNumber - The current page number for PAGE field resolution. Must be a positive integer if provided.
    * @param options.currentPageNumberText - The current formatted PAGE field display text if provided.
+   * @param options.currentPageDisplayNumber - The current numeric PAGE display value for local field formatting.
    * @param options.totalPageCount - The total page count for NUMPAGES field resolution. Must be a positive integer if provided.
    * @param options.sectionPageCount - The current section page count for SECTIONPAGES field resolution. Must be a positive integer if provided.
    * @returns The editor instance, or null if creation failed
@@ -278,6 +279,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableHeight?: number;
       currentPageNumber?: number;
       currentPageNumberText?: string;
+      currentPageDisplayNumber?: number;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -445,6 +447,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableHeight?: number;
       currentPageNumber?: number;
       currentPageNumberText?: string;
+      currentPageDisplayNumber?: number;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -481,6 +484,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
     const parentEditor = opts.parentEditor as Record<string, unknown> | undefined;
 
     const currentPage = String(opts.currentPageNumberText || opts.currentPageNumber || '1');
+    const currentPageNumber = Number(opts.currentPageDisplayNumber || opts.currentPageNumber || 1);
     const totalPages = String(opts.totalPageCount || parentEditor?.currentTotalPages || '1');
     const sectionPages = Number(opts.sectionPageCount || opts.totalPageCount || parentEditor?.currentTotalPages || 1);
 
@@ -489,7 +493,9 @@ export class HeaderFooterEditorManager extends EventEmitter {
     const sectionPagesEls = container.querySelectorAll('[data-id="auto-section-pages"]');
 
     pageNumberEls.forEach((el) => {
-      if (el.textContent !== currentPage) el.textContent = currentPage;
+      const pageNumberFormat = this.#getPageNumberFormatForDomNode(editor, el);
+      const text = pageNumberFormat ? formatPageNumber(currentPageNumber, pageNumberFormat) : currentPage;
+      if (el.textContent !== text) el.textContent = text;
     });
     totalPagesEls.forEach((el) => {
       if (el.textContent !== totalPages) el.textContent = totalPages;
@@ -770,6 +776,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableHeight?: number;
       currentPageNumber?: number;
       currentPageNumberText?: string;
+      currentPageDisplayNumber?: number;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -792,6 +799,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
         availableHeight: options?.availableHeight ?? DEFAULT_HEADER_FOOTER_HEIGHT,
         currentPageNumber: options?.currentPageNumber ?? 1,
         currentPageNumberText: options?.currentPageNumberText,
+        currentPageDisplayNumber: options?.currentPageDisplayNumber,
         totalPageCount: options?.totalPageCount ?? 1,
         sectionPageCount: options?.sectionPageCount ?? options?.totalPageCount ?? 1,
       }) as Editor;
@@ -910,6 +918,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       availableHeight?: number;
       currentPageNumber?: number;
       currentPageNumberText?: string;
+      currentPageDisplayNumber?: number;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -928,6 +937,9 @@ export class HeaderFooterEditorManager extends EventEmitter {
     }
     if (options.currentPageNumberText !== undefined) {
       updateOptions.currentPageNumberText = options.currentPageNumberText;
+    }
+    if (options.currentPageDisplayNumber !== undefined) {
+      updateOptions.currentPageDisplayNumber = options.currentPageDisplayNumber;
     }
     if (options.totalPageCount !== undefined) {
       updateOptions.totalPageCount = options.totalPageCount;

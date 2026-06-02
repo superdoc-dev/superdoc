@@ -40,6 +40,11 @@ export interface StoryEditorOptions {
   currentPageNumberText?: string;
 
   /**
+   * The current numeric PAGE display value for field-local formatting.
+   */
+  currentPageDisplayNumber?: number;
+
+  /**
    * The total page count for NUMPAGES field resolution.
    * Must be a positive integer.
    * @default 1
@@ -127,6 +132,7 @@ export function createStoryEditor(
     headless,
     currentPageNumber = 1,
     currentPageNumberText,
+    currentPageDisplayNumber,
     totalPageCount = 1,
     sectionPageCount = 1,
     element = null,
@@ -170,6 +176,7 @@ export function createStoryEditor(
     annotations: true,
     currentPageNumber,
     currentPageNumberText,
+    currentPageDisplayNumber,
     totalPageCount,
     sectionPageCount,
     editable: false,

@@ -282,12 +282,16 @@ export class ShapeGroupView {
       // Add text content if present
       if (attrs.textContent && attrs.textContent.parts) {
         const pageNumber = this.editor?.options?.currentPageNumber;
+        const pageNumberText = this.editor?.options?.currentPageNumberText;
+        const pageNumberDisplayNumber = this.editor?.options?.currentPageDisplayNumber;
         const totalPages = this.editor?.options?.totalPageCount;
         const sectionPageCount = this.editor?.options?.sectionPageCount;
         const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
           textVerticalAlign: attrs.textVerticalAlign,
           textInsets: attrs.textInsets,
           pageNumber,
+          pageNumberText,
+          pageNumberDisplayNumber,
           totalPages,
           sectionPageCount,
         });
@@ -359,12 +363,16 @@ export class ShapeGroupView {
       // Add text content if present
       if (attrs.textContent && attrs.textContent.parts) {
         const pageNumber = this.editor?.options?.currentPageNumber;
+        const pageNumberText = this.editor?.options?.currentPageNumberText;
+        const pageNumberDisplayNumber = this.editor?.options?.currentPageDisplayNumber;
         const totalPages = this.editor?.options?.totalPageCount;
         const sectionPageCount = this.editor?.options?.sectionPageCount;
         const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
           textVerticalAlign: attrs.textVerticalAlign,
           textInsets: attrs.textInsets,
           pageNumber,
+          pageNumberText,
+          pageNumberDisplayNumber,
           totalPages,
           sectionPageCount,
         });
@@ -487,12 +495,16 @@ export class ShapeGroupView {
     // Add text content if present
     if (attrs.textContent && attrs.textContent.parts) {
       const pageNumber = this.editor?.options?.currentPageNumber;
+      const pageNumberText = this.editor?.options?.currentPageNumberText;
+      const pageNumberDisplayNumber = this.editor?.options?.currentPageDisplayNumber;
       const totalPages = this.editor?.options?.totalPageCount;
       const sectionPageCount = this.editor?.options?.sectionPageCount;
       const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
         textVerticalAlign: attrs.textVerticalAlign,
         textInsets: attrs.textInsets,
         pageNumber,
+        pageNumberText,
+        pageNumberDisplayNumber,
         totalPages,
         sectionPageCount,
       });

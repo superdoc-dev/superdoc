@@ -360,11 +360,10 @@ const getNodeAttributes = (nodeName, editor, node = null) => {
   switch (nodeName) {
     case 'page-number': {
       const currentPageNumber = editor.options.currentPageNumber || 1;
-      const text =
-        editor.options.currentPageNumberText ||
-        (node?.attrs?.pageNumberFormat
-          ? formatPageNumber(Number(currentPageNumber) || 1, node.attrs.pageNumberFormat)
-          : currentPageNumber);
+      const currentPageDisplayNumber = editor.options.currentPageDisplayNumber || currentPageNumber;
+      const text = node?.attrs?.pageNumberFormat
+        ? formatPageNumber(Number(currentPageDisplayNumber) || 1, node.attrs.pageNumberFormat)
+        : editor.options.currentPageNumberText || currentPageNumber;
       return {
         text,
         className: 'sd-editor-auto-page-number',

@@ -404,6 +404,7 @@ describe('HeaderFooterSessionManager', () => {
       pageIndex: 0,
       pageNumber: 1,
       displayPageNumber: 'i',
+      displayPageNumberValue: 1,
       localX: 36,
       localY: 24,
       width: 480,
@@ -432,6 +433,7 @@ describe('HeaderFooterSessionManager', () => {
           availableHeight: 72,
           currentPageNumber: 1,
           currentPageNumberText: 'i',
+          currentPageDisplayNumber: 1,
           totalPageCount: 3,
           surfaceKind: 'header',
         }),
@@ -1970,6 +1972,30 @@ describe('HeaderFooterSessionManager', () => {
 
       expect(manager.headerRegions.get(2)!.sectionType).toBe('even');
       expect(manager.footerRegions.get(2)!.sectionType).toBe('even');
+    });
+
+    it('propagates section-aware page display values onto built regions', () => {
+      manager = buildManager();
+      const layout: ResolvedLayout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [
+          makePage({
+            number: 7,
+            height: 792,
+            numberText: 'iii',
+            displayNumber: 3,
+          }),
+        ],
+      };
+
+      manager.rebuildRegions(layout);
+
+      expect(manager.headerRegions.get(0)!.displayPageNumber).toBe('iii');
+      expect(manager.headerRegions.get(0)!.displayPageNumberValue).toBe(3);
+      expect(manager.footerRegions.get(0)!.displayPageNumber).toBe('iii');
+      expect(manager.footerRegions.get(0)!.displayPageNumberValue).toBe(3);
     });
   });
 });

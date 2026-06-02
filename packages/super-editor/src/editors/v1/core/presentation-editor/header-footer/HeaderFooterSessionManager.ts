@@ -831,6 +831,7 @@ export class HeaderFooterSessionManager {
       const headerPayload = this.#headerDecorationProvider?.(page.number, margins, page);
       const headerBox = this.#computeDecorationBox('header', margins, actualPageHeight);
       const displayPageNumber = page.numberText ?? String(page.number);
+      const displayPageNumberValue = page.displayNumber ?? page.number;
 
       this.#headerRegions.set(pageIndex, {
         kind: 'header',
@@ -842,6 +843,7 @@ export class HeaderFooterSessionManager {
         pageIndex,
         pageNumber: page.number,
         displayPageNumber,
+        displayPageNumberValue,
         sectionPageCount,
         localX: headerPayload?.hitRegion?.x ?? headerBox.x,
         localY: headerPayload?.hitRegion?.y ?? headerBox.offset,
@@ -863,6 +865,7 @@ export class HeaderFooterSessionManager {
         pageIndex,
         pageNumber: page.number,
         displayPageNumber,
+        displayPageNumberValue,
         sectionPageCount,
         localX: footerPayload?.hitRegion?.x ?? footerBox.x,
         localY: footerPayload?.hitRegion?.y ?? footerBox.offset,
@@ -1097,6 +1100,7 @@ export class HeaderFooterSessionManager {
         availableHeight: Math.max(1, region.height),
         currentPageNumber: Math.max(1, region.pageNumber ?? 1),
         currentPageNumberText: region.displayPageNumber,
+        currentPageDisplayNumber: Math.max(1, region.displayPageNumberValue ?? region.pageNumber ?? 1),
         totalPageCount: Math.max(1, bodyPageCount),
         sectionPageCount: Math.max(1, region.sectionPageCount ?? bodyPageCount),
         surfaceKind: region.kind,

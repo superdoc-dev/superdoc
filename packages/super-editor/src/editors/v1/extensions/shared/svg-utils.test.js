@@ -146,6 +146,34 @@ describe('svg-utils', () => {
         expect(span.textContent).toBe('V');
       });
 
+      it('should resolve PAGE field type to section-aware display text when provided', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'PAGE', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          pageNumber: 7,
+          pageNumberText: '3',
+          pageNumberDisplayNumber: 3,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('3');
+      });
+
+      it('should apply pageNumberFormat to section-aware PAGE display number when provided', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'PAGE', pageNumberFormat: 'upperRoman', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          pageNumber: 7,
+          pageNumberText: '3',
+          pageNumberDisplayNumber: 3,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('III');
+      });
+
       it('should resolve NUMPAGES field type to totalPages', () => {
         const textContent = {
           parts: [{ text: '', fieldType: 'NUMPAGES', formatting: {} }],

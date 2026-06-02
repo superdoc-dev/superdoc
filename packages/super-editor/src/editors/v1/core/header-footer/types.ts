@@ -38,6 +38,9 @@ export type HeaderFooterRegion = {
   /** Section-aware display page number (e.g. "7" when physical page is 10 due to section numbering) */
   displayPageNumber?: string;
 
+  /** Numeric section-aware display page number before PAGE field-local formatting */
+  displayPageNumberValue?: number;
+
   /** Physical page count in this region's section */
   sectionPageCount?: number;
 

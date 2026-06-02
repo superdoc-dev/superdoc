@@ -80,12 +80,22 @@ export function createGradient(gradientData, gradientId) {
  * @param {{ top: number, right: number, bottom: number, left: number }} [options.textInsets] - Text padding insets in pixels
  * @param {'top'|'center'|'bottom'} [options.textVerticalAlign] - Vertical alignment of text content
  * @param {number} [options.pageNumber] - Current page number for PAGE field resolution
+ * @param {string} [options.pageNumberText] - Current formatted PAGE display text
+ * @param {number} [options.pageNumberDisplayNumber] - Current numeric PAGE display value for local field formatting
  * @param {number} [options.totalPages] - Total page count for NUMPAGES field resolution
  * @param {number} [options.sectionPageCount] - Current section page count for SECTIONPAGES field resolution
  * @returns {SVGForeignObjectElement} The created foreignObject element containing the formatted text
  */
 export function createTextElement(textContent, textAlign, width, height, options = {}) {
-  const { textInsets, textVerticalAlign, pageNumber, totalPages, sectionPageCount } = options;
+  const {
+    textInsets,
+    textVerticalAlign,
+    pageNumber,
+    pageNumberText,
+    pageNumberDisplayNumber,
+    totalPages,
+    sectionPageCount,
+  } = options;
   // Use foreignObject with HTML for proper text wrapping
   const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
   foreignObject.setAttribute('x', '0');
@@ -134,8 +144,8 @@ export function createTextElement(textContent, textAlign, width, height, options
 
   const resolveFieldText = (part) => {
     if (part.fieldType === 'PAGE') {
-      const count = pageNumber ?? 1;
-      return part.pageNumberFormat ? formatPageNumber(count, part.pageNumberFormat) : String(count);
+      const count = pageNumberDisplayNumber ?? pageNumber ?? 1;
+      return part.pageNumberFormat ? formatPageNumber(count, part.pageNumberFormat) : (pageNumberText ?? String(count));
     }
     if (part.fieldType === 'NUMPAGES') {
       return totalPages != null ? String(totalPages) : '1';

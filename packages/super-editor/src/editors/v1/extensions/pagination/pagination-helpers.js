@@ -97,6 +97,7 @@ const getSectionHeight = async (editor, data) => {
  * @param {number} [params.availableHeight] - The height of the editing region in pixels. Must be positive.
  * @param {number} [params.currentPageNumber] - The current page number for PAGE field resolution. Must be a positive integer.
  * @param {string} [params.currentPageNumberText] - The formatted PAGE field display text.
+ * @param {number} [params.currentPageDisplayNumber] - The numeric PAGE display value for local field formatting.
  * @param {number} [params.totalPageCount] - The total page count for NUMPAGES field resolution. Must be a positive integer.
  * @param {number} [params.sectionPageCount] - The current section page count for SECTIONPAGES field resolution. Must be a positive integer.
  * @returns {Editor} The created header/footer editor instance
@@ -115,6 +116,7 @@ export const createHeaderFooterEditor = ({
   availableHeight,
   currentPageNumber,
   currentPageNumberText,
+  currentPageDisplayNumber,
   totalPageCount,
   sectionPageCount,
 }) => {
@@ -216,6 +218,7 @@ export const createHeaderFooterEditor = ({
     isHeaderOrFooter: true,
     currentPageNumber,
     currentPageNumberText,
+    currentPageDisplayNumber,
     totalPageCount,
     sectionPageCount,
     element: editorContainer,

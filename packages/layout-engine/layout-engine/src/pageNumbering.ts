@@ -57,7 +57,8 @@ export interface DisplayPageInfo {
 }
 
 const HEADING_STYLE_PREFIX = 'heading';
-const CLEAN_CHAPTER_MARKER_RE = /^[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*$/;
+const CHAPTER_MARKER_SEPARATOR_RE = /[.\-:\u2013\u2014]/;
+const CLEAN_CHAPTER_MARKER_RE = /^[A-Za-z0-9]+(?:[.\-:\u2013\u2014][A-Za-z0-9]+)*$/;
 
 function normalizeHeadingStyleId(styleId: unknown): string | undefined {
   if (typeof styleId !== 'string') {
@@ -116,7 +117,7 @@ function getChapterMarkerText(block: FlowBlock, headingLevel: number): string | 
 
   const attrs = (block as ParagraphBlock).attrs;
   const markerText = normalizeChapterMarkerText(attrs?.wordLayout?.marker?.markerText);
-  if (markerText && markerText.split('.').length <= headingLevel) {
+  if (markerText && markerText.split(CHAPTER_MARKER_SEPARATOR_RE).length <= headingLevel) {
     return markerText;
   }
 

@@ -134,7 +134,7 @@ export function createStoryEditor(
     currentPageNumberText,
     currentPageDisplayNumber,
     totalPageCount = 1,
-    sectionPageCount = 1,
+    sectionPageCount,
     element = null,
     editorOptions = {},
   } = options;

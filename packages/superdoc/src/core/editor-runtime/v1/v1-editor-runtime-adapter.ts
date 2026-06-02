@@ -123,13 +123,15 @@ const COMMAND_NAME_BY_KIND: Partial<Record<EditorRuntimeCommandKind, string>> = 
   'text.insert': 'insertContent',
   'text.replace': 'insertContent',
   'text.paste': 'insertContent',
-  'text.deleteBackward': 'deleteSelection',
-  'text.deleteForward': 'deleteSelection',
   'history.undo': 'undo',
   'history.redo': 'redo',
   'structural.splitBlock': 'splitBlock',
   'formatting.applyMark': 'toggleMark',
 };
+
+// Directional delete is intentionally not mapped yet. Real v1 Backspace/Delete
+// run direction-specific keymap chains; delegating both kinds to deleteSelection
+// would advertise behavior this adapter cannot faithfully provide.
 
 const SUPPORTED_COMMAND_KINDS = Object.keys(COMMAND_NAME_BY_KIND) as EditorRuntimeCommandKind[];
 

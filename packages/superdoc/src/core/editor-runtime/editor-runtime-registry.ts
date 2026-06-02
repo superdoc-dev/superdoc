@@ -204,7 +204,9 @@ export class EditorRuntimeRegistry {
     const host = element.closest(`[${RUNTIME_ROOT_ATTRIBUTE}]`);
     if (!host) return null;
     const id = host.getAttribute(RUNTIME_ROOT_ATTRIBUTE);
-    return id ? this.get(id) : null;
+    const runtime = id ? this.get(id) : null;
+    if (!runtime) return null;
+    return runtime.root === host ? runtime : null;
   }
 
   /**

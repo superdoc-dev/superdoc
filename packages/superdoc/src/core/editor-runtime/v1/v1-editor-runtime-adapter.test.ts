@@ -281,6 +281,27 @@ describe('V1EditorRuntimeAdapter  -  command dispatch result mapping ', () => {
     expect(toggleMark).toHaveBeenCalledWith('bold', true);
   });
 
+  it('does not advertise directional delete until it can forward to the v1 keymap chains', async () => {
+    const deleteSelection = vi.fn(() => true);
+    const { runtime } = ready({ deleteSelection });
+    const supported = runtime.getCapabilities().commands.supportedCommands;
+
+    expect(supported).not.toContain('text.deleteBackward');
+    expect(supported).not.toContain('text.deleteForward');
+
+    await expect(runtime.dispatch({ kind: 'text.deleteBackward' })).resolves.toEqual({
+      status: 'rejected',
+      reason: 'command-unsupported',
+      detail: 'text.deleteBackward',
+    });
+    await expect(runtime.dispatch({ kind: 'text.deleteForward' })).resolves.toEqual({
+      status: 'rejected',
+      reason: 'command-unsupported',
+      detail: 'text.deleteForward',
+    });
+    expect(deleteSelection).not.toHaveBeenCalled();
+  });
+
   it('rejects positioned dispatch instead of ignoring the token and editing the current selection', async () => {
     const insertContent = vi.fn(() => true);
     const editor = createFakeEditor({

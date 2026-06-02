@@ -269,6 +269,23 @@ describe('EditorRuntimeRegistry  -  event-target resolution', () => {
     expect(registry.resolveFromEventTarget(root)).toBeNull();
   });
 
+  it('returns null for a marker id collision on another registry root', () => {
+    const registry = new EditorRuntimeRegistry();
+    const runtimeId = 'v1:shared-doc:1';
+    const rootA = document.createElement('div');
+    const rootB = document.createElement('div');
+    const childInsideB = document.createElement('span');
+    rootB.appendChild(childInsideB);
+
+    markRuntimeRoot(rootA, runtimeId);
+    markRuntimeRoot(rootB, runtimeId);
+    const runtimeA = createFakeV1Runtime({ id: runtimeId, root: rootA });
+    registry.register(runtimeA);
+
+    expect(registry.resolveFromEventTarget(rootA)).toBe(runtimeA);
+    expect(registry.resolveFromEventTarget(childInsideB)).toBeNull();
+  });
+
   it('returns null for a null target', () => {
     const registry = new EditorRuntimeRegistry();
     expect(registry.resolveFromEventTarget(null)).toBeNull();

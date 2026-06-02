@@ -157,6 +157,41 @@ describe('preProcessPageFieldsOnly', () => {
         expect(result.processedNodes[0].attributes.importedCachedText).toBe('4');
       },
     );
+
+    it('should preserve SECTIONPAGES field sequence styling when cached result has no rPr', () => {
+      const fieldRunRPr = { name: 'w:rPr', elements: [{ name: 'w:i' }] };
+      const nodes = [
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }],
+        },
+        {
+          name: 'w:r',
+          elements: [fieldRunRPr, { name: 'w:instrText', elements: [{ type: 'text', text: ' SECTIONPAGES ' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:t', elements: [{ type: 'text', text: '4' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }],
+        },
+      ];
+
+      const result = preProcessPageFieldsOnly(nodes);
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0]).toMatchObject({
+        name: 'sd:sectionPageCount',
+        attributes: { importedCachedText: '4' },
+        elements: [fieldRunRPr],
+      });
+    });
   });
 
   describe('simple field syntax (w:fldSimple)', () => {

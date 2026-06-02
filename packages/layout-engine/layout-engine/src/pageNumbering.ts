@@ -161,18 +161,34 @@ function buildBlockById(blocks: FlowBlock[] | ReadonlyMap<string, FlowBlock>): R
   return blocks;
 }
 
+function getActiveChapterNumberText(
+  activeChapterByStyle: ReadonlyMap<number, string>,
+  chapterStyle: number,
+): { chapterNumberText: string; chapterStyle: number } | undefined {
+  for (let headingLevel = chapterStyle; headingLevel > 0; headingLevel -= 1) {
+    const chapterNumberText = activeChapterByStyle.get(headingLevel);
+    if (chapterNumberText) {
+      return { chapterNumberText, chapterStyle: headingLevel };
+    }
+  }
+
+  return undefined;
+}
+
 export function buildChapterContextByPage(
   layout: Layout,
   blocks: FlowBlock[] | ReadonlyMap<string, FlowBlock>,
   sections: SectionMetadata[],
 ): Map<number, ChapterPageInfo> {
   const chapterStyles = new Set<number>();
+  let maxChapterStyle = 0;
   const sectionByIndex = new Map<number, SectionMetadata>();
   for (const section of sections) {
     sectionByIndex.set(section.sectionIndex, section);
     const chapterStyle = section.numbering?.chapterStyle;
     if (typeof chapterStyle === 'number' && Number.isInteger(chapterStyle) && chapterStyle > 0) {
       chapterStyles.add(chapterStyle);
+      maxChapterStyle = Math.max(maxChapterStyle, chapterStyle);
     }
   }
 
@@ -197,7 +213,7 @@ export function buildChapterContextByPage(
       }
 
       const headingLevel = getHeadingLevel(block);
-      if (!headingLevel || !chapterStyles.has(headingLevel)) {
+      if (!headingLevel || headingLevel > maxChapterStyle) {
         continue;
       }
 
@@ -213,9 +229,9 @@ export function buildChapterContextByPage(
       continue;
     }
 
-    const chapterNumberText = activeChapterByStyle.get(chapterStyle);
-    if (chapterNumberText) {
-      chapterInfoByPage.set(page.number, { chapterNumberText, chapterStyle });
+    const activeChapter = getActiveChapterNumberText(activeChapterByStyle, chapterStyle);
+    if (activeChapter) {
+      chapterInfoByPage.set(page.number, activeChapter);
     }
   }
 

@@ -316,6 +316,38 @@ describe('chapter page context', () => {
     expect(result.get(1)?.chapterNumberText).toBe('1');
   });
 
+  it('falls back to the nearest numbered previous heading level for chapter style', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'heading-1',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '3.' } } },
+      },
+      { kind: 'paragraph', id: 'body-before-heading-2', runs: [] },
+      {
+        kind: 'paragraph',
+        id: 'heading-2',
+        runs: [],
+        attrs: { styleId: 'Heading2', wordLayout: { marker: { markerText: '4.' } } },
+      },
+    ] as FlowBlock[];
+    const layout = {
+      pages: [
+        { number: 1, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-1' }] },
+        { number: 2, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'body-before-heading-2' }] },
+        { number: 3, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-2' }] },
+      ],
+    } as Layout;
+    const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 2 } }];
+
+    const result = buildChapterContextByPage(layout, blocks, sections);
+
+    expect(result.get(1)?.chapterNumberText).toBe('3');
+    expect(result.get(2)?.chapterNumberText).toBe('3');
+    expect(result.get(3)?.chapterNumberText).toBe('4');
+  });
+
   it('omits chapter context when the matching heading marker is not a clean single token', () => {
     const blocks: FlowBlock[] = [
       {

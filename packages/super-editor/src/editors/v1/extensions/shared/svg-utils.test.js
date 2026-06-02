@@ -134,6 +134,18 @@ describe('svg-utils', () => {
         expect(span.textContent).toBe('5');
       });
 
+      it('should apply pageNumberFormat to PAGE field type', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'PAGE', pageNumberFormat: 'upperRoman', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          pageNumber: 5,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('V');
+      });
+
       it('should resolve NUMPAGES field type to totalPages', () => {
         const textContent = {
           parts: [{ text: '', fieldType: 'NUMPAGES', formatting: {} }],

@@ -134,7 +134,8 @@ export function createTextElement(textContent, textAlign, width, height, options
 
   const resolveFieldText = (part) => {
     if (part.fieldType === 'PAGE') {
-      return pageNumber != null ? String(pageNumber) : '1';
+      const count = pageNumber ?? 1;
+      return part.pageNumberFormat ? formatPageNumber(count, part.pageNumberFormat) : String(count);
     }
     if (part.fieldType === 'NUMPAGES') {
       return totalPages != null ? String(totalPages) : '1';

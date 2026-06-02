@@ -6528,6 +6528,69 @@ describe('DomPainter', () => {
     expect(mount.querySelector('.superdoc-vector-shape')?.textContent).toContain('Page 2');
   });
 
+  it('renders formatted PAGE fields in drawing text', () => {
+    const vectorShapeBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-formatted-page-field',
+      drawingKind: 'vectorShape',
+      geometry: { width: 100, height: 50, rotation: 0, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      textContent: {
+        parts: [
+          { text: 'Page ', formatting: { fontFamily: 'Arial', fontSize: 18 } },
+          {
+            text: '',
+            fieldType: 'PAGE',
+            pageNumberFormat: 'upperRoman',
+            formatting: { fontFamily: 'Arial', fontSize: 18 },
+          },
+        ],
+      },
+      textAlign: 'center',
+    };
+
+    const vectorShapeMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 100,
+      height: 50,
+      scale: 1,
+      naturalWidth: 100,
+      naturalHeight: 50,
+      geometry: { width: 100, height: 50, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const painter = createTestPainter({ blocks: [vectorShapeBlock], measures: [vectorShapeMeasure] });
+    painter.paint(
+      {
+        pageSize: layout.pageSize,
+        pages: [
+          {
+            number: 7,
+            displayNumber: 5,
+            numberText: '5',
+            fragments: [
+              {
+                kind: 'drawing',
+                drawingKind: 'vectorShape',
+                blockId: 'drawing-formatted-page-field',
+                x: 30,
+                y: 40,
+                width: 100,
+                height: 50,
+                geometry: { width: 100, height: 50, rotation: 0, flipH: false, flipV: false },
+                scale: 1,
+              },
+            ],
+          },
+        ],
+      },
+      mount,
+    );
+
+    expect(mount.querySelector('.superdoc-vector-shape')?.textContent).toContain('Page V');
+  });
+
   describe('resolved paragraph rendering', () => {
     it('renders resolved paragraph lines with precomputed indent styles', () => {
       const paragraphBlock: FlowBlock = {

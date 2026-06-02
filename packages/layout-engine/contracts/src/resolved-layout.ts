@@ -58,6 +58,8 @@ export type ResolvedPage = {
   displayNumber?: number;
   /** Formatted page number text (e.g. "i", "ii" for Roman numeral sections). */
   numberText?: string;
+  /** Numeric page number after section page numbering settings are applied. */
+  effectivePageNumber?: number;
   /** Vertical alignment of content within this page. */
   vAlign?: SectionVerticalAlign;
   /** Base section margins before header/footer inflation. Used for vAlign centering calculations. */

@@ -1764,6 +1764,7 @@ export class HeaderFooterSessionManager {
     sectionFirstPageNumbers: Map<number, number>,
   ): string {
     const pageNumber = page.number;
+    const effectivePageNumber = page.effectivePageNumber ?? page.displayNumber ?? pageNumber;
     const sectionIndex = page.sectionIndex ?? 0;
     const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
     const isFirstPageOfSection = firstPageInSection === pageNumber;
@@ -1786,8 +1787,7 @@ export class HeaderFooterSessionManager {
       return 'first';
     }
     if (hasAlternateHeaders) {
-      const parityPageNumber = page.displayNumber ?? page.number;
-      return parityPageNumber % 2 === 0 ? 'even' : 'odd';
+      return effectivePageNumber % 2 === 0 ? 'even' : 'odd';
     }
     return 'default';
   }
@@ -2419,17 +2419,13 @@ export class HeaderFooterSessionManager {
 
     return (pageNumber, pageMargins, page) => {
       const sectionIndex = page?.sectionIndex ?? 0;
+      const effectivePageNumber = page?.effectivePageNumber ?? page?.displayNumber ?? pageNumber;
       const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
       const sectionPageNumber =
         typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
-      const parityPageNumber = page?.displayNumber ?? pageNumber;
       const headerFooterType = hasSectionResolution
-        ? getHeaderFooterTypeForSection(pageNumber, sectionIndex, multiSectionId, {
-            kind,
-            sectionPageNumber,
-            parityPageNumber,
-          })
-        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind, parityPageNumber });
+        ? getHeaderFooterTypeForSection(effectivePageNumber, sectionIndex, multiSectionId, { kind, sectionPageNumber })
+        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind, parityPageNumber: effectivePageNumber });
 
       if (!headerFooterType) {
         return null;

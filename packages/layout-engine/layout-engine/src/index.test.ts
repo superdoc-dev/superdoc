@@ -6285,6 +6285,53 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(p4Fragment!.y).toBeCloseTo(70, 0);
   });
 
+  it('uses restarted section page numbering for even/odd header selection', () => {
+    const sb1: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb1-restart',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+    const sb2: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb2-restart',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [
+        { sectionIndex: 0 },
+        { sectionIndex: 1, numbering: { start: 2 }, headerRefs: { odd: 'h-odd', even: 'h-even' } },
+      ],
+      headerContentHeightsByRId: new Map([
+        ['h-odd', 80],
+        ['h-even', 40],
+      ]),
+    };
+
+    const layout = layoutDocument(
+      [sb1, tallBlock('p1'), tallBlock('p2'), sb2, tallBlock('p3')],
+      [{ kind: 'sectionBreak' }, tallMeasure, tallMeasure, { kind: 'sectionBreak' }, tallMeasure],
+      options,
+    );
+
+    expect(layout.pages.length).toBeGreaterThanOrEqual(3);
+    expect(layout.pages[2].number).toBe(3);
+    expect(layout.pages[2].effectivePageNumber).toBe(2);
+    expect(layout.pages[2].numberText).toBe('2');
+
+    const p3Fragment = layout.pages[2]?.fragments.find((f) => f.blockId === 'p3');
+    expect(p3Fragment).toBeDefined();
+    expect(p3Fragment!.y).toBeCloseTo(70, 0);
+  });
+
   it('selects even/odd footer heights when alternateHeaders is true', () => {
     // The footer-height path uses the per-rId map + sectionMetadata.footerRefs.
     // Exposing the variant selection through `footerContentHeights` alone is not

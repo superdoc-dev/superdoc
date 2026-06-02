@@ -356,7 +356,7 @@ export function buildMultiSectionIdentifier(
  * This function determines which header/footer variant (default, first, even, odd)
  * should be used for a given page number within a specific section. It respects:
  * - Per-section titlePg (first page of section uses 'first' variant)
- * - Alternate headers (even/odd pages based on section-aware page numbering)
+ * - Alternate headers (even/odd pages based on the effective Word page number)
  * - Fallback to default variant
  *
  * **Important**: When `titlePg` is enabled, this function returns 'first' even if the
@@ -365,7 +365,7 @@ export function buildMultiSectionIdentifier(
  * sections. The rendering layer is responsible for resolving the actual content ID
  * through inheritance fallback logic.
  *
- * @param pageNumber - Physical page number (1-indexed)
+ * @param pageNumber - Effective Word page number (1-indexed), after section page numbering settings
  * @param sectionIndex - Index of the section this page belongs to
  * @param identifier - Multi-section identifier with per-section mappings
  * @param options - Optional settings (kind, sectionPageNumber, parityPageNumber)
@@ -442,10 +442,10 @@ export function getHeaderFooterIdForPage(
   const kind = options?.kind ?? 'header';
   const sectionIndex = page.sectionIndex ?? 0;
   const sectionPageNumber = options?.sectionPageNumber ?? page.number;
-  const parityPageNumber = options?.parityPageNumber ?? page.displayNumber ?? page.number;
+  const effectivePageNumber = options?.parityPageNumber ?? page.effectivePageNumber ?? page.displayNumber ?? page.number;
   const sectionTitlePg = getSectionTitlePg(identifier, sectionIndex);
   const variantType = selectHeaderFooterVariantForPage({
-    documentPageNumber: parityPageNumber,
+    documentPageNumber: effectivePageNumber,
     sectionPageNumber,
     titlePg: sectionTitlePg,
     alternateHeaders: identifier.alternateHeaders,
@@ -505,6 +505,7 @@ export function resolveHeaderFooterForPageAndSection(
   const kind = options?.kind ?? 'header';
   const sectionIndex = page.sectionIndex ?? 0;
   const pageNumber = page.number;
+  const effectivePageNumber = options?.parityPageNumber ?? page.effectivePageNumber ?? page.displayNumber ?? pageNumber;
   const sectionFirstPageNumbers = new Map<number, number>();
   for (const layoutPage of layout.pages) {
     const idx = layoutPage.sectionIndex ?? 0;
@@ -514,11 +515,10 @@ export function resolveHeaderFooterForPageAndSection(
   }
   const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
   const sectionPageNumber = typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
-  const parityPageNumber = options?.parityPageNumber ?? page.displayNumber ?? pageNumber;
 
   const sectionTitlePg = getSectionTitlePg(identifier, sectionIndex);
   const type = selectHeaderFooterVariantForPage({
-    documentPageNumber: parityPageNumber,
+    documentPageNumber: effectivePageNumber,
     sectionPageNumber,
     titlePg: sectionTitlePg,
     alternateHeaders: identifier.alternateHeaders,

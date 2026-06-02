@@ -1708,6 +1708,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (state?.page) {
         state.page.displayNumber = activePageCounter;
         state.page.numberText = formatPageNumber(activePageCounter, activeNumberFormat);
+        state.page.effectivePageNumber = activePageCounter;
         // Stamp section index on the page for section-aware page numbering and header/footer selection
         state.page.sectionIndex = activeSectionIndex;
         layoutLog(`[Layout] Page ${state.page.number}: Stamped sectionIndex:`, activeSectionIndex);

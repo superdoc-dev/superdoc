@@ -2032,6 +2032,8 @@ export type Page = {
   /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
   displayNumber?: number;
   numberText?: string;
+  /** Numeric page number after section page numbering settings are applied. */
+  effectivePageNumber?: number;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';
   sectionRefs?: {

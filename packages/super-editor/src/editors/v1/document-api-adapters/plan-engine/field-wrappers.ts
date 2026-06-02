@@ -3,6 +3,7 @@
  */
 
 import type { Editor } from '../../core/Editor.js';
+import { formatPageNumber, type PageNumberFormat } from '@superdoc/contracts';
 import type {
   FieldListInput,
   FieldGetInput,
@@ -259,6 +260,10 @@ export function fieldsRebuildWrapper(
     return rebuildTotalPageNumber(editor, resolved, address, options);
   }
 
+  if (node.type.name === 'section-page-count') {
+    return rebuildSectionPageCount(editor, resolved, address, options);
+  }
+
   // Default: clear resolvedNumber to force re-evaluation (sequence fields, etc.)
   const receipt = executeDomainCommand(
     editor,
@@ -360,6 +365,51 @@ function rebuildTotalPageNumber(
 
   if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Rebuild produced no change.');
   return fieldSuccess(address);
+}
+
+/**
+ * Rebuilds a section-page-count field by writing the current section page count
+ * into both resolvedText and the node's text content.
+ */
+function rebuildSectionPageCount(
+  editor: Editor,
+  resolved: { pos: number },
+  address: FieldAddress,
+  options?: MutationOptions,
+): FieldMutationResult {
+  const node = editor.state.doc.nodeAt(resolved.pos);
+  if (!node) return fieldFailure('TARGET_NOT_FOUND', 'Node not found.');
+
+  const freshValue = resolveSectionPageCountFieldValue(editor, node);
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const { tr } = editor.state;
+      const currentNode = tr.doc.nodeAt(resolved.pos);
+      if (!currentNode) return false;
+
+      const textChild = freshValue ? editor.schema.text(freshValue) : null;
+      const newNode = currentNode.type.create({ ...currentNode.attrs, resolvedText: freshValue }, textChild);
+      tr.replaceWith(resolved.pos, resolved.pos + currentNode.nodeSize, newNode);
+      editor.dispatch(tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Rebuild produced no change.');
+  return fieldSuccess(address);
+}
+
+function resolveSectionPageCountFieldValue(editor: Editor, node: { attrs?: Record<string, unknown> }): string {
+  const sectionPageCount = editor.options?.sectionPageCount ?? editor.options?.totalPageCount ?? 1;
+  const pageNumberFormat = node.attrs?.pageNumberFormat;
+  if (typeof pageNumberFormat === 'string' && pageNumberFormat) {
+    return formatPageNumber(Number(sectionPageCount) || 1, pageNumberFormat as PageNumberFormat);
+  }
+  return String(sectionPageCount);
 }
 
 export function fieldsRemoveWrapper(

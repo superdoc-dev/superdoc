@@ -241,7 +241,7 @@ export type SdtMetadata =
   | DocumentSectionMetadata
   | DocPartMetadata;
 
-export const CONTRACTS_VERSION = '1.0.0';
+export const CONTRACTS_VERSION = '1.1.0';
 
 /** Unique identifier for a block in the document. Format: `${pos}-${type}`. */
 export type BlockId = string;

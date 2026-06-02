@@ -6591,6 +6591,22 @@ describe('DomPainter', () => {
     expect(mount.querySelector('.superdoc-vector-shape')?.textContent).toContain('Page V');
   });
 
+  it('preserves cached SECTIONPAGES drawing text when section context is unavailable', () => {
+    const painter = new DomPainter();
+    const resolvePartText = (
+      painter as unknown as {
+        resolveShapeTextPartText: (
+          part: { text: string; fieldType: string; pageNumberFormat?: string },
+          context: { pageNumber: number; totalPages: number; section: 'body' },
+        ) => string;
+      }
+    ).resolveShapeTextPartText.bind(painter);
+
+    expect(
+      resolvePartText({ text: '3', fieldType: 'SECTIONPAGES' }, { pageNumber: 1, totalPages: 9, section: 'body' }),
+    ).toBe('3');
+  });
+
   describe('resolved paragraph rendering', () => {
     it('renders resolved paragraph lines with precomputed indent styles', () => {
       const paragraphBlock: FlowBlock = {

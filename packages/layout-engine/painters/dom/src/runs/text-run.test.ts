@@ -31,6 +31,24 @@ describe('resolveRunText', () => {
     expect(resolveRunText(run, context)).toBe('V');
   });
 
+  it('uses section page count context for SECTIONPAGES tokens', () => {
+    const run: TextRun = { text: '0', token: 'sectionPageCount', fontFamily: 'Arial', fontSize: 12 };
+
+    expect(resolveRunText(run, { ...context, sectionPageCount: 7 })).toBe('7');
+  });
+
+  it('formats SECTIONPAGES tokens with run-local page number format', () => {
+    const run: TextRun = {
+      text: '0',
+      token: 'sectionPageCount',
+      pageNumberFieldFormat: { format: 'upperRoman' },
+      fontFamily: 'Arial',
+      fontSize: 12,
+    };
+
+    expect(resolveRunText(run, { ...context, sectionPageCount: 7 })).toBe('VII');
+  });
+
   it('changes merge signature when pageNumberFieldFormat changes', () => {
     const baseRun: TextRun = { text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 };
     const formattedRun: TextRun = { ...baseRun, pageNumberFieldFormat: { format: 'upperRoman' } };

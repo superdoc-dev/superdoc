@@ -1,6 +1,13 @@
 import { toFlowBlocks } from '@core/layout-adapter';
 import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from '../presentation-editor/utils/SchemaNodeTypes.js';
-import { formatPageNumber, type FlowBlock, type PageNumberFormat, type TrackedChangesMode } from '@superdoc/contracts';
+import {
+  formatPageNumber,
+  formatSectionPageNumberText,
+  type FlowBlock,
+  type PageNumberChapterSeparator,
+  type PageNumberFormat,
+  type TrackedChangesMode,
+} from '@superdoc/contracts';
 import type { HeaderFooterBatch } from '@superdoc/layout-bridge';
 import type { Editor } from '@core/Editor.js';
 import { EventEmitter } from '@core/EventEmitter.js';
@@ -265,6 +272,8 @@ export class HeaderFooterEditorManager extends EventEmitter {
    * @param options.currentPageNumber - The current page number for PAGE field resolution. Must be a positive integer if provided.
    * @param options.currentPageNumberText - The current formatted PAGE field display text if provided.
    * @param options.currentPageDisplayNumber - The current numeric PAGE display value for local field formatting.
+   * @param options.currentPageChapterNumberText - The PAGE chapter prefix for local field formatting.
+   * @param options.currentPageChapterSeparator - The PAGE chapter separator for local field formatting.
    * @param options.totalPageCount - The total page count for NUMPAGES field resolution. Must be a positive integer if provided.
    * @param options.sectionPageCount - The current section page count for SECTIONPAGES field resolution. Must be a positive integer if provided.
    * @returns The editor instance, or null if creation failed
@@ -280,6 +289,8 @@ export class HeaderFooterEditorManager extends EventEmitter {
       currentPageNumber?: number;
       currentPageNumberText?: string;
       currentPageDisplayNumber?: number;
+      currentPageChapterNumberText?: string;
+      currentPageChapterSeparator?: PageNumberChapterSeparator;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -448,6 +459,8 @@ export class HeaderFooterEditorManager extends EventEmitter {
       currentPageNumber?: number;
       currentPageNumberText?: string;
       currentPageDisplayNumber?: number;
+      currentPageChapterNumberText?: string;
+      currentPageChapterSeparator?: PageNumberChapterSeparator;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -485,6 +498,12 @@ export class HeaderFooterEditorManager extends EventEmitter {
 
     const currentPage = String(opts.currentPageNumberText || opts.currentPageNumber || '1');
     const currentPageNumber = Number(opts.currentPageDisplayNumber || opts.currentPageNumber || 1);
+    const chapterNumberText =
+      typeof opts.currentPageChapterNumberText === 'string' ? opts.currentPageChapterNumberText : undefined;
+    const chapterSeparator =
+      typeof opts.currentPageChapterSeparator === 'string'
+        ? (opts.currentPageChapterSeparator as PageNumberChapterSeparator)
+        : undefined;
     const totalPages = String(opts.totalPageCount || parentEditor?.currentTotalPages || '1');
     const sectionPages = opts.sectionPageCount;
 
@@ -494,7 +513,14 @@ export class HeaderFooterEditorManager extends EventEmitter {
 
     pageNumberEls.forEach((el) => {
       const pageNumberFormat = this.#getPageNumberFormatForDomNode(editor, el);
-      const text = pageNumberFormat ? formatPageNumber(currentPageNumber, pageNumberFormat) : currentPage;
+      const text = pageNumberFormat
+        ? formatSectionPageNumberText({
+            displayNumber: currentPageNumber,
+            pageFormat: pageNumberFormat,
+            chapterNumberText,
+            chapterSeparator,
+          })
+        : currentPage;
       if (el.textContent !== text) el.textContent = text;
     });
     totalPagesEls.forEach((el) => {
@@ -511,7 +537,9 @@ export class HeaderFooterEditorManager extends EventEmitter {
 
   #getPageNumberFormatForDomNode(editor: Editor, el: Element): PageNumberFormat | null {
     try {
-      const pos = editor.view.posAtDOM(el, 0);
+      const view = editor.view;
+      if (!view) return null;
+      const pos = view.posAtDOM(el, 0);
       const node = editor.state.doc.nodeAt(pos);
       const format = node?.attrs?.pageNumberFormat;
       return typeof format === 'string' ? (format as PageNumberFormat) : null;
@@ -779,6 +807,8 @@ export class HeaderFooterEditorManager extends EventEmitter {
       currentPageNumber?: number;
       currentPageNumberText?: string;
       currentPageDisplayNumber?: number;
+      currentPageChapterNumberText?: string;
+      currentPageChapterSeparator?: PageNumberChapterSeparator;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -802,6 +832,8 @@ export class HeaderFooterEditorManager extends EventEmitter {
         currentPageNumber: options?.currentPageNumber ?? 1,
         currentPageNumberText: options?.currentPageNumberText,
         currentPageDisplayNumber: options?.currentPageDisplayNumber,
+        currentPageChapterNumberText: options?.currentPageChapterNumberText,
+        currentPageChapterSeparator: options?.currentPageChapterSeparator,
         totalPageCount: options?.totalPageCount ?? 1,
         sectionPageCount: options?.sectionPageCount,
       }) as Editor;
@@ -921,6 +953,8 @@ export class HeaderFooterEditorManager extends EventEmitter {
       currentPageNumber?: number;
       currentPageNumberText?: string;
       currentPageDisplayNumber?: number;
+      currentPageChapterNumberText?: string;
+      currentPageChapterSeparator?: PageNumberChapterSeparator;
       totalPageCount?: number;
       sectionPageCount?: number;
     },
@@ -942,6 +976,12 @@ export class HeaderFooterEditorManager extends EventEmitter {
     }
     if (options.currentPageDisplayNumber !== undefined) {
       updateOptions.currentPageDisplayNumber = options.currentPageDisplayNumber;
+    }
+    if (options.currentPageChapterNumberText !== undefined) {
+      updateOptions.currentPageChapterNumberText = options.currentPageChapterNumberText;
+    }
+    if (options.currentPageChapterSeparator !== undefined) {
+      updateOptions.currentPageChapterSeparator = options.currentPageChapterSeparator;
     }
     if (options.totalPageCount !== undefined) {
       updateOptions.totalPageCount = options.totalPageCount;

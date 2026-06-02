@@ -1,7 +1,7 @@
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
 import { isHeadless } from '@utils/headless-helpers.js';
-import { formatPageNumber } from '@superdoc/contracts';
+import { formatPageNumber, formatSectionPageNumberText } from '@superdoc/contracts';
 /**
  * Configuration options for PageNumber
  * @typedef {Object} PageNumberOptions
@@ -361,8 +361,17 @@ const getNodeAttributes = (nodeName, editor, node = null) => {
     case 'page-number': {
       const currentPageNumber = editor.options.currentPageNumber || 1;
       const currentPageDisplayNumber = editor.options.currentPageDisplayNumber || currentPageNumber;
+      const chapterNumberText =
+        typeof editor.options.currentPageChapterNumberText === 'string'
+          ? editor.options.currentPageChapterNumberText
+          : undefined;
       const text = node?.attrs?.pageNumberFormat
-        ? formatPageNumber(Number(currentPageDisplayNumber) || 1, node.attrs.pageNumberFormat)
+        ? formatSectionPageNumberText({
+            displayNumber: Number(currentPageDisplayNumber) || 1,
+            pageFormat: node.attrs.pageNumberFormat,
+            chapterNumberText,
+            chapterSeparator: editor.options.currentPageChapterSeparator,
+          })
         : editor.options.currentPageNumberText || currentPageNumber;
       return {
         text,

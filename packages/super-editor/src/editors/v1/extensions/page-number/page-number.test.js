@@ -253,6 +253,31 @@ describe('AutoPageNumberNodeView', () => {
     expect(nodeView.dom.textContent).toBe('III');
   });
 
+  it('preserves chapter prefix when applying node pageNumberFormat', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: {
+        currentPageNumber: 7,
+        currentPageNumberText: '3\u2011IV',
+        currentPageDisplayNumber: 4,
+        currentPageChapterNumberText: '3',
+        currentPageChapterSeparator: 'hyphen',
+      },
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'page-number' }, attrs: { pageNumberFormat: 'upperRoman' } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('3\u2011IV');
+  });
+
   it('formats page number node from current page number when display text is unavailable', () => {
     const doc = {
       resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),

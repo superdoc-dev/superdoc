@@ -45,6 +45,16 @@ export interface StoryEditorOptions {
   currentPageDisplayNumber?: number;
 
   /**
+   * The current PAGE chapter prefix for field-local formatting.
+   */
+  currentPageChapterNumberText?: string;
+
+  /**
+   * The current PAGE chapter separator for field-local formatting.
+   */
+  currentPageChapterSeparator?: 'hyphen' | 'period' | 'colon' | 'emDash' | 'enDash';
+
+  /**
    * The total page count for NUMPAGES field resolution.
    * Must be a positive integer.
    * @default 1
@@ -133,6 +143,8 @@ export function createStoryEditor(
     currentPageNumber = 1,
     currentPageNumberText,
     currentPageDisplayNumber,
+    currentPageChapterNumberText,
+    currentPageChapterSeparator,
     totalPageCount = 1,
     sectionPageCount,
     element = null,
@@ -177,6 +189,8 @@ export function createStoryEditor(
     currentPageNumber,
     currentPageNumberText,
     currentPageDisplayNumber,
+    currentPageChapterNumberText,
+    currentPageChapterSeparator,
     totalPageCount,
     sectionPageCount,
     editable: false,

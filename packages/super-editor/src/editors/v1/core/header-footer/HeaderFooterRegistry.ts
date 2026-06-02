@@ -486,7 +486,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
     const currentPage = String(opts.currentPageNumberText || opts.currentPageNumber || '1');
     const currentPageNumber = Number(opts.currentPageDisplayNumber || opts.currentPageNumber || 1);
     const totalPages = String(opts.totalPageCount || parentEditor?.currentTotalPages || '1');
-    const sectionPages = Number(opts.sectionPageCount || opts.totalPageCount || parentEditor?.currentTotalPages || 1);
+    const sectionPages = opts.sectionPageCount;
 
     const pageNumberEls = container.querySelectorAll('[data-id="auto-page-number"]');
     const totalPagesEls = container.querySelectorAll('[data-id="auto-total-pages"]');
@@ -501,8 +501,10 @@ export class HeaderFooterEditorManager extends EventEmitter {
       if (el.textContent !== totalPages) el.textContent = totalPages;
     });
     sectionPagesEls.forEach((el) => {
+      if (sectionPages == null) return;
       const pageNumberFormat = this.#getPageNumberFormatForDomNode(editor, el);
-      const text = pageNumberFormat ? formatPageNumber(sectionPages, pageNumberFormat) : String(sectionPages);
+      const sectionPageCount = Number(sectionPages) || 1;
+      const text = pageNumberFormat ? formatPageNumber(sectionPageCount, pageNumberFormat) : String(sectionPageCount);
       if (el.textContent !== text) el.textContent = text;
     });
   }

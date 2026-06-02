@@ -11,6 +11,7 @@ type MockEditorEmitter = {
 
 type MockSectionEditor = MockEditorEmitter & {
   destroy: ReturnType<typeof vi.fn>;
+  setOptions: ReturnType<typeof vi.fn>;
   view: {
     dom: HTMLDivElement;
     focus: ReturnType<typeof vi.fn>;
@@ -58,6 +59,9 @@ const { mockCreateHeaderFooterEditor, mockOnHeaderFooterDataUpdate, mockToFlowBl
         once: emitter.once,
         emit: emitter.emit,
         destroy: vi.fn(),
+        setOptions: vi.fn((options: Record<string, unknown>) => {
+          Object.assign(editorStub.options, options);
+        }),
         view: {
           dom: document.createElement('div'),
           focus: vi.fn(),
@@ -231,6 +235,24 @@ describe('HeaderFooterEditorManager', () => {
     expect(sameEditor).toBe(sectionEditor);
     expect(firstHost.children).toHaveLength(0);
     expect(secondHost.children).toHaveLength(1);
+  });
+
+  it('preserves section page count DOM text when refreshed without section context', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host });
+    expect(sectionEditor).toBeDefined();
+    const sectionPages = document.createElement('span');
+    sectionPages.dataset.id = 'auto-section-pages';
+    sectionPages.textContent = '3';
+    sectionEditor!.view.dom.appendChild(sectionPages);
+
+    manager.ensureEditorSync(descriptor, { editorHost: host, totalPageCount: 9 });
+
+    expect(sectionPages.textContent).toBe('3');
   });
 
   it('emits contentChanged and syncs converter/Yjs data when section editor updates', async () => {

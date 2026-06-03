@@ -9,6 +9,7 @@ import { translator as tblBordersTranslator } from '../tblBorders';
 import { translator as trPrTranslator } from '../trPr';
 import { advancePastRowSpans, fillPlaceholderColumns, isPlaceholderCell } from './tr-helpers.js';
 import { normalizeRowCellChildren } from './row-cell-children.js';
+import { readRowTrackChange, buildRowTrackChangeElement } from './row-track-change.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:tr';
@@ -48,6 +49,15 @@ const encode = (params, encodedAttrs) => {
       ...params,
       nodes: [tPr],
     });
+  }
+
+  // Structural tracked-change revision: <w:ins>/<w:del> inside <w:trPr> marks an
+  // inserted/deleted row. The whitelist-based trPr translator drops these, so read
+  // them here onto a row-level attribute. The enumeration layer groups rows of one
+  // table that share a revision into a single logical structural change.
+  const trackChange = readRowTrackChange(tPr, params);
+  if (trackChange) {
+    encodedAttrs['trackChange'] = trackChange;
   }
   const gridBeforeRaw = tableRowProperties?.['gridBefore'];
   const safeGridBefore =
@@ -279,11 +289,37 @@ const decode = (params, decodedAttrs) => {
     if (trPr) elements.unshift(trPr);
   }
 
+  // Structural tracked-change revision: reconstruct <w:ins>/<w:del> inside
+  // <w:trPr> from the row's trackChange attr (SD-3360 whole-table insert/delete).
+  // The marker is the first child of w:trPr; create the trPr if no other row
+  // properties produced one.
+  applyRowTrackChangeOnDecode({ node, elements, params });
+
   return {
     name: 'w:tr',
     attributes: decodedAttrs || {},
     elements,
   };
+};
+
+/**
+ * Emit the `<w:ins>`/`<w:del>` revision marker inside `<w:trPr>` from the row's
+ * `trackChange` attr. Mutates `elements` in place.
+ *
+ * @param {{ node: any, elements: any[], params: import('@translator').SCDecoderConfig }} input
+ */
+const applyRowTrackChangeOnDecode = ({ node, elements, params }) => {
+  const marker = buildRowTrackChangeElement(node.attrs?.trackChange, params);
+  if (!marker) return;
+
+  let trPr = elements.find((el) => el && el.name === 'w:trPr');
+  if (!trPr) {
+    trPr = { name: 'w:trPr', elements: [] };
+    elements.unshift(trPr);
+  }
+  if (!Array.isArray(trPr.elements)) trPr.elements = [];
+  // ECMA-376: the revision marker is the first child of w:trPr.
+  trPr.elements.unshift(marker);
 };
 
 /** @type {import('@translator').NodeTranslatorConfig} */

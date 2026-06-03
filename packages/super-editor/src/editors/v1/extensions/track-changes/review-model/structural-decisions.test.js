@@ -1,0 +1,401 @@
+// @ts-check
+/**
+ * Structural (whole-table) tracked-change tests (SD-3360 phases 3-4).
+ *
+ * Covers:
+ *   - enumeration + grouping of structural row revisions into one logical change
+ *   - review-graph projection (type === 'structural')
+ *   - decide semantics (accept/reject insert/delete)
+ *   - whole-object atomicity: partial-range target fails closed with INVALID_INPUT
+ *   - scope: 'all' includes structural changes
+ */
+
+import { describe, it, expect } from 'vitest';
+
+import { decideTrackedChanges } from './decision-engine.js';
+import { buildReviewGraph, CanonicalChangeType } from './review-graph.js';
+import {
+  createReviewGraphTestSchema,
+  stateWithTrackedTable,
+  stateWithPerRowTrackedTable,
+  stateWithTwoTrackedTables,
+} from './test-fixtures.js';
+import { enumerateStructuralRowChanges } from '../trackChangesHelpers/structuralRowChanges.js';
+import { EditorState } from 'prosemirror-state';
+import { TrackInsertMarkName } from '../constants.js';
+
+const ALICE = { name: 'Alice Reviewer', email: 'alice@example.com' };
+
+const insertTrackChange = (id = '1') => ({
+  type: 'rowInsert',
+  id,
+  sourceId: id,
+  author: ALICE.name,
+  authorEmail: ALICE.email,
+  date: '2026-05-20T16:00:00Z',
+  importedAuthor: `${ALICE.name} (imported)`,
+});
+
+const deleteTrackChange = (id = '1') => ({ ...insertTrackChange(id), type: 'rowDelete' });
+
+const editorFor = (extra) => ({
+  options: { user: ALICE, trackedChanges: {}, ...extra },
+  storage: { trackChanges: { lastDecisionFailure: null } },
+});
+
+describe('structural row-change enumeration', () => {
+  it('groups every row of a whole inserted table into one structural change', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithTrackedTable({ schema, trackChange: insertTrackChange('1'), rowCount: 3 });
+
+    const changes = enumerateStructuralRowChanges(state);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      id: '1',
+      side: 'insertion',
+      subtype: 'table-insert',
+      wholeTable: true,
+    });
+    expect(changes[0].rows).toHaveLength(3);
+    expect(changes[0].tableTo).toBeGreaterThan(changes[0].tableFrom);
+  });
+
+  it('groups a whole deleted table into one structural deletion', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithTrackedTable({ schema, trackChange: deleteTrackChange('9') });
+    const changes = enumerateStructuralRowChanges(state);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ id: '9', side: 'deletion', subtype: 'table-delete' });
+  });
+
+  it('returns [] for a missing state', () => {
+    expect(enumerateStructuralRowChanges(null)).toEqual([]);
+    expect(enumerateStructuralRowChanges({})).toEqual([]);
+  });
+});
+
+describe('structural review-graph projection', () => {
+  it('exposes the structural change with type "structural" and table-covering segment', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state, tablePos } = stateWithTrackedTable({ schema, trackChange: insertTrackChange('1') });
+
+    const graph = buildReviewGraph({ state });
+    const change = graph.changes.get('1');
+    expect(change).toBeDefined();
+    expect(change.type).toBe(CanonicalChangeType.Structural);
+    expect(change.subtype).toBe('table-insert');
+    expect(change.segments[0].from).toBe(tablePos);
+
+    // No invariant errors introduced by the structural change.
+    expect(graph.validate().filter((d) => d.severity === 'error')).toEqual([]);
+
+    // Range queries see the structural change.
+    const inRange = graph.changesInRange(change.segments[0].from, change.segments[0].to);
+    expect(inRange.map((c) => c.id)).toContain('1');
+  });
+});
+
+describe('structural decide semantics', () => {
+  const tableSurvives = (state) => state.doc.child(1).type.name === 'table';
+  const rowTrackChangeOf = (state) => state.doc.child(1).child(0).attrs.trackChange;
+
+  it('accept insertion clears the row trackChange attrs (table stays as normal content)', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithTrackedTable({ schema, trackChange: insertTrackChange('1') });
+
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'accept',
+      target: { kind: 'id', id: '1' },
+    });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+    expect(tableSurvives(next)).toBe(true);
+    expect(rowTrackChangeOf(next)).toBeNull();
+  });
+
+  it('reject insertion removes the whole table node', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithTrackedTable({ schema, trackChange: insertTrackChange('1') });
+
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'reject',
+      target: { kind: 'id', id: '1' },
+    });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+    expect(next.doc.childCount).toBe(2); // before + after, table gone.
+    expect(next.doc.child(1).textContent).toBe('After.');
+  });
+
+  it('accept deletion removes the whole table node', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithTrackedTable({ schema, trackChange: deleteTrackChange('1') });
+
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'accept',
+      target: { kind: 'id', id: '1' },
+    });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+    expect(next.doc.childCount).toBe(2);
+  });
+
+  it('reject deletion clears the row trackChange attrs (table restored)', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithTrackedTable({ schema, trackChange: deleteTrackChange('1') });
+
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'reject',
+      target: { kind: 'id', id: '1' },
+    });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+    expect(tableSurvives(next)).toBe(true);
+    expect(rowTrackChangeOf(next)).toBeNull();
+  });
+
+  it('scope: all reject clears the structural change', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithTrackedTable({ schema, trackChange: insertTrackChange('1') });
+
+    const result = decideTrackedChanges({ state, editor: editorFor(), decision: 'reject', target: { kind: 'all' } });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+    expect(enumerateStructuralRowChanges(next)).toEqual([]);
+  });
+});
+
+describe('whole-table detection with distinct per-row ids (real Word shape)', () => {
+  const insertRow = (id) => ({
+    type: 'rowInsert',
+    id,
+    sourceId: id,
+    author: ALICE.name,
+    authorEmail: ALICE.email,
+    date: '2026-05-20T16:00:00Z',
+    importedAuthor: `${ALICE.name} (imported)`,
+  });
+  const deleteRow = (id) => ({ ...insertRow(id), type: 'rowDelete' });
+
+  it('mirrors new_table.docx: 3 rows, 3 distinct ids, all inserts → ONE whole table-insert', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithPerRowTrackedTable({
+      schema,
+      rowTrackChanges: [insertRow('2'), insertRow('7'), insertRow('11')],
+    });
+    const changes = enumerateStructuralRowChanges(state);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ subtype: 'table-insert', wholeTable: true, decidable: true });
+    expect(changes[0].rows).toHaveLength(3);
+
+    // accept/reject affects only that table.
+    const accept = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'accept',
+      target: { kind: 'id', id: changes[0].id },
+    });
+    expect(accept.ok).toBe(true);
+    const next = state.apply(accept.tr);
+    expect(next.doc.child(1).type.name).toBe('table');
+    // every row trackChange cleared
+    next.doc.child(1).forEach((row) => expect(row.attrs.trackChange).toBeNull());
+    expect(enumerateStructuralRowChanges(next)).toEqual([]);
+  });
+
+  it('partial tracked rows (subset) → NOT whole-table, decide fails closed, table NOT removed', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithPerRowTrackedTable({
+      schema,
+      rowTrackChanges: [insertRow('2'), null, insertRow('11')],
+    });
+    const changes = enumerateStructuralRowChanges(state);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ wholeTable: false, decidable: false, undecidableReason: 'partial-rows' });
+
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'reject',
+      target: { kind: 'id', id: changes[0].id },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('CAPABILITY_UNAVAILABLE');
+  });
+
+  it('mixed sides within one table → NOT whole-table, decide fails closed', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithPerRowTrackedTable({
+      schema,
+      rowTrackChanges: [insertRow('2'), deleteRow('7')],
+    });
+    const changes = enumerateStructuralRowChanges(state);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ wholeTable: false, decidable: false, undecidableReason: 'mixed-sides' });
+
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'accept',
+      target: { kind: 'id', id: changes[0].id },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('CAPABILITY_UNAVAILABLE');
+    // table must survive
+    const before = state.doc.childCount;
+    expect(before).toBe(state.doc.childCount);
+  });
+
+  it('scope:all with a partial table leaves the table intact (no whole-table removal)', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithPerRowTrackedTable({
+      schema,
+      rowTrackChanges: [insertRow('2'), null],
+    });
+    const result = decideTrackedChanges({ state, editor: editorFor(), decision: 'reject', target: { kind: 'all' } });
+    // The only change is undecidable structural → no ops → fails closed.
+    expect(result.ok).toBe(false);
+    // table still present in original state (engine never mutated).
+    expect(state.doc.child(1).type.name).toBe('table');
+  });
+
+  it('two separate tracked tables → two independent structural changes', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithTwoTrackedTables({
+      schema,
+      first: insertRow('5'),
+      second: deleteRow('8'),
+    });
+    const changes = enumerateStructuralRowChanges(state);
+    expect(changes).toHaveLength(2);
+    expect(changes.map((c) => c.subtype).sort()).toEqual(['table-delete', 'table-insert']);
+    // graph projects each as its own change.
+    const graph = buildReviewGraph({ state });
+    const structuralLogical = new Set();
+    for (const c of graph.changes.values()) {
+      if (c.type === CanonicalChangeType.Structural) structuralLogical.add(c);
+    }
+    expect(structuralLogical.size).toBe(2);
+  });
+
+  it('two tracked tables sharing the same Word id still project as two changes (table-scoped identity)', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateWithTwoTrackedTables({
+      schema,
+      first: insertRow('3'),
+      second: insertRow('3'),
+    });
+    const graph = buildReviewGraph({ state });
+    const structuralLogical = new Set();
+    for (const c of graph.changes.values()) {
+      if (c.type === CanonicalChangeType.Structural) structuralLogical.add(c);
+    }
+    expect(structuralLogical.size).toBe(2);
+  });
+
+  it('nested tracked table inside a cell is discovered as its own change', () => {
+    const schema = createReviewGraphTestSchema();
+    // Outer table: one row, NOT tracked, whose cell contains an inner tracked table.
+    const innerCellParagraph = schema.nodes.paragraph.create({}, [schema.text('Inner')]);
+    const innerCell = schema.nodes.tableCell.create({}, [innerCellParagraph]);
+    const innerRow = schema.nodes.tableRow.create({ trackChange: insertRow('42') }, [innerCell]);
+    const innerTable = schema.nodes.table.create({}, [innerRow]);
+    const outerCell = schema.nodes.tableCell.create({}, [innerTable]);
+    const outerRow = schema.nodes.tableRow.create({ trackChange: null }, [outerCell]);
+    const outerTable = schema.nodes.table.create({}, [outerRow]);
+    const doc = schema.nodes.doc.create({}, [schema.nodes.paragraph.create({}, [schema.text('Before.')]), outerTable]);
+    const state = EditorState.create({ schema, doc });
+
+    const changes = enumerateStructuralRowChanges(state);
+    // Only the inner table is fully tracked → ONE whole-table change.
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ subtype: 'table-insert', wholeTable: true });
+  });
+});
+
+describe('co-decide: inline tracked change inside a removed table', () => {
+  const insertRow = (id) => ({
+    type: 'rowInsert',
+    id,
+    sourceId: id,
+    author: ALICE.name,
+    authorEmail: ALICE.email,
+    date: '2026-05-20T16:00:00Z',
+    importedAuthor: `${ALICE.name} (imported)`,
+  });
+
+  /**
+   * Build a doc: Before. / table (one row, rowInsert) whose cell text carries an
+   * inline trackInsert mark / After.
+   */
+  const buildDocWithInlineInsideTable = (schema) => {
+    const insMark = schema.marks[TrackInsertMarkName].create({
+      id: 'inline-1',
+      author: ALICE.name,
+      authorEmail: ALICE.email,
+      date: '2026-05-20T16:00:00Z',
+    });
+    const cellParagraph = schema.nodes.paragraph.create({}, [schema.text('NewCell', [insMark])]);
+    const cell = schema.nodes.tableCell.create({}, [cellParagraph]);
+    const row = schema.nodes.tableRow.create({ trackChange: insertRow('2') }, [cell]);
+    const table = schema.nodes.table.create({}, [row]);
+    const before = schema.nodes.paragraph.create({}, [schema.text('Before.')]);
+    const after = schema.nodes.paragraph.create({}, [schema.text('After.')]);
+    const doc = schema.nodes.doc.create({}, [before, table, after]);
+    return EditorState.create({ schema, doc });
+  };
+
+  it('scope:all reject removes the table once and retires the inner inline change (no drift)', () => {
+    const schema = createReviewGraphTestSchema();
+    const state = buildDocWithInlineInsideTable(schema);
+
+    // Sanity: graph sees both the structural and the inline change.
+    const graph = buildReviewGraph({ state });
+    const types = [...graph.changes.values()].map((c) => c.type);
+    expect(types).toContain(CanonicalChangeType.Structural);
+    expect(types).toContain(CanonicalChangeType.Insertion);
+
+    const result = decideTrackedChanges({ state, editor: editorFor(), decision: 'reject', target: { kind: 'all' } });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+    // Table gone: before + after only.
+    expect(next.doc.childCount).toBe(2);
+    expect(next.doc.child(0).textContent).toBe('Before.');
+    expect(next.doc.child(1).textContent).toBe('After.');
+    // No tracked changes remain.
+    expect(enumerateStructuralRowChanges(next)).toEqual([]);
+    const nextGraph = buildReviewGraph({ state: next });
+    expect(nextGraph.changes.size).toBe(0);
+    // The inline change was retired as a side effect.
+    const retiredIds = result.receipt.removedChangeIds
+      .map((entry) => entry.id)
+      .concat(result.receipt.affectedChildren.map((c) => c.changeId));
+    expect(retiredIds).toContain('inline-1');
+  });
+});
+
+describe('structural whole-object atomicity (fail closed)', () => {
+  it('a partial-range target on a structural change fails closed with INVALID_INPUT and does not mutate', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state, tablePos } = stateWithTrackedTable({ schema, trackChange: deleteTrackChange('1') });
+
+    // A range strictly inside the table, not covering the whole table → partial.
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'accept',
+      target: { kind: 'range', from: tablePos + 2, to: tablePos + 4 },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('INVALID_INPUT');
+  });
+});

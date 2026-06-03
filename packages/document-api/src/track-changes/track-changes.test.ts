@@ -116,4 +116,18 @@ describe('executeTrackChangesDecide validation', () => {
       } as any),
     ).toThrow(/exactly one/);
   });
+
+  it('fails closed with INVALID_INPUT for a partial-range qualifier on an id target', () => {
+    const adapter = stubAdapter();
+    const result = executeTrackChangesDecide(adapter, {
+      decision: 'accept',
+      target: { id: 'tc1', range: { kind: 'partial', start: 0, end: 2 } } as any,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.failure.code).toBe('INVALID_INPUT');
+    }
+    // The whole change must not be resolved as a side effect.
+    expect(adapter.accept).not.toHaveBeenCalled();
+  });
 });

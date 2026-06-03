@@ -336,4 +336,138 @@ describe('w:tr translator', () => {
       expect(translateCall.node.content).toHaveLength(2);
     });
   });
+
+  describe('structural tracked changes (whole-table insert/delete)', () => {
+    const rowWithMarker = (markerName) => ({
+      name: 'w:tr',
+      elements: [
+        {
+          name: 'w:trPr',
+          elements: [
+            {
+              name: markerName,
+              attributes: {
+                'w:id': '7',
+                'w:author': 'Alice Reviewer',
+                'w:authorEmail': 'alice@example.com',
+                'w:date': '2026-05-20T16:00:00Z',
+              },
+            },
+          ],
+        },
+        { name: 'w:tc', elements: [] },
+      ],
+    });
+
+    it('reads <w:ins> in <w:trPr> into a rowInsert trackChange attr', () => {
+      const row = rowWithMarker('w:ins');
+      const result = translator.encode({ nodes: [row], extraParams: { row, columnWidths: [100] } }, {});
+
+      expect(result.attrs.trackChange).toMatchObject({
+        type: 'rowInsert',
+        id: '7',
+        sourceId: '7',
+        author: 'Alice Reviewer',
+        authorEmail: 'alice@example.com',
+        date: '2026-05-20T16:00:00Z',
+      });
+    });
+
+    it('reads <w:del> in <w:trPr> into a rowDelete trackChange attr', () => {
+      const row = rowWithMarker('w:del');
+      const result = translator.encode({ nodes: [row], extraParams: { row, columnWidths: [100] } }, {});
+
+      expect(result.attrs.trackChange).toMatchObject({ type: 'rowDelete', id: '7' });
+    });
+
+    it('leaves trackChange unset for a plain row', () => {
+      const row = {
+        name: 'w:tr',
+        elements: [
+          { name: 'w:trPr', elements: [] },
+          { name: 'w:tc', elements: [] },
+        ],
+      };
+      const result = translator.encode({ nodes: [row], extraParams: { row, columnWidths: [100] } }, {});
+
+      expect(result.attrs.trackChange).toBeUndefined();
+    });
+
+    describe('export (decode)', () => {
+      const rowNode = (trackChange) => ({
+        type: 'tableRow',
+        attrs: { trackChange },
+        content: [{ type: 'tableCell', attrs: {}, content: [] }],
+      });
+
+      it('emits <w:ins> inside <w:trPr> for a rowInsert trackChange', () => {
+        const node = rowNode({
+          type: 'rowInsert',
+          id: '7',
+          sourceId: '7',
+          author: 'Alice Reviewer',
+          authorEmail: 'alice@example.com',
+          date: '2026-05-20T16:00:00Z',
+        });
+        const result = translator.decode({ node }, {});
+        const trPr = result.elements.find((el) => el.name === 'w:trPr');
+        expect(trPr).toBeDefined();
+        const ins = trPr.elements.find((el) => el.name === 'w:ins');
+        expect(ins).toBeDefined();
+        expect(ins.attributes).toMatchObject({
+          'w:id': '7',
+          'w:author': 'Alice Reviewer',
+          'w:authorEmail': 'alice@example.com',
+          'w:date': '2026-05-20T16:00:00Z',
+        });
+        // The revision marker is the first child of w:trPr.
+        expect(trPr.elements[0].name).toBe('w:ins');
+      });
+
+      it('emits <w:del> inside <w:trPr> for a rowDelete trackChange', () => {
+        const node = rowNode({ type: 'rowDelete', id: '3', sourceId: '3', author: 'Alice Reviewer' });
+        const result = translator.decode({ node }, {});
+        const trPr = result.elements.find((el) => el.name === 'w:trPr');
+        const del = trPr.elements.find((el) => el.name === 'w:del');
+        expect(del).toBeDefined();
+        expect(del.attributes['w:id']).toBe('3');
+      });
+
+      it('emits no revision marker for a plain row', () => {
+        const node = rowNode(null);
+        const result = translator.decode({ node }, {});
+        const trPr = result.elements.find((el) => el.name === 'w:trPr');
+        // No tableRowProperties and no trackChange → no w:trPr is synthesized.
+        expect(trPr).toBeUndefined();
+      });
+
+      it('round-trips import → export preserving the trPr ins markup', () => {
+        const importRow = {
+          name: 'w:tr',
+          elements: [
+            {
+              name: 'w:trPr',
+              elements: [
+                {
+                  name: 'w:ins',
+                  attributes: { 'w:id': '7', 'w:author': 'Alice Reviewer', 'w:date': '2026-05-20T16:00:00Z' },
+                },
+              ],
+            },
+            { name: 'w:tc', elements: [] },
+          ],
+        };
+        const encoded = translator.encode(
+          { nodes: [importRow], extraParams: { row: importRow, columnWidths: [100] } },
+          {},
+        );
+        const exported = translator.decode({ node: encoded }, {});
+        const trPr = exported.elements.find((el) => el.name === 'w:trPr');
+        const ins = trPr.elements.find((el) => el.name === 'w:ins');
+        expect(ins.attributes['w:id']).toBe('7');
+        expect(ins.attributes['w:author']).toBe('Alice Reviewer');
+        expect(ins.attributes['w:date']).toBe('2026-05-20T16:00:00Z');
+      });
+    });
+  });
 });

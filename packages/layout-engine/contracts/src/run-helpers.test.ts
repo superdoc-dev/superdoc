@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import type { FlowBlock, Line, ParagraphBlock, Run, TabRun, TextRun, TrackedChangeMeta } from './index.js';
-import { expandRunsForInlineNewlines, isEmptySdtPlaceholderRun, sliceRunsForLine } from './run-helpers.js';
+import {
+  expandRunsForInlineNewlines,
+  expandRunsForInlineTabs,
+  isEmptySdtPlaceholderRun,
+  sliceRunsForLine,
+} from './run-helpers.js';
 
 describe('expandRunsForInlineNewlines', () => {
   const makeRun = (text: string, pmStart = 0): TextRun => ({
@@ -57,6 +62,91 @@ describe('expandRunsForInlineNewlines', () => {
     const run: TextRun = { ...makeRun('foo\nbar'), trackedChange };
     const result = expandRunsForInlineNewlines([run]);
     expect(result[1]).toMatchObject({ kind: 'break', trackedChange });
+  });
+});
+
+describe('expandRunsForInlineTabs (SD-3266)', () => {
+  const makeRun = (text: string, pmStart = 0, trackedChange?: TrackedChangeMeta): TextRun => ({
+    text,
+    fontFamily: 'Arial',
+    fontSize: 12,
+    pmStart,
+    pmEnd: pmStart + text.length,
+    ...(trackedChange ? { trackedChange } : {}),
+  });
+
+  it('returns runs unchanged when no run contains a literal tab', () => {
+    const runs: Run[] = [makeRun('hello'), makeRun(' world', 5)];
+    expect(expandRunsForInlineTabs(runs)).toBe(runs);
+  });
+
+  it('splits a tracked-deletion text "[\\t]" into [text, tab(fromLiteralTab), text]', () => {
+    const meta: TrackedChangeMeta = {
+      kind: 'delete',
+      id: 'test',
+      author: 'tester',
+      date: '2026-01-01',
+      storyKey: 'body',
+    };
+    const result = expandRunsForInlineTabs([makeRun('[\t]', 0, meta)]);
+    expect(result).toHaveLength(3);
+    expect(result[0]).toMatchObject({ text: '[', pmStart: 0, pmEnd: 1 });
+    expect(result[1]).toMatchObject({
+      kind: 'tab',
+      text: '\t',
+      pmStart: 1,
+      pmEnd: 2,
+      fromLiteralTab: true,
+    });
+    expect((result[1] as TabRun).trackedChange).toEqual(meta);
+    expect(result[2]).toMatchObject({ text: ']', pmStart: 2, pmEnd: 3 });
+  });
+
+  it('splits non-revision text containing "\\t" and sets fromLiteralTab but NOT trackedChange', () => {
+    // TOC-style "Chapter 1\t42" / signature-line "Sign:____\t".
+    // `fromLiteralTab` is the load-bearing signal for the measurer→painter
+    // width handoff (synthesized TabRuns are fresh on each helper call, so
+    // `run.width` mutation isn't visible to the painter — the measurer also
+    // emits a LineSegment, which the painter reads back via segmentsByRun).
+    // `trackedChange` stays undefined for non-revision tabs so the painter
+    // applies real tab-stop advance + signature underline (vs. the compact
+    // 2-space strut used for revision placeholders).
+    const result = expandRunsForInlineTabs([makeRun('Chapter 1\t42', 0)]);
+    expect(result).toHaveLength(3);
+    const tab = result[1] as TabRun;
+    expect(tab.kind).toBe('tab');
+    expect(tab.fromLiteralTab).toBe(true);
+    expect(tab.trackedChange).toBeUndefined();
+  });
+
+  it('preserves tabStops + indent on the synthesized tab', () => {
+    const meta: TrackedChangeMeta = {
+      kind: 'delete',
+      id: 'x',
+      author: 'a',
+      date: 'd',
+      storyKey: 'body',
+    };
+    const tabStops = [{ pos: 720, val: 'start' as const }];
+    const indent = { left: 100 };
+    const result = expandRunsForInlineTabs([makeRun('a\tb', 0, meta)], tabStops, indent);
+    const tab = result[1] as TabRun;
+    expect(tab.tabStops).toBe(tabStops);
+    expect(tab.indent).toBe(indent);
+  });
+
+  it('handles consecutive tabs ("[\\t\\t]") by emitting two tab runs in a row', () => {
+    const meta: TrackedChangeMeta = {
+      kind: 'delete',
+      id: 'x',
+      author: 'a',
+      date: 'd',
+      storyKey: 'body',
+    };
+    const result = expandRunsForInlineTabs([makeRun('a(n) [\t\t] (X)', 0, meta)]);
+    // Expect: text "a(n) [" + tab + tab + text "] (X)"
+    const kinds = result.map((r) => (r.kind === 'tab' ? 'tab' : 'text'));
+    expect(kinds).toEqual(['text', 'tab', 'tab', 'text']);
   });
 });
 

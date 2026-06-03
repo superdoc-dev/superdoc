@@ -1513,7 +1513,11 @@ describe('DomPainter hanging indent with tabs', () => {
       const block: FlowBlock = {
         kind: 'paragraph',
         id: blockId,
-        runs: [{ text: 'Text\twith tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
+        // SD-3266: literal U+0009 now expands at paint-time via expandRunsForInlineTabs,
+        // which would invalidate the runIndex:0 indices these segment fixtures use.
+        // This describe block exercises segment positioning, not tab semantics — use
+        // a plain space to keep the original 1-run shape under the hand-rolled measure.
+        runs: [{ text: 'Text with tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
         attrs: {
           indent: {
             left: 100,
@@ -1593,7 +1597,11 @@ describe('DomPainter hanging indent with tabs', () => {
       const block: FlowBlock = {
         kind: 'paragraph',
         id: blockId,
-        runs: [{ text: 'Text\twith tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
+        // SD-3266: literal U+0009 now expands at paint-time via expandRunsForInlineTabs,
+        // which would invalidate the runIndex:0 indices these segment fixtures use.
+        // This describe block exercises segment positioning, not tab semantics — use
+        // a plain space to keep the original 1-run shape under the hand-rolled measure.
+        runs: [{ text: 'Text with tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
         attrs: {
           indent: {
             left: 360,
@@ -1674,7 +1682,8 @@ describe('DomPainter hanging indent with tabs', () => {
         id: blockId,
         runs: [
           {
-            text: 'First line text continues on second line\twith tab',
+            // SD-3266: replace literal \t with space (see note in failing test above).
+            text: 'First line text continues on second line with tab',
             fontFamily: 'Arial',
             fontSize: 12,
             pmStart: 0,
@@ -1770,7 +1779,11 @@ describe('DomPainter hanging indent with tabs', () => {
       const block: FlowBlock = {
         kind: 'paragraph',
         id: blockId,
-        runs: [{ text: 'Text\twith tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
+        // SD-3266: literal U+0009 now expands at paint-time via expandRunsForInlineTabs,
+        // which would invalidate the runIndex:0 indices these segment fixtures use.
+        // This describe block exercises segment positioning, not tab semantics — use
+        // a plain space to keep the original 1-run shape under the hand-rolled measure.
+        runs: [{ text: 'Text with tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
         attrs: {
           indent: {
             left: 200,
@@ -1848,7 +1861,11 @@ describe('DomPainter hanging indent with tabs', () => {
       const block: FlowBlock = {
         kind: 'paragraph',
         id: blockId,
-        runs: [{ text: 'Text\twith tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
+        // SD-3266: literal U+0009 now expands at paint-time via expandRunsForInlineTabs,
+        // which would invalidate the runIndex:0 indices these segment fixtures use.
+        // This describe block exercises segment positioning, not tab semantics — use
+        // a plain space to keep the original 1-run shape under the hand-rolled measure.
+        runs: [{ text: 'Text with tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
         attrs: {
           indent: {
             left: 0,
@@ -1934,7 +1951,11 @@ describe('DomPainter hanging indent with tabs', () => {
       const block: FlowBlock = {
         kind: 'paragraph',
         id: blockId,
-        runs: [{ text: 'Text\twith tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
+        // SD-3266: literal U+0009 now expands at paint-time via expandRunsForInlineTabs,
+        // which would invalidate the runIndex:0 indices these segment fixtures use.
+        // This describe block exercises segment positioning, not tab semantics — use
+        // a plain space to keep the original 1-run shape under the hand-rolled measure.
+        runs: [{ text: 'Text with tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
         attrs: {
           indent: {
             left: 100,
@@ -1980,7 +2001,11 @@ describe('DomPainter hanging indent with tabs', () => {
       const block: FlowBlock = {
         kind: 'paragraph',
         id: blockId,
-        runs: [{ text: 'Text\twith tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
+        // SD-3266: literal U+0009 now expands at paint-time via expandRunsForInlineTabs,
+        // which would invalidate the runIndex:0 indices these segment fixtures use.
+        // This describe block exercises segment positioning, not tab semantics — use
+        // a plain space to keep the original 1-run shape under the hand-rolled measure.
+        runs: [{ text: 'Text with tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
         attrs: {
           indent: {
             left: 100,
@@ -2245,7 +2270,11 @@ describe('DomPainter hanging indent with tabs', () => {
       const block: FlowBlock = {
         kind: 'paragraph',
         id: blockId,
-        runs: [{ text: 'Text\twith tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
+        // SD-3266: literal U+0009 now expands at paint-time via expandRunsForInlineTabs,
+        // which would invalidate the runIndex:0 indices these segment fixtures use.
+        // This describe block exercises segment positioning, not tab semantics — use
+        // a plain space to keep the original 1-run shape under the hand-rolled measure.
+        runs: [{ text: 'Text with tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
         attrs: {
           indent: {
             left: 360,
@@ -2292,7 +2321,11 @@ describe('DomPainter hanging indent with tabs', () => {
       const block: FlowBlock = {
         kind: 'paragraph',
         id: blockId,
-        runs: [{ text: 'Text\twith tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
+        // SD-3266: literal U+0009 now expands at paint-time via expandRunsForInlineTabs,
+        // which would invalidate the runIndex:0 indices these segment fixtures use.
+        // This describe block exercises segment positioning, not tab semantics — use
+        // a plain space to keep the original 1-run shape under the hand-rolled measure.
+        runs: [{ text: 'Text with tab', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 13 }],
         attrs: {
           indent: {
             left: 0,

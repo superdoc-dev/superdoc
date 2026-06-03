@@ -433,6 +433,24 @@ export type TabRun = RunMarks & {
   pmEnd?: number;
   /** SDT metadata if tab is inside a structured document tag. */
   sdt?: SdtMetadata;
+  /**
+   * SD-3266: true when this TabRun was produced by expandRunsForInlineTabs from a
+   * literal U+0009 in run text (i.e. inside `<w:t>` / `<w:delText>`) rather than
+   * from a canonical `<w:tab/>` element. Layout treats these compactly — no
+   * tab-stop advance, glyph-sized width — so a deleted "[\t]" placeholder fits
+   * inline like Word's body view and the strikethrough can paint across.
+   */
+  fromLiteralTab?: boolean;
+  /** Optional tracked-change metadata propagated from the source text run (SD-3266). */
+  trackedChange?: TrackedChangeMeta;
+  /**
+   * SD-3266: typography propagated from the source text run when a literal-tab
+   * TabRun is synthesized. The measurer uses fontFamily/fontSize to compute the
+   * "→" glyph width; the painter sets the same on the visible tab span so it
+   * does not inherit the line container's `font-size: 0` and render invisibly.
+   */
+  fontFamily?: string;
+  fontSize?: number;
 };
 
 export type LineBreakRun = {
@@ -2327,6 +2345,7 @@ export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from 
 // and painter-dom). Located in contracts to avoid reverse stage dependencies.
 export {
   expandRunsForInlineNewlines,
+  expandRunsForInlineTabs,
   isEmptyInlineSdtPlaceholderRun,
   isEmptySdtPlaceholderRun,
   sliceRunsForLine,

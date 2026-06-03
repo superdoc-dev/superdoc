@@ -5763,7 +5763,7 @@ describe('DomPainter', () => {
 
       const footerEl = mount.querySelector('.superdoc-page-footer');
       expect(footerEl).toBeTruthy();
-      expect(footerEl?.textContent).toBe('-4-');
+      expect(footerEl?.textContent).toBe('- 4 -');
     });
 
     it('bottom-aligns footer content within the footer box', () => {

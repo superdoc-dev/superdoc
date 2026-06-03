@@ -9,7 +9,7 @@ const pageNumberBlock: FlowBlock = {
     {
       text: '0',
       token: 'pageNumber',
-      pageNumberFormat: 'upperRoman',
+      pageNumberFieldFormat: { format: 'upperRoman' },
       fontFamily: 'Arial',
       fontSize: 12,
     } as TextRun,

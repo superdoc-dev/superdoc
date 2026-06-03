@@ -28,7 +28,12 @@ import type {
   CollaborationProvider as SuperEditorCollaborationProvider,
   Comment,
   FontConfig,
+  FontsConfig,
   FontsResolvedPayload,
+  FontsChangedPayload,
+  FontResolutionRecord,
+  FontAssetUrlContext,
+  FontAssetUrlResolver,
   ListDefinitionsPayload,
   ProofingProvider,
   User,
@@ -66,6 +71,39 @@ export type NavigableAddress = SuperEditorNavigableAddress;
  * `#assignUserColor()` after `#init`.
  */
 export type { User } from '@superdoc/super-editor';
+export type {
+  FontResolutionRecord,
+  FontsChangedPayload,
+  FontsConfig,
+  FontAssetUrlContext,
+  FontAssetUrlResolver,
+} from '@superdoc/super-editor';
+
+/**
+ * Read-only font surface on a SuperDoc instance (`superdoc.fonts`). The authoritative,
+ * substitution- and load-aware answer to "what fonts does this document use and did
+ * SuperDoc render them faithfully", pulled on demand. The same report streams via the
+ * `fonts-changed` event / `onFontsChanged`. All three reflect the active editor; they
+ * return empty arrays when no editor is active. The write surface (add/map/preload) is
+ * deferred. {@link getReport} and {@link getDocumentFonts} cover the document's DECLARED
+ * fonts (font table + theme + defaults), not only fonts visible on screen.
+ */
+export interface SuperDocFontsApi {
+  /** Per-font report: requested logical family -> physical render family, reason, load status, export family, missing. */
+  getReport(): FontResolutionRecord[];
+  /** Declared families with no faithful render font loaded (the substitution-aware truth). */
+  getMissingFonts(): string[];
+  /** The document's declared logical font families, deduped. */
+  getDocumentFonts(): string[];
+  /**
+   * Observe the font report: replays the current report immediately if one has already
+   * resolved, then invokes `callback` on every future change. Use this rather than
+   * `on('fonts-changed')` when you may subscribe after the report resolved. Note: right after
+   * a document swap, if the new active editor has not produced a report yet, nothing is
+   * delivered until it does (no stale prior-document report). Returns an unsubscribe function.
+   */
+  onReport(callback: (payload: FontsChangedPayload) => void): () => void;
+}
 
 /**
  * Internal post-`#init` shape of the active user. Extends the public
@@ -1825,6 +1863,13 @@ export interface Config {
   /** Proofing / spellcheck configuration. */
   proofing?: ProofingConfig;
   /**
+   * Font system configuration. Currently the served location of the bundled
+   * metric-compatible substitute pack: set `fonts.assetBaseUrl` (e.g. `/fonts/` or a CDN
+   * URL) for npm/SSR/framework deploys, or `fonts.resolveAssetUrl` for signed/versioned
+   * hosting. The CDN `<script>` build auto-detects a script-relative default.
+   */
+  fonts?: FontsConfig;
+  /**
    * Opt-in toggle for the layout engine. Auto-disabled when web layout is
    * requested without `layoutEngineOptions.flowMode === 'semantic'`; the
    * loader logs a warning and falls back to the legacy ProseMirror render
@@ -1835,8 +1880,20 @@ export interface Config {
    * Callback fired after the editor reports `fonts-resolved`. The payload
    * contains `documentFonts` and `unsupportedFonts` arrays so hosts can fall
    * back, warn, or block printing on unsupported faces.
+   *
+   * LEGACY/EARLY: this fires once before fonts load and is not substitution-aware
+   * (`unsupportedFonts` over-reports families that render via a bundled substitute).
+   * For the authoritative, load-settled picture use {@link onFontsChanged}.
    */
   onFontsResolved?: (payload: FontsResolvedPayload) => void;
+  /**
+   * Callback fired with the authoritative substitution + load-aware font report: once
+   * after the load-before-measure gate settles (`source: 'initial'`), again when a face
+   * arrives after a timed-out first paint (`'late-load'`). Each payload carries the full
+   * per-font `resolutions`, the genuinely `missingFonts`, and a `loadSummary`. Also
+   * available to pull on demand via `superdoc.fonts.getReport()`.
+   */
+  onFontsChanged?: (payload: FontsChangedPayload) => void;
 }
 
 /**

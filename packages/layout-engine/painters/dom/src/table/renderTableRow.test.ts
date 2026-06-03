@@ -285,6 +285,60 @@ describe('renderTableRow', () => {
     expect(secondCall.borders?.left).toBeDefined();
   });
 
+  // SD-1797: a single row's measure only lists cells that START in it, so on a w:vMerge
+  // (rowspan) continuation row the columns held by a cell spanning from above look empty.
+  // `rowOccupiedRightCol` / `nextRowOccupiedRightCol` count that occupancy so the single-owner
+  // edge ownership doesn't misfire (a leftmost cell drawing a right border, or a covered column
+  // mistaken for a gridAfter gap) and double the shared edge.
+  const sparseRow = (overrides: Record<string, unknown> = {}) =>
+    createDeps({
+      rowIndex: 2,
+      totalRows: 6,
+      cellSpacingPx: 0,
+      columnWidths: [100, 100, 100, 100],
+      rowMeasure: { height: 20, cells: [{ width: 100, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 1 }] },
+      row: { id: 'row-x', cells: [{ id: 'c', blocks: [{ kind: 'paragraph', id: 'p', runs: [] }] }] },
+      ...overrides,
+    });
+
+  it('does not draw a right border on a leftmost cell of a rowspan-continuation row', () => {
+    // Columns 1-3 are covered by a vMerge cell spanning from above (rowOccupiedRightCol = 4),
+    // so this leftmost cell is NOT the rightmost column and must not draw insideV as its right.
+    renderTableRow(sparseRow({ rowOccupiedRightCol: 4 }) as never);
+
+    const call = getRenderedCellCall();
+    expect(call.borders?.right).toBeUndefined();
+    expect(call.borders?.left).toBeDefined();
+  });
+
+  it('does not treat a rowspan-covered column below a spanning cell as a gridAfter gap', () => {
+    // A cell spanning all 4 columns; the row below is fully covered (occupancy 4) -> no gap,
+    // so the spanning cell does NOT draw its own bottom (the cell below owns the shared edge).
+    renderTableRow(
+      sparseRow({
+        rowMeasure: { height: 20, cells: [{ width: 400, height: 20, gridColumnStart: 0, colSpan: 4, rowSpan: 1 }] },
+        nextRowOccupiedRightCol: 4,
+      }) as never,
+    );
+
+    const call = getRenderedCellCall();
+    expect(call.borders?.bottom).toBeUndefined();
+  });
+
+  it('still treats a genuine gridAfter gap as a bottom boundary (SD-3345 preserved)', () => {
+    // The cell spans all 4 columns but the row below only reaches column 2 (real gridAfter gap),
+    // so the spanning cell must draw its own bottom across the uncovered span.
+    renderTableRow(
+      sparseRow({
+        rowMeasure: { height: 20, cells: [{ width: 400, height: 20, gridColumnStart: 0, colSpan: 4, rowSpan: 1 }] },
+        nextRowOccupiedRightCol: 2,
+      }) as never,
+    );
+
+    const call = getRenderedCellCall();
+    expect(call.borders?.bottom).toBeDefined();
+  });
+
   it('does not paint interior bottom border for explicit cell borders in collapsed mode on non-final row', () => {
     const explicit = {
       top: { style: 'single' as const, width: 2, color: '#123456' },

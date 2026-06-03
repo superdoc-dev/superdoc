@@ -242,6 +242,16 @@ type TableRowRenderDependencies = {
   nextRow?: TableRow;
   /** Next (below) row measure, to detect a gridAfter gap under a spanning cell (SD-3345). */
   nextRowMeasure?: TableRowMeasure;
+  /**
+   * Rightmost occupied grid column (exclusive) for THIS row, counting cells that span into it
+   * via w:vMerge (rowspan) from an earlier row. Falls back to this row's own cells when absent.
+   * Prevents a leftmost cell on a rowspan-continuation row from being treated as the rightmost
+   * column. (SD-1797)
+   */
+  rowOccupiedRightCol?: number;
+  /** Same as {@link rowOccupiedRightCol} for the NEXT row, so a rowspan continuation below is
+   * not mistaken for a gridAfter gap (which would double the shared bottom edge). (SD-1797) */
+  nextRowOccupiedRightCol?: number;
   /** Total number of rows in the table (for border resolution) */
   totalRows: number;
   /** Table-level borders (for resolving cell borders) */
@@ -358,6 +368,8 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     prevRowMeasure,
     nextRow,
     nextRowMeasure,
+    rowOccupiedRightCol,
+    nextRowOccupiedRightCol,
     totalRows,
     tableBorders,
     columnWidths,
@@ -390,9 +402,14 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
   // border at the rightmost cell, treating gridAfter columns as outside the box.
   // Use the last occupied column as the right edge; for rows without gridAfter
   // this equals totalCols (no change).
-  const rowRightEdgeCol = rowMeasure.cells.length
-    ? Math.min(totalCols, Math.max(...rowMeasure.cells.map((c) => (c.gridColumnStart ?? 0) + (c.colSpan ?? 1))))
-    : totalCols;
+  // Prefer the rowspan-aware occupied width (counts cells spanning into this row via vMerge);
+  // fall back to this row's own cells when the caller doesn't provide it. (SD-1797, SD-3345)
+  const rowRightEdgeCol =
+    rowOccupiedRightCol != null && rowOccupiedRightCol > 0
+      ? Math.min(totalCols, rowOccupiedRightCol)
+      : rowMeasure.cells.length
+        ? Math.min(totalCols, Math.max(...rowMeasure.cells.map((c) => (c.gridColumnStart ?? 0) + (c.colSpan ?? 1))))
+        : totalCols;
 
   // Row-level border override (OOXML w:tblPrEx/w:tblBorders, §17.4.61). When this
   // row carries its own borders, they override the table borders for this row only,
@@ -531,9 +548,14 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
   // Rightmost grid column (exclusive) covered by the next row's REAL cells. When a spanning
   // cell's right edge exceeds this, the next row has a gridAfter spacer beneath it and can't
   // own the shared bottom edge across the uncovered span. (SD-3345)
-  const nextRowMaxCol = nextRowMeasure?.cells?.length
-    ? Math.max(...nextRowMeasure.cells.map((c) => (c.gridColumnStart ?? 0) + (c.colSpan ?? 1)))
-    : Infinity;
+  // Rowspan-aware occupied width of the next row (counts cells spanning into it); fall back to
+  // the next row's own cells. A covered column must not look like a gridAfter gap. (SD-1797)
+  const nextRowMaxCol =
+    nextRowOccupiedRightCol != null && nextRowOccupiedRightCol > 0
+      ? nextRowOccupiedRightCol
+      : nextRowMeasure?.cells?.length
+        ? Math.max(...nextRowMeasure.cells.map((c) => (c.gridColumnStart ?? 0) + (c.colSpan ?? 1)))
+        : Infinity;
 
   for (let cellIndex = 0; cellIndex < rowMeasure.cells.length; cellIndex += 1) {
     const cellMeasure = rowMeasure.cells[cellIndex];

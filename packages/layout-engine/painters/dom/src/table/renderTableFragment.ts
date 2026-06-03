@@ -435,6 +435,25 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     return r?.height ?? 0;
   });
 
+  // Per-row rightmost occupied grid column (exclusive), INCLUDING cells that span into a row
+  // via w:vMerge (rowspan) from an earlier row. A single row's measure only lists the cells
+  // that START in that row, so on a rowspan-continuation row the columns held by a spanning
+  // cell look empty. The single-owner edge helpers (rowRightEdgeCol / nextRowMaxCol) would
+  // then undercount and treat a leftmost cell as the rightmost column (drawing an interior
+  // right border) or treat a covered column as a gridAfter gap (drawing an interior bottom),
+  // doubling the shared edge. Counting rowspan occupancy keeps those edges single-owned.
+  // (SD-1797)
+  const rowOccupiedRightCols: number[] = new Array(measure.rows.length).fill(0);
+  measure.rows.forEach((rowM, r) => {
+    for (const c of rowM?.cells ?? []) {
+      const right = (c.gridColumnStart ?? 0) + (c.colSpan ?? 1);
+      const lastRow = Math.min(measure.rows.length - 1, r + (c.rowSpan ?? 1) - 1);
+      for (let rr = r; rr <= lastRow; rr += 1) {
+        if (right > rowOccupiedRightCols[rr]) rowOccupiedRightCols[rr] = right;
+      }
+    }
+  });
+
   // First row starts after space before table content (space between table border and first row)
   let y = cellSpacingPx;
 
@@ -456,6 +475,8 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         prevRowMeasure: r > 0 ? measure.rows[r - 1] : undefined,
         nextRow: r < block.rows.length - 1 ? block.rows[r + 1] : undefined,
         nextRowMeasure: r < block.rows.length - 1 ? measure.rows[r + 1] : undefined,
+        rowOccupiedRightCol: rowOccupiedRightCols[r],
+        nextRowOccupiedRightCol: rowOccupiedRightCols[r + 1],
         totalRows: block.rows.length,
         tableBorders,
         columnWidths: effectiveColumnWidths,
@@ -627,6 +648,8 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       prevRowMeasure: r > 0 ? measure.rows[r - 1] : undefined,
       nextRow: r < block.rows.length - 1 ? block.rows[r + 1] : undefined,
       nextRowMeasure: r < block.rows.length - 1 ? measure.rows[r + 1] : undefined,
+      rowOccupiedRightCol: rowOccupiedRightCols[r],
+      nextRowOccupiedRightCol: rowOccupiedRightCols[r + 1],
       totalRows: block.rows.length,
       tableBorders,
       columnWidths: effectiveColumnWidths,

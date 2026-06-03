@@ -15,6 +15,7 @@ import {
 export type { FontLoadSummary } from '@superdoc/font-system';
 import { clearTextMeasurementCaches } from '@superdoc/measuring-dom';
 import { measureCache } from '@superdoc/layout-bridge';
+import { FontLateLoadReflowScheduler } from './FontLateLoadReflowScheduler';
 
 /**
  * The font set the gate operates on plus the constructor for new managed faces.
@@ -69,6 +70,13 @@ export interface FontReadinessGateOptions {
    * (text/font-metric/table caches + the block-measure cache). Injectable for tests.
    */
   invalidateCaches?: () => void;
+  /** Late-load reflow batching: quiet window before the leading flush. Defaults to the scheduler default. */
+  reflowQuietMs?: number;
+  /** Late-load reflow batching: cooldown (min interval between flushes). Defaults to the scheduler default. */
+  reflowCooldownMs?: number;
+  /** Timer hooks for the late-load scheduler (injectable for tests); default to the globals. */
+  scheduleTimeout?: (cb: () => void, ms: number) => unknown;
+  cancelTimeout?: (handle: unknown) => void;
 }
 
 /**
@@ -110,6 +118,8 @@ export class FontReadinessGate {
   readonly #seenAvailableFaces = new Set<string>();
   #lastSummary: FontLoadSummary | null = null;
   #loadingDoneHandler: ((event: FontFaceSetLoadEvent) => void) | null = null;
+  /** Batches late-load reflows so many font arrivals coalesce into bounded re-measures. */
+  readonly #lateLoadScheduler: FontLateLoadReflowScheduler;
 
   constructor(options: FontReadinessGateOptions) {
     this.#getDocumentFonts = options.getDocumentFonts;
@@ -121,6 +131,13 @@ export class FontReadinessGate {
     this.#onRegistryResolved = options.onRegistryResolved ?? null;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_FONT_LOAD_TIMEOUT_MS;
     this.#invalidateCaches = options.invalidateCaches ?? defaultInvalidate;
+    this.#lateLoadScheduler = new FontLateLoadReflowScheduler({
+      quietMs: options.reflowQuietMs,
+      cooldownMs: options.reflowCooldownMs,
+      flush: () => this.#flushLateFontLoads(),
+      scheduleTimeout: options.scheduleTimeout,
+      cancelTimeout: options.cancelTimeout,
+    });
   }
 
   /**
@@ -255,20 +272,46 @@ export class FontReadinessGate {
   notifyFontConfigChanged(): void {
     this.#fontConfigVersion += 1;
     bumpFontConfigVersion(); // bump the global epoch so measure/paint reuse signatures bust
-    this.#seenAvailable.clear();
-    this.#seenAvailableFaces.clear();
-    this.#requiredSignature = '';
+    // Reset the required + seen sets so an in-flight `loadingdone` can't re-arm a reflow for a
+    // face this immediate reflow already corrects; the next pass re-plans from scratch.
+    this.#resetRequiredAndSeen();
+    // Drop any pending batched late-load reflow: this immediate reflow supersedes it.
+    this.#lateLoadScheduler.cancel();
     this.#invalidateCaches();
     this.#requestReflow();
   }
 
-  /** Remove the late-load listener. Call on editor teardown. */
+  /**
+   * Reset late-load state for a document swap: cancel the pending batched reflow and drop the
+   * prior document's required/seen sets, so a flush armed under the old document cannot fire a
+   * spurious reflow against the new one. The new document's own render re-plans and invalidates.
+   */
+  resetForDocumentChange(): void {
+    this.#lateLoadScheduler.cancel();
+    this.#resetRequiredAndSeen();
+  }
+
+  /** Clear the per-document required + seen face/family sets, the signature, and the cached
+   *  summary, so the next readiness pass cannot reuse the prior document's diagnostics (an
+   *  empty/no-text new document would otherwise short-circuit to the stale summary). */
+  #resetRequiredAndSeen(): void {
+    this.#requiredSignature = '';
+    this.#requiredFaceKeys = new Set();
+    this.#requiredFamilies = new Set();
+    this.#seenAvailable.clear();
+    this.#seenAvailableFaces.clear();
+    this.#lastSummary = null;
+  }
+
+  /** Remove the late-load listener and cancel any pending batched reflow. Call on teardown. */
   dispose(): void {
     const fontSet = this.#context?.fontSet ?? null;
     if (fontSet && this.#loadingDoneHandler && typeof fontSet.removeEventListener === 'function') {
       fontSet.removeEventListener('loadingdone', this.#loadingDoneHandler);
     }
     this.#loadingDoneHandler = null;
+    // Cancel pending batched reflow so a destroyed editor never reflows after teardown.
+    this.#lateLoadScheduler.cancel();
   }
 
   /** Resolve (and cache) the watched font set + its paired registry. */
@@ -306,12 +349,14 @@ export class FontReadinessGate {
 
   #onLoadingDone(event: FontFaceSetLoadEvent): void {
     // A required face/family that the last measure could not use just finished loading ->
-    // that paint used a fallback, so invalidate and reflow. We key off the faces the event
-    // actually reports as loaded (reliable), NOT FontFaceSet.check() (which lies for
-    // unregistered bare families). The seen-set fires this at most once per face.
+    // that paint used a fallback, so it must invalidate and reflow. We key off the faces the
+    // event actually reports as loaded (reliable), NOT FontFaceSet.check() (which lies for
+    // unregistered bare families). The seen-set records each at most once. The actual reflow
+    // is BATCHED through the late-load scheduler so many arrival waves coalesce into bounded
+    // re-measures instead of one full reflow per wave.
     const faces = event?.fontfaces ?? [];
     if (faces.length === 0) return;
-    let changed = false;
+    const changedKeys: string[] = [];
 
     if (this.#requiredFaceKeys.size > 0) {
       // Face path: reflow only when a loaded face matches a REQUIRED face key (family +
@@ -324,7 +369,7 @@ export class FontReadinessGate {
         if (this.#seenAvailableFaces.has(key)) continue;
         if (loadedFaceKeys.has(key)) {
           this.#seenAvailableFaces.add(key);
-          changed = true;
+          changedKeys.push(key);
         }
       }
     } else {
@@ -334,15 +379,29 @@ export class FontReadinessGate {
         if (this.#seenAvailable.has(family)) continue;
         if (loadedFamilies.has(normalizeFamilyKey(family))) {
           this.#seenAvailable.add(family);
-          changed = true;
+          changedKeys.push(normalizeFamilyKey(family));
         }
       }
     }
 
-    if (!changed) return;
+    if (changedKeys.length === 0) return;
+    // The available-font picture changed NOW, so bump the epoch and clear the measurement
+    // caches immediately - measure caches are keyed without the epoch (fontMetricsCache is
+    // `family|size|bold|italic`), so this explicit clear is the only thing that busts them,
+    // and any re-measure/paint before the batched reflow must already see the loaded font.
+    // Only the expensive full reflow is deferred to the scheduler so arrival waves coalesce.
     this.#fontConfigVersion += 1;
-    bumpFontConfigVersion(); // bump the global epoch so measure/paint reuse signatures bust
+    bumpFontConfigVersion(); // bump the global epoch so paint reuse signatures bust
     this.#invalidateCaches();
+    this.#lateLoadScheduler.schedule(changedKeys);
+  }
+
+  /**
+   * The batched late-load correction: only the expensive re-measure/reflow. The epoch bump and
+   * cache invalidation already fired synchronously in `#onLoadingDone`, so the document is never
+   * left measuring against stale caches while the reflow waits out the scheduler's window.
+   */
+  #flushLateFontLoads(): void {
     this.#requestReflow();
   }
 }
@@ -394,7 +453,14 @@ function summarize(results: FontLoadResult[]): FontLoadSummary {
 
 // Status precedence for rolling per-face outcomes up to a family: a settled failure must
 // never be masked by a loaded sibling. Mirrors FontRegistry.getStatus's rollup order.
-const FACE_STATUS_PRIORITY: FontLoadStatus[] = ['failed', 'timed_out', 'fallback_used', 'loaded', 'loading', 'unloaded'];
+const FACE_STATUS_PRIORITY: FontLoadStatus[] = [
+  'failed',
+  'timed_out',
+  'fallback_used',
+  'loaded',
+  'loading',
+  'unloaded',
+];
 
 function summarizeFaces(results: FontFaceLoadResult[]): FontLoadSummary {
   // FontLoadSummary's counts are documented as distinct physical FAMILIES and ride the

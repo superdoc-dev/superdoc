@@ -563,7 +563,7 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
   const fontSignature = input.fontSignature ?? '';
   const blockMap = buildBlockMap(blocks, measures);
   const blockVersionCache = new Map<string, string>();
-  const pageRefAnchorMap = bookmarks?.size ? buildPageRefAnchorMap(bookmarks, layout, blocks) : undefined;
+  const pageRefAnchorMap = bookmarks?.size ? buildPageRefAnchorMap(bookmarks, layout, blocks, measures) : undefined;
 
   const pages: ResolvedPage[] = layout.pages.map((page, pageIndex) => ({
     id: `page-${pageIndex}`,

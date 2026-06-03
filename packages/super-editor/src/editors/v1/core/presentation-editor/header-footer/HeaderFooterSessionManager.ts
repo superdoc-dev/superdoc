@@ -1750,9 +1750,10 @@ export class HeaderFooterSessionManager {
     const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
     const isFirstPageOfSection = firstPageInSection === pageNumber;
 
-    // Check for alternateHeaders in converter
+    // Check for alternateHeaders in converter or the multi-section identifier.
     const converter = (this.#options.editor as EditorWithConverter).converter;
-    const hasAlternateHeaders = converter?.pageStyles?.alternateHeaders === true;
+    const hasAlternateHeaders =
+      this.#multiSectionIdentifier?.alternateHeaders === true || converter?.pageStyles?.alternateHeaders === true;
 
     // Only use 'first' variant when titlePg is enabled (w:titlePg element in OOXML).
     // Without titlePg, even the first page of a section uses 'default'.

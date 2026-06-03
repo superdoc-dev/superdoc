@@ -1503,6 +1503,56 @@ describe('HeaderFooterSessionManager', () => {
       expect(manager.footerRegions.get(0)!.sectionType).toBe('even');
     });
 
+    it('uses multi-section alternateHeaders state when inferring fallback region variants', () => {
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: {
+          ...createMainEditorStub(),
+          converter: { pageStyles: { alternateHeaders: false } },
+        } as unknown as Editor,
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies({
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 1),
+      });
+      manager.setMultiSectionIdentifier(
+        buildMultiSectionIdentifier(
+          [
+            {
+              sectionIndex: 0,
+              titlePg: false,
+              headerRefs: { default: 'rId-default', even: 'rId-even' },
+              footerRefs: { default: 'rId-default-footer', even: 'rId-even-footer' },
+            },
+          ],
+          { alternateHeaders: true },
+        ),
+      );
+
+      manager.rebuildRegions({
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [makePage({ number: 1, displayNumber: 2, height: 792 })],
+      });
+
+      expect(manager.headerRegions.get(0)!.sectionType).toBe('even');
+      expect(manager.footerRegions.get(0)!.sectionType).toBe('even');
+    });
+
     it('uses section titlePg state when inferring fallback region variants', () => {
       manager = new HeaderFooterSessionManager({
         painterHost,

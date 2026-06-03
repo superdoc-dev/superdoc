@@ -114,10 +114,10 @@ describe('header/footer pre-layout', () => {
 
     expect(prelayoutPageResolver).toBeTypeOf('function');
     expect(prelayoutPageResolver(1)).toMatchObject({
-      displayText: '123456789\u20111',
-      displayNumber: 1,
-      totalPages: 1,
-      sectionPageCount: 1,
+      displayText: '123456789\u201110',
+      displayNumber: 10,
+      totalPages: 10,
+      sectionPageCount: 10,
       pageFormat: 'decimal',
       chapterNumberText: '123456789',
       chapterSeparator: 'hyphen',
@@ -145,7 +145,7 @@ describe('header/footer pre-layout', () => {
 
     expect(prelayoutPageResolver).toBeTypeOf('function');
     expect(prelayoutPageResolver(1)).toMatchObject({
-      displayText: '123456789\u20111',
+      displayText: '123456789\u201110',
       chapterNumberText: '123456789',
       chapterSeparator: 'hyphen',
     });
@@ -172,9 +172,37 @@ describe('header/footer pre-layout', () => {
 
     expect(prelayoutPageResolver).toBeTypeOf('function');
     expect(prelayoutPageResolver(1)).toMatchObject({
-      displayText: '3\u20111',
+      displayText: '3\u201110',
       chapterNumberText: '3',
       chapterSeparator: 'hyphen',
+    });
+  });
+
+  it('uses a two-digit page component for conservative chapter pre-layout', async () => {
+    await incrementalLayout(
+      [],
+      null,
+      [makeHeading('heading-1', '123456789.'), makeParagraph('body', 'Body')],
+      {
+        pageSize: { w: 300, h: 300 },
+        margins: { top: 20, right: 20, bottom: 20, left: 20 },
+        sectionMetadata: [{ sectionIndex: 0, numbering: { chapterStyle: 1, chapterSeparator: 'hyphen' } }],
+      },
+      vi.fn(async () => makeMeasure()),
+      {
+        headerBlocks: { default: [makeHeaderPageNumber()] },
+        constraints: { width: 40, height: 40 },
+      },
+    );
+
+    const prelayoutPageResolver = headerFooterMocks.layoutHeaderFooterWithCache.mock.calls[0]?.[5];
+
+    expect(prelayoutPageResolver).toBeTypeOf('function');
+    expect(prelayoutPageResolver(1)).toMatchObject({
+      displayText: '123456789\u201110',
+      displayNumber: 10,
+      totalPages: 10,
+      sectionPageCount: 10,
     });
   });
 });

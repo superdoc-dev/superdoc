@@ -3085,6 +3085,7 @@ function sectionsHaveChapterNumbering(sections: SectionMetadata[]): boolean {
 }
 
 const PRELAYOUT_CHAPTER_MARKER_SEPARATOR_RE = /[.\-:\u2013\u2014]/;
+const PRELAYOUT_MIN_PAGE_COMPONENT = 10;
 
 function getPrelayoutHeadingLevel(block: FlowBlock): number | undefined {
   if (block.kind !== 'paragraph') {
@@ -3159,17 +3160,18 @@ function buildConservativePrelayoutPageResolver(
   };
 
   for (const section of sections) {
-    const displayNumber =
+    const sectionStart =
       typeof section.numbering?.start === 'number' && Number.isFinite(section.numbering.start)
         ? section.numbering.start
         : 1;
+    const displayNumber = Math.max(sectionStart, PRELAYOUT_MIN_PAGE_COMPONENT);
     const pageFormat = section.numbering?.format ?? 'decimal';
 
     considerDisplay({
       displayText: formatSectionPageNumberText({ displayNumber, pageFormat }),
       displayNumber,
-      totalPages: 1,
-      sectionPageCount: 1,
+      totalPages: PRELAYOUT_MIN_PAGE_COMPONENT,
+      sectionPageCount: PRELAYOUT_MIN_PAGE_COMPONENT,
       pageFormat,
     });
 
@@ -3193,8 +3195,8 @@ function buildConservativePrelayoutPageResolver(
           chapterSeparator,
         }),
         displayNumber,
-        totalPages: 1,
-        sectionPageCount: 1,
+        totalPages: PRELAYOUT_MIN_PAGE_COMPONENT,
+        sectionPageCount: PRELAYOUT_MIN_PAGE_COMPONENT,
         pageFormat,
         chapterNumberText,
         chapterSeparator,

@@ -146,6 +146,15 @@ function paragraphHasSectionPageCountToken(para: ParagraphBlock): boolean {
   return false;
 }
 
+function paragraphHasPageNumberToken(para: ParagraphBlock): boolean {
+  for (const run of para.runs) {
+    if ('token' in run && run.token === 'pageNumber') {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isDigitBucketCompatiblePageNumberFormat(format?: string): boolean {
   return !format || format === 'decimal' || format === 'numberInDash';
 }
@@ -213,6 +222,32 @@ function hasSectionPageCountTokens(blocks: FlowBlock[]): boolean {
               ? [cell.paragraph]
               : [];
           if (hasSectionPageCountTokens(cellBlocks)) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function hasPageNumberTokens(blocks: FlowBlock[]): boolean {
+  for (const block of blocks) {
+    if (block.kind === 'paragraph') {
+      if (paragraphHasPageNumberToken(block as ParagraphBlock)) return true;
+    } else if (block.kind === 'list') {
+      const list = block as ListBlock;
+      for (const item of list.items ?? []) {
+        if (paragraphHasPageNumberToken(item.paragraph)) return true;
+      }
+    } else if (block.kind === 'table') {
+      const table = block as TableBlock;
+      for (const row of table.rows ?? []) {
+        for (const cell of row.cells ?? []) {
+          const cellBlocks: FlowBlock[] = cell.blocks
+            ? (cell.blocks as FlowBlock[])
+            : cell.paragraph
+              ? [cell.paragraph]
+              : [];
+          if (hasPageNumberTokens(cellBlocks)) return true;
         }
       }
     }
@@ -387,17 +422,19 @@ export async function layoutHeaderFooterWithCache(
 
     // Determine which pages to create layouts for
     let pagesToLayout: number[];
+    const hasPageNumberToken = hasPageNumberTokens(blocks);
 
     const useBucketingForVariant =
       useBucketing &&
       !hasPageNumberTokensRequiringPerPageLayout(blocks) &&
       !hasSectionPageCountTokens(blocks) &&
-      !hasChapterNumberTextForAnyPage(docTotalPages, pageResolver) &&
-      !hasSectionAwarePageTextForAnyPage(docTotalPages, pageResolver);
+      (!hasPageNumberToken ||
+        (!hasChapterNumberTextForAnyPage(docTotalPages, pageResolver) &&
+          !hasSectionAwarePageTextForAnyPage(docTotalPages, pageResolver)));
 
     if (!useBucketingForVariant) {
-      // Per-page layout: small docs, disabled bucketing, SECTIONPAGES, chapter prefixes,
-      // section-aware display text, or non-digit-bucket-compatible PAGE formats.
+      // Per-page layout: small docs, disabled bucketing, SECTIONPAGES, PAGE variants with
+      // chapter prefixes or section-aware display text, or non-digit-bucket-compatible PAGE formats.
       pagesToLayout = Array.from({ length: docTotalPages }, (_, i) => i + 1);
       HeaderFooterCacheLogger.logBucketingDecision(docTotalPages, false);
     } else {

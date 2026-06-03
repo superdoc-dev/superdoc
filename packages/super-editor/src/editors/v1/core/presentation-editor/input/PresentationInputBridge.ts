@@ -299,6 +299,18 @@ export class PresentationInputBridge {
         : originNode?.parentElement instanceof HTMLElement
           ? originNode.parentElement
           : null;
+
+    // Skip events from external contenteditable elements (e.g., other TipTap/ProseMirror editors).
+    // If the event target is in a contenteditable that's not part of our editor, don't intercept.
+    const originContentEditable = originElement?.closest?.('[contenteditable="true"]') as HTMLElement | null;
+    if (originContentEditable) {
+      const targetDom = this.#getTargetDom?.();
+      const targetRoot = targetDom?.closest?.('.presentation-editor') ?? targetDom?.parentElement;
+      if (targetRoot && !targetRoot.contains(originContentEditable)) {
+        return null;
+      }
+    }
+
     const staleEditorTarget = originElement?.closest?.('.ProseMirror[contenteditable="true"]') as HTMLElement | null;
 
     if (!staleEditorTarget || staleEditorTarget === activeTarget) {

@@ -3118,9 +3118,16 @@ function getPrelayoutChapterMarkerText(block: FlowBlock, chapterStyle: number): 
     return undefined;
   }
 
-  const markerText = normalizeChapterMarkerText((block as ParagraphBlock).attrs?.wordLayout?.marker?.markerText);
+  const attrs = (block as ParagraphBlock).attrs;
+  const markerText = normalizeChapterMarkerText(attrs?.wordLayout?.marker?.markerText);
   if (!markerText) {
-    return undefined;
+    const listLevelOrdinal = attrs?.listLevelOrdinal;
+    return headingLevel === 1 &&
+      typeof listLevelOrdinal === 'number' &&
+      Number.isInteger(listLevelOrdinal) &&
+      listLevelOrdinal > 0
+      ? String(listLevelOrdinal)
+      : undefined;
   }
 
   return markerText.split(PRELAYOUT_CHAPTER_MARKER_SEPARATOR_RE).length <= chapterStyle ? markerText : undefined;

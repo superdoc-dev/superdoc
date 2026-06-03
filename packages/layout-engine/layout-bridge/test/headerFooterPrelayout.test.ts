@@ -67,6 +67,13 @@ const makeResolvedHeading = (id: string, markerText: string): FlowBlock => ({
   attrs: { styleId: 'Titre1', headingLevel: 1, wordLayout: { marker: { markerText } } },
 });
 
+const makeOrdinalHeading = (id: string, ordinal: number): FlowBlock => ({
+  kind: 'paragraph',
+  id,
+  runs: [{ text: 'Chapter' }],
+  attrs: { styleId: 'Titre1', headingLevel: 1, listLevelOrdinal: ordinal },
+});
+
 describe('header/footer pre-layout', () => {
   beforeEach(() => {
     measureCache.clear();
@@ -140,6 +147,33 @@ describe('header/footer pre-layout', () => {
     expect(prelayoutPageResolver(1)).toMatchObject({
       displayText: '123456789\u20111',
       chapterNumberText: '123456789',
+      chapterSeparator: 'hyphen',
+    });
+  });
+
+  it('uses heading ordinal fallback for conservative chapter pre-layout', async () => {
+    await incrementalLayout(
+      [],
+      null,
+      [makeOrdinalHeading('heading-1', 3), makeParagraph('body', 'Body')],
+      {
+        pageSize: { w: 300, h: 300 },
+        margins: { top: 20, right: 20, bottom: 20, left: 20 },
+        sectionMetadata: [{ sectionIndex: 0, numbering: { chapterStyle: 1, chapterSeparator: 'hyphen' } }],
+      },
+      vi.fn(async () => makeMeasure()),
+      {
+        headerBlocks: { default: [makeHeaderPageNumber()] },
+        constraints: { width: 40, height: 40 },
+      },
+    );
+
+    const prelayoutPageResolver = headerFooterMocks.layoutHeaderFooterWithCache.mock.calls[0]?.[5];
+
+    expect(prelayoutPageResolver).toBeTypeOf('function');
+    expect(prelayoutPageResolver(1)).toMatchObject({
+      displayText: '3\u20111',
+      chapterNumberText: '3',
       chapterSeparator: 'hyphen',
     });
   });

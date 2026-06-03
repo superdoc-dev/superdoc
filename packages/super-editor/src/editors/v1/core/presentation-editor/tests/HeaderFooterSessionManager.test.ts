@@ -23,7 +23,7 @@ import type {
   ResolvedLayout,
   ResolvedPage,
 } from '@superdoc/contracts';
-import type { HeaderFooterLayoutResult } from '@superdoc/layout-bridge';
+import { buildMultiSectionIdentifier, type HeaderFooterLayoutResult } from '@superdoc/layout-bridge';
 import {
   HeaderFooterSessionManager,
   type SessionManagerDependencies,
@@ -933,6 +933,86 @@ describe('HeaderFooterSessionManager', () => {
       expect(payload!.items).toHaveLength(2);
       expect(payload!.items!.every((item) => item.blockId === 'p1')).toBe(true);
     });
+
+    it('uses displayNumber parity when resolving per-rId header layouts', () => {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 1),
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: createMainEditorStub(),
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.setMultiSectionIdentifier(
+        buildMultiSectionIdentifier([{ sectionIndex: 0, headerRefs: { default: 'rId-default', even: 'rId-even' } }], {
+          alternateHeaders: true,
+        }),
+      );
+
+      const evenFragment: ParaFragment = {
+        kind: 'para',
+        blockId: 'even-header',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 10,
+        width: 468,
+      };
+      manager.headerLayoutsByRId.set('rId-default', buildHeaderResult());
+      manager.headerLayoutsByRId.set('rId-even', {
+        kind: 'header',
+        type: 'even',
+        layout: { height: 50, pages: [{ number: 1, fragments: [evenFragment] }] },
+        blocks: [{ kind: 'paragraph', id: 'even-header', runs: [] }],
+        measures: [
+          {
+            kind: 'paragraph',
+            lines: [
+              { fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 100, ascent: 10, descent: 3, lineHeight: 18 },
+            ],
+            totalHeight: 18,
+          },
+        ],
+      });
+
+      const page = {
+        number: 1,
+        displayNumber: 2,
+        sectionIndex: 0,
+        height: 792,
+        margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+        sectionRefs: { headerRefs: { default: 'rId-default', even: 'rId-even' }, footerRefs: {} },
+      } as unknown as ResolvedPage;
+      const layout: ResolvedLayout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [page],
+      };
+
+      const provider = manager.createDecorationProvider('header', layout);
+      const payload = provider!(1, page.margins, page);
+
+      expect(payload).not.toBeNull();
+      expect(payload!.sectionType).toBe('even');
+      expect(payload!.headerFooterRefId).toBe('rId-even');
+      expect(payload!.fragments[0]!.blockId).toBe('even-header');
+    });
   });
 
   describe('rebuildRegions — ResolvedLayout entry', () => {
@@ -1036,6 +1116,43 @@ describe('HeaderFooterSessionManager', () => {
       expect(manager.headerRegions.get(1)!.sectionIndex).toBe(1);
       expect(manager.headerRegions.get(2)!.sectionIndex).toBe(1);
       expect(manager.footerRegions.get(2)!.sectionIndex).toBe(1);
+    });
+
+    it('uses displayNumber parity when inferring header/footer region variants', () => {
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: {
+          ...createMainEditorStub(),
+          converter: { pageStyles: { alternateHeaders: true } },
+        } as unknown as Editor,
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies({
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 1),
+      });
+
+      manager.rebuildRegions({
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [makePage({ number: 1, displayNumber: 2, height: 792 })],
+      });
+
+      expect(manager.headerRegions.get(0)!.sectionType).toBe('even');
+      expect(manager.footerRegions.get(0)!.sectionType).toBe('even');
     });
   });
 });

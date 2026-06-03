@@ -24,6 +24,7 @@ const INLINE_FALLBACK_TYPES = new Set([
   'endnoteReference',
   'fieldAnnotation',
   'structuredContent',
+  'image',
   'mathInline',
   'passthroughInline',
   'page-number',

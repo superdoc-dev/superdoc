@@ -1095,6 +1095,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('comment-positions', this.options.onCommentLocationsUpdate!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
+    // Emitted unconditionally by PresentationEditor, so only register a real callback -
+    // a bare `this.on('fonts-changed', undefined)` would make `emit` call undefined.
+    if (this.options.onFontsChanged) this.on('fonts-changed', this.options.onFontsChanged);
     this.on('exception', this.options.onException!);
     this.on('pointerDown', this.options.onPointerDown!);
     this.#trackContentControlPointer();
@@ -1527,6 +1530,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('comment-positions', this.options.onCommentLocationsUpdate!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
+    // Emitted unconditionally by PresentationEditor, so only register a real callback -
+    // a bare `this.on('fonts-changed', undefined)` would make `emit` call undefined.
+    if (this.options.onFontsChanged) this.on('fonts-changed', this.options.onFontsChanged);
     this.on('exception', this.options.onException!);
     this.on('pointerDown', this.options.onPointerDown!);
     this.#trackContentControlPointer();

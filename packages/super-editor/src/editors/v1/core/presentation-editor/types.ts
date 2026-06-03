@@ -6,7 +6,7 @@
  */
 
 import type { Editor } from '../Editor.js';
-import type { CollaborationProvider } from '../types/EditorConfig.js';
+import type { CollaborationProvider, FontsConfig } from '../types/EditorConfig.js';
 import type {
   TrackedChangesMode,
   FlowBlock,
@@ -205,6 +205,12 @@ export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] 
    * Layout-specific configuration consumed by PresentationEditor.
    */
   layoutEngineOptions?: LayoutEngineOptions;
+  /**
+   * Font system configuration (the SuperDoc-level `fonts` config). Currently the served
+   * location of the bundled substitute pack: `assetBaseUrl` / `resolveAssetUrl`. Threaded
+   * here (not the legacy untyped `EditorConfig.fonts`) so the asset config is typed.
+   */
+  fontAssets?: FontsConfig;
   /**
    * Document mode for the editor. Determines editability and tracked changes behavior.
    * @default 'editing'

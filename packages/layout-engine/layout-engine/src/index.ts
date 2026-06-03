@@ -724,14 +724,14 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
    * names and types — a positional call site is easy to get wrong.
    *
    * @param sectionPageNumber - The page number within the current section (1-indexed), used for titlePg
-   * @param documentPageNumber - The absolute document page number (1-indexed), used for even/odd
+   * @param parityPageNumber - The section-aware page number used for even/odd
    * @param titlePgEnabled - Whether the section has "different first page" enabled
    * @param alternateHeaders - Whether the document has odd/even differentiation enabled
    * @returns The variant type: 'first', 'even', 'odd', or 'default'
    */
   const getVariantTypeForPage = (args: {
     sectionPageNumber: number;
-    documentPageNumber: number;
+    parityPageNumber: number;
     titlePgEnabled: boolean;
     alternateHeaders: boolean;
   }): 'default' | 'first' | 'even' | 'odd' => {
@@ -739,10 +739,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (args.sectionPageNumber === 1 && args.titlePgEnabled) {
       return 'first';
     }
-    // Alternate headers: even/odd based on document page number, matching
-    // the rendering side (getHeaderFooterTypeForSection in headerFooterUtils.ts)
+    // Alternate headers: even/odd based on the section-aware page number,
+    // matching ECMA-376 section 17.10.1.
     if (args.alternateHeaders) {
-      return args.documentPageNumber % 2 === 0 ? 'even' : 'odd';
+      return args.parityPageNumber % 2 === 0 ? 'even' : 'odd';
     }
     return 'default';
   };
@@ -1637,7 +1637,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         // Determine which header/footer variant applies to this page
         const variantType = getVariantTypeForPage({
           sectionPageNumber,
-          documentPageNumber: newPageNumber,
+          parityPageNumber: activePageCounter,
           titlePgEnabled,
           alternateHeaders,
         });
@@ -1728,6 +1728,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       // second callback: after page creation -> stamp display number, section refs, section index, and advance counter
       if (state?.page) {
+        state.page.displayNumber = activePageCounter;
         state.page.numberText = formatPageNumber(activePageCounter, activeNumberFormat);
         // Stamp section index on the page for section-aware page numbering and header/footer selection
         state.page.sectionIndex = activeSectionIndex;

@@ -2636,6 +2636,9 @@ importers:
       '@superdoc/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@superdoc/font-system':
+        specifier: workspace:*
+        version: link:../../../shared/font-system
     devDependencies:
       tsup:
         specifier: 'catalog:'
@@ -2655,6 +2658,9 @@ importers:
       '@superdoc/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@superdoc/font-system':
+        specifier: workspace:*
+        version: link:../../../../shared/font-system
       '@superdoc/font-utils':
         specifier: workspace:*
         version: link:../../../../shared/font-utils
@@ -2676,6 +2682,9 @@ importers:
       '@superdoc/dom-contract':
         specifier: workspace:*
         version: link:../../dom-contract
+      '@superdoc/font-system':
+        specifier: workspace:*
+        version: link:../../../../shared/font-system
       '@superdoc/font-utils':
         specifier: workspace:*
         version: link:../../../../shared/font-utils
@@ -2853,6 +2862,9 @@ importers:
       '@superdoc/dom-contract':
         specifier: workspace:*
         version: link:../layout-engine/dom-contract
+      '@superdoc/font-system':
+        specifier: workspace:*
+        version: link:../../shared/font-system
       '@superdoc/font-utils':
         specifier: workspace:*
         version: link:../../shared/font-utils
@@ -3286,6 +3298,18 @@ importers:
       vue:
         specifier: 3.5.32
         version: 3.5.32(typescript@5.9.3)
+
+  shared/font-system:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.2
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   shared/font-utils: {}
 

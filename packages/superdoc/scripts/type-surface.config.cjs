@@ -197,6 +197,17 @@ const relocations = [
     viteIncludes: [], // emitted via sharedCommonDtsTargets tsc-postbuild
     tsconfigIncludes: [],
   },
+  // The font report types (FontResolutionRecord, FontLoadStatus, FontLoadSummary, ...)
+  // surface on `superdoc.fonts` / `fonts-changed`. font-system lives in shared/ like
+  // @superdoc/common, so it is emitted standalone via tsc-postbuild (ensure-types.cjs)
+  // rather than vite includes, which would shift the dts common-ancestor.
+  {
+    pkg: '@superdoc/font-system',
+    distEntry: 'shared/font-system/src/index.d.ts',
+    matchSubpaths: true,
+    viteIncludes: [], // emitted via the font-system tsc-postbuild in ensure-types
+    tsconfigIncludes: [],
+  },
 ];
 
 /**

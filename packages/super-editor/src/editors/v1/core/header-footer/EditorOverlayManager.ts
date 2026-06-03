@@ -20,6 +20,9 @@
  */
 
 import type { HeaderFooterRegion } from './types.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('editor-overlay-manager');
 
 export type { HeaderFooterRegion } from './types.js';
 
@@ -222,7 +225,7 @@ export class EditorOverlayManager {
       this.#hideHeaderFooterBorder();
 
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('[EditorOverlayManager] Failed to show editing overlay:', error);
+      log.error('[EditorOverlayManager] Failed to show editing overlay:', error);
 
       return {
         success: false,
@@ -415,7 +418,7 @@ export class EditorOverlayManager {
     const pageElement = editorHost.parentElement;
 
     if (!pageElement) {
-      console.error('[EditorOverlayManager] Editor host has no parent element');
+      log.error('[EditorOverlayManager] Editor host has no parent element');
       return;
     }
 

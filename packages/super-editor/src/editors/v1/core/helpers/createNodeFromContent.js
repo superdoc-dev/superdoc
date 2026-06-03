@@ -1,5 +1,8 @@
 import { DOMParser, Schema, Fragment } from 'prosemirror-model';
 import { htmlHandler } from '../InputRule.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('create-node-from-content');
 
 const removeWhitespaces = (node) => {
   const children = node.childNodes;
@@ -62,7 +65,7 @@ export function createNodeFromContent(content, editor, options) {
         throw new Error('[super-editor error]: Invalid JSON content', { cause: error });
       }
 
-      console.warn('[super-editor warn]: Invalid content.', 'Passed value:', content, 'Error:', error);
+      log.warn('[super-editor warn]: Invalid content.', 'Passed value:', content, 'Error:', error);
 
       return createNodeFromContent('', editor, options);
     }
@@ -74,7 +77,7 @@ export function createNodeFromContent(content, editor, options) {
 
     // If elementFromString returned null (no DOM available), we can't parse HTML
     if (element === null) {
-      console.warn(
+      log.warn(
         '[super-editor] Cannot parse HTML content without a DOM. HTML insertion requires a browser environment or JSDOM. Skipping insertion.',
       );
       return null;

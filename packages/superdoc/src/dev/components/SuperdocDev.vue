@@ -18,6 +18,9 @@ import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 import SidebarLayout from './sidebar/SidebarLayout.vue';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('superdoc-dev');
 
 // note:
 // Or set worker globally outside the component.
@@ -112,7 +115,7 @@ const handleLoadFromUrl = async () => {
     const file = await getFileObject(url, 'document.docx', DOCX);
     await handleNewFile(file);
   } catch (err) {
-    console.error('Failed to load from URL:', err);
+    log.error('Failed to load from URL:', err);
     const message = err instanceof Error ? err.message : String(err);
     alert(`Failed to load document: ${message}`);
   } finally {
@@ -256,9 +259,9 @@ const handleNewFile = async (file) => {
   if (useCollaboration && activeEditor.value && !isMarkdown && !isHtml) {
     try {
       await activeEditor.value.replaceFile(currentFile.value);
-      console.log('[collab] Replaced file via editor.replaceFile()');
+      log.debug('[collab] Replaced file via editor.replaceFile()');
     } catch (err) {
-      console.error('[collab] replaceFile failed, falling back to full reinit:', err);
+      log.error('[collab] replaceFile failed, falling back to full reinit:', err);
       nextTick(() => init());
     }
   } else {
@@ -604,7 +607,7 @@ const attachServerActivityStream = async () => {
       }
     }
   } catch (error) {
-    console.warn('[collab] failed to load recent activity events:', error);
+    log.warn('[collab] failed to load recent activity events:', error);
   }
 
   const stream = new EventSource(`${baseUrl}/stream`);
@@ -615,7 +618,7 @@ const attachServerActivityStream = async () => {
       addServerActivityEvent(payload);
       yjsActivityStatus.value = 'open';
     } catch (error) {
-      console.warn('[collab] failed to parse activity stream payload:', error);
+      log.warn('[collab] failed to parse activity stream payload:', error);
     }
   };
 
@@ -917,7 +920,7 @@ const init = async () => {
     superdoc.value.addCommentsList(commentsPanel.value);
   });
   superdoc.value?.on('exception', (error) => {
-    console.error('SuperDoc exception:', error);
+    log.error('SuperDoc exception:', error);
   });
 
   superdoc.value?.on('zoomChange', ({ zoom }) => {
@@ -941,11 +944,11 @@ const init = async () => {
 const onCommentsUpdate = () => {};
 
 const onContentError = ({ editor, error, documentId, file }) => {
-  console.debug('Content error on', documentId, error);
+  log.debug('Content error on', documentId, error);
 };
 
 const exportHTML = async (commentsType) => {
-  console.debug('Exporting HTML', { commentsType });
+  log.debug('Exporting HTML', { commentsType });
 
   // Get HTML content from SuperDoc
   const htmlArray = superdoc.value.getHTML();
@@ -968,17 +971,17 @@ const exportHTML = async (commentsType) => {
   // Clean up the URL
   URL.revokeObjectURL(url);
 
-  console.debug('HTML exported successfully');
+  log.debug('HTML exported successfully');
 };
 
 const exportDocx = async (commentsType) => {
-  console.debug('Exporting docx', { commentsType });
+  log.debug('Exporting docx', { commentsType });
   await superdoc.value.export({ commentsType });
 };
 
 const exportDocxBlob = async () => {
   const blob = await superdoc.value.export({ commentsType: 'external', triggerDownload: false });
-  console.debug(blob);
+  log.debug(blob);
 };
 
 const blobToBase64 = (blob) =>
@@ -1054,7 +1057,7 @@ const generateWordBaseline = async () => {
   } catch (error) {
     wordBaselineStatus.value = '';
     wordBaselineError.value = error instanceof Error ? error.message : String(error);
-    console.error('[SuperDoc Dev] Failed to generate Word reference:', error);
+    log.error('[SuperDoc Dev] Failed to generate Word reference:', error);
   } finally {
     isGeneratingWordBaseline.value = false;
   }
@@ -1106,28 +1109,28 @@ const onEditorCreate = ({ editor }) => {
   bindWordOverlayListener(editor);
 
   editor.on('fieldAnnotationClicked', (params) => {
-    console.log('fieldAnnotationClicked', { params });
+    log.debug('fieldAnnotationClicked', { params });
   });
 
   editor.on('fieldAnnotationSelected', (params) => {
-    console.log('fieldAnnotationSelected', { params });
+    log.debug('fieldAnnotationSelected', { params });
   });
 
   editor.on('fieldAnnotationDoubleClicked', (params) => {
-    console.log('fieldAnnotationDoubleClicked', { params });
+    log.debug('fieldAnnotationDoubleClicked', { params });
   });
 
   // SD-2494: Pointer event observability for debugging trackpad/right-click selection issues
   editor.on('pointerDown', (params) => {
-    console.log('pointerDown', { params });
+    log.debug('pointerDown', { params });
   });
 
   editor.on('pointerUp', (params) => {
-    console.log('pointerUp', { params });
+    log.debug('pointerUp', { params });
   });
 
   editor.on('rightClick', (params) => {
-    console.log('rightClick', { params });
+    log.debug('rightClick', { params });
   });
 };
 
@@ -1148,7 +1151,7 @@ const handleTitleChange = (e) => {
   const ydoc = superdoc.value.ydoc;
   const metaMap = ydoc.getMap('meta');
   metaMap.set('title', title.value);
-  console.debug('Title changed', metaMap.toJSON());
+  log.debug('Title changed', metaMap.toJSON());
 };
 
 const isCommentsListOpen = ref(false);
@@ -1194,7 +1197,7 @@ onMounted(async () => {
       setTimeout(settle, 3000);
     });
 
-    console.log(`[collab] Provider ready (${collabUrl}/${collabRoom}), initializing SuperDoc`);
+    log.debug(`[collab] Provider ready (${collabUrl}/${collabRoom}), initializing SuperDoc`);
   }
 
   // Initialize SuperDoc - it will automatically create a blank document
@@ -1358,7 +1361,7 @@ if (scrollTestMode.value) {
   let lastScrollY = 0;
   window.addEventListener('scroll', () => {
     if (Math.abs(window.scrollY - lastScrollY) > 10) {
-      console.log('[SCROLL-DEBUG] Scroll changed:', lastScrollY, '→', window.scrollY);
+      log.debug('[SCROLL-DEBUG] Scroll changed:', lastScrollY, '→', window.scrollY);
       console.trace('[SCROLL-DEBUG] Stack trace:');
       lastScrollY = window.scrollY;
     }
@@ -1367,7 +1370,7 @@ if (scrollTestMode.value) {
   // Also intercept scrollTo calls
   const originalScrollTo = window.scrollTo.bind(window);
   window.scrollTo = function (...args) {
-    console.log('[SCROLL-DEBUG] scrollTo called:', args);
+    log.debug('[SCROLL-DEBUG] scrollTo called:', args);
     console.trace('[SCROLL-DEBUG] scrollTo stack:');
     return originalScrollTo(...args);
   };

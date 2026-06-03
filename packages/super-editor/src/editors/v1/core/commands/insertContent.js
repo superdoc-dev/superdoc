@@ -1,5 +1,8 @@
 //@ts-check
 import { processContent } from '../helpers/contentProcessor.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('insertContent');
 
 /**
  * Command to insert content at the current selection or replace the current selection.
@@ -23,7 +26,7 @@ export const insertContent =
     if (options.contentType) {
       const validTypes = ['html', 'markdown', 'text', 'schema'];
       if (!validTypes.includes(options.contentType)) {
-        console.error(`[insertContent] Invalid contentType: "${options.contentType}". Use: ${validTypes.join(', ')}`);
+        log.error(`Invalid contentType: "${options.contentType}". Use: ${validTypes.join(', ')}`);
         return false;
       }
 
@@ -52,7 +55,7 @@ export const insertContent =
 
         return ok;
       } catch (error) {
-        console.error(`[insertContent] Failed to process ${options.contentType}:`, error);
+        log.error(`Failed to process ${options.contentType}:`, error);
         return false;
       }
     }

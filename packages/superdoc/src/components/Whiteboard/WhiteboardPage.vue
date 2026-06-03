@@ -1,5 +1,8 @@
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('whiteboard');
 
 const props = defineProps({
   whiteboard: {
@@ -79,7 +82,7 @@ const handleStickerDrop = (event, x, y, scale) => {
   const sticker = stickers.find((item) => item.id === stickerId);
   if (!sticker?.src) {
     if (import.meta.env.DEV) {
-      console.warn('[Whiteboard] Dropped sticker id is not registered.', {
+      log.warn('Dropped sticker id is not registered.', {
         stickerId,
         registeredStickerIds: stickers.map((item) => item.id),
       });

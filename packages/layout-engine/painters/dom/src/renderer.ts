@@ -99,11 +99,14 @@ import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './
 import { applyStyles } from './utils/apply-styles.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
+import { createLogger } from '@superdoc/common/logger';
 
 export type {
   PaintSnapshotStructuredContentBlockEntity,
   PaintSnapshotStructuredContentInlineEntity,
 } from './sdt/snapshot.js';
+
+const log = createLogger('painter-dom');
 
 const ACTIVE_HEADER_FOOTER_WATERMARK_PREVIEW_OPACITY = '1';
 const INACTIVE_HEADER_FOOTER_WATERMARK_PREVIEW_OPACITY = '0.5';
@@ -1754,13 +1757,13 @@ export class DomPainter {
    */
   private renderPageRuler(pageWidthPx: number, page: ResolvedPage): HTMLElement | null {
     if (!this.doc) {
-      console.warn('[renderPageRuler] Cannot render ruler: document is not available.');
+      log.warn('[renderPageRuler] Cannot render ruler: document is not available.');
       return null;
     }
 
     const margins = page.margins;
     if (!margins) {
-      console.warn(`[renderPageRuler] Cannot render ruler for page ${page.number}: margins not available.`);
+      log.warn(`[renderPageRuler] Cannot render ruler for page ${page.number}: margins not available.`);
       return null;
     }
 
@@ -1791,7 +1794,7 @@ export class DomPainter {
                   const marginInches = side === 'left' ? x / ppi : (pageWidthPx - x) / ppi;
                   onMarginChange(side, marginInches);
                 } catch (error) {
-                  console.error('[renderPageRuler] Error in onMarginChange callback:', error);
+                  log.error('[renderPageRuler] Error in onMarginChange callback:', error);
                 }
               }
             : undefined,
@@ -1806,7 +1809,7 @@ export class DomPainter {
 
       return rulerEl;
     } catch (error) {
-      console.error(`[renderPageRuler] Failed to create ruler for page ${page.number}:`, error);
+      log.error(`[renderPageRuler] Failed to create ruler for page ${page.number}:`, error);
       return null;
     }
   }
@@ -2409,7 +2412,7 @@ export class DomPainter {
       }
     } catch (error) {
       // Log the error but don't crash the paint cycle - corrupted mappings shouldn't break rendering
-      console.error('Error updating position attributes with mapping:', error);
+      log.error('Error updating position attributes with mapping:', error);
     }
   }
 
@@ -2716,7 +2719,7 @@ export class DomPainter {
 
       return fragmentEl;
     } catch (error) {
-      console.error('[DomPainter] Drawing fragment rendering failed:', { fragment, error });
+      log.error('[DomPainter] Drawing fragment rendering failed:', { fragment, error });
       return this.createErrorPlaceholder(fragment.blockId, error);
     }
   }
@@ -3222,7 +3225,7 @@ export class DomPainter {
         height: heightOverride ?? block.geometry.height,
       });
     } catch (error) {
-      console.warn(`[DomPainter] Unable to render preset shape "${block.shapeKind}":`, error);
+      log.warn(`[DomPainter] Unable to render preset shape "${block.shapeKind}":`, error);
       return null;
     }
   }
@@ -3768,7 +3771,7 @@ export class DomPainter {
 
       return el;
     } catch (error) {
-      console.error('[DomPainter] Table fragment rendering failed:', { fragment, error });
+      log.error('[DomPainter] Table fragment rendering failed:', { fragment, error });
       return this.createErrorPlaceholder(fragment.blockId, error);
     }
   }

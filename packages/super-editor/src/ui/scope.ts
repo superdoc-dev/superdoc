@@ -31,7 +31,10 @@
  *   methods follow the same rules.
  */
 
+import { createLogger } from '@superdoc/common/logger';
 import type { CustomCommandRegistration, CustomCommandRegistrationResult, SuperDocUIScope } from './types.js';
+
+const log = createLogger('superdoc/ui');
 
 /**
  * Internal collaborator the scope needs from its owner (the
@@ -131,7 +134,7 @@ export function createScope(owner: ScopeOwner): SuperDocUIScope {
         try {
           child.destroy();
         } catch (err) {
-          console.error('[superdoc/ui] child scope destroy threw', err);
+          log.error('[superdoc/ui] child scope destroy threw', err);
         }
       }
       // Reverse order is the standard effect-cleanup convention: most
@@ -160,6 +163,6 @@ function runTeardown(teardown: () => void): void {
   try {
     teardown();
   } catch (err) {
-    console.error('[superdoc/ui] scope teardown threw', err);
+    log.error('[superdoc/ui] scope teardown threw', err);
   }
 }

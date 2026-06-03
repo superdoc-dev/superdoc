@@ -91,8 +91,8 @@ describe('normalizeTrackChangesConfig', () => {
 
       expect(result.visible).toBe(true);
       expect(warnSpy).toHaveBeenCalledTimes(1);
-      expect(warnSpy.mock.calls[0][0]).toMatch(/config\.trackChanges/);
-      expect(warnSpy.mock.calls[0][0]).toMatch(/config\.modules\.trackChanges/);
+      expect(warnSpy.mock.calls[0][1]).toMatch(/config\.trackChanges/);
+      expect(warnSpy.mock.calls[0][1]).toMatch(/config\.modules\.trackChanges/);
     });
 
     it('mirrors the resolved visible back onto the legacy key', () => {
@@ -107,7 +107,7 @@ describe('normalizeTrackChangesConfig', () => {
       normalizeTrackChangesConfig({ trackChanges: { visible: false } });
 
       const visibleWarnings = warnSpy.mock.calls.filter(
-        (call) => /config\.trackChanges\b/.test(call[0]) && !/layoutEngineOptions/.test(call[0]),
+        (call) => /config\.trackChanges\b/.test(call[1]) && !/layoutEngineOptions/.test(call[1]),
       );
       expect(visibleWarnings).toHaveLength(1);
     });
@@ -123,7 +123,7 @@ describe('normalizeTrackChangesConfig', () => {
       expect(result.mode).toBe('original');
       expect(result.enabled).toBe(false);
       expect(warnSpy).toHaveBeenCalledTimes(1);
-      expect(warnSpy.mock.calls[0][0]).toMatch(/layoutEngineOptions\.trackedChanges/);
+      expect(warnSpy.mock.calls[0][1]).toMatch(/layoutEngineOptions\.trackedChanges/);
     });
 
     it('mirrors resolved mode/enabled back onto the legacy key', () => {
@@ -310,7 +310,7 @@ describe('normalizeTrackChangesConfig', () => {
 
       expect(result).toEqual({ visible: true, mode: 'original', enabled: false, replacements: 'paired' });
       expect(warnSpy).toHaveBeenCalledTimes(2);
-      const messages = warnSpy.mock.calls.map((call) => call[0]);
+      const messages = warnSpy.mock.calls.map((call) => call[1]);
       expect(messages.some((m) => /config\.trackChanges\b/.test(m) && !/layoutEngineOptions/.test(m))).toBe(true);
       expect(messages.some((m) => /layoutEngineOptions\.trackedChanges/.test(m))).toBe(true);
     });
@@ -323,7 +323,7 @@ describe('normalizeTrackChangesConfig', () => {
       normalizeTrackChangesConfig(config);
 
       expect(warnSpy).toHaveBeenCalledTimes(1);
-      expect(warnSpy.mock.calls[0][0]).toMatch(/config\.trackChanges/);
+      expect(warnSpy.mock.calls[0][1]).toMatch(/config\.trackChanges/);
     });
   });
 

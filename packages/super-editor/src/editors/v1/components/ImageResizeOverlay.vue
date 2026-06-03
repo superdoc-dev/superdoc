@@ -23,6 +23,9 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { measureCache } from '@superdoc/layout-bridge';
 import { isContentLockedMode } from '../extensions/structured-content/lockModes.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('image-resize-overlay');
 
 // Configuration constants
 const OVERLAY_EXPANSION_PX = 2000;
@@ -344,7 +347,7 @@ function parseImageMetadata() {
     ];
     for (const field of required) {
       if (!Number.isFinite(parsed[field]) || parsed[field] <= 0) {
-        console.warn(`[ImageResizeOverlay] Invalid or missing metadata field: ${field}`);
+        log.warn(`[ImageResizeOverlay] Invalid or missing metadata field: ${field}`);
         imageMetadata.value = null;
         return;
       }

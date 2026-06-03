@@ -30,7 +30,7 @@ describe('warnOnce', () => {
   it('should emit console.warn on first call', () => {
     const key = `test:${Math.random()}`;
     warnOnce(key, 'first call');
-    expect(console.warn).toHaveBeenCalledWith('first call');
+    expect(console.warn).toHaveBeenCalledWith('[superdoc]', 'first call');
   });
 
   it('should suppress subsequent calls with the same key', () => {
@@ -87,7 +87,10 @@ describe('createDeprecatedEditorProxy', () => {
       expect(console.warn).toHaveBeenCalledTimes(DEPRECATED_KEYS.length);
 
       for (const key of DEPRECATED_KEYS) {
-        expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('is deprecated and will be removed'));
+        expect(console.warn).toHaveBeenCalledWith(
+          '[superdoc]',
+          expect.stringContaining('is deprecated and will be removed'),
+        );
       }
     });
 

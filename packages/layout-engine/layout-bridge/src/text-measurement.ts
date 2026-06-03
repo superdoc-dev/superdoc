@@ -5,6 +5,9 @@ import {
   sliceRunsForLine,
   SPACE_CHARS as SHARED_SPACE_CHARS,
 } from '@superdoc/contracts';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-bridge:text-measurement');
 
 /**
  * Shared text measurement utility for accurate character positioning.
@@ -105,7 +108,7 @@ function getMeasurementContext(): CanvasRenderingContext2D | null {
   if (typeof document === 'undefined') {
     // Only warn in non-test environments - Canvas fallback is expected in tests
     if (process.env.NODE_ENV !== 'test') {
-      console.warn('[text-measurement] Canvas not available (non-browser environment)');
+      log.warn('[text-measurement] Canvas not available (non-browser environment)');
     }
     return null;
   }
@@ -118,7 +121,7 @@ function getMeasurementContext(): CanvasRenderingContext2D | null {
   }
 
   if (!measurementCtx && process.env.NODE_ENV !== 'test') {
-    console.warn('[text-measurement] Failed to create 2D context');
+    log.warn('[text-measurement] Failed to create 2D context');
   }
 
   return measurementCtx;
@@ -618,7 +621,7 @@ function measureCharacterXSegmentBased(
 export function charOffsetToPm(block: FlowBlock, line: Line, charOffset: number, fallbackPmStart: number): number {
   // Validate inputs
   if (!Number.isFinite(charOffset) || !Number.isFinite(fallbackPmStart)) {
-    console.warn('[charOffsetToPm] Invalid input:', { charOffset, fallbackPmStart });
+    log.warn('[charOffsetToPm] Invalid input:', { charOffset, fallbackPmStart });
     return fallbackPmStart;
   }
 

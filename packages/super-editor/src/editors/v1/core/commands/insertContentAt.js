@@ -1,5 +1,8 @@
 import { createNodeFromContent } from '../helpers/createNodeFromContent';
 import { selectionToInsertionEnd } from '../helpers/selectionToInsertionEnd';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('insertContentAt');
 
 /**
  * @typedef {import("prosemirror-model").Node} ProseMirrorNode
@@ -123,7 +126,7 @@ export const insertContentAt =
         editor,
         error: e,
         disableCollaboration: () => {
-          console.error('[super-editor error]: Unable to disable collaboration at this point in time');
+          log.error('[super-editor error]: Unable to disable collaboration at this point in time');
         },
       });
       return false;

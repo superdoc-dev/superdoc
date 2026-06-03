@@ -260,4 +260,22 @@ export default [
       '@typescript-eslint/no-empty-object-type': 'off',
     },
   },
+  // Logging discipline: shipped package source must use the shared logger
+  // (`@superdoc/common/logger`) instead of raw `console.*`, so embedding
+  // SuperDoc does not spam the host console and output stays level-gated and
+  // redirectable. Build scripts (scripts/**) and tests are exempt.
+  {
+    files: ['packages/*/src/**/*.{js,ts}', 'shared/**/*.{js,ts}'],
+    ignores: [
+      // The logger implementation itself owns the only sanctioned console sink.
+      'shared/common/logger.ts',
+      // @superdoc-dev/ai is deprecated and keeps its own legacy logger.
+      'packages/ai/src/shared/logger.ts',
+      // Zero-dependency security leaf: a single env-gated diagnostic warning.
+      'shared/url-validation/index.js',
+    ],
+    rules: {
+      'no-console': 'error',
+    },
+  },
 ];

@@ -491,7 +491,7 @@ describe('ContextMenu extension', () => {
 
       const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.open).toBe(false); // Should remain closed due to error
-      expect(consoleWarnSpy).toHaveBeenCalledWith('ContextMenu: Failed to get surface bounds', expect.any(Error));
+      expect(consoleWarnSpy).toHaveBeenCalledWith('[context-menu]', 'Failed to get surface bounds', expect.any(Error));
 
       consoleWarnSpy.mockRestore();
     });
@@ -715,7 +715,7 @@ describe('ContextMenu extension', () => {
 
       const pluginState = ContextMenuPluginKey.getState(view.state);
       expect(pluginState.open).toBe(false); // Should remain closed
-      expect(consoleWarnSpy).toHaveBeenCalledWith('ContextMenu: Invalid position', 99999);
+      expect(consoleWarnSpy).toHaveBeenCalledWith('[context-menu]', 'Invalid position', 99999);
 
       consoleWarnSpy.mockRestore();
     });
@@ -1583,7 +1583,8 @@ describe('findContainingBlockAncestor', () => {
     const result = findContainingBlockAncestor(child);
     expect(result).toBe(null);
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      'ContextMenu: Failed to get computed style for element',
+      '[context-menu]',
+      'Failed to get computed style for element',
       expect.any(Object),
       expect.any(Error),
     );
@@ -1621,7 +1622,8 @@ describe('findContainingBlockAncestor', () => {
     const result = findContainingBlockAncestor(child);
     expect(result).toBe(grandparent);
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      'ContextMenu: Failed to get computed style for element',
+      '[context-menu]',
+      'Failed to get computed style for element',
       parent,
       expect.any(Error),
     );

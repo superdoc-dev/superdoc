@@ -1,4 +1,7 @@
 import { updateSectionMargins, getSectPrMargins } from '@converter/section-properties.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('insertSectionBreakAtSelection');
 
 /**
  * Insert (or ensure) a paragraph-level sectPr at the selection.
@@ -17,17 +20,17 @@ export const insertSectionBreakAtSelection =
   ({ headerInches, footerInches } = {}) =>
   ({ tr, state, editor }) => {
     if (!state || !editor) {
-      console.warn('[insertSectionBreakAtSelection] Missing state or editor');
+      log.warn('Missing state or editor');
       return false;
     }
 
     // Validate margin values if provided
     if (typeof headerInches === 'number' && headerInches < 0) {
-      console.warn('[insertSectionBreakAtSelection] headerInches must be >= 0, got:', headerInches);
+      log.warn('headerInches must be >= 0, got:', headerInches);
       return false;
     }
     if (typeof footerInches === 'number' && footerInches < 0) {
-      console.warn('[insertSectionBreakAtSelection] footerInches must be >= 0, got:', footerInches);
+      log.warn('footerInches must be >= 0, got:', footerInches);
       return false;
     }
 
@@ -45,7 +48,7 @@ export const insertSectionBreakAtSelection =
     }
 
     if (!paragraph || paraPos <= 0) {
-      console.warn('[insertSectionBreakAtSelection] No paragraph found at selection');
+      log.warn('No paragraph found at selection');
       return false;
     }
 

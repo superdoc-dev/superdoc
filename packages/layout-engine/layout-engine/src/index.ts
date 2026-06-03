@@ -54,6 +54,9 @@ import { formatPageNumber } from './pageNumbering.js';
 import { shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
 import { balanceSectionOnPage, type BalancingFragment, type MeasureData } from './column-balancing.js';
 import { cloneColumnLayout, widthsEqual } from './column-utils.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-engine');
 
 type PageSize = { w: number; h: number };
 type Margins = {
@@ -664,7 +667,7 @@ const layoutDebugEnabled =
 const layoutLog = (...args: unknown[]): void => {
   if (!layoutDebugEnabled) return;
 
-  console.log(...args);
+  log.debug(...args);
 };
 
 /**

@@ -11,6 +11,9 @@
  */
 
 import type { FlowBlock, ParagraphBlock, TableBlock } from '@superdoc/contracts';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-bridge:header-footer-tokens');
 
 /**
  * Walk every paragraph block reachable through `blocks`, including those
@@ -79,12 +82,12 @@ export function resolveHeaderFooterTokens(
   }
 
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    console.warn('[resolveHeaderFooterTokens] Invalid pageNumber:', pageNumber, '- using 1 as fallback');
+    log.warn('[resolveHeaderFooterTokens] Invalid pageNumber:', pageNumber, '- using 1 as fallback');
     pageNumber = 1;
   }
 
   if (!Number.isFinite(totalPages) || totalPages < 1) {
-    console.warn('[resolveHeaderFooterTokens] Invalid totalPages:', totalPages, '- using 1 as fallback');
+    log.warn('[resolveHeaderFooterTokens] Invalid totalPages:', totalPages, '- using 1 as fallback');
     totalPages = 1;
   }
 

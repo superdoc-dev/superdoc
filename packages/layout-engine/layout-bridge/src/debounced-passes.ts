@@ -20,6 +20,10 @@
  * @module debounced-passes
  */
 
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-bridge:debounced-passes');
+
 /**
  * Configuration for a debounced pass.
  */
@@ -157,9 +161,7 @@ export class DebouncedPassManager {
     } catch (error) {
       // Silently handle errors to prevent cascading failures
       // In production, this would be logged
-      if (typeof console !== 'undefined' && console.error) {
-        console.error(`Error executing debounced pass "${passId}":`, error);
-      }
+      log.error(`Error executing debounced pass "${passId}":`, error);
     }
   }
 

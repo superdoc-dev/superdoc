@@ -9,6 +9,10 @@
  * boundary wraps the editor with a Proxy.
  */
 
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('superdoc');
+
 const MIGRATION_URL = 'https://docs.superdoc.dev/guides/migration/document-api';
 
 /** @type {Set<string>} */
@@ -22,7 +26,7 @@ const _warned = new Set();
 export function warnOnce(key, message) {
   if (_warned.has(key)) return;
   _warned.add(key);
-  console.warn(message);
+  log.warn(message);
 }
 
 /**

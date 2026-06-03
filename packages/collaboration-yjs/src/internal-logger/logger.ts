@@ -1,16 +1,15 @@
-const COLORS = {
-  ConnectionHandler: '\x1b[34m', // blue
-  DocumentManager: '\x1b[32m', // green
-  SuperDocCollaboration: '\x1b[35m', // magenta
-  reset: '\x1b[0m',
-};
+import { createLogger as createBaseLogger } from '@superdoc/common/logger';
 
 export type Logger = (...args: unknown[]) => void;
 
-export function createLogger(label: keyof typeof COLORS | string): Logger {
-  const color = (COLORS as Record<string, string>)[label] || COLORS.reset;
-
-  return (...args: unknown[]) => {
-    console.log(`${color}[${label}]${COLORS.reset}`, ...args);
-  };
+/**
+ * Always-on, label-prefixed logger for the collaboration server.
+ *
+ * Thin adapter over the shared `@superdoc/common/logger`. The level is pinned
+ * to `info` so server diagnostics stay visible regardless of the global level,
+ * preserving the previous always-print behavior.
+ */
+export function createLogger(label: string): Logger {
+  const base = createBaseLogger(label, { level: 'info' });
+  return (...args: unknown[]) => base.info(...args);
 }

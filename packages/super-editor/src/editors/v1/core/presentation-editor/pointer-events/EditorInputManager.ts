@@ -50,6 +50,9 @@ import {
   findStructuredContentInlineById,
   type StructuredContentSelection,
 } from '../input/structured-content-resolution.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('editor-input-manager');
 
 // =============================================================================
 // Constants
@@ -2447,7 +2450,7 @@ export class EditorInputManager {
       this.#lastSelectedImageBlockId = newSelectionId;
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`[EditorInputManager] Failed to create NodeSelection for inline image:`, error);
+        log.warn(`[EditorInputManager] Failed to create NodeSelection for inline image:`, error);
       }
     }
 
@@ -2489,7 +2492,7 @@ export class EditorInputManager {
       }
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[EditorInputManager] Failed to create NodeSelection for atomic fragment:', error);
+        log.warn('[EditorInputManager] Failed to create NodeSelection for atomic fragment:', error);
       }
     }
 
@@ -2509,7 +2512,7 @@ export class EditorInputManager {
       editor.view?.dispatch(tr);
       this.#callbacks.scheduleSelectionUpdate?.();
     } catch (error) {
-      console.warn('[SELECTION] Failed to extend selection on shift+click:', error);
+      log.warn('[SELECTION] Failed to extend selection on shift+click:', error);
     }
 
     this.#focusEditor();
@@ -2587,7 +2590,7 @@ export class EditorInputManager {
       editor.view?.dispatch(tr);
       this.#callbacks.scheduleSelectionUpdate?.();
     } catch (error) {
-      console.warn('[SELECTION] Failed to extend selection during drag:', error);
+      log.warn('[SELECTION] Failed to extend selection during drag:', error);
     }
   }
 
@@ -2613,7 +2616,7 @@ export class EditorInputManager {
       editor.view?.dispatch(tr);
       this.#callbacks.scheduleSelectionUpdate?.();
     } catch (error) {
-      console.warn('[CELL-SELECTION] Failed to create CellSelection, falling back to TextSelection:', error);
+      log.warn('[CELL-SELECTION] Failed to create CellSelection, falling back to TextSelection:', error);
       // Fall back to text selection
       const anchor = this.#dragAnchor!;
       const head = hit.pos;

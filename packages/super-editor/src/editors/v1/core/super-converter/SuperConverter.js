@@ -35,6 +35,10 @@ import {
   syncBibliographyPartToPackage,
   getBibliographyPartExportPaths,
 } from './citation-sources.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-converter');
+
 const FONT_FAMILY_FALLBACKS = Object.freeze({
   swiss: 'Arial, sans-serif',
   roman: 'Times New Roman, serif',
@@ -492,13 +496,13 @@ class SuperConverter {
 
       // Add null safety for nested property structure
       if (!property.elements?.[0]?.elements?.[0]?.text) {
-        console.warn(`Malformed property structure for "${propertyName}"`);
+        log.warn(`Malformed property structure for "${propertyName}"`);
         return null;
       }
 
       return property.elements[0].elements[0].text;
     } catch (e) {
-      console.warn(`Error getting custom property ${propertyName}:`, e);
+      log.warn(`Error getting custom property ${propertyName}:`, e);
       return null;
     }
   }
@@ -561,7 +565,7 @@ class SuperConverter {
       if (property && preserveExisting) {
         // Add null safety when returning existing value
         if (!property.elements?.[0]?.elements?.[0]?.text) {
-          console.warn(`Malformed existing property structure for "${propertyName}"`);
+          log.warn(`Malformed existing property structure for "${propertyName}"`);
           return null;
         }
         return property.elements[0].elements[0].text;
@@ -610,7 +614,7 @@ class SuperConverter {
 
         // Add null safety when updating existing property
         if (!property.elements?.[0]?.elements?.[0]) {
-          console.warn(`Malformed property structure for "${propertyName}", recreating structure`);
+          log.warn(`Malformed property structure for "${propertyName}", recreating structure`);
           property.elements = [
             {
               type: 'element',
@@ -630,7 +634,7 @@ class SuperConverter {
 
       return finalValue;
     } catch (e) {
-      console.warn(`Error setting custom property ${propertyName}:`, e);
+      log.warn(`Error setting custom property ${propertyName}:`, e);
       return null;
     }
   }
@@ -834,7 +838,7 @@ class SuperConverter {
 
       return `HASH-${computeCrc32Hex(data).toUpperCase()}`;
     } catch (e) {
-      console.warn('[super-converter] Could not generate content hash:', e);
+      log.warn('Could not generate content hash:', e);
       return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
     }
   }
@@ -1751,12 +1755,12 @@ class SuperConverter {
 
   // Deprecated methods for backward compatibility
   static getStoredSuperdocId(docx) {
-    console.warn('getStoredSuperdocId is deprecated, use getDocumentGuid instead');
+    log.warn('getStoredSuperdocId is deprecated, use getDocumentGuid instead');
     return SuperConverter.extractDocumentGuid(docx);
   }
 
   static updateDocumentVersion(docx, version) {
-    console.warn('updateDocumentVersion is deprecated, use setStoredSuperdocVersion instead');
+    log.warn('updateDocumentVersion is deprecated, use setStoredSuperdocVersion instead');
     return SuperConverter.setStoredSuperdocVersion(docx, version);
   }
 }

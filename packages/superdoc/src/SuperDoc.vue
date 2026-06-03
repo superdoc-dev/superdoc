@@ -63,6 +63,9 @@ import {
   RIGHT_CLICK_COMMENT_SUPPRESS_MS,
   VALID_COMMENTS_DISPLAY_MODES,
 } from './helpers/comment-small-screen.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('superdoc');
 
 const PdfViewer = defineAsyncComponent(() => import('./components/PdfViewer/PdfViewer.vue'));
 const getDocumentLoadPassword = (doc) => doc.password ?? proxy.$superdoc.config.password;
@@ -705,7 +708,7 @@ const processSelectionChange = (editor, transaction) => {
       try {
         return view.coordsAtPos(pos);
       } catch (err) {
-        console.warn('[superdoc] Ignoring selection coords error', err);
+        log.warn('Ignoring selection coords error', err);
         return null;
       }
     };
@@ -760,7 +763,7 @@ const processSelectionChange = (editor, transaction) => {
     try {
       return view.coordsAtPos(pos);
     } catch (err) {
-      console.warn('[superdoc] Ignoring selection coords error', err);
+      log.warn('Ignoring selection coords error', err);
       return null;
     }
   };
@@ -883,7 +886,7 @@ const editorOptions = (doc) => {
     isAiEnabled: proxy.$superdoc.config.modules?.ai,
     contextMenuConfig: (() => {
       if (proxy.$superdoc.config.modules?.slashMenu && !proxy.$superdoc.config.modules?.contextMenu) {
-        console.warn('[SuperDoc] modules.slashMenu is deprecated. Use modules.contextMenu instead.');
+        log.warn('modules.slashMenu is deprecated. Use modules.contextMenu instead.');
       }
       return proxy.$superdoc.config.modules?.contextMenu ?? proxy.$superdoc.config.modules?.slashMenu;
     })(),

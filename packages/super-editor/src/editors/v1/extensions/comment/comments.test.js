@@ -882,6 +882,7 @@ describe('comments plugin commands', () => {
 
       expect(result).toBe(false);
       expect(warnSpy).toHaveBeenCalledWith(
+        '[comments]',
         'addComment requires a text selection. Please select text before adding a comment.',
       );
       expect(dispatch).not.toHaveBeenCalled();

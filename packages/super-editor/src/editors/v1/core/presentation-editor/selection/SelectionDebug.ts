@@ -1,3 +1,7 @@
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('selection-debug');
+
 export type SelectionDebugLogLevel = 'off' | 'error' | 'warn' | 'info' | 'verbose';
 
 export type SelectionDebugConfig = {
@@ -77,9 +81,9 @@ export function debugLog(
 
   const prefix = '[Selection]';
   if (data) {
-    console.log(prefix, message, data);
+    log.debug(prefix, message, data);
   } else {
-    console.log(prefix, message);
+    log.debug(prefix, message);
   }
 }
 

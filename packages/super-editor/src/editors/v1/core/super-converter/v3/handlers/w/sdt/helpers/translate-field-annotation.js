@@ -8,6 +8,9 @@ import { sanitizeHtml } from '@core/InputRule';
 import { getTextNodeForExport } from '@converter/v3/handlers/w/t/helpers/translate-text-node.js';
 import he from 'he';
 import { translator as wHyperlinkTranslator } from '@converter/v3/handlers/w/hyperlink/index.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-converter:export');
 
 /**
  * Translate a field annotation node
@@ -373,7 +376,7 @@ export function getFieldHighlightJson(fieldsHighlightColor) {
   const hexRegex = /^#?([A-Fa-f0-9]{3}|[A-Fa-f0-9]{4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$/;
 
   if (!hexRegex.test(parsedColor)) {
-    console.warn(`Invalid HEX color provided to fieldsHighlightColor export param: ${fieldsHighlightColor}`);
+    log.warn(`Invalid HEX color provided to fieldsHighlightColor export param: ${fieldsHighlightColor}`);
     return null;
   }
 

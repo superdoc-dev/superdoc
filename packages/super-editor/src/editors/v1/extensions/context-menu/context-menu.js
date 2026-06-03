@@ -1,6 +1,9 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Extension } from '@core/Extension.js';
 import { getEditorSurfaceElement, getSurfaceRelativePoint } from '../../core/helpers/editorSurface.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('context-menu');
 
 /**
  * Find the nearest ancestor element that creates a containing block for `position: fixed`.
@@ -69,7 +72,7 @@ export function findContainingBlockAncestor(element) {
       }
     } catch (error) {
       // Element may be detached from DOM or otherwise invalid
-      console.warn('ContextMenu: Failed to get computed style for element', current, error);
+      log.warn('Failed to get computed style for element', current, error);
       // Continue checking parent elements
     }
 
@@ -210,7 +213,7 @@ export const ContextMenu = Extension.create({
             case 'open': {
               // Validate position
               if (typeof meta.pos !== 'number' || meta.pos < 0 || meta.pos > tr.doc.content.size) {
-                console.warn('ContextMenu: Invalid position', meta.pos);
+                log.warn('Invalid position', meta.pos);
                 return ensureStateShape(value);
               }
 
@@ -233,7 +236,7 @@ export const ContextMenu = Extension.create({
                     left = rect.left + relativePoint.left;
                     top = rect.top + relativePoint.top;
                   } catch (error) {
-                    console.warn('ContextMenu: Failed to get surface bounds', error);
+                    log.warn('Failed to get surface bounds', error);
                     return ensureStateShape(value);
                   }
                 } else if (surface) {
@@ -244,7 +247,7 @@ export const ContextMenu = Extension.create({
                     left = rect.left;
                     top = rect.top;
                   } catch (error) {
-                    console.warn('ContextMenu: Failed to get surface bounds for fallback', error);
+                    log.warn('Failed to get surface bounds for fallback', error);
                     return ensureStateShape(value);
                   }
                 }
@@ -294,7 +297,7 @@ export const ContextMenu = Extension.create({
                   left += containingBlock.scrollLeft || 0;
                   top += containingBlock.scrollTop || 0;
                 } catch (error) {
-                  console.warn('ContextMenu: Failed to adjust for containing block', error);
+                  log.warn('Failed to adjust for containing block', error);
                 }
               }
 

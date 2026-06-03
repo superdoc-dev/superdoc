@@ -536,6 +536,7 @@ describe('PresentationEditor - goToAnchor', () => {
     const result = await editor.goToAnchor('bookmark1');
     expect(result).toBe(true);
     expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[anchor-navigation]',
       expect.stringContaining('Navigation succeeded but could not move caret'),
     );
 
@@ -563,7 +564,11 @@ describe('PresentationEditor - goToAnchor', () => {
 
     const result = await editor.goToAnchor('bookmark1');
     expect(result).toBe(false);
-    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('goToAnchor failed'), expect.any(Error));
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[presentation-editor]',
+      expect.stringContaining('goToAnchor failed'),
+      expect.any(Error),
+    );
     expect(errorListener).toHaveBeenCalledWith(
       expect.objectContaining({
         error: expect.any(Error),

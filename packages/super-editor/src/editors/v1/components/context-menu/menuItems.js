@@ -8,6 +8,9 @@ import { resolveContextMenuCommandEditor } from './utils.js';
 import { isTrackedChangeActionAllowed } from '@extensions/track-changes/permission-helpers.js';
 import { readClipboardRaw } from '../../core/utilities/clipboardUtils.js';
 import { handleClipboardPaste } from '../../core/InputRule.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('context-menu');
 
 /**
  * Build a minimal clipboard event-like object so ProseMirror paste hooks
@@ -67,7 +70,7 @@ const shouldShowItem = (item, context) => {
     try {
       return Boolean(item.showWhen(context));
     } catch (error) {
-      console.warn('[ContextMenu] showWhen error for item', item.id, ':', error);
+      log.warn('showWhen error for item', item.id, ':', error);
       return false;
     }
   }
@@ -166,7 +169,7 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
   const { selectedText, editor } = context;
 
   if (editor?.options?.slashMenuConfig && !editor?.options?.contextMenuConfig) {
-    console.warn('[ContextMenu] editor.options.slashMenuConfig is deprecated. Use contextMenuConfig instead.');
+    log.warn('editor.options.slashMenuConfig is deprecated. Use contextMenuConfig instead.');
   }
   const menuConfig = editor?.options?.contextMenuConfig ?? editor?.options?.slashMenuConfig;
   if (arguments.length === 1 && menuConfig) {
@@ -389,7 +392,7 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
                 mode: 'all',
               });
             } catch (error) {
-              console.warn('[ContextMenu] toc.update failed:', error);
+              log.warn('toc.update failed:', error);
             }
           },
           showWhen: (context) => context.trigger === TRIGGERS.click && !!context.tocAncestor?.sdBlockId,
@@ -521,7 +524,7 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
     try {
       allSections = menuConfig.menuProvider(enhancedContext, allSections) || allSections;
     } catch (error) {
-      console.warn('[ContextMenu] menuProvider error:', error);
+      log.warn('menuProvider error:', error);
     }
   }
 

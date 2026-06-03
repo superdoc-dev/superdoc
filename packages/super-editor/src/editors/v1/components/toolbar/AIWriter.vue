@@ -4,6 +4,9 @@ import { writeStreaming, rewriteStreaming, formatDocument } from './ai-helpers';
 import { TextSelection } from 'prosemirror-state';
 import edit from '@superdoc/common/icons/edit-regular.svg?raw';
 import paperPlane from '@superdoc/common/icons/paper-plane-regular.svg?raw';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('ai-writer');
 
 const props = defineProps({
   selectedText: {
@@ -136,7 +139,7 @@ const getDocumentXml = () => {
     // This is a placeholder, implement according to your editor's capability
     return props.editor.state.doc.textContent || '';
   } catch (error) {
-    console.error('Error getting document XML:', error);
+    log.error('Error getting document XML:', error);
     return '';
   }
 };
@@ -166,7 +169,7 @@ const handleTextChunk = async (text) => {
         // Dispatch the transaction to update the editor state
         props.editor.view.dispatch(tr);
       } else {
-        console.warn('[AIWriter] No stored selection to restore');
+        log.warn('[AIWriter] No stored selection to restore');
       }
 
       // Now delete the selection
@@ -211,7 +214,7 @@ const handleTextChunk = async (text) => {
     // Hide the AI Writer after content is received
     props.handleClose();
   } catch (error) {
-    console.error('Error handling text chunk:', error);
+    log.error('Error handling text chunk:', error);
   }
 };
 
@@ -325,7 +328,7 @@ const handleSubmit = async () => {
       await writeStreaming(promptText.value, options, handleTextChunk, handleDone);
     }
   } catch (error) {
-    console.error('AI generation error:', error);
+    log.error('AI generation error:', error);
     isError.value = error.message || 'An error occurred';
   } finally {
     // Clear the input after submission

@@ -1,5 +1,9 @@
 // @ts-check
 
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('superdoc');
+
 /**
  * @typedef {'review' | 'original' | 'final' | 'off'} TrackChangesMode
  * @typedef {'paired' | 'independent'} TrackChangesReplacements
@@ -28,7 +32,7 @@ const warnedKeys = new Set();
 function warnOnce(legacyPath, newPath) {
   if (warnedKeys.has(legacyPath)) return;
   warnedKeys.add(legacyPath);
-  console.warn(`[SuperDoc] ${legacyPath} is deprecated — use ${newPath} instead.`);
+  log.warn(`${legacyPath} is deprecated — use ${newPath} instead.`);
 }
 
 /**

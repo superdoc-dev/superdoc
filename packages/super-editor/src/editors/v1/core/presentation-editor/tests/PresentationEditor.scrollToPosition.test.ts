@@ -709,7 +709,10 @@ describe('PresentationEditor - scrollToPosition', () => {
 
       // The page never mounted, so it should fail
       expect(result).toBe(false);
-      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('failed to mount within timeout'));
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[presentation-editor]',
+        expect.stringContaining('failed to mount within timeout'),
+      );
 
       consoleWarnSpy.mockRestore();
     });

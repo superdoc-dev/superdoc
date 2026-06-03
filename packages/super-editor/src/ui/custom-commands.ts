@@ -1,3 +1,4 @@
+import { createLogger } from '@superdoc/common/logger';
 import { normalizeShortcut } from './keyboard-shortcuts.js';
 import { isViewportContextBundle } from './viewport-context.js';
 import type {
@@ -15,6 +16,8 @@ import type {
   ViewportContext,
   ViewportEntityHit,
 } from './types.js';
+
+const log = createLogger('superdoc/ui');
 
 const DEFAULT_SHORTCUT_COLLISION_MESSAGE = (shortcut: string, oldId: string, newId: string) =>
   `[superdoc/ui] ui.commands.register(): shortcut '${shortcut}' was already bound to '${oldId}'. Replacing with '${newId}'.`;
@@ -232,12 +235,12 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
     for (const item of list) {
       const normalized = normalizeShortcut(item);
       if (!normalized) {
-        console.warn(DEFAULT_INVALID_SHORTCUT_MESSAGE(id, item));
+        log.warn(DEFAULT_INVALID_SHORTCUT_MESSAGE(id, item));
         continue;
       }
       const prior = shortcutIndex.get(normalized);
       if (prior && prior !== id) {
-        console.warn(DEFAULT_SHORTCUT_COLLISION_MESSAGE(normalized, prior, id));
+        log.warn(DEFAULT_SHORTCUT_COLLISION_MESSAGE(normalized, prior, id));
       }
       shortcutIndex.set(normalized, id);
       claimed.push(normalized);
@@ -367,7 +370,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       // a no-op result here keeps the call site safe (handle.execute
       // still callable) and warns once.
       if (RESERVED_PROXY_PROPERTY_NAMES.has(id)) {
-        console.warn(DEFAULT_RESERVED_NAME_MESSAGE(id));
+        log.warn(DEFAULT_RESERVED_NAME_MESSAGE(id));
         return {
           handle: buildNoOpHandle<TPayload, TValue>(id),
           invalidate() {
@@ -384,7 +387,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       // crash on `result.handle.execute(...)` — they just see a warned
       // disabled command, matching the "warn and refuse" decision.
       if (deps.isBuiltIn(id) && !override) {
-        console.warn(DEFAULT_BUILTIN_COLLISION_MESSAGE(id));
+        log.warn(DEFAULT_BUILTIN_COLLISION_MESSAGE(id));
         return {
           handle: buildNoOpHandle<TPayload, TValue>(id),
           invalidate() {
@@ -402,7 +405,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       // observer's `entries.has(id)` short-circuit will then detach.
       const priorEntry = entries.get(id);
       if (priorEntry) {
-        console.warn(DEFAULT_REPLACEMENT_MESSAGE(id));
+        log.warn(DEFAULT_REPLACEMENT_MESSAGE(id));
         disposeAllObservers(id);
         // Drop the prior registration's shortcuts before claiming the
         // new ones so a re-registration that drops a binding doesn't
@@ -489,7 +492,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
             if (entry.lastErrorMessage !== message) {
               entry.lastErrorMessage = message;
 
-              console.error(`[superdoc/ui] custom command '${entry.id}' getState threw: ${message}`);
+              log.error(`[superdoc/ui] custom command '${entry.id}' getState threw: ${message}`);
             }
           }
         }
@@ -541,14 +544,14 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
           return result.then(
             (value) => value !== false,
             (err) => {
-              console.error(`[superdoc/ui] custom command '${id}' execute rejected:`, err);
+              log.error(`[superdoc/ui] custom command '${id}' execute rejected:`, err);
               return false;
             },
           );
         }
         return result !== false;
       } catch (err) {
-        console.error(`[superdoc/ui] custom command '${id}' execute threw:`, err);
+        log.error(`[superdoc/ui] custom command '${id}' execute threw:`, err);
         return false;
       }
     },
@@ -591,7 +594,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
             const message = err instanceof Error ? err.message : String(err);
             if (entry.lastContextMenuErrorMessage !== message) {
               entry.lastContextMenuErrorMessage = message;
-              console.error(`[superdoc/ui] custom command '${entry.id}' contextMenu.when threw:`, err);
+              log.error(`[superdoc/ui] custom command '${entry.id}' contextMenu.when threw:`, err);
             }
             applies = false;
           }
@@ -696,7 +699,7 @@ function buildNoOpHandle<TPayload, TValue>(id: string): CustomCommandHandle<TPay
       return () => {};
     },
     execute: ((..._args: unknown[]) => {
-      console.warn(
+      log.warn(
         `[superdoc/ui] ui.commands['${id}'].execute(): registration was refused (built-in collision without override).`,
       );
       return false;

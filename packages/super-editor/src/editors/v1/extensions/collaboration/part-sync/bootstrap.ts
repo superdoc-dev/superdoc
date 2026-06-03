@@ -38,6 +38,9 @@ import {
   ensureHeaderFooterDescriptor,
   isHeaderFooterPartId,
 } from '../../../core/parts/adapters/header-footer-part-descriptor.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('part-sync');
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -90,7 +93,7 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc): PartSyncHandle {
         ),
         editor,
       });
-      console.error('[part-sync] Migration failed — entering degraded mode:', result.error);
+      log.error('Migration failed — entering degraded mode:', result.error);
       return createNoopHandle();
     }
   }
@@ -99,7 +102,7 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc): PartSyncHandle {
   if (!capabilityActive && hasNonDocumentEntries(partsMap)) {
     backfillCapability(metaMap, ydoc);
     capabilityActive = true;
-    console.info('[part-sync] Backfilled partsCapability marker for existing parts data');
+    log.info('Backfilled partsCapability marker for existing parts data');
   }
 
   // Step 4: No parts, no meta.docx — seed from local converter.
@@ -119,8 +122,8 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc): PartSyncHandle {
         reason: 'existing-room-no-parts',
         failures: ['Room has shared document content from remote clients but no parts data — cannot seed safely'],
       });
-      console.warn(
-        '[part-sync] Degraded: room has Y fragment content with remote client state but no parts/meta.docx.' +
+      log.warn(
+        'Degraded: room has Y fragment content with remote client state but no parts/meta.docx.' +
           ' Skipping local seed to avoid publishing non-authoritative data.',
       );
       return createNoopHandle();
@@ -128,7 +131,7 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc): PartSyncHandle {
 
     seedPartsFromEditor(editor, ydoc);
     capabilityActive = true;
-    console.info('[part-sync] Seeded parts from local converter');
+    log.info('Seeded parts from local converter');
   }
 
   // Step 5: Register header/footer descriptors before hydration
@@ -153,7 +156,7 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc): PartSyncHandle {
       ),
       editor,
     });
-    console.error('[part-sync] Degraded mode — publisher/consumer NOT activated:', hydration.failures);
+    log.error('Degraded mode — publisher/consumer NOT activated:', hydration.failures);
     return createNoopHandle();
   }
 
@@ -221,7 +224,7 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
       if (CRITICAL_PART_IDS.has(key)) {
         criticalFailures.push(`${key}: entry is not a Y.Map (got ${typeof value})`);
       } else {
-        console.warn(`[part-sync] Skipping non-Y.Map entry "${key}" during hydration`);
+        log.warn(`Skipping non-Y.Map entry "${key}" during hydration`);
       }
       continue;
     }
@@ -264,14 +267,14 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
       if (CRITICAL_PART_IDS.has(key)) {
         criticalFailures.push(`${key}: ${errorMsg}`);
       } else {
-        console.warn(`[part-sync] Skipping non-critical part "${key}" during hydration:`, errorMsg);
+        log.warn(`Skipping non-critical part "${key}" during hydration:`, errorMsg);
       }
     }
   }
 
   // Abort entirely if any critical part failed
   if (criticalFailures.length > 0) {
-    console.error('[part-sync] Critical part hydration failures:', criticalFailures);
+    log.error('Critical part hydration failures:', criticalFailures);
     return { ok: false, failures: criticalFailures };
   }
 
@@ -282,7 +285,7 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
     return { ok: true, failures: [] };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[part-sync] Hydration mutateParts failed:', err);
+    log.error('Hydration mutateParts failed:', err);
     return { ok: false, failures: [`mutateParts: ${msg}`] };
   }
 }

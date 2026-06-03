@@ -22,6 +22,9 @@
 
 import { EMFJS, WMFJS } from './rtfjs';
 import { dataUriToArrayBuffer } from '../../../../helpers.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-converter:image');
 
 // Disable verbose logging from the renderers
 EMFJS.loggingEnabled(false);
@@ -741,7 +744,7 @@ export function convertEmfToSvg(data, size = {}) {
   try {
     // Check if we're in a browser environment with DOM support (or a provided mock)
     if (!ensureDomEnvironment()) {
-      console.warn('EMF conversion requires browser environment with DOM support');
+      log.warn('EMF conversion requires browser environment with DOM support');
       return null;
     }
 
@@ -790,7 +793,7 @@ export function convertEmfToSvg(data, size = {}) {
 
     return { dataUri: svgToDataUri(svgElement), format: 'svg' };
   } catch (error) {
-    console.warn('Failed to convert EMF to SVG:', error.message);
+    log.warn('Failed to convert EMF to SVG:', error.message);
     return null;
   }
 }
@@ -806,7 +809,7 @@ export function convertWmfToSvg(data, size = {}) {
   try {
     // Check if we're in a browser environment with DOM support (or a provided mock)
     if (!ensureDomEnvironment()) {
-      console.warn('WMF conversion requires browser environment with DOM support');
+      log.warn('WMF conversion requires browser environment with DOM support');
       return null;
     }
 
@@ -832,7 +835,7 @@ export function convertWmfToSvg(data, size = {}) {
     if (!svgElement || !svgElement.childNodes?.length) return null;
     return { dataUri: svgToDataUri(svgElement), format: 'svg' };
   } catch (error) {
-    console.warn('Failed to convert WMF to SVG:', error.message);
+    log.warn('Failed to convert WMF to SVG:', error.message);
     return null;
   }
 }
@@ -856,7 +859,7 @@ export function convertMetafileToSvg(dataUri, extension, size = {}) {
     return convertWmfToSvg(dataUri, size);
   }
 
-  console.warn(`Unsupported metafile extension: ${extension}`);
+  log.warn(`Unsupported metafile extension: ${extension}`);
   return null;
 }
 

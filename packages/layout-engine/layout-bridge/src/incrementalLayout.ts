@@ -35,6 +35,9 @@ import { FeatureFlags } from './featureFlags';
 import { PageTokenLogger, HeaderFooterCacheLogger, globalMetrics } from './instrumentation';
 import { HeaderFooterCacheState, invalidateHeaderFooterCache } from './cacheInvalidation';
 import { getPreferredReserveCandidates, getPreferredReserveTrialTargets, scoreFootnoteWindow } from './footnote-scorer';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-bridge:incremental');
 
 export type HeaderFooterMeasureFn = (
   block: FlowBlock,
@@ -75,7 +78,7 @@ const layoutDebugEnabled =
 const perfLog = (...args: unknown[]): void => {
   if (!layoutDebugEnabled) return;
 
-  console.log(...args);
+  log.debug(...args);
 };
 
 type FootnoteReference = { id: string; pos: number };
@@ -1197,7 +1200,7 @@ export async function incrementalLayout(
         footerContentHeightsBySectionRef = measuredHeights.heightsBySectionRef;
       }
     } catch (error) {
-      console.error('[Layout] Footer pre-layout failed:', error);
+      log.error('[Layout] Footer pre-layout failed:', error);
       footerContentHeights = undefined;
     }
 
@@ -1319,7 +1322,7 @@ export async function incrementalLayout(
 
     if (iteration >= maxIterations) {
       converged = false;
-      console.warn(
+      log.warn(
         `[incrementalLayout] Page token resolution did not converge after ${maxIterations} iterations - stopping`,
       );
     }
@@ -1872,14 +1875,14 @@ export async function incrementalLayout(
         }
 
         if (cappedPages.size > 0) {
-          console.warn('[layout] Footnote reserve capped to preserve body area', {
+          log.warn('[layout] Footnote reserve capped to preserve body area', {
             pages: Array.from(cappedPages),
           });
         }
         if (pendingByColumn.size > 0) {
           const pendingIds = new Set<string>();
           pendingByColumn.forEach((entries) => entries.forEach((entry) => pendingIds.add(entry.id)));
-          console.warn('[layout] Footnote content truncated: extends beyond document pages', {
+          log.warn('[layout] Footnote content truncated: extends beyond document pages', {
             ids: Array.from(pendingIds),
           });
         }
@@ -2329,7 +2332,7 @@ export async function incrementalLayout(
           }
         }
         if (!reservesStabilized) {
-          console.warn(
+          log.warn(
             `[incrementalLayout] Footnote reserve loop did not converge (max ${MAX_FOOTNOTE_LAYOUT_PASSES} passes); layout may have suboptimal footnote placement.`,
           );
         }
@@ -2507,7 +2510,7 @@ export async function incrementalLayout(
 
               if (trialConverged && score.accept) {
                 if (layoutDebugEnabled) {
-                  console.log('[incrementalLayout] Accepted footnote preferred-reserve trial', {
+                  log.debug('[incrementalLayout] Accepted footnote preferred-reserve trial', {
                     pageIndex: candidate.pageIndex,
                     targetReserve,
                     score,
@@ -2519,7 +2522,7 @@ export async function incrementalLayout(
               }
 
               if (layoutDebugEnabled) {
-                console.log('[incrementalLayout] Rejected footnote preferred-reserve trial', {
+                log.debug('[incrementalLayout] Rejected footnote preferred-reserve trial', {
                   pageIndex: candidate.pageIndex,
                   targetReserve,
                   trialConverged,
@@ -2540,7 +2543,7 @@ export async function incrementalLayout(
           }
 
           if (layoutDebugEnabled && (acceptedPreferredTrials > 0 || rejectedPreferredTrials > 0)) {
-            console.log('[incrementalLayout] Footnote preferred-reserve trials', {
+            log.debug('[incrementalLayout] Footnote preferred-reserve trials', {
               accepted: acceptedPreferredTrials,
               rejected: rejectedPreferredTrials,
             });
@@ -2570,7 +2573,7 @@ export async function incrementalLayout(
 
         if (needsWork) {
           if (!(await growReserves(GROW_MAX_PASSES))) {
-            console.warn(
+            log.warn(
               '[incrementalLayout] Footnote post-reserve loop did not converge; some pages may have footnotes overflowing the reserved band.',
             );
           }
@@ -3068,7 +3071,7 @@ async function remeasureAffectedBlocks(
       measureCache?.set(block, blockConstraints.maxWidth, blockConstraints.maxHeight, newMeasure);
     } catch (error) {
       // Error handling per plan: log warning, keep prior layout for block
-      console.warn(`[incrementalLayout] Failed to re-measure block ${block.id} after token resolution:`, error);
+      log.warn(`[incrementalLayout] Failed to re-measure block ${block.id} after token resolution:`, error);
       // Keep the old measure - don't update updatedMeasures[i]
     }
   }

@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createLogger } from './logger.js';
 
+// The validator logger is a thin adapter over @superdoc/common/logger. When
+// `debug` is true it logs at the shared logger's `debug` level, whose console
+// sink writes via console.debug and prepends a single `[namespace]` prefix.
+// Nested prefixes compose into the namespace as `[SuperValidator:Prefix:...]`.
 describe('createLogger', () => {
   let consoleDebugSpy;
 
@@ -18,84 +22,47 @@ describe('createLogger', () => {
     expect(consoleDebugSpy).not.toHaveBeenCalled();
   });
 
-  it('logs with correct format and styles when debug is true', () => {
+  it('logs with the SuperValidator prefix when debug is true', () => {
     const logger = createLogger(true);
     logger.debug('hello', 'world');
 
     expect(consoleDebugSpy).toHaveBeenCalledTimes(1);
-
-    const [format, ...rest] = consoleDebugSpy.mock.calls[0];
-    expect(format).toBe('%c%s');
-
-    const [style, prefix, ...args] = rest;
-    expect(style).toBe('color: teal; font-weight: bold;');
-    expect(prefix).toBe('[SuperValidator]');
-    expect(args).toEqual(['hello', 'world']);
+    expect(consoleDebugSpy).toHaveBeenCalledWith('[SuperValidator]', 'hello', 'world');
   });
 
-  it('adds additional prefix correctly', () => {
+  it('composes an additional prefix into the namespace', () => {
     const logger = createLogger(true, ['MyValidator']);
     logger.debug('test');
 
-    expect(consoleDebugSpy).toHaveBeenCalledTimes(1);
-
-    const [format, ...rest] = consoleDebugSpy.mock.calls[0];
-    expect(format).toBe('%c%s %c%s');
-
-    const [style1, prefix1, style2, prefix2, ...args] = rest;
-    expect(style1).toBe('color: teal; font-weight: bold;');
-    expect(prefix1).toBe('[SuperValidator]');
-    expect(style2).toBe('color: teal; font-weight: bold;');
-    expect(prefix2).toBe('[MyValidator]');
-    expect(args).toEqual(['test']);
+    expect(consoleDebugSpy).toHaveBeenCalledWith('[SuperValidator:MyValidator]', 'test');
   });
 
   it('allows chaining withPrefix to add more prefixes', () => {
     const logger = createLogger(true).withPrefix('ValidatorA').withPrefix('Nested');
     logger.debug('deep');
 
-    expect(consoleDebugSpy).toHaveBeenCalledTimes(1);
-
-    const [format, ...rest] = consoleDebugSpy.mock.calls[0];
-    expect(format).toBe('%c%s %c%s %c%s');
-
-    const styled = rest.slice(0, 6);
-    const expectedPrefixes = ['[SuperValidator]', '[ValidatorA]', '[Nested]'];
-    for (let i = 0; i < styled.length; i += 2) {
-      expect(styled[i]).toBe('color: teal; font-weight: bold;');
-      expect(styled[i + 1]).toBe(expectedPrefixes[i / 2]);
-    }
-
-    expect(rest.slice(6)).toEqual(['deep']);
+    expect(consoleDebugSpy).toHaveBeenCalledWith('[SuperValidator:ValidatorA:Nested]', 'deep');
   });
 
   it('stringifies non-string prefixes', () => {
     const logger = createLogger(true, [123, null, undefined]);
     logger.debug('mixed');
 
-    const [format, ...rest] = consoleDebugSpy.mock.calls[0];
-    expect(format).toBe('%c%s %c%s %c%s %c%s');
-    expect(rest).toContain('[123]');
-    expect(rest).toContain('[null]');
-    expect(rest).toContain('[undefined]');
+    expect(consoleDebugSpy).toHaveBeenCalledWith('[SuperValidator:123:null:undefined]', 'mixed');
   });
 
   it('works with no additionalPrefixes provided', () => {
     const logger = createLogger(true);
     logger.debug('only base');
 
-    const [format, ...rest] = consoleDebugSpy.mock.calls[0];
-    expect(format).toBe('%c%s');
-    expect(rest).toContain('[SuperValidator]');
+    expect(consoleDebugSpy).toHaveBeenCalledWith('[SuperValidator]', 'only base');
   });
 
   it('handles empty debug call gracefully', () => {
     const logger = createLogger(true);
     logger.debug();
 
-    const [format, ...rest] = consoleDebugSpy.mock.calls[0];
-    expect(format).toBe('%c%s');
-    expect(rest).toEqual(['color: teal; font-weight: bold;', '[SuperValidator]']);
+    expect(consoleDebugSpy).toHaveBeenCalledWith('[SuperValidator]');
   });
 
   it('does not log from chained logger if debug is false', () => {

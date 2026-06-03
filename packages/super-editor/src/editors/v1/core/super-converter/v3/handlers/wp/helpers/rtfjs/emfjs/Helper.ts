@@ -25,6 +25,10 @@ SOFTWARE.
 
 */
 
+import { createLogger } from '@superdoc/common/logger';
+
+const logger = createLogger('super-converter:image');
+
 export class EMFJSError extends Error {
   constructor(message: string) {
     super(message); // 'Error' breaks prototype chain here
@@ -325,7 +329,7 @@ export class Helper {
 
   public static log(message: string): void {
     if (isLoggingEnabled) {
-      console.log(message);
+      logger.debug(message);
     }
   }
 

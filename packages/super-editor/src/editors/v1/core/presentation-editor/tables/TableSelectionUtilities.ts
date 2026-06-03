@@ -19,6 +19,9 @@ import {
   type PageHit,
   type TableHitResult,
 } from '@superdoc/layout-bridge';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('table-selection-utilities');
 
 /**
  * Calculates the ProseMirror document position for a table cell identified by a hit test result.
@@ -60,7 +63,7 @@ export function getCellPosFromTableHit(
 ): number | null {
   // Input validation: Check for valid tableHit structure
   if (!tableHit || !tableHit.block || typeof tableHit.block.id !== 'string') {
-    console.warn('[getCellPosFromTableHit] Invalid tableHit input:', tableHit);
+    log.warn('[getCellPosFromTableHit] Invalid tableHit input:', tableHit);
     return null;
   }
 
@@ -71,7 +74,7 @@ export function getCellPosFromTableHit(
     tableHit.cellRowIndex < 0 ||
     tableHit.cellColIndex < 0
   ) {
-    console.warn('[getCellPosFromTableHit] Invalid cell indices:', {
+    log.warn('[getCellPosFromTableHit] Invalid cell indices:', {
       row: tableHit.cellRowIndex,
       col: tableHit.cellColIndex,
     });
@@ -101,7 +104,7 @@ export function getCellPosFromTableHit(
       return true;
     });
   } catch (error: unknown) {
-    console.error('[getCellPosFromTableHit] Error during document traversal:', error);
+    log.error('[getCellPosFromTableHit] Error during document traversal:', error);
     return null;
   }
 
@@ -116,7 +119,7 @@ export function getCellPosFromTableHit(
 
   // Bounds check: Validate target row exists in table
   if (targetRowIndex >= tableNode.childCount) {
-    console.warn('[getCellPosFromTableHit] Target row index out of bounds:', {
+    log.warn('[getCellPosFromTableHit] Target row index out of bounds:', {
       targetRowIndex,
       tableChildCount: tableNode.childCount,
     });
@@ -155,7 +158,7 @@ export function getCellPosFromTableHit(
       }
 
       // Target column not found in this row (shouldn't happen in valid tables)
-      console.warn('[getCellPosFromTableHit] Target column not found in row:', {
+      log.warn('[getCellPosFromTableHit] Target column not found in row:', {
         targetColIndex,
         logicalColReached: logicalCol,
         rowCellCount: row.childCount,

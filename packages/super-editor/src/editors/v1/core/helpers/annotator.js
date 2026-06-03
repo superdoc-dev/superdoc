@@ -1,4 +1,7 @@
 import { Fragment } from 'prosemirror-model';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('annotator');
 
 /**
  * Get the field attributes based on the field type and value
@@ -75,7 +78,7 @@ export const processTables = ({ state, tr, annotationValues }) => {
     try {
       generateTableIfNecessary({ tableNode: { node: currentTableNode, pos }, annotationValues, tr, state });
     } catch (error) {
-      console.error('Error generating table at pos', pos, ':', error);
+      log.error('Error generating table at pos', pos, ':', error);
       // Continue processing other tables even if one fails
     }
   });
@@ -187,7 +190,7 @@ const generateTableIfNecessary = ({ tableNode, annotationValues, tr, state }) =>
             const rawExtraAttrs = getFieldAttrs(inlineNode, value, null);
             extraAttrs = validateAttributes(rawExtraAttrs || {});
           } catch (error) {
-            console.error('Error getting field attrs:', error);
+            log.error('Error getting field attrs:', error);
             extraAttrs = {};
           }
 
@@ -203,7 +206,7 @@ const generateTableIfNecessary = ({ tableNode, annotationValues, tr, state }) =>
           try {
             return FieldType.create(newAttrs, inlineNode.content || Fragment.empty, inlineNode.marks || []);
           } catch (error) {
-            console.error('Error creating field node:', error);
+            log.error('Error creating field node:', error);
 
             // Fallback: minimal attributes
             try {
@@ -218,7 +221,7 @@ const generateTableIfNecessary = ({ tableNode, annotationValues, tr, state }) =>
                 inlineNode.marks || [],
               );
             } catch (fallbackError) {
-              console.error('Fallback also failed:', fallbackError);
+              log.error('Fallback also failed:', fallbackError);
               return inlineNode; // Return original node as last resort
             }
           }
@@ -232,7 +235,7 @@ const generateTableIfNecessary = ({ tableNode, annotationValues, tr, state }) =>
             blockNode.marks || [],
           );
         } catch (error) {
-          console.error('Error creating paragraph node:', error);
+          log.error('Error creating paragraph node:', error);
           return blockNode;
         }
       });
@@ -244,7 +247,7 @@ const generateTableIfNecessary = ({ tableNode, annotationValues, tr, state }) =>
         cellNode.marks || [],
       );
     } catch (error) {
-      console.error(`Failed to rebuild cell for row ${rowIndex}:`, error);
+      log.error(`Failed to rebuild cell for row ${rowIndex}:`, error);
       throw error;
     }
   };
@@ -269,7 +272,7 @@ const generateTableIfNecessary = ({ tableNode, annotationValues, tr, state }) =>
     tr.replaceWith(mappedRowStart, rowEnd, Fragment.from(newRows));
     tr.setMeta('tableGeneration', true);
   } catch (error) {
-    console.error('Error during row generation:', error);
+    log.error('Error during row generation:', error);
     throw error;
   }
 };

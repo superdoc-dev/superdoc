@@ -14,6 +14,9 @@ import {
   sliceFromText,
 } from './review-model/edit-intent.js';
 import { decideTrackedChanges, buildDecisionBubbleEvents } from './review-model/decision-engine.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('track-changes');
 
 /**
  * @typedef {{ code: string, message: string, details?: unknown }} TrackChangesFailure
@@ -446,7 +449,7 @@ export const TrackChanges = Extension.create({
           // Validate bounds to prevent RangeError
           const docSize = state.doc.content.size;
           if (from < 0 || to > docSize || from > to) {
-            console.warn('insertTrackedChange: invalid range', { from, to, docSize });
+            log.warn('insertTrackedChange: invalid range', { from, to, docSize });
             return false;
           }
 
@@ -464,7 +467,7 @@ export const TrackChanges = Extension.create({
 
           // Warn if user info is missing - marks will have undefined author
           if (!resolvedUser.name && !resolvedUser.email) {
-            console.warn('insertTrackedChange: no user name/email provided, track change will have undefined author');
+            log.warn('insertTrackedChange: no user name/email provided, track change will have undefined author');
           }
           const date = new Date().toISOString();
 
@@ -792,7 +795,7 @@ const dispatchCompiledInsertTrackedChange = ({
       return false;
     }
   } catch (error) {
-    console.warn('insertTrackedChange: could not build intent', error);
+    log.warn('insertTrackedChange: could not build intent', error);
     return false;
   }
 

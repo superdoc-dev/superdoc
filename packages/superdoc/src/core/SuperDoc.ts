@@ -6,6 +6,7 @@ import { markRaw, toRaw } from 'vue';
 import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 
 import { DOCX, PDF, HTML, getActorIdentityKey, normalizeActorEmail } from '@superdoc/common';
+import { createLogger } from '@superdoc/common/logger';
 import { SuperToolbar, createZip, seedEditorStateToYDoc, onCollaborationProviderSynced } from '@superdoc/super-editor';
 import { SuperComments } from '../components/CommentsLayer/commentsList/super-comments-list.js';
 import { createSuperdocVueApp } from './create-app.js';
@@ -23,6 +24,8 @@ import { createDeprecatedEditorProxy } from '../helpers/deprecation.js';
 import { normalizeTrackChangesConfig } from './helpers/normalize-track-changes-config.js';
 import { normalizeCommentsUiPolicy } from '../helpers/comment-small-screen.js';
 import { EditorRuntimeRegistry } from './editor-runtime/editor-runtime-registry.js';
+
+const log = createLogger('superdoc');
 
 const DEFAULT_USER = Object.freeze({
   id: null,
@@ -558,13 +561,13 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     const requestedFlowMode = this.config.layoutEngineOptions?.flowMode;
     const isSemanticFlow = requestedFlowMode === 'semantic';
     if (isWebLayout && this.config.useLayoutEngine && !isSemanticFlow) {
-      console.warn(
-        "[SuperDoc] Web layout uses PM fallback unless layoutEngineOptions.flowMode is set to 'semantic'. Automatically disabling layout engine.",
+      log.warn(
+        "Web layout uses PM fallback unless layoutEngineOptions.flowMode is set to 'semantic'. Automatically disabling layout engine.",
       );
       this.config.useLayoutEngine = false;
     }
     if (!isWebLayout && isSemanticFlow) {
-      console.warn("[SuperDoc] flowMode 'semantic' is only valid with web layout. Coercing to 'paginated'.");
+      log.warn("flowMode 'semantic' is only valid with web layout. Coercing to 'paginated'.");
       this.config.layoutEngineOptions.flowMode = 'paginated';
     }
 
@@ -785,7 +788,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     const hasDocumentBlob = !!doc && doc instanceof Blob && !(doc instanceof File);
     const hasListOfDocuments = this.config.documents && this.config.documents?.length;
     if (hasDocumentConfig && hasListOfDocuments) {
-      console.warn('🦋 [superdoc] You can only provide one of document or documents');
+      log.warn('🦋 You can only provide one of document or documents');
     }
 
     if (hasDocumentConfig) {
@@ -1315,8 +1318,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
       const timer = setTimeout(() => {
         cleanup();
-        console.warn(
-          '[SuperDoc] collaborationReady did not fire within 10 s after collaboration attach. Continuing — collaboration is active but cursor/presence setup may be delayed.',
+        log.warn(
+          'collaborationReady did not fire within 10 s after collaboration attach. Continuing — collaboration is active but cursor/presence setup may be delayed.',
         );
         resolve(undefined);
       }, TIMEOUT_MS);
@@ -1617,7 +1620,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   /** @param args */
   #log(...args: unknown[]) {
-    (console.debug ? console.debug : console.log)('🦋 🦸‍♀️ [superdoc]', ...args);
+    log.debug(...args);
   }
 
   #fontsApi: SuperDocFontsApi | null = null;
@@ -2351,7 +2354,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    */
   setZoom(percent: number) {
     if (typeof percent !== 'number' || !Number.isFinite(percent) || percent <= 0) {
-      console.warn('[SuperDoc] setZoom expects a positive number representing percentage');
+      log.warn('setZoom expects a positive number representing percentage');
       return;
     }
 

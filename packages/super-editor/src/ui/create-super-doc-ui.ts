@@ -1,3 +1,4 @@
+import { createLogger } from '@superdoc/common/logger';
 import { createHeadlessToolbar } from '../headless-toolbar/index.js';
 import { resolveToolbarSources } from '../headless-toolbar/resolve-toolbar-sources.js';
 import { createToolbarRegistry } from '../headless-toolbar/toolbar-registry.js';
@@ -73,6 +74,8 @@ import type {
   ViewportRect,
   ViewportRectResult,
 } from './types.js';
+
+const log = createLogger('superdoc/ui');
 
 /**
  * Source events the controller listens to today. Domain tickets may
@@ -2267,7 +2270,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       try {
         setter.call(superdoc, mode);
       } catch (err) {
-        console.error('[superdoc/ui] ui.document.setMode failed:', err);
+        log.error('[superdoc/ui] ui.document.setMode failed:', err);
       }
     },
     async export(options?: DocumentExportInput): Promise<unknown> {
@@ -2322,7 +2325,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
             comments: editor.converter?.comments ?? [],
           });
         } catch (err) {
-          console.error('[superdoc/ui] ui.document.replaceFile commentsLoaded re-emit failed:', err);
+          log.error('[superdoc/ui] ui.document.replaceFile commentsLoaded re-emit failed:', err);
         }
       }
     },
@@ -2569,7 +2572,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       try {
         scope.destroy();
       } catch (err) {
-        console.error('[superdoc/ui] scope destroy threw during ui.destroy()', err);
+        log.error('[superdoc/ui] scope destroy threw during ui.destroy()', err);
       }
     }
     stateChangeListeners.clear();

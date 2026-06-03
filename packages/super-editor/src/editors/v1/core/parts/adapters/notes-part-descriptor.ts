@@ -13,6 +13,9 @@
 import type { Editor } from '../../Editor.js';
 import type { PartDescriptor, PartId } from '../types.js';
 import { clearPartCacheStale } from '../cache-staleness.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('parts');
 
 // ---------------------------------------------------------------------------
 // Part IDs
@@ -289,7 +292,7 @@ function rebuildDerivedCache(editor: Editor, config: NotePartConfig, part: unkno
       converter[config.converterKey] = converter.reimportNotePart(config.partId);
       return;
     } catch (err) {
-      console.warn(`[parts] reimportNotePart failed for ${config.partId}, using fallback:`, err);
+      log.warn(`reimportNotePart failed for ${config.partId}, using fallback:`, err);
     }
   }
 

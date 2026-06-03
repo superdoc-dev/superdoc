@@ -14,6 +14,9 @@
 
 import { FeatureFlags } from './featureFlags';
 import type { MeasureCacheStats } from './cache';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-bridge:instrumentation');
 
 /**
  * Performance metrics for page token resolution.
@@ -84,7 +87,7 @@ export const PageTokenLogger = {
   logIterationStart(iteration: number, totalPages: number): void {
     if (!FeatureFlags.DEBUG_PAGE_TOKENS) return;
 
-    console.log(`[PageTokens] Iteration ${iteration}: Resolving tokens for ${totalPages} pages`);
+    log.debug(`[PageTokens] Iteration ${iteration}: Resolving tokens for ${totalPages} pages`);
   },
 
   /**
@@ -100,10 +103,7 @@ export const PageTokenLogger = {
     const count = affectedBlockIds.size;
     const samples = blockSamples.slice(0, 5).join(', ');
 
-    console.log(
-      `[PageTokens] Iteration ${iteration}: ${count} blocks affected`,
-      samples ? `(samples: ${samples})` : '',
-    );
+    log.debug(`[PageTokens] Iteration ${iteration}: ${count} blocks affected`, samples ? `(samples: ${samples})` : '');
   },
 
   /**
@@ -117,9 +117,9 @@ export const PageTokenLogger = {
     if (!FeatureFlags.DEBUG_PAGE_TOKENS) return;
 
     if (converged) {
-      console.log(`[PageTokens] Converged after ${iteration} iterations in ${totalTimeMs.toFixed(2)}ms`);
+      log.debug(`[PageTokens] Converged after ${iteration} iterations in ${totalTimeMs.toFixed(2)}ms`);
     } else {
-      console.warn(`[PageTokens] Did NOT converge after ${iteration} iterations (${totalTimeMs.toFixed(2)}ms)`);
+      log.warn(`[PageTokens] Did NOT converge after ${iteration} iterations (${totalTimeMs.toFixed(2)}ms)`);
     }
   },
 
@@ -132,7 +132,7 @@ export const PageTokenLogger = {
   logError(blockId: string, error: unknown): void {
     if (!FeatureFlags.DEBUG_PAGE_TOKENS) return;
 
-    console.error(`[PageTokens] Error resolving tokens in block ${blockId}:`, error);
+    log.error(`[PageTokens] Error resolving tokens in block ${blockId}:`, error);
   },
 
   /**
@@ -144,7 +144,7 @@ export const PageTokenLogger = {
   logRemeasure(blockCount: number, timeMs: number): void {
     if (!FeatureFlags.DEBUG_PAGE_TOKENS) return;
 
-    console.log(`[PageTokens] Re-measured ${blockCount} blocks in ${timeMs.toFixed(2)}ms`);
+    log.debug(`[PageTokens] Re-measured ${blockCount} blocks in ${timeMs.toFixed(2)}ms`);
   },
 };
 
@@ -163,7 +163,7 @@ export const HeaderFooterCacheLogger = {
   logCacheHit(variantType: string, pageNumber: number, bucket: string): void {
     if (!FeatureFlags.DEBUG_HF_CACHE) return;
 
-    console.log(`[HF Cache] HIT: variant=${variantType}, page=${pageNumber}, bucket=${bucket}`);
+    log.debug(`[HF Cache] HIT: variant=${variantType}, page=${pageNumber}, bucket=${bucket}`);
   },
 
   /**
@@ -176,7 +176,7 @@ export const HeaderFooterCacheLogger = {
   logCacheMiss(variantType: string, pageNumber: number, bucket: string): void {
     if (!FeatureFlags.DEBUG_HF_CACHE) return;
 
-    console.log(`[HF Cache] MISS: variant=${variantType}, page=${pageNumber}, bucket=${bucket}`);
+    log.debug(`[HF Cache] MISS: variant=${variantType}, page=${pageNumber}, bucket=${bucket}`);
   },
 
   /**
@@ -188,7 +188,7 @@ export const HeaderFooterCacheLogger = {
   logInvalidation(reason: string, affectedBlockIds: string[]): void {
     if (!FeatureFlags.DEBUG_HF_CACHE) return;
 
-    console.log(`[HF Cache] INVALIDATE: reason=${reason}, blocks=${affectedBlockIds.length}`);
+    log.debug(`[HF Cache] INVALIDATE: reason=${reason}, blocks=${affectedBlockIds.length}`);
   },
 
   /**
@@ -202,7 +202,7 @@ export const HeaderFooterCacheLogger = {
     const hitRate =
       stats.hits + stats.misses > 0 ? ((stats.hits / (stats.hits + stats.misses)) * 100).toFixed(1) : '0.0';
 
-    console.log(
+    log.debug(
       `[HF Cache] Stats: hits=${stats.hits}, misses=${stats.misses}, hitRate=${hitRate}%, size=${stats.size}, evictions=${stats.evictions}`,
     );
   },
@@ -218,9 +218,9 @@ export const HeaderFooterCacheLogger = {
     if (!FeatureFlags.DEBUG_HF_CACHE) return;
 
     if (useBucketing && buckets) {
-      console.log(`[HF Cache] Bucketing enabled: ${totalPages} pages, buckets=${buckets.join(', ')}`);
+      log.debug(`[HF Cache] Bucketing enabled: ${totalPages} pages, buckets=${buckets.join(', ')}`);
     } else {
-      console.log(`[HF Cache] Bucketing disabled: ${totalPages} pages (per-page layouts)`);
+      log.debug(`[HF Cache] Bucketing disabled: ${totalPages} pages (per-page layouts)`);
     }
   },
 };
@@ -314,7 +314,7 @@ export class MetricsCollector {
   private checkPageTokenRollbackTriggers(metrics: PageTokenMetrics): void {
     // Trigger 1: Too many iterations
     if (metrics.iterations > 2 && !metrics.converged) {
-      console.warn(
+      log.warn(
         `[Rollback Trigger] Page token resolution did not converge after ${metrics.iterations} iterations. ` +
           `Consider disabling SD_BODY_PAGE_TOKENS if this persists.`,
       );
@@ -322,7 +322,7 @@ export class MetricsCollector {
 
     // Trigger 2: Slow token resolution
     if (metrics.totalTimeMs > 100 && metrics.iterations > 0) {
-      console.warn(
+      log.warn(
         `[Rollback Trigger] Page token resolution took ${metrics.totalTimeMs.toFixed(2)}ms (>100ms threshold). ` +
           `Consider disabling SD_BODY_PAGE_TOKENS if performance is unacceptable.`,
       );
@@ -344,7 +344,7 @@ export class MetricsCollector {
 
     // Trigger 1: Low hit rate (cache thrash)
     if (metrics.hits + metrics.misses > 10 && metrics.hitRate < MIN_HIT_RATE) {
-      console.warn(
+      log.warn(
         `[Rollback Trigger] Header/footer cache hit rate is low (${metrics.hitRate.toFixed(1)}% < ${MIN_HIT_RATE}%). ` +
           `Consider disabling SD_HF_DIGIT_BUCKETING if cache thrashing persists.`,
       );
@@ -353,7 +353,7 @@ export class MetricsCollector {
     // Trigger 2: Excessive memory usage (approximate check)
     // Note: This is a rough heuristic - actual page count would need to be passed in
     if (metrics.memoryEstimate > MAX_MEMORY_PER_100_PAGES) {
-      console.warn(
+      log.warn(
         `[Rollback Trigger] Header/footer cache memory usage is high (${(metrics.memoryEstimate / 1_000_000).toFixed(2)}MB). ` +
           `Monitor for excessive growth.`,
       );
@@ -381,7 +381,7 @@ export const LayoutVersionLogger = {
   logStaleLayoutRead(versionGap: number, stalenessDuration: number): void {
     if (!FeatureFlags.DEBUG_LAYOUT_VERSION) return;
 
-    console.warn(
+    log.warn(
       `[LayoutVersion] Selection overlay using STALE layout ` +
         `(gap: ${versionGap} versions, stale for: ${stalenessDuration}ms)`,
     );
@@ -396,7 +396,7 @@ export const LayoutVersionLogger = {
   logGeometryFallback(reason: string, pos: number): void {
     if (!FeatureFlags.DEBUG_LAYOUT_VERSION) return;
 
-    console.warn(`[LayoutVersion] Geometry fallback used: ${reason} (pos: ${pos})`);
+    log.warn(`[LayoutVersion] Geometry fallback used: ${reason} (pos: ${pos})`);
   },
 
   /**
@@ -409,7 +409,7 @@ export const LayoutVersionLogger = {
     if (!FeatureFlags.DEBUG_LAYOUT_VERSION) return;
 
     if (versionGap > 0) {
-      console.log(`[LayoutVersion] Layout caught up after ${versionGap} versions (stale for ${stalenessDuration}ms)`);
+      log.debug(`[LayoutVersion] Layout caught up after ${versionGap} versions (stale for ${stalenessDuration}ms)`);
     }
   },
 
@@ -421,7 +421,7 @@ export const LayoutVersionLogger = {
   logPmTransaction(newVersion: number): void {
     if (!FeatureFlags.DEBUG_LAYOUT_VERSION) return;
 
-    console.log(`[LayoutVersion] PM transaction → v${newVersion}`);
+    log.debug(`[LayoutVersion] PM transaction → v${newVersion}`);
   },
 
   /**
@@ -434,6 +434,6 @@ export const LayoutVersionLogger = {
     if (!FeatureFlags.DEBUG_LAYOUT_VERSION) return;
 
     const status = isStale ? 'STALE' : 'CURRENT';
-    console.log(`[LayoutVersion] Layout complete → v${version} (${status})`);
+    log.debug(`[LayoutVersion] Layout complete → v${version} (${status})`);
   },
 };

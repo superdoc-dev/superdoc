@@ -26,6 +26,9 @@ import type {
 } from '../types.js';
 import { normalizeAwarenessStates } from './RemoteCursorAwareness.js';
 import { renderRemoteCursors } from './RemoteCursorRendering.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('remote-cursor-manager');
 
 /**
  * Minimal interface for collaboration provider with awareness.
@@ -207,9 +210,7 @@ export class RemoteCursorManager {
       if (awareness) {
         // Warn so consumer misconfigurations (provider present but missing
         // event hooks) are debuggable; remote cursors stay disabled.
-        console.warn(
-          '[remote-cursors] provider.awareness is missing on/off methods; remote cursors will not be wired.',
-        );
+        log.warn('[remote-cursors] provider.awareness is missing on/off methods; remote cursors will not be wired.');
       }
       return;
     }

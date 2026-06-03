@@ -1,5 +1,8 @@
 // @ts-check
 import { markdownToPmDoc } from './markdown/markdownToPmContent.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('import-markdown');
 
 /**
  * Create a ProseMirror document from Markdown content.
@@ -37,7 +40,7 @@ export function createDocFromMarkdown(markdown, editor, options = {}) {
     if (options.onUnsupportedContent) {
       options.onUnsupportedContent(items);
     } else if (options.warnOnUnsupportedContent) {
-      console.warn('[super-editor] Unsupported Markdown content during import:', items);
+      log.warn('[super-editor] Unsupported Markdown content during import:', items);
     }
   }
 

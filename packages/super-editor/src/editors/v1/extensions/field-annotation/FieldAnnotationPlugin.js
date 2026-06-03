@@ -2,6 +2,9 @@ import { Plugin, PluginKey } from 'prosemirror-state';
 import { mergeRanges, clampRange } from '@utils/rangeUtils.js';
 import { trackFieldAnnotationsDeletion } from './fieldAnnotationHelpers/trackFieldAnnotationsDeletion.js';
 import { getAllFieldAnnotations } from './fieldAnnotationHelpers/getAllFieldAnnotations.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('field-annotation');
 
 /**
  * Creates a ProseMirror plugin for managing field annotations.
@@ -176,7 +179,7 @@ export const FieldAnnotationPlugin = (options = {}) => {
               }
             });
           } catch (error) {
-            console.warn('FieldAnnotationPlugin: range check failed, assuming annotations exist', error);
+            log.warn('FieldAnnotationPlugin: range check failed, assuming annotations exist', error);
             // If range check fails, assume there might be annotations and continue to main logic
             hasExistingAnnotations = true;
             break;
@@ -226,7 +229,7 @@ export const FieldAnnotationPlugin = (options = {}) => {
               }
             });
           } catch (error) {
-            console.warn('FieldAnnotationPlugin: nodesBetween failed, falling back to full scan', error);
+            log.warn('FieldAnnotationPlugin: nodesBetween failed, falling back to full scan', error);
             // Range-based scan failed due to document structure changes, fall back to full scan
             shouldFallbackToFullScan = true;
             break;

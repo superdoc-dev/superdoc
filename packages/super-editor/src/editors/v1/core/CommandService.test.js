@@ -219,7 +219,10 @@ describe('CommandService', () => {
 
       expect(result).toBe(false);
       expect(view.dispatch).not.toHaveBeenCalled();
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[CommandService] Cannot dispatch: editor is destroyed');
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[command-service]',
+        '[CommandService] Cannot dispatch: editor is destroyed',
+      );
     });
 
     it('skips chain dispatch when editor.isDestroyed is true', () => {
@@ -239,7 +242,10 @@ describe('CommandService', () => {
 
       expect(result).toBe(false);
       expect(view.dispatch).not.toHaveBeenCalled();
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[CommandService] Cannot dispatch: editor is destroyed');
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[command-service]',
+        '[CommandService] Cannot dispatch: editor is destroyed',
+      );
     });
 
     it('returns false when editor is destroyed with preventDispatch', () => {
@@ -287,7 +293,10 @@ describe('CommandService', () => {
 
       expect(result).toBe(false);
       expect(view.dispatch).not.toHaveBeenCalled();
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[CommandService] Cannot dispatch: editor is destroyed');
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[command-service]',
+        '[CommandService] Cannot dispatch: editor is destroyed',
+      );
     });
   });
 
@@ -318,6 +327,7 @@ describe('CommandService', () => {
 
       expect(result).toBe(false);
       expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[command-service]',
         '[CommandService] No dispatch method available (editor may not be initialized)',
       );
     });
@@ -340,6 +350,7 @@ describe('CommandService', () => {
 
       expect(result).toBe(false);
       expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[command-service]',
         '[CommandService] No dispatch method available (editor may not be initialized)',
       );
     });

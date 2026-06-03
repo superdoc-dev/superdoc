@@ -1,3 +1,7 @@
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('carbon-copy');
+
 /**
  *
  * @template T
@@ -9,7 +13,7 @@ export const carbonCopy = (obj) => {
   try {
     return JSON.parse(JSON.stringify(obj));
   } catch (e) {
-    console.error('Error in carbonCopy', obj, e);
+    log.error('Error in carbonCopy', obj, e);
     return undefined;
   }
 };

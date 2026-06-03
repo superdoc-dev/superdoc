@@ -1,3 +1,7 @@
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('safe-cleanup');
+
 /**
  * Executes a cleanup function and catches any errors, logging them with context.
  *
@@ -18,6 +22,6 @@ export function safeCleanup(fn: () => void, context: string): void {
   try {
     fn();
   } catch (error) {
-    console.warn(`[PresentationEditor] ${context} cleanup failed:`, error);
+    log.warn(`[PresentationEditor] ${context} cleanup failed:`, error);
   }
 }

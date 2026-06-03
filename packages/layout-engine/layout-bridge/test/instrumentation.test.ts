@@ -136,7 +136,7 @@ describe('Instrumentation', () => {
         });
 
         expect(consoleWarnSpy).toHaveBeenCalled();
-        const call = consoleWarnSpy.mock.calls[0][0];
+        const call = consoleWarnSpy.mock.calls[0][1];
         expect(call).toContain('[Rollback Trigger]');
         expect(call).toContain('did not converge');
       });
@@ -152,7 +152,7 @@ describe('Instrumentation', () => {
         });
 
         expect(consoleWarnSpy).toHaveBeenCalled();
-        const call = consoleWarnSpy.mock.calls[0][0];
+        const call = consoleWarnSpy.mock.calls[0][1];
         expect(call).toContain('[Rollback Trigger]');
         expect(call).toContain('>100ms threshold');
       });
@@ -170,7 +170,7 @@ describe('Instrumentation', () => {
         });
 
         expect(consoleWarnSpy).toHaveBeenCalled();
-        const call = consoleWarnSpy.mock.calls[0][0];
+        const call = consoleWarnSpy.mock.calls[0][1];
         expect(call).toContain('[Rollback Trigger]');
         expect(call).toContain('hit rate is low');
       });
@@ -188,7 +188,7 @@ describe('Instrumentation', () => {
         });
 
         expect(consoleWarnSpy).toHaveBeenCalled();
-        const call = consoleWarnSpy.mock.calls[0][0];
+        const call = consoleWarnSpy.mock.calls[0][1];
         expect(call).toContain('[Rollback Trigger]');
         expect(call).toContain('memory usage is high');
       });

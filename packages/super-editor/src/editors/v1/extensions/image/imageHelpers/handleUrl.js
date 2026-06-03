@@ -2,6 +2,10 @@
  * Handles URL to File conversion with comprehensive CORS error handling
  */
 
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('image');
+
 /**
  * Converts a URL to a File object with proper CORS error handling
  * @param {string} url - The image URL to fetch
@@ -22,7 +26,7 @@ export const urlToFile = async (url, filename, mimeType) => {
     });
 
     if (!response.ok) {
-      console.warn(`Failed to fetch image from ${url}: ${response.status} ${response.statusText}`);
+      log.warn(`Failed to fetch image from ${url}: ${response.status} ${response.statusText}`);
       return null;
     }
 
@@ -37,11 +41,11 @@ export const urlToFile = async (url, filename, mimeType) => {
     return new File([blob], finalFilename, { type: finalMimeType });
   } catch (error) {
     if (isCorsError(error)) {
-      console.warn(`CORS policy prevents accessing image from ${url}:`, error.message);
+      log.warn(`CORS policy prevents accessing image from ${url}:`, error.message);
       return null;
     }
 
-    console.error(`Error fetching image from ${url}:`, error);
+    log.error(`Error fetching image from ${url}:`, error);
     return null;
   }
 };

@@ -33,6 +33,9 @@ import {
   applySuperdocClipboardMedia,
 } from './helpers/superdocClipboardSlice.js';
 import { annotateFragmentDomWithClipboardData } from './helpers/clipboardFragmentAnnotate.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('input-rule');
 
 /** Heuristic: clipboard HTML from SuperDoc copy (slice attrs, list/section metadata). */
 export function isSuperdocOriginClipboardHtml(html) {
@@ -126,7 +129,7 @@ const inputRuleMatcherHandler = (text, match) => {
 
   if (inputRuleMatch.replaceWith) {
     if (!inputRuleMatch.text.includes(inputRuleMatch.replaceWith)) {
-      console.warn('[super-editor warn]: "inputRuleMatch.replaceWith" must be part of "inputRuleMatch.text".');
+      log.warn('[super-editor warn]: "inputRuleMatch.replaceWith" must be part of "inputRuleMatch.text".');
     }
 
     result.push(inputRuleMatch.replaceWith);
@@ -331,7 +334,7 @@ export const inputRulesPlugin = ({ editor, rules }) => {
           try {
             if (handleSuperdocSlicePaste(superdocSliceData, editor, view, embeddedBodySectPr)) return true;
           } catch (err) {
-            console.warn('Failed to paste SuperDoc slice, falling back to HTML:', err);
+            log.warn('Failed to paste SuperDoc slice, falling back to HTML:', err);
           }
         }
 
@@ -567,7 +570,7 @@ export function cleanHtmlUnnecessaryTags(html) {
 export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'style', 'button'], domDocument) {
   const resolvedDocument = domDocument ?? (typeof document !== 'undefined' ? document : null);
   if (!resolvedDocument) {
-    console.warn(
+    log.warn(
       '[super-editor] HTML sanitization requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment. Skipping sanitization.',
     );
     return null;
@@ -669,7 +672,7 @@ export function handleClipboardPaste({ editor, view }, html, plainText) {
     try {
       if (handleSuperdocSlicePaste(superdocSliceData, editor, view, embeddedBodySectPr)) return true;
     } catch (err) {
-      console.warn('Failed to paste SuperDoc slice, falling back to HTML:', err);
+      log.warn('Failed to paste SuperDoc slice, falling back to HTML:', err);
     }
   }
 
@@ -762,7 +765,7 @@ function handleCutEvent(view, event, editor) {
     view.dispatch(view.state.tr.deleteSelection().scrollIntoView());
     return true;
   } catch (error) {
-    console.warn('Failed to handle cut:', error);
+    log.warn('Failed to handle cut:', error);
     return false;
   }
 }

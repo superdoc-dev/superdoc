@@ -302,7 +302,7 @@ describe('updateStructuredContentById', () => {
 
       // Verify that console.error was called with validation error
       expect(consoleErrorSpy).toHaveBeenCalled();
-      expect(consoleErrorSpy.mock.calls[0][0]).toBe('Invalid content.');
+      expect(consoleErrorSpy.mock.calls[0][1]).toBe('Invalid content.');
 
       // Verify the original node was NOT modified
       let originalNode = null;
@@ -370,7 +370,7 @@ describe('updateStructuredContentById', () => {
 
       // Verify validation error was logged
       expect(consoleErrorSpy).toHaveBeenCalled();
-      expect(consoleErrorSpy.mock.calls[0][0]).toBe('Invalid content.');
+      expect(consoleErrorSpy.mock.calls[0][1]).toBe('Invalid content.');
 
       // Verify the original node was NOT modified
       let originalNode = null;
@@ -519,7 +519,7 @@ describe('updateStructuredContentByGroup', () => {
 
       // Verify that console.error was called with validation error
       expect(consoleErrorSpy).toHaveBeenCalled();
-      expect(consoleErrorSpy.mock.calls[0][0]).toBe('Invalid content.');
+      expect(consoleErrorSpy.mock.calls[0][1]).toBe('Invalid content.');
 
       // Verify the original nodes were NOT modified
       const originalNodes = [];

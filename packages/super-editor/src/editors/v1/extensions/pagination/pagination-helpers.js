@@ -4,6 +4,9 @@ import { exportSubEditorToPart } from '@core/parts/adapters/header-footer-sync.j
 import { createStoryEditor } from '@core/story-editor-factory.js';
 import { applyStyleIsolationClass } from '@utils/styleIsolation.js';
 import { isHeadless } from '@utils/headless-helpers.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('pagination');
 
 export const PaginationPluginKey = new PluginKey('paginationPlugin');
 
@@ -195,7 +198,7 @@ export const createHeaderFooterEditor = ({
     editorHost.appendChild(editorContainer);
   } else {
     // Fallback to body for backward compatibility (should not happen in new code)
-    console.warn('[createHeaderFooterEditor] No editorHost provided, falling back to document.body');
+    log.warn('[createHeaderFooterEditor] No editorHost provided, falling back to document.body');
     document.body.appendChild(editorContainer);
   }
 
@@ -249,7 +252,7 @@ export const broadcastEditorEvents = (editor, sectionEditor) => {
   eventNames.forEach((eventName) => {
     sectionEditor.on(eventName, (...args) => {
       editor.emit(eventName, ...args);
-      console.debug('broadcastEditorEvents', { eventName, args });
+      log.debug('broadcastEditorEvents', { eventName, args });
     });
   });
 };

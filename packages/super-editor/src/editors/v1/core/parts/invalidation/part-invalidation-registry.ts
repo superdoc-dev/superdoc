@@ -9,6 +9,9 @@
 
 import type { Editor } from '../../Editor.js';
 import type { PartId, PartChangedEvent } from '../types.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('parts');
 
 type InvalidationHandler = (editor: Editor, event: PartChangedEvent) => void;
 
@@ -36,7 +39,7 @@ export function applyPartInvalidation(editor: Editor, event: PartChangedEvent): 
       try {
         handler(editor, event);
       } catch (err) {
-        console.error(`[parts] Invalidation handler failed for "${part.partId}":`, err);
+        log.error(`Invalidation handler failed for "${part.partId}":`, err);
       }
     }
   }

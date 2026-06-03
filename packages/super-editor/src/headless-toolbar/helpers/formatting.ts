@@ -6,6 +6,9 @@ import { TextSelection, Selection } from 'prosemirror-state';
 import { getCurrentResolvedParagraphProperties, isFieldAnnotationSelection, resolveStateEditor } from './context.js';
 import { createDirectCommandExecute, isMutationCommandDisabled } from './general.js';
 import type { ToolbarContext } from '../types.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('headless-toolbar');
 
 /**
  * Local mirror of `ActiveFormattingEntry` from `getActiveFormatting.js`
@@ -555,7 +558,7 @@ export const createImageExecute =
         const originalError = err instanceof Error ? err : new Error(String(err));
         const error = new Error(`[headless-toolbar] Image insertion failed: ${originalError.message}`);
         editor?.emit?.('exception', { error, editor });
-        console.error(error, originalError);
+        log.error(error, originalError);
       });
 
     return true;

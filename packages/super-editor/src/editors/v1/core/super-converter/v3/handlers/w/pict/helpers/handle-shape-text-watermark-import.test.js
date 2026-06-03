@@ -156,7 +156,7 @@ describe('handleShapeTextWatermarkImport', () => {
       const result = handleShapeTextWatermarkImport({ params: {}, pict });
 
       expect(result).toBeNull();
-      expect(consoleSpy).toHaveBeenCalledWith('v:textpath missing string attribute');
+      expect(consoleSpy).toHaveBeenCalledWith('[super-converter:import]', 'v:textpath missing string attribute');
 
       consoleSpy.mockRestore();
     });

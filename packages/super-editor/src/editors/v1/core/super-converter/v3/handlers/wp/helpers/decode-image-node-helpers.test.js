@@ -347,6 +347,7 @@ describe('translateImageNode', () => {
     expect(baseParams.relationships).toHaveLength(0);
     expect(baseParams.media).toEqual({});
     expect(warn).toHaveBeenCalledWith(
+      '[super-converter:image]',
       'Skipping image export because media target could not be resolved.',
       expect.objectContaining({ nodeType: 'image', src: 'data:,payload' }),
     );

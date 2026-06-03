@@ -235,8 +235,8 @@ describe('ui.commands.register', () => {
     });
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][0]).toContain("'bold'");
-    expect(warnSpy.mock.calls[0][0]).toContain('built-in');
+    expect(warnSpy.mock.calls[0][1]).toContain("'bold'");
+    expect(warnSpy.mock.calls[0][1]).toContain('built-in');
 
     // Calling execute on the refused handle returns false and warns.
     const result = reg.handle.execute();
@@ -288,7 +288,7 @@ describe('ui.commands.register', () => {
 
     const second = ui.commands.register({ id: 'company.x', execute: secondExecute });
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][0]).toContain('Replacing');
+    expect(warnSpy.mock.calls[0][1]).toContain('Replacing');
 
     second.handle.execute();
     expect(secondExecute).toHaveBeenCalledTimes(1);
@@ -338,7 +338,7 @@ describe('ui.commands.register', () => {
     });
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy.mock.calls[0][0]).toContain('boom');
+    expect(errorSpy.mock.calls[0][1]).toContain('boom');
 
     // Force a rebuild — same error message → no second log.
     reg.invalidate();
@@ -381,7 +381,7 @@ describe('ui.commands.register', () => {
     const result = reg.handle.execute();
     expect(result).toBe(false);
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy.mock.calls[0][0]).toContain("'company.throws'");
+    expect(errorSpy.mock.calls[0][1]).toContain("'company.throws'");
 
     ui.destroy();
   });

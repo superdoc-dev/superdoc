@@ -9,6 +9,9 @@
  */
 
 import type { RulerDefinition, RulerTick } from './ruler-core.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('painter-dom:ruler');
 
 /**
  * CSS class names for ruler elements
@@ -88,12 +91,12 @@ export function createRulerElement(options: CreateRulerElementOptions): HTMLElem
 
   // Validate definition
   if (!Number.isFinite(definition.widthPx) || definition.widthPx <= 0) {
-    console.warn(`[createRulerElement] Invalid ruler width: ${definition.widthPx}px. Using minimum width of 1px.`);
+    log.warn(`[createRulerElement] Invalid ruler width: ${definition.widthPx}px. Using minimum width of 1px.`);
     definition.widthPx = Math.max(1, definition.widthPx || 1);
   }
 
   if (!definition.ticks || definition.ticks.length === 0) {
-    console.warn('[createRulerElement] Ruler definition has no ticks. Ruler will be empty.');
+    log.warn('[createRulerElement] Ruler definition has no ticks. Ruler will be empty.');
   }
 
   const ruler = doc.createElement('div');

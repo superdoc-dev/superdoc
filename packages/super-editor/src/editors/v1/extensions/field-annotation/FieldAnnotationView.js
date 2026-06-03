@@ -1,5 +1,8 @@
 import { Attribute } from '@core/Attribute.js';
 import { NodeSelection } from 'prosemirror-state';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('field-annotation');
 
 export class FieldAnnotationView {
   editor;
@@ -144,7 +147,7 @@ export class FieldAnnotationView {
         });
         rawHtml = childEditor.view.dom.innerHTML;
       } catch (error) {
-        console.warn('Error parsing HTML in FieldAnnotationView:', error);
+        log.warn('Error parsing HTML in FieldAnnotationView:', error);
       }
     }
 

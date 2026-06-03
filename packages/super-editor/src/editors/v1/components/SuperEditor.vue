@@ -21,6 +21,9 @@ import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import { isHeadless } from '@utils/headless-helpers.js';
 import { isMacOS } from '@core/utilities/isMacOS.js';
 import { DOM_CLASS_NAMES, buildImagePmSelector, buildInlineImagePmSelector } from '@superdoc/dom-contract';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('SuperDoc');
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -418,7 +421,7 @@ const getEditorZoom = () => {
     return active.presentationEditor.zoom;
   }
   // Fallback to default zoom when editor instance doesn't have zoom configured
-  console.warn(
+  log.warn(
     '[SuperEditor] getEditorZoom: Unable to retrieve zoom from editor instance, using fallback value of 1. ' +
       'This may indicate the editor is not fully initialized or is not a PresentationEditor instance.',
   );
@@ -441,13 +444,13 @@ let lastUpdateTableResizeTimestamp = 0;
 const isNearColumnBoundary = (event, tableElement) => {
   // Input validation: event must have clientX and clientY properties
   if (!event || typeof event.clientX !== 'number' || typeof event.clientY !== 'number') {
-    console.warn('[isNearColumnBoundary] Invalid event: missing clientX or clientY', event);
+    log.warn('[isNearColumnBoundary] Invalid event: missing clientX or clientY', event);
     return false;
   }
 
   // Input validation: tableElement must be a valid DOM element
   if (!tableElement || !(tableElement instanceof HTMLElement)) {
-    console.warn('[isNearColumnBoundary] Invalid tableElement: not an HTMLElement', tableElement);
+    log.warn('[isNearColumnBoundary] Invalid tableElement: not an HTMLElement', tableElement);
     return false;
   }
 
@@ -480,15 +483,15 @@ const isNearColumnBoundary = (event, tableElement) => {
 
       // Validate column data structure before using col.x and col.w
       if (!col || typeof col !== 'object') {
-        console.warn(`[isNearColumnBoundary] Invalid column at index ${i}: not an object`, col);
+        log.warn(`[isNearColumnBoundary] Invalid column at index ${i}: not an object`, col);
         continue;
       }
       if (typeof col.x !== 'number' || !Number.isFinite(col.x)) {
-        console.warn(`[isNearColumnBoundary] Invalid column.x at index ${i}:`, col.x);
+        log.warn(`[isNearColumnBoundary] Invalid column.x at index ${i}:`, col.x);
         continue;
       }
       if (typeof col.w !== 'number' || !Number.isFinite(col.w) || col.w <= 0) {
-        console.warn(`[isNearColumnBoundary] Invalid column.w at index ${i}:`, col.w);
+        log.warn(`[isNearColumnBoundary] Invalid column.w at index ${i}:`, col.w);
         continue;
       }
 
@@ -536,7 +539,7 @@ const isNearColumnBoundary = (event, tableElement) => {
     return false;
   } catch (e) {
     // Log parsing errors for debugging while falling back to safe default
-    console.warn('[isNearColumnBoundary] Failed to parse table boundary metadata:', e);
+    log.warn('[isNearColumnBoundary] Failed to parse table boundary metadata:', e);
     return false;
   }
 };
@@ -855,11 +858,11 @@ const loadNewFileData = async () => {
       }
       // Not handled — return undefined so initializeData falls back to a blank
       // document instead of leaving the component in an unusable empty state.
-      console.debug('[SuperDoc] Error loading file:', err);
+      log.debug('Error loading file:', err);
       return;
     }
 
-    console.debug('[SuperDoc] Error loading file:', err);
+    log.debug('Error loading file:', err);
     if (typeof props.options.onException === 'function') {
       props.options.onException({ error: err, editor: null });
     }
@@ -890,7 +893,7 @@ const waitForCollaborativeFragmentSettling = async (ydoc, maxWaitMs = 200) => {
 };
 
 const notifyFileLoadError = () => {
-  console.warn(FILE_LOAD_ERROR_MESSAGE);
+  log.warn(FILE_LOAD_ERROR_MESSAGE);
 };
 
 const initializeData = async () => {

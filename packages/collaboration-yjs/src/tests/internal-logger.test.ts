@@ -6,27 +6,29 @@ describe('createLogger', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    // The logger now routes through the shared @superdoc/common logger, whose
+    // console sink writes `info`-level records via console.info.
+    consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
   });
 
   afterEach(() => {
     consoleSpy.mockRestore();
   });
 
-  test('logs with configured color for known label', () => {
+  test('prefixes output with the label', () => {
     const logger = createLogger('ConnectionHandler');
 
     logger('connected', 123);
 
-    expect(consoleSpy).toHaveBeenCalledWith('\x1b[34m[ConnectionHandler]\x1b[0m', 'connected', 123);
+    expect(consoleSpy).toHaveBeenCalledWith('[ConnectionHandler]', 'connected', 123);
   });
 
-  test('falls back to reset color for unknown label', () => {
+  test('prefixes output for any label', () => {
     const logger = createLogger('Custom');
 
     logger('info');
 
-    expect(consoleSpy).toHaveBeenCalledWith('\x1b[0m[Custom]\x1b[0m', 'info');
+    expect(consoleSpy).toHaveBeenCalledWith('[Custom]', 'info');
   });
 
   test('returns a stable logging function', () => {

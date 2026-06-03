@@ -1,5 +1,9 @@
 <script setup>
 import { onMounted, ref } from 'vue';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('html-viewer');
+
 const props = defineProps({
   fileSource: {
     type: [File, Blob],
@@ -17,7 +21,7 @@ const emit = defineEmits(['ready', 'selection-change']);
 
 const handleSelectionChange = () => {
   const selection = window.getSelection();
-  console.debug('selection from html viewer', selection);
+  log.debug('selection from html viewer', selection);
   emit('selection-change', selection);
 };
 
@@ -41,7 +45,7 @@ const initViewer = async () => {
     emit('ready', props.documentId);
   } catch (error) {
     emit('error', error);
-    console.error('Error loading document', error);
+    log.error('Error loading document', error);
   }
 };
 

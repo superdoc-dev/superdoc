@@ -4,6 +4,9 @@
  */
 
 import type { GradientFill, GradientStop, SolidFillWithAlpha, ShapeTextContent, TextPart } from '@superdoc/contracts';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('painter-dom:svg-utils');
 
 /**
  * Validates and sanitizes a hex color string to prevent XSS attacks.
@@ -283,7 +286,7 @@ export function applyGradientToSVG(svg: SVGElement, gradientData: GradientFill):
     });
   } catch (error) {
     // Gracefully handle DOM manipulation errors
-    console.error('Failed to apply gradient to SVG:', error);
+    log.error('Failed to apply gradient to SVG:', error);
   }
 }
 
@@ -325,7 +328,7 @@ export function applyAlphaToSVG(svg: SVGElement, alphaData: SolidFillWithAlpha):
     });
   } catch (error) {
     // Gracefully handle DOM manipulation errors
-    console.error('Failed to apply alpha to SVG:', error);
+    log.error('Failed to apply alpha to SVG:', error);
   }
 }
 

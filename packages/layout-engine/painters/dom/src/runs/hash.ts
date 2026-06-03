@@ -1,4 +1,7 @@
 import type { Run, TextRun } from '@superdoc/contracts';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('painter-dom:runs');
 
 /**
  * Type guard to check if a run has a string property.
@@ -130,7 +133,7 @@ export const applyRunDataAttributes = (element: HTMLElement, dataAttrs?: Record<
       element.setAttribute(key, value);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`[DomPainter] Failed to set data attribute "${key}":`, error);
+        log.warn(`[DomPainter] Failed to set data attribute "${key}":`, error);
       }
     }
   });

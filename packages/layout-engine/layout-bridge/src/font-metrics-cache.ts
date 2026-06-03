@@ -12,6 +12,10 @@
  * @module font-metrics-cache
  */
 
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-bridge:font-metrics-cache');
+
 /**
  * Metrics for a specific font configuration.
  */
@@ -164,7 +168,7 @@ export class FontMetricsCache {
     for (const config of fonts) {
       // Validate fontKey format (should be "family|size|weight|style")
       if (!this.isValidFontKey(config.fontKey)) {
-        console.warn(
+        log.warn(
           `[FontMetricsCache] Invalid fontKey format: "${config.fontKey}". Expected format: "family|size|weight|style". Skipping.`,
         );
         continue;

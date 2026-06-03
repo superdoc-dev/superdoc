@@ -1,4 +1,7 @@
 import { getPageElementByIndex } from '../../../dom-observer/PageDom.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('coordinate-transform');
 
 /**
  * Calculates the offset of a page element within the viewport.
@@ -155,7 +158,7 @@ export function convertPageLocalToOverlayCoords(options: {
 }): { x: number; y: number } | null {
   // Validate pageIndex: must be finite and non-negative
   if (!Number.isFinite(options.pageIndex) || options.pageIndex < 0) {
-    console.warn(
+    log.warn(
       `[PresentationEditor] #convertPageLocalToOverlayCoords: Invalid pageIndex ${options.pageIndex}. ` +
         'Expected a finite non-negative number.',
     );
@@ -164,7 +167,7 @@ export function convertPageLocalToOverlayCoords(options: {
 
   // Validate pageLocalX: must be finite
   if (!Number.isFinite(options.pageLocalX)) {
-    console.warn(
+    log.warn(
       `[PresentationEditor] #convertPageLocalToOverlayCoords: Invalid pageLocalX ${options.pageLocalX}. ` +
         'Expected a finite number.',
     );
@@ -173,7 +176,7 @@ export function convertPageLocalToOverlayCoords(options: {
 
   // Validate pageLocalY: must be finite
   if (!Number.isFinite(options.pageLocalY)) {
-    console.warn(
+    log.warn(
       `[PresentationEditor] #convertPageLocalToOverlayCoords: Invalid pageLocalY ${options.pageLocalY}. ` +
         'Expected a finite number.',
     );

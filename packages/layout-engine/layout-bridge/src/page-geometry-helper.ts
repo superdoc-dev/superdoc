@@ -13,6 +13,9 @@
  */
 
 import type { Layout } from '@superdoc/contracts';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-bridge:page-geometry');
 
 /**
  * Configuration for page geometry calculations.
@@ -289,7 +292,7 @@ export class PageGeometryHelper {
     if (this.cache !== null) {
       // Validate cache integrity
       if (!Array.isArray(this.cache.cumulativeY) || !Array.isArray(this.cache.pageHeights)) {
-        console.warn('[PageGeometryHelper] Cache corruption detected, rebuilding cache');
+        log.warn('[PageGeometryHelper] Cache corruption detected, rebuilding cache');
         this.cache = null;
       } else {
         return;
@@ -365,7 +368,7 @@ export class PageGeometryHelper {
     } catch (error) {
       // Log error and create a safe fallback cache with empty data
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[PageGeometryHelper] Cache build failed: ${errorMessage}. Using fallback empty cache.`);
+      log.error(`[PageGeometryHelper] Cache build failed: ${errorMessage}. Using fallback empty cache.`);
 
       // Provide safe fallback cache with no pages
       this.cache = {

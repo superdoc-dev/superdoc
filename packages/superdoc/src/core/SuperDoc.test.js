@@ -754,7 +754,7 @@ describe('SuperDoc core', () => {
     const instance = new SuperDoc(config);
     await flushMicrotasks();
 
-    expect(warnSpy).toHaveBeenCalledWith('🦋 [superdoc] You can only provide one of document or documents');
+    expect(warnSpy).toHaveBeenCalledWith('[superdoc]', '🦋 You can only provide one of document or documents');
     expect(instance.config.documents).toHaveLength(1);
     expect(instance.config.documents[0].name).toBe('doc1.docx');
     warnSpy.mockRestore();
@@ -2489,7 +2489,7 @@ describe('SuperDoc core', () => {
 
       // Test negative value
       instance.setZoom(-50);
-      expect(warnSpy).toHaveBeenCalledWith('[SuperDoc] setZoom expects a positive number representing percentage');
+      expect(warnSpy).toHaveBeenCalledWith('[superdoc]', 'setZoom expects a positive number representing percentage');
       expect(superdocStore.activeZoom).toBe(100);
       expect(zoomChangeSpy).not.toHaveBeenCalled();
 
@@ -2539,7 +2539,8 @@ describe('SuperDoc core', () => {
       await flushMicrotasks();
 
       expect(warnSpy).toHaveBeenCalledWith(
-        "[SuperDoc] Web layout uses PM fallback unless layoutEngineOptions.flowMode is set to 'semantic'. Automatically disabling layout engine.",
+        '[superdoc]',
+        "Web layout uses PM fallback unless layoutEngineOptions.flowMode is set to 'semantic'. Automatically disabling layout engine.",
       );
       expect(instance.config.useLayoutEngine).toBe(false);
       warnSpy.mockRestore();
@@ -2598,7 +2599,8 @@ describe('SuperDoc core', () => {
       await flushMicrotasks();
 
       expect(warnSpy).toHaveBeenCalledWith(
-        "[SuperDoc] flowMode 'semantic' is only valid with web layout. Coercing to 'paginated'.",
+        '[superdoc]',
+        "flowMode 'semantic' is only valid with web layout. Coercing to 'paginated'.",
       );
       expect(instance.config.layoutEngineOptions.flowMode).toBe('paginated');
       expect(instance.config.useLayoutEngine).toBe(true);

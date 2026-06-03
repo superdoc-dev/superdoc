@@ -25,12 +25,15 @@
  */
 
 import { DOM_CLASS_NAMES, STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES } from '@superdoc/dom-contract';
+import { createLogger } from '@superdoc/common/logger';
+
+const logger = createLogger('layout-bridge:dom-map');
 
 // Debug logging for click-to-position pipeline (disabled - enable for debugging)
 const DEBUG_CLICK_MAPPING = false;
 const log = (...args: unknown[]) => {
   if (DEBUG_CLICK_MAPPING) {
-    console.log('[DOM-MAP]', ...args);
+    logger.debug(...args);
   }
 };
 

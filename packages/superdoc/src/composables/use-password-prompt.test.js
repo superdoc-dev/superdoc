@@ -290,7 +290,8 @@ describe('usePasswordPrompt', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(consoleSpy).toHaveBeenCalledWith(
-      '[SuperDoc] Password prompt error:',
+      '[superdoc]',
+      'Password prompt error:',
       expect.objectContaining({
         message: expect.stringContaining('cannot provide both "component" and "render"'),
       }),

@@ -6,6 +6,9 @@ import { DOCX } from '@superdoc/common';
 import { COMMENT_FILE_BASENAMES } from './super-converter/constants.js';
 import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 import { reconcileDocumentRelationships, MANAGED_DOCUMENT_PARTS } from './opc/reconcile-document-relationships.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('docx-zipper');
 
 /** Image file extensions recognized during import and export. */
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
@@ -411,7 +414,7 @@ class DocxZipper {
           partNames.add(partName);
         });
       } catch (error) {
-        console.warn('Failed to parse document relationships while updating content types', error);
+        log.warn('Failed to parse document relationships while updating content types', error);
       }
     }
 

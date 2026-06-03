@@ -1948,7 +1948,6 @@ describe('HeaderFooterSessionManager', () => {
       expect(manager.headerRegions.get(1)!.sectionType).toBe('default');
       expect(manager.footerRegions.get(1)!.sectionType).toBe('default');
     });
-
     it('uses effective Word page number for fallback odd/even region type', () => {
       manager = buildManager({
         ...createMainEditorStub(),

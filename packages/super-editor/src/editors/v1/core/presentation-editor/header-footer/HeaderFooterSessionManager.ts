@@ -2424,14 +2424,19 @@ export class HeaderFooterSessionManager {
       const sectionPageNumber =
         typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
       const headerFooterType = hasSectionResolution
-        ? getHeaderFooterTypeForSection(effectivePageNumber, sectionIndex, multiSectionId, { kind, sectionPageNumber })
+        ? getHeaderFooterTypeForSection(effectivePageNumber, sectionIndex, multiSectionId, {
+            kind,
+            sectionPageNumber,
+            parityPageNumber: effectivePageNumber,
+          })
         : getHeaderFooterType(pageNumber, legacyIdentifier, { kind, parityPageNumber: effectivePageNumber });
 
       if (!headerFooterType) {
         return null;
       }
 
-      const effectiveRef = hasSectionResolution
+      const pageSectionRefs = kind === 'header' ? page?.sectionRefs?.headerRefs : page?.sectionRefs?.footerRefs;
+      const sectionResolvedRef = hasSectionResolution
         ? resolveEffectiveHeaderFooterRef({
             sections: multiSectionId.sections,
             sectionIndex,
@@ -2439,13 +2444,13 @@ export class HeaderFooterSessionManager {
             variant: headerFooterType,
           })
         : null;
-      const pageSectionRefs = kind === 'header' ? page?.sectionRefs?.headerRefs : page?.sectionRefs?.footerRefs;
       const legacyRefs = kind === 'header' ? legacyIdentifier.headerIds : legacyIdentifier.footerIds;
-      const fallbackRef =
+      const resolvedRef =
         refForVariant(pageSectionRefs, headerFooterType) ??
+        sectionResolvedRef ??
         (!hasSectionResolution ? refForVariant(legacyRefs, headerFooterType) : undefined);
-      const sectionRId = effectiveRef?.refId ?? fallbackRef?.refId;
-      const layoutVariantType = effectiveRef?.matchedVariant ?? fallbackRef?.matchedVariant ?? headerFooterType;
+      const sectionRId = resolvedRef?.refId;
+      const layoutVariantType = resolvedRef?.matchedVariant ?? headerFooterType;
 
       // PRIORITY 1: Try per-rId layout (composite key first for per-section margins, then plain rId)
       const compositeKey = sectionRId ? `${sectionRId}::s${sectionIndex}` : undefined;

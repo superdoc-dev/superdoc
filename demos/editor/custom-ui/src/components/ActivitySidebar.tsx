@@ -81,15 +81,16 @@ export function ActivitySidebar({ composeOpen, onCloseComposer, decided }: Props
   // suggestion (`comments.list()` links it via `assignTrackedChangeLink`),
   // so a flag filter would wrongly hide those discussions. Only the
   // synthetic rows reuse a tracked-change id; real comments have their
-  // own. `pairedWithChangeId` covers replacement pairs that
-  // `trackChanges.list()` collapses into one row (this demo runs
-  // `replacements: 'paired'`) but which still surface as two comments.
+  // own. Note: this demo runs `replacements: 'independent'`, so both
+  // sides of a replacement surface as separate change rows and both
+  // synthetic comment ids land in the dedupe set. Under the default
+  // `'paired'` mode the collapsed row drops the delete-side id, which
+  // `trackChanges.list()` does not currently expose — the delete-side
+  // synthetic comment would leak as a duplicate. Engine follow-up needed
+  // before this pattern is safe in paired mode.
   const feed = useMemo<ActivityItem[]>(() => {
     const changeIds = new Set<string>();
-    for (const tc of trackChanges.items) {
-      changeIds.add(tc.id);
-      if (tc.change.pairedWithChangeId) changeIds.add(tc.change.pairedWithChangeId);
-    }
+    for (const tc of trackChanges.items) changeIds.add(tc.id);
     const items: ActivityItem[] = [];
     for (const c of comments.items) {
       if (changeIds.has(c.id)) continue;

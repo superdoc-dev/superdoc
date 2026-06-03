@@ -76,6 +76,11 @@ type ParagraphPageRefResolution = {
   changed: boolean;
 };
 
+type ResolvedPageRefRunText = {
+  text: string;
+  originalLength: number;
+};
+
 function resolveParagraphPageRefs(
   fragment: ParaFragment,
   block: ParagraphBlock,
@@ -118,8 +123,8 @@ function resolveParagraphPageRefBlock(
 function collectResolvedPageRefRunTexts(
   block: ParagraphBlock,
   context?: PageRefResolutionContext,
-): Map<number, string> {
-  const runTexts = new Map<number, string>();
+): Map<number, ResolvedPageRefRunText> {
+  const runTexts = new Map<number, ResolvedPageRefRunText>();
   if (!context?.anchorMap?.size) return runTexts;
 
   block.runs.forEach((run, index) => {
@@ -133,16 +138,19 @@ function collectResolvedPageRefRunTexts(
       metadata: run.pageRefMetadata,
     });
     if (resolvedText !== run.text) {
-      runTexts.set(index, resolvedText);
+      runTexts.set(index, { text: resolvedText, originalLength: run.text.length });
     }
   });
 
   return runTexts;
 }
 
-function resolvePageRefRuns(block: ParagraphBlock, runTexts: Map<number, string>): ParagraphBlock['runs'] {
+function resolvePageRefRuns(
+  block: ParagraphBlock,
+  runTexts: Map<number, ResolvedPageRefRunText>,
+): ParagraphBlock['runs'] {
   return block.runs.map((run, index) =>
-    runTexts.has(index) && isTextRun(run) ? { ...run, text: runTexts.get(index)! } : run,
+    runTexts.has(index) && isTextRun(run) ? { ...run, text: runTexts.get(index)!.text } : run,
   );
 }
 
@@ -285,28 +293,37 @@ function isPageReferenceTextRun(
   return isTextRun(run) && run.token === 'pageReference' && run.pageRefMetadata != null;
 }
 
-function adjustLineForResolvedPageRefs(line: Line, runTexts: Map<number, string>): Line {
+function adjustLineForResolvedPageRefs(line: Line, runTexts: Map<number, ResolvedPageRefRunText>): Line {
   let changed = false;
   const nextLine: Line = { ...line };
 
-  for (const [runIndex, text] of runTexts) {
+  for (const [runIndex, resolved] of runTexts) {
     if (runIndex < line.fromRun || runIndex > line.toRun) continue;
     changed = true;
-    if (line.fromRun === runIndex) nextLine.fromChar = 0;
-    if (line.toRun === runIndex) nextLine.toChar = text.length;
+    if (line.fromRun === runIndex) nextLine.fromChar = clampResolvedRunBoundary(line.fromChar, resolved);
+    if (line.toRun === runIndex) nextLine.toChar = clampResolvedRunBoundary(line.toChar, resolved);
   }
 
   if (line.segments?.length) {
     const segments = line.segments.map((segment) => {
-      const text = runTexts.get(segment.runIndex);
-      if (text == null) return segment;
+      const resolved = runTexts.get(segment.runIndex);
+      if (resolved == null) return segment;
       changed = true;
-      return { ...segment, fromChar: 0, toChar: text.length } satisfies LineSegment;
+      return {
+        ...segment,
+        fromChar: clampResolvedRunBoundary(segment.fromChar, resolved),
+        toChar: clampResolvedRunBoundary(segment.toChar, resolved),
+      } satisfies LineSegment;
     });
     nextLine.segments = segments;
   }
 
   return changed ? nextLine : line;
+}
+
+function clampResolvedRunBoundary(offset: number, resolved: ResolvedPageRefRunText): number {
+  if (offset === resolved.originalLength) return resolved.text.length;
+  return Math.min(offset, resolved.text.length);
 }
 
 function sumLineHeights(lines: Line[], from: number, to: number): number {

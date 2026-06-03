@@ -12,6 +12,7 @@ import type {
   DrawingFragment,
   SourceAnchor,
 } from '@superdoc/contracts';
+import { sliceRunsForLine } from '@superdoc/contracts';
 
 describe('resolveLayout', () => {
   const baseLayout: Layout = {
@@ -188,6 +189,66 @@ describe('resolveLayout', () => {
 
       expect(item.block.runs[0].text).toBe('12');
       expect(item.content.lines[0].line.toChar).toBe(2);
+    });
+
+    it('does not duplicate resolved PAGEREF text across cached split lines', () => {
+      const input = makePageRefInput(pageRefRun({ text: '123456', pmStart: 5, pmEnd: 11 }));
+      input.measures[0] = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 3,
+            width: 24,
+            ascent: 8,
+            descent: 2,
+            lineHeight: 12,
+            segments: [{ runIndex: 0, fromChar: 0, toChar: 3, width: 24, x: 0 }],
+          },
+          {
+            fromRun: 0,
+            fromChar: 3,
+            toRun: 0,
+            toChar: 6,
+            width: 24,
+            ascent: 8,
+            descent: 2,
+            lineHeight: 12,
+            segments: [{ runIndex: 0, fromChar: 3, toChar: 6, width: 24, x: 0 }],
+          },
+        ],
+        totalHeight: 24,
+      } as any;
+      input.layout.pages[0].fragments = [
+        {
+          kind: 'para',
+          blockId: 'source',
+          fromLine: 0,
+          toLine: 2,
+          x: 0,
+          y: 0,
+          width: 100,
+          pmStart: 1,
+          pmEnd: 12,
+        },
+      ];
+
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+      const item = result.pages[0].items[0] as any;
+      const paintedText = item.content.lines
+        .flatMap((lineItem: any) => sliceRunsForLine(item.block, lineItem.line))
+        .map((run: any) => run.text ?? '')
+        .join('');
+      const segmentText = item.content.lines
+        .flatMap((lineItem: any) => lineItem.line.segments ?? [])
+        .map((segment: any) => item.block.runs[segment.runIndex].text.slice(segment.fromChar, segment.toChar))
+        .join('');
+
+      expect(item.block.runs[0].text).toBe('12');
+      expect(paintedText).toBe('12');
+      expect(segmentText).toBe('12');
     });
 
     it('changes the paint cache version when the target display page changes', () => {

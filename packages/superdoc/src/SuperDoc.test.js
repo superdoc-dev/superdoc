@@ -293,7 +293,7 @@ const createCommentsStoreWithFloatingGetter = () => {
 
 const mountComponent = async (
   superdocStub,
-  { surfaceManager = null, superdocStore = null, commentsStore = null } = {},
+  { surfaceManager = null, superdocStore = null, commentsStore = null, attachTo = null } = {},
 ) => {
   superdocStoreStub = superdocStore ?? buildSuperdocStore();
   commentsStoreStub = commentsStore ?? buildCommentsStore();
@@ -303,6 +303,7 @@ const mountComponent = async (
   const component = (await import('./SuperDoc.vue')).default;
 
   return mount(component, {
+    ...(attachTo ? { attachTo } : {}),
     global: {
       components: {
         SuperEditor: SuperEditorStub,
@@ -335,6 +336,7 @@ const mountComponent = async (
 
 const createSuperdocStub = () => {
   const toolbar = { config: { aiApiKey: 'abc' }, setActiveEditor: vi.fn(), updateToolbarState: vi.fn() };
+  const runtimeMap = new Map();
   return {
     config: {
       modules: { comments: {}, ai: {}, toolbar: {}, pdf: {} },
@@ -354,6 +356,13 @@ const createSuperdocStub = () => {
     broadcastPdfDocumentReady: vi.fn(),
     broadcastSidebarToggle: vi.fn(),
     setActiveEditor: vi.fn(),
+    registerEditorRuntime: vi.fn((runtime) => {
+      if (runtime?.id) runtimeMap.set(runtime.id, runtime);
+    }),
+    unregisterEditorRuntime: vi.fn((runtimeId) => runtimeMap.delete(runtimeId)),
+    setActiveRuntime: vi.fn(),
+    getActiveRuntime: vi.fn(() => null),
+    activateRuntimeFromEventTarget: vi.fn(() => false),
     lockSuperdoc: vi.fn(),
     emit: vi.fn(),
     listeners: vi.fn(),
@@ -361,6 +370,32 @@ const createSuperdocStub = () => {
     canPerformPermission: vi.fn(() => true),
   };
 };
+
+const createRuntimeEditorMock = (documentId = 'doc-1') => ({
+  options: { documentId },
+  editorVersion: 1,
+  state: {
+    doc: { textBetween: vi.fn(() => '') },
+    selection: { from: 0, to: 0, empty: true },
+  },
+  commands: {
+    insertContent: vi.fn(() => true),
+  },
+  view: { focus: vi.fn() },
+  focus: vi.fn(),
+  on: vi.fn(),
+  off: vi.fn(),
+  exportDocx: vi.fn(async () => new ArrayBuffer(0)),
+});
+
+const createPresentationEditorMock = () => ({
+  focus: vi.fn(),
+  setZoom: vi.fn(),
+  setContextMenuDisabled: vi.fn(),
+  on: vi.fn(),
+  off: vi.fn(),
+  getCommentBounds: vi.fn(() => ({})),
+});
 
 const createFloatingCommentsSchema = () =>
   new Schema({
@@ -859,6 +894,141 @@ describe('SuperDoc.vue', () => {
     wrapper.unmount();
 
     expect(removeEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function), true);
+  });
+
+  it('routes product focus/pointer hits through activateRuntimeFromEventTarget and cleans up on unmount', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub, { attachTo: document.body });
+    await nextTick();
+
+    const subDocument = wrapper.element.querySelector('.superdoc__sub-document');
+    expect(subDocument).not.toBeNull();
+    const target = document.createElement('span');
+    subDocument.appendChild(target);
+
+    // Real product DOM events inside the marked runtime root activate the owning
+    // runtime through the shell helper — no painter inspection or dispatch here.
+    target.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(superdocStub.activateRuntimeFromEventTarget).toHaveBeenCalledWith(target, 'focusin');
+
+    target.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(superdocStub.activateRuntimeFromEventTarget).toHaveBeenCalledWith(target, 'pointerdown');
+
+    target.dispatchEvent(new Event('mousedown', { bubbles: true }));
+    expect(superdocStub.activateRuntimeFromEventTarget).toHaveBeenCalledWith(target, 'mousedown');
+
+    const callsBeforeUnmount = superdocStub.activateRuntimeFromEventTarget.mock.calls.length;
+
+    wrapper.unmount();
+
+    // After unmount the capture listeners are gone: further hits do not route.
+    document.body.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(superdocStub.activateRuntimeFromEventTarget.mock.calls.length).toBe(callsBeforeUnmount);
+  });
+
+  it('runtime hit routing outside any marked root delegates to the registry no-op (does not throw)', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub, { attachTo: document.body });
+    await nextTick();
+
+    // An event outside the document area still routes to the helper, which
+    // resolves no owning runtime and is a safe no-op (returns false).
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(superdocStub.activateRuntimeFromEventTarget).toHaveBeenCalledWith(document.body, 'pointerdown');
+
+    wrapper.unmount();
+  });
+
+  it('skips v1 runtime registration when the document host root is unavailable', async () => {
+    const superdocStub = createSuperdocStub();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const doc = superdocStoreStub.documents.value[0];
+    wrapper.vm.$.setupState.setSubDocumentRoot(doc, null);
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[SuperDoc] v1 runtime host root unavailable; skipping runtime registration for',
+      'doc-1',
+    );
+    expect(superdocStub.registerEditorRuntime).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+  });
+
+  it('registers a v1 runtime, attaches the presentation editor, and activates it on focus', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const editor = createRuntimeEditorMock('doc-1');
+    const presentationEditor = createPresentationEditorMock();
+    const editorComponent = wrapper.findComponent(SuperEditorStub);
+    const options = editorComponent.props('options');
+    superdocStoreStub.documents.value[0].setPresentationEditor = vi.fn();
+
+    options.onCreate({ editor });
+    const runtime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+
+    expect(runtime.documentId).toBe('doc-1');
+    expect(superdocStub.setActiveRuntime).toHaveBeenLastCalledWith(runtime.id, 'v1-editor-create');
+
+    editorComponent.vm.$emit('editor-ready', { editor, presentationEditor });
+    await nextTick();
+    expect(runtime.getSnapshot().state).toBe('editing-ready');
+    expect(presentationEditor.on).toHaveBeenCalledWith('paginationUpdate', expect.any(Function));
+    expect(presentationEditor.setContextMenuDisabled).toHaveBeenCalledWith(false);
+
+    superdocStub.setActiveRuntime.mockClear();
+    options.onFocus({ editor });
+    expect(superdocStub.setActiveRuntime).toHaveBeenCalledWith(runtime.id, 'v1-editor-focus');
+
+    runtime.dispose();
+    expect(superdocStub.unregisterEditorRuntime).toHaveBeenCalledWith(runtime.id);
+
+    wrapper.unmount();
+  });
+
+  it('disposes an existing v1 runtime before registering a replacement for the same document', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+    const firstRuntime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+    const disposeSpy = vi.spyOn(firstRuntime, 'dispose');
+
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+    const secondRuntime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(superdocStub.unregisterEditorRuntime).toHaveBeenCalledWith(firstRuntime.id);
+    expect(superdocStub.registerEditorRuntime).toHaveBeenCalledTimes(2);
+    expect(secondRuntime.id).not.toBe(firstRuntime.id);
+
+    wrapper.unmount();
+  });
+
+  it('disposes registered v1 runtimes on component unmount', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+    const runtime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+    const disposeSpy = vi.spyOn(runtime, 'dispose');
+
+    wrapper.unmount();
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(superdocStub.unregisterEditorRuntime).toHaveBeenCalledWith(runtime.id);
   });
 
   it('forwards configured passwords to SuperEditor options', async () => {

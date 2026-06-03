@@ -177,6 +177,10 @@ import type {
 } from '@superdoc/layout-bridge';
 
 import { measureBlock } from '@superdoc/measuring-dom';
+import { resolvePhysicalFamilies, type FontResolutionRecord, type FontLoadSummary } from '@superdoc/font-system';
+import { installBundledSubstitutes } from '@superdoc/font-system/bundled';
+import { FontReadinessGate } from './fonts/FontReadinessGate';
+import type { FontsChangedPayload } from '../types/EditorEvents';
 import type {
   ColumnLayout,
   FlowBlock,
@@ -524,6 +528,12 @@ export class PresentationEditor extends EventEmitter {
   #pendingMapping: Mapping | null = null;
   #isRerendering = false;
   #selectionSync = new SelectionSyncCoordinator();
+  /** Load-before-measure gate: awaits required fonts before measurement, reflows on late load. */
+  #fontGate: FontReadinessGate | null = null;
+  /** Dedup key for `fonts-changed`: epoch + per-face load status. Null until the first emit. */
+  #lastFontsChangedKey: string | null = null;
+  /** Last emitted `fonts-changed` payload, so a late relay subscriber can replay it. */
+  #lastFontsChangedPayload: FontsChangedPayload | null = null;
   /**
    * When true, the next selection render scrolls the caret/selection head into view.
    * Only set for user-initiated actions (keyboard/mouse selection, image click, zoom).
@@ -934,6 +944,41 @@ export class PresentationEditor extends EventEmitter {
       // Add reference back to PresentationEditor for event handler detection
       (this.#editor as Editor & { _presentationEditor?: PresentationEditor })._presentationEditor = this;
       this.#syncHiddenEditorA11yAttributes();
+      this.#fontGate = new FontReadinessGate({
+        getDocumentFonts: () => {
+          const converter = (this.#editor as Editor & { converter?: { getDocumentFonts?: () => string[] } }).converter;
+          return converter?.getDocumentFonts?.() ?? [];
+        },
+        requestReflow: () => {
+          // A font finished loading (or the resolution changed). Incremental layout reuses
+          // this editor's previousMeasures for unchanged blocks, so clearing the global
+          // measurement caches alone will not re-measure. Drop the cached blocks + measures
+          // to force a full re-measure, then schedule a DOCUMENT re-layout - #scheduleRerender
+          // with the pending-change flag, not #selectionSync.requestRender (selection-only).
+          this.#layoutState = { ...this.#layoutState, blocks: [], measures: [], layout: null };
+          this.#pendingDocChange = true;
+          this.#scheduleRerender();
+        },
+        // Wait on the resolved PHYSICAL families (Calibri -> Carlito), so the gate holds
+        // measurement until the substitute that measure + paint will use has loaded.
+        resolveFamilies: resolvePhysicalFamilies,
+        // Register the bundled substitute pack (Carlito) into the document's registry the
+        // first time it resolves, so the substitute is available with no manual setup.
+        onRegistryResolved: (registry) =>
+          installBundledSubstitutes(registry, {
+            assetBaseUrl: this.#options.fontAssets?.assetBaseUrl,
+            resolveAssetUrl: this.#options.fontAssets?.resolveAssetUrl,
+          }),
+        getFontEnvironment: () => {
+          // Bind the registry and the watched font set to THIS editor's document, so an
+          // editor inside an iframe awaits and listens on the same FontFaceSet.
+          const ownerDoc = this.#visibleHost?.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
+          const view = ownerDoc?.defaultView ?? (typeof window !== 'undefined' ? window : null);
+          const fontSet = ownerDoc?.fonts ?? null;
+          const FontFaceCtor = view?.FontFace ?? (typeof FontFace !== 'undefined' ? FontFace : null);
+          return fontSet && FontFaceCtor ? { fontSet, FontFaceCtor } : null;
+        },
+      });
       if (typeof this.#options.disableContextMenu === 'boolean') {
         this.setContextMenuDisabled(this.#options.disableContextMenu);
       }
@@ -2841,6 +2886,89 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Per-font resolution report for the current document: for each DECLARED (logical)
+   * font, the physical family SuperDoc rendered, why, its load status, and the family
+   * export preserves. The observable answer to "what font did SuperDoc actually use".
+   *
+   * Scope: this is a DOCUMENT-font report - it covers every family the document declares
+   * (font table + theme + defaults via `converter.getDocumentFonts()`), not only fonts
+   * currently visible on screen. A family declared but never painted still appears. A
+   * separate rendered-fonts view (only what is on screen) may follow. Surfaced publicly
+   * as `superdoc.fonts.getReport()`.
+   */
+  getFontReport(): FontResolutionRecord[] {
+    return this.#fontGate?.getReport() ?? [];
+  }
+
+  /**
+   * Declared families with no faithful render font loaded (substitution-aware): the
+   * subset of {@link getFontReport} where `missing` is true - genuinely absent fonts
+   * such as Aptos with no metric-compatible clone. The accurate replacement for the
+   * legacy `fonts-resolved.unsupportedFonts` probe. Surfaced as
+   * `superdoc.fonts.getMissingFonts()`.
+   */
+  getMissingFonts(): string[] {
+    return this.getFontReport()
+      .filter((record) => record.missing)
+      .map((record) => record.logicalFamily);
+  }
+
+  /**
+   * Emit `fonts-changed` on the hidden editor when the resolved/loaded font picture
+   * actually changed since the last emit, so consumers see one event per real change
+   * rather than one per render. The dedup key is the font epoch plus each required face's
+   * load status (cheap; from the gate's last summary). The full report is built only when
+   * we emit. First emit is `source: 'initial'`; an epoch bump (a late load) is
+   * `'late-load'`. Never throws - font reporting must not break layout.
+   */
+  #emitFontsChangedIfChanged(summary: FontLoadSummary | null): void {
+    const gate = this.#fontGate;
+    if (!gate) return;
+    const version = gate.fontConfigVersion;
+    const statusKey = summary
+      ? summary.results
+          .map((result) => `${result.family}:${result.status}`)
+          .sort()
+          .join(',')
+      : '';
+    const key = `${version}|${statusKey}`;
+    if (key === this.#lastFontsChangedKey) return;
+    const isInitial = this.#lastFontsChangedKey === null;
+    this.#lastFontsChangedKey = key;
+
+    let resolutions: FontResolutionRecord[];
+    try {
+      resolutions = gate.getReport();
+    } catch {
+      return;
+    }
+    const payload: FontsChangedPayload = {
+      documentFonts: resolutions.map((record) => record.logicalFamily),
+      resolutions,
+      missingFonts: resolutions.filter((record) => record.missing).map((record) => record.logicalFamily),
+      loadSummary: summary ?? { loaded: 0, failed: 0, timedOut: 0, fallbackUsed: 0, results: [] },
+      source: isInitial ? 'initial' : 'late-load',
+      version,
+    };
+    this.#lastFontsChangedPayload = payload;
+    try {
+      this.#editor.emit('fonts-changed', payload);
+    } catch {
+      /* font reporting must never break layout */
+    }
+  }
+
+  /**
+   * The last `fonts-changed` payload this editor emitted, or null if none yet. Lets a
+   * SuperDoc relay that subscribed after the emission replay the current report, so the
+   * active document's authoritative report is always delivered even when the relay
+   * attaches late (e.g. a document swap).
+   */
+  getLastFontsChangedPayload(): FontsChangedPayload | null {
+    return this.#lastFontsChangedPayload;
+  }
+
+  /**
    * Expose the current layout engine options.
    */
   getLayoutOptions(): LayoutEngineOptions {
@@ -4299,6 +4427,8 @@ export class PresentationEditor extends EventEmitter {
     this.#postPaintPipeline.destroy();
     this.#proofingManager?.dispose();
     this.#proofingManager = null;
+    this.#fontGate?.dispose();
+    this.#fontGate = null;
 
     // Cancel pending cursor awareness update
     if (this.#cursorUpdateTimer !== null) {
@@ -6572,6 +6702,20 @@ export class PresentationEditor extends EventEmitter {
       let extraMeasures: Measure[] | undefined;
       let resolveBlocks: FlowBlock[] = blocksForLayout;
       let resolveMeasures: Measure[] = previousMeasures;
+      // Load-before-measure gate (T3): wait for the fonts this document needs so the first
+      // measurement pass uses real metrics instead of a fallback that would reflow on load.
+      // Bounded by a per-font timeout; resolves to the cached summary once fonts are stable;
+      // never throws, so font readiness can never block layout.
+      try {
+        const fontSummary = (await this.#fontGate?.ensureReadyForMeasure()) ?? null;
+        // Now that the gate has settled, the font report reflects real load status. Emit
+        // the authoritative `fonts-changed` once the picture first resolves and whenever it
+        // changes (a late-load bumps the gate epoch and re-renders through here).
+        this.#emitFontsChangedIfChanged(fontSummary);
+      } catch {
+        /* font readiness must never break layout */
+      }
+
       const headerFooterInput = this.#buildHeaderFooterInput();
       try {
         const incrementalLayoutStart = perfNow();

@@ -49,4 +49,13 @@ describe('page number formatting', () => {
     expect(formatIntegerWithNumericPicture(-5, '0;minus 0;zero')).toBe('minus 5');
     expect(formatIntegerWithNumericPicture(0, '0;minus 0;zero')).toBe('zero');
   });
+
+  it('documents unsupported numeric picture features for PAGEREF page values', () => {
+    // PAGEREF only formats integer page numbers here. Backtick numbered-item
+    // references, localized separators, and fractional rounding are out of
+    // scope for this numeric-picture subset.
+    expect(formatIntegerWithNumericPicture(5, '`1`')).toBe('`1`');
+    expect(formatIntegerWithNumericPicture(1234, '#.##0')).toBe('1234.0');
+    expect(formatIntegerWithNumericPicture(5, '0.9')).toBe('5.9');
+  });
 });

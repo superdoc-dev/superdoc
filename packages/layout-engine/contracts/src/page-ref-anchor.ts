@@ -17,6 +17,9 @@ import type {
 } from './index.js';
 import { computeFragmentPmRange } from './pm-range.js';
 
+// Bookmark start/end markers are inline PM leaf nodes. A bookmark can legally sit
+// immediately before visible text, and with start+end plus one wrapper/offset
+// boundary the visible fragment may begin up to three PM positions later.
 const MAX_BOOKMARK_MARKER_LEAD_DISTANCE = 3;
 
 export function buildPageRefAnchorMap(

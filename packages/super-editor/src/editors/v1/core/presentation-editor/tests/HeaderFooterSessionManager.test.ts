@@ -1619,7 +1619,6 @@ describe('HeaderFooterSessionManager', () => {
       expect(payload!.headerFooterRefId).toBe('rId-even');
       expect(payload!.fragments[0]!.blockId).toBe('even-header');
     });
-
     it('inherits first-page header refs through intermediate sections that omit first refs', () => {
       const deps: SessionManagerDependencies = {
         getLayoutOptions: vi.fn(() => ({})),
@@ -1833,7 +1832,6 @@ describe('HeaderFooterSessionManager', () => {
       expect(manager.headerRegions.get(0)!.sectionType).toBe('even');
       expect(manager.footerRegions.get(0)!.sectionType).toBe('even');
     });
-
     it('uses multi-section alternateHeaders state when inferring fallback region variants', () => {
       manager = new HeaderFooterSessionManager({
         painterHost,

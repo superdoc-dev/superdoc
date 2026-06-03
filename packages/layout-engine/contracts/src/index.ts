@@ -2260,6 +2260,7 @@ export type HeaderFooterType = 'default' | 'first' | 'even' | 'odd';
 export type HeaderFooterPage = {
   number: number;
   fragments: Fragment[];
+  displayNumber?: number;
   numberText?: string;
   /** Section-aware numeric page value before formatting. */
   displayNumber?: number;

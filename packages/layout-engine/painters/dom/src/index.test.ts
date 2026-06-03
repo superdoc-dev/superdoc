@@ -3200,7 +3200,11 @@ describe('DomPainter', () => {
     expect(placeholder?.dataset.placeholderText).toBe('Click or tap here to enter text');
     expect(placeholder?.dataset.pmStart).toBe('4');
     expect(placeholder?.dataset.pmEnd).toBe('4');
-    expect(placeholder?.style.fontFamily).toBe('Arial');
+    // Painted with the resolved PHYSICAL family (Arial -> Liberation Sans), like all
+    // painted text - the placeholder chrome goes through the same paint path. The logical
+    // family is preserved for export, not in painted DOM. Quoted because the serialized
+    // CSS value wraps a multi-word family name.
+    expect(placeholder?.style.fontFamily).toBe('"Liberation Sans"');
     expect(placeholder?.style.fontSize).toBe('16px');
     expect(fragment?.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('0px');
     expect(fragment?.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('220px');

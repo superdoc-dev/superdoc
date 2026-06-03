@@ -95,4 +95,17 @@ describe('pageReferenceNodeToBlock', () => {
     const run = pageReferenceNodeToBlock(makeParams({ instruction: 'PAGEREF _Toc123 \\H' })) as TextRun | undefined;
     expect(run!.link?.anchor).toBe('_Toc123');
   });
+
+  it('falls back to parsing legacy instructions when boolean attrs contain schema defaults', () => {
+    const run = pageReferenceNodeToBlock(
+      makeParams({
+        instruction: 'PAGEREF _Toc123 \\h \\p',
+        hasHyperlinkSwitch: false,
+        hasRelativePositionSwitch: false,
+      }),
+    ) as TextRun | undefined;
+
+    expect(run!.link?.anchor).toBe('_Toc123');
+    expect(run!.pageRefMetadata?.relativePosition).toBe(true);
+  });
 });

@@ -32,6 +32,38 @@ export const PageReference = Node.create({
         default: '',
         rendered: false,
       },
+      instructionTokens: {
+        default: null,
+        rendered: false,
+      },
+      bookmarkId: {
+        default: '',
+        rendered: false,
+      },
+      hasHyperlinkSwitch: {
+        default: false,
+        rendered: false,
+      },
+      hasRelativePositionSwitch: {
+        default: false,
+        rendered: false,
+      },
+      pageNumberFieldFormat: {
+        default: null,
+        rendered: false,
+      },
+      numericPictureFormat: {
+        default: null,
+        rendered: false,
+      },
+      fieldResultFormat: {
+        default: null,
+        rendered: false,
+      },
+      fieldRunProperties: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 

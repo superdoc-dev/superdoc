@@ -183,7 +183,11 @@ describe('preProcessNodesForFldChar', () => {
           {
             name: 'sd:pageReference',
             type: 'element',
-            attributes: { instruction: 'PAGEREF bookmark' },
+            attributes: {
+              bookmarkId: 'bookmark',
+              instruction: 'PAGEREF bookmark',
+              instructionTokens: [{ type: 'text', text: 'PAGEREF bookmark' }],
+            },
             elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '5' }] }] }],
           },
         ],

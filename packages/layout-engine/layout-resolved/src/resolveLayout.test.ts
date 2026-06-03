@@ -107,6 +107,198 @@ describe('resolveLayout', () => {
     expect(a).toEqual(b);
   });
 
+  describe('PAGEREF resolution', () => {
+    const pageRefRun = (overrides: Partial<Extract<FlowBlock, { kind: 'paragraph' }>['runs'][number]> = {}) =>
+      ({
+        text: '5',
+        fontFamily: 'Arial',
+        fontSize: 12,
+        token: 'pageReference',
+        pmStart: 5,
+        pmEnd: 6,
+        pageRefMetadata: { bookmarkId: 'target', instruction: 'PAGEREF target' },
+        ...overrides,
+      }) as any;
+
+    const makePageRefInput = (run = pageRefRun()) => {
+      const sourceBlock: FlowBlock = { kind: 'paragraph', id: 'source', runs: [run] } as any;
+      const targetBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'target-block',
+        runs: [{ text: 'Target', fontFamily: 'Arial', fontSize: 12, pmStart: 100, pmEnd: 106 }],
+      } as any;
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 }],
+        } as any,
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 6, width: 40, ascent: 8, descent: 2, lineHeight: 12 }],
+        } as any,
+      ];
+      const layout: Layout = {
+        pageSize: { w: 800, h: 1000 },
+        pages: [
+          {
+            number: 1,
+            displayNumber: 1,
+            numberText: '1',
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'source',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                pmStart: 1,
+                pmEnd: 10,
+              },
+            ],
+          },
+          {
+            number: 2,
+            displayNumber: 12,
+            numberText: '12',
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'target-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                pmStart: 100,
+                pmEnd: 106,
+              },
+            ],
+          },
+        ],
+      };
+      return { layout, blocks: [sourceBlock, targetBlock], measures };
+    };
+
+    it('resolves PAGEREF text to the target display page text', () => {
+      const input = makePageRefInput();
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+      const item = result.pages[0].items[0] as any;
+
+      expect(item.block.runs[0].text).toBe('12');
+      expect(item.content.lines[0].line.toChar).toBe(2);
+    });
+
+    it('changes the paint cache version when the target display page changes', () => {
+      const input1 = makePageRefInput();
+      const input2 = makePageRefInput();
+      input2.layout.pages[1].displayNumber = 13;
+      input2.layout.pages[1].numberText = '13';
+
+      const result1 = resolveLayout({ ...input1, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+      const result2 = resolveLayout({ ...input2, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+      const item1 = result1.pages[0].items[0] as any;
+      const item2 = result2.pages[0].items[0] as any;
+
+      expect(item1.block.runs[0].text).toBe('12');
+      expect(item2.block.runs[0].text).toBe('13');
+      expect(item1.paintCacheVersion).not.toBe(item2.paintCacheVersion);
+    });
+
+    it('keeps fallback text when bookmarks are not passed', () => {
+      const input = makePageRefInput();
+      const result = resolveLayout({ ...input, flowMode: 'paginated' });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('5');
+    });
+
+    it('keeps fallback text when the target bookmark is missing', () => {
+      const input = makePageRefInput();
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['other', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('5');
+    });
+
+    it('resolves relative PAGEREF text across pages', () => {
+      const input = makePageRefInput(
+        pageRefRun({
+          pageRefMetadata: { bookmarkId: 'target', instruction: 'PAGEREF target \\p', relativePosition: true },
+        }),
+      );
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('on page 12');
+    });
+
+    it('resolves same-page relative PAGEREF text using PM order', () => {
+      const input = makePageRefInput(
+        pageRefRun({
+          pmStart: 150,
+          pageRefMetadata: { bookmarkId: 'target', instruction: 'PAGEREF target \\p', relativePosition: true },
+        }),
+      );
+      input.layout.pages = [
+        {
+          number: 1,
+          displayNumber: 1,
+          numberText: '1',
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'source',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 0,
+              width: 100,
+              pmStart: 140,
+              pmEnd: 160,
+            },
+            {
+              kind: 'para',
+              blockId: 'target-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 20,
+              width: 100,
+              pmStart: 100,
+              pmEnd: 106,
+            },
+          ],
+        },
+      ];
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('above');
+    });
+
+    it('applies PAGEREF numeric formatting against the target display number', () => {
+      const input = makePageRefInput(
+        pageRefRun({
+          pageRefMetadata: {
+            bookmarkId: 'target',
+            instruction: 'PAGEREF target \\# "00"',
+            numericPictureFormat: { picture: '00' },
+          },
+        }),
+      );
+      input.layout.pages[1].displayNumber = 3;
+      input.layout.pages[1].numberText = '3';
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('03');
+    });
+
+    it('does not mutate input blocks', () => {
+      const input = makePageRefInput();
+      resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((input.blocks[0] as any).runs[0].text).toBe('5');
+    });
+  });
+
   it('derives neutral layout identity for resolved fragments even when input fragments do not precompute it', () => {
     const layout: Layout = {
       pageSize: { w: 800, h: 1000 },

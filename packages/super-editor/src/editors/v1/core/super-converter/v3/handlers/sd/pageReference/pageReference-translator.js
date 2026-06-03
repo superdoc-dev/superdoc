@@ -1,6 +1,7 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
 import { exportSchemaToJson, processOutputMarks } from '../../../../exporter.js';
+import { buildInstructionElements } from '../shared/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'sd:pageReference';
@@ -28,6 +29,16 @@ const encode = (params) => {
     attrs: {
       instruction: node.attributes?.instruction || '',
       marksAsAttrs: node.marks || [],
+      ...(node.attributes?.instructionTokens ? { instructionTokens: node.attributes.instructionTokens } : {}),
+      ...(node.attributes?.bookmarkId ? { bookmarkId: node.attributes.bookmarkId } : {}),
+      ...(node.attributes?.hasHyperlinkSwitch ? { hasHyperlinkSwitch: true } : {}),
+      ...(node.attributes?.hasRelativePositionSwitch ? { hasRelativePositionSwitch: true } : {}),
+      ...(node.attributes?.pageNumberFieldFormat
+        ? { pageNumberFieldFormat: node.attributes.pageNumberFieldFormat }
+        : {}),
+      ...(node.attributes?.numericPictureFormat ? { numericPictureFormat: node.attributes.numericPictureFormat } : {}),
+      ...(node.attributes?.fieldResultFormat ? { fieldResultFormat: node.attributes.fieldResultFormat } : {}),
+      ...(node.attributes?.fieldRunProperties ? { fieldRunProperties: node.attributes.fieldRunProperties } : {}),
     },
     content: processedText,
   };
@@ -45,6 +56,7 @@ const decode = (params) => {
 
   const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
   const contentNodes = (node.content ?? []).flatMap((n) => exportSchemaToJson({ ...params, node: n }));
+  const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens);
   const translated = [
     {
       name: 'w:r',
@@ -63,22 +75,7 @@ const decode = (params) => {
     },
     {
       name: 'w:r',
-      elements: [
-        {
-          name: 'w:rPr',
-          elements: outputMarks,
-        },
-        {
-          name: 'w:instrText',
-          attributes: { 'xml:space': 'preserve' },
-          elements: [
-            {
-              type: 'text',
-              text: `${node.attrs.instruction}`,
-            },
-          ],
-        },
-      ],
+      elements: [{ name: 'w:rPr', elements: outputMarks }, ...instructionElements],
     },
     {
       name: 'w:r',

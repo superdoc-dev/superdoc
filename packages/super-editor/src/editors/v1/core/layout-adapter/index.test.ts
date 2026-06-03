@@ -2588,6 +2588,47 @@ describe('toFlowBlocks', () => {
       });
     });
 
+    it('uses typed pageReference attrs before reparsing raw instruction', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'pageReference',
+                attrs: {
+                  instruction: 'PAGEREF legacy',
+                  bookmarkId: '_TypedTarget',
+                  hasHyperlinkSwitch: true,
+                  hasRelativePositionSwitch: true,
+                  pageNumberFieldFormat: { format: 'upperRoman' },
+                  numericPictureFormat: { picture: '00' },
+                  fieldResultFormat: 'mergeformat',
+                },
+                content: [{ type: 'text', text: '7' }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+
+      expect(blocks[0].runs[0]).toMatchObject({
+        token: 'pageReference',
+        link: { anchor: '_TypedTarget' },
+        pageRefMetadata: {
+          bookmarkId: '_TypedTarget',
+          instruction: 'PAGEREF legacy',
+          relativePosition: true,
+          pageNumberFieldFormat: { format: 'upperRoman' },
+          numericPictureFormat: { picture: '00' },
+          fieldResultFormat: 'mergeformat',
+        },
+      });
+    });
+
     it('handles pageReference without bookmark (transparent container fallback)', () => {
       const pmDoc = {
         type: 'doc',

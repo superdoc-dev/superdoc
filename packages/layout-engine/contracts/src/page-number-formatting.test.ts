@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { formatPageNumber, formatPageNumberFieldValue } from './page-number-formatting.js';
+import {
+  formatIntegerWithNumericPicture,
+  formatPageNumber,
+  formatPageNumberFieldValue,
+} from './page-number-formatting.js';
 
 describe('page number formatting', () => {
   it('formats the supported Word page number formats', () => {
@@ -29,5 +33,20 @@ describe('page number formatting', () => {
   it('applies decimal zero padding for field values', () => {
     expect(formatPageNumberFieldValue(7, { format: 'decimal', zeroPadding: 3 })).toBe('007');
     expect(formatPageNumberFieldValue(7, { format: 'lowerRoman', zeroPadding: 3 })).toBe('vii');
+  });
+
+  it('formats integer values with numeric pictures', () => {
+    expect(formatIntegerWithNumericPicture(5, '00')).toBe('05');
+    expect(formatIntegerWithNumericPicture(1234, '#,##0')).toBe('1,234');
+    expect(formatIntegerWithNumericPicture(5, '##%')).toBe('5%');
+    expect(formatIntegerWithNumericPicture(5, "00 'pages'")).toBe('05 pages');
+    expect(formatIntegerWithNumericPicture(1234, 'x##')).toBe('34');
+    expect(formatIntegerWithNumericPicture(5, '0.00')).toBe('5.00');
+  });
+
+  it('selects numeric picture sections for positive, negative, and zero values', () => {
+    expect(formatIntegerWithNumericPicture(5, '0;minus 0;zero')).toBe('5');
+    expect(formatIntegerWithNumericPicture(-5, '0;minus 0;zero')).toBe('minus 5');
+    expect(formatIntegerWithNumericPicture(0, '0;minus 0;zero')).toBe('zero');
   });
 });

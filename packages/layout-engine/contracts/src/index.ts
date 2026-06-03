@@ -146,6 +146,7 @@ export {
 } from './header-footer-inheritance.js';
 export {
   formatChapterPageNumberText,
+  formatIntegerWithNumericPicture,
   formatPageNumber,
   formatPageNumberFieldValue,
   formatSectionPageNumberText,
@@ -153,6 +154,8 @@ export {
   type PageNumberChapterSeparator,
   type PageNumberFormat,
 } from './page-number-formatting.js';
+
+export { buildPageRefAnchorMap } from './page-ref-anchor.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -405,6 +408,26 @@ export type RunMarks = {
   baselineShift?: number;
 };
 
+export type PageReferenceRelativePositionText = 'above' | 'below';
+
+export type FieldResultFormat = 'charformat' | 'mergeformat';
+
+export type NumericPictureFormat = {
+  /** Raw argument after the \# switch, without surrounding quotes. */
+  picture: string;
+};
+
+export interface PageRefLocation {
+  physicalPage: number;
+  displayNumber: number;
+  displayText: string;
+  pageFormat?: PageNumberFormat;
+  chapterNumberText?: string;
+  chapterSeparator?: PageNumberChapterSeparator;
+  sectionIndex?: number;
+  pmPosition?: number;
+}
+
 export type TextRun = RunMarks & {
   kind?: 'text';
   text: string;
@@ -427,7 +450,7 @@ export type TextRun = RunMarks & {
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
   token?: 'pageNumber' | 'totalPageCount' | 'pageReference' | 'sectionPageCount';
-  /** Explicit formatting requested by PAGE/NUMPAGES field switches. */
+  /** Explicit formatting requested by PAGE/NUMPAGES/SECTIONPAGES field switches. */
   pageNumberFieldFormat?: PageNumberFieldFormat;
   /** Absolute ProseMirror position (inclusive) of first character in this run. */
   pmStart?: number;
@@ -437,6 +460,14 @@ export type TextRun = RunMarks & {
   pageRefMetadata?: {
     bookmarkId: string;
     instruction: string;
+    /** True when the instruction has \p. */
+    relativePosition?: boolean;
+    /** General numeric formatting switch for the PAGEREF page value. */
+    pageNumberFieldFormat?: PageNumberFieldFormat;
+    /** Raw numeric picture from \#. */
+    numericPictureFormat?: NumericPictureFormat;
+    /** CHARFORMAT / MERGEFORMAT, if present. */
+    fieldResultFormat?: FieldResultFormat;
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;

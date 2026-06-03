@@ -1,6 +1,6 @@
 import { formatPageNumberFieldValue as formatSharedPageNumberFieldValue } from '@superdoc/contracts';
 
-const GENERAL_FORMATS = new Map([
+export const GENERAL_FORMATS = new Map([
   ['Arabic', 'decimal'],
   ['roman', 'lowerRoman'],
   ['Roman', 'upperRoman'],
@@ -10,7 +10,7 @@ const GENERAL_FORMATS = new Map([
   ['ArabicDash', 'numberInDash'],
 ]);
 
-const CASE_INSENSITIVE_GENERAL_FORMATS = new Map([
+export const CASE_INSENSITIVE_GENERAL_FORMATS = new Map([
   ['arabic', 'decimal'],
   ['arabicdash', 'numberInDash'],
 ]);

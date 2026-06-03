@@ -2793,5 +2793,52 @@ describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => 
 
       expect(result.rows[0].attrs?.trackedChange).toBeUndefined();
     });
+
+    // View-mode hiding: a hidden tracked row must be dropped from the layout
+    // entirely (not just CSS-hidden in the painter) so it reserves no blank
+    // table space. When every row is hidden the whole table block is omitted.
+    const buildTable = (node: PMNode, config: TrackedChangesConfig) =>
+      tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        config,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock | null;
+
+    it('omits an inserted row in "original" mode (whole single-row table dropped)', () => {
+      const result = buildTable(buildTrackedRowTable({ type: 'rowInsert', id: 'r1' }), {
+        enabled: true,
+        mode: 'original',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('omits a deleted row in "final" mode (whole single-row table dropped)', () => {
+      const result = buildTable(buildTrackedRowTable({ type: 'rowDelete', id: 'r1' }), {
+        enabled: true,
+        mode: 'final',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('keeps a deleted row in "original" mode and an inserted row in "final" mode', () => {
+      const del = buildTable(buildTrackedRowTable({ type: 'rowDelete', id: 'r1' }), {
+        enabled: true,
+        mode: 'original',
+      });
+      expect(del?.rows).toHaveLength(1);
+
+      const ins = buildTable(buildTrackedRowTable({ type: 'rowInsert', id: 'r1' }), {
+        enabled: true,
+        mode: 'final',
+      });
+      expect(ins?.rows).toHaveLength(1);
+    });
   });
 });

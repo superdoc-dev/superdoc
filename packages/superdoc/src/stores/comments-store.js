@@ -1282,7 +1282,7 @@ export const useCommentsStore = defineStore('comments', () => {
     syncStoryTrackedChangeComments({ superdoc, editor });
     // Whole-table structural tracked changes live on node attrs (not inline
     // marks), so `createCommentForTrackChanges` never sees them. Without this
-    // pass the "Inserted table" right-rail bubble is not created on import and
+    // pass the "Added table" right-rail bubble is not created on import and
     // only appears after a later transaction triggers the full
     // `syncTrackedChangeComments` path. Mirror the inline/story bootstrap here.
     // Idempotent: `syncStructuralTrackedChangeComments` upserts (event 'update'
@@ -1887,7 +1887,10 @@ export const useCommentsStore = defineStore('comments', () => {
         authorImage: structural.authorImage || null,
         date: structural.date || null,
         author: structural.author || null,
-        importedAuthor: structural.importedAuthor || null,
+        // Match the inline tracked-change shape: the comment layer reads
+        // `importedAuthor.name` (see use-comment.js `getCommentUser`). Passing the
+        // raw string would make `.name` undefined and fall back to "(Imported)".
+        importedAuthor: structural.importedAuthor ? { name: structural.importedAuthor } : null,
         documentId: activeDocumentId,
         coords: null,
         trackedChangeStory: BODY_TRACKED_CHANGE_STORY,
@@ -2093,7 +2096,7 @@ export const useCommentsStore = defineStore('comments', () => {
   /**
    * Identify the single structural (whole-table) bubble for a tracked table so
    * it is NEVER suppressed by the table-subsume filter below. The structural
-   * bubble is the parent "Inserted table" / "Deleted table" change; its public
+   * bubble is the parent "Added table" / "Deleted table" change; its public
    * id is `word:structural:<id>` (or a bare structural fallback) and its display
    * type is `tableInsert` / `tableDelete`.
    *
@@ -2234,7 +2237,7 @@ export const useCommentsStore = defineStore('comments', () => {
 
   /**
    * Suppress an inline tracked-change bubble whose document range falls within a
-   * tracked whole-table change's range, so only the structural "Inserted table"
+   * tracked whole-table change's range, so only the structural "Added table"
    * / "Deleted table" bubble shows for that table (matching Word / Google Docs).
    * The structural bubble itself, real user comments, and inline tracked changes
    * inside a NON-tracked table are never suppressed.

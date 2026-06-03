@@ -987,7 +987,15 @@ export function tableNodeToBlock(
       tableProperties: tablePropertiesForCascade,
     });
     if (parsedRow) {
-      rows.push(parsedRow);
+      // Drop a tracked row from the layout entirely (not just CSS-hide it in the
+      // painter) when the current view mode removes it — inserted rows in
+      // "original", deleted rows in "final" — so it never reserves blank table
+      // space during measurement/pagination. Mirrors `shouldHideTrackedNode` for
+      // inline content. If every row is hidden, the `rows.length === 0` guard
+      // below omits the whole table block.
+      if (!shouldHideTrackedNode(parsedRow.attrs?.trackedChange, parserDeps.trackedChangesConfig)) {
+        rows.push(parsedRow);
+      }
     }
   });
 

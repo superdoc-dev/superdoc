@@ -1477,7 +1477,7 @@ describe('comments-store', () => {
       });
     });
 
-    // The "Inserted table" structural bubble must appear on initial
+    // The "Added table" structural bubble must appear on initial
     // import, not only after a later transaction triggers the full
     // syncTrackedChangeComments path. The bootstrap that runs after import
     // (bootstrapImportedTrackedChangeComments, fired via setTimeout(0)) must
@@ -3997,7 +3997,7 @@ describe('comments-store', () => {
       ]);
 
       store.commentsList = [
-        // Structural "Inserted table" bubble — must stay.
+        // Structural "Added table" bubble — must stay.
         {
           commentId: 'word:structural:2',
           fileId: 'doc-1',

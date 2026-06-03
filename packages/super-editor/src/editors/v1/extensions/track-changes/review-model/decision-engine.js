@@ -216,6 +216,33 @@ const normalizeDecisionTarget = (target) => {
  * @property {Array<{ from: number, to: number }>} ranges Concrete PM ranges to resolve.
  */
 
+/**
+ * Resolve a logical change id to its change object, preferring a STRUCTURAL
+ * whole-table change when the id is shared.
+ *
+ * Cell text typed in a tracked-inserted row inherits the row's revision id, so
+ * the same id can map to BOTH the inline text change and the structural table
+ * change. The structural change registers its public-id alias only when the key
+ * is free (review-graph), so a plain `changes.get(id)` can return the inline
+ * child. Always selecting the structural change lets the decide cascade clear
+ * the contained cell text in ONE action — and this must hold for id, range, and
+ * collapsed-cursor targets alike (otherwise a range/cursor decide on a tracked
+ * table resolves the inline child instead of the table).
+ *
+ * @param {import('./review-graph.js').TrackedReviewGraph} graph
+ * @param {string} id
+ * @returns {import('./review-graph.js').LogicalTrackedChange | undefined}
+ */
+const resolveLogicalChangeById = (graph, id) => {
+  const key = String(id);
+  for (const candidate of graph.changes.values()) {
+    if (candidate?.type === CanonicalChangeType.Structural && String(candidate.id) === key) {
+      return candidate;
+    }
+  }
+  return graph.changes.get(id);
+};
+
 const resolveTargetToSelections = ({ graph, normalized }) => {
   if (normalized.kind === 'all') {
     /** @type {ChangeSelection[]} */
@@ -236,22 +263,7 @@ const resolveTargetToSelections = ({ graph, normalized }) => {
     return { ok: true, selections: sel };
   }
   if (normalized.kind === 'id') {
-    // Prefer a STRUCTURAL whole-table change for a shared id. Cell text typed in
-    // a tracked-inserted row inherits the row's revision id, so the same id can
-    // map to BOTH the inline text change and the structural table change. The
-    // structural change registers its public-id alias only when the key is free
-    // (review-graph), so `changes.get(id)` can return the inline child instead of
-    // the table. Deciding the "Inserted table" bubble must resolve the structural
-    // change, which then cascades to the contained cell text in ONE action —
-    // otherwise the user has to accept once for the text and again for the table.
-    let change = null;
-    for (const candidate of graph.changes.values()) {
-      if (candidate?.type === CanonicalChangeType.Structural && String(candidate.id) === String(normalized.id)) {
-        change = candidate;
-        break;
-      }
-    }
-    if (!change) change = graph.changes.get(normalized.id);
+    const change = resolveLogicalChangeById(graph, normalized.id);
     if (!change)
       return { ok: false, failure: failure('TARGET_NOT_FOUND', `no tracked change with id "${normalized.id}".`) };
     return {
@@ -277,7 +289,7 @@ const resolveTargetToSelections = ({ graph, normalized }) => {
       // per phase0-004 "Range Decisions": collapsed range inside a change
       // resolves the whole logical change.
       if (from === to && segment.from <= from && segment.to > from) {
-        const change = graph.changes.get(segment.changeId);
+        const change = resolveLogicalChangeById(graph, segment.changeId);
         if (!change) continue;
         const existing = byId.get(change.id);
         if (existing) {
@@ -293,7 +305,7 @@ const resolveTargetToSelections = ({ graph, normalized }) => {
       }
       continue;
     }
-    const change = graph.changes.get(segment.changeId);
+    const change = resolveLogicalChangeById(graph, segment.changeId);
     if (!change) continue;
     const existing = byId.get(change.id);
     if (existing) {

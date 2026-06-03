@@ -869,7 +869,7 @@ watch(editingCommentId, (commentId) => {
               <span class="change-type">Added new line</span>
             </div>
             <div v-else-if="comment.trackedChangeDisplayType === 'tableInsert'">
-              <span class="change-type">Inserted table</span>
+              <span class="change-type">Added table</span>
             </div>
             <div v-else-if="comment.trackedChangeDisplayType === 'tableDelete'">
               <span class="change-type">Deleted table</span>

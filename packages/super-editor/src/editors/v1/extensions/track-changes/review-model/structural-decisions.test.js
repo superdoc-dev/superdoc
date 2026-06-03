@@ -156,6 +156,51 @@ describe('structural decide semantics', () => {
     expect((cellText.marks || []).some((m) => m.type.name === TrackInsertMarkName)).toBe(false);
   });
 
+  it('a RANGE/cursor decide over a tracked table resolves the STRUCTURAL change (not the inline child)', () => {
+    // Range and collapsed-cursor targets must prefer the structural change for a
+    // shared id, same as the by-id path — otherwise a cursor inside the table
+    // resolves the inline cell-text change and the table stays tracked.
+    const schema = createReviewGraphTestSchema();
+    const id = '1';
+    const tc = insertTrackChange(id);
+    const insMark = schema.marks[TrackInsertMarkName].create({ id, author: ALICE.name, date: tc.date });
+    const cellParagraph = schema.nodes.paragraph.create({}, [schema.text('q', [insMark])]);
+    const cell = schema.nodes.tableCell.create({}, [cellParagraph]);
+    const row = schema.nodes.tableRow.create({ trackChange: tc }, [cell]);
+    const table = schema.nodes.table.create({}, [row]);
+    const before = schema.nodes.paragraph.create({}, [schema.text('Before.')]);
+    const doc = schema.nodes.doc.create({}, [before, table, schema.nodes.paragraph.create({}, [schema.text('A')])]);
+    const state = EditorState.create({ schema, doc });
+
+    // Locate the table node range, then accept via a RANGE target covering it.
+    let tableFrom = 0;
+    let tableTo = 0;
+    state.doc.descendants((node, pos) => {
+      if (node.type.name === 'table') {
+        tableFrom = pos;
+        tableTo = pos + node.nodeSize;
+        return false;
+      }
+      return undefined;
+    });
+
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'accept',
+      target: { kind: 'range', from: tableFrom, to: tableTo },
+    });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+
+    // The structural change was resolved: table stays, row revision cleared, and
+    // the shared-id cell text lost its trackInsert mark (cascade reached it).
+    expect(next.doc.child(1).type.name).toBe('table');
+    expect(next.doc.child(1).child(0).attrs.trackChange).toBeNull();
+    const cellText = next.doc.child(1).child(0).child(0).child(0).child(0);
+    expect((cellText.marks || []).some((m) => m.type.name === TrackInsertMarkName)).toBe(false);
+  });
+
   it('reject insertion removes the whole table node', () => {
     const schema = createReviewGraphTestSchema();
     const { state } = stateWithTrackedTable({ schema, trackChange: insertTrackChange('1') });

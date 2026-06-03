@@ -3,8 +3,10 @@
  */
 
 import type { ParagraphAttrs, Run, TextRun } from '@superdoc/contracts';
-import { getNumberingProperties, type RunProperties } from '@superdoc/style-engine/ooxml';
+import type { ParagraphProperties } from '@superdoc/style-engine/ooxml';
+import { hasExplicitParagraphRunProperties } from './attributes/paragraph.js';
 import type { ConverterContext } from './converter-context.js';
+import { numberingDefinesMarkerFontFamily } from './numbering-marker-font.js';
 import { applyTextStyleMark } from './marks/application.js';
 import type { PMNode, ParagraphFont } from './types.js';
 
@@ -35,6 +37,9 @@ const pickFontPartial = (fontFamily?: string, fontSize?: number): Partial<Paragr
 const getFontFromRuns = (runs: ReadonlyArray<Run>): Partial<ParagraphFont> | undefined => {
   for (const run of runs) {
     if (!isTextRun(run)) continue;
+    // Leading empty runs are not merged away; skip them like getLastParagraphFont so
+    // stale placeholder font does not drive marker sync.
+    if (typeof run.text === 'string' && run.text.length === 0) continue;
     const partial = pickFontPartial(run.fontFamily, run.fontSize);
     if (partial) return partial;
   }
@@ -78,14 +83,6 @@ const getFontFromParagraphContent = (node: PMNode): Partial<ParagraphFont> | und
   return found;
 };
 
-const mergeContentFont = (
-  primary?: Partial<ParagraphFont>,
-  secondary?: Partial<ParagraphFont>,
-): Partial<ParagraphFont> | undefined => {
-  if (!primary && !secondary) return undefined;
-  return pickFontPartial(primary?.fontFamily ?? secondary?.fontFamily, primary?.fontSize ?? secondary?.fontSize);
-};
-
 const resolveContentFont = (
   block: { runs: ReadonlyArray<Run> },
   para: PMNode | undefined,
@@ -95,27 +92,13 @@ const resolveContentFont = (
   const fromRuns = getFontFromRuns(block.runs);
   const fromPara = para ? getFontFromParagraphContent(para) : undefined;
   if (source === 'paragraph') {
-    // Cache hits must not fall back to stale cached runs. Empty list items have no
-    // textStyle marks, so inherit from the preceding paragraph when available.
-    return mergeContentFont(fromPara, previousParagraphFont);
+    // Live textStyle: apply only what marks define (size-only edits must not pull
+    // stale family from cached runs). No textStyle: prefer converted runs like the
+    // fresh path, then previousParagraphFont for empty list items.
+    if (fromPara) return fromPara;
+    return fromRuns ?? previousParagraphFont;
   }
   return fromRuns ?? fromPara;
-};
-
-const getNumberingMarkerFontOverrides = (
-  numberingProperties: { numId?: number; ilvl?: number } | null | undefined,
-  converterContext?: ConverterContext,
-): { fontFamily: boolean; fontSize: boolean } => {
-  const numId = numberingProperties?.numId;
-  if (numId == null || numId === 0 || !converterContext) {
-    return { fontFamily: false, fontSize: false };
-  }
-  const ilvl = numberingProperties?.ilvl ?? 0;
-  const numberingRunProps = getNumberingProperties<RunProperties>('runProperties', converterContext, ilvl, numId);
-  return {
-    fontFamily: numberingRunProps.fontFamily != null,
-    fontSize: numberingRunProps.fontSize != null || numberingRunProps.fontSizeCs != null,
-  };
 };
 
 /**
@@ -134,6 +117,15 @@ export const syncListMarkerFontFromParagraphRuns = ({
   const contentFont = resolveContentFont(block, para, contentFontSource, previousParagraphFont);
   if (!contentFont) return;
 
+  const paragraphProperties =
+    para?.attrs?.paragraphProperties != null && typeof para.attrs.paragraphProperties === 'object'
+      ? (para.attrs.paragraphProperties as ParagraphProperties)
+      : undefined;
+  const hasLiveTextStyleFont = para ? getFontFromParagraphContent(para) != null : false;
+  // Match computeParagraphAttrs: pPr/rPr already defines marker font unless the user
+  // applied live textStyle marks (SD-3238 toolbar edits, including stale pPr after Enter).
+  const allowBodyFontSync = !hasExplicitParagraphRunProperties(paragraphProperties) || hasLiveTextStyleFont;
+
   // Cache-hit path may reuse stale empty runs. Normalize empty run font so subsequent
   // getLastParagraphFont() reads the current inherited font instead of cached values.
   if (contentFontSource === 'paragraph') {
@@ -144,12 +136,15 @@ export const syncListMarkerFontFromParagraphRuns = ({
     }
   }
 
-  const numberingOverrides = getNumberingMarkerFontOverrides(block.attrs?.numberingProperties, converterContext);
+  const preserveNumberingFontFamily = numberingDefinesMarkerFontFamily(
+    block.attrs?.numberingProperties,
+    converterContext,
+  );
 
-  if (!numberingOverrides.fontFamily && contentFont.fontFamily) {
+  if (allowBodyFontSync && !preserveNumberingFontFamily && contentFont.fontFamily) {
     markerRun.fontFamily = contentFont.fontFamily;
   }
-  if (!numberingOverrides.fontSize && contentFont.fontSize) {
+  if (allowBodyFontSync && contentFont.fontSize) {
     markerRun.fontSize = contentFont.fontSize;
   }
 };

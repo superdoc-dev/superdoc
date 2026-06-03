@@ -28,6 +28,7 @@ import type {
   SectionNumbering,
   FlowMode,
   NormalizedColumnLayout,
+  DocumentBackground,
 } from '@superdoc/contracts';
 import { buildLayoutSourceIdentityForFragment, normalizeColumnLayout, getFragmentZIndex } from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
@@ -456,6 +457,7 @@ function calculateChainHeight(
 export type LayoutOptions = {
   pageSize?: PageSize;
   margins?: Margins;
+  documentBackground?: DocumentBackground;
   columns?: ColumnLayout;
   flowMode?: FlowMode;
   semantic?: {
@@ -3220,6 +3222,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   return {
     pageSize,
     pages,
+    ...(options.documentBackground ? { documentBackground: options.documentBackground } : {}),
     // Note: columns here reflects the effective default for subsequent pages
     // after processing sections. Page/region-specific column changes are encoded
     // implicitly via fragment positions. Consumers should not assume this is

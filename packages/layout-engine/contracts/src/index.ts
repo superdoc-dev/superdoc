@@ -800,6 +800,11 @@ export type PageMargins = {
   gutter?: number;
 };
 
+export type DocumentBackground = {
+  /** Solid page background color as a CSS hex value. */
+  color: string;
+};
+
 export type ImageBlockAttrs = {
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
@@ -2260,6 +2265,8 @@ export type HeaderFooterLayout = {
 export type Layout = {
   pageSize: { w: number; h: number };
   pages: Page[];
+  /** Optional document-level page background from OOXML w:background. */
+  documentBackground?: DocumentBackground;
   columns?: ColumnLayout;
   headerFooter?: Partial<Record<HeaderFooterType, HeaderFooterLayout>>;
   /**

@@ -1,6 +1,7 @@
 import type {
   ColumnLayout,
   ColumnRegion,
+  DocumentBackground,
   DrawingBlock,
   FlowMode,
   Fragment,
@@ -32,6 +33,8 @@ export type ResolvedLayout = {
   blockVersions?: Record<string, string>;
   /** Resolved pages with normalized dimensions. */
   pages: ResolvedPage[];
+  /** Optional document-level page background from OOXML w:background. */
+  documentBackground?: DocumentBackground;
   /** Document epoch identifier from the source layout. Used for change tracking in the painter. */
   layoutEpoch?: number;
 };

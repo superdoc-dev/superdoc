@@ -192,6 +192,7 @@ import type {
   SectionMetadata,
   TrackedChangesMode,
   Fragment,
+  DocumentBackground,
 } from '@superdoc/contracts';
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
 // TrackChangesBasePluginKey is used by #syncTrackedChangesPreferences and getTrackChangesPluginState.
@@ -7857,6 +7858,7 @@ export class PresentationEditor extends EventEmitter {
     this.#layoutOptions.pageSize = pageSize;
     this.#layoutOptions.margins = margins;
     const flowMode = this.#layoutOptions.flowMode ?? 'paginated';
+    const documentBackground = this.#resolveDocumentBackground();
 
     const resolvedMargins = {
       top: margins.top!,
@@ -7896,17 +7898,18 @@ export class PresentationEditor extends EventEmitter {
           marginBottom: semanticMargins.bottom,
         },
         sectionMetadata,
+        ...(documentBackground ? { documentBackground } : {}),
       };
     }
 
     this.#hiddenHost.style.width = `${pageSize.w}px`;
 
     const alternateHeaders = this.#resolveAlternateHeadersFlag();
-
     return {
       flowMode: 'paginated',
       pageSize,
       margins: resolvedMargins,
+      ...(documentBackground ? { documentBackground } : {}),
       ...(columns ? { columns } : {}),
       sectionMetadata,
       alternateHeaders,
@@ -7932,6 +7935,13 @@ export class PresentationEditor extends EventEmitter {
       if (byRId) for (const blocks of byRId.values()) out.push(...blocks);
     }
     return out;
+  }
+
+  #resolveDocumentBackground(): DocumentBackground | undefined {
+    const background = this.#editor?.state?.doc?.attrs?.documentBackground;
+    if (!background || typeof background !== 'object') return undefined;
+    const color = (background as { color?: unknown }).color;
+    return typeof color === 'string' && color.length > 0 ? { color } : undefined;
   }
 
   #buildHeaderFooterInput() {

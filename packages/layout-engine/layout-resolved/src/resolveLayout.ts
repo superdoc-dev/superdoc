@@ -344,6 +344,7 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
     flowMode,
     pageGap: layout.pageGap ?? 0,
     pages,
+    ...(layout.documentBackground ? { documentBackground: layout.documentBackground } : {}),
   };
 
   if (blocks.length > 0) {

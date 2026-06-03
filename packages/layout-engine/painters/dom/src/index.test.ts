@@ -431,6 +431,26 @@ describe('DomPainter', () => {
     expect(fragment.textContent).toContain('world');
   });
 
+  it('paints document-level page background from resolved layout', () => {
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint({ ...layout, documentBackground: { color: '#EEEEEE' } }, mount);
+
+    const page = mount.querySelector('.superdoc-page') as HTMLElement;
+    expectCssColor(page.style.background, '#EEEEEE');
+  });
+
+  it('keeps the configured page background when no document background is present', () => {
+    const painter = createTestPainter({
+      blocks: [block],
+      measures: [measure],
+      pageStyles: { background: '#FFFFFF' },
+    });
+    painter.paint(layout, mount);
+
+    const page = mount.querySelector('.superdoc-page') as HTMLElement;
+    expectCssColor(page.style.background, '#FFFFFF');
+  });
+
   it('applies paragraph alignment to line elements', () => {
     const alignedBlock: FlowBlock = {
       kind: 'paragraph',

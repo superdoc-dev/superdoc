@@ -63,6 +63,44 @@ describe('preProcessPageFieldsOnly', () => {
       expect(result.processedNodes).toHaveLength(1);
       expect(result.processedNodes[0].name).toBe('sd:totalPageNumber');
     });
+
+    it('should process NUMPAGES switches when field instruction uses newline whitespace', () => {
+      const nodes = [
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'NUMPAGES\n\\# "00"' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:t', elements: [{ type: 'text', text: '05' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }],
+        },
+      ];
+
+      const result = preProcessPageFieldsOnly(nodes);
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0]).toMatchObject({
+        name: 'sd:totalPageNumber',
+        attributes: {
+          instruction: 'NUMPAGES \\# "00"',
+          pageNumberFormat: 'decimal',
+          pageNumberZeroPadding: 2,
+          importedCachedText: '05',
+        },
+      });
+    });
   });
 
   describe('simple field syntax (w:fldSimple)', () => {

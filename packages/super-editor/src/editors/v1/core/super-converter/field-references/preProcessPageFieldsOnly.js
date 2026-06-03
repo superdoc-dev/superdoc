@@ -206,7 +206,7 @@ function scanFieldSequence(nodes, beginIndex) {
     return null; // Incomplete field
   }
 
-  const fieldType = instrText.trim().split(' ')[0];
+  const fieldType = instrText.trim().split(/\s+/)[0];
 
   return {
     fieldType,

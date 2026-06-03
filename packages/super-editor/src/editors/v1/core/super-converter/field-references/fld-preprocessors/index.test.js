@@ -26,6 +26,12 @@ describe('getInstructionPreProcessor', () => {
     expect(processor).toBe(preProcessNumPagesInstruction);
   });
 
+  it('should return preProcessNumPagesInstruction when instruction uses non-space whitespace', () => {
+    const instruction = 'NUMPAGES\t\\# "00"';
+    const processor = getInstructionPreProcessor(instruction);
+    expect(processor).toBe(preProcessNumPagesInstruction);
+  });
+
   it('should return preProcessPageRefInstruction for PAGEREF instruction', () => {
     const instruction = 'PAGEREF _Toc123456789 h';
     const processor = getInstructionPreProcessor(instruction);

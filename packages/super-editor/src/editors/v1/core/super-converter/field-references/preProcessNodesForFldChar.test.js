@@ -119,6 +119,30 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
+  it('processes PAGE field switches when instruction whitespace is not a literal space', () => {
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'PAGE\t\\* Arabic' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '1' }] }] },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toMatchObject({
+      name: 'sd:autoPageNumber',
+      attributes: {
+        instruction: 'PAGE \\* Arabic',
+        pageNumberFormat: 'decimal',
+      },
+    });
+  });
+
   it('processes TOC fields when begin, instrText, separate, and end share a single run', () => {
     const nodes = [
       {

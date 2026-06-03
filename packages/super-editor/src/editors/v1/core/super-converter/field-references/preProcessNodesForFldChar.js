@@ -138,7 +138,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     if (node.name === 'w:fldSimple') {
       const instr = node.attributes?.['w:instr'];
       if (typeof instr === 'string') {
-        const instructionType = instr.trim().split(' ')[0];
+        const instructionType = instr.trim().split(/\s+/)[0];
         const instructionPreProcessor = getInstructionPreProcessor(instructionType);
         if (instructionPreProcessor) {
           const processed = instructionPreProcessor(node.elements ?? [], instr, { docx });
@@ -324,7 +324,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
  * @returns {{ nodes: OpenXmlNode[], handled: boolean }} The processed nodes and whether a preprocessor handled them.
  */
 const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, instructionTokens, fieldRunRPr) => {
-  const instructionType = instrText.trim().split(' ')[0];
+  const instructionType = instrText.trim().split(/\s+/)[0];
   const instructionPreProcessor = getInstructionPreProcessor(instructionType);
   if (instructionPreProcessor) {
     return {
@@ -349,7 +349,7 @@ const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, i
  * @param {ParsedDocx} docx
  */
 const applyConstructiveFieldInterpretation = (rawNodes, instrText, docx) => {
-  const instructionType = instrText.split(' ')[0];
+  const instructionType = instrText.trim().split(/\s+/)[0];
   if (instructionType !== 'HYPERLINK') return;
 
   const linkAttributes = resolveHyperlinkAttributes(instrText, docx);

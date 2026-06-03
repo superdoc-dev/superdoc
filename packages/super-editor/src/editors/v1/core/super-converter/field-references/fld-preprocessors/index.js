@@ -37,7 +37,7 @@ import { preProcessDocumentStatInstruction } from './document-stat-preprocessor.
  * @returns {InstructionPreProcessor | null} The pre-processor function or null if not found.
  */
 export const getInstructionPreProcessor = (instruction) => {
-  const instructionType = instruction.split(' ')[0];
+  const instructionType = instruction.trim().split(/\s+/)[0];
   switch (instructionType) {
     case 'PAGE':
       return preProcessPageInstruction;

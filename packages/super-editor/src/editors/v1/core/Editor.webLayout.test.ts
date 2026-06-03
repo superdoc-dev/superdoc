@@ -290,6 +290,39 @@ describe('Editor Web Layout Mode', () => {
       expect(size.width).toBe(expectedWidth);
     });
 
+    it('uses parent editor page styles for header/footer story editors', () => {
+      const editor = {
+        converter: { pageStyles: {} },
+        options: {
+          viewOptions: { layout: 'print' },
+          isHeaderOrFooter: true,
+          parentEditor: {
+            converter: {
+              pageStyles: {
+                pageSize: { width: 8.5, height: 11 },
+                pageMargins: { top: 1, bottom: 1, left: 1, right: 1 },
+              },
+            },
+          },
+        },
+        state: {
+          selection: {
+            $head: {
+              depth: 1,
+              node: () => ({ type: { name: 'paragraph' }, attrs: {} }),
+            },
+          },
+        },
+        isWebLayout() {
+          return false;
+        },
+      };
+
+      const size = Editor.prototype.getMaxContentSize.call(editor);
+
+      expect(size).toEqual({ width: 604, height: 814 });
+    });
+
     it('falls back to page content width when colwidth is empty', () => {
       const PIXELS_PER_INCH = 96;
       const MAX_WIDTH_BUFFER_PX = 20;

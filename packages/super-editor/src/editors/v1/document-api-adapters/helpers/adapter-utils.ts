@@ -74,7 +74,7 @@ export function resolveTextTarget(editor: Editor, target: TextAddress): Resolved
   assertUnambiguous(matches, target.blockId);
   const block = matches[0];
   if (!block) return null;
-  return resolveTextRangeInBlock(block.node, block.pos, target.range);
+  return resolveTextRangeInBlock(block.node, block.pos, target.range, { textModel: 'visible' });
 }
 
 /**
@@ -167,8 +167,13 @@ export function resolveDefaultInsertTarget(editor: Editor): DefaultInsertTarget 
   for (let i = index.candidates.length - 1; i >= 0; i--) {
     const candidate = index.candidates[i];
     if (topLevelPositions.has(candidate.pos) && isTextBlockCandidate(candidate)) {
-      const textLength = computeTextContentLength(candidate.node);
-      const range = resolveTextRangeInBlock(candidate.node, candidate.pos, { start: textLength, end: textLength });
+      const textLength = computeTextContentLength(candidate.node, { textModel: 'visible' });
+      const range = resolveTextRangeInBlock(
+        candidate.node,
+        candidate.pos,
+        { start: textLength, end: textLength },
+        { textModel: 'visible' },
+      );
       if (!range) continue;
 
       return {

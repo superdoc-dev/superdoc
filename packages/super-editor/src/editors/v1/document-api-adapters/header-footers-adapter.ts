@@ -22,6 +22,7 @@ import type {
 } from '@superdoc/document-api';
 import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
+import { getWordPartRelsPath } from '../core/helpers/word-part-path.js';
 import { DocumentApiAdapterError } from './errors.js';
 import { getRevision, checkRevision } from './plan-engine/revision-tracker.js';
 import { resolveSectionProjections, type SectionProjection } from './helpers/sections-resolver.js';
@@ -554,10 +555,7 @@ export function headerFootersPartsDeleteAdapter(
   delete convertedXml[partPath];
 
   // 5. Remove rels for the part
-  const partFileName = partPath.split('/').pop();
-  if (partFileName) {
-    delete convertedXml[`word/_rels/${partFileName}.rels`];
-  }
+  delete convertedXml[getWordPartRelsPath(partPath)];
 
   // 6. Remove JSON collection entry
   const collection = kind === 'header' ? converter.headers : converter.footers;

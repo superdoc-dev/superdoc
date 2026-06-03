@@ -1,8 +1,14 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { computeTextContentLength, pmPositionToTextOffset, resolveTextRangeInBlock } from './text-offset-resolver.js';
+import {
+  computeTextContentLength,
+  pmPositionToTextOffset,
+  resolveTextRangeInBlock,
+  textContentInBlock,
+} from './text-offset-resolver.js';
 
 type NodeOptions = {
   text?: string;
+  marks?: Array<{ type: { name: string } }>;
   isInline?: boolean;
   isBlock?: boolean;
   isLeaf?: boolean;
@@ -31,6 +37,7 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
     inlineContent,
     isTextblock: inlineContent,
     isLeaf,
+    marks: options.marks ?? [],
     childCount: children.length,
     child(index: number) {
       return children[index]!;
@@ -68,6 +75,26 @@ describe('resolveTextRangeInBlock', () => {
     expect(result).toEqual({ from: 2, to: 4 });
   });
 
+  it('resolves a non-collapsed range starting at an inline-wrapper boundary to the next text node', () => {
+    const prefix = createNode('run', [createNode('text', [], { text: 'The quick brown fox jumps over the ' })], {
+      isInline: true,
+      isLeaf: false,
+    });
+    const insertedRun = createNode('run', [createNode('text', [], { text: 'lazy ' })], {
+      isInline: true,
+      isLeaf: false,
+    });
+    const suffix = createNode('run', [createNode('text', [], { text: 'dog.' })], {
+      isInline: true,
+      isLeaf: false,
+    });
+    const paragraph = createNode('paragraph', [prefix, insertedRun, suffix], { isBlock: true, inlineContent: true });
+
+    const result = resolveTextRangeInBlock(paragraph, 0, { start: 35, end: 39 });
+
+    expect(result).toEqual({ from: 39, to: 43 });
+  });
+
   it('returns null for out-of-range offsets', () => {
     const textNode = createNode('text', [], { text: 'Hi' });
     const paragraph = createNode('paragraph', [textNode], { isBlock: true, inlineContent: true });
@@ -99,6 +126,17 @@ describe('resolveTextRangeInBlock', () => {
     const result = resolveTextRangeInBlock(cell, 0, { start: 2, end: 3 });
 
     expect(result).toEqual({ from: 5, to: 6 });
+  });
+
+  it('maps visible offsets across tracked deleted text without counting it', () => {
+    const textA = createNode('text', [], { text: 'A' });
+    const deleted = createNode('text', [], { text: 'gone', marks: [{ type: { name: 'trackDelete' } }] });
+    const textB = createNode('text', [], { text: 'B' });
+    const paragraph = createNode('paragraph', [textA, deleted, textB], { isBlock: true, inlineContent: true });
+
+    const result = resolveTextRangeInBlock(paragraph, 0, { start: 1, end: 2 }, { textModel: 'visible' });
+
+    expect(result).toEqual({ from: 6, to: 7 });
   });
 });
 
@@ -155,6 +193,17 @@ describe('computeTextContentLength', () => {
 
     expect(computeTextContentLength(paragraph)).toBe(2);
   });
+
+  it('excludes tracked deleted text in the visible text model', () => {
+    const textA = createNode('text', [], { text: 'A' });
+    const deleted = createNode('text', [], { text: 'gone', marks: [{ type: { name: 'trackDelete' } }] });
+    const textB = createNode('text', [], { text: 'B' });
+    const paragraph = createNode('paragraph', [textA, deleted, textB], { isBlock: true, inlineContent: true });
+
+    expect(computeTextContentLength(paragraph)).toBe(6);
+    expect(computeTextContentLength(paragraph, { textModel: 'visible' })).toBe(2);
+    expect(textContentInBlock(paragraph, { textModel: 'visible' })).toBe('AB');
+  });
 });
 
 describe('pmPositionToTextOffset', () => {
@@ -207,5 +256,16 @@ describe('pmPositionToTextOffset', () => {
 
     // Past-end PM positions clamp to block length.
     expect(pmPositionToTextOffset(paragraph, 0, 1000)).toBe(2);
+  });
+
+  it('keeps PM positions inside tracked deletions at the surrounding visible offset', () => {
+    const textA = createNode('text', [], { text: 'A' });
+    const deleted = createNode('text', [], { text: 'gone', marks: [{ type: { name: 'trackDelete' } }] });
+    const textB = createNode('text', [], { text: 'B' });
+    const paragraph = createNode('paragraph', [textA, deleted, textB], { isBlock: true, inlineContent: true });
+
+    expect(pmPositionToTextOffset(paragraph, 0, 3, { textModel: 'visible' })).toBe(1);
+    expect(pmPositionToTextOffset(paragraph, 0, 6, { textModel: 'visible' })).toBe(1);
+    expect(pmPositionToTextOffset(paragraph, 0, 7, { textModel: 'visible' })).toBe(2);
   });
 });

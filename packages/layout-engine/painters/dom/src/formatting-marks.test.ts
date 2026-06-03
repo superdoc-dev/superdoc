@@ -159,7 +159,11 @@ describe('DomPainter formatting marks', () => {
 
     container.innerHTML = '';
     const rtlPainter = createDomPainter({
-      blocks: [createParagraphBlock(text, { direction: 'rtl' })],
+      blocks: [
+        createParagraphBlock(text, {
+          directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' },
+        }),
+      ],
       measures: [measure],
       showFormattingMarks: true,
     });

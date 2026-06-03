@@ -4,7 +4,15 @@ sidebarTitle: SuperDoc Yjs
 keywords: "superdoc collaboration server, yjs server, self-hosted, websocket"
 ---
 
-The official collaboration package for self-hosted deployments. Purpose-built for SuperDoc with a builder API.
+A minimal Yjs WebSocket server we ship as a reference implementation for prototypes and local development.
+
+<Warning>
+Use this package for prototypes and local development. It does not include production auth, persistence, scaling, or observability.
+
+For production self-hosted collaboration, [compare the available Yjs servers](/guides/collaboration/self-hosted-overview). YHub is worth a look if you need attribution or revision history.
+
+SuperDoc only needs a Yjs document and provider: pass `{ ydoc, provider }` to `modules.collaboration`.
+</Warning>
 
 ## Installation
 
@@ -320,11 +328,7 @@ DATABASE_URL=postgres://user:pass@localhost/db
 
 ```typescript
 fastify.get('/health', (request, reply) => {
-  reply.send({
-    status: 'healthy',
-    documents: collaboration.getActiveDocumentCount(),
-    connections: collaboration.getConnectionCount()
-  });
+  reply.send({ status: 'healthy' });
 });
 ```
 

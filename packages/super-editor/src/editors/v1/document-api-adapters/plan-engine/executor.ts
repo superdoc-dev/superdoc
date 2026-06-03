@@ -39,7 +39,7 @@ import type {
 } from './executor-registry.types.js';
 import { getStepExecutor } from './executor-registry.js';
 import { planError } from './errors.js';
-import { ALIGNMENT_TO_JUSTIFICATION } from './paragraphs-wrappers.js';
+import { mapAlignmentToJustificationForParagraph } from './paragraphs-wrappers.js';
 import { closeHistory } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
 import { checkRevision, getRevision } from './revision-tracker.js';
@@ -53,12 +53,18 @@ import { mapBlockNodeType } from '../helpers/node-address-resolver.js';
 import { resolveWithinScope, scopeByRange } from '../helpers/adapter-utils.js';
 import { normalizeReplacementText } from './replacement-normalizer.js';
 import { getWordChanges } from './word-diff.js';
+import { calculateResolvedParagraphProperties } from '../../extensions/paragraph/resolvedPropertiesCache.js';
 import { Fragment, Slice } from 'prosemirror-model';
 import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
 import type { Transaction } from 'prosemirror-state';
 import type { Mapping } from 'prosemirror-transform';
 import { buildTextWithTabs, parentAllowsNodeAt, textBetweenWithTabs } from '../helpers/text-with-tabs.js';
 import { getFormattingStateAtPos } from '../../core/helpers/getMarksFromSelection.js';
+import {
+  TrackDeleteMarkName,
+  TrackFormatMarkName,
+  TrackInsertMarkName,
+} from '../../extensions/track-changes/constants.js';
 
 // ---------------------------------------------------------------------------
 // Character-offset → document-position mapping
@@ -107,6 +113,7 @@ export function charOffsetToDocPos(
       const textStart = Math.max(pos, rangeFrom);
       const textEnd = Math.min(pos + node.nodeSize, rangeTo);
       const textLen = textEnd - textStart;
+      if (textLen <= 0) return false;
       if (count + textLen >= charOffset) {
         foundPos = textStart + (charOffset - count);
       }
@@ -175,6 +182,33 @@ type InlineWrapperSpec = {
 
 function asProseMirrorMarks(marks: readonly unknown[]): readonly ProseMirrorMark[] {
   return marks as readonly ProseMirrorMark[];
+}
+
+const TRACKED_REVIEW_MARK_NAMES = new Set([TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName]);
+
+function hasTrackedReviewMark(marks: readonly ProseMirrorMark[] | undefined): boolean {
+  return Boolean(marks?.some((mark) => TRACKED_REVIEW_MARK_NAMES.has(mark.type.name)));
+}
+
+function rangeTouchesTrackedReviewState(doc: ProseMirrorNode, from: number, to: number): boolean {
+  let found = false;
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (found) return false;
+
+    if (node.isText) {
+      const textStart = Math.max(from, pos);
+      const textEnd = Math.min(to, pos + node.nodeSize);
+      if (textStart >= textEnd) return false;
+    }
+
+    if ((node.isText || node.isInline) && hasTrackedReviewMark(node.marks as readonly ProseMirrorMark[] | undefined)) {
+      found = true;
+      return false;
+    }
+  });
+
+  return found;
 }
 
 function resolveMarksForRange(editor: Editor, target: CompiledRangeTarget, step: MutationStep): readonly unknown[] {
@@ -896,6 +930,16 @@ export function executeTextRewrite(
   const origLen = originalText.length;
   const replLen = replacementText.length;
 
+  if (rangeTouchesTrackedReviewState(tr.doc, absFrom, absTo)) {
+    if (replacementText.length === 0) {
+      tr.delete(absFrom, absTo);
+      return { changed: target.text.length > 0 };
+    }
+    const content = buildTextWithTabs(editor.state.schema, replacementText, asProseMirrorMarks(marks));
+    tr.replaceWith(absFrom, absTo, content);
+    return { changed: replacementText !== target.text };
+  }
+
   let prefix = 0;
   while (prefix < origLen && prefix < replLen && originalText[prefix] === replacementText[prefix]) {
     prefix++;
@@ -977,18 +1021,59 @@ function resolveInheritedMarksAt(editor: Editor, tr: Transaction, absPos: number
     const state = editor.state as unknown as { doc: { resolve?: unknown } };
     if (typeof state?.doc?.resolve !== 'function') {
       const $pos = tr.doc.resolve(absPos);
-      return $pos.marks();
+      return mergeDirectInsertTrackedInsertionMark(tr, absPos, $pos.marks());
     }
     const resolved = getFormattingStateAtPos(
       editor.state as unknown as import('prosemirror-state').EditorState,
       absPos,
       editor as unknown as undefined,
     );
-    return (resolved?.resolvedMarks as ProseMirrorMark[]) ?? [];
+    return mergeDirectInsertTrackedInsertionMark(tr, absPos, (resolved?.resolvedMarks as ProseMirrorMark[]) ?? []);
   } catch {
     const $pos = tr.doc.resolve(absPos);
-    return $pos.marks();
+    return mergeDirectInsertTrackedInsertionMark(tr, absPos, $pos.marks());
   }
+}
+
+function getSharedTrackedInsertionMarkAt(tr: Transaction, absPos: number): ProseMirrorMark | null {
+  const maxPos = typeof tr.doc.content?.size === 'number' ? tr.doc.content.size : absPos;
+  const boundedPos = Math.max(0, Math.min(maxPos, absPos));
+  const $pos = tr.doc.resolve(boundedPos);
+  const beforeInsert = $pos.nodeBefore?.marks?.find((mark) => mark.type?.name === TrackInsertMarkName) ?? null;
+  const afterInsert = $pos.nodeAfter?.marks?.find((mark) => mark.type?.name === TrackInsertMarkName) ?? null;
+  const beforeId = typeof beforeInsert?.attrs?.id === 'string' ? beforeInsert.attrs.id : null;
+  const afterId = typeof afterInsert?.attrs?.id === 'string' ? afterInsert.attrs.id : null;
+
+  if (!beforeInsert || !afterInsert || !beforeId || beforeId !== afterId) {
+    return null;
+  }
+
+  return beforeInsert;
+}
+
+function mergeDirectInsertTrackedInsertionMark(
+  tr: Transaction,
+  absPos: number,
+  marks: readonly ProseMirrorMark[],
+): readonly ProseMirrorMark[] {
+  if (tr.getMeta?.('skipTrackChanges') !== true) {
+    return marks;
+  }
+
+  const sharedInsert = getSharedTrackedInsertionMarkAt(tr, absPos);
+  if (!sharedInsert) {
+    return marks;
+  }
+
+  const sharedInsertId = typeof sharedInsert.attrs?.id === 'string' ? sharedInsert.attrs.id : null;
+  if (
+    sharedInsertId &&
+    marks.some((mark) => mark.type?.name === TrackInsertMarkName && mark.attrs?.id === sharedInsertId)
+  ) {
+    return marks;
+  }
+
+  return [...marks, sharedInsert];
 }
 
 export function executeTextInsert(
@@ -1067,16 +1152,19 @@ export function executeTextDelete(
   return { changed: true };
 }
 
-// ALIGNMENT_TO_JUSTIFICATION imported from paragraphs-wrappers.js
-
 /**
  * Applies alignment to the paragraph node(s) that contain the given range.
  * Uses the same mechanism as paragraphsSetAlignmentWrapper: updates
  * paragraphProperties.justification via tr.setNodeMarkup.
  */
-function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, alignment: string): boolean {
-  const justification = ALIGNMENT_TO_JUSTIFICATION[alignment as keyof typeof ALIGNMENT_TO_JUSTIFICATION];
-  if (!justification) return false;
+function applyAlignmentToRange(
+  editor: Editor,
+  tr: Transaction,
+  absFrom: number,
+  absTo: number,
+  alignment: string,
+): boolean {
+  if (!alignment) return false;
 
   let changed = false;
   const doc = tr.doc;
@@ -1086,6 +1174,9 @@ function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, 
     if (!node.isTextblock) return;
 
     const existing = (node.attrs as Record<string, unknown>).paragraphProperties as Record<string, unknown> | undefined;
+    const paragraphPos = typeof tr.doc.resolve === 'function' ? tr.doc.resolve(pos) : null;
+    const resolved = calculateResolvedParagraphProperties(editor, node, paragraphPos as any);
+    const justification = mapAlignmentToJustificationForParagraph(alignment as any, resolved?.rightToLeft === true);
     const currentJustification = existing?.justification;
 
     if (currentJustification === justification) return;
@@ -1145,7 +1236,7 @@ export function executeStyleApply(
   }
 
   if (step.args.alignment) {
-    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+    changed = applyAlignmentToRange(editor, tr, absFrom, absTo, step.args.alignment) || changed;
   }
 
   return { changed };
@@ -1305,7 +1396,7 @@ export function executeSpanStyleApply(
   }
 
   if (step.args.alignment) {
-    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+    changed = applyAlignmentToRange(editor, tr, absFrom, absTo, step.args.alignment) || changed;
   }
 
   return { changed };
@@ -2289,7 +2380,9 @@ export function executePlan(editor: Editor, input: MutationsApplyInput): PlanRec
     throw planError('INVALID_INPUT', 'plan must contain at least one step');
   }
 
-  const compiled = compilePlan(editor, input.steps);
+  const compiled = compilePlan(editor, input.steps, {
+    selectTextModel: input.changeMode === 'tracked' ? 'raw' : 'visible',
+  });
 
   return executeCompiledPlan(editor, compiled, {
     changeMode: input.changeMode ?? 'direct',

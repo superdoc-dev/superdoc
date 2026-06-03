@@ -1,8 +1,10 @@
 /**
- * Find first field annotation by field ID.
- * @param fieldId The field ID.
- * @param state The editor state.
- * @returns The field annotation or null.
+ * Find the first field annotation matching the given field ID.
+ *
+ * @param {string} fieldId - The field ID to match against `node.attrs.fieldId`.
+ * @param {import('./types.js').EditorState} state - The editor state to search.
+ * @returns {import('./types.js').FieldAnnotationEntry | null} The first
+ *   match, or `null` if none.
  */
 export function findFirstFieldAnnotationByFieldId(fieldId, state) {
   let fieldAnnotation = findNode(state.doc, (node) => {
@@ -12,7 +14,13 @@ export function findFirstFieldAnnotationByFieldId(fieldId, state) {
   return fieldAnnotation;
 }
 
+/**
+ * @param {import('./types.js').PmNode} node
+ * @param {(node: import('./types.js').PmNode) => boolean} predicate
+ * @returns {import('./types.js').FieldAnnotationEntry | null}
+ */
 function findNode(node, predicate) {
+  /** @type {import('./types.js').FieldAnnotationEntry | null} */
   let found = null;
   node.descendants((node, pos) => {
     if (predicate(node)) found = { node, pos };

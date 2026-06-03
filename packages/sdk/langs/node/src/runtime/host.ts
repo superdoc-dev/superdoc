@@ -40,6 +40,63 @@ const FORWARD_HOST_STDERR =
 
 const JSON_RPC_TIMEOUT_CODE = -32011;
 
+// Mirrors apps/cli/src/host/server.ts:DEFAULT_REQUEST_TIMEOUT_MS. Kept in sync
+// by hand; an explicit constant here avoids importing CLI app internals across
+// the package boundary.
+const HOST_DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+// Extra time the JS-side watchdog waits beyond the host-side ceiling so the
+// host's structured RequestTimeout error wins the race against the SDK's own
+// abort. The buffer absorbs JSON-RPC serialization, stdio drain, and event-
+// loop latency.
+const WATCHDOG_HEADROOM_MS = 5_000;
+
+/**
+ * Builds the argv passed to `spawn` for `superdoc host --stdio`. Propagates
+ * `requestTimeoutMs` to the host via `--request-timeout-ms`, since the SDK
+ * option alone cannot raise the host's 30s per-invoke ceiling otherwise.
+ *
+ * Exported for unit testing.
+ */
+export function buildHostSpawnArgs(prefixArgs: readonly string[], options: { requestTimeoutMs?: number }): string[] {
+  const args = [...prefixArgs, 'host', '--stdio'];
+  if (options.requestTimeoutMs != null) {
+    args.push('--request-timeout-ms', String(options.requestTimeoutMs));
+  }
+  return args;
+}
+
+/**
+ * Computes the JS-side watchdog timeout for a single JSON-RPC request.
+ *
+ * The watchdog must outlive the host-side `cli.invoke` ceiling so the host's
+ * structured `RequestTimeout` JSON-RPC frame wins the race against the SDK's
+ * own abort. Three cases:
+ *
+ * 1. A per-call `InvokeOptions.timeoutMs` is supplied → widen above it.
+ * 2. The client set `requestTimeoutMs` → widen above that.
+ * 3. Neither is set → widen above the host's compiled-in default so the
+ *    default-config case doesn't race at 30s (which previously surfaced the
+ *    old "Host watchdog timed out" string instead of the host's structured
+ *    TIMEOUT error).
+ *
+ * Exported for unit testing.
+ */
+export function resolveJsWatchdogTimeout(
+  watchdogTimeoutMs: number,
+  requestTimeoutMs: number | undefined,
+  timeoutMsOverride: number | undefined,
+): number {
+  if (timeoutMsOverride != null) {
+    return Math.max(watchdogTimeoutMs, timeoutMsOverride + WATCHDOG_HEADROOM_MS);
+  }
+
+  if (requestTimeoutMs != null) {
+    return Math.max(watchdogTimeoutMs, requestTimeoutMs + WATCHDOG_HEADROOM_MS);
+  }
+
+  return Math.max(watchdogTimeoutMs, HOST_DEFAULT_REQUEST_TIMEOUT_MS + WATCHDOG_HEADROOM_MS);
+}
+
 /**
  * Transport that communicates with a long-lived CLI host process over JSON-RPC stdio.
  */
@@ -170,7 +227,7 @@ export class HostTransport {
 
   private async startHostProcess(): Promise<void> {
     const { command, prefixArgs } = resolveInvocation(this.cliBin);
-    const args = [...prefixArgs, 'host', '--stdio'];
+    const args = buildHostSpawnArgs(prefixArgs, { requestTimeoutMs: this.requestTimeoutMs });
 
     const child = spawn(command, args, {
       env: {
@@ -282,15 +339,7 @@ export class HostTransport {
   }
 
   private resolveWatchdogTimeout(timeoutMsOverride: number | undefined): number {
-    if (timeoutMsOverride != null) {
-      return Math.max(this.watchdogTimeoutMs, timeoutMsOverride + 1_000);
-    }
-
-    if (this.requestTimeoutMs != null) {
-      return Math.max(this.watchdogTimeoutMs, this.requestTimeoutMs + 1_000);
-    }
-
-    return this.watchdogTimeoutMs;
+    return resolveJsWatchdogTimeout(this.watchdogTimeoutMs, this.requestTimeoutMs, timeoutMsOverride);
   }
 
   private async sendJsonRpcRequest(method: string, params: unknown, watchdogTimeoutMs: number): Promise<unknown> {

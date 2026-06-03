@@ -58,7 +58,8 @@ vi.mock('../helpers/group-changes.js', () => ({
   groupChanges: vi.fn(() => []),
 }));
 
-vi.mock('@superdoc/super-editor', () => {
+vi.mock('@superdoc/super-editor', async () => {
+  const actual = await vi.importActual('@superdoc/super-editor');
   const getTrackedChangeIndex = vi.fn(() => ({
     get: vi.fn(() => []),
     getAll: vi.fn(() => []),
@@ -110,6 +111,7 @@ vi.mock('@superdoc/super-editor', () => {
     getRichTextExtensions: vi.fn(() => []),
     getTrackedChangeIndex,
     makeTrackedChangeAnchorKey,
+    shallowEqual: actual.shallowEqual,
   };
 });
 
@@ -204,6 +206,35 @@ describe('comments-store', () => {
     expect(store.getComment('import-2')).toEqual(comment);
     expect(store.getComment(null)).toBeNull();
     expect(store.getComment(undefined)).toBeNull();
+  });
+
+  it('resolves rendered tracked-change aliases by equivalent position', () => {
+    const canonicalAnchorKey = 'tc::hf:part:rId8::word:trackInsert:101';
+    const renderedAnchorKey = 'tc::hf:part:rId8::rendered-uuid';
+    const comment = {
+      commentId: 'word:trackInsert:101',
+      trackedChange: true,
+      trackedChangeAnchorKey: canonicalAnchorKey,
+    };
+    store.commentsList = [comment];
+    store.editorCommentPositions = {
+      [canonicalAnchorKey]: {
+        key: canonicalAnchorKey,
+        threadId: 'word:trackInsert:101',
+        kind: 'trackedChange',
+        storyKey: 'hf:part:rId8',
+        bounds: { top: 49, left: 199, bottom: 69, right: 267, width: 68, height: 20 },
+      },
+      [renderedAnchorKey]: {
+        key: renderedAnchorKey,
+        threadId: 'rendered-uuid',
+        kind: 'trackedChange',
+        storyKey: 'hf:part:rId8',
+        bounds: { top: 47, left: 188, bottom: 69, right: 300, width: 112, height: 22 },
+      },
+    };
+
+    expect(store.getComment('rendered-uuid')).toEqual(comment);
   });
 
   it('prefers tracked-change anchor keys for position lookup and alias resolution', () => {
@@ -481,6 +512,15 @@ describe('comments-store', () => {
         comment: { commentId: 'change-1' },
       }),
     );
+
+    // SD-673: pin the exact key set of the comments-update payload.
+    // SuperDocCommentsUpdatePayload declares { type, comment?, changes? };
+    // the objectContaining assertion above would not catch a regression
+    // to the older { data: ... } shape or an extra field leaking in.
+    const [, payload] = superdoc.emit.mock.calls[0];
+    expect(Object.keys(payload).sort()).toEqual(['comment', 'type']);
+    expect(typeof payload.type).toBe('string');
+    expect(payload.comment).toEqual({ commentId: 'change-1' });
   });
 
   it('reopens resolved tracked change comments on update events', () => {
@@ -602,7 +642,7 @@ describe('comments-store', () => {
   it('resolves tracked change comments on resolve events', () => {
     const superdoc = {
       emit: vi.fn(),
-      user: { email: 'reviewer@example.com', name: 'Reviewer' },
+      user: { id: 'reviewer-id', email: 'reviewer@example.com', name: 'Reviewer' },
     };
 
     const existingComment = {
@@ -612,8 +652,9 @@ describe('comments-store', () => {
       resolvedByEmail: null,
       resolvedByName: null,
       getValues: vi.fn(() => ({ commentId: 'change-resolve-1', resolvedTime: Date.now() })),
-      resolveComment: vi.fn(function ({ email, name }) {
+      resolveComment: vi.fn(function ({ id, email, name }) {
         this.resolvedTime = Date.now();
+        this.resolvedById = id;
         this.resolvedByEmail = email;
         this.resolvedByName = name;
         const emitData = { type: comments_module_events.RESOLVED, comment: this.getValues() };
@@ -632,6 +673,7 @@ describe('comments-store', () => {
     });
 
     expect(existingComment.resolveComment).toHaveBeenCalledWith({
+      id: 'reviewer-id',
       email: 'reviewer@example.com',
       name: 'Reviewer',
       superdoc,
@@ -647,6 +689,166 @@ describe('comments-store', () => {
       'comments-update',
       expect.objectContaining({ type: comments_module_events.RESOLVED }),
     );
+  });
+
+  it('does not blanket-cascade linked user comments on tracked-change resolve events', async () => {
+    const superdoc = {
+      emit: vi.fn(),
+      user: { id: 'reviewer-id', email: 'reviewer@example.com', name: 'Reviewer' },
+    };
+
+    const trackedChangeComment = {
+      commentId: 'tc-1',
+      trackedChange: true,
+      resolvedTime: null,
+      getValues: vi.fn(() => ({ commentId: 'tc-1' })),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+
+    const linkedUserComment = {
+      commentId: 'user-comment-1',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-1',
+      resolvedTime: null,
+      getValues: vi.fn(() => ({ commentId: 'user-comment-1' })),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+
+    const unrelatedUserComment = {
+      commentId: 'user-comment-2',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-99',
+      resolvedTime: null,
+      getValues: vi.fn(() => ({ commentId: 'user-comment-2' })),
+      resolveComment: vi.fn(),
+    };
+
+    store.commentsList = [trackedChangeComment, linkedUserComment, unrelatedUserComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: { event: 'resolve', changeId: 'tc-1' },
+    });
+
+    expect(trackedChangeComment.resolveComment).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
+    expect(linkedUserComment.resolveComment).not.toHaveBeenCalled();
+    expect(unrelatedUserComment.resolveComment).not.toHaveBeenCalled();
+  });
+
+  it('does not cascade linked comments even when tracked-change resolve carries a documentId', async () => {
+    const superdoc = { emit: vi.fn(), user: { email: 'reviewer@example.com', name: 'Reviewer' } };
+    __mockSuperdoc.documents.value = [
+      { id: 'doc-A', type: 'docx' },
+      { id: 'doc-B', type: 'docx' },
+    ];
+
+    const trackedChangeOnDocA = {
+      commentId: 'tc-shared',
+      trackedChange: true,
+      resolvedTime: null,
+      fileId: 'doc-A',
+      trackedChangeAnchorKey: 'tc::body::tc-shared',
+      getValues: vi.fn(() => ({ commentId: 'tc-shared' })),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+    const linkedOnDocA = {
+      commentId: 'user-on-A',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-shared',
+      resolvedTime: null,
+      fileId: 'doc-A',
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(),
+    };
+    const linkedOnDocB = {
+      commentId: 'user-on-B',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-shared',
+      resolvedTime: null,
+      fileId: 'doc-B',
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(),
+    };
+
+    store.commentsList = [trackedChangeOnDocA, linkedOnDocA, linkedOnDocB];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: { event: 'resolve', changeId: 'tc-shared', documentId: 'doc-A' },
+    });
+
+    await Promise.resolve();
+    expect(linkedOnDocA.resolveComment).not.toHaveBeenCalled();
+    expect(linkedOnDocB.resolveComment).not.toHaveBeenCalled();
+  });
+
+  it('does not cascade linked comments in single-document resolve flows either', async () => {
+    const superdoc = { emit: vi.fn(), user: { email: 'r@e', name: 'R' } };
+
+    const trackedChangeComment = {
+      commentId: 'tc-nodoc',
+      trackedChange: true,
+      resolvedTime: null,
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+    const linkedNoFileId = {
+      commentId: 'user-nodoc',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-nodoc',
+      resolvedTime: null,
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(),
+    };
+
+    store.commentsList = [trackedChangeComment, linkedNoFileId];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: { event: 'resolve', changeId: 'tc-nodoc' },
+    });
+
+    await Promise.resolve();
+    expect(linkedNoFileId.resolveComment).not.toHaveBeenCalled();
+  });
+
+  it('does not re-resolve already-resolved linked user comments', async () => {
+    const superdoc = { emit: vi.fn(), user: { email: 'a@a', name: 'A' } };
+
+    const trackedChangeComment = {
+      commentId: 'tc-2',
+      trackedChange: true,
+      resolvedTime: null,
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+
+    const alreadyResolvedLinked = {
+      commentId: 'user-2',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-2',
+      resolvedTime: 1234,
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(),
+    };
+
+    store.commentsList = [trackedChangeComment, alreadyResolvedLinked];
+
+    store.handleTrackedChangeUpdate({ superdoc, params: { event: 'resolve', changeId: 'tc-2' } });
+
+    await Promise.resolve();
+    expect(alreadyResolvedLinked.resolveComment).not.toHaveBeenCalled();
   });
 
   it('syncs and emits an update when add event dedupes an existing tracked change', () => {
@@ -817,6 +1019,7 @@ describe('comments-store', () => {
       trackedChangeText: 'Old text',
       trackedChangeType: 'trackInsert',
       deletedText: null,
+      fileId: 'doc-1',
       getValues: vi.fn(() => ({ commentId: 'story-change-2' })),
     };
 
@@ -1188,6 +1391,20 @@ describe('comments-store', () => {
         comment: expect.objectContaining({ commentId: 'tc-stale' }),
       }),
     );
+
+    // SD-673: pin the DELETED variant of SuperDocCommentsUpdatePayload.
+    // This emit path produces the three-key shape { type, comment, changes }
+    // (changes carries the [{ key: 'deleted', commentId, fileId }] tuple).
+    // The objectContaining assertion above does not require `changes` to be
+    // present, so a regression that dropped it would not be caught.
+    const deletedCall = superdoc.emit.mock.calls.find(
+      ([name, payload]) => name === 'comments-update' && payload?.type === comments_module_events.DELETED,
+    );
+    expect(deletedCall).toBeDefined();
+    const [, deletedPayload] = deletedCall;
+    expect(Object.keys(deletedPayload).sort()).toEqual(['changes', 'comment', 'type']);
+    expect(Array.isArray(deletedPayload.changes)).toBe(true);
+    expect(deletedPayload.changes[0]).toMatchObject({ key: 'deleted' });
   });
 
   it('keeps tracked-change comments whose IDs are still present in marks', () => {
@@ -1255,6 +1472,156 @@ describe('comments-store', () => {
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });
 
+  it('refreshes only requested tracked-change comments by id', () => {
+    const superdoc = { emit: vi.fn() };
+    const editor = { state: {}, options: { documentId: 'doc-1' } };
+    const mark = (type, id) => ({ type: { name: type }, attrs: { id } });
+    const trackedChangesById = {
+      'tc-insert': [{ mark: mark('trackInsert', 'tc-insert'), from: 1, to: 4 }],
+      'tc-replacement': [
+        { mark: mark('trackInsert', 'tc-replacement'), from: 5, to: 8 },
+        { mark: mark('trackDelete', 'tc-replacement'), from: 9, to: 12 },
+      ],
+      'tc-delete': [{ mark: mark('trackDelete', 'tc-delete'), from: 13, to: 16 }],
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockImplementation((state, id) => trackedChangesById[id] ?? []);
+
+    createOrUpdateTrackedChangeCommentMock.mockImplementation(({ event, marks, trackedChangesForId }) => {
+      const changeId = marks?.insertedMark?.attrs?.id ?? marks?.deletionMark?.attrs?.id ?? marks?.formatMark?.attrs?.id;
+      return {
+        event,
+        changeId,
+        trackedChangeText: `updated-${changeId}`,
+        trackedChangeType: marks.insertedMark && marks.deletionMark ? 'both' : marks.deletionMark ? 'delete' : 'insert',
+        deletedText: marks.deletionMark ? `deleted-${changeId}` : null,
+        documentId: 'doc-1',
+        trackedChangesForId,
+      };
+    });
+
+    store.commentsList = Object.keys(trackedChangesById).map((commentId) => ({
+      commentId,
+      trackedChange: true,
+      trackedChangeText: 'old',
+      fileId: 'doc-1',
+    }));
+
+    store.refreshTrackedChangeCommentsByIds({
+      superdoc,
+      editor,
+      changeIds: ['tc-insert', 'tc-replacement', 'tc-delete', 'missing'],
+    });
+
+    expect(createOrUpdateTrackedChangeCommentMock).toHaveBeenCalledTimes(3);
+    expect(createOrUpdateTrackedChangeCommentMock.mock.calls.map(([call]) => call.marks)).toEqual([
+      { insertedMark: trackedChangesById['tc-insert'][0].mark, deletionMark: null, formatMark: null },
+      {
+        insertedMark: trackedChangesById['tc-replacement'][0].mark,
+        deletionMark: trackedChangesById['tc-replacement'][1].mark,
+        formatMark: null,
+      },
+      { insertedMark: null, deletionMark: trackedChangesById['tc-delete'][0].mark, formatMark: null },
+    ]);
+    expect(store.getComment('tc-insert').trackedChangeText).toBe('updated-tc-insert');
+    expect(store.getComment('tc-replacement').deletedText).toBe('deleted-tc-replacement');
+    expect(store.getComment('tc-delete').trackedChangeType).toBe('delete');
+  });
+
+  it('does not emit tracked-change comment updates when refreshed fields are unchanged', () => {
+    const superdoc = { emit: vi.fn() };
+    const existingComment = {
+      commentId: 'tc-live',
+      trackedChange: true,
+      trackedChangeText: 'tracked-tc-live',
+      trackedChangeType: 'insert',
+      trackedChangeDisplayType: null,
+      deletedText: null,
+      trackedChangeStory: { kind: 'story', storyType: 'body' },
+      trackedChangeStoryKind: 'body',
+      trackedChangeStoryLabel: '',
+      trackedChangeAnchorKey: 'tc::body::tc-live',
+      fileId: 'doc-1',
+      getValues: vi.fn(() => ({ commentId: 'tc-live' })),
+    };
+    store.commentsList = [existingComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'update',
+        changeId: 'tc-live',
+        trackedChangeText: 'tracked-tc-live',
+        trackedChangeType: 'insert',
+        trackedChangeDisplayType: null,
+        deletedText: null,
+        documentId: 'doc-1',
+      },
+    });
+
+    expect(syncCommentsToClientsMock).not.toHaveBeenCalled();
+    expect(superdoc.emit).not.toHaveBeenCalled();
+  });
+
+  it('creates the first live tracked-change comment from an add event', () => {
+    const superdoc = {
+      ...__mockSuperdoc,
+      emit: vi.fn(),
+      activeEditor: { commands: { removeComment: vi.fn(), setActiveComment: vi.fn() } },
+    };
+
+    store.commentsList = [];
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'add',
+        changeId: 'tc-live-insert',
+        trackedChangeText: 'Tracked live insert',
+        trackedChangeType: 'trackInsert',
+        deletedText: null,
+        authorEmail: 'alice@example.com',
+        author: 'Alice',
+        date: 123,
+        documentId: 'doc-1',
+      },
+      broadcastChanges: false,
+    });
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(store.commentsList[0]).toEqual(
+      expect.objectContaining({
+        commentId: 'tc-live-insert',
+        trackedChange: true,
+        trackedChangeText: 'Tracked live insert',
+        trackedChangeType: 'trackInsert',
+        fileId: 'doc-1',
+      }),
+    );
+  });
+
+  it('does not create a missing tracked-change comment from an update-only refresh event', () => {
+    const superdoc = { emit: vi.fn() };
+
+    store.commentsList = [];
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'update',
+        changeId: 'tc-live-insert',
+        trackedChangeText: 'Tracked live insert',
+        trackedChangeType: 'trackInsert',
+        deletedText: null,
+        authorEmail: 'alice@example.com',
+        author: 'Alice',
+        date: 123,
+        documentId: 'doc-1',
+      },
+    });
+
+    expect(store.commentsList).toEqual([]);
+    expect(superdoc.emit).not.toHaveBeenCalled();
+  });
+
   it('keeps imported resolved tracked-change comments resolved during initial tracked-change rebuild', async () => {
     const editorDispatch = vi.fn();
     const tr = { setMeta: vi.fn() };
@@ -1294,6 +1661,95 @@ describe('comments-store', () => {
     expect(store.commentsList[0].commentId).toBe('tc-import-resolved');
     expect(store.commentsList[0].resolvedTime).not.toBeNull();
     expect(createOrUpdateTrackedChangeCommentMock).not.toHaveBeenCalled();
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('replaces stale document threads immediately when a new file is loaded into the same document id', async () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      converter: { commentThreadingProfile: 'range-based' },
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'tc-new' } } }]);
+    groupChangesMock.mockReturnValue([{ insertedMark: { mark: { attrs: { id: 'tc-new' } } } }]);
+
+    store.commentsList = [
+      {
+        commentId: 'tc-old',
+        trackedChange: true,
+        trackedChangeText: 'Old tracked text',
+        fileId: 'doc-1',
+      },
+      {
+        commentId: 'tc-old-reply',
+        parentCommentId: 'tc-old',
+        fileId: 'doc-1',
+      },
+      {
+        commentId: 'regular-old',
+        commentText: 'Old regular comment',
+        fileId: 'doc-1',
+      },
+    ];
+
+    store.processLoadedDocxComments({
+      superdoc: __mockSuperdoc,
+      editor,
+      comments: [
+        {
+          commentId: 'regular-new',
+          creatorName: 'Imported Author',
+          creatorEmail: 'imported@example.com',
+          createdTime: 123,
+          elements: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'run',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Replacement comment',
+                      attrs: {
+                        type: 'element',
+                        attributes: {},
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      documentId: 'doc-1',
+      replacedFile: true,
+    });
+
+    expect(store.commentsList).toHaveLength(2);
+    expect(store.commentsList.find((comment) => comment.commentId === 'tc-old')).toBeUndefined();
+    expect(store.commentsList.find((comment) => comment.commentId === 'tc-old-reply')).toBeUndefined();
+    expect(store.commentsList.find((comment) => comment.commentId === 'regular-old')).toBeUndefined();
+    expect(store.commentsList).toEqual([
+      expect.objectContaining({
+        commentId: 'regular-new',
+        fileId: 'doc-1',
+        docxCommentJSON: expect.any(Array),
+      }),
+      expect.objectContaining({
+        commentId: 'tc-new',
+        trackedChange: true,
+        trackedChangeText: 'tracked-tc-new',
+        fileId: 'doc-1',
+      }),
+    ]);
+    expect(createOrUpdateTrackedChangeCommentMock).toHaveBeenCalledTimes(1);
     expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });

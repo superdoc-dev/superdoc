@@ -1,12 +1,13 @@
-import type {
-  ParagraphAttrs,
-  ParagraphBorders,
-  ParagraphBorder,
-  Run,
-  TableBorders,
-  TableBorderValue,
-  CellBorders,
-  BorderSpec,
+import {
+  getParagraphInlineDirection,
+  type ParagraphAttrs,
+  type ParagraphBorders,
+  type ParagraphBorder,
+  type Run,
+  type TableBorders,
+  type TableBorderValue,
+  type CellBorders,
+  type BorderSpec,
 } from '@superdoc/contracts';
 
 /**
@@ -202,7 +203,8 @@ export const hashParagraphAttrs = (attrs: ParagraphAttrs | undefined): string =>
   }
 
   // Direction
-  if (attrs.direction) parts.push(`dir:${attrs.direction}`);
+  const dir = getParagraphInlineDirection(attrs);
+  if (dir) parts.push(`dir:${dir}`);
 
   return parts.join(':');
 };

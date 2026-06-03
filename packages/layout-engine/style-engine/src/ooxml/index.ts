@@ -5,7 +5,7 @@
  * This module is format-aware (docx), but translator-agnostic.
  */
 
-import { combineIndentProperties, combineProperties, combineRunProperties } from '../cascade.js';
+import { combineIndentProperties, combineProperties, combineRunProperties, FONT_SLOT_THEME_PAIRS } from '../cascade.js';
 import type { PropertyObject } from '../cascade.js';
 import type { ParagraphConditionalFormatting, ParagraphProperties, ParagraphTabStop, RunProperties } from './types.ts';
 import type { NumberingProperties } from './numbering-types.ts';
@@ -18,7 +18,7 @@ import type {
   TableCellProperties,
 } from './styles-types.ts';
 
-export { combineIndentProperties, combineProperties, combineRunProperties };
+export { combineIndentProperties, combineProperties, combineRunProperties, FONT_SLOT_THEME_PAIRS };
 export type { PropertyObject };
 export type * from './types.ts';
 export type * from './numbering-types.ts';
@@ -131,6 +131,17 @@ export function resolveRunProperties(
     // Inline underlines are ignored for list numbers
     if (inlineRpr?.underline) {
       delete inlineRpr.underline;
+    }
+
+    // w:vanish and w:specVanish on the paragraph-mark rPr (w:pPr/w:rPr) apply only
+    // to the paragraph-mark glyph (¶), per ECMA-376 §17.3.2.41 and §17.3.2.36.
+    // They must not leak into the auto-generated list marker (SD-3269). Vanish set
+    // on the numbering definition's own rPr still applies via numberingProps below.
+    if (inlineRpr?.vanish) {
+      delete inlineRpr.vanish;
+    }
+    if (inlineRpr?.specVanish) {
+      delete inlineRpr.specVanish;
     }
 
     styleChain = [

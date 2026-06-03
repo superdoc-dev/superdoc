@@ -1,6 +1,8 @@
 // @ts-check
 import { Plugin, PluginKey, Selection, TextSelection } from 'prosemirror-state';
-import { TableMap } from 'prosemirror-tables';
+import { CellSelection, TableMap } from 'prosemirror-tables';
+import { getTableVisualDirection } from '@superdoc/contracts';
+import { findFirstTextPosInNode, findLastTextPosInNode } from '@core/commands/helpers/textPositions.js';
 
 const TABLE_CELL_ROLES = new Set(['cell', 'header_cell']);
 
@@ -163,6 +165,15 @@ function getTableContext($head) {
 }
 
 /**
+ * Returns true when table navigation should be mirrored for RTL visual order.
+ * @param {import('prosemirror-model').Node} table
+ * @returns {boolean}
+ */
+function isRtlTable(table) {
+  return getTableVisualDirection(table?.attrs) === 'rtl';
+}
+
+/**
  * Returns the current cell rectangle within the table map.
  * @param {NonNullable<ReturnType<typeof getTableContext>>} context
  * @returns {{ map: TableMap, rect: ReturnType<TableMap['findCell']> }}
@@ -170,6 +181,16 @@ function getTableContext($head) {
 function getCellRect(context) {
   const map = TableMap.get(context.table);
   return { map, rect: map.findCell(context.cellStart - context.tableStart) };
+}
+
+/**
+ * Resolves direction in table coordinates, accounting for RTL visual order.
+ * @param {import('prosemirror-model').Node} table
+ * @param {-1 | 1} dir
+ * @returns {-1 | 1}
+ */
+function getEffectiveTableDir(table, dir) {
+  return isRtlTable(table) ? /** @type {-1 | 1} */ (-dir) : dir;
 }
 
 /**
@@ -192,42 +213,6 @@ function isFirstCellInTable(context) {
   if (!context) return false;
   const { rect } = getCellRect(context);
   return rect.left === 0 && rect.top === 0;
-}
-
-/**
- * Finds the first text position inside a node.
- * @param {import('prosemirror-model').Node} node
- * @param {number} nodePos
- * @returns {number | null}
- */
-function findFirstTextPosInNode(node, nodePos) {
-  if (node.isText) return nodePos;
-  for (let index = 0, offset = 0; index < node.childCount; index += 1) {
-    const child = node.child(index);
-    const childPos = nodePos + 1 + offset;
-    const found = findFirstTextPosInNode(child, childPos);
-    if (found != null) return found;
-    offset += child.nodeSize;
-  }
-  return null;
-}
-
-/**
- * Finds the last text position inside a node.
- * @param {import('prosemirror-model').Node} node
- * @param {number} nodePos
- * @returns {number | null}
- */
-function findLastTextPosInNode(node, nodePos) {
-  if (node.isText) return nodePos + (node.text?.length ?? 0);
-  for (let index = node.childCount - 1, offset = node.content.size; index >= 0; index -= 1) {
-    const child = node.child(index);
-    offset -= child.nodeSize;
-    const childPos = nodePos + 1 + offset;
-    const found = findLastTextPosInNode(child, childPos);
-    if (found != null) return found;
-  }
-  return null;
 }
 
 /**
@@ -332,7 +317,8 @@ export function getTableBoundaryExitSelection(state, dir) {
 
   const context = getTableContext(selection.$head);
   if (!context) return null;
-  const helpers = getDirectionHelpers(dir);
+  const effectiveDir = getEffectiveTableDir(context.table, dir);
+  const helpers = getDirectionHelpers(effectiveDir);
   if (!helpers.isEdgeParagraphInCell(selection.$head, context.cellDepth)) return null;
   if (!helpers.isAtParagraphBoundary(selection.$head)) return null;
   if (!helpers.isEdgeCellInTable(context)) return null;
@@ -342,7 +328,51 @@ export function getTableBoundaryExitSelection(state, dir) {
   if (targetPos != null) {
     return TextSelection.create(state.doc, targetPos);
   }
-  return findSelectionNearBoundary(state, boundaryPos, dir);
+  return findSelectionNearBoundary(state, boundaryPos, effectiveDir);
+}
+
+/**
+ * Computes intra-table horizontal navigation selection between adjacent cells.
+ * Returns null when native behavior should continue.
+ *
+ * @param {import('prosemirror-state').EditorState} state
+ * @param {-1 | 1} dir
+ * @param {boolean} expandSelection
+ * @returns {import('prosemirror-state').Selection | null}
+ */
+export function getIntraTableArrowSelection(state, dir, expandSelection) {
+  const selection = state.selection;
+  if (!selection.empty) return null;
+
+  const context = getTableContext(selection.$head);
+  if (!context) return null;
+  if (!isRtlTable(context.table)) return null;
+
+  const effectiveDir = getEffectiveTableDir(context.table, dir);
+  const helpers = getDirectionHelpers(effectiveDir);
+  if (!helpers.isEdgeParagraphInCell(selection.$head, context.cellDepth)) return null;
+  if (!helpers.isAtParagraphBoundary(selection.$head)) return null;
+
+  const { map } = getCellRect(context);
+  const currentCellRelativePos = context.cellStart - context.tableStart;
+  const nextCellRelativePos = map.nextCell(currentCellRelativePos, 'horiz', effectiveDir);
+  if (nextCellRelativePos == null) return null;
+
+  const nextCellAbsolutePos = context.tableStart + nextCellRelativePos;
+  if (expandSelection) {
+    return CellSelection.create(state.doc, context.cellStart, nextCellAbsolutePos);
+  }
+
+  const nextCellNode = state.doc.nodeAt(nextCellAbsolutePos);
+  if (!nextCellNode) return null;
+  const targetPos =
+    effectiveDir > 0
+      ? findFirstTextPosInNode(nextCellNode, nextCellAbsolutePos)
+      : findLastTextPosInNode(nextCellNode, nextCellAbsolutePos);
+  if (targetPos != null) {
+    return TextSelection.create(state.doc, targetPos);
+  }
+  return findSelectionNearBoundary(state, nextCellAbsolutePos, effectiveDir);
 }
 
 /**
@@ -369,16 +399,19 @@ export function getAdjacentTableEntrySelection(state, dir) {
   const adjacentNode = dir > 0 ? $boundary.nodeAfter : $boundary.nodeBefore;
 
   if (!adjacentNode || adjacentNode.type.spec.tableRole !== 'table') return null;
+  const effectiveDir = isRtlTable(adjacentNode) ? /** @type {-1 | 1} */ (-dir) : dir;
 
-  if (dir > 0) {
-    const targetPos = findFirstTextPosInNode(adjacentNode, boundaryPos);
+  const isAdjacentAfter = dir > 0;
+  const tablePos = isAdjacentAfter ? boundaryPos : boundaryPos - adjacentNode.nodeSize;
+
+  if (effectiveDir > 0) {
+    const targetPos = findFirstTextPosInNode(adjacentNode, tablePos);
     if (targetPos != null) {
       return TextSelection.create(state.doc, targetPos);
     }
-    return findSelectionNearBoundary(state, boundaryPos, 1);
+    return findSelectionNearBoundary(state, tablePos, 1);
   }
 
-  const tablePos = boundaryPos - adjacentNode.nodeSize;
   const targetPos = findLastTextPosInNode(adjacentNode, tablePos);
   if (targetPos != null) {
     return TextSelection.create(state.doc, targetPos);
@@ -408,7 +441,7 @@ export function createTableBoundaryNavigationPlugin() {
        */
       handleKeyDown(view, event) {
         if (event.defaultPrevented) return false;
-        if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
+        if (event.altKey || event.ctrlKey || event.metaKey) return false;
 
         if ((event.key === 'Backspace' || event.key === 'Delete') && isInProtectedTrailingTableParagraph(view.state)) {
           event.preventDefault();
@@ -417,8 +450,17 @@ export function createTableBoundaryNavigationPlugin() {
 
         const dir = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
         if (!dir) return false;
-
-        const nextSelection =
+        const context = getTableContext(view.state.selection.$head);
+        const allowShiftInRtlTable = Boolean(event.shiftKey && context && isRtlTable(context.table));
+        if (event.shiftKey && !allowShiftInRtlTable) return false;
+        let nextSelection = getIntraTableArrowSelection(view.state, /** @type {-1 | 1} */ (dir), event.shiftKey);
+        if (!nextSelection && event.shiftKey) {
+          // For Shift+Arrow in RTL tables, avoid collapsing outside table bounds.
+          // Let native behavior continue when we cannot extend to an adjacent cell.
+          return false;
+        }
+        nextSelection =
+          nextSelection ??
           getTableBoundaryExitSelection(view.state, /** @type {-1 | 1} */ (dir)) ??
           getAdjacentTableEntrySelection(view.state, /** @type {-1 | 1} */ (dir));
         if (!nextSelection) return false;

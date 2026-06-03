@@ -1,0 +1,37 @@
+name: Notify Labs of OSS changes
+
+on:
+  push:
+    branches:
+      - nick/sync
+
+permissions:
+  contents: read
+
+concurrency:
+  group: superdoc-oss-sync-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Dispatch to Labs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Create Labs App token
+        id: labs-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: superdoc-dev
+          repositories: labs
+
+      - name: Dispatch superdoc-oss-sync to Labs
+        env:
+          GH_TOKEN: ${{ steps.labs-token.outputs.token }}
+        run: |
+          gh api repos/superdoc-dev/labs/dispatches \
+            -f event_type=superdoc-oss-sync \
+            -F client_payload[sha]='${{ github.sha }}' \
+            -F client_payload[ref]='${{ github.ref_name }}'

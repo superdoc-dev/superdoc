@@ -78,18 +78,23 @@ const defaultDecisionFor = (permission, role, isInternal) => {
 };
 
 /**
- * Check if a role is allowed to perform a permission
+ * Check if a role is allowed to perform a permission. The resolver
+ * receives a `PermissionResolverParams`-shaped payload, so `context`
+ * here is the un-merged set of fields the caller knows about. Use
+ * lowercase `object` for the per-entity fields so SuperDoc class
+ * instances and structural objects both satisfy the parameter (capital
+ * `Object` excludes class instances under strict JSDoc inference).
  *
- * @param {String} permission The permission to check
- * @param {String} role The role to check
- * @param {Boolean} isInternal The internal/external flag
- * @param {Object} [context] Optional context used by the permission resolver
- * @param {Object} [context.comment] The comment/tracked change being evaluated
- * @param {Object} [context.superdoc] The superdoc instance
- * @param {Object} [context.currentUser] The active user object performing the action
+ * @param {string} permission The permission to check
+ * @param {string} role The role to check
+ * @param {boolean} isInternal The internal/external flag
+ * @param {object} [context] Optional context used by the permission resolver
+ * @param {object | null} [context.comment] The comment/tracked change being evaluated
+ * @param {object | null} [context.superdoc] The superdoc instance
+ * @param {object | null} [context.currentUser] The active user object performing the action
  * @param {Function} [context.permissionResolver] Explicit resolver override
- * @param {Object} [context.trackedChange] Tracked change metadata (for tracked-change permissions)
- * @returns {Boolean} True if the role is allowed to perform the permission
+ * @param {object | null} [context.trackedChange] Tracked change metadata (for tracked-change permissions)
+ * @returns {boolean} True if the role is allowed to perform the permission
  */
 export const isAllowed = (permission, role, isInternal, context = {}) => {
   const defaultDecision = defaultDecisionFor(permission, role, isInternal);

@@ -35,18 +35,28 @@
  *   - `rule1Allowlist`: bare `@superdoc/*` specifiers permitted in
  *     published d.ts. Currently only the legacy public super-editor
  *     surface per RFC Decision 1.
+ *   - `publicContract`: SD-3256 Phase 2. Tier metadata for every
+ *     `package.json#exports` subpath. Describes what each subpath is
+ *     (supported / legacy / asset / deprecated), not yet enforced.
+ *     `scripts/report-public-contract.mjs` prints this for review.
  *
  * Adding a new relocation: append one entry to `relocations` with the
  * package specifier, the dist target the rewriter should point at, and
  * the source-include patterns vite + tsconfig need. Every consumer picks
  * up the new entry without further edits.
+ *
+ * Adding a new public subpath: append an entry to `publicContract` with
+ * the correct tier. Keep it in sync with `package.json#exports`.
  */
 
 const requiredEntryPoints = [
   'superdoc/src/index.d.ts',
+  'superdoc/src/index.d.cts',
   'superdoc/src/super-editor.d.ts',
+  'superdoc/src/super-editor.d.cts',
   'super-editor/src/index.d.ts',
   'super-editor/src/types.d.ts',
+  'super-editor/src/types.d.cts',
 ];
 
 /**
@@ -123,36 +133,41 @@ const relocations = [
     viteIncludes: ['../layout-engine/painters/dom/src/**/*'],
     tsconfigIncludes: ['../layout-engine/painters/dom/src'],
   },
-  // pm-adapter: subpath-only. The full barrel pulls in @superdoc/style-engine
-  // and other internal packages that would re-expand the shim list.
-  {
-    pkg: '@superdoc/pm-adapter/converter-context.js',
-    distEntry: 'layout-engine/pm-adapter/src/converter-context.d.ts',
-    matchSubpaths: false,
-    viteIncludes: ['../layout-engine/pm-adapter/src/converter-context.ts'],
-    tsconfigIncludes: ['../layout-engine/pm-adapter/src/converter-context.ts'],
-  },
-  {
-    pkg: '@superdoc/pm-adapter/sections/types.js',
-    distEntry: 'layout-engine/pm-adapter/src/sections/types.d.ts',
-    matchSubpaths: false,
-    viteIncludes: ['../layout-engine/pm-adapter/src/sections/types.ts'],
-    tsconfigIncludes: ['../layout-engine/pm-adapter/src/sections/types.ts'],
-  },
+  // SD-3222: the v1 ProseMirror adapter (converter-context, sections/types)
+  // moved into @superdoc/super-editor (../super-editor/src), so its
+  // declarations are emitted as part of the super-editor source root in
+  // `baseTsconfigIncludes`. No standalone pm-adapter relocation is needed.
   // style-engine/ooxml: subpath-only. Includes the ooxml subtree plus the
   // sibling cascade.ts dependency it imports.
   {
     pkg: '@superdoc/style-engine/ooxml',
     distEntry: 'layout-engine/style-engine/src/ooxml/index.d.ts',
     matchSubpaths: false,
-    viteIncludes: [
-      '../layout-engine/style-engine/src/ooxml/**/*',
-      '../layout-engine/style-engine/src/cascade.ts',
-    ],
-    tsconfigIncludes: [
-      '../layout-engine/style-engine/src/ooxml',
-      '../layout-engine/style-engine/src/cascade.ts',
-    ],
+    viteIncludes: ['../layout-engine/style-engine/src/ooxml/**/*', '../layout-engine/style-engine/src/cascade.ts'],
+    tsconfigIncludes: ['../layout-engine/style-engine/src/ooxml', '../layout-engine/style-engine/src/cascade.ts'],
+  },
+  // SD-3222: the v1 layout-adapter (now under super-editor/src) surfaces a few
+  // bare type imports — `StyleContext`/`ComputedParagraphStyle` from
+  // `@superdoc/style-engine`, `ResolvedRunProperties` from
+  // `@superdoc/word-layout` — that the old narrow pm-adapter relocation kept off
+  // superdoc's emitted surface. Relocate the packages those types come from so
+  // the published d.ts point at bundled dist paths instead of leaking bare,
+  // unpublished `@superdoc/*` specifiers. Both have a bounded dependency
+  // closure: word-layout imports no `@superdoc/*`, and style-engine only pulls
+  // in already-relocated `@superdoc/contracts` and `@superdoc/style-engine/ooxml`.
+  {
+    pkg: '@superdoc/style-engine',
+    distEntry: 'layout-engine/style-engine/src/index.d.ts',
+    matchSubpaths: false,
+    viteIncludes: ['../layout-engine/style-engine/src/**/*'],
+    tsconfigIncludes: ['../layout-engine/style-engine/src'],
+  },
+  {
+    pkg: '@superdoc/word-layout',
+    distEntry: 'word-layout/src/index.d.ts',
+    matchSubpaths: true,
+    viteIncludes: ['../word-layout/src/**/*'],
+    tsconfigIncludes: ['../word-layout/src'],
   },
   // common/list-marker-utils and common (bare): emitted via tsc-postbuild
   // (see sharedCommonDtsTargets) because the source lives in shared/, which
@@ -173,6 +188,26 @@ const relocations = [
     viteIncludes: [], // emitted via sharedCommonDtsTargets tsc-postbuild
     tsconfigIncludes: [],
   },
+  // SD-3222: the v1 layout-adapter's list-helpers re-exports list-numbering
+  // utilities. Emit the leaf module via tsc-postbuild like list-marker-utils.
+  {
+    pkg: '@superdoc/common/list-numbering',
+    distEntry: 'shared/common/list-numbering/index.d.ts',
+    matchSubpaths: false,
+    viteIncludes: [], // emitted via sharedCommonDtsTargets tsc-postbuild
+    tsconfigIncludes: [],
+  },
+  // The font report types (FontResolutionRecord, FontLoadStatus, FontLoadSummary, ...)
+  // surface on `superdoc.fonts` / `fonts-changed`. font-system lives in shared/ like
+  // @superdoc/common, so it is emitted standalone via tsc-postbuild (ensure-types.cjs)
+  // rather than vite includes, which would shift the dts common-ancestor.
+  {
+    pkg: '@superdoc/font-system',
+    distEntry: 'shared/font-system/src/index.d.ts',
+    matchSubpaths: true,
+    viteIncludes: [], // emitted via the font-system tsc-postbuild in ensure-types
+    tsconfigIncludes: [],
+  },
 ];
 
 /**
@@ -184,6 +219,7 @@ const sharedCommonDtsTargets = [
   'list-marker-utils.ts',
   'layout-constants.ts', // dependency of list-marker-utils
   'comments-types.ts',
+  'list-numbering/index.ts', // SD-3222: re-exported by the v1 layout-adapter's list-helpers
 ];
 
 /**
@@ -199,10 +235,11 @@ const relocationGuardPackages = [
   '@superdoc/layout-bridge',
   '@superdoc/layout-engine',
   '@superdoc/painter-dom',
-  '@superdoc/pm-adapter',
   '@superdoc/style-engine',
+  '@superdoc/word-layout',
   '@superdoc/common',
   '@superdoc/common/list-marker-utils',
+  '@superdoc/common/list-numbering',
 ];
 
 /**
@@ -211,7 +248,11 @@ const relocationGuardPackages = [
  * forward-compat documentation; the SD-2942 removal made shim
  * generation a no-op.
  */
-const unshimmedPrivateSpecifiers = ['@superdoc/pm-adapter', '@superdoc/style-engine'];
+const unshimmedPrivateSpecifiers = [
+  '@superdoc/style-engine',
+  '@superdoc/word-layout',
+  '@superdoc/common/list-numbering',
+];
 
 /**
  * Bare `@superdoc/*` specifiers permitted in published d.ts beyond the
@@ -223,6 +264,66 @@ const rule1Allowlist = {
   '@superdoc/super-editor': 'legacy public surface (RFC Decision 1)',
 };
 
+/**
+ * SD-3256 Phase 2: tier metadata for every `package.json#exports`
+ * subpath. Describes what each entry is, not what CI enforces. No
+ * enforcement is wired up in this phase; the metadata exists so the
+ * team can review the classification before Phase 3 (./super-editor
+ * facade curation) and Phase 4 (ratchet against the tiers).
+ *
+ * Tier policies (target end state, not all enforced today):
+ *
+ *   - `supported`: fully typed, no `any`, no accidental internals;
+ *     supported-root strict gate hard-fails regressions. Routes
+ *     through `src/public/**`.
+ *   - `legacy`: must not grow accidentally; typed where supported;
+ *     can be deprecated or migrated over time; new APIs should not
+ *     be added here. Routes through `src/public/legacy/**`.
+ *   - `legacy-raw`: legacy public surface that does NOT yet route
+ *     through `src/public/legacy/**` (the export resolves directly
+ *     to a non-curated dist path). Only `./super-editor` today.
+ *     SD-3256 Phase 3 will curate this through
+ *     `src/public/legacy/super-editor.ts` after team alignment on
+ *     which exports stay public.
+ *   - `asset`: non-type asset (e.g. CSS). Not covered by the type
+ *     contract.
+ *   - `deprecated`: scheduled for removal. None today.
+ *
+ * The `internal` tier is implicit: anything not exported here is
+ * internal and not part of the consumer promise.
+ *
+ * Sync rule: keep this list aligned with `package.json#exports`.
+ * Adding a new export means adding an entry here too.
+ */
+const publicContract = {
+  supported: [
+    { subpath: '.', tier: 'supported', note: 'root facade; routes through src/public/index.ts' },
+    { subpath: './types', tier: 'supported', note: 'type-only facade; src/public/types.ts' },
+    { subpath: './ui', tier: 'supported', note: 'UI primitives; src/public/ui.ts' },
+    { subpath: './ui/react', tier: 'supported', note: 'React adapter; src/public/ui-react.ts' },
+  ],
+  legacy: [
+    { subpath: './converter', tier: 'legacy', note: 'src/public/legacy/converter.ts' },
+    { subpath: './docx-zipper', tier: 'legacy', note: 'src/public/legacy/docx-zipper.ts' },
+    { subpath: './file-zipper', tier: 'legacy', note: 'src/public/legacy/file-zipper.ts' },
+    { subpath: './headless-toolbar', tier: 'legacy', note: 'src/public/legacy/headless-toolbar.ts' },
+    { subpath: './headless-toolbar/react', tier: 'legacy', note: 'src/public/legacy/headless-toolbar-react.ts' },
+    { subpath: './headless-toolbar/vue', tier: 'legacy', note: 'src/public/legacy/headless-toolbar-vue.ts' },
+  ],
+  legacyRaw: [
+    {
+      subpath: './super-editor',
+      tier: 'legacy-raw',
+      note: 'resolves to dist/superdoc/src/super-editor.d.ts (not src/public/legacy/). SD-3256 Phase 3 will curate.',
+    },
+  ],
+  asset: [
+    { subpath: './style.css', tier: 'asset', note: 'CSS bundle; no types' },
+    { subpath: './style.layered.css', tier: 'asset', note: 'Layered CSS bundle; no types' },
+  ],
+  deprecated: [],
+};
+
 module.exports = {
   requiredEntryPoints,
   handwrittenDtsBlocklist,
@@ -232,4 +333,5 @@ module.exports = {
   relocationGuardPackages,
   unshimmedPrivateSpecifiers,
   rule1Allowlist,
+  publicContract,
 };

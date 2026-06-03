@@ -6,13 +6,22 @@
  * `const _real_X: AssertNotAny<X> = true` lines fail to compile if X
  * has collapsed. A missing export shows up as TS2305 on the import.
  *
- * THIS FILE IS GENERATED from the JSDoc @typedef block in
- * packages/superdoc/src/index.js. Edit the typedef block (or run
- *   node tests/consumer-typecheck/check-public-types.mjs --write
- * from the repo root, or `npm run check:types:write` from inside
- * tests/consumer-typecheck) and commit both. SD-2860's check script enforces
- * that the two stay in sync; a missing assertion fails CI with a message
- * pointing at this script.
+ * SD-3213a (post root facade flip): this file is no longer auto-generated
+ * from `packages/superdoc/src/index.js`'s typedef block — that file is no
+ * longer the canonical source of truth for the root contract after the
+ * SD-3212 PR C root types flip. The canonical root surface is now
+ * `packages/superdoc/src/public/index.ts`, locked by
+ * `tests/consumer-typecheck/snapshots/superdoc-root-exports.json` and
+ * classified at `tests/consumer-typecheck/snapshots/superdoc-root-classification.json`.
+ *
+ * When a new TYPE-ONLY root export lands (inDts true, inEsm/inCjs false
+ * in the classification), add a corresponding
+ * `import { X } from 'superdoc';` + `const _real_X: AssertNotAny<X> = true;`
+ * line below. The `check-all-public-types-fixture.mjs` gate derives the
+ * expected assertion set from the classification artifact and fails CI
+ * if any type-only export is missing here, so you cannot silently land a
+ * new root type without any-collapse coverage. The SD-2842 matrix
+ * scenarios then exercise this file to catch the actual any-collapses.
  */
 import type {
   BinaryData,
@@ -22,6 +31,7 @@ import type {
   BookmarkInfo,
   BoundingRect,
   CanObject,
+  CanPerformPermissionParams,
   ChainableCommandObject,
   ChainedCommand,
   CollaborationConfig,
@@ -43,6 +53,7 @@ import type {
   CoreCommandMap,
   DirectSurfaceRequest,
   DocRange,
+  Document,
   DocumentApi,
   DocumentMode,
   DocumentProtectionState,
@@ -74,7 +85,12 @@ import type {
   FindReplaceResolution,
   FlowBlock,
   FlowMode,
+  FontAssetUrlContext,
+  FontAssetUrlResolver,
   FontConfig,
+  FontResolutionRecord,
+  FontsChangedPayload,
+  FontsConfig,
   FontsResolvedPayload,
   ImageDeselectedEvent,
   ImageSelectedEvent,
@@ -91,6 +107,8 @@ import type {
   LinkPopoverContext,
   LinkPopoverResolution,
   LinkPopoverResolver,
+  AwarenessState,
+  AwarenessUser,
   ListDefinitionsPayload,
   Measure,
   Modules,
@@ -111,6 +129,7 @@ import type {
   PasswordPromptRenderContext,
   PasswordPromptResolution,
   PermissionParams,
+  PermissionResolverParams,
   PositionHit,
   PresenceOptions,
   PresentationEditorOptions,
@@ -146,7 +165,18 @@ import type {
   SelectionHandle,
   SelectionInfo,
   StoryLocator,
+  SuperDocAwarenessUpdatePayload,
+  SuperDocCommentsUpdatePayload,
+  SuperDocEditorPayload,
+  SuperDocExceptionEditorPayload,
+  SuperDocExceptionPayload,
+  SuperDocExceptionRestorePayload,
+  SuperDocExceptionStorePayload,
+  SuperDocFontsApi,
   SuperDocLayoutEngineOptions,
+  SuperDocLockedPayload,
+  SuperDocReadyPayload,
+  SuperDocState,
   SuperDocTelemetryConfig,
   SurfaceComponentProps,
   SurfaceFloatingPlacement,
@@ -161,6 +191,8 @@ import type {
   TextAddress,
   TextSegment,
   TextTarget,
+  TrackChangeAuthor,
+  TrackChangesAuthorColorsConfig,
   TrackChangesModuleConfig,
   TrackedChangeAddress,
   TrackedChangesMode,
@@ -189,6 +221,7 @@ const _real_BookmarkAddress: AssertNotAny<BookmarkAddress> = true;
 const _real_BookmarkInfo: AssertNotAny<BookmarkInfo> = true;
 const _real_BoundingRect: AssertNotAny<BoundingRect> = true;
 const _real_CanObject: AssertNotAny<CanObject> = true;
+const _real_CanPerformPermissionParams: AssertNotAny<CanPerformPermissionParams> = true;
 const _real_ChainableCommandObject: AssertNotAny<ChainableCommandObject> = true;
 const _real_ChainedCommand: AssertNotAny<ChainedCommand> = true;
 const _real_CollaborationConfig: AssertNotAny<CollaborationConfig> = true;
@@ -210,6 +243,7 @@ const _real_ContextMenuSection: AssertNotAny<ContextMenuSection> = true;
 const _real_CoreCommandMap: AssertNotAny<CoreCommandMap> = true;
 const _real_DirectSurfaceRequest: AssertNotAny<DirectSurfaceRequest> = true;
 const _real_DocRange: AssertNotAny<DocRange> = true;
+const _real_Document: AssertNotAny<Document> = true;
 const _real_DocumentApi: AssertNotAny<DocumentApi> = true;
 const _real_DocumentMode: AssertNotAny<DocumentMode> = true;
 const _real_DocumentProtectionState: AssertNotAny<DocumentProtectionState> = true;
@@ -241,7 +275,12 @@ const _real_FindReplaceRenderContext: AssertNotAny<FindReplaceRenderContext> = t
 const _real_FindReplaceResolution: AssertNotAny<FindReplaceResolution> = true;
 const _real_FlowBlock: AssertNotAny<FlowBlock> = true;
 const _real_FlowMode: AssertNotAny<FlowMode> = true;
+const _real_FontAssetUrlContext: AssertNotAny<FontAssetUrlContext> = true;
+const _real_FontAssetUrlResolver: AssertNotAny<FontAssetUrlResolver> = true;
 const _real_FontConfig: AssertNotAny<FontConfig> = true;
+const _real_FontResolutionRecord: AssertNotAny<FontResolutionRecord> = true;
+const _real_FontsChangedPayload: AssertNotAny<FontsChangedPayload> = true;
+const _real_FontsConfig: AssertNotAny<FontsConfig> = true;
 const _real_FontsResolvedPayload: AssertNotAny<FontsResolvedPayload> = true;
 const _real_ImageDeselectedEvent: AssertNotAny<ImageDeselectedEvent> = true;
 const _real_ImageSelectedEvent: AssertNotAny<ImageSelectedEvent> = true;
@@ -258,6 +297,8 @@ const _real_LayoutUpdatePayload: AssertNotAny<LayoutUpdatePayload> = true;
 const _real_LinkPopoverContext: AssertNotAny<LinkPopoverContext> = true;
 const _real_LinkPopoverResolution: AssertNotAny<LinkPopoverResolution> = true;
 const _real_LinkPopoverResolver: AssertNotAny<LinkPopoverResolver> = true;
+const _real_AwarenessState: AssertNotAny<AwarenessState> = true;
+const _real_AwarenessUser: AssertNotAny<AwarenessUser> = true;
 const _real_ListDefinitionsPayload: AssertNotAny<ListDefinitionsPayload> = true;
 const _real_Measure: AssertNotAny<Measure> = true;
 const _real_Modules: AssertNotAny<Modules> = true;
@@ -278,6 +319,7 @@ const _real_PasswordPromptHandle: AssertNotAny<PasswordPromptHandle> = true;
 const _real_PasswordPromptRenderContext: AssertNotAny<PasswordPromptRenderContext> = true;
 const _real_PasswordPromptResolution: AssertNotAny<PasswordPromptResolution> = true;
 const _real_PermissionParams: AssertNotAny<PermissionParams> = true;
+const _real_PermissionResolverParams: AssertNotAny<PermissionResolverParams> = true;
 const _real_PositionHit: AssertNotAny<PositionHit> = true;
 const _real_PresenceOptions: AssertNotAny<PresenceOptions> = true;
 const _real_PresentationEditorOptions: AssertNotAny<PresentationEditorOptions> = true;
@@ -313,7 +355,18 @@ const _real_SelectionCurrentInput: AssertNotAny<SelectionCurrentInput> = true;
 const _real_SelectionHandle: AssertNotAny<SelectionHandle> = true;
 const _real_SelectionInfo: AssertNotAny<SelectionInfo> = true;
 const _real_StoryLocator: AssertNotAny<StoryLocator> = true;
+const _real_SuperDocAwarenessUpdatePayload: AssertNotAny<SuperDocAwarenessUpdatePayload> = true;
+const _real_SuperDocCommentsUpdatePayload: AssertNotAny<SuperDocCommentsUpdatePayload> = true;
+const _real_SuperDocEditorPayload: AssertNotAny<SuperDocEditorPayload> = true;
+const _real_SuperDocExceptionEditorPayload: AssertNotAny<SuperDocExceptionEditorPayload> = true;
+const _real_SuperDocExceptionPayload: AssertNotAny<SuperDocExceptionPayload> = true;
+const _real_SuperDocExceptionRestorePayload: AssertNotAny<SuperDocExceptionRestorePayload> = true;
+const _real_SuperDocExceptionStorePayload: AssertNotAny<SuperDocExceptionStorePayload> = true;
+const _real_SuperDocFontsApi: AssertNotAny<SuperDocFontsApi> = true;
 const _real_SuperDocLayoutEngineOptions: AssertNotAny<SuperDocLayoutEngineOptions> = true;
+const _real_SuperDocLockedPayload: AssertNotAny<SuperDocLockedPayload> = true;
+const _real_SuperDocReadyPayload: AssertNotAny<SuperDocReadyPayload> = true;
+const _real_SuperDocState: AssertNotAny<SuperDocState> = true;
 const _real_SuperDocTelemetryConfig: AssertNotAny<SuperDocTelemetryConfig> = true;
 const _real_SurfaceComponentProps: AssertNotAny<SurfaceComponentProps> = true;
 const _real_SurfaceFloatingPlacement: AssertNotAny<SurfaceFloatingPlacement> = true;
@@ -328,6 +381,8 @@ const _real_TelemetryEvent: AssertNotAny<TelemetryEvent> = true;
 const _real_TextAddress: AssertNotAny<TextAddress> = true;
 const _real_TextSegment: AssertNotAny<TextSegment> = true;
 const _real_TextTarget: AssertNotAny<TextTarget> = true;
+const _real_TrackChangeAuthor: AssertNotAny<TrackChangeAuthor> = true;
+const _real_TrackChangesAuthorColorsConfig: AssertNotAny<TrackChangesAuthorColorsConfig> = true;
 const _real_TrackChangesModuleConfig: AssertNotAny<TrackChangesModuleConfig> = true;
 const _real_TrackedChangeAddress: AssertNotAny<TrackedChangeAddress> = true;
 const _real_TrackedChangesMode: AssertNotAny<TrackedChangesMode> = true;

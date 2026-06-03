@@ -114,7 +114,23 @@ export type ParagraphDirectionContext = {
  * w:bdo (§17.3.2.3 override).
  */
 export type RunBidiContext = {
-  /** w:rPr/w:rtl. Forces complex-script formatting; see RunScriptContext. */
+  /**
+   * w:rPr/w:rtl. Preserves the source OOXML signal that the run carries
+   * the `w:rtl` flag. Per §17.3.2.30, `w:rtl` does two things at the model
+   * level:
+   *   1. Forces the complex-script formatting stack (bCs, iCs, szCs,
+   *      rFonts/@cs). See RunScriptContext for the formatting half.
+   *   2. Acts as a Character Directionality Override for weak/neutral
+   *      characters in the run (NOT a forced visual flip of strong-LTR text;
+   *      §17.3.2.30 explicitly says behavior on strong-LTR is unspecified).
+   *
+   * `rtl: true` is the source signal, NOT a directive that every consumer
+   * must project to `dir="rtl"` in the rendered DOM. The painter decides
+   * the DOM projection per its Word-parity rules (see
+   * `features/inline-direction/resolveRunDirectionAttribute`). Exporters
+   * must preserve `rtl: true` on round-trip regardless of paint decisions,
+   * since dropping it would lose the source `w:rPr/w:rtl` semantics.
+   */
   rtl: boolean;
   /** w:dir; bidi embedding direction (RLE/LRE). Wave 1c. */
   embedding?: BaseDirection;
@@ -134,8 +150,88 @@ export type RunBidiContext = {
  * with the CS or Latin stack).
  */
 export type RunScriptContext = {
-  /** w:rPr/w:cs. Forces complex-script formatting regardless of Unicode. */
-  complexScript: boolean;
-  /** w:rPr/w:lang/@bidi. Complex-script language metadata (spellcheck). */
-  language?: string;
+  /**
+   * w:rPr/w:cs (§17.3.2.7). Forces complex-script formatting regardless of Unicode.
+   * Per the spec, absence != false: when omitted, the value inherits from the style
+   * hierarchy and ultimately falls back to Unicode-based script detection. Only set
+   * this field when the source explicitly carries w:cs - leave undefined otherwise so
+   * downstream consumers can distinguish "not set" from "explicitly off".
+   */
+  complexScript?: boolean;
+  /**
+   * Per-script language metadata, kept on separate fields per ECMA §17.3.2.20
+   * because each maps to a different formatting stack (Latin / CS / East Asian).
+   * Wave 1b consumes these to gate spellcheck and font-stack selection.
+   */
+  language?: {
+    /** w:rPr/w:lang/@val. Default (Latin) language tag. */
+    default?: string;
+    /** w:rPr/w:lang/@bidi. Complex-script language tag. */
+    complexScript?: string;
+    /** w:rPr/w:lang/@eastAsia. East Asian language tag. */
+    eastAsian?: string;
+  };
 };
+
+/**
+ * Read a paragraph's inline base direction from its attributes.
+ *
+ * Prefers the resolved {@link ParagraphDirectionContext} (SD-2776) when
+ * present. Falls back to `paragraphProperties.rightToLeft` for PM-node /
+ * editor paths that store direction on the raw OOXML properties rather
+ * than the typed direction context.
+ *
+ * Consumers should call this instead of inspecting attrs ad hoc so the
+ * direction source check stays in one place.
+ */
+export function getParagraphInlineDirection(
+  attrs:
+    | {
+        directionContext?: { inlineDirection?: BaseDirection | null } | null;
+        paragraphProperties?: { rightToLeft?: boolean | null } | null;
+      }
+    | null
+    | undefined,
+): BaseDirection | undefined {
+  const fromContext = attrs?.directionContext?.inlineDirection;
+  if (fromContext != null) return fromContext;
+  const ppRtl = attrs?.paragraphProperties?.rightToLeft;
+  if (ppRtl === true) return 'rtl';
+  if (ppRtl === false) return 'ltr';
+  return undefined;
+}
+
+/**
+ * Read a table's visual direction (cell ordering axis) from its attributes.
+ *
+ * Prefers the resolved {@link TableDirectionContext} when present, falls
+ * back to the legacy `tableProperties.rightToLeft` (or `bidiVisual` alias)
+ * for compatibility. The AIDEV-NOTE on the fallback branch names the
+ * retirement signal.
+ *
+ * Per ECMA-376 §17.4.1, `w:bidiVisual` affects only cell ordering and
+ * table-visual properties. Cell paragraph inline direction is independent;
+ * use {@link getParagraphInlineDirection} for that axis.
+ *
+ * Consumers should call this instead of reading `tableProperties.rightToLeft`
+ * directly so the source check stays in one place and the resolver can take
+ * over once pm-adapter populates `tableDirectionContext` everywhere.
+ */
+export function getTableVisualDirection(
+  attrs:
+    | {
+        tableDirectionContext?: { visualDirection?: BaseDirection | null } | null;
+        tableProperties?: { rightToLeft?: boolean | null; bidiVisual?: boolean | null } | null;
+      }
+    | null
+    | undefined,
+): BaseDirection | undefined {
+  const fromContext = attrs?.tableDirectionContext?.visualDirection;
+  if (fromContext != null) return fromContext;
+  // AIDEV-NOTE: compat-fallback - used when TableAttrs.tableDirectionContext is absent.
+  // Retire once pm-adapter writes the resolved context onto every TableAttrs site.
+  const tp = attrs?.tableProperties;
+  if (tp?.rightToLeft === true || tp?.bidiVisual === true) return 'rtl';
+  if (tp?.rightToLeft === false || tp?.bidiVisual === false) return 'ltr';
+  return undefined;
+}

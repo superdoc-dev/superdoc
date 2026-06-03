@@ -74,6 +74,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     insert: (input, options) => api.insert(input, options),
     replace: (input, options) => api.replace(input, options),
     delete: (input, options) => api.delete(input, options),
+    formatRange: (input, options) => api.formatRange(input, options),
 
     // --- blocks.* ---
     'blocks.list': (input) => api.blocks.list(input),
@@ -530,5 +531,20 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'permissionRanges.create': (input, options) => api.permissionRanges.create(input, options),
     'permissionRanges.remove': (input, options) => api.permissionRanges.remove(input, options),
     'permissionRanges.updatePrincipal': (input, options) => api.permissionRanges.updatePrincipal(input, options),
+
+    // --- customXml.parts.* ---
+    'customXml.parts.list': (input) => api.customXml.parts.list(input),
+    'customXml.parts.get': (input) => api.customXml.parts.get(input),
+    'customXml.parts.create': (input, options) => api.customXml.parts.create(input, options),
+    'customXml.parts.patch': (input, options) => api.customXml.parts.patch(input, options),
+    'customXml.parts.remove': (input, options) => api.customXml.parts.remove(input, options),
+
+    // --- metadata.* (anchored metadata) ---
+    'metadata.attach': (input, options) => api.metadata.attach(input, options),
+    'metadata.list': (input) => api.metadata.list(input),
+    'metadata.get': (input) => api.metadata.get(input),
+    'metadata.update': (input, options) => api.metadata.update(input, options),
+    'metadata.remove': (input, options) => api.metadata.remove(input, options),
+    'metadata.resolve': (input) => api.metadata.resolve(input),
   };
 }

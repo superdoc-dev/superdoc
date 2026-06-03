@@ -1,12 +1,14 @@
 /**
  * Consumer typecheck: realistic Config with `modules.*` pass-through fields.
  *
- * The runtime spreads consumer-provided module configs into downstream
- * stores (comments-store, SuperToolbar, etc.), so each `modules.X` shape
- * is intentionally open: typed fields for IDE help on documented options,
+ * The runtime spreads many consumer-provided module configs into downstream
+ * stores (comments-store, SuperToolbar, etc.), so those `modules.X` shapes
+ * are intentionally open: typed fields for IDE help on documented options,
  * plus an index-signature intersection to accept additional keys that the
  * runtime forwards. This fixture pins that contract so a future PR cannot
- * silently re-narrow these into closed object literals.
+ * silently re-narrow them into closed object literals. Configs that forward
+ * nothing (e.g. `contentControls`, with a single real option) are instead
+ * intentionally exact; this fixture pins that shape too.
  *
  * Past regressions covered here:
  *   - SD-2869 review pass flagged `Modules.comments` rejecting
@@ -17,7 +19,7 @@
  *   - SD-2869 review pass flagged `onAwarenessUpdate.states` narrowed from
  *     JSDoc `Array` (= `any[]`) to `unknown[]`.
  */
-import type { Config } from 'superdoc';
+import type { Config, AwarenessState } from 'superdoc';
 
 // A realistic config with the documented fields plus the pass-through extras
 // the runtime accepts. If any of these stops compiling under strict mode,
@@ -65,6 +67,15 @@ const config: Config = {
       // and comments-store).
       useInternalExternalComments: true,
       suppressInternalExternalComments: false,
+    },
+
+    // Documented field: built-in SDT chrome mode (SD-3159). A consumer must be
+    // able to set the union value and get IDE help on it. Unlike the other
+    // module configs in this fixture, contentControls is exact (no pass-through
+    // index signature): it has a single real runtime option, so an unknown key
+    // is a typo to catch, not a forwarded setting.
+    contentControls: {
+      chrome: 'none',
     },
 
     ai: {
@@ -121,17 +132,26 @@ const config: Config = {
     whiteboard: false, // disable sentinel — must compile
   },
 
-  // Awareness handler reads concrete fields off each state. The JSDoc
-  // original typed `states` as `Array` (= `any[]`); the conversion
-  // preserved that. If a future change narrows to `unknown[]`, this access
-  // breaks under strict mode.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAwarenessUpdate: ({ states }: { states: any[] }) => {
+  // Awareness handler reads concrete fields off each state. SD-2834
+  // promoted `states` from `any[]` to a public `AwarenessState` type
+  // (which extends `User`, since the runtime helper
+  // `awarenessStatesToArray` spreads user fields at the top level via
+  // `{ clientId, ...value.user, color }`). Consumers get IntelliSense
+  // on the flattened fields (`name`, `email`, `clientId`, `color`)
+  // without giving up the pass-through index signature for
+  // application-specific keys.
+  onAwarenessUpdate: ({ states }: { states: AwarenessState[] }) => {
     for (const state of states) {
-      const userId = state?.user?.id;
-      const clientId = state?.clientId;
-      void userId;
+      const userName = state.name;
+      const userEmail = state.email;
+      const clientId = state.clientId;
+      const userColor = state.color;
+      const customField = state['customField']; // index signature still works
+      void userName;
+      void userEmail;
       void clientId;
+      void userColor;
+      void customField;
     }
   },
 };

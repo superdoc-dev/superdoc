@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.32.0",
+  "version": "1.38.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -19,101 +19,109 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/superdoc/src/index.d.ts",
+      "types": {
+        "import": "./dist/superdoc/src/public/index.d.ts",
+        "require": "./dist/superdoc/src/public/index.d.cts"
+      },
       "source": "./src/index.js",
       "import": "./dist/superdoc.es.js",
       "require": "./dist/superdoc.cjs"
     },
     "./types": {
-      "types": "./dist/super-editor/src/types.d.ts",
+      "types": {
+        "import": "./dist/superdoc/src/public/types.d.ts",
+        "require": "./dist/superdoc/src/public/types.d.cts"
+      },
       "source": "./src/types.ts",
       "import": "./dist/types.es.js",
       "require": "./dist/types.cjs"
     },
     "./converter": {
-      "types": "./dist/super-editor/src/editors/v1/core/super-converter/SuperConverter.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/converter.d.ts",
       "import": "./dist/super-editor/converter.es.js"
     },
     "./docx-zipper": {
-      "types": "./dist/super-editor/src/editors/v1/core/DocxZipper.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/docx-zipper.d.ts",
       "import": "./dist/super-editor/docx-zipper.es.js"
     },
     "./super-editor": {
+      "types": {
+        "import": "./dist/superdoc/src/super-editor.d.ts",
+        "require": "./dist/superdoc/src/super-editor.d.cts"
+      },
       "source": "./src/super-editor.js",
-      "types": "./dist/superdoc/src/super-editor.d.ts",
       "import": "./dist/super-editor.es.js",
       "require": "./dist/super-editor.cjs"
     },
     "./headless-toolbar": {
-      "types": "./dist/superdoc/src/headless-toolbar.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/headless-toolbar.d.ts",
       "source": "./src/headless-toolbar.js",
       "import": "./dist/headless-toolbar.es.js"
     },
     "./ui": {
-      "types": "./dist/superdoc/src/ui.d.ts",
+      "types": "./dist/superdoc/src/public/ui.d.ts",
       "source": "./src/ui.js",
       "import": "./dist/ui.es.js"
     },
     "./ui/react": {
-      "types": "./dist/superdoc/src/ui-react.d.ts",
+      "types": "./dist/superdoc/src/public/ui-react.d.ts",
       "source": "./src/ui-react.js",
       "import": "./dist/ui-react.es.js"
     },
     "./headless-toolbar/react": {
-      "types": "./dist/superdoc/src/headless-toolbar-react.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/headless-toolbar-react.d.ts",
       "source": "./src/headless-toolbar-react.js",
       "import": "./dist/headless-toolbar-react.es.js"
     },
     "./headless-toolbar/vue": {
-      "types": "./dist/superdoc/src/headless-toolbar-vue.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/headless-toolbar-vue.d.ts",
       "source": "./src/headless-toolbar-vue.js",
       "import": "./dist/headless-toolbar-vue.es.js"
     },
     "./file-zipper": {
-      "types": "./dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts",
+      "types": "./dist/superdoc/src/public/legacy/file-zipper.d.ts",
       "import": "./dist/super-editor/file-zipper.es.js"
     },
-    "./style.css": "./dist/style.css"
+    "./style.css": "./dist/style.css",
+    "./style.layered.css": "./dist/style.layered.css"
   },
-  "types": "./dist/superdoc/src/index.d.ts",
+  "types": "./dist/superdoc/src/public/index.d.ts",
   "typesVersions": {
     "*": {
       "headless-toolbar": [
-        "./dist/superdoc/src/headless-toolbar.d.ts"
+        "./dist/superdoc/src/public/legacy/headless-toolbar.d.ts"
       ],
       "ui": [
-        "./dist/superdoc/src/ui.d.ts"
+        "./dist/superdoc/src/public/ui.d.ts"
       ],
       "ui/react": [
-        "./dist/superdoc/src/ui-react.d.ts"
+        "./dist/superdoc/src/public/ui-react.d.ts"
       ],
       "headless-toolbar/react": [
-        "./dist/superdoc/src/headless-toolbar-react.d.ts"
+        "./dist/superdoc/src/public/legacy/headless-toolbar-react.d.ts"
       ],
       "headless-toolbar/vue": [
-        "./dist/superdoc/src/headless-toolbar-vue.d.ts"
+        "./dist/superdoc/src/public/legacy/headless-toolbar-vue.d.ts"
       ],
       "super-editor": [
         "./dist/superdoc/src/super-editor.d.ts"
       ],
       "types": [
-        "./dist/super-editor/src/types.d.ts"
+        "./dist/superdoc/src/public/types.d.ts"
       ],
       "converter": [
-        "./dist/super-editor/src/editors/v1/core/super-converter/SuperConverter.d.ts"
+        "./dist/superdoc/src/public/legacy/converter.d.ts"
       ],
       "docx-zipper": [
-        "./dist/super-editor/src/editors/v1/core/DocxZipper.d.ts"
+        "./dist/superdoc/src/public/legacy/docx-zipper.d.ts"
       ],
       "file-zipper": [
-        "./dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts"
+        "./dist/superdoc/src/public/legacy/file-zipper.d.ts"
       ]
     }
   },
   "main": "./dist/superdoc.cjs",
   "module": "./dist/superdoc.es.js",
-  "unpkg": "./dist/superdoc.min.js",
-  "jsdelivr": "./dist/superdoc.min.js",
   "scripts": {
     "dev": "concurrently -k -n VITE,WORD -c cyan,magenta \"vite\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
     "dev:collab": "concurrently -k -n VITE,COLLAB,WORD -c cyan,green,magenta \"vite\" \"pnpm run collab-server\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
@@ -121,7 +129,7 @@
     "word-benchmark-sidecar": "node ../../devtools/word-benchmark-sidecar/server.js",
     "build": "vite build && pnpm run build:cdn",
     "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
-    "postbuild": "node ./scripts/check-tsconfig-type-surface.cjs && node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs && node ./scripts/audit-declarations.cjs && node ./scripts/check-export-coverage.cjs && node ./scripts/report-declaration-reachability.cjs",
+    "postbuild": "node ./scripts/check-tsconfig-type-surface.cjs && node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs && node ./scripts/audit-declarations.cjs && node ./scripts/check-export-coverage.cjs && node ./scripts/verify-public-facade-emit.cjs && node ./scripts/report-declaration-reachability.cjs",
     "audit:declarations": "node ./scripts/audit-declarations.cjs",
     "audit:declarations:informational": "node ./scripts/audit-declarations.cjs --informational",
     "check:jsdoc": "node ./scripts/check-jsdoc.cjs",
@@ -130,7 +138,9 @@
     "build:cdn": "vite build --config vite.config.cdn.js",
     "watch:cdn": "vite build --watch --config vite.config.cdn.js",
     "clean": "rm -rf dist",
-    "pack:local": "pnpm run pack",
+    "prepack": "node ./scripts/sanitize-pack-manifest.cjs prepare",
+    "postpack": "node ./scripts/sanitize-pack-manifest.cjs restore",
+    "pack:local": "pnpm run pack:es",
     "pack": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
     "pack:es": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
     "test": "vitest"
@@ -185,6 +195,7 @@
     "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
     "@types/uuid": "catalog:",
     "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",

@@ -1,5 +1,7 @@
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
+import { prepareTableOfContentsInsertion } from '../../document-api-adapters/plan-engine/toc-wrappers.js';
+import { resolveTableOfContentsCreateLocation } from './table-of-contents-insertion.js';
 
 export const TableOfContents = Node.create({
   name: 'tableOfContents',
@@ -50,37 +52,68 @@ export const TableOfContents = Node.create({
       );
     };
 
-    return {
-      /**
-       * Insert a tableOfContents node at the given document position.
-       * @param {{ pos: number, instruction?: string, sdBlockId?: string, content?: object[], rightAlignPageNumbers?: boolean }} options
-       */
-      insertTableOfContentsAt:
-        (options) =>
-        ({ tr, dispatch, state }) => {
-          const { pos, instruction = '', sdBlockId = null, content, rightAlignPageNumbers } = options;
-          const tocType = this.editor.schema.nodes.tableOfContents;
-          if (!tocType) return false;
+    /**
+     * Insert a tableOfContents node at the given document position.
+     * @param {{ pos: number, instruction?: string, sdBlockId?: string, content?: object[], rightAlignPageNumbers?: boolean }} options
+     */
+    const insertTableOfContentsAt =
+      (options) =>
+      ({ tr, dispatch, state }) => {
+        const { pos, instruction = '', sdBlockId = null, content, rightAlignPageNumbers } = options;
+        const tocType = this.editor.schema.nodes.tableOfContents;
+        if (!tocType) return false;
 
-          const paragraphType = this.editor.schema.nodes.paragraph;
-          const defaultContent = [
-            paragraphType.create({}, this.editor.schema.text('Update table of contents to populate entries.')),
-          ];
-          const materializedContent = normalizeTocContent(content, state.schema) ?? defaultContent;
-          const attrs = { instruction, sdBlockId };
-          if (rightAlignPageNumbers !== undefined) attrs.rightAlignPageNumbers = rightAlignPageNumbers;
-          const tocNode = tocType.create(attrs, materializedContent);
+        const paragraphType = this.editor.schema.nodes.paragraph;
+        const defaultContent = [
+          paragraphType.create({}, this.editor.schema.text('Update table of contents to populate entries.')),
+        ];
+        const materializedContent = normalizeTocContent(content, state.schema) ?? defaultContent;
+        const attrs = { instruction, sdBlockId };
+        if (rightAlignPageNumbers !== undefined) attrs.rightAlignPageNumbers = rightAlignPageNumbers;
+        const tocNode = tocType.create(attrs, materializedContent);
 
-          try {
-            if (dispatch) {
-              tr.insert(pos, tocNode);
-            }
-            return true;
-          } catch (error) {
-            if (error instanceof RangeError) return false;
-            throw error;
+        try {
+          if (dispatch) {
+            tr.insert(pos, tocNode);
           }
-        },
+          return true;
+        } catch (error) {
+          if (error instanceof RangeError) return false;
+          throw error;
+        }
+      };
+
+    return {
+      insertTableOfContentsAt,
+
+      /**
+       * Inserts a TOC after the innermost block at the selection, or at document
+       * end when none qualifies. Uses the same materialization as
+       * `create.tableOfContents`, applied on the **current command transaction**
+       * (must not call `editor.doc.create` here — nested dispatches cause
+       * "Applying a mismatched transaction").
+       */
+      insertTableOfContents: () => (props) => {
+        const { editor } = props;
+
+        let prepared;
+        try {
+          const at = resolveTableOfContentsCreateLocation(editor);
+          prepared = prepareTableOfContentsInsertion(editor, { at });
+        } catch {
+          return false;
+        }
+
+        return insertTableOfContentsAt({
+          pos: prepared.pos,
+          instruction: prepared.instruction,
+          sdBlockId: prepared.sdBlockId,
+          content: prepared.content,
+          ...(prepared.rightAlignPageNumbers !== undefined
+            ? { rightAlignPageNumbers: prepared.rightAlignPageNumbers }
+            : {}),
+        })(props);
+      },
 
       /**
        * Update the instruction attribute of a tableOfContents node by sdBlockId.

@@ -14,6 +14,32 @@ describe('mapInvokeError', () => {
     expect(mapped.message).toBe('blocks.delete requires a target.');
     expect(mapped.details).toEqual({ operationId: 'blocks.delete', details: { field: 'target' } });
   });
+
+  test('preserves TARGET_NOT_FOUND for trackChanges.decide stale ids', () => {
+    const error = Object.assign(new Error('Tracked change "tc-1" was not found.'), {
+      code: 'TARGET_NOT_FOUND',
+      details: { id: 'tc-1' },
+    });
+
+    const mapped = mapInvokeError('trackChanges.decide' as any, error);
+    expect(mapped.code).toBe('TARGET_NOT_FOUND');
+    expect(mapped.details).toEqual({ operationId: 'trackChanges.decide', details: { id: 'tc-1' } });
+  });
+
+  test('keeps track-changes accept/reject helper missing ids backward compatible', () => {
+    const error = Object.assign(new Error('Tracked change "tc-1" was not found.'), {
+      code: 'TARGET_NOT_FOUND',
+      details: { id: 'tc-1' },
+    });
+
+    const accept = mapInvokeError('trackChanges.decide' as any, error, { commandName: 'track-changes accept' });
+    const reject = mapInvokeError('trackChanges.decide' as any, error, { commandName: 'track-changes reject' });
+    const canonical = mapInvokeError('trackChanges.decide' as any, error, { commandName: 'track-changes decide' });
+
+    expect(accept.code).toBe('TRACK_CHANGE_NOT_FOUND');
+    expect(reject.code).toBe('TRACK_CHANGE_NOT_FOUND');
+    expect(canonical.code).toBe('TARGET_NOT_FOUND');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -203,6 +229,24 @@ describe('mapFailedReceipt: plan-engine code passthrough', () => {
     const result = mapFailedReceipt(operationId, { success: false });
     expect(result).toBeInstanceOf(CliError);
     expect(result!.code).toBe('COMMAND_FAILED');
+  });
+
+  test('maps helper trackChanges.decide TARGET_NOT_FOUND receipts to TRACK_CHANGE_NOT_FOUND', () => {
+    const receipt = {
+      success: false,
+      failure: {
+        code: 'TARGET_NOT_FOUND',
+        message: 'Tracked change "tc-1" was not found.',
+      },
+    };
+
+    const helper = mapFailedReceipt('trackChanges.decide' as any, receipt, { commandName: 'track-changes accept' });
+    const canonical = mapFailedReceipt('trackChanges.decide' as any, receipt, {
+      commandName: 'track-changes decide',
+    });
+
+    expect(helper?.code).toBe('TRACK_CHANGE_NOT_FOUND');
+    expect(canonical?.code).toBe('TARGET_NOT_FOUND');
   });
 
   test('plan-engine code MATCH_NOT_FOUND passes through with structured details', () => {

@@ -78,8 +78,10 @@ const renameTextElementsForDeletion = (node) => {
   if (Array.isArray(node.elements)) node.elements.forEach(renameTextElementsForDeletion);
 };
 
-export const ensureTrackedWrapper = (runs, trackingMarksByType = new Map()) => {
+export const ensureTrackedWrapper = (runs, trackingMarksByType = new Map(), options = {}) => {
   if (!Array.isArray(runs) || !runs.length) return runs;
+
+  const { isFinalDoc = false } = options;
 
   const firstRun = runs[0];
   if (firstRun?.name === 'w:ins' || firstRun?.name === 'w:del') {
@@ -89,6 +91,9 @@ export const ensureTrackedWrapper = (runs, trackingMarksByType = new Map()) => {
   if (!trackingMarksByType.size) return runs;
 
   if (trackingMarksByType.has(TrackInsertMarkName)) {
+    if (isFinalDoc) {
+      return runs;
+    }
     const mark = trackingMarksByType.get(TrackInsertMarkName);
     const clonedRuns = cloneRuns(runs);
     const wrapper = {
@@ -108,6 +113,9 @@ export const ensureTrackedWrapper = (runs, trackingMarksByType = new Map()) => {
   }
 
   if (trackingMarksByType.has(TrackDeleteMarkName)) {
+    if (isFinalDoc) {
+      return [];
+    }
     const mark = trackingMarksByType.get(TrackDeleteMarkName);
     const clonedRuns = cloneRuns(runs);
     clonedRuns.forEach(renameTextElementsForDeletion);

@@ -2,6 +2,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import { TrackInsertMarkName, TrackDeleteMarkName } from '../constants.js';
 import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
+import {
+  getCurrentUserIdentity,
+  getChangeAuthorIdentity,
+  matchesSameUserRefinement,
+} from '../review-model/identity.js';
 
 /**
  * Mark insertion.
@@ -17,6 +22,7 @@ import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
 export const markInsertion = ({ tr, from, to, user, date, id: providedId }) => {
   tr.removeMark(from, to, tr.doc.type.schema.marks[TrackDeleteMarkName]);
   tr.removeMark(from, to, tr.doc.type.schema.marks[TrackInsertMarkName]);
+  const currentIdentity = getCurrentUserIdentity({ options: { user } });
 
   const trackedMark =
     /** @type {{ from: number, to: number, mark: import('prosemirror-model').Mark } | null | undefined} */ (
@@ -25,7 +31,11 @@ export const markInsertion = ({ tr, from, to, user, date, id: providedId }) => {
         from,
         to,
         markName: TrackInsertMarkName,
-        attrs: { authorEmail: user.email || '' },
+        predicate: (mark) =>
+          matchesSameUserRefinement({
+            currentUser: currentIdentity,
+            change: getChangeAuthorIdentity(mark),
+          }),
       })
     );
 
@@ -42,6 +52,7 @@ export const markInsertion = ({ tr, from, to, user, date, id: providedId }) => {
   const insertionMark = tr.doc.type.schema.marks[TrackInsertMarkName].create({
     id,
     author: user.name || '',
+    authorId: user.id || '',
     authorEmail: user.email || '',
     authorImage: user.image || '',
     date,

@@ -49,6 +49,7 @@ import {
   trackChangesRejectWrapper,
   trackChangesAcceptAllWrapper,
   trackChangesRejectAllWrapper,
+  trackChangesDecideRangeWrapper,
 } from './plan-engine/track-changes-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from './plan-engine/create-wrappers.js';
 import { blocksListWrapper, blocksDeleteWrapper, blocksDeleteRangeWrapper } from './plan-engine/blocks-wrappers.js';
@@ -256,6 +257,8 @@ import {
   bookmarksRenameWrapper,
   bookmarksRemoveWrapper,
 } from './plan-engine/bookmark-wrappers.js';
+import { createCustomXmlPartsAdapter } from './plan-engine/custom-xml-wrappers.js';
+import { createAnchoredMetadataAdapter } from './plan-engine/anchored-metadata-wrappers.js';
 import {
   protectionGetAdapter,
   protectionSetEditingRestrictionAdapter,
@@ -441,6 +444,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       reject: (input, options) => trackChangesRejectWrapper(editor, input, options),
       acceptAll: (input, options) => trackChangesAcceptAllWrapper(editor, input, options),
       rejectAll: (input, options) => trackChangesRejectAllWrapper(editor, input, options),
+      decideRange: (input, options) => trackChangesDecideRangeWrapper(editor, input, options),
     },
     blocks: {
       list: (input) => blocksListWrapper(editor, input),
@@ -645,6 +649,10 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       rename: (input, options) => bookmarksRenameWrapper(editor, input, options),
       remove: (input, options) => bookmarksRemoveWrapper(editor, input, options),
     },
+    customXml: {
+      parts: createCustomXmlPartsAdapter(editor),
+    },
+    metadata: createAnchoredMetadataAdapter(editor),
     footnotes: {
       list: (query) => footnotesListWrapper(editor, query),
       get: (input) => footnotesGetWrapper(editor, input),

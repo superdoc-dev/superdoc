@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { toFlowBlocks } from './test-helpers/to-flow-blocks.js';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type { FlowBlock, PMNode, SectionBreakBlock, Measure } from '@superdoc/contracts';
@@ -33,7 +33,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * @returns ProseMirror document
  */
 function loadPMJsonFixture(fixtureName: string): PMNode {
-  const fixturePath = path.join(__dirname, '../../pm-adapter/src/fixtures', fixtureName);
+  const fixturePath = path.join(
+    __dirname,
+    '../../../super-editor/src/editors/v1/core/layout-adapter/fixtures',
+    fixtureName,
+  );
 
   if (!fs.existsSync(fixturePath)) {
     throw new Error(`Fixture not found: ${fixturePath}`);

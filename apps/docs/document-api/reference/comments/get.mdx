@@ -49,6 +49,7 @@ Returns a CommentInfo object with the comment text, author, date, and thread met
 | `createdTime` | number | no |  |
 | `creatorEmail` | string | no |  |
 | `creatorName` | string | no |  |
+| `deletedText` | string \| null | no |  |
 | `importedId` | string | no |  |
 | `isInternal` | boolean | no |  |
 | `parentCommentId` | string | no |  |
@@ -58,6 +59,13 @@ Returns a CommentInfo object with the comment text, author, date, and thread met
 | `target.segments` | TextSegment[] | no |  |
 | `target.story` | StoryLocator | no | StoryLocator |
 | `text` | string | no |  |
+| `trackedChange` | boolean | no |  |
+| `trackedChangeAnchorKey` | string \| null | no |  |
+| `trackedChangeDisplayType` | string \| null | no |  |
+| `trackedChangeLink` | CommentTrackedChangeLink \| null | no | One of: CommentTrackedChangeLink, null |
+| `trackedChangeStory` | StoryLocator \| null | no | One of: StoryLocator, null |
+| `trackedChangeText` | string \| null | no |  |
+| `trackedChangeType` | enum | no | `"insert"`, `"delete"`, `"replacement"`, `"format"` |
 
 ### Example response
 
@@ -125,6 +133,12 @@ Returns a CommentInfo object with the comment text, author, date, and thread met
     "creatorName": {
       "type": "string"
     },
+    "deletedText": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "importedId": {
       "type": "string"
     },
@@ -145,6 +159,55 @@ Returns a CommentInfo object with the comment text, author, date, and thread met
     },
     "text": {
       "type": "string"
+    },
+    "trackedChange": {
+      "type": "boolean"
+    },
+    "trackedChangeAnchorKey": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "trackedChangeDisplayType": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "trackedChangeLink": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/CommentTrackedChangeLink"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "trackedChangeStory": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/StoryLocator"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "trackedChangeText": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "trackedChangeType": {
+      "enum": [
+        "insert",
+        "delete",
+        "replacement",
+        "format"
+      ]
     }
   },
   "required": [

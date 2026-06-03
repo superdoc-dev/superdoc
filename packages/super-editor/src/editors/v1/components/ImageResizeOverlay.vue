@@ -22,6 +22,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { measureCache } from '@superdoc/layout-bridge';
+import { isContentLockedMode } from '../extensions/structured-content/lockModes.js';
 
 // Configuration constants
 const OVERLAY_EXPANSION_PX = 2000;
@@ -72,7 +73,23 @@ const props = defineProps({
 
 const emit = defineEmits(['resize-start', 'resize-move', 'resize-end', 'resize-success', 'resize-error']);
 
-const isResizeDisabled = computed(() => props.editor?.options?.documentMode === 'viewing' || !props.editor?.isEditable);
+/** Header/footer edits use the presentation editor's active sub-editor. */
+const resizeEditor = computed(() => {
+  const editor = props.editor;
+  return typeof editor?.getActiveEditor === 'function' ? editor.getActiveEditor() : editor;
+});
+
+const isImageContentLocked = computed(() => {
+  const lockMode = resolveImageLockMode(props.imageElement);
+  return isContentLockedMode(lockMode);
+});
+
+const isResizeDisabled = computed(
+  () =>
+    resizeEditor.value?.options?.documentMode === 'viewing' ||
+    !resizeEditor.value?.isEditable ||
+    isImageContentLocked.value,
+);
 
 /**
  * Parsed image metadata from data-image-metadata attribute
@@ -98,6 +115,36 @@ const dragState = ref(null);
  * Flag to track forced cleanup (overlay hidden during drag)
  */
 const forcedCleanup = ref(false);
+
+function readLockMode(element) {
+  return element?.dataset?.lockMode || element?.getAttribute?.('data-lock-mode') || null;
+}
+
+function resolveImageLockMode(imageElement) {
+  if (!imageElement) return null;
+
+  const lockModes = [];
+  const directLockMode = readLockMode(imageElement);
+  if (directLockMode) lockModes.push(directLockMode);
+
+  imageElement.querySelectorAll?.('[data-lock-mode]').forEach((element) => {
+    const lockMode = readLockMode(element);
+    if (lockMode) lockModes.push(lockMode);
+  });
+
+  let sdtElement = imageElement.closest?.(
+    '.superdoc-structured-content-block[data-lock-mode], .superdoc-structured-content-inline[data-lock-mode]',
+  );
+  while (sdtElement) {
+    const lockMode = readLockMode(sdtElement);
+    if (lockMode) lockModes.push(lockMode);
+    sdtElement = sdtElement.parentElement?.closest?.(
+      '.superdoc-structured-content-block[data-lock-mode], .superdoc-structured-content-inline[data-lock-mode]',
+    );
+  }
+
+  return lockModes.find(isContentLockedMode) ?? lockModes[0] ?? null;
+}
 
 /**
  * Overlay position and size relative to image element.
@@ -324,7 +371,8 @@ function onHandleMouseDown(event, handlePosition) {
 
   if (isResizeDisabled.value) return;
 
-  if (!isValidEditor(props.editor) || !imageMetadata.value || !props.imageElement) return;
+  const editor = resizeEditor.value;
+  if (!isValidEditor(editor) || !imageMetadata.value || !props.imageElement) return;
 
   const rect = props.imageElement.getBoundingClientRect();
 
@@ -341,7 +389,7 @@ function onHandleMouseDown(event, handlePosition) {
   };
 
   // Disable pointer events on PM view to prevent conflicts
-  const pmView = props.editor.view.dom;
+  const pmView = editor.view.dom;
   pmView.style.pointerEvents = 'none';
 
   // Add global listeners
@@ -486,8 +534,9 @@ function onDocumentMouseUp(event) {
   document.removeEventListener('mouseup', onDocumentMouseUp);
   document.removeEventListener('keydown', onEscapeKey);
 
-  if (props.editor?.view) {
-    const pmView = props.editor.view.dom;
+  const editor = resizeEditor.value;
+  if (editor?.view) {
+    const pmView = editor.view.dom;
     if (pmView && pmView.style) {
       pmView.style.pointerEvents = 'auto';
     }
@@ -525,7 +574,8 @@ function onDocumentMouseUp(event) {
  * @param {number} newHeight - New height in pixels
  */
 function dispatchResizeTransaction(blockId, newWidth, newHeight) {
-  if (!isValidEditor(props.editor) || !props.imageElement) {
+  const editor = resizeEditor.value;
+  if (!isValidEditor(editor) || !props.imageElement || isResizeDisabled.value) {
     return;
   }
 
@@ -539,7 +589,7 @@ function dispatchResizeTransaction(blockId, newWidth, newHeight) {
   }
 
   try {
-    const { state, dispatch } = props.editor.view;
+    const { state, dispatch } = editor.view;
     const tr = state.tr;
 
     // Find image position using data-pm-start attribute
@@ -648,8 +698,9 @@ onBeforeUnmount(() => {
     document.removeEventListener('keydown', onEscapeKey);
 
     // Re-enable PM pointer events
-    if (props.editor?.view?.dom) {
-      props.editor.view.dom.style.pointerEvents = 'auto';
+    const editor = resizeEditor.value;
+    if (editor?.view?.dom) {
+      editor.view.dom.style.pointerEvents = 'auto';
     }
   }
 });

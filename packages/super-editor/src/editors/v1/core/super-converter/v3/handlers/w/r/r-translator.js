@@ -32,6 +32,32 @@ const hasXmlNodeNamed = (node, targetName) => {
   return node.elements.some((child) => hasXmlNodeNamed(child, targetName));
 };
 
+const COMPLEX_SCRIPT_CODEPOINT_RANGES = [
+  [0x0590, 0x08ff],
+  [0x0900, 0x109f],
+  [0x1780, 0x18af],
+  [0x1cd0, 0x1cff],
+  [0xa800, 0xa8ff],
+  [0xaa60, 0xaa7f],
+];
+
+const textHasComplexScript = (text) => {
+  for (const char of text) {
+    const codePoint = char.codePointAt(0);
+    if (COMPLEX_SCRIPT_CODEPOINT_RANGES.some(([start, end]) => codePoint >= start && codePoint <= end)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const hasComplexScriptText = (node) => {
+  if (!node || typeof node !== 'object') return false;
+  if (typeof node.text === 'string' && textHasComplexScript(node.text)) return true;
+  if (!Array.isArray(node.content)) return false;
+  return node.content.some((child) => hasComplexScriptText(child));
+};
+
 const getRunPropertiesNode = (runNode) => {
   if (!runNode) return null;
   if (!Array.isArray(runNode.elements)) runNode.elements = [];
@@ -348,6 +374,14 @@ const decode = (params, decodedAttrs = {}) => {
 
   const runPropertiesToExport =
     exportKeys.length > 0 ? Object.fromEntries(exportKeys.map((k) => [k, runProperties[k]])) : {};
+  if (hasComplexScriptText(runNodeForExport)) {
+    if ('bold' in runPropertiesToExport && !('boldCs' in runPropertiesToExport)) {
+      runPropertiesToExport.boldCs = runPropertiesToExport.bold;
+    }
+    if ('italic' in runPropertiesToExport && !('italicCs' in runPropertiesToExport)) {
+      runPropertiesToExport.italicCs = runPropertiesToExport.italic;
+    }
+  }
 
   // Decode child nodes within the run
   const exportParams = {
@@ -388,7 +422,10 @@ const decode = (params, decodedAttrs = {}) => {
 
     if (!existingRunPropertyChanges.length && runTrackFormatMark) {
       const runPropertiesNode = getRunPropertiesNode(runNode);
-      appendTrackFormatChangeToRunProperties(runPropertiesNode, [runTrackFormatMark]);
+      appendTrackFormatChangeToRunProperties(runPropertiesNode, [runTrackFormatMark], {
+        wordIdAllocator: params?.converter?.wordIdAllocator || null,
+        partPath: params?.currentPartPath || 'word/document.xml',
+      });
     }
   };
 
@@ -452,9 +489,12 @@ const decode = (params, decodedAttrs = {}) => {
     runs.push(runWrapper);
   });
 
-  const trackedRuns = ensureTrackedWrapper(runs, trackingMarksByType);
+  const trackedRuns = ensureTrackedWrapper(runs, trackingMarksByType, { isFinalDoc: Boolean(params?.isFinalDoc) });
 
   if (!trackedRuns.length) {
+    if (params?.isFinalDoc) {
+      return trackedRuns;
+    }
     const emptyRun = { name: XML_NODE_NAME, elements: [] };
     applyBaseRunProps(emptyRun);
     trackedRuns.push(emptyRun);

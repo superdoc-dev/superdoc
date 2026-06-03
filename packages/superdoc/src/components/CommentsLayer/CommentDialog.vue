@@ -14,6 +14,7 @@ import {
 import InternalDropdown from './InternalDropdown.vue';
 import CommentHeader from './CommentHeader.vue';
 import CommentInput from './CommentInput.vue';
+import { collectTrackedChangeThread } from './collect-tracked-change-thread.js';
 import Avatar from '@superdoc/components/general/Avatar.vue';
 
 const emit = defineEmits(['click-outside', 'ready', 'dialog-exit', 'resize']);
@@ -92,6 +93,10 @@ const CLICK_OUTSIDE_HIT_SAMPLE_OFFSETS = [
 ];
 const CLICK_OUTSIDE_IGNORED_SELECTORS = [
   '.comments-dropdown__option-label',
+  '.comments-dropdown__menu',
+  '.comments-dropdown__option',
+  '.comments-dropdown__option-icon',
+  '.comments-dropdown__trigger',
   '.superdoc-comment-highlight',
   '.sd-editor-comment-highlight',
   '.sd-editor-tracked-change-highlight',
@@ -300,45 +305,6 @@ const startReply = () => {
     commentInput.value?.focus?.();
     emit('resize');
   });
-};
-
-const isRangeThreadedComment = (comment) => {
-  if (!comment) return false;
-  return (
-    comment.threadingStyleOverride === 'range-based' ||
-    comment.threadingMethod === 'range-based' ||
-    comment.originalXmlStructure?.hasCommentsExtended === false
-  );
-};
-
-const collectTrackedChangeThread = (parentComment, allComments) => {
-  const trackedChangeId = parentComment.commentId;
-  const threadIds = new Set([trackedChangeId]);
-  const queue = [];
-
-  allComments.forEach((comment) => {
-    if (comment.commentId === trackedChangeId) return;
-    const isDirectChild = comment.parentCommentId === trackedChangeId;
-    const isRangeBasedTrackedChangeComment =
-      comment.trackedChangeParentId === trackedChangeId && isRangeThreadedComment(comment);
-
-    if (isDirectChild || isRangeBasedTrackedChangeComment) {
-      threadIds.add(comment.commentId);
-      queue.push(comment.commentId);
-    }
-  });
-
-  for (let i = 0; i < queue.length; i += 1) {
-    const parentId = queue[i];
-    allComments.forEach((comment) => {
-      if (comment.parentCommentId === parentId && !threadIds.has(comment.commentId)) {
-        threadIds.add(comment.commentId);
-        queue.push(comment.commentId);
-      }
-    });
-  }
-
-  return allComments.filter((comment) => threadIds.has(comment.commentId));
 };
 
 const comments = computed(() => {
@@ -647,6 +613,7 @@ const handleReject = () => {
   // disappears from getFloatingComments — even when a custom handler is used (SD-2049).
   if (props.comment.trackedChange) {
     props.comment.resolveComment({
+      id: superdocStore.user.id,
       email: superdocStore.user.email,
       name: superdocStore.user.name,
       superdoc: proxy.$superdoc,
@@ -680,6 +647,7 @@ const handleResolve = () => {
   // Always resolve so resolvedTime is set and the bubble disappears
   // from getFloatingComments — even when a custom handler is used (SD-2049).
   props.comment.resolveComment({
+    id: superdocStore.user.id,
     email: superdocStore.user.email,
     name: superdocStore.user.name,
     superdoc: proxy.$superdoc,
@@ -810,6 +778,7 @@ watch(editingCommentId, (commentId) => {
     :style="getSidebarCommentStyle"
     ref="commentDialogElement"
     role="dialog"
+    data-sd-part="comment-thread"
     data-editor-ui-surface
     :data-comment-instance-id="props.floatingInstanceId ?? ''"
     :data-comment-thread-id="props.comment.commentId ?? ''"
@@ -821,7 +790,7 @@ watch(editingCommentId, (commentId) => {
       <div v-if="shouldShowInternalExternal" class="existing-internal-input">
         <InternalDropdown
           @click.stop.prevent
-          class="internal-dropdown"
+          class="sd-internal-dropdown"
           :is-disabled="false"
           :state="pendingComment.isInternal ? 'internal' : 'external'"
           @select="handleInternalExternalSelect"
@@ -845,7 +814,7 @@ watch(editingCommentId, (commentId) => {
           class="sd-button primary reply-btn-primary"
           @click.stop.prevent="handleAddComment"
           :disabled="!hasTextContent"
-          :class="{ 'is-disabled': !hasTextContent }"
+          :class="{ 'sd-is-disabled': !hasTextContent }"
         >
           Comment
         </button>
@@ -863,7 +832,7 @@ watch(editingCommentId, (commentId) => {
       <div v-if="shouldShowInternalExternal" class="existing-internal-input">
         <InternalDropdown
           @click.stop.prevent
-          class="internal-dropdown"
+          class="sd-internal-dropdown"
           :is-disabled="isInternalDropdownDisabled"
           :state="comment.isInternal ? 'internal' : 'external'"
           @select="handleInternalExternalSelect"
@@ -895,6 +864,9 @@ watch(editingCommentId, (commentId) => {
             <div v-else-if="comment.trackedChangeDisplayType === 'hyperlinkModified'">
               <span class="change-type">Changed hyperlink to </span>
               <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+            </div>
+            <div v-else-if="comment.trackedChangeDisplayType === 'paragraphSplit'">
+              <span class="change-type">Added new line</span>
             </div>
             <div v-else-if="comment.trackedChangeType === 'trackFormat'">
               <span class="change-type">Format: </span>
@@ -961,7 +933,7 @@ watch(editingCommentId, (commentId) => {
                 class="sd-button primary reply-btn-primary"
                 @click.stop.prevent="handleCommentUpdate(comment)"
                 :disabled="!hasTextContent"
-                :class="{ 'is-disabled': !hasTextContent }"
+                :class="{ 'sd-is-disabled': !hasTextContent }"
               >
                 Update
               </button>
@@ -1021,7 +993,7 @@ watch(editingCommentId, (commentId) => {
               class="sd-button primary reply-btn-primary"
               @click.stop.prevent="handleAddComment"
               :disabled="!hasTextContent"
-              :class="{ 'is-disabled': !hasTextContent }"
+              :class="{ 'sd-is-disabled': !hasTextContent }"
             >
               Reply
             </button>
@@ -1289,7 +1261,7 @@ watch(editingCommentId, (commentId) => {
 .reply-btn-primary:hover {
   background: var(--sd-ui-action-hover, #0f44cc);
 }
-.reply-btn-primary.is-disabled {
+.reply-btn-primary.sd-is-disabled {
   background: var(--sd-color-gray-400, #dbdbdb);
   color: var(--sd-color-gray-600, #888888);
   cursor: default;
@@ -1300,7 +1272,7 @@ watch(editingCommentId, (commentId) => {
   margin-bottom: 10px;
 }
 
-.internal-dropdown {
+.sd-internal-dropdown {
   display: inline-block;
 }
 </style>

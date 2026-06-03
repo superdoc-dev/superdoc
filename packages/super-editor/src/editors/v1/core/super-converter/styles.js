@@ -45,7 +45,8 @@ export function encodeMarksFromRPr(runProperties, docx) {
 
   const marks = [];
   const textStyleAttrs = {};
-  let highlightColor = null;
+  /** @type {{ color: string, ooxmlHighlightClear?: boolean } | null} */
+  let highlightAttrs = null;
   let hasHighlightTag = false;
   Object.keys(runProperties).forEach((key) => {
     const value = runProperties[key];
@@ -134,7 +135,10 @@ export function encodeMarksFromRPr(runProperties, docx) {
         const color = getHighLightValue(value);
         if (color) {
           hasHighlightTag = true;
-          highlightColor = color;
+          highlightAttrs = { color };
+          if (color.toLowerCase() === 'transparent' && String(value?.['w:val']).toLowerCase() === 'none') {
+            highlightAttrs.ooxmlHighlightClear = true;
+          }
         }
         break;
       case 'shading': {
@@ -144,11 +148,11 @@ export function encodeMarksFromRPr(runProperties, docx) {
         const fill = value['fill'];
         const shdVal = value['val'];
         if (fill && String(fill).toLowerCase() !== 'auto') {
-          highlightColor = `#${String(fill).replace('#', '')}`;
+          highlightAttrs = { color: `#${String(fill).replace('#', '')}` };
         } else if (typeof shdVal === 'string') {
           const normalized = shdVal.toLowerCase();
           if (normalized === 'clear' || normalized === 'nil' || normalized === 'none') {
-            highlightColor = 'transparent';
+            highlightAttrs = { color: 'transparent' };
           }
         }
         break;
@@ -175,8 +179,8 @@ export function encodeMarksFromRPr(runProperties, docx) {
     marks.push({ type: 'textStyle', attrs: textStyleAttrs });
   }
 
-  if (highlightColor) {
-    marks.push({ type: 'highlight', attrs: { color: highlightColor } });
+  if (highlightAttrs) {
+    marks.push({ type: 'highlight', attrs: highlightAttrs });
   }
 
   return marks;
@@ -535,11 +539,14 @@ export function decodeRPrFromMarks(marks) {
       case 'italic':
       case 'bold':
         runProperties[type] = mark.attrs.value !== '0' && mark.attrs.value !== false;
-        if (type === 'bold') {
-          runProperties.boldCs = runProperties.bold;
-        } else if (type === 'italic') {
-          runProperties.italicCs = runProperties.italic;
-        }
+        // SD-2912: do NOT auto-propagate `boldCs` / `italicCs` from the latin
+        // bold/italic mark. The complex-script companion is an independent OOXML
+        // property (ECMA-376 §17.3.2). Auto-propagating it injects elements that
+        // weren't in the source rPr — every run gets a `<w:bCs/>` regardless of
+        // whether the original `<w:rPr>` contained one. When the source genuinely
+        // had `<w:bCs/>`, it round-trips via the run's stored runProperties
+        // (preserved by the plugin's existing-keys branch — see the matching
+        // SD-2912 change in `calculateInlineRunPropertiesPlugin.js`).
         break;
       case 'underline': {
         const { underlineType, underlineColor, underlineThemeColor, underlineThemeTint, underlineThemeShade } =
@@ -566,12 +573,13 @@ export function decodeRPrFromMarks(marks) {
         break;
       }
       case 'highlight':
-        if (mark.attrs.color) {
-          if (mark.attrs.color.toLowerCase() === 'transparent') {
+        if (!mark.attrs.color) break;
+        if (mark.attrs.color.toLowerCase() === 'transparent') {
+          if (mark.attrs.ooxmlHighlightClear) {
             runProperties.highlight = { 'w:val': 'none' };
-          } else {
-            runProperties.highlight = { 'w:val': mark.attrs.color };
           }
+        } else {
+          runProperties.highlight = { 'w:val': mark.attrs.color };
         }
         break;
       case 'link':

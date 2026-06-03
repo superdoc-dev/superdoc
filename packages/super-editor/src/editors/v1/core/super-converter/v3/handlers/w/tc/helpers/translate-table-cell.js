@@ -79,19 +79,79 @@ export function generateTableCellProperties(node) {
     delete tableCellProperties.shading;
   }
 
-  // Margins — only merge from attrs when the cell had w:tcMar in its w:tcPr (inline), or when inlineKeys was not set (new cell / backward compat). Do not output when inlineKeys is set and does not include 'cellMargins' (inherited from table style).
+  // Margins — only merge from attrs when the cell had w:tcMar in its w:tcPr
+  // (inline), or when inlineKeys was not set (new cell / backward compat). Do
+  // not output when inlineKeys is set and does not include 'cellMargins'
+  // (inherited from table style).
+  //
+  // SD-3152: preserve the source key family per horizontal side. The importer
+  // keeps the OOXML-shaped value on tableCellProperties.cellMargins (logical
+  // marginStart/marginEnd or physical marginLeft/marginRight), while the
+  // user-facing attrs.cellMargins is LTR-default physical-only (SD-3134). On
+  // export, write the user-visible value back into whichever pair the import
+  // preserved so a Word-authored <w:start>/<w:end> doc does not gain extra
+  // <w:left>/<w:right> children on round-trip.
   const { cellMargins } = attrs;
   if (cellMargins && (!Array.isArray(inlineKeys) || inlineKeys.includes('cellMargins'))) {
-    ['left', 'right', 'top', 'bottom'].forEach((side) => {
+    if (!tableCellProperties.cellMargins) tableCellProperties['cellMargins'] = {};
+    const propMargins = tableCellProperties.cellMargins;
+
+    // Vertical sides have no logical alternate (CT_TcMar has only top/bottom).
+    ['top', 'bottom'].forEach((side) => {
       const key = `margin${side.charAt(0).toUpperCase() + side.slice(1)}`;
       if (cellMargins[side] != null) {
-        if (!tableCellProperties.cellMargins) tableCellProperties['cellMargins'] = {};
-        let currentPropertyValuePixels = twipsToPixels(tableCellProperties.cellMargins?.[key]?.value);
-        if (currentPropertyValuePixels !== cellMargins[side]) {
-          tableCellProperties.cellMargins[key] = { value: pixelsToTwips(cellMargins[side]), type: 'dxa' };
+        const currentPx = twipsToPixels(propMargins[key]?.value);
+        if (currentPx !== cellMargins[side]) {
+          propMargins[key] = { value: pixelsToTwips(cellMargins[side]), type: 'dxa' };
         }
-      } else if (tableCellProperties?.cellMargins?.[key]) {
-        delete tableCellProperties.cellMargins[key];
+      } else if (propMargins[key]) {
+        delete propMargins[key];
+      }
+    });
+
+    // Horizontal sides: choose logical vs physical pair per imported source.
+    [
+      { side: 'left', physicalKey: 'marginLeft', logicalKey: 'marginStart' },
+      { side: 'right', physicalKey: 'marginRight', logicalKey: 'marginEnd' },
+    ].forEach(({ side, physicalKey, logicalKey }) => {
+      const value = cellMargins[side];
+      const hasPhysical = propMargins[physicalKey] != null;
+      const hasLogical = propMargins[logicalKey] != null;
+      const physicalTwips = propMargins[physicalKey]?.value;
+      const logicalTwips = propMargins[logicalKey]?.value;
+
+      if (value == null) {
+        if (hasPhysical) delete propMargins[physicalKey];
+        if (hasLogical) delete propMargins[logicalKey];
+        return;
+      }
+
+      const newTwips = pixelsToTwips(value);
+
+      if (hasPhysical && hasLogical) {
+        // Mixed source (rare; not produced by Word). Mirror getTableCellMargins
+        // import precedence — physical wins — to decide unchanged vs edited.
+        // If the user-visible value still equals the imported physical, leave
+        // both pairs untouched. If it was edited, normalize to physical and
+        // drop the logical key so the doc emits one pair, not two conflicting.
+        const unchanged = twipsToPixels(physicalTwips) === value;
+        if (unchanged) return;
+        propMargins[physicalKey] = { value: newTwips, type: 'dxa' };
+        delete propMargins[logicalKey];
+        return;
+      }
+
+      if (hasLogical) {
+        // Logical-only source: stay logical on export.
+        if (logicalTwips !== newTwips) {
+          propMargins[logicalKey] = { value: newTwips, type: 'dxa' };
+        }
+        return;
+      }
+
+      // Physical-only source or new cell: default to physical.
+      if (physicalTwips !== newTwips) {
+        propMargins[physicalKey] = { value: newTwips, type: 'dxa' };
       }
     });
   }

@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { handleShapeTextWatermarkImport } from './handle-shape-text-watermark-import';
 
+const decodeSvgDataUri = (src) => {
+  const [meta = '', payload = ''] = src.split(',');
+  if (meta.endsWith(';base64')) {
+    return Buffer.from(payload, 'base64').toString('utf8');
+  }
+  return decodeURIComponent(payload);
+};
+
 describe('handleShapeTextWatermarkImport', () => {
   describe('Basic text watermark import', () => {
     it('should import a basic text watermark with v:textpath', () => {
@@ -70,7 +78,7 @@ describe('handleShapeTextWatermarkImport', () => {
       expect(result.type).toBe('image');
       expect(result.attrs.vmlTextWatermark).toBe(true);
       expect(result.attrs.textWatermarkData.text).toBe('DRAFT MARK');
-      expect(result.attrs.src).toContain('data:image/svg+xml');
+      expect(result.attrs.src).toContain('data:image/svg+xml;base64,');
     });
 
     it('should extract text from string attribute', () => {
@@ -210,7 +218,7 @@ describe('handleShapeTextWatermarkImport', () => {
       expect(result.attrs.transformData).toBeUndefined();
     });
 
-    it('should parse margin offsets from style', () => {
+    it('should preserve explicit margin offsets when alignment is omitted', () => {
       const pict = {
         elements: [
           {
@@ -232,10 +240,10 @@ describe('handleShapeTextWatermarkImport', () => {
 
       const result = handleShapeTextWatermarkImport({ params: {}, pict });
 
-      // For center-aligned watermarks relative to margin, both horizontal and vertical
-      // margin offsets are set to 0 to let center alignment work properly in the browser
-      expect(result.attrs.marginOffset.horizontal).toBe(0);
-      expect(result.attrs.marginOffset.top).toBe(0);
+      expect(result.attrs.marginOffset.horizontal).toBeCloseTo(0.07, 1);
+      expect(result.attrs.marginOffset.top).toBeCloseTo(420.9, 1);
+      expect(result.attrs.anchorData.alignH).toBeUndefined();
+      expect(result.attrs.anchorData.alignV).toBeUndefined();
     });
 
     it('should parse positioning from style', () => {
@@ -325,6 +333,40 @@ describe('handleShapeTextWatermarkImport', () => {
       expect(result.attrs.marginOffset.top).toBeCloseTo(133.3, 1); // 100pt to pixels
       expect(result.attrs.anchorData.alignH).toBe('left');
       expect(result.attrs.anchorData.alignV).toBe('top');
+    });
+
+    it('should preserve the absolute VML shape center for rotated watermarks without explicit alignment', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style:
+                'position:absolute;margin-left:1in;margin-top:337.5pt;width:468pt;height:117pt;rotation:315;mso-position-horizontal-relative:margin;mso-position-vertical-relative:margin',
+              fillcolor: 'silver',
+              stroked: 'f',
+            },
+            elements: [
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'SOLID',
+                  style: 'font-family:&quot;Calibri&quot;;font-size:1pt',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+
+      expect(result.attrs.anchorData).toEqual({
+        hRelativeFrom: 'margin',
+        vRelativeFrom: 'margin',
+      });
+      expect(result.attrs.marginOffset.horizontal).toBeCloseTo(64.8, 1);
+      expect(result.attrs.marginOffset.top).toBeCloseTo(224.7, 1);
     });
 
     it('should preserve margin offsets for right-aligned watermarks', () => {
@@ -480,6 +522,72 @@ describe('handleShapeTextWatermarkImport', () => {
 
       expect(result.attrs.textWatermarkData.fill.color).toBe('silver');
     });
+
+    it('should parse VML percentage and fixed-point opacity values', () => {
+      const buildPict = (opacity) => ({
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style: 'width:100pt',
+            },
+            elements: [
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'OPACITY',
+                },
+              },
+              {
+                name: 'v:fill',
+                attributes: {
+                  opacity,
+                },
+              },
+            ],
+          },
+        ],
+      });
+
+      const percentResult = handleShapeTextWatermarkImport({ params: {}, pict: buildPict('50%') });
+      const fixedResult = handleShapeTextWatermarkImport({ params: {}, pict: buildPict('32768f') });
+
+      expect(percentResult.attrs.textWatermarkData.fill.opacity).toBe(0.5);
+      expect(fixedResult.attrs.textWatermarkData.fill.opacity).toBe(0.5);
+    });
+
+    it('should preserve explicit opacity="0" instead of coercing to default', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style: 'width:100pt',
+            },
+            elements: [
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'INVISIBLE',
+                },
+              },
+              {
+                name: 'v:fill',
+                attributes: {
+                  opacity: '0',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+      const decodedSvg = decodeSvgDataUri(result.attrs.src);
+
+      expect(result.attrs.textWatermarkData.fill.opacity).toBe(0);
+      expect(decodedSvg).toContain('fill-opacity="0"');
+    });
   });
 
   describe('Stroke properties', () => {
@@ -575,6 +683,42 @@ describe('handleShapeTextWatermarkImport', () => {
 
       expect(result.attrs.textWatermarkData.textStyle.fontFamily).toBe('Liberation Sans');
       expect(result.attrs.textWatermarkData.textStyle.fontSize).toBe('1pt');
+    });
+
+    it('should decode XML entities in textpath font family', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style: 'width:479.9pt;height:179.95pt;rotation:315',
+              fillcolor: 'silver',
+              stroked: 'f',
+            },
+            elements: [
+              {
+                name: 'v:fill',
+                attributes: {
+                  opacity: '.5',
+                },
+              },
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'EXAMPLE',
+                  style: 'font-family:&quot;Calibri&quot;;font-size:1pt',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+
+      expect(result.attrs.textWatermarkData.textStyle.fontFamily).toBe('Calibri');
+      const decodedSvg = decodeSvgDataUri(result.attrs.src);
+      expect(decodedSvg).toContain('font-family="Calibri, Arial, sans-serif"');
     });
 
     it('should handle single quotes in font-family', () => {
@@ -734,6 +878,100 @@ describe('handleShapeTextWatermarkImport', () => {
     });
   });
 
+  describe('SVG rendering data', () => {
+    it('fits text to the VML shape width and normalizes named fill colors in the generated SVG', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style: 'width:479.9pt;height:179.95pt;rotation:315',
+              fillcolor: 'silver',
+              stroked: 'f',
+            },
+            elements: [
+              {
+                name: 'v:fill',
+                attributes: {
+                  opacity: '.5',
+                },
+              },
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'EXAMPLE',
+                  style: 'font-family:&quot;Calibri&quot;;font-size:1pt',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+      const decodedSvg = decodeSvgDataUri(result.attrs.src);
+
+      expect(decodedSvg).toMatch(/textLength="639\.866666666666[67]"/);
+      expect(decodedSvg).toContain('lengthAdjust="spacingAndGlyphs"');
+      expect(decodedSvg).toContain('font-size="268.7253333333333px"');
+      expect(decodedSvg).toContain('fill="#C0C0C0"');
+      expect(decodedSvg).toContain('fill-opacity="0.5"');
+      expect(result.attrs.marginOffset.top).toBeCloseTo(59.98, 1);
+      expect(result.attrs.textWatermarkData.fill.color).toBe('silver');
+      expect(result.attrs.textWatermarkData.fill.opacity).toBe(0.5);
+    });
+
+    it('renders a Word-native no-fill t136 watermark as fully opaque', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shapetype',
+            attributes: { id: '_x0000_t136', 'o:spt': '136', adj: '10800' },
+            elements: [
+              {
+                name: 'v:path',
+                attributes: { textpathok: 't' },
+              },
+              {
+                name: 'v:textpath',
+                attributes: { on: 't', fitshape: 't' },
+              },
+            ],
+          },
+          {
+            name: 'v:shape',
+            attributes: {
+              id: '_x0000_s1025',
+              type: '#_x0000_t136',
+              style: 'margin-left:1in;margin-top:337.5pt;width:468pt;height:117pt;rotation:315',
+              fillcolor: 'silver',
+              stroked: 'f',
+            },
+            elements: [
+              {
+                name: 'v:textpath',
+                attributes: {
+                  string: 'SOLID',
+                  style: 'font-family:&quot;Calibri&quot;;font-size:1pt',
+                  trim: 't',
+                  fitpath: 't',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+      const decodedSvg = decodeSvgDataUri(result.attrs.src);
+
+      expect(result.attrs.textWatermarkData.fill.opacity).toBe(1);
+      expect(decodedSvg).toContain('fill-opacity="1"');
+      expect(decodedSvg).toContain('textLength=');
+      expect(decodedSvg).toContain('lengthAdjust="spacingAndGlyphs"');
+    });
+  });
+
   describe('Textpath properties', () => {
     it('should extract textpath boolean properties', () => {
       const pict = {
@@ -808,6 +1046,36 @@ describe('handleShapeTextWatermarkImport', () => {
       expect(result.attrs.textWatermarkData.textpath.fitshape).toBe(false);
       expect(result.attrs.textWatermarkData.textpath.textpathok).toBe(false);
     });
+
+    it('should not stretch SVG text when fitshape is false', () => {
+      const pict = {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              style: 'width:300pt;height:80pt;rotation:315',
+            },
+            elements: [
+              {
+                name: 'v:textpath',
+                attributes: {
+                  fitshape: 'f',
+                  string: 'NATURAL WIDTH',
+                  style: 'font-family:&quot;Calibri&quot;;font-size:1pt',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = handleShapeTextWatermarkImport({ params: {}, pict });
+      const decodedSvg = decodeSvgDataUri(result.attrs.src);
+
+      expect(result.attrs.textWatermarkData.textpath.fitshape).toBe(false);
+      expect(decodedSvg).not.toContain('textLength=');
+      expect(decodedSvg).not.toContain('lengthAdjust=');
+    });
   });
 
   describe('Edge cases', () => {
@@ -875,9 +1143,10 @@ describe('handleShapeTextWatermarkImport', () => {
       // Should handle 345 degree rotation (15 degrees clockwise from horizontal)
       expect(result.attrs.textWatermarkData.rotation).toBe(345);
 
-      // For center-aligned watermarks, margins should be 0
+      // For center-aligned rotated text watermarks, horizontal stays centered and
+      // vertical gets a WordArt-specific correction from the original VML height.
       expect(result.attrs.marginOffset.horizontal).toBe(0);
-      expect(result.attrs.marginOffset.top).toBe(0);
+      expect(result.attrs.marginOffset.top).toBeCloseTo(28.2, 1);
 
       // Verify rotated bounding box is calculated correctly with 10% padding
       // Original: 481.8pt × 84.65pt ≈ 642.4px × 112.9px
@@ -1143,8 +1412,8 @@ describe('handleShapeTextWatermarkImport', () => {
       // NaN and Infinity should be replaced with defaults
       // rotation: NaN becomes default 0
       expect(result.attrs.textWatermarkData.rotation).toBe(0);
-      // opacity: Infinity becomes default 0.5
-      expect(result.attrs.textWatermarkData.fill.opacity).toBe(0.5);
+      // opacity: Infinity becomes default 1
+      expect(result.attrs.textWatermarkData.fill.opacity).toBe(1);
     });
 
     it('should sanitize extreme dimension values', () => {
@@ -1198,7 +1467,7 @@ describe('handleShapeTextWatermarkImport', () => {
       const result = handleShapeTextWatermarkImport({ params: {}, pict });
 
       // XML special characters should be escaped in the SVG output
-      const decodedSrc = decodeURIComponent(result.attrs.src.replace('data:image/svg+xml,', ''));
+      const decodedSrc = decodeSvgDataUri(result.attrs.src);
       expect(decodedSrc).toContain('&lt;');
       expect(decodedSrc).toContain('&gt;');
       // But the actual text should be preserved
@@ -1240,7 +1509,7 @@ describe('handleShapeTextWatermarkImport', () => {
       // Should use defaults for empty values
       expect(result.attrs.textWatermarkData.fill.color).toBe('silver');
       expect(result.attrs.textWatermarkData.textStyle.fontFamily).toBe('Arial');
-      expect(result.attrs.textWatermarkData.fill.opacity).toBe(0.5);
+      expect(result.attrs.textWatermarkData.fill.opacity).toBe(1);
     });
   });
 });

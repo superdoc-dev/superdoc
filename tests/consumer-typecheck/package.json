@@ -4,9 +4,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "typecheck:matrix": "node typecheck-matrix.mjs",
-    "check:types": "node check-public-types.mjs",
-    "check:types:write": "node check-public-types.mjs --write"
+    "typecheck:matrix": "node typecheck-matrix.mjs"
   },
   "dependencies": {
     "superdoc": "file:../../packages/superdoc/superdoc.tgz"

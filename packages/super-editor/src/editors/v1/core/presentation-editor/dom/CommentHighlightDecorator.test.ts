@@ -352,6 +352,105 @@ describe('CommentHighlightDecorator', () => {
 
   // ── Edge cases ─────────────────────────────────────────────────────
 
+  // ── SD-2528 P2 #2: comment fill vs tracked-change background ───────
+  //
+  // Per layout-engine styles.ts, only `.track-insert-dec.highlighted` and
+  // `.track-delete-dec.highlighted` paint a background; `.track-format-dec`
+  // only paints a `border-bottom`. The `.highlighted` modifier is ONLY
+  // applied in "review" (All Markup) mode — Original and Final modes use
+  // `.hidden` / `.normal` / `.before` and paint no background.
+  //
+  // The decorator must therefore suppress its comment-fill repaint ONLY in
+  // the narrow case where the TC actually paints a competing background.
+  // Otherwise the comment highlight is cleared with nothing to replace it
+  // and the comment becomes invisible in Original / Final / format-only.
+  describe('tracked-change-anchored elements (SD-2528 P2 #2)', () => {
+    const commentClass = 'superdoc-comment-highlight';
+
+    function tcCommentSpan(opts: { commentIds: string[]; tcClasses: string[] }): HTMLSpanElement {
+      const el = commentSpan({ commentIds: opts.commentIds });
+      el.classList.add(...opts.tcClasses);
+      return el;
+    }
+
+    it('suppresses comment fill when element is track-insert-dec AND highlighted', () => {
+      const span = tcCommentSpan({ commentIds: ['c-1'], tcClasses: ['track-insert-dec', 'highlighted'] });
+      container.appendChild(span);
+
+      decorator.apply();
+
+      expect(span.style.backgroundColor).toBe('');
+      expect(span.classList.contains(commentClass)).toBe(true);
+    });
+
+    it('suppresses comment fill when element is track-delete-dec AND highlighted', () => {
+      const span = tcCommentSpan({ commentIds: ['c-1'], tcClasses: ['track-delete-dec', 'highlighted'] });
+      container.appendChild(span);
+
+      decorator.apply();
+
+      expect(span.style.backgroundColor).toBe('');
+    });
+
+    it('keeps comment fill when track-insert-dec is present but .highlighted is NOT (Original/Final mode)', () => {
+      // In Original/Final modes the painter applies `.hidden` / `.normal` /
+      // `.before` instead of `.highlighted`, so no green background is drawn.
+      // The comment fill must remain visible — otherwise the comment bubble
+      // disappears with no replacement paint.
+      const span = tcCommentSpan({ commentIds: ['c-1'], tcClasses: ['track-insert-dec', 'normal'] });
+      container.appendChild(span);
+
+      decorator.apply();
+
+      expect(span.style.backgroundColor).toBe(EXT);
+    });
+
+    it('keeps comment fill when track-delete-dec is present but .highlighted is NOT', () => {
+      const span = tcCommentSpan({ commentIds: ['c-1'], tcClasses: ['track-delete-dec', 'hidden'] });
+      container.appendChild(span);
+
+      decorator.apply();
+
+      expect(span.style.backgroundColor).toBe(EXT);
+    });
+
+    it('keeps comment fill on track-format-dec.highlighted — format changes paint only a border, not a background', () => {
+      const span = tcCommentSpan({ commentIds: ['c-1'], tcClasses: ['track-format-dec', 'highlighted'] });
+      container.appendChild(span);
+
+      decorator.apply();
+
+      expect(span.style.backgroundColor).toBe(EXT);
+    });
+
+    it('still suppresses comment fill in the active highlight branch when TC paints', () => {
+      const span = tcCommentSpan({ commentIds: ['c-1'], tcClasses: ['track-insert-dec', 'highlighted'] });
+      container.appendChild(span);
+
+      setActiveCommentAndApply(decorator, 'c-1');
+
+      expect(span.style.backgroundColor).toBe('');
+    });
+
+    it('still suppresses comment fill in the faded branch when TC paints and a different comment is active', () => {
+      const span = tcCommentSpan({ commentIds: ['c-1'], tcClasses: ['track-delete-dec', 'highlighted'] });
+      container.appendChild(span);
+
+      setActiveCommentAndApply(decorator, 'other');
+
+      expect(span.style.backgroundColor).toBe('');
+    });
+
+    it('keeps faded comment fill in Original mode (track-insert-dec without .highlighted)', () => {
+      const span = tcCommentSpan({ commentIds: ['c-1'], tcClasses: ['track-insert-dec', 'normal'] });
+      container.appendChild(span);
+
+      setActiveCommentAndApply(decorator, 'other');
+
+      expect(span.style.backgroundColor).toBe(EXT_FADED);
+    });
+  });
+
   describe('edge cases', () => {
     it('apply() is a no-op when no container is set', () => {
       const dec = new CommentHighlightDecorator();

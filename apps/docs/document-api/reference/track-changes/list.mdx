@@ -20,16 +20,16 @@ List all tracked changes in the document.
 
 ## Expected result
 
-Returns a TrackChangesListResult with tracked change entries, total count, and raw imported Word OOXML revision IDs (`w:id`) when available.
+Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`, `replacement`, `format`), total count, and raw imported Word OOXML revision IDs (`w:id`) when available.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `in` | StoryLocator \\| `"all"` | no | One of: StoryLocator, `"all"` |
+| `in` | StoryLocator \| `"all"` | no | One of: StoryLocator, `"all"` |
 | `limit` | integer | no |  |
 | `offset` | integer | no |  |
-| `type` | enum | no | `"insert"`, `"delete"`, `"format"` |
+| `type` | enum | no | `"insert"`, `"delete"`, `"replacement"`, `"format"` |
 
 ### Example request
 
@@ -68,18 +68,15 @@ Returns a TrackChangesListResult with tracked change entries, total count, and r
           "storyType": "body"
         }
       },
-      "author": "Jane Doe",
+      "grouping": "standalone",
       "handle": {
         "ref": "handle:abc123",
         "refStability": "stable",
         "targetKind": "text"
       },
       "id": "id-001",
-      "type": "insert",
-      "wordRevisionIds": {
-        "delete": "example",
-        "insert": "example"
-      }
+      "pairedWithChangeId": null,
+      "type": "insert"
     }
   ],
   "page": {
@@ -126,10 +123,11 @@ Returns a TrackChangesListResult with tracked change entries, total count, and r
       "type": "integer"
     },
     "type": {
-      "description": "Filter by change type: 'insert', 'delete', or 'format'.",
+      "description": "Filter by change type: 'insert', 'delete', 'replacement', or 'format'.",
       "enum": [
         "insert",
         "delete",
+        "replacement",
         "format"
       ]
     }
@@ -166,8 +164,18 @@ Returns a TrackChangesListResult with tracked change entries, total count, and r
           "date": {
             "type": "string"
           },
+          "deletedText": {
+            "type": "string"
+          },
           "excerpt": {
             "type": "string"
+          },
+          "grouping": {
+            "enum": [
+              "standalone",
+              "replacement-pair",
+              "unknown"
+            ]
           },
           "handle": {
             "$ref": "#/$defs/ResolvedHandle"
@@ -175,10 +183,20 @@ Returns a TrackChangesListResult with tracked change entries, total count, and r
           "id": {
             "type": "string"
           },
+          "insertedText": {
+            "type": "string"
+          },
+          "pairedWithChangeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "type": {
             "enum": [
               "insert",
               "delete",
+              "replacement",
               "format"
             ]
           },

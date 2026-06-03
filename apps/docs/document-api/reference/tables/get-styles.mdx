@@ -37,8 +37,8 @@ _No fields._
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `effectiveDefaultSource` | string | yes |  |
-| `effectiveDefaultStyleId` | any | yes |  |
-| `explicitDefaultStyleId` | any | yes |  |
+| `effectiveDefaultStyleId` | string \| null | yes |  |
+| `explicitDefaultStyleId` | string \| null | yes |  |
 | `styles` | object[] | yes |  |
 
 ### Example response
@@ -46,11 +46,11 @@ _No fields._
 ```json
 {
   "effectiveDefaultSource": "example",
-  "effectiveDefaultStyleId": {},
-  "explicitDefaultStyleId": {},
+  "effectiveDefaultStyleId": "example",
+  "explicitDefaultStyleId": "example",
   "styles": [
     {
-      "basedOn": {},
+      "basedOn": "example",
       "conditionalRegions": [
         "example"
       ],
@@ -58,9 +58,9 @@ _No fields._
       "id": "id-001",
       "isCustom": true,
       "isDefault": true,
-      "name": {},
+      "name": "example",
       "quickFormat": true,
-      "uiPriority": {}
+      "uiPriority": 1
     }
   ]
 }

@@ -87,6 +87,13 @@ export function getWordChanges(oldText: string, newText: string): WordDiffOp[] {
       continue;
     }
 
+    // SD-3044: capture the index where this delete/insert group starts so we
+    // can inspect the step immediately preceding the group (typically an
+    // 'equal' that anchors a pure-insert group's position). After the inner
+    // while loop runs, `i` points past the group, so `steps[i - 1]` is the
+    // last delete/insert in this group and never reflects the prior anchor.
+    const groupStart = i;
+
     let deleteStart = -1;
     let deleteEnd = -1;
     let insertText = '';
@@ -108,7 +115,7 @@ export function getWordChanges(oldText: string, newText: string): WordDiffOp[] {
     } else if (deleteStart !== -1) {
       result.push({ type: 'delete', oldFrom: deleteStart, oldTo: deleteEnd });
     } else if (insertText.length > 0) {
-      const prevStep = i > 0 ? steps[i - 1] : null;
+      const prevStep = groupStart > 0 ? steps[groupStart - 1] : null;
       let insertAt = 0;
       if (prevStep && prevStep.type === 'equal') {
         const prevToken = oldTokens[prevStep.oldIdx];

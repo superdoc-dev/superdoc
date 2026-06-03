@@ -241,7 +241,7 @@ function normalizeStructuredContentMetadata(
   nodeType: 'structuredContent' | 'structuredContentBlock',
   attrs: Record<string, unknown>,
 ): StructuredContentMetadata {
-  return {
+  const metadata: StructuredContentMetadata = {
     type: 'structuredContent',
     scope: nodeType === 'structuredContentBlock' ? 'block' : 'inline',
     id: toNullableString(attrs.id),
@@ -250,6 +250,14 @@ function normalizeStructuredContentMetadata(
     lockMode: attrs.lockMode as StructuredContentMetadata['lockMode'],
     sdtPr: attrs.sdtPr,
   };
+  // `appearance` comes from the SDT's <w15:appearance> element on import.
+  // Only the three spec-defined values flow through; anything else is
+  // discarded so a bad value doesn't poison rendering decisions.
+  const rawAppearance = toOptionalString(attrs.appearance);
+  if (rawAppearance === 'boundingBox' || rawAppearance === 'tags' || rawAppearance === 'hidden') {
+    metadata.appearance = rawAppearance;
+  }
+  return metadata;
 }
 
 function normalizeDocumentSectionMetadata(attrs: Record<string, unknown>): DocumentSectionMetadata {

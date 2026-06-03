@@ -1,3 +1,4 @@
+from .presets import DEFAULT_PRESET, get_preset, list_presets
 from .client import AsyncSuperDocClient, AsyncSuperDocDocument, SuperDocClient, SuperDocDocument
 from .errors import SuperDocError
 from .skill_api import get_skill, install_skill, list_skills
@@ -29,4 +30,7 @@ __all__ = [
     "dispatch_superdoc_tool_async",
     "get_mcp_prompt",
     "get_system_prompt",
+    "DEFAULT_PRESET",
+    "get_preset",
+    "list_presets",
 ]

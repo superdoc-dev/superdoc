@@ -56,18 +56,14 @@ jobs:
       fail-fast: false
       matrix:
         demo:
+          - contract-templates
           - custom-ui
           - docx-from-html
-          - docxtemplater
-          - fields
+          - fields-source
           - grading-papers
           # - html-editor  # broken: imports unpublished superdoc/super-editor/style.css subpath
           - linked-sections
-          - loading-from-json
           - nextjs-ssr
-          # - replace-content  # broken: runtime nextSibling error in SuperDoc
-          - text-selection
-          - toolbar
     steps:
       - name: Restore workspace
         uses: actions/cache/restore@v4
@@ -76,6 +72,8 @@ jobs:
             .
             ~/.cache/ms-playwright
           key: demos-workspace-${{ github.sha }}
+
+      - uses: pnpm/action-setup@v4
 
       - name: Run smoke test
         working-directory: demos/__tests__

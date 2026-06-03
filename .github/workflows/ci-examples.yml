@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [react, vue, vanilla, cdn, angular, nuxt, laravel]
+        example: [react, vue, vanilla, cdn, angular, nuxt, laravel, solid]
     steps:
       - name: Restore workspace
         uses: actions/cache/restore@v4

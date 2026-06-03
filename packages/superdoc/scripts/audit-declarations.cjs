@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Audit the published declaration surface for leaks the package boundary RFC
- * (SD-2829) classifies as forbidden. Walks every `.d.ts` file under `dist/`
+ * (SD-2829) classifies as forbidden. Walks every declaration file under `dist/`
  * and reports:
  *
  *  Rule 1 (FAIL in strict mode): private workspace specifier in an emitted
@@ -90,7 +90,7 @@ function collectDtsFiles(dir) {
       files.push(...collectDtsFiles(fullPath));
       continue;
     }
-    if (entry.name.endsWith('.d.ts')) {
+    if (entry.name.endsWith('.d.ts') || entry.name.endsWith('.d.cts')) {
       files.push(fullPath);
     }
   }
@@ -159,7 +159,7 @@ const relocatedInShim = RELOCATION_GUARD_PACKAGES.filter((pkg) =>
 
 console.log('[audit-declarations] Declaration surface audit');
 console.log('='.repeat(72));
-console.log(`Scanned: ${dtsFiles.length} .d.ts files under ${path.relative(process.cwd(), distRoot)}/`);
+console.log(`Scanned: ${dtsFiles.length} declaration files under ${path.relative(process.cwd(), distRoot)}/`);
 console.log();
 
 const violations = [];

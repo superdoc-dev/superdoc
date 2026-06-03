@@ -81,6 +81,7 @@ export const HEADLESS_ITEM_MAP = {
   numberedlist: 'numbered-list',
   table: 'table-insert',
   image: 'image',
+  tableOfContents: 'table-of-contents-insert',
   color: 'text-color',
   highlight: 'highlight-color',
   textAlign: 'text-align',
@@ -88,6 +89,8 @@ export const HEADLESS_ITEM_MAP = {
   linkedStyles: 'linked-style',
   indentleft: 'indent-decrease',
   indentright: 'indent-increase',
+  directionLtr: 'direction-ltr',
+  directionRtl: 'direction-rtl',
   clearFormatting: 'clear-formatting',
   copyFormat: 'copy-format',
 };

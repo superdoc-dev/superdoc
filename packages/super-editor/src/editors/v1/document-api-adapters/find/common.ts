@@ -8,7 +8,7 @@ import type {
   UnknownNodeDiagnostic,
 } from '@superdoc/document-api';
 import { toId } from '../helpers/value-utils.js';
-import { getInlineIndex } from '../helpers/index-cache.js';
+import { getBlockIndex, getInlineIndex } from '../helpers/index-cache.js';
 import {
   findBlockById,
   toBlockAddress,
@@ -17,6 +17,7 @@ import {
 } from '../helpers/node-address-resolver.js';
 import { findInlineByAnchor, isInlineQueryType } from '../helpers/inline-address-resolver.js';
 import { findCandidateByPos } from '../helpers/adapter-utils.js';
+import { pmPositionToTextOffset, textContentInBlock, type TextOffsetOptions } from '../helpers/text-offset-resolver.js';
 
 /** Characters of document text to include before and after a match in snippet context. */
 const SNIPPET_PADDING = 30;
@@ -48,6 +49,13 @@ const KNOWN_INLINE_PM_NODE_TYPES = new Set<string>([
   'commentRangeStart',
   'commentRangeEnd',
 ]);
+
+function getCandidateText(editor: Editor, candidate: BlockCandidate, options?: TextOffsetOptions): string {
+  if (candidate.node.childCount > 0) {
+    return textContentInBlock(candidate.node, options);
+  }
+  return editor.state.doc.textBetween(candidate.pos + 1, candidate.end - 1, '\n', '\ufffc');
+}
 
 function resolveUnknownBlockId(attrs: Record<string, unknown> | undefined): string | undefined {
   if (!attrs) return undefined;
@@ -85,7 +93,46 @@ export function buildTextContext(
   matchFrom: number,
   matchTo: number,
   textRanges?: TextAddress[],
+  options?: TextOffsetOptions,
 ): MatchContext {
+  if (textRanges?.length) {
+    const index = getBlockIndex(editor);
+    const firstRange = textRanges[0];
+    const lastRange = textRanges[textRanges.length - 1];
+    const firstBlock = index.candidates.find((candidate) => candidate.nodeId === firstRange.blockId);
+    const lastBlock = index.candidates.find((candidate) => candidate.nodeId === lastRange.blockId);
+
+    if (firstBlock && lastBlock) {
+      const matchText = textRanges
+        .map((range) => {
+          const block = index.candidates.find((candidate) => candidate.nodeId === range.blockId);
+          if (!block) return '';
+          return getCandidateText(editor, block, options).slice(range.range.start, range.range.end);
+        })
+        .join('\n');
+      const firstText = getCandidateText(editor, firstBlock, options);
+      const lastText = getCandidateText(editor, lastBlock, options);
+      const leftContext = firstText.slice(
+        Math.max(0, firstRange.range.start - SNIPPET_PADDING),
+        firstRange.range.start,
+      );
+      const rightContext = lastText.slice(lastRange.range.end, lastRange.range.end + SNIPPET_PADDING);
+      const snippet = `${leftContext}${matchText}${rightContext}`.replace(/ {2,}/g, ' ');
+      const prefix = leftContext.replace(/ {2,}/g, ' ');
+      const normalizedMatch = matchText.replace(/ {2,}/g, ' ');
+
+      return {
+        address,
+        snippet,
+        highlightRange: {
+          start: prefix.length,
+          end: prefix.length + normalizedMatch.length,
+        },
+        textRanges,
+      };
+    }
+  }
+
   const docSize = editor.state.doc.content.size;
   const snippetFrom = Math.max(0, matchFrom - SNIPPET_PADDING);
   const snippetTo = Math.min(docSize, matchTo + SNIPPET_PADDING);
@@ -120,13 +167,20 @@ export function toTextAddress(
   editor: Editor,
   block: BlockCandidate,
   range: { from: number; to: number },
+  options?: TextOffsetOptions,
 ): TextAddress | undefined {
   const blockStart = block.pos + 1;
   const blockEnd = block.end - 1;
   if (range.from < blockStart || range.to > blockEnd) return undefined;
 
-  const start = editor.state.doc.textBetween(blockStart, range.from, '\n', '\ufffc').length;
-  const end = editor.state.doc.textBetween(blockStart, range.to, '\n', '\ufffc').length;
+  const start =
+    block.node.childCount > 0
+      ? pmPositionToTextOffset(block.node, block.pos, range.from, options)
+      : editor.state.doc.textBetween(blockStart, range.from, '\n', '\ufffc').length;
+  const end =
+    block.node.childCount > 0
+      ? pmPositionToTextOffset(block.node, block.pos, range.to, options)
+      : editor.state.doc.textBetween(blockStart, range.to, '\n', '\ufffc').length;
 
   return {
     kind: 'text',

@@ -26,12 +26,14 @@ import { getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
 import { pruneIgnoredNodes } from './ignoredNodes.js';
 import { tabNodeEntityHandler } from './tabImporter.js';
 import { noBreakHyphenNodeEntityHandler } from './noBreakHyphenImporter.js';
+import { smartTagNodeEntityHandler } from './smartTagImporter.js';
 import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
 import { endnoteReferenceHandlerEntity } from './endnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
 import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
 import { bibliographyHandlerEntity } from './bibliographyImporter.js';
+import { tableOfAuthoritiesHandlerEntity } from './tableOfAuthoritiesImporter.js';
 import { preProcessNodesForFldChar } from '../../field-references';
 import { preProcessPageFieldsOnly } from '../../field-references/preProcessPageFieldsOnly.js';
 import { ensureNumberingCache } from './numberingCache.js';
@@ -47,6 +49,7 @@ import { translator as wNumberingTranslator } from '@converter/v3/handlers/w/num
 import { baseNumbering } from '@converter/v2/exporter/helpers/base-list.definitions.js';
 import { patchNumberingDefinitions } from './patchNumberingDefinitions.js';
 import { startCollection, drainDiagnostics } from '@converter/v3/handlers/import-diagnostics.js';
+import { TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY } from '@extensions/track-changes/review-model/word-id-allocator.js';
 
 /**
  * @typedef {import()} XmlNode
@@ -72,7 +75,39 @@ import { startCollection, drainDiagnostics } from '@converter/v3/handlers/import
  * @param {ParsedDocx} docx The parsed docx object
  * @returns {'word' | 'google-docs' | 'unknown'} The detected origin
  */
+const OFFICE_DOCUMENT_RELATIONSHIP =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
+const SUPERDOC_DOCUMENT_ORIGIN_PROPERTY = 'SuperdocDocumentOrigin';
+const STORED_DOCUMENT_ORIGINS = new Set(['word', 'google-docs', 'unknown', 'superdoc']);
+
+const listPackageRelationships = (docx) => {
+  try {
+    const relationships = docx?.['_rels/.rels']?.elements?.find((el) => matchesElementName(el?.name, 'Relationships'));
+    return Array.isArray(relationships?.elements)
+      ? relationships.elements.filter((el) => matchesElementName(el?.name, 'Relationship'))
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const looksLikeGoogleDocsMinimalPackage = (docx) => {
+  const packageRelationships = listPackageRelationships(docx);
+  if (packageRelationships.length !== 1) return false;
+  if (packageRelationships[0]?.attributes?.Type !== OFFICE_DOCUMENT_RELATIONSHIP) return false;
+  return !docx?.['docProps/app.xml'] && !docx?.['docProps/core.xml'] && !docx?.['word/webSettings.xml'];
+};
+
 const detectDocumentOrigin = (docx) => {
+  const storedOrigin = readCustomProperty(docx, SUPERDOC_DOCUMENT_ORIGIN_PROPERTY);
+  if (storedOrigin && STORED_DOCUMENT_ORIGINS.has(storedOrigin)) {
+    return storedOrigin;
+  }
+
+  if (readCustomProperty(docx, 'SuperdocVersion') || readCustomProperty(docx, TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY)) {
+    return 'superdoc';
+  }
+
   const commentsExtended = docx['word/commentsExtended.xml'];
   if (commentsExtended) {
     const { elements: initialElements = [] } = commentsExtended;
@@ -92,8 +127,57 @@ const detectDocumentOrigin = (docx) => {
     return 'google-docs';
   }
 
+  if (looksLikeGoogleDocsMinimalPackage(docx)) {
+    return 'google-docs';
+  }
+
   return 'unknown';
 };
+
+const matchesElementName = (name, localName) => {
+  if (typeof name !== 'string') return false;
+  return name === localName || name.endsWith(`:${localName}`);
+};
+
+function readCustomProperty(docx, propertyName) {
+  try {
+    const customXml = docx?.['docProps/custom.xml'];
+    const properties = customXml?.elements?.find((el) => matchesElementName(el?.name, 'Properties'));
+    const property = properties?.elements?.find(
+      (el) => matchesElementName(el?.name, 'property') && el?.attributes?.name === propertyName,
+    );
+    const value = property?.elements?.[0]?.elements?.[0]?.text;
+    return typeof value === 'string' && value.length > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+const parseTrackedChangeSourceIdMap = (raw) => {
+  if (typeof raw !== 'string' || raw.length === 0) return new Map();
+
+  try {
+    const parsed = JSON.parse(raw);
+    const parts = parsed && typeof parsed === 'object' ? parsed.parts : null;
+    if (!parts || typeof parts !== 'object') return new Map();
+
+    const byPart = new Map();
+    for (const [partPath, entries] of Object.entries(parts)) {
+      if (!partPath || !entries || typeof entries !== 'object') continue;
+      const byWordId = new Map();
+      for (const [wordId, sourceId] of Object.entries(entries)) {
+        if (typeof sourceId === 'string' && sourceId.length > 0) byWordId.set(wordId, sourceId);
+      }
+      if (byWordId.size > 0) byPart.set(partPath, byWordId);
+    }
+    return byPart;
+  } catch {
+    return new Map();
+  }
+};
+
+const readTrackedChangeSourceIdMap = (docx) =>
+  parseTrackedChangeSourceIdMap(readCustomProperty(docx, TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY));
 
 /**
  * Detect the document-level threading profile for comments based on file structure.
@@ -125,6 +209,7 @@ export const createDocumentJson = (docx, converter, editor) => {
     importViewSettingFromSettings(docx, converter);
     converter.documentOrigin = detectDocumentOrigin(docx);
     converter.commentThreadingProfile = detectCommentThreadingProfile(docx);
+    converter.trackedChangeSourceIdMapByPart = readTrackedChangeSourceIdMap(docx);
   }
 
   const nodeListHandler = defaultNodeListHandler();
@@ -158,8 +243,16 @@ export const createDocumentJson = (docx, converter, editor) => {
     const trackedChangeIdMapOptions = {
       replacements: converter.trackedChangesOptions?.replacements ?? 'paired',
     };
-    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx, trackedChangeIdMapOptions);
+    // AIDEV-NOTE: SD-2528. The per-part map and the global map MUST share UUIDs
+    // for the same w:id, otherwise documentCommentsImporter (uses the global)
+    // and the ins/del translators (use the per-part) end up with two different
+    // UUIDs for the same tracked change — the comment's trackedChangeParentId
+    // never matches the tracked-change mark's id, breaking accept/reject
+    // cascading.
     converter.trackedChangeIdMapsByPart = buildTrackedChangeIdMapsByPart(docx, trackedChangeIdMapOptions);
+    converter.trackedChangeIdMap =
+      converter.trackedChangeIdMapsByPart.get('word/document.xml') ??
+      buildTrackedChangeIdMap(docx, trackedChangeIdMapOptions);
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
     const endnotes = importEndnoteData({ docx, nodeListHandler, converter, editor, numbering });
@@ -248,9 +341,11 @@ export const defaultNodeListHandler = () => {
     endnoteReferenceHandlerEntity,
     tabNodeEntityHandler,
     noBreakHyphenNodeEntityHandler,
+    smartTagNodeEntityHandler,
     tableOfContentsHandlerEntity,
     indexHandlerEntity,
     bibliographyHandlerEntity,
+    tableOfAuthoritiesHandlerEntity,
     indexEntryHandlerEntity,
     autoPageHandlerEntity,
     autoTotalPageCountEntity,
@@ -316,6 +411,7 @@ const createNodeListHandler = (nodeHandlers) => {
     parentStyleId,
     lists,
     inlineDocumentFonts,
+    importTrackingContext,
     path = [],
     extraParams = {},
   }) => {
@@ -351,6 +447,7 @@ const createNodeListHandler = (nodeHandlers) => {
                 parentStyleId,
                 lists,
                 inlineDocumentFonts,
+                importTrackingContext,
                 path,
                 extraParams,
               });
@@ -1260,11 +1357,37 @@ const isStOnOffEnabled = (element) => {
   return ST_ON_OFF_TRUE_VALUES.has(String(rawValue).trim().toLowerCase());
 };
 
+/**
+ * Reads `w:evenAndOddHeaders` from a parsed `word/settings.xml` node (the same
+ * shape as `convertedXml['word/settings.xml']` after import).
+ *
+ * @param {unknown} settingsPart Parsed settings part root (may be `w:settings`,
+ *   a wrapper with `w:settings` among `elements`, or the file node whose first
+ *   child is `w:settings`).
+ * @returns {boolean | null} `true`/`false` when the element is present; `null`
+ *   when it is absent or the part is unreadable (callers may fall back to e.g.
+ *   `pageStyles.alternateHeaders`).
+ */
+export const resolveEvenAndOddHeadersFromSettingsPart = (settingsPart) => {
+  if (!settingsPart || typeof settingsPart !== 'object') return null;
+
+  const part =
+    /** @type {{ name?: string; elements?: { name?: string; elements?: unknown[]; attributes?: Record<string, unknown> }[] }} */ (
+      settingsPart
+    );
+  const settingsRoot = part.name === 'w:settings' ? part : part.elements?.find((entry) => entry?.name === 'w:settings');
+  if (!settingsRoot?.elements?.length) return null;
+
+  const evenOdd = settingsRoot.elements.find((el) => el?.name === 'w:evenAndOddHeaders');
+  if (!evenOdd) return null;
+
+  return isStOnOffEnabled(evenOdd);
+};
+
 export const isAlternatingHeadersOddEven = (docx) => {
   const settings = docx['word/settings.xml'];
-  if (!settings || !settings.elements?.length) return false;
+  if (!settings) return false;
 
-  const { elements = [] } = settings.elements[0];
-  const evenOdd = elements.find((el) => el.name === 'w:evenAndOddHeaders');
-  return isStOnOffEnabled(evenOdd);
+  const resolved = resolveEvenAndOddHeadersFromSettingsPart(settings);
+  return resolved ?? false;
 };

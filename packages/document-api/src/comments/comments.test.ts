@@ -9,9 +9,17 @@ import {
 
 const stubAdapter = () =>
   ({
-    add: mock(() => ({ success: true })),
+    add: mock(() => ({
+      success: true,
+      id: 'c1',
+      inserted: [{ kind: 'entity', entityType: 'comment', entityId: 'c1' }],
+    })),
     edit: mock(() => ({ success: true })),
-    reply: mock(() => ({ success: true })),
+    reply: mock(() => ({
+      success: true,
+      id: 'c2',
+      inserted: [{ kind: 'entity', entityType: 'comment', entityId: 'c2' }],
+    })),
     move: mock(() => ({ success: true })),
     resolve: mock(() => ({ success: true })),
     reopen: mock(() => ({ success: true })),
@@ -39,6 +47,14 @@ describe('executeCommentsCreate validation', () => {
     } catch (e: any) {
       expect(e.code).toBe('INVALID_INPUT');
     }
+  });
+
+  it('returns the created comment id on success', () => {
+    const adapter = stubAdapter();
+    const target = { kind: 'text', blockId: 'b1', range: { start: 0, end: 5 } };
+    const receipt = executeCommentsCreate(adapter, { text: 'hello', target });
+    expect(receipt.success).toBe(true);
+    expect(receipt.id).toBe('c1');
   });
 });
 

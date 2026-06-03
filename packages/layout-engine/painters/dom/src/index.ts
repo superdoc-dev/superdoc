@@ -40,13 +40,14 @@ export type {
   PaintSnapshotImageEntity,
   PaintSnapshotEntities,
 } from './renderer.js';
-export type { DomPainterInput, PositionMapping, RenderedLineInfo } from './renderer.js';
+export type { DomPainterInput, PositionMapping } from './renderer.js';
+export type { RenderedLineInfo } from './runs/index.js';
 
 // Re-export utility functions for testing
-export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './renderer.js';
+export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './runs/index.js';
 
 export { applySquareWrapExclusionsToLines } from './utils/anchor-helpers';
-export { buildImagePmSelector, buildInlineImagePmSelector } from './utils/image-selectors.js';
+export { buildImagePmSelector, buildInlineImagePmSelector } from './images/image-selectors.js';
 
 // Re-export PM position validation utilities
 export {
@@ -101,6 +102,8 @@ export type DomPainterOptions = {
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
   /** Render nonprinting formatting marks such as spaces, tabs, and paragraph marks. */
   showFormattingMarks?: boolean;
+  /** Built-in SDT chrome rendering mode. */
+  contentControlsChrome?: 'default' | 'none';
 };
 
 export type DomPainterHandle = {

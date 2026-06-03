@@ -4,6 +4,7 @@ import { h, defineComponent, ref, shallowRef, reactive, nextTick } from 'vue';
 import { DOCX } from '@superdoc/common';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
+import { Mapping, StepMap } from 'prosemirror-transform';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { Extension } from '../../super-editor/src/editors/v1/core/Extension.js';
 import {
@@ -114,12 +115,19 @@ const createTrackedChangeIndexStub = () => ({
 });
 
 const getTrackedChangeIndexMock = vi.fn(() => createTrackedChangeIndexStub());
+const resolveTrackedChangeColorMock = vi.fn(() => '#123456');
+const composeAuthorColorResolverMock = vi.fn((config) => (config ? resolveTrackedChangeColorMock : undefined));
+
+vi.mock('@superdoc/contracts', () => ({
+  composeAuthorColorResolver: composeAuthorColorResolverMock,
+}));
 
 // Mock @superdoc/super-editor with stubs and PresentationEditor class
 vi.mock('@superdoc/super-editor', () => ({
   SuperEditor: SuperEditorStub,
   AIWriter: AIWriterStub,
   getTrackedChangeIndex: getTrackedChangeIndexMock,
+  TrackChangesBasePluginKey: 'TrackChangesBasePluginKey',
   PresentationEditor: class PresentationEditorMock {
     static getInstance(documentId) {
       return mockState.instances.get(documentId);
@@ -194,6 +202,7 @@ const buildCommentsStore = () => ({
   handleEditorLocationsUpdate: vi.fn(),
   clearEditorCommentPositions: vi.fn(),
   handleTrackedChangeUpdate: vi.fn(),
+  refreshTrackedChangeCommentsByIds: vi.fn(),
   syncTrackedChangePositionsWithDocument: vi.fn(),
   syncTrackedChangeComments: vi.fn(),
   removePendingComment: vi.fn(),
@@ -284,7 +293,7 @@ const createCommentsStoreWithFloatingGetter = () => {
 
 const mountComponent = async (
   superdocStub,
-  { surfaceManager = null, superdocStore = null, commentsStore = null } = {},
+  { surfaceManager = null, superdocStore = null, commentsStore = null, attachTo = null } = {},
 ) => {
   superdocStoreStub = superdocStore ?? buildSuperdocStore();
   commentsStoreStub = commentsStore ?? buildCommentsStore();
@@ -294,6 +303,7 @@ const mountComponent = async (
   const component = (await import('./SuperDoc.vue')).default;
 
   return mount(component, {
+    ...(attachTo ? { attachTo } : {}),
     global: {
       components: {
         SuperEditor: SuperEditorStub,
@@ -326,6 +336,7 @@ const mountComponent = async (
 
 const createSuperdocStub = () => {
   const toolbar = { config: { aiApiKey: 'abc' }, setActiveEditor: vi.fn(), updateToolbarState: vi.fn() };
+  const runtimeMap = new Map();
   return {
     config: {
       modules: { comments: {}, ai: {}, toolbar: {}, pdf: {} },
@@ -345,6 +356,13 @@ const createSuperdocStub = () => {
     broadcastPdfDocumentReady: vi.fn(),
     broadcastSidebarToggle: vi.fn(),
     setActiveEditor: vi.fn(),
+    registerEditorRuntime: vi.fn((runtime) => {
+      if (runtime?.id) runtimeMap.set(runtime.id, runtime);
+    }),
+    unregisterEditorRuntime: vi.fn((runtimeId) => runtimeMap.delete(runtimeId)),
+    setActiveRuntime: vi.fn(),
+    getActiveRuntime: vi.fn(() => null),
+    activateRuntimeFromEventTarget: vi.fn(() => false),
     lockSuperdoc: vi.fn(),
     emit: vi.fn(),
     listeners: vi.fn(),
@@ -352,6 +370,32 @@ const createSuperdocStub = () => {
     canPerformPermission: vi.fn(() => true),
   };
 };
+
+const createRuntimeEditorMock = (documentId = 'doc-1') => ({
+  options: { documentId },
+  editorVersion: 1,
+  state: {
+    doc: { textBetween: vi.fn(() => '') },
+    selection: { from: 0, to: 0, empty: true },
+  },
+  commands: {
+    insertContent: vi.fn(() => true),
+  },
+  view: { focus: vi.fn() },
+  focus: vi.fn(),
+  on: vi.fn(),
+  off: vi.fn(),
+  exportDocx: vi.fn(async () => new ArrayBuffer(0)),
+});
+
+const createPresentationEditorMock = () => ({
+  focus: vi.fn(),
+  setZoom: vi.fn(),
+  setContextMenuDisabled: vi.fn(),
+  on: vi.fn(),
+  off: vi.fn(),
+  getCommentBounds: vi.fn(() => ({})),
+});
 
 const createFloatingCommentsSchema = () =>
   new Schema({
@@ -420,6 +464,9 @@ describe('SuperDoc.vue', () => {
     useSelectedTextMock.mockClear();
     getTrackedChangeIndexMock.mockClear();
     getTrackedChangeIndexMock.mockImplementation(() => createTrackedChangeIndexStub());
+    resolveTrackedChangeColorMock.mockClear();
+    composeAuthorColorResolverMock.mockReset();
+    composeAuthorColorResolverMock.mockImplementation((config) => (config ? resolveTrackedChangeColorMock : undefined));
     mockState.instances.clear();
 
     // Make RAF synchronous in tests — jsdom has no rendering loop, and
@@ -544,6 +591,28 @@ describe('SuperDoc.vue', () => {
     await nextTick();
     expect(superdocStoreStub.isReady.value).toBe(true);
 
+    // SD-673: pin the list-definitions-change bridge using the actual
+    // production payload shape. Both producers in super-editor's
+    // numbering-part-descriptor emit `{ editor, numbering }` (see
+    // packages/super-editor/src/editors/v1/core/parts/adapters/
+    // numbering-part-descriptor.ts:222,242). ListDefinitionsPayload
+    // itself marks all three fields optional, so this test pins the
+    // current production numbering variant + the SuperDoc.vue
+    // pass-through, not every possible ListDefinitionsPayload shape.
+    //
+    // Reference equality (.toBe) pins verbatim pass-through; the
+    // separate Object.keys snapshot pins the key set in case the
+    // bridge ever mutates the payload in place before forwarding (a
+    // deep-equal assertion against the same reference would pass
+    // trivially).
+    const listDefsPayload = { editor: editorMock, numbering: { nums: [] } };
+    options.onListDefinitionsChange(listDefsPayload);
+    const listDefsCall = superdocStub.emit.mock.calls.find(([name]) => name === 'list-definitions-change');
+    expect(listDefsCall).toBeDefined();
+    const [, emittedListDefsPayload] = listDefsCall;
+    expect(emittedListDefsPayload).toBe(listDefsPayload);
+    expect(Object.keys(emittedListDefsPayload).sort()).toEqual(['editor', 'numbering']);
+
     options.onDocumentLocked({ editor: editorMock, isLocked: true, lockedBy: { name: 'A' } });
     expect(superdocStub.lockSuperdoc).toHaveBeenCalledWith(true, { name: 'A' });
 
@@ -554,6 +623,72 @@ describe('SuperDoc.vue', () => {
       code: 'DOCX_ENCRYPTION_UNSUPPORTED',
       documentId: 'doc-1',
     });
+  });
+
+  it('bridges content-control editor events to superdoc public events', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const listeners = {};
+    const editorMock = {
+      options: { documentId: 'doc-1' },
+      on: vi.fn((event, handler) => {
+        listeners[event] = handler;
+      }),
+    };
+
+    options.onCreate({ editor: editorMock });
+
+    const activePayload = {
+      active: { id: 'cc-2', controlType: 'text', scope: 'inline', tag: 'tag-2', alias: 'Alias 2' },
+      previous: { id: 'cc-1', controlType: 'text', scope: 'inline', tag: 'tag-1', alias: 'Alias 1' },
+      source: 'pointer',
+    };
+    const blurPayload = {
+      active: null,
+      previous: { id: 'cc-2', controlType: 'text', scope: 'inline', tag: 'tag-2', alias: 'Alias 2' },
+      source: 'keyboard',
+    };
+    const clickPayload = {
+      target: { id: 'cc-2', controlType: 'text', scope: 'inline', tag: 'tag-2', alias: 'Alias 2' },
+      source: 'pointer',
+    };
+
+    listeners.contentControlFocus?.(activePayload);
+    listeners.contentControlBlur?.(blurPayload);
+    listeners.contentControlClick?.(clickPayload);
+
+    expect(superdocStub.emit).toHaveBeenCalledWith('content-control:active-change', activePayload);
+    expect(superdocStub.emit).toHaveBeenCalledWith('content-control:active-change', blurPayload);
+    expect(superdocStub.emit).toHaveBeenCalledWith('content-control:click', clickPayload);
+  });
+
+  it('bridges content-control blur payload (active=null) as active-change event', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const listeners = {};
+    const editorMock = {
+      options: { documentId: 'doc-1' },
+      on: vi.fn((event, handler) => {
+        listeners[event] = handler;
+      }),
+    };
+
+    options.onCreate({ editor: editorMock });
+
+    const blurPayload = {
+      active: null,
+      previous: { id: 'cc-prev', controlType: 'text', scope: 'inline', tag: 'tag-prev', alias: 'Prev' },
+      source: 'keyboard',
+    };
+    listeners.contentControlBlur?.(blurPayload);
+
+    expect(superdocStub.emit).toHaveBeenCalledWith('content-control:active-change', blurPayload);
   });
 
   it('does not emit public exception events for recoverable password prompt errors by default', async () => {
@@ -761,6 +896,141 @@ describe('SuperDoc.vue', () => {
     expect(removeEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function), true);
   });
 
+  it('routes product focus/pointer hits through activateRuntimeFromEventTarget and cleans up on unmount', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub, { attachTo: document.body });
+    await nextTick();
+
+    const subDocument = wrapper.element.querySelector('.superdoc__sub-document');
+    expect(subDocument).not.toBeNull();
+    const target = document.createElement('span');
+    subDocument.appendChild(target);
+
+    // Real product DOM events inside the marked runtime root activate the owning
+    // runtime through the shell helper — no painter inspection or dispatch here.
+    target.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(superdocStub.activateRuntimeFromEventTarget).toHaveBeenCalledWith(target, 'focusin');
+
+    target.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(superdocStub.activateRuntimeFromEventTarget).toHaveBeenCalledWith(target, 'pointerdown');
+
+    target.dispatchEvent(new Event('mousedown', { bubbles: true }));
+    expect(superdocStub.activateRuntimeFromEventTarget).toHaveBeenCalledWith(target, 'mousedown');
+
+    const callsBeforeUnmount = superdocStub.activateRuntimeFromEventTarget.mock.calls.length;
+
+    wrapper.unmount();
+
+    // After unmount the capture listeners are gone: further hits do not route.
+    document.body.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(superdocStub.activateRuntimeFromEventTarget.mock.calls.length).toBe(callsBeforeUnmount);
+  });
+
+  it('runtime hit routing outside any marked root delegates to the registry no-op (does not throw)', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub, { attachTo: document.body });
+    await nextTick();
+
+    // An event outside the document area still routes to the helper, which
+    // resolves no owning runtime and is a safe no-op (returns false).
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(superdocStub.activateRuntimeFromEventTarget).toHaveBeenCalledWith(document.body, 'pointerdown');
+
+    wrapper.unmount();
+  });
+
+  it('skips v1 runtime registration when the document host root is unavailable', async () => {
+    const superdocStub = createSuperdocStub();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const doc = superdocStoreStub.documents.value[0];
+    wrapper.vm.$.setupState.setSubDocumentRoot(doc, null);
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[SuperDoc] v1 runtime host root unavailable; skipping runtime registration for',
+      'doc-1',
+    );
+    expect(superdocStub.registerEditorRuntime).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+  });
+
+  it('registers a v1 runtime, attaches the presentation editor, and activates it on focus', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const editor = createRuntimeEditorMock('doc-1');
+    const presentationEditor = createPresentationEditorMock();
+    const editorComponent = wrapper.findComponent(SuperEditorStub);
+    const options = editorComponent.props('options');
+    superdocStoreStub.documents.value[0].setPresentationEditor = vi.fn();
+
+    options.onCreate({ editor });
+    const runtime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+
+    expect(runtime.documentId).toBe('doc-1');
+    expect(superdocStub.setActiveRuntime).toHaveBeenLastCalledWith(runtime.id, 'v1-editor-create');
+
+    editorComponent.vm.$emit('editor-ready', { editor, presentationEditor });
+    await nextTick();
+    expect(runtime.getSnapshot().state).toBe('editing-ready');
+    expect(presentationEditor.on).toHaveBeenCalledWith('paginationUpdate', expect.any(Function));
+    expect(presentationEditor.setContextMenuDisabled).toHaveBeenCalledWith(false);
+
+    superdocStub.setActiveRuntime.mockClear();
+    options.onFocus({ editor });
+    expect(superdocStub.setActiveRuntime).toHaveBeenCalledWith(runtime.id, 'v1-editor-focus');
+
+    runtime.dispose();
+    expect(superdocStub.unregisterEditorRuntime).toHaveBeenCalledWith(runtime.id);
+
+    wrapper.unmount();
+  });
+
+  it('disposes an existing v1 runtime before registering a replacement for the same document', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+    const firstRuntime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+    const disposeSpy = vi.spyOn(firstRuntime, 'dispose');
+
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+    const secondRuntime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(superdocStub.unregisterEditorRuntime).toHaveBeenCalledWith(firstRuntime.id);
+    expect(superdocStub.registerEditorRuntime).toHaveBeenCalledTimes(2);
+    expect(secondRuntime.id).not.toBe(firstRuntime.id);
+
+    wrapper.unmount();
+  });
+
+  it('disposes registered v1 runtimes on component unmount', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    options.onCreate({ editor: createRuntimeEditorMock('doc-1') });
+    const runtime = superdocStub.registerEditorRuntime.mock.calls.at(-1)[0];
+    const disposeSpy = vi.spyOn(runtime, 'dispose');
+
+    wrapper.unmount();
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(superdocStub.unregisterEditorRuntime).toHaveBeenCalledWith(runtime.id);
+  });
+
   it('forwards configured passwords to SuperEditor options', async () => {
     const superdocStub = createSuperdocStub();
     superdocStub.config.password = 'top-secret';
@@ -801,6 +1071,40 @@ describe('SuperDoc.vue', () => {
     const options = wrapper.findComponent(SuperEditorStub).props('options');
     expect(options.layoutEngineOptions.proofing).toBe(topLevelProofing);
     expect(options.layoutEngineOptions.flowMode).toBe('paginated');
+  });
+
+  it('forwards modules.contentControls.chrome into layoutEngineOptions for PresentationEditor', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.modules.contentControls = { chrome: 'none' };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    expect(options.layoutEngineOptions.contentControlsChrome).toBe('none');
+  });
+
+  it('leaves contentControlsChrome undefined when modules.contentControls is not configured', async () => {
+    const superdocStub = createSuperdocStub();
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    expect(options.layoutEngineOptions.contentControlsChrome).toBeUndefined();
+  });
+
+  it('forwards modules.trackChanges.authorColors into layoutEngineOptions for PresentationEditor', async () => {
+    const superdocStub = createSuperdocStub();
+    const authorColors = { overrides: { Alice: '#f00' } };
+    superdocStub.config.modules.trackChanges = { authorColors };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    expect(composeAuthorColorResolverMock).toHaveBeenCalledWith(authorColors);
+    expect(options.layoutEngineOptions.resolveTrackedChangeColor).toBe(resolveTrackedChangeColorMock);
   });
 
   it('handles replay comment update/delete events and triggers tracked-change resync', async () => {
@@ -999,6 +1303,72 @@ describe('SuperDoc.vue', () => {
 
     expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).not.toHaveBeenCalled();
     expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+  });
+
+  it('refreshes only touched tracked-change comments from normal body transactions', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+    const transaction = {
+      getMeta: vi.fn((key) =>
+        key === 'TrackChangesBasePluginKey'
+          ? {
+              insertedMark: { attrs: { id: 'tracked-insert-1' } },
+              deletionMark: { attrs: { id: 'tracked-delete-1' } },
+              formatMark: { attrs: { id: 'tracked-format-1' } },
+            }
+          : undefined,
+      ),
+    };
+
+    options.onTransaction({ editor: editorMock, transaction, duration: 3 });
+
+    expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).not.toHaveBeenCalled();
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    expect(commentsStoreStub.refreshTrackedChangeCommentsByIds).not.toHaveBeenCalled();
+
+    await Promise.resolve();
+    expect(commentsStoreStub.refreshTrackedChangeCommentsByIds).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: editorMock,
+      changeIds: ['tracked-insert-1', 'tracked-delete-1', 'tracked-format-1'],
+      broadcastChanges: true,
+    });
+  });
+
+  it('refreshes tracked-change comments found in changed transaction ranges', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+    const trackedNode = {
+      marks: [{ type: { name: 'trackInsert' }, attrs: { id: 'tracked-range-1' } }],
+    };
+    const transaction = {
+      docChanged: true,
+      doc: {
+        content: { size: 20 },
+        nodesBetween: vi.fn((from, to, visitor) => visitor(trackedNode)),
+      },
+      mapping: new Mapping([new StepMap([4, 0, 1])]),
+      getMeta: vi.fn(() => undefined),
+    };
+
+    options.onTransaction({ editor: editorMock, transaction, duration: 3 });
+
+    await Promise.resolve();
+    expect(transaction.doc.nodesBetween).toHaveBeenCalledWith(3, 6, expect.any(Function));
+    expect(commentsStoreStub.refreshTrackedChangeCommentsByIds).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: editorMock,
+      changeIds: ['tracked-range-1'],
+      broadcastChanges: true,
+    });
   });
 
   it('reconciles replay updates by importedId before commentId to avoid duplicate comments', async () => {
@@ -1458,6 +1828,35 @@ describe('SuperDoc.vue', () => {
     expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
   });
 
+  it('forwards replacedFile comment loads to the comments store', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editor = {
+      options: {
+        documentId: 'doc-1',
+        shouldLoadComments: false,
+      },
+    };
+
+    options.onCommentsLoaded({
+      editor,
+      comments: [{ commentId: 'c-1' }],
+      replacedFile: true,
+    });
+    await nextTick();
+
+    expect(commentsStoreStub.processLoadedDocxComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor,
+      comments: [{ commentId: 'c-1' }],
+      documentId: 'doc-1',
+      replacedFile: true,
+    });
+  });
+
   it('clears tracked-change positions for non-body tracked-change updates when viewing-mode comments are hidden', async () => {
     const superdocStub = createSuperdocStub();
     superdocStub.config.documentMode = 'viewing';
@@ -1766,6 +2165,261 @@ describe('SuperDoc.vue', () => {
     expect(wrapper.find('.floating-comments').exists()).toBe(true);
   });
 
+  it('hides sidebar when comments displayMode is inline', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    commentsStoreStub.getFloatingComments.value = [{ commentId: 'c-1' }];
+    commentsStoreStub.hasInitializedLocations.value = true;
+    superdocStoreStub.isReady.value = true;
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    await nextTick();
+
+    expect(wrapper.vm.showCommentsSidebar).toBe(false);
+    expect(wrapper.find('.superdoc__right-sidebar').exists()).toBe(false);
+  });
+
+  it('hides sidebar in auto mode when compact threshold is reached', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    commentsStoreStub.getFloatingComments.value = [{ commentId: 'c-1' }];
+    commentsStoreStub.hasInitializedLocations.value = true;
+    superdocStoreStub.isReady.value = true;
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    superdocStoreStub.modules.comments.compactBreakpointPx = 760;
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const parentEl = rootEl.parentElement;
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 700 });
+    if (parentEl) {
+      Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 700 });
+    }
+
+    wrapper.vm.recalculateCompactCommentsMode();
+    await nextTick();
+
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+    expect(wrapper.vm.showCommentsSidebar).toBe(false);
+  });
+
+  it('closes comment bubble and suppresses immediate comment activation on right-click', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    document.body.appendChild(wrapper.element);
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.setActiveComment.mockClear();
+    commentsStoreStub.removePendingComment.mockClear();
+
+    const layersEl = wrapper.find('.superdoc__layers').element;
+    layersEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+    expect(commentsStoreStub.removePendingComment).toHaveBeenCalledWith(superdocStub);
+
+    commentsStoreStub.setActiveComment.mockClear();
+    options.onCommentsUpdate({ activeCommentId: 'c1', type: 'trackedChange' });
+    await nextTick();
+
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalledWith(superdocStub, 'c1');
+
+    wrapper.element.remove();
+  });
+
+  it('renders compact comment popover when sidebar is disabled and there is an active thread', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    commentsStoreStub.removePendingComment.mockImplementation(() => {
+      commentsStoreStub.pendingComment.value = null;
+    });
+    commentsStoreStub.setActiveComment.mockImplementation((_, commentId) => {
+      commentsStoreStub.activeComment.value = commentId;
+    });
+    commentsStoreStub.pendingComment.value = { commentId: 'pending-1', selection: { selectionBounds: {} } };
+    await nextTick();
+
+    expect(wrapper.vm.showCommentsSidebar).toBe(false);
+    expect(wrapper.vm.activeCompactComment).toBeTruthy();
+    expect(wrapper.find('.superdoc__compact-comment-popover').exists()).toBe(true);
+    expect(wrapper.findComponent(CommentDialogStub).exists()).toBe(true);
+  });
+
+  it('uses PDF DOM anchor fallback for compact popover positioning when stored bounds are unavailable', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    commentsStoreStub.pendingComment.value = {
+      commentId: 'pending-1',
+      selection: { source: 'pdf', selectionBounds: {} },
+    };
+    await nextTick();
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const layersEl = wrapper.find('.superdoc__layers').element;
+    const anchorEl = document.createElement('div');
+    anchorEl.className = 'sd-comment-anchor';
+    anchorEl.setAttribute('data-id', 'pending-1');
+    rootEl.appendChild(anchorEl);
+
+    rootEl.getBoundingClientRect = () => ({ top: 50, left: 0, right: 900, bottom: 850, width: 900, height: 800 });
+    layersEl.getBoundingClientRect = () => ({ top: 100, left: 0, right: 800, bottom: 700, width: 800, height: 600 });
+    anchorEl.getBoundingClientRect = () => ({ top: 180, left: 10, right: 30, bottom: 200, width: 20, height: 20 });
+
+    superdocStoreStub.selectionPosition.value = { source: 'pdf', top: 100, left: 10, right: 20, bottom: 120 };
+    await nextTick();
+    await nextTick();
+    const style = wrapper.vm.compactCommentPopoverStyle;
+    expect(style.top).not.toBe('12px');
+  });
+
+  it('re-anchors compact popover when clicking between DOCX comment anchors', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    document.body.appendChild(wrapper.element);
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    commentsStoreStub.pendingComment.value = {
+      commentId: 'pending-1',
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    await nextTick();
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const layersEl = wrapper.find('.superdoc__layers').element;
+    rootEl.getBoundingClientRect = () => ({ top: 0, left: 0, right: 1000, bottom: 700, width: 1000, height: 700 });
+    layersEl.getBoundingClientRect = () => ({ top: 0, left: 100, right: 900, bottom: 700, width: 800, height: 700 });
+
+    const anchorA = document.createElement('span');
+    anchorA.className = 'superdoc-comment-highlight';
+    anchorA.setAttribute('data-comment-ids', 'pending');
+    anchorA.getBoundingClientRect = () => ({ top: 100, left: 140, right: 200, bottom: 120, width: 60, height: 20 });
+
+    const anchorB = document.createElement('span');
+    anchorB.className = 'superdoc-comment-highlight';
+    anchorB.setAttribute('data-comment-ids', 'pending');
+    anchorB.getBoundingClientRect = () => ({ top: 180, left: 420, right: 500, bottom: 200, width: 80, height: 20 });
+
+    layersEl.appendChild(anchorA);
+    layersEl.appendChild(anchorB);
+
+    const dispatchPointerDown = (target, x, y) => {
+      const event = new Event('pointerdown', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'button', { value: 0 });
+      Object.defineProperty(event, 'pointerType', { value: 'mouse' });
+      Object.defineProperty(event, 'clientX', { value: x });
+      Object.defineProperty(event, 'clientY', { value: y });
+      target.dispatchEvent(event);
+    };
+
+    dispatchPointerDown(anchorA, 160, 112);
+    await nextTick();
+    const firstStyle = wrapper.vm.compactCommentPopoverStyle;
+
+    dispatchPointerDown(anchorB, 450, 190);
+    await nextTick();
+    const secondStyle = wrapper.vm.compactCommentPopoverStyle;
+
+    expect(firstStyle.left).not.toBe(secondStyle.left);
+    expect(firstStyle.top).not.toBe(secondStyle.top);
+
+    wrapper.element.remove();
+  });
+
+  it('does not early-close compact popover on DOCX pointerdown outside anchors', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    document.body.appendChild(wrapper.element);
+
+    commentsStoreStub.removePendingComment.mockClear();
+    commentsStoreStub.setActiveComment.mockClear();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    commentsStoreStub.pendingComment.value = {
+      commentId: 'pending-1',
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    await nextTick();
+
+    expect(wrapper.find('.superdoc__compact-comment-popover').exists()).toBe(true);
+
+    const layersEl = wrapper.find('.superdoc__layers').element;
+    const outsideNode = document.createElement('div');
+    layersEl.appendChild(outsideNode);
+
+    const event = new Event('pointerdown', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'button', { value: 0 });
+    Object.defineProperty(event, 'pointerType', { value: 'mouse' });
+    Object.defineProperty(event, 'clientX', { value: 300 });
+    Object.defineProperty(event, 'clientY', { value: 300 });
+    outsideNode.dispatchEvent(event);
+    await nextTick();
+
+    expect(commentsStoreStub.removePendingComment).not.toHaveBeenCalled();
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalledWith(superdocStub, null);
+    expect(wrapper.find('.superdoc__compact-comment-popover').exists()).toBe(true);
+
+    wrapper.element.remove();
+  });
+
+  it('does not render compact comment popover when sidebar remains enabled', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    commentsStoreStub.pendingComment.value = { commentId: 'pending-1', selection: { selectionBounds: {} } };
+    await nextTick();
+
+    expect(wrapper.vm.showCommentsSidebar).toBeTruthy();
+    expect(wrapper.find('.superdoc__compact-comment-popover').exists()).toBe(false);
+  });
+
+  it('closes compact comment popover on Escape and restores focus', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const trigger = document.createElement('button');
+    trigger.textContent = 'trigger';
+    document.body.appendChild(trigger);
+    trigger.focus();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    commentsStoreStub.pendingComment.value = { commentId: 'pending-1', selection: { selectionBounds: {} } };
+    await nextTick();
+
+    expect(wrapper.find('.superdoc__compact-comment-popover').exists()).toBe(true);
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+      }),
+    );
+    await nextTick();
+    await nextTick();
+
+    expect(commentsStoreStub.removePendingComment).toHaveBeenCalled();
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+  });
+
   it('hides floating comments sidebar entirely in viewing mode even with comment positions', async () => {
     const superdocStub = createSuperdocStub();
     superdocStub.config.documentMode = 'viewing';
@@ -1779,6 +2433,145 @@ describe('SuperDoc.vue', () => {
 
     expect(wrapper.vm.showCommentsSidebar).toBe(false);
     expect(wrapper.find('.superdoc__right-sidebar').exists()).toBe(false);
+  });
+
+  it('computes compact comments mode for explicit sidebar/inline display modes', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    superdocStoreStub.modules.comments.displayMode = 'sidebar';
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(false);
+  });
+
+  it('computes compact comments mode in auto using compactBreakpointPx override', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const parentEl = rootEl.parentElement;
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 700 });
+    if (parentEl) {
+      Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 700 });
+    }
+
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    superdocStoreStub.modules.comments.compactBreakpointPx = 760;
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 900 });
+    if (parentEl) {
+      Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 900 });
+    }
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(false);
+  });
+
+  it('switches auto mode directly at compactBreakpointPx threshold', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const parentEl = rootEl.parentElement;
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    superdocStoreStub.modules.comments.compactBreakpointPx = 760;
+
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 700 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 700 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    // Still compact below threshold
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 759 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 759 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    // Exits compact at/above threshold
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 760 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 760 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(false);
+  });
+
+  it('switches auto mode directly at measured document threshold when compactBreakpointPx is absent', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const rootEl = wrapper.find('.superdoc').element;
+    const documentEl = wrapper.find('.superdoc__document').element;
+    const parentEl = rootEl.parentElement;
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    delete superdocStoreStub.modules.comments.compactBreakpointPx;
+    delete superdocStoreStub.modules.comments.compactMeasurementSelector;
+
+    // Measured threshold = document(816) + sidebar(320) + gutter(24) = 1160
+    Object.defineProperty(documentEl, 'clientWidth', { configurable: true, value: 816 });
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 1130 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 1130 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    // Still compact below threshold
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 1159 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 1159 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 1160 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 1160 });
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(false);
+  });
+
+  it('uses compactMeasurementSelector as width source in auto mode when target exists', async () => {
+    const superdocStub = createSuperdocStub();
+    const measurementTarget = document.createElement('div');
+    measurementTarget.id = 'compact-shell';
+    Object.defineProperty(measurementTarget, 'clientWidth', { configurable: true, value: 700 });
+    document.body.appendChild(measurementTarget);
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    superdocStoreStub.modules.comments.compactMeasurementSelector = '#compact-shell';
+    superdocStoreStub.modules.comments.compactBreakpointPx = 760;
+    wrapper.vm.recalculateCompactCommentsMode();
+
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+    measurementTarget.remove();
+  });
+
+  it('holds compact state when measured auto width is invalid (0)', async () => {
+    const superdocStub = createSuperdocStub();
+    const measurementTarget = document.createElement('div');
+    measurementTarget.id = 'compact-shell-invalid';
+    Object.defineProperty(measurementTarget, 'clientWidth', { configurable: true, value: 0 });
+    document.body.appendChild(measurementTarget);
+
+    superdocStub.config.modules.comments.compactMeasurementSelector = '#compact-shell-invalid';
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    superdocStoreStub.modules.comments.displayMode = 'inline';
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+
+    superdocStoreStub.modules.comments.displayMode = 'auto';
+    superdocStoreStub.modules.comments.compactBreakpointPx = 760;
+    wrapper.vm.recalculateCompactCommentsMode();
+    expect(wrapper.vm.isCompactCommentsMode).toBe(true);
+    measurementTarget.remove();
   });
 
   it('ignores comment location updates while in viewing mode', async () => {

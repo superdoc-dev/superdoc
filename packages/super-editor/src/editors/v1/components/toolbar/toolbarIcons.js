@@ -60,6 +60,9 @@ import copyIconSvg from '@superdoc/common/icons/copy-solid.svg?raw';
 import pasteIconSvg from '@superdoc/common/icons/paste-solid.svg?raw';
 import strikethroughSvg from '@superdoc/common/icons/strikethrough.svg?raw';
 import paragraphIconSvg from '@superdoc/common/icons/paragraph-solid.svg?raw';
+import tocIconSvg from '@superdoc/common/icons/toc-solid.svg?raw';
+import paragraphLtrIconSvg from '@superdoc/common/icons/paragraph-ltr-solid.svg?raw';
+import paragraphRtlIconSvg from '@superdoc/common/icons/paragraph-rtl-solid.svg?raw';
 
 export const toolbarIcons = {
   undo: rotateLeftIconSvg,
@@ -70,6 +73,7 @@ export const toolbarIcons = {
   color: fontIconSvg,
   link: linkIconSvg,
   image: imageIconSvg,
+  tableOfContents: tocIconSvg,
   alignLeft: alignLeftIconSvg,
   alignRight: alignRightIconSvg,
   alignCenter: alignCenterIconSvg,
@@ -89,6 +93,8 @@ export const toolbarIcons = {
   numberedListLowerAlphaParen: listLowerAlphaParenIconSvg,
   indentLeft: outdentIconSvg,
   indentRight: indentIconSvg,
+  directionLtr: paragraphLtrIconSvg,
+  directionRtl: paragraphRtlIconSvg,
   pageBreak: fileHalfDashedIconSvg,
   copyFormat: paintRollerIconSvg,
   clearFormatting: textSlashIconSvg,

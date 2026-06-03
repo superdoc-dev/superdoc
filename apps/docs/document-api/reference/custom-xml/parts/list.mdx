@@ -1,0 +1,95 @@
+---
+title: customXml.parts.list
+sidebarTitle: customXml.parts.list
+description: List Custom XML Data Storage Parts in the document, optionally filtered by root namespace or schema reference.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+List Custom XML Data Storage Parts in the document, optionally filtered by root namespace or schema reference.
+
+- Operation ID: `customXml.parts.list`
+- API member path: `editor.doc.customXml.parts.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CustomXmlPartsListResult with summary entries (no content); fetch content via get.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+| `rootNamespace` | string | no |  |
+| `schemaRef` | string | no |  |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "offset": 0
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "offset": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "rootNamespace": {
+      "type": "string"
+    },
+    "schemaRef": {
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

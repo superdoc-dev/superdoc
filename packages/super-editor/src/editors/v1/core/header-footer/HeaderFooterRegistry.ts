@@ -1,11 +1,11 @@
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { toFlowBlocks } from '@core/layout-adapter';
 import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from '../presentation-editor/utils/SchemaNodeTypes.js';
 import type { FlowBlock, TrackedChangesMode } from '@superdoc/contracts';
 import type { HeaderFooterBatch } from '@superdoc/layout-bridge';
 import type { Editor } from '@core/Editor.js';
 import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
-import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
+import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
 import { buildStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'] as const;
@@ -29,12 +29,17 @@ type MinimalConverterContext = {
 };
 
 /**
- * Extended Editor interface that includes the converter property.
- * Used for type-safe access to header/footer data stored in the converter.
+ * SD-3240: `Editor.converter` is now typed as `EditorConverterSurface`
+ * (a public no-`any` facade) rather than the raw `SuperConverter`
+ * class. Header/footer code reads narrower-than-surface fields
+ * (`headers` / `footers` / `headerIds` / `footerIds` as the
+ * `HeaderFooterCollections` shape). Cast at the boundary instead of
+ * declaring an `interface … extends Editor` that overrides
+ * `converter` incompatibly with the surface.
  */
-interface EditorWithConverter extends Editor {
+type EditorWithConverter = Omit<Editor, 'converter'> & {
   converter: HeaderFooterCollections;
-}
+};
 
 export type HeaderFooterKind = 'header' | 'footer';
 export type HeaderFooterVariant = (typeof HEADER_FOOTER_VARIANTS)[number];
@@ -184,12 +189,18 @@ export class HeaderFooterEditorManager extends EventEmitter {
   }
 
   /**
-   * Type guard to check if an editor has a converter property.
+   * Runtime check that the editor has a usable converter handle.
+   *
+   * SD-3240: cannot be a type predicate (`editor is EditorWithConverter`)
+   * because `Editor.converter` is `EditorConverterSurface` while
+   * `EditorWithConverter` overrides it to `HeaderFooterCollections`.
+   * The two shapes don't share a subtype relationship. Callers narrow
+   * with a local cast after the check.
    *
    * @param editor - The editor instance to check
    * @returns True if the editor has a converter property
    */
-  #hasConverter(editor: Editor): editor is EditorWithConverter {
+  #hasConverter(editor: Editor): boolean {
     return 'converter' in editor && editor.converter !== undefined && editor.converter !== null;
   }
 
@@ -206,9 +217,17 @@ export class HeaderFooterEditorManager extends EventEmitter {
    * - Rebuilds the descriptor map
    * - Tears down editors for sections that no longer exist
    *
+   * When `purgeCachedEditors` is true, all cached header/footer sub-editors are
+   * disposed first. Use after a full document replace: the same relationship id
+   * can point at new OOXML while `getDocumentJson` would otherwise keep serving
+   * the old live editor's PM JSON.
+   *
    * @throws Never throws - errors during editor teardown are caught and logged
    */
-  refresh(): void {
+  refresh(options?: { purgeCachedEditors?: boolean }): void {
+    if (options?.purgeCachedEditors) {
+      this.#teardownEditors();
+    }
     this.#collections = this.#extractCollections();
     const nextDescriptors = this.#collectDescriptors(this.#collections);
     this.#teardownMissingEditors(nextDescriptors);
@@ -897,7 +916,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
     if (!this.#hasConverter(this.#editor)) {
       return;
     }
-    const converter = this.#editor.converter as Record<string, unknown>;
+    const converter = this.#editor.converter as unknown as Record<string, unknown>;
     if (!converter) return;
 
     const targetKey = descriptor.kind === 'header' ? 'headerEditors' : 'footerEditors';
@@ -932,7 +951,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
     if (!this.#hasConverter(this.#editor)) {
       return;
     }
-    const converter = this.#editor.converter as Record<string, unknown>;
+    const converter = this.#editor.converter as unknown as Record<string, unknown>;
     if (!converter) return;
 
     const targetKey = descriptor.kind === 'header' ? 'headerEditors' : 'footerEditors';
@@ -1321,7 +1340,7 @@ export class HeaderFooterLayoutAdapter {
 
     const blockIdPrefix = `hf-${descriptor.kind}-${descriptor.id}-`;
     const converterContext = this.#getConverterContext();
-    const rootConverter = (this.#manager.rootEditor as EditorWithConverter | undefined)?.converter as
+    const rootConverter = (this.#manager.rootEditor as unknown as EditorWithConverter | undefined)?.converter as
       | { media?: Record<string, string>; getDocumentDefaultStyles?: () => { typeface?: string; fontSizePt?: number } }
       | undefined;
     const providedMedia = this.#mediaFiles;
@@ -1366,7 +1385,7 @@ export class HeaderFooterLayoutAdapter {
     if (!('converter' in rootEditor)) {
       return undefined;
     }
-    const converter = (rootEditor as EditorWithConverter).converter as Record<string, unknown> | undefined;
+    const converter = (rootEditor as unknown as EditorWithConverter).converter as Record<string, unknown> | undefined;
     if (!converter) return undefined;
 
     const context: ConverterContext = {

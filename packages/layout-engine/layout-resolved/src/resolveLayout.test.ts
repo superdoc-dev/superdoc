@@ -106,6 +106,31 @@ describe('resolveLayout', () => {
     expect(a).toEqual(b);
   });
 
+  it('derives neutral layout identity for resolved fragments even when input fragments do not precompute it', () => {
+    const layout: Layout = {
+      pageSize: { w: 800, h: 1000 },
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 72, y: 0, width: 468 }],
+        },
+      ],
+    };
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'p1', runs: [{ text: 'visible', fontFamily: 'Arial', fontSize: 12 }] } as any,
+    ];
+    const measures: Measure[] = [
+      { kind: 'paragraph', lines: [{ lineHeight: 20 }, { lineHeight: 20 }], totalHeight: 40 } as any,
+    ];
+
+    const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+    const item = result.pages[0].items[0];
+
+    expect(item?.kind).toBe('fragment');
+    expect(item?.layoutSourceIdentity?.blockRef).toBe('p1');
+    expect(item?.layoutSourceIdentity?.fragmentId).toContain('para:0:2');
+  });
+
   it('includes precomputed block versions for every supplied block', () => {
     const layout: Layout = {
       pageSize: { w: 612, h: 792 },
@@ -1777,7 +1802,12 @@ describe('resolveLayout', () => {
         id,
         runs: [{ kind: 'text', text: 'RTL list item' }],
         attrs: {
-          direction: 'rtl',
+          // SD-2778: use directionContext so this test only passes through the
+          // new helper-driven typed path. The pre-migration code read
+          // attrs.direction directly, so the prior `direction: 'rtl'` fixture
+          // would have passed against the old implementation too and didn't
+          // actually prove the migration.
+          directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' },
           indent: { right, hanging: -24 },
           wordLayout: {
             marker: {
@@ -2763,7 +2793,7 @@ describe('resolveLayout', () => {
       expect(drItem.sdtContainerKey).toBeUndefined();
     });
 
-    it('returns null (omits key) for structuredContent block scope with no id', () => {
+    it('sets an object-stable key for structuredContent block scope with no id', () => {
       const layout: Layout = {
         pageSize: { w: 612, h: 792 },
         pages: [
@@ -2785,10 +2815,10 @@ describe('resolveLayout', () => {
 
       const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
       const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
-      expect(item.sdtContainerKey).toBeUndefined();
+      expect(item.sdtContainerKey).toMatch(/^idlessSdt:/);
     });
 
-    it('returns null (omits key) for documentSection with no id or sdBlockId', () => {
+    it('sets an object-stable key for documentSection with no id or sdBlockId', () => {
       const layout: Layout = {
         pageSize: { w: 612, h: 792 },
         pages: [
@@ -2810,7 +2840,7 @@ describe('resolveLayout', () => {
 
       const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
       const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
-      expect(item.sdtContainerKey).toBeUndefined();
+      expect(item.sdtContainerKey).toMatch(/^idlessSdt:/);
     });
   });
 

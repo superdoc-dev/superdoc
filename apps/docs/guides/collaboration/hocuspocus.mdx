@@ -11,17 +11,18 @@ keywords: "hocuspocus server, tiptap yjs, self-hosted collaboration"
 ### Server
 
 ```bash
-npm install @hocuspocus/server
+npm install @hocuspocus/server yjs
 ```
 
 ```typescript
 import { Server } from "@hocuspocus/server";
+import * as Y from "yjs";
 
 const server = Server.configure({
   port: 1234,
 
   async onLoadDocument(data) {
-    // Load document from database
+    // Load the stored Yjs update from your database.
     const state = await db.getDocument(data.documentName);
     if (state) {
       Y.applyUpdate(data.document, state);
@@ -30,9 +31,9 @@ const server = Server.configure({
   },
 
   async onStoreDocument(data) {
-    // Save document to database
+    // Store the Yjs document as a binary update.
     const state = Y.encodeStateAsUpdate(data.document);
-    await db.saveDocument(data.documentName, state);
+    await db.saveDocument(data.documentName, Buffer.from(state));
   },
 
   async onAuthenticate(data) {
@@ -87,6 +88,56 @@ provider.on("synced", () => {
 
 SuperDoc JS always uses the same collaboration contract, regardless of provider: `modules.collaboration = { ydoc, provider }`.
 
+## Seed from DOCX only for empty rooms
+
+A DOCX file can seed a new collaboration room. After that, the Yjs document is
+the source of truth.
+
+Wait for Hocuspocus to sync before you decide whether the room is empty. If you
+check before sync, the client can look empty while the server still has stored
+Yjs state.
+
+```typescript
+function hasSuperDocContent(ydoc: Y.Doc) {
+  return (
+    ydoc.getXmlFragment("supereditor").length > 0 ||
+    ydoc.getMap("parts").size > 0 ||
+    ydoc.getMap("meta").has("docx")
+  );
+}
+
+provider.on("synced", () => {
+  const shouldSeedFromDocx = !hasSuperDocContent(ydoc);
+
+  new SuperDoc({
+    selector: "#editor",
+    documentMode: "editing",
+    ...(shouldSeedFromDocx
+      ? {
+          document: {
+            type: "docx",
+            url: "/initial.docx",
+            isNewFile: true,
+          },
+        }
+      : {}),
+    user: {
+      name: "John Smith",
+      email: "john@example.com",
+    },
+    modules: {
+      collaboration: { ydoc, provider },
+    },
+  });
+});
+```
+
+<Note>
+If your backend already knows whether a room has stored Yjs state, use that
+metadata. The important part is the order: sync first, inspect the Yjs document
+or room metadata, then decide whether to pass the DOCX seed.
+</Note>
+
 ## React example
 
 ```tsx
@@ -95,6 +146,14 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import * as Y from "yjs";
 import { SuperDoc } from "superdoc";
 import "superdoc/style.css";
+
+function hasSuperDocContent(ydoc: Y.Doc) {
+  return (
+    ydoc.getXmlFragment("supereditor").length > 0 ||
+    ydoc.getMap("parts").size > 0 ||
+    ydoc.getMap("meta").has("docx")
+  );
+}
 
 export default function Editor() {
   const superdocRef = useRef<SuperDoc | null>(null);
@@ -109,9 +168,21 @@ export default function Editor() {
     });
 
     provider.on("synced", () => {
+      if (superdocRef.current) return;
+
+      const shouldSeedFromDocx = !hasSuperDocContent(ydoc);
       superdocRef.current = new SuperDoc({
         selector: "#superdoc",
         documentMode: "editing",
+        ...(shouldSeedFromDocx
+          ? {
+              document: {
+                type: "docx",
+                url: "/initial.docx",
+                isNewFile: true,
+              },
+            }
+          : {}),
         user: {
           name: `User ${Math.floor(Math.random() * 1000)}`,
           email: "user@example.com",
@@ -275,7 +346,7 @@ Server.configure({
   </Card>
 
   <Card
-    title="Working Example"
+    title="Working example"
     icon="github"
     href="https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/providers/hocuspocus"
   >
@@ -287,18 +358,18 @@ Server.configure({
 
 <CardGroup cols={2}>
   <Card
-    title="SuperDoc Yjs"
-    icon="rocket"
-    href="/guides/collaboration/superdoc-yjs"
-  >
-    Try the official collaboration package
-  </Card>
-
-  <Card
     title="Client Configuration"
     icon="settings"
     href="/editor/collaboration/configuration"
   >
     All SuperDoc collaboration options
+  </Card>
+
+  <Card
+    title="Self-hosted overview"
+    icon="server"
+    href="/guides/collaboration/self-hosted-overview"
+  >
+    Compare Hocuspocus, YHub, and the SuperDoc Yjs reference server
   </Card>
 </CardGroup>

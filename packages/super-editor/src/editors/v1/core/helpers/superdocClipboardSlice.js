@@ -3,6 +3,7 @@
  * in Node (tests) uses `Buffer` for base64 when `btoa`/`atob` are missing.
  */
 import { getSectPrColumns } from '../super-converter/section-properties.js';
+import { encodeUtf8Base64, decodeUtf8Base64 } from './base64.js';
 
 export const SUPERDOC_SLICE_MIME = 'application/x-superdoc-slice';
 /** JSON map of package-relative image path → display URL (data URL, https, or blob URL). */
@@ -193,81 +194,38 @@ export function applySuperdocClipboardMedia(editor, clipboardData, sliceJson = n
   return outSlice;
 }
 
-/** Latin-1 / “binary” string → base64 (browser `btoa`, else Node `Buffer`). */
-function binaryStringToBase64(binary) {
-  if (typeof globalThis.btoa === 'function') {
-    return globalThis.btoa(binary);
-  }
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(binary, 'latin1').toString('base64');
-  }
-  throw new Error('[superdocClipboardSlice] base64 encode requires btoa (browser) or Buffer (Node)');
-}
-
-/** base64 → Latin-1 / “binary” string (browser `atob`, else Node `Buffer`). */
-function base64ToBinaryString(b64) {
-  if (typeof globalThis.atob === 'function') {
-    return globalThis.atob(b64);
-  }
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(b64, 'base64').toString('latin1');
-  }
-  throw new Error('[superdocClipboardSlice] base64 decode requires atob (browser) or Buffer (Node)');
-}
-
-/**
- * UTF-8 string → base64. Same idea as `btoa(unescape(encodeURIComponent(s)))` without `unescape`.
- * @param {string} input
- */
-function encodeUtf8Base64(input) {
-  const binary = encodeURIComponent(input).replace(/%([0-9A-F]{2})/g, (_, hex) =>
-    String.fromCharCode(parseInt(hex, 16)),
-  );
-  return binaryStringToBase64(binary);
-}
-
-/**
- * base64 → UTF-8 string. Decodes bytes then UTF-8 via percent-encoding.
- * @param {string} b64
- */
-function decodeUtf8Base64(b64) {
-  if (!b64) return '';
-  try {
-    const bin = base64ToBinaryString(b64);
-    let pct = '';
-    for (let i = 0; i < bin.length; i += 1) {
-      pct += `%${bin.charCodeAt(i).toString(16).padStart(2, '0')}`;
-    }
-    return decodeURIComponent(pct);
-  } catch {
-    return '';
-  }
-}
-
 export function bodySectPrShouldEmbed(bodySectPr) {
   if (!bodySectPr || typeof bodySectPr !== 'object') return false;
   const cols = getSectPrColumns(bodySectPr);
   return !!(cols?.count && cols.count > 1);
 }
 
-/** Embeds PM slice, media, and optional body sectPr as hidden base64 payloads. */
+function hiddenClipboardPayload(attr, base64) {
+  return `<div ${attr}="${base64}" style="display:none"></div>`;
+}
+
+function readClipboardPayload(el, attr) {
+  return el.getAttribute(attr)?.trim() || el.textContent?.trim() || '';
+}
+
+/** Embeds PM slice, media, and optional body sectPr as hidden base64 payload attributes. */
 export function embedSliceInHtml(html, sliceJson, bodySectPrJson = '', mediaJson = '') {
   let out = html;
   if (bodySectPrJson) {
     const body64 = encodeUtf8Base64(bodySectPrJson);
-    out = `<div ${SUPERDOC_BODY_SECT_PR_ATTR} style="display:none">${body64}</div>${out}`;
+    out = `${hiddenClipboardPayload(SUPERDOC_BODY_SECT_PR_ATTR, body64)}${out}`;
   }
   if (mediaJson) {
     const media64 = encodeUtf8Base64(mediaJson);
-    out = `<div ${SUPERDOC_MEDIA_ATTR} style="display:none">${media64}</div>${out}`;
+    out = `${hiddenClipboardPayload(SUPERDOC_MEDIA_ATTR, media64)}${out}`;
   }
   if (!sliceJson) return out;
   const base64 = encodeUtf8Base64(sliceJson);
-  return `<div ${SUPERDOC_SLICE_ATTR} style="display:none">${base64}</div>${out}`;
+  return `${hiddenClipboardPayload(SUPERDOC_SLICE_ATTR, base64)}${out}`;
 }
 
 /**
- * Reads slice JSON from HTML produced by {@link embedSliceInHtml} (hidden div + base64 text).
+ * Reads slice JSON from HTML produced by {@link embedSliceInHtml}.
  */
 export function extractSliceFromHtml(html) {
   if (!html || !html.includes(SUPERDOC_SLICE_ATTR)) return null;
@@ -278,10 +236,7 @@ export function extractSliceFromHtml(html) {
     const el = doc.querySelector(`[${SUPERDOC_SLICE_ATTR}]`);
     if (!el) return null;
 
-    let b64 = el.textContent?.trim() ?? '';
-    if (!b64) {
-      b64 = el.getAttribute(SUPERDOC_SLICE_ATTR)?.trim() ?? '';
-    }
+    const b64 = readClipboardPayload(el, SUPERDOC_SLICE_ATTR);
     if (!b64) return null;
 
     const decoded = decodeUtf8Base64(b64);
@@ -314,7 +269,7 @@ export function extractMediaFromHtml(html) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const el = doc.querySelector(`[${SUPERDOC_MEDIA_ATTR}]`);
     if (!el) return null;
-    const b64 = el.textContent?.trim() ?? '';
+    const b64 = readClipboardPayload(el, SUPERDOC_MEDIA_ATTR);
     if (!b64) return null;
     const decoded = decodeUtf8Base64(b64);
     return decoded || null;
@@ -331,7 +286,7 @@ export function extractBodySectPrFromHtml(html) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const el = doc.querySelector(`[${SUPERDOC_BODY_SECT_PR_ATTR}]`);
     if (!el) return null;
-    const b64 = el.textContent?.trim() ?? '';
+    const b64 = readClipboardPayload(el, SUPERDOC_BODY_SECT_PR_ATTR);
     if (!b64) return null;
     return JSON.parse(decodeUtf8Base64(b64));
   } catch {

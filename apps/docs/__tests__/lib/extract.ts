@@ -12,6 +12,12 @@ export interface CodeExample {
   code: string;
   pattern: 'superdoc' | 'editor' | 'headless' | 'unknown';
   line: number;
+  /**
+   * Fence language as written in the .mdx (`javascript`, `typescript`,
+   * `js`, `ts`, `tsx`, or empty for unfenced). Used by the type-check
+   * gate to pick `.js + // @ts-check + allowJs` vs `.ts + strict`.
+   */
+  lang: string;
 }
 
 const SKIP_FILE_PATTERNS = [
@@ -39,6 +45,8 @@ const SKIP_IMPORTS = [
   'react-dom',
   'vue',
   '@angular/',
+  'yjs',
+  'y-websocket',
 ];
 
 const parser = unified().use(remarkParse).use(remarkMdx);
@@ -124,7 +132,7 @@ export function extractExamples(docsRoot: string): CodeExample[] {
         }
       }
 
-      examples.push({ file: relPath, section, code, pattern, line: codeLine });
+      examples.push({ file: relPath, section, code, pattern, line: codeLine, lang: node.lang ?? '' });
     });
   }
 

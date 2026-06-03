@@ -113,6 +113,29 @@ describe('resolveTableFrame', () => {
       const result = resolveTableFrame(0, 500, 600, { justification: 'end' } as TableAttrs);
       expect(result).toEqual({ x: -100, width: 600 });
     });
+
+    it('defaults bidiVisual tables without jc to right alignment', () => {
+      const result = resolveTableFrame(0, 500, 300, {
+        tableProperties: { rightToLeft: true },
+      } as TableAttrs);
+      expect(result).toEqual({ x: 200, width: 300 });
+    });
+
+    it('applies tblInd from the right edge for bidiVisual tables without jc', () => {
+      const result = resolveTableFrame(0, 500, 300, {
+        tableIndent: { width: 40 },
+        tableProperties: { rightToLeft: true },
+      } as TableAttrs);
+      expect(result).toEqual({ x: 160, width: 300 });
+    });
+
+    it('keeps explicit left justification for bidiVisual tables', () => {
+      const result = resolveTableFrame(0, 500, 300, {
+        justification: 'left',
+        tableProperties: { rightToLeft: true },
+      } as TableAttrs);
+      expect(result).toEqual({ x: 0, width: 300 });
+    });
   });
 
   describe('with pct tableWidth', () => {

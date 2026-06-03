@@ -1,0 +1,15 @@
+{
+  "name": "@superdoc-testing/document-api-smoke",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pretest": "pnpm --silent --dir ../.. run generate:all && pnpm --silent --prefix ../../apps/cli run build && pnpm --silent --prefix ../../packages/sdk/langs/node run build",
+    "test": "vitest run --config ./vitest.config.ts"
+  },
+  "dependencies": {
+    "@superdoc-dev/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "catalog:"
+  }
+}

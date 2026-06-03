@@ -4,6 +4,8 @@ import type { Editor } from '../core/Editor.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
 import { DocumentApiAdapterError } from './errors.js';
 import { readEditorHistorySnapshot, type DocumentHistoryState } from '../core/presentation-editor/history/index.js';
+import { reconcileCommentEntityStoreWithAnchors, type CommentEntityRecord } from './helpers/comment-entity-store.js';
+import { listCommentAnchors } from './helpers/comment-target-resolver.js';
 
 /**
  * Minimal PresentationEditor surface the history adapter needs.
@@ -67,6 +69,67 @@ function runHistoryCommand(editor: Editor, action: 'undo' | 'redo'): boolean {
   return Boolean(command());
 }
 
+function buildAnchoredCommentIdSet(editor: Editor): Set<string> {
+  const ids = new Set<string>();
+  try {
+    for (const anchor of listCommentAnchors(editor)) {
+      if (typeof anchor.commentId === 'string' && anchor.commentId.length > 0) ids.add(anchor.commentId);
+      if (typeof anchor.importedId === 'string' && anchor.importedId.length > 0) ids.add(anchor.importedId);
+    }
+  } catch {
+    return ids;
+  }
+  return ids;
+}
+
+function buildCommentLifecyclePayload(record: CommentEntityRecord): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    commentId: record.commentId,
+  };
+
+  if (record.importedId !== undefined) payload.importedId = record.importedId;
+  if (record.parentCommentId !== undefined) payload.parentCommentId = record.parentCommentId;
+  if (record.commentText !== undefined) {
+    payload.commentText = record.commentText;
+    payload.text = record.commentText;
+  }
+  if (record.commentJSON !== undefined) payload.commentJSON = record.commentJSON;
+  if (record.creatorName !== undefined) payload.creatorName = record.creatorName;
+  if (record.creatorEmail !== undefined) payload.creatorEmail = record.creatorEmail;
+  if (record.creatorImage !== undefined) payload.creatorImage = record.creatorImage;
+  if (record.createdTime !== undefined) payload.createdTime = record.createdTime;
+  if (record.isInternal !== undefined) payload.isInternal = record.isInternal;
+  if (record.isDone !== undefined) payload.isDone = record.isDone;
+  if (record.resolvedTime !== undefined) payload.resolvedTime = record.resolvedTime;
+  if (record.fileId !== undefined) payload.fileId = record.fileId;
+  if (record.documentId !== undefined) payload.documentId = record.documentId;
+
+  return payload;
+}
+
+function emitCommentLifecycleEvents(
+  editor: Editor,
+  type: 'add' | 'deleted',
+  records: ReadonlyArray<CommentEntityRecord>,
+): void {
+  const emitter = (editor as Editor & { emit?: (event: string, payload: Record<string, unknown>) => void }).emit;
+  if (typeof emitter !== 'function') return;
+
+  for (const record of records) {
+    emitter.call(editor, 'commentsUpdate', {
+      type,
+      comment: buildCommentLifecyclePayload(record),
+    });
+  }
+}
+
+function reconcileCommentHistorySideEffects(editor: Editor): void {
+  const anchorIds = buildAnchoredCommentIdSet(editor);
+  const { restored, removed } = reconcileCommentEntityStoreWithAnchors(editor, anchorIds);
+  if (removed.length > 0) emitCommentLifecycleEvents(editor, 'deleted', removed);
+  if (restored.length > 0) emitCommentLifecycleEvents(editor, 'add', restored);
+}
+
 export function createHistoryAdapter(editor: Editor): HistoryAdapter {
   return {
     get(): HistoryState {
@@ -87,6 +150,7 @@ export function createHistoryAdapter(editor: Editor): HistoryAdapter {
         return { noop: true, reason: 'EMPTY_UNDO_STACK', revision: { before: revBefore, after: revBefore } };
       }
       const success = runHistoryCommand(editor, 'undo');
+      if (success) reconcileCommentHistorySideEffects(editor);
       const revAfter = getRevision(editor);
       return {
         noop: !success,
@@ -102,6 +166,7 @@ export function createHistoryAdapter(editor: Editor): HistoryAdapter {
         return { noop: true, reason: 'EMPTY_REDO_STACK', revision: { before: revBefore, after: revBefore } };
       }
       const success = runHistoryCommand(editor, 'redo');
+      if (success) reconcileCommentHistorySideEffects(editor);
       const revAfter = getRevision(editor);
       return {
         noop: !success,

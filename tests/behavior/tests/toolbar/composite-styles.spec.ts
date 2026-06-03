@@ -28,7 +28,7 @@ async function selectDropdownOption(superdoc: SuperDocFixture, dataItem: string,
 async function selectColorSwatch(superdoc: SuperDocFixture, dataItem: string, label: string): Promise<void> {
   await superdoc.page.locator(`[data-item="btn-${dataItem}"]`).click();
   await superdoc.waitForStable();
-  await superdoc.page.locator(`.option[aria-label="${label}"]`).first().click();
+  await superdoc.page.locator(`.sd-option[aria-label="${label}"]`).first().click();
   await superdoc.waitForStable();
 }
 
@@ -41,8 +41,8 @@ test('bold + italic', async ({ superdoc }) => {
   await clickToolbarButton(superdoc, 'bold');
   await clickToolbarButton(superdoc, 'italic');
 
-  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/active/);
+  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/sd-active/);
   await superdoc.snapshot('bold + italic applied');
 
   await superdoc.assertTextHasMarks('is a sentence', ['bold', 'italic']);
@@ -55,8 +55,8 @@ test('bold + underline', async ({ superdoc }) => {
   await clickToolbarButton(superdoc, 'bold');
   await clickToolbarButton(superdoc, 'underline');
 
-  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-underline"]')).toHaveClass(/active/);
+  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-underline"]')).toHaveClass(/sd-active/);
   await superdoc.snapshot('bold + underline applied');
 
   await superdoc.assertTextHasMarks('is a sentence', ['bold', 'underline']);
@@ -69,8 +69,8 @@ test('italic + strikethrough', async ({ superdoc }) => {
   await clickToolbarButton(superdoc, 'italic');
   await clickToolbarButton(superdoc, 'strike');
 
-  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-strike"]')).toHaveClass(/active/);
+  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-strike"]')).toHaveClass(/sd-active/);
   await superdoc.snapshot('italic + strikethrough applied');
 
   await superdoc.assertTextHasMarks('is a sentence', ['italic', 'strike']);
@@ -87,10 +87,10 @@ test('bold + italic + underline + strikethrough', async ({ superdoc }) => {
   await clickToolbarButton(superdoc, 'underline');
   await clickToolbarButton(superdoc, 'strike');
 
-  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-underline"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-strike"]')).toHaveClass(/active/);
+  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-underline"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-strike"]')).toHaveClass(/sd-active/);
   await superdoc.snapshot('all four toggles applied');
 
   await superdoc.assertTextHasMarks('is a sentence', ['bold', 'italic', 'underline', 'strike']);
@@ -106,8 +106,8 @@ test('bold + font family + font size', async ({ superdoc }) => {
   await selectDropdownOption(superdoc, 'fontFamily', 'Georgia');
   await selectDropdownOption(superdoc, 'fontSize', '24');
 
-  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Georgia');
+  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText('Georgia');
   await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('24');
   await superdoc.snapshot('bold + Georgia 24pt applied');
 
@@ -123,7 +123,7 @@ test('italic + color', async ({ superdoc }) => {
   await clickToolbarButton(superdoc, 'italic');
   await selectColorSwatch(superdoc, 'color', 'red');
 
-  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/active/);
+  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/sd-active/);
   const colorBar = superdoc.page.locator('[data-item="btn-color"] .color-bar');
   await expect(colorBar).toHaveCSS('background-color', 'rgb(210, 0, 63)');
   await superdoc.snapshot('italic + red color applied');
@@ -142,7 +142,7 @@ test('font family + font size + color', async ({ superdoc }) => {
   await selectDropdownOption(superdoc, 'fontSize', '18');
   await selectColorSwatch(superdoc, 'color', 'dark red');
 
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Georgia');
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText('Georgia');
   await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('18');
   const colorBar = superdoc.page.locator('[data-item="btn-color"] .color-bar');
   await expect(colorBar).toHaveCSS('background-color', 'rgb(134, 0, 40)');
@@ -173,11 +173,11 @@ test('all styles combined', async ({ superdoc }) => {
   await selectColorSwatch(superdoc, 'highlight', 'yellow');
 
   // Assert all toolbar button states
-  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-underline"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-strike"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText('Courier New');
+  await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-underline"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-strike"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText('Courier New');
   await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('24');
   const colorBar = superdoc.page.locator('[data-item="btn-color"] .color-bar');
   await expect(colorBar).toHaveCSS('background-color', 'rgb(210, 0, 63)');

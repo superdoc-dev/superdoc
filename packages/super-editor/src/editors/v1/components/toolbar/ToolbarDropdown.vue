@@ -135,13 +135,13 @@ const renderIcon = (option) => {
 const classHasSelected = (value) => {
   if (!value) return false;
   if (typeof value === 'string') {
-    return value.split(/\s+/).includes('selected');
+    return value.split(/\s+/).includes('sd-selected');
   }
   if (Array.isArray(value)) {
     return value.some(classHasSelected);
   }
   if (typeof value === 'object') {
-    return Boolean(value.selected);
+    return Boolean(value['sd-selected']);
   }
   return false;
 };
@@ -249,6 +249,46 @@ const handlePointerDown = (event) => {
   close();
 };
 
+const TRIGGER_FOCUS_SELECTOR =
+  'button, [href], input, select, textarea, [role="button"], [tabindex]:not([tabindex="-1"])';
+const triggerFocusTargetRef = ref(null);
+const rememberTriggerFocusTarget = () => {
+  const trigger = triggerRef.value;
+  const active = document.activeElement;
+
+  // Dropdown options are teleported to <body> and receive focus while open.
+  // Remember the opener before focus moves so Escape can restore it later.
+  if (trigger && active instanceof HTMLElement && trigger.contains(active)) {
+    triggerFocusTargetRef.value = active;
+    return;
+  }
+
+  triggerFocusTargetRef.value = trigger?.matches?.(TRIGGER_FOCUS_SELECTOR)
+    ? trigger
+    : trigger?.querySelector(TRIGGER_FOCUS_SELECTOR);
+};
+
+const focusTrigger = () => {
+  const remembered = triggerFocusTargetRef.value;
+  if (remembered instanceof HTMLElement && document.contains(remembered)) {
+    remembered.focus();
+    return;
+  }
+
+  const trigger = triggerRef.value;
+  if (!trigger) return;
+
+  const fallback = trigger.matches?.(TRIGGER_FOCUS_SELECTOR) ? trigger : trigger.querySelector(TRIGGER_FOCUS_SELECTOR);
+
+  if (fallback instanceof HTMLElement) {
+    fallback.focus();
+    return;
+  }
+
+  trigger.setAttribute('tabindex', '-1');
+  trigger.focus();
+};
+
 const handleKeyDown = (event) => {
   if (!isOpen.value) return;
 
@@ -257,7 +297,12 @@ const handleKeyDown = (event) => {
   if (!supportedKeys.includes(key)) return;
 
   if (key === 'Escape') {
+    event.preventDefault();
     close();
+    nextTick(() => {
+      // Wait one frame so the focused teleported option is gone before restoring focus.
+      requestAnimationFrame(focusTrigger);
+    });
     return;
   }
 
@@ -291,6 +336,7 @@ watch(
       return;
     }
 
+    rememberTriggerFocusTarget();
     await nextTick();
     updateMenuPosition();
 
@@ -330,19 +376,30 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="toolbar-dropdown">
-    <div ref="triggerRef" class="toolbar-dropdown-trigger" @click="onTriggerClick">
+    <div ref="triggerRef" class="toolbar-dropdown-trigger" data-sd-part="dropdown-trigger" @click="onTriggerClick">
       <slot name="trigger" />
     </div>
 
     <Teleport to="body">
       <Transition name="fade-in-scale-up-transition">
-        <div v-if="isOpen" ref="menuRef" :class="mergedMenuClass" :style="menuStyle" v-bind="computedMenuAttrs">
+        <div
+          v-if="isOpen"
+          ref="menuRef"
+          data-sd-part="dropdown-menu"
+          :class="mergedMenuClass"
+          :style="menuStyle"
+          v-bind="computedMenuAttrs"
+        >
           <div
             v-for="(option, index) in options"
             :key="option.key"
             :ref="(el) => setOptionRef(el, index)"
             class="toolbar-dropdown-option"
-            :class="[option.class, option.props?.class, { disabled: option.disabled, render: isRenderOption(option) }]"
+            :class="[
+              option.class,
+              option.props?.class,
+              { 'sd-disabled': option.disabled, 'sd-render': isRenderOption(option) },
+            ]"
             tabindex="-1"
             @click="onOptionClick(option)"
             v-bind="{ ...option.props, ...getNodeProps(option) }"
@@ -418,35 +475,35 @@ onBeforeUnmount(() => {
   color: var(--sd-ui-dropdown-hover-text, #47484a);
 }
 
-.toolbar-dropdown-option.selected {
+.toolbar-dropdown-option.sd-selected {
   background: var(--sd-ui-dropdown-active-bg, #d8dee5);
   color: var(--sd-ui-dropdown-selected-text, #47484a);
 }
 
-.toolbar-dropdown-menu.high-contrast .toolbar-dropdown-option:not(.render):hover {
+.toolbar-dropdown-menu.high-contrast .toolbar-dropdown-option:not(.sd-render):hover {
   background: #000;
   color: #fff;
 }
 
-.toolbar-dropdown-menu.high-contrast .toolbar-dropdown-option:not(.render).selected {
+.toolbar-dropdown-menu.high-contrast .toolbar-dropdown-option:not(.sd-render).sd-selected {
   background: #000;
   color: #fff;
 }
 
-.toolbar-dropdown-option.disabled {
+.toolbar-dropdown-option.sd-disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.toolbar-dropdown-option.render {
+.toolbar-dropdown-option.sd-render {
   padding: 0;
   cursor: default;
   background: transparent;
   color: inherit;
 }
 
-.toolbar-dropdown-option.render:hover,
-.toolbar-dropdown-option.render.selected {
+.toolbar-dropdown-option.sd-render:hover,
+.toolbar-dropdown-option.sd-render.sd-selected {
   background: transparent;
   color: inherit;
 }

@@ -6,6 +6,7 @@ import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js
 import { registerHeaderFooterInvalidation } from '../../core/parts/invalidation/invalidation-handlers.js';
 import { removePart, hasPart } from '../../core/parts/store/part-store.js';
 import type { XmlElement } from './sections-xml.js';
+import { getWordPartRelsPath } from '../../core/helpers/word-part-path.js';
 
 const DOCUMENT_RELS_PATH = 'word/_rels/document.xml.rels';
 const RELS_XMLNS = 'http://schemas.openxmlformats.org/package/2006/relationships';
@@ -98,10 +99,7 @@ function normalizeRelationshipTarget(target: string): string {
 }
 
 function toRelsPathForPart(partPath: string): string {
-  const normalized = normalizeRelationshipTarget(partPath);
-  const fileName = normalized.split('/').pop();
-  if (!fileName) return normalized;
-  return `word/_rels/${fileName}.rels`;
+  return getWordPartRelsPath(normalizeRelationshipTarget(partPath));
 }
 
 function ensureConvertedXml(converter: ConverterWithHeaderFooterParts): Record<string, unknown> {

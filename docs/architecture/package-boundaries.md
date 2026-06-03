@@ -65,7 +65,7 @@ For any entry classified as legacy public:
 | `packages/layout-engine/dom-contract` | `@superdoc/dom-contract` | Internal implementation | DOM rendering contracts |
 | `packages/layout-engine/painters/dom` | `@superdoc/painter-dom` | Internal implementation | DOM rendering pipeline |
 | `packages/layout-engine/measuring/dom` | `@superdoc/measuring-dom` | Internal implementation | Measurement pipeline |
-| `packages/layout-engine/pm-adapter` | `@superdoc/pm-adapter` | Internal implementation | ProseMirror to FlowBlock bridge |
+| `packages/super-editor/src/editors/v1/core/layout-adapter` | (internal to `@superdoc/super-editor`) | Internal implementation | v1 ProseMirror → FlowBlock projection; owned by super-editor, not a standalone package |
 | `packages/layout-engine/style-engine` | `@superdoc/style-engine` | Internal implementation | OOXML cascade resolution |
 | `packages/layout-engine/layout-bridge` | `@superdoc/layout-bridge` | Internal implementation | Pipeline orchestration |
 | `packages/layout-engine/layout-engine` | `@superdoc/layout-engine` | Internal implementation | Pagination algorithms |
@@ -109,9 +109,9 @@ The `superdoc` package currently exposes the following entries via `package.json
 | `./super-editor` | Yes | Legacy public compatibility surface | `imports-sub-export.ts` | Was effectively public when no other headless path existed. `Editor`, `PresentationEditor`, `getStarterExtensions`, `Extensions`, `SuperToolbar`, `SuperConverter`, `DocxZipper` and most of the surface are now exported from `superdoc` itself. Kept exported, not advertised, migration target is `superdoc`. See Decision 1. |
 | `./ui` | Yes | Public subpath | `imports-ui.ts` | Stays |
 | `./ui/react` | Yes | Public subpath | `imports-ui-react.ts` | Stays |
-| `./headless-toolbar` | Yes | Public subpath | `imports-headless-toolbar.ts` | Stays |
-| `./headless-toolbar/react` | Yes | Public subpath | `imports-headless-toolbar-react.ts` | Stays |
-| `./headless-toolbar/vue` | Yes | Public subpath | `imports-headless-toolbar-vue.ts` | Stays |
+| `./headless-toolbar` | Yes | Legacy public compatibility surface | `imports-headless-toolbar.ts` | Kept exported, not advertised. New custom UI integrations should use `superdoc/ui`. See Decision 4. |
+| `./headless-toolbar/react` | Yes | Legacy public compatibility surface | `imports-headless-toolbar-react.ts` | Framework helper for the legacy headless toolbar. Migration target is `superdoc/ui/react`. See Decision 4. |
+| `./headless-toolbar/vue` | Yes | Legacy public compatibility surface | `imports-headless-toolbar-vue.ts` | Framework helper for the legacy headless toolbar. New work that needs a Vue UI controller should track that as a separate decision; the legacy entry is kept compiling. See Decision 4. |
 | `./converter` | Yes (SD-2953) | Legacy public compatibility surface | `imports-converter.ts` | DOCX conversion is also reachable through `Editor.open` / `Editor.loadXmlData` / `SuperConverter` exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. Types added in SD-2953 to satisfy strict-mode consumers. |
 | `./docx-zipper` | Yes (SD-2953) | Legacy public compatibility surface | `imports-docx-zipper.ts` | `DocxZipper` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. Types added in SD-2953. |
 | `./file-zipper` | Yes (SD-2953) | Legacy public compatibility surface | `imports-file-zipper.ts` | `createZip` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. Types added in SD-2953. |
@@ -174,7 +174,7 @@ The relocation pattern is what `superdoc` currently uses for several internal-bu
 
 ### Decision 3. The layout-engine sub-packages stay separate.
 
-**Context.** `packages/layout-engine/` contains ten sub-packages (`contracts`, `dom-contract`, `geometry-utils`, `layout-bridge`, `layout-engine`, `layout-resolved`, `pm-adapter`, `style-engine`, `painters/dom`, `measuring/dom`), all private, all internal implementation.
+**Context.** `packages/layout-engine/` contains nine sub-packages (`contracts`, `dom-contract`, `geometry-utils`, `layout-bridge`, `layout-engine`, `layout-resolved`, `style-engine`, `painters/dom`, `measuring/dom`), all private, all internal implementation. (The v1 ProseMirror → FlowBlock adapter is no longer here; it is owned by `@superdoc/super-editor` at `src/editors/v1/core/layout-adapter`.)
 
 **Decision.** Keep as-is. The audit gate (SD-2832) plus the type ownership rules remove the customer-visible cost of the split. Restructuring without a strong forcing function is scope creep. Revisit only if the audit gate proves expensive to maintain because of the package count.
 
@@ -182,7 +182,40 @@ The relocation pattern is what `superdoc` currently uses for several internal-bu
 
 **Context.** `./converter`, `./docx-zipper`, `./file-zipper` are exported subpaths whose functionality (DOCX conversion, zipping) is also reachable through `superdoc`'s main entry: `Editor.open`, `Editor.loadXmlData`, `SuperConverter`, `DocxZipper`, `createZip` are all exported from `superdoc`.
 
-**Decision.** All three subpaths are classified as **legacy public compatibility surface**. Migration target is `superdoc` itself (the symbols already exist there). We keep them exported, stop advertising them, and point new use at `superdoc`. SD-2953 added `types` fields and matrix fixtures so strict-mode consumers no longer hit TS7016; the export-coverage audit (`check-export-coverage.cjs`) now enforces that every `package.json` exports entry carries types, an asset classification, or a documented runtime-only allowlist entry.
+`./headless-toolbar` is the same shape with a different migration target: the next-generation custom UI story is `superdoc/ui` and `superdoc/ui/react` (the typed UI controller). Existing consumers of the headless-toolbar surface keep compiling; new integrations should use the UI controller entries.
+
+**Decision.** `./converter`, `./docx-zipper`, `./file-zipper`, and the `./headless-toolbar` family (`./headless-toolbar`, `./headless-toolbar/react`, `./headless-toolbar/vue`) are classified as **legacy public compatibility surface**.
+
+| Subpath | Migration target |
+| --- | --- |
+| `./converter` | `SuperConverter` from `superdoc` |
+| `./docx-zipper` | `DocxZipper` from `superdoc` |
+| `./file-zipper` | `createZip` from `superdoc` |
+| `./headless-toolbar` | `superdoc/ui` |
+| `./headless-toolbar/react` | `superdoc/ui/react` |
+| `./headless-toolbar/vue` | Track a Vue UI controller as a separate decision; the legacy entry is kept compiling. |
+
+We keep them exported, stop advertising them, and point new use at the migration target. SD-2953 added `types` fields and matrix fixtures so strict-mode consumers no longer hit TS7016; the export-coverage audit (`check-export-coverage.cjs`) now enforces that every `package.json` exports entry carries types, an asset classification, or a documented runtime-only allowlist entry. SD-3179 lands the source-side facade for `./headless-toolbar` under `packages/superdoc/src/public/legacy/` and extends SD-3176's no-growth snapshot list to cover `./headless-toolbar`, `./headless-toolbar/react`, and `./headless-toolbar/vue` so these subpaths cannot expand silently.
+
+### Decision 5. Document API is the supported programmatic surface; editor commands and ProseMirror internals are legacy compatibility.
+
+**Context.** Two coexisting paths for programmatic interaction with the editor exist in the codebase today:
+
+- `editor.doc.*` — the Document API (`packages/document-api/`). Contract-first: `OPERATION_DEFINITIONS` → operation registry → typed dispatch table → adapters. 300+ operations spanning reads (`get`, `find`, `query.match`, `extract`, etc.) and mutations (`insert`, `replace`, `delete`, `format.*`, `comments.*`, `tables.*`, `blocks.*`, etc.). Compile-time parity checks tie all four layers together.
+- `editor.commands.*` — the older command system on the editor instance. Typed by `CoreCommandMap`, `ExtensionCommandMap`, `EditorCommands`, `CoreCommands`, `ExtensionCommands`, `CommandProps`, `Command`, `ChainedCommand`, `ChainableCommandObject`, `CanCommand`, `CanObject`.
+
+`packages/superdoc/AGENTS.md` already documents the policy: "For reading and mutating documents programmatically, use the Document API (`editor.doc`). Direct access to ProseMirror internals (`editor.state`, `editor.view`) and editor commands (`editor.commands`) is deprecated and will be removed." Source-side, `editor.commands`, `editor.chain`, `editor.can`, `editor.state`, `editor.view`, `editor.schema`, and `editor.dispatch` all carry `@deprecated` JSDoc tags in `packages/super-editor/src/editors/v1/core/Editor.ts` (lines 268, 275, 1344, 1411, 1597, 1605, 2813) pointing at the Document API as the replacement.
+
+**Decision.**
+
+- **Supported public surface for document reads and mutations.** `editor.doc.*` (the Document API). `DocumentApi` plus the supporting selection / address / range / bookmark / block / protection types are first-class in the `superdoc` root facade. New programmatic document features land as Document API operations.
+- **Legacy public compatibility surface.** `editor.commands.*` and its 11 typing infrastructure types remain exported from the facade so existing TypeScript consumers keep compiling. The re-export at the facade carries `@deprecated` JSDoc. SD-3147's classification is corrected to label these as `legacy/public-compat`, not `public`.
+- **Legacy ProseMirror internals.** `editor.state`, `editor.view`, `editor.schema`, `editor.dispatch`, and direct ProseMirror types (`EditorState`, `Transaction`, `Schema`, `EditorView`, etc.) follow the same posture: typed, exported, deprecated, not advertised.
+- **Out of scope for this decision.** SuperDoc-level config and lifecycle methods (the `SuperDoc` constructor, `Config`, instance lifecycle like `setMode`, `getDocument`, `destroy`) are unrelated. They are not document-mutation API and remain `public`.
+
+**Coverage caveat.** This decision aligns the messaging — Document API is the supported programmatic surface, editor commands are legacy compat — but does **not** assert that today's Document API operations cover every legacy editor command 1:1. A direct comparison of the typed `editor.commands.*` surface against the Document API's 300+ operations finds real gaps: field annotations, document section management commands, search-session UI state, AI marks, diff/comparison helpers, and format-clearing helpers all exist as runtime commands without a 1:1 Document API analogue today. Some of those belong on a future UI/navigation API surface rather than Document API; some are real Document API operation gaps. A separate audit ticket enumerates the typed + runtime command surface against the Document API's `OPERATION_DEFINITIONS`, classifies each gap (Document API covered / UI-navigation API needed / internal editor primitive / legacy compatibility only / missing Document API operation), and produces child tickets for the actual gaps. That audit must complete before any deprecation escalation or removal of `editor.commands.*`.
+
+**Status.** SD-3185 promotes the Document API types into the root facade and adds `@deprecated` tags at the legacy re-exports. The facade verifier's command-signature probe is reframed as a legacy compatibility regression check, not a supported-API guarantee. No removals — `EditorCommands` and PM internals stay exported; removal blocks on the coverage audit (separate ticket) and then a deprecation cycle on a future major.
 
 ## Deliverables
 

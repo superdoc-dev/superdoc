@@ -1,9 +1,15 @@
 /**
- * Purpose: Enforce required/forbidden overview content and API-surface path validity.
- * Caller: Documentation consistency gate for `apps/docs/document-api/overview.mdx`.
+ * Purpose: Enforce structural correctness of the Document API overview page.
+ * Caller: Documentation consistency gate for `apps/docs/document-api/available-operations.mdx`.
  * Reads: Overview doc content + `DOCUMENT_API_MEMBER_PATHS`.
  * Writes: None (exit code + console output only).
- * Fails when: Disclaimers/markers are missing, forbidden placeholders exist, or unknown API paths appear.
+ * Fails when: The reference link or generated section markers are missing,
+ *   forbidden stale placeholders appear, or `editor.doc.*` paths reference
+ *   unknown API members.
+ *
+ * NOT enforced: product-status framing (e.g. "alpha", "subject to change").
+ * Those launch-phase disclaimers were removed when the Document API went
+ * live; this gate now focuses on durable structural correctness.
  */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -18,14 +24,6 @@ import {
 const OVERVIEW_PATH = resolve(process.cwd(), getOverviewDocsPath());
 
 const REQUIRED_PATTERNS = [
-  {
-    label: 'alpha disclaimer',
-    pattern: /\balpha\b/i,
-  },
-  {
-    label: 'subject-to-change disclaimer',
-    pattern: /subject to (?:breaking )?changes?/i,
-  },
   {
     label: 'generated reference link',
     pattern: /\/document-api\/reference\/index/i,

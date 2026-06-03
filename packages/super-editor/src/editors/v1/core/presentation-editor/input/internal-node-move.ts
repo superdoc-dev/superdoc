@@ -19,6 +19,10 @@ type InternalMoveState = {
 };
 
 type TargetBias = 'before' | 'after';
+type BoundaryCandidate = {
+  pos: number;
+  side: TargetBias;
+};
 
 export function canInsertNodeAtPosition(doc: ProseMirrorNode, pos: number, node: ProseMirrorNode): boolean {
   try {
@@ -42,31 +46,44 @@ function resolveInsertionBoundary(
   node: ProseMirrorNode,
   canInsertAt: InternalMoveRequest['canInsertAt'],
   bias: TargetBias,
+  avoidPos?: number,
 ): number | null {
   try {
     const resolvedPos = doc.resolve(pos);
-    const candidates: number[] = [];
+    const candidates: BoundaryCandidate[] = [];
 
     for (let depth = resolvedPos.depth; depth > 0; depth--) {
-      const before = resolvedPos.before(depth);
-      const after = resolvedPos.after(depth);
-      if (bias === 'before') {
-        candidates.push(before, after);
-      } else {
-        candidates.push(after, before);
-      }
+      candidates.push(
+        { pos: resolvedPos.before(depth), side: 'before' },
+        { pos: resolvedPos.after(depth), side: 'after' },
+      );
     }
 
+    candidates.sort((a, b) => {
+      const distanceDelta = Math.abs(a.pos - pos) - Math.abs(b.pos - pos);
+      if (distanceDelta !== 0) return distanceDelta;
+      if (a.side === bias && b.side !== bias) return -1;
+      if (b.side === bias && a.side !== bias) return 1;
+      return 0;
+    });
+
+    let avoidedCandidate: number | null = null;
     for (const candidate of candidates) {
-      if (candidate < 0 || candidate > doc.content.size) continue;
-      if (candidate === pos) continue;
-      if (canInsertAt(doc, candidate, node)) return candidate;
+      const candidatePos = candidate.pos;
+      if (candidatePos < 0 || candidatePos > doc.content.size) continue;
+      if (candidatePos === pos) continue;
+      if (!canInsertAt(doc, candidatePos, node)) continue;
+      if (avoidPos != null && candidatePos === avoidPos) {
+        avoidedCandidate = candidatePos;
+        continue;
+      }
+      return candidatePos;
     }
+
+    return avoidedCandidate;
   } catch {
     return null;
   }
-
-  return null;
 }
 
 export function createInternalNodeMoveTransaction(
@@ -92,6 +109,7 @@ export function createInternalNodeMoveTransaction(
   tr.delete(sourceStart, sourceEnd);
 
   const mappedTarget = tr.mapping.map(targetPos);
+  const mappedSourceStart = tr.mapping.map(sourceStart);
   if (mappedTarget < 0 || mappedTarget > tr.doc.content.size) {
     return { ok: false, reason: 'invalid-target' };
   }
@@ -104,6 +122,7 @@ export function createInternalNodeMoveTransaction(
       sourceNode,
       canInsertAt,
       targetPos <= sourceStart ? 'before' : 'after',
+      mappedSourceStart,
     );
     if (boundaryTarget == null) {
       return { ok: false, reason: 'invalid-target' };

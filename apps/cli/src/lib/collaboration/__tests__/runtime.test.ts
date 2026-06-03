@@ -13,9 +13,11 @@ const mockWsInstance = {
   synced: false,
 };
 
-const MockWebsocketProvider = mock(function (this: unknown, ..._args: unknown[]) {
-  Object.assign(this as Record<string, unknown>, mockWsInstance);
-});
+// Bun's `mock()` wrapper does not preserve `new`-binding of `this` reliably,
+// so we return the instance from the mock function directly. JS `new` semantics
+// use an explicit object return as the constructor's result, so this still
+// looks like `new WebsocketProvider(...)` from callers' perspective.
+const MockWebsocketProvider = mock((..._args: unknown[]) => mockWsInstance);
 
 const mockHocuspocusInstance = {
   on: mock(() => {}),
@@ -25,9 +27,7 @@ const mockHocuspocusInstance = {
   synced: false,
 };
 
-const MockHocuspocusProvider = mock(function (this: unknown, ..._args: unknown[]) {
-  Object.assign(this as Record<string, unknown>, mockHocuspocusInstance);
-});
+const MockHocuspocusProvider = mock((..._args: unknown[]) => mockHocuspocusInstance);
 
 mock.module('y-websocket', () => ({
   WebsocketProvider: MockWebsocketProvider,

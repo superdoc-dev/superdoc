@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getTextNodeForExport } from './translate-text-node.js';
 
 const buildParams = (runProperties = {}) => ({
@@ -34,7 +34,7 @@ describe('getTextNodeForExport', () => {
       expect.objectContaining({
         name: 'w:rPrChange',
         attributes: expect.objectContaining({
-          'w:id': 'format-1',
+          'w:id': expect.stringMatching(/^\d+$/),
           'w:author': 'Missy Fox',
           'w:date': '2026-01-07T20:24:39Z',
         }),
@@ -70,5 +70,68 @@ describe('getTextNodeForExport', () => {
         name: 'w:i',
       }),
     ]);
+  });
+
+  it('does not emit a non-standard w:authorEmail on w:rPrChange even when the mark carries one', () => {
+    const trackFormatMark = {
+      type: 'trackFormat',
+      attrs: {
+        id: 'format-email',
+        author: 'Missy Fox',
+        authorEmail: 'missy.fox@example.com',
+        date: '2026-01-07T20:24:39Z',
+        before: [],
+        after: [{ type: 'bold', attrs: { value: true } }],
+      },
+    };
+
+    const result = getTextNodeForExport(
+      'styles',
+      [{ type: 'bold', attrs: { value: true } }, trackFormatMark],
+      buildParams(),
+    );
+
+    const runProperties = result.elements.find((element) => element.name === 'w:rPr');
+    const runPropertiesChange = runProperties.elements.find((element) => element.name === 'w:rPrChange');
+    expect(runPropertiesChange.attributes).toEqual(
+      expect.objectContaining({
+        'w:id': expect.stringMatching(/^\d+$/),
+        'w:author': 'Missy Fox',
+        'w:date': '2026-01-07T20:24:39Z',
+      }),
+    );
+    expect(runPropertiesChange.attributes).not.toHaveProperty('w:authorEmail');
+  });
+
+  it('uses the Word revision id allocator for trackFormat export ids', () => {
+    const allocate = vi.fn(() => '7');
+    const trackFormatMark = {
+      type: 'trackFormat',
+      attrs: {
+        id: 'format-allocated',
+        sourceId: '',
+        author: 'Missy Fox',
+        authorEmail: '',
+        date: '2026-01-07T20:24:39Z',
+        before: [],
+        after: [{ type: 'bold', attrs: { value: true } }],
+      },
+    };
+
+    const result = getTextNodeForExport('styles', [trackFormatMark], {
+      ...buildParams(),
+      converter: { wordIdAllocator: { allocate } },
+      currentPartPath: 'word/header1.xml',
+    });
+
+    expect(allocate).toHaveBeenCalledWith({
+      partPath: 'word/header1.xml',
+      sourceId: '',
+      logicalId: 'format-allocated',
+    });
+
+    const runProperties = result.elements.find((element) => element.name === 'w:rPr');
+    const runPropertiesChange = runProperties.elements.find((element) => element.name === 'w:rPrChange');
+    expect(runPropertiesChange.attributes['w:id']).toBe('7');
   });
 });

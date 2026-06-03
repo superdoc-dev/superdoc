@@ -13,6 +13,7 @@ export {
   useSuperDocSlice,
   useSuperDocSelection,
   useSuperDocComments,
+  useSuperDocContentControls,
   useSuperDocTrackChanges,
   useSuperDocToolbar,
   useSuperDocCommand,

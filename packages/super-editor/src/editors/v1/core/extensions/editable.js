@@ -62,6 +62,20 @@ const recordStoryInputDebug = (view, event, editor, phase, extra = {}) => {
   });
 };
 
+const isInlineStructuredContentNode = (node) => node?.type?.name === 'structuredContent' && node.isInline;
+
+const isInlineStructuredContentBoundary = (doc, pos) => {
+  if (typeof pos !== 'number' || pos < 0 || pos > doc.content.size) {
+    return false;
+  }
+
+  const $pos = doc.resolve(pos);
+  const before = $pos.parent.childBefore($pos.parentOffset).node;
+  const after = $pos.parent.childAfter($pos.parentOffset).node;
+
+  return isInlineStructuredContentNode(before) || isInlineStructuredContentNode(after);
+};
+
 const handleInsertTextBeforeInput = (view, event, editor) => {
   const isInsertTextInput = event?.inputType === 'insertText';
   const hasTextData = typeof event?.data === 'string' && event.data.length > 0;
@@ -79,7 +93,10 @@ const handleInsertTextBeforeInput = (view, event, editor) => {
   }
 
   const selection = view.state.selection;
-  if (selection.empty && !isStorySurfaceEditor(editor)) {
+  const shouldHandleCollapsedSelection =
+    isStorySurfaceEditor(editor) || isInlineStructuredContentBoundary(view.state.doc, selection.from);
+
+  if (selection.empty && !shouldHandleCollapsedSelection) {
     recordStoryInputDebug(view, event, editor, 'beforeinput:skip-empty-selection');
     return false;
   }

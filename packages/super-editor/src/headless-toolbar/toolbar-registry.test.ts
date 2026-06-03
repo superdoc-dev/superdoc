@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { historyKey } from 'prosemirror-history';
-import { PluginKey } from 'prosemirror-state';
+import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
+import { Schema } from 'prosemirror-model';
 
 const getActiveFormattingMock = vi.hoisted(() => vi.fn(() => []));
 const getYUndoPluginStateMock = vi.hoisted(() => vi.fn(() => undefined));
@@ -46,6 +47,116 @@ const createContext = (): ToolbarContext => ({
   selectionEmpty: false,
   editor: {} as any,
 });
+
+const sdtSchema = new Schema({
+  nodes: {
+    doc: { content: 'block+' },
+    paragraph: {
+      group: 'block',
+      content: 'inline*',
+      toDOM: () => ['p', 0],
+      parseDOM: [{ tag: 'p' }],
+    },
+    text: { group: 'inline' },
+    structuredContent: {
+      group: 'inline',
+      inline: true,
+      content: 'inline*',
+      attrs: {
+        id: { default: null },
+        lockMode: { default: 'unlocked' },
+      },
+      toDOM: () => ['span', 0],
+      parseDOM: [{ tag: 'span' }],
+    },
+    structuredContentBlock: {
+      group: 'block',
+      content: 'block+',
+      attrs: {
+        id: { default: null },
+        lockMode: { default: 'unlocked' },
+      },
+      toDOM: () => ['div', 0],
+      parseDOM: [{ tag: 'div' }],
+    },
+  },
+});
+
+const makeToolbarContextWithSelection = (state: EditorState): ToolbarContext => ({
+  ...createContext(),
+  editor: {
+    state,
+    options: {
+      documentMode: 'editing',
+    },
+  } as any,
+});
+
+const findNodeById = (doc: any, id: string) => {
+  let result: { node: any; pos: number } | null = null;
+  doc.descendants((node: any, pos: number) => {
+    if (result) return false;
+    if (String(node.attrs?.id) === id) {
+      result = { node, pos };
+      return false;
+    }
+    return true;
+  });
+  if (!result) throw new Error(`Missing test node "${id}"`);
+  return result;
+};
+
+const findTextPos = (doc: any, text: string) => {
+  let result: number | null = null;
+  doc.descendants((node: any, pos: number) => {
+    if (result != null) return false;
+    if (node.isText && node.text?.includes(text)) {
+      result = pos + node.text.indexOf(text);
+      return false;
+    }
+    return true;
+  });
+  if (result == null) throw new Error(`Missing test text "${text}"`);
+  return result;
+};
+
+const makeInlineSdtState = (lockMode: string, selectionKind: 'inside' | 'node' | 'span' = 'inside') => {
+  const doc = sdtSchema.node('doc', null, [
+    sdtSchema.node('paragraph', null, [
+      sdtSchema.text('A '),
+      sdtSchema.node('structuredContent', { id: 'inline-sdt', lockMode }, [sdtSchema.text('Field')]),
+      sdtSchema.text(' Z'),
+    ]),
+  ]);
+
+  const baseState = EditorState.create({ schema: sdtSchema, doc });
+  const inlineSdt = findNodeById(doc, 'inline-sdt');
+
+  if (selectionKind === 'node') {
+    return baseState.apply(baseState.tr.setSelection(NodeSelection.create(doc, inlineSdt.pos)));
+  }
+
+  if (selectionKind === 'span') {
+    return baseState.apply(
+      baseState.tr.setSelection(TextSelection.create(doc, findTextPos(doc, 'A'), findTextPos(doc, 'Z') + 1)),
+    );
+  }
+
+  return baseState.apply(baseState.tr.setSelection(TextSelection.create(doc, findTextPos(doc, 'Field') + 1)));
+};
+
+const makeBlockSdtState = (lockMode: string) => {
+  const doc = sdtSchema.node('doc', null, [
+    sdtSchema.node('paragraph', null, [sdtSchema.text('Before')]),
+    sdtSchema.node('structuredContentBlock', { id: 'block-sdt', lockMode }, [
+      sdtSchema.node('paragraph', null, [sdtSchema.text('Block field')]),
+    ]),
+    sdtSchema.node('paragraph', null, [sdtSchema.text('After')]),
+  ]);
+
+  const baseState = EditorState.create({ schema: sdtSchema, doc });
+  return baseState.apply(baseState.tr.setSelection(TextSelection.create(doc, findTextPos(doc, 'Block field') + 1)));
+};
 
 describe('createToolbarRegistry', () => {
   afterEach(() => {
@@ -373,6 +484,137 @@ describe('createToolbarRegistry', () => {
       active: true,
       disabled: false,
       value: 'justify',
+    });
+  });
+
+  it('derives mirrored text-align for RTL paragraph with explicit right justification', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['text-align']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {
+              resolve: vi.fn(() => '$resolved-pos'),
+            },
+            selection: {
+              $from: {
+                depth: 1,
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {
+                          paragraphProperties: {
+                            rightToLeft: true,
+                            justification: 'right',
+                          },
+                        },
+                      }
+                    : null,
+                ),
+                before: vi.fn(() => 5),
+                start: vi.fn(() => 6),
+              },
+            },
+          },
+          converter: null,
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: 'left',
+    });
+  });
+
+  it('derives mirrored text-align for RTL paragraph with explicit left justification', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['text-align']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {
+              resolve: vi.fn(() => '$resolved-pos'),
+            },
+            selection: {
+              $from: {
+                depth: 1,
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {
+                          paragraphProperties: {
+                            rightToLeft: true,
+                            justification: 'left',
+                          },
+                        },
+                      }
+                    : null,
+                ),
+                before: vi.fn(() => 5),
+                start: vi.fn(() => 6),
+              },
+            },
+          },
+          converter: null,
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: 'right',
+    });
+  });
+
+  it('defaults text-align to right for RTL paragraph when justification is missing', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['text-align']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {
+              resolve: vi.fn(() => '$resolved-pos'),
+            },
+            selection: {
+              $from: {
+                depth: 1,
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {
+                          paragraphProperties: {
+                            rightToLeft: true,
+                          },
+                        },
+                      }
+                    : null,
+                ),
+                before: vi.fn(() => 5),
+                start: vi.fn(() => 6),
+              },
+            },
+          },
+          converter: null,
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: 'right',
     });
   });
 
@@ -836,6 +1078,57 @@ describe('createToolbarRegistry', () => {
     );
   });
 
+  // SD-3213f: the tracked-change enricher prefers the narrow
+  // `superdoc.getComment(id)` method when present, falling back to
+  // `commentsStore.getComment(id)` for custom host stubs that pre-date
+  // the narrow method. Pin precedence so a future refactor cannot flip
+  // it silently. (The legacy branch above already covers the
+  // commentsStore path in isolation.)
+  it('prefers superdoc.getComment over commentsStore.getComment when both are present', () => {
+    collectTrackedChangesMock.mockReturnValueOnce([{ id: 'tc-narrow', attrs: {} }]);
+    isTrackedChangeActionAllowedMock.mockReturnValueOnce(true);
+
+    const narrowGetComment = vi.fn(() => ({ id: 'tc-narrow', body: 'narrow-body' }));
+    const legacyGetComment = vi.fn(() => ({
+      getValues: () => ({ id: 'tc-narrow', body: 'legacy-body' }),
+    }));
+
+    const registry = createToolbarRegistry();
+    registry['track-changes-accept-selection']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {},
+            selection: {
+              from: 1,
+              to: 3,
+            },
+          },
+        } as any,
+      },
+      superdoc: {
+        getComment: narrowGetComment,
+        commentsStore: {
+          getComment: legacyGetComment,
+        },
+      },
+    });
+
+    expect(narrowGetComment).toHaveBeenCalledWith('tc-narrow');
+    expect(legacyGetComment).not.toHaveBeenCalled();
+    expect(isTrackedChangeActionAllowedMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trackedChanges: [
+          expect.objectContaining({
+            id: 'tc-narrow',
+            comment: { id: 'tc-narrow', body: 'narrow-body' },
+          }),
+        ],
+      }),
+    );
+  });
+
   it('derives document-mode value from superdoc config', () => {
     const registry = createToolbarRegistry();
     const state = registry['document-mode']?.state({
@@ -870,6 +1163,50 @@ describe('createToolbarRegistry', () => {
     });
   });
 
+  it('derives copy-format active state from stored format painter style', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['copy-format']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          storage: {
+            formatCommands: {
+              storedStyle: [{ type: { name: 'bold' }, attrs: {} }],
+            },
+          },
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+    });
+  });
+
+  it('keeps copy-format inactive when no stored format painter style exists', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['copy-format']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          storage: {
+            formatCommands: {
+              storedStyle: null,
+            },
+          },
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: false,
+    });
+  });
+
   it('keeps table-insert disabled state tied to editability', () => {
     const registry = createToolbarRegistry();
     const state = registry['table-insert']?.state({
@@ -883,6 +1220,56 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: false,
       disabled: true,
+    });
+  });
+
+  it('keeps table-of-contents-insert disabled when create.tableOfContents is unavailable', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['table-of-contents-insert']?.state({
+      context: {
+        ...createContext(),
+        target: {
+          commands: {},
+          doc: {
+            capabilities: () => ({
+              operations: {
+                'create.tableOfContents': { available: false },
+              },
+            }),
+          },
+        },
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: true,
+    });
+  });
+
+  it('enables table-of-contents-insert when create.tableOfContents is available', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['table-of-contents-insert']?.state({
+      context: {
+        ...createContext(),
+        target: {
+          commands: {},
+          doc: {
+            capabilities: () => ({
+              operations: {
+                'create.tableOfContents': { available: true },
+              },
+            }),
+          },
+        },
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: false,
     });
   });
 
@@ -948,6 +1335,91 @@ describe('createToolbarRegistry', () => {
       active: false,
       disabled: true,
     });
+  });
+
+  it.each(['contentLocked', 'sdtContentLocked'])(
+    'disables representative mutation commands inside a %s inline SDT',
+    (lockMode) => {
+      const registry = createToolbarRegistry();
+      const context = makeToolbarContextWithSelection(makeInlineSdtState(lockMode));
+
+      expect(registry.bold?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry.italic?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry.underline?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry.link?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry.image?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry['table-insert']?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry['clear-formatting']?.state({ context, superdoc: {} })?.disabled).toBe(true);
+      expect(registry['copy-format']?.state({ context, superdoc: {} })?.disabled).toBe(true);
+    },
+  );
+
+  it.each(['unlocked', 'sdtLocked'])('does not disable mutation commands from %s SDTs alone', (lockMode) => {
+    const registry = createToolbarRegistry();
+    const context = makeToolbarContextWithSelection(makeInlineSdtState(lockMode));
+
+    expect(registry.bold?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry.link?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry['table-insert']?.state({ context, superdoc: {} })?.disabled).toBe(false);
+  });
+
+  it('leaves document controls governed by their existing rules inside content-locked SDTs', () => {
+    getYUndoPluginStateMock.mockReturnValue({
+      undoManager: {
+        undoStack: [1],
+        redoStack: [1],
+      },
+    });
+
+    const registry = createToolbarRegistry();
+    const baseContext = makeToolbarContextWithSelection(makeInlineSdtState('contentLocked'));
+    const context = {
+      ...baseContext,
+      editor: {
+        ...baseContext.editor,
+        options: {
+          ydoc: {},
+          documentMode: 'editing',
+        },
+      } as any,
+    };
+
+    expect(registry.undo?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry.redo?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry.ruler?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry.zoom?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(registry['document-mode']?.state({ context, superdoc: {} })?.disabled).toBe(false);
+    expect(
+      registry['formatting-marks']?.state({
+        context,
+        superdoc: {
+          toggleFormattingMarks: vi.fn(),
+        },
+      })?.disabled,
+    ).toBe(false);
+  });
+
+  it('keeps text-align available when mutation commands are disabled inside a locked block SDT paragraph', () => {
+    const registry = createToolbarRegistry();
+    const context = makeToolbarContextWithSelection(makeBlockSdtState('contentLocked'));
+
+    expect(registry.bold?.state({ context, superdoc: {} })?.disabled).toBe(true);
+    expect(registry['text-align']?.state({ context, superdoc: {} })?.disabled).toBe(false);
+  });
+
+  it('disables mutation commands for a NodeSelection on a locked SDT', () => {
+    const registry = createToolbarRegistry();
+    const context = makeToolbarContextWithSelection(makeInlineSdtState('sdtContentLocked', 'node'));
+
+    expect(registry.bold?.state({ context, superdoc: {} })?.disabled).toBe(true);
+  });
+
+  it('disables mutation commands for a range spanning locked SDT content', () => {
+    const registry = createToolbarRegistry();
+    const context = makeToolbarContextWithSelection(makeInlineSdtState('contentLocked', 'span'));
+
+    expect(registry.bold?.state({ context, superdoc: {} })?.disabled).toBe(true);
+    expect(registry['bullet-list']?.state({ context, superdoc: {} })?.disabled).toBe(true);
   });
 
   // -------------------------------------------------------------------------
@@ -1063,6 +1535,162 @@ describe('createToolbarRegistry', () => {
         superdoc: {},
       });
       expect(state).toEqual({ active: false, disabled: false, value: null });
+    });
+  });
+
+  // SD-2810/PR #3226: the headless direction-ltr / direction-rtl ids must encode
+  // their direction in the closure (not in a payload). Public payload type is
+  // `never` because the runtime ignores any payload arg. These tests pin that
+  // contract: no-payload invocation maps to the expected setParagraphDirection
+  // call with alignmentPolicy='matchDirection'.
+  describe('direction-ltr / direction-rtl execute contract', () => {
+    const createExecuteContext = (commandSpy: ReturnType<typeof vi.fn>): ToolbarContext => ({
+      target: {
+        commands: {
+          setParagraphDirection: commandSpy,
+        },
+      },
+      surface: 'body',
+      isEditable: true,
+      selectionEmpty: false,
+      editor: {
+        commands: {
+          setParagraphDirection: commandSpy,
+        },
+      } as any,
+    });
+
+    it("controller.execute('direction-ltr') calls setParagraphDirection({direction:'ltr', alignmentPolicy:'matchDirection'})", () => {
+      const commandSpy = vi.fn(() => true);
+      const registry = createToolbarRegistry();
+      const result = registry['direction-ltr']?.execute?.({
+        context: createExecuteContext(commandSpy),
+        superdoc: {},
+      });
+
+      expect(result).toBe(true);
+      expect(commandSpy).toHaveBeenCalledExactlyOnceWith({
+        direction: 'ltr',
+        alignmentPolicy: 'matchDirection',
+      });
+    });
+
+    it("controller.execute('direction-rtl') calls setParagraphDirection({direction:'rtl', alignmentPolicy:'matchDirection'})", () => {
+      const commandSpy = vi.fn(() => true);
+      const registry = createToolbarRegistry();
+      const result = registry['direction-rtl']?.execute?.({
+        context: createExecuteContext(commandSpy),
+        superdoc: {},
+      });
+
+      expect(result).toBe(true);
+      expect(commandSpy).toHaveBeenCalledExactlyOnceWith({
+        direction: 'rtl',
+        alignmentPolicy: 'matchDirection',
+      });
+    });
+
+    it('execute ignores any payload arg (direction comes from the command id)', () => {
+      const commandSpy = vi.fn(() => true);
+      const registry = createToolbarRegistry();
+      // The headless ToolbarPayloadMap declares both direction ids as `never`,
+      // so callers can't pass a payload through the typed surface. This test
+      // pins the runtime side of that contract: even if someone bypasses TS
+      // and passes a payload, it's ignored.
+      const result = registry['direction-ltr']?.execute?.({
+        context: createExecuteContext(commandSpy),
+        superdoc: {},
+        payload: { direction: 'rtl', alignmentPolicy: undefined } as never,
+      });
+
+      expect(result).toBe(true);
+      // Still called with LTR, not the contradictory payload.
+      expect(commandSpy).toHaveBeenCalledExactlyOnceWith({
+        direction: 'ltr',
+        alignmentPolicy: 'matchDirection',
+      });
+    });
+
+    it('returns false when editor command is unavailable', () => {
+      const registry = createToolbarRegistry();
+      const result = registry['direction-ltr']?.execute?.({
+        context: {
+          ...createContext(),
+          editor: { commands: {} } as any,
+        },
+        superdoc: {},
+      });
+
+      expect(result).toBe(false);
+    });
+  });
+
+  // PR #3226: state-deriver tests for direction-ltr/direction-rtl. The deriver
+  // reads paragraphProperties.rightToLeft via getCurrentResolvedParagraphProperties
+  // and returns `{ active: current === closureDirection, disabled, value: current }`.
+  describe('direction-ltr / direction-rtl state deriver', () => {
+    const makeDirectionContext = (rightToLeft: boolean | undefined): ToolbarContext => ({
+      ...createContext(),
+      editor: {
+        // Leaving `converter` undefined makes calculateResolvedParagraphProperties
+        // return node.attrs.paragraphProperties directly, no cascade.
+        state: {
+          doc: { resolve: vi.fn(() => '$resolved-pos') },
+          selection: {
+            $from: {
+              depth: 1,
+              node: vi.fn((depth) =>
+                depth === 1
+                  ? {
+                      type: { name: 'paragraph' },
+                      attrs: {
+                        paragraphProperties: rightToLeft === undefined ? {} : { rightToLeft },
+                      },
+                    }
+                  : null,
+              ),
+              before: vi.fn(() => 5),
+              start: vi.fn(() => 6),
+            },
+          },
+        },
+      } as any,
+    });
+
+    it('direction-rtl is active when paragraph resolves RTL', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-rtl']?.state({ context: makeDirectionContext(true), superdoc: {} });
+
+      expect(state).toEqual({ active: true, disabled: false, value: 'rtl' });
+    });
+
+    it('direction-rtl is inactive when paragraph resolves LTR', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-rtl']?.state({ context: makeDirectionContext(false), superdoc: {} });
+
+      expect(state).toEqual({ active: false, disabled: false, value: 'ltr' });
+    });
+
+    it('direction-rtl is inactive when paragraph has no explicit direction', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-rtl']?.state({ context: makeDirectionContext(undefined), superdoc: {} });
+
+      // Falsy rightToLeft -> current = 'ltr', so direction-rtl is inactive.
+      expect(state).toEqual({ active: false, disabled: false, value: 'ltr' });
+    });
+
+    it('direction-ltr is active when paragraph resolves LTR', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-ltr']?.state({ context: makeDirectionContext(false), superdoc: {} });
+
+      expect(state).toEqual({ active: true, disabled: false, value: 'ltr' });
+    });
+
+    it('direction-ltr is inactive when paragraph resolves RTL', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-ltr']?.state({ context: makeDirectionContext(true), superdoc: {} });
+
+      expect(state).toEqual({ active: false, disabled: false, value: 'rtl' });
     });
   });
 });

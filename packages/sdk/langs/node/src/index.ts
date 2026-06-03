@@ -4,6 +4,8 @@ import {
   type BoundDocApi,
   type DocCloseBoundParams,
   type DocCloseResult,
+  type DocFormatApplyBoundParams,
+  type DocFormatApplyResult,
   type DocOpenParams as GeneratedDocOpenParams,
   type DocOpenResult,
   type DocSaveBoundParams,
@@ -45,9 +47,9 @@ class BoundRuntime implements RuntimeInvoker {
     options: InvokeOptions = {},
   ): Promise<TData> {
     if (this.closed) {
-      throw new SuperDocCliError('Document handle is closed.', {
+      throw new SuperDocCliError(`Document handle is closed; cannot invoke ${operation.operationId}.`, {
         code: 'DOCUMENT_CLOSED',
-        details: { sessionId: this.sessionId },
+        details: { sessionId: this.sessionId, operationId: operation.operationId },
       });
     }
     return this.runtime.invoke<TData>(operation, { ...params, sessionId: this.sessionId }, options);
@@ -56,6 +58,10 @@ class BoundRuntime implements RuntimeInvoker {
   markClosed(): void {
     this.closed = true;
   }
+}
+
+export interface DocFormatRangeBoundParams extends Omit<DocFormatApplyBoundParams, 'inline'> {
+  properties: NonNullable<DocFormatApplyBoundParams['inline']>;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +119,18 @@ class SuperDocDocumentCore {
   /** @internal */
   markClosed(): void {
     this.boundRuntime.markClosed();
+  }
+
+  async formatRange(params: DocFormatRangeBoundParams, options: InvokeOptions = {}): Promise<DocFormatApplyResult> {
+    const { properties, ...rest } = params;
+    return this.boundRuntime.invoke<DocFormatApplyResult>(
+      CONTRACT.operations['doc.format.apply'],
+      {
+        ...rest,
+        inline: properties,
+      },
+      options,
+    );
   }
 }
 
@@ -235,11 +253,17 @@ export {
   getSystemPromptForProvider,
   getToolCatalog,
   listTools,
+  DEFAULT_PRESET,
+  getPreset,
+  listPresets,
 } from './tools.js';
 export type {
   AnthropicSystemPrompt,
   CacheStrategy,
   SystemPromptForProviderResult,
+  ToolCatalog,
+  ToolCatalogEntry,
+  ToolCatalogOperation,
   ToolChooserInput,
   ToolProvider,
 } from './tools.js';

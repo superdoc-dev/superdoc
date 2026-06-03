@@ -51,6 +51,7 @@ import { onCollaborationProviderSynced } from './core/helpers/collaboration-prov
 import { resolveSelectionTarget } from './document-api-adapters/helpers/selection-target-resolver.js';
 import { resolveDefaultInsertTarget } from './document-api-adapters/helpers/adapter-utils.js';
 import { resolveTrackedChangeInStory } from './document-api-adapters/helpers/tracked-change-resolver.js';
+import { syncCommentEntitiesFromCollaboration } from './document-api-adapters/helpers/comment-entity-store.js';
 import { getTrackedChangeIndex } from './document-api-adapters/tracked-changes/tracked-change-index.js';
 import {
   makeTrackedChangeAnchorKey,
@@ -158,6 +159,8 @@ export {
   resolveDefaultInsertTarget,
   /** @internal */
   resolveTrackedChangeInStory,
+  /** @internal SD-3214: feed collaboration-sourced comment metadata into the editor's CommentEntityStore. */
+  syncCommentEntitiesFromCollaboration,
 
   // Story-aware tracked-change service
   /** @internal */

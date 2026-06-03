@@ -208,6 +208,7 @@ export const createHeaderFooterEditor = ({
     totalPageCount,
     element: editorContainer,
     editorOptions: {
+      headerFooterRefId,
       headerFooterType: type,
       onCreate: (evt) => setEditorToolbar(evt, editor),
       onBlur: (evt) => onHeaderFooterDataUpdate(evt, editor, headerFooterRefId, type),

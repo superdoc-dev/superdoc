@@ -839,6 +839,70 @@ function stripMetadataFields(node, shouldDropField, pathSegments = []) {
   }
 }
 
+function normalizeLayoutSourceIdentityIds(node, idMap) {
+  if (!node || typeof node !== 'object') return;
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      normalizeLayoutSourceIdentityIds(item, idMap);
+    }
+    return;
+  }
+
+  const identity = node.layoutSourceIdentity;
+  if (identity && typeof identity === 'object') {
+    const blockRef = identity.blockRef;
+    const normalizedBlockRef = typeof blockRef === 'string' ? idMap.get(blockRef) : null;
+    if (normalizedBlockRef) {
+      identity.blockRef = normalizedBlockRef;
+      if (typeof identity.fragmentId === 'string') {
+        identity.fragmentId = identity.fragmentId.replaceAll(`|${blockRef}|`, `|${normalizedBlockRef}|`);
+      }
+    }
+  }
+
+  for (const value of Object.values(node)) {
+    normalizeLayoutSourceIdentityIds(value, idMap);
+  }
+}
+
+function normalizeTrackedChangeIds(node, idMap = new Map(), pathSegments = []) {
+  const canonicalizeTrackedChangeId = (value) => {
+    if (typeof value !== 'string' || value.length === 0) return value;
+    let normalized = idMap.get(value);
+    if (!normalized) {
+      normalized = `tc${idMap.size}`;
+      idMap.set(value, normalized);
+    }
+    return normalized;
+  };
+
+  if (!node || typeof node !== 'object') return;
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i += 1) {
+      normalizeTrackedChangeIds(node[i], idMap, [...pathSegments, i]);
+    }
+    return;
+  }
+
+  const isTrackedChangeEntry =
+    pathSegments.length >= 2 &&
+    pathSegments[pathSegments.length - 2] === 'trackedChanges' &&
+    typeof pathSegments[pathSegments.length - 1] === 'number';
+
+  if (isTrackedChangeEntry) {
+    if (typeof node.id === 'string') {
+      node.id = canonicalizeTrackedChangeId(node.id);
+    }
+    if (typeof node.overlapParentId === 'string') {
+      node.overlapParentId = canonicalizeTrackedChangeId(node.overlapParentId);
+    }
+  }
+
+  for (const [key, value] of Object.entries(node)) {
+    normalizeTrackedChangeIds(value, idMap, [...pathSegments, key]);
+  }
+}
+
 function normalizeDocSnapshot(raw) {
   const layoutSnapshot = cloneDeep(raw?.layoutSnapshot ?? {});
   const paintSnapshot = cloneDeep(raw?.paintSnapshot ?? null);
@@ -870,7 +934,9 @@ function normalizeDocSnapshot(raw) {
   }
 
   stripMetadataFields(layoutSnapshot, shouldDropLayoutMetadataField, ['layoutSnapshot']);
+  normalizeTrackedChangeIds(layoutSnapshot, new Map(), ['layoutSnapshot']);
   stripMetadataFields(paintSnapshot, isPaintImageBlockIdPath, ['paintSnapshot']);
+  normalizeLayoutSourceIdentityIds(paintSnapshot, idMap);
 
   return {
     formatVersion: raw?.formatVersion ?? null,

@@ -10,26 +10,34 @@ import {
   withActiveContext,
   writeContextMetadata,
 } from '../lib/context';
-import { openSessionDocument } from '../lib/document';
+import { exportToPath, openSessionDocument } from '../lib/document';
 import { syncCollaborativeSessionSnapshot } from '../lib/session-collab';
 import type { CommandContext, CommandExecution } from '../lib/types';
+
+type SaveMode = 'review-preserving' | 'final';
+
 function validateSaveMode(
   inPlace: boolean,
   outPath: string | undefined,
   force: boolean,
+  mode: string | undefined,
 ): {
   inPlace: boolean;
   outPath?: string;
   force: boolean;
+  mode: SaveMode;
 } {
   if (inPlace && outPath) {
     throw new CliError('INVALID_ARGUMENT', 'save: use either --in-place or --out, not both.');
   }
 
+  const resolvedMode = mode === 'final' ? 'final' : 'review-preserving';
+
   return {
     inPlace,
     outPath,
     force,
+    mode: resolvedMode,
   };
 }
 
@@ -40,9 +48,12 @@ export async function runSave(tokens: string[], context: CommandContext): Promis
     return {
       command: 'save',
       data: {
-        usage: ['superdoc save [--in-place] [--out <path>] [--force]'],
+        usage: ['superdoc save [--mode <review-preserving|final>] [--in-place] [--out <path>] [--force]'],
       },
-      pretty: ['Usage:', '  superdoc save [--in-place] [--out <path>] [--force]'].join('\n'),
+      pretty: [
+        'Usage:',
+        '  superdoc save [--mode <review-preserving|final>] [--in-place] [--out <path>] [--force]',
+      ].join('\n'),
     };
   }
 
@@ -50,6 +61,7 @@ export async function runSave(tokens: string[], context: CommandContext): Promis
     getBooleanOption(parsed, 'in-place'),
     getStringOption(parsed, 'out'),
     getBooleanOption(parsed, 'force'),
+    getStringOption(parsed, 'mode'),
   );
 
   return withActiveContext(
@@ -87,9 +99,15 @@ export async function runSave(tokens: string[], context: CommandContext): Promis
       if (isInPlace && !sourcePath) {
         throw new CliError('MISSING_REQUIRED', 'save: --in-place requires a source path; use --out <path>.');
       }
+      if (mode.mode !== 'review-preserving' && isInPlace) {
+        throw new CliError(
+          'INVALID_ARGUMENT',
+          'save: final-mode export requires --out <path>; in-place final export would desynchronize the live session.',
+        );
+      }
 
       let output: { path: string; byteLength: number };
-      if (isInPlace) {
+      if (mode.mode === 'review-preserving' && isInPlace) {
         const drift = await detectSourceDrift(effectiveMetadata);
         if (drift.drifted && !mode.force) {
           throw new CliError('SOURCE_DRIFT_DETECTED', 'Source document changed since open. Refusing to overwrite.', {
@@ -102,8 +120,41 @@ export async function runSave(tokens: string[], context: CommandContext): Promis
         }
 
         output = await copyWorkingDocumentToPath(paths, sourcePath!, true);
-      } else {
+      } else if (mode.mode === 'review-preserving') {
         output = await copyWorkingDocumentToPath(paths, targetPath, mode.force);
+      } else {
+        const opened = await openSessionDocument(paths.workingDocPath, context.io, effectiveMetadata, {
+          sessionId: context.sessionId ?? effectiveMetadata.contextId,
+          executionMode: context.executionMode,
+          sessionPool: context.sessionPool,
+        });
+        try {
+          output = await exportToPath(opened.editor, targetPath, mode.force, { isFinalDoc: true });
+        } finally {
+          opened.dispose();
+        }
+
+        return {
+          command: 'save',
+          data: {
+            contextId: effectiveMetadata.contextId,
+            saved: true,
+            inPlace: false,
+            mode: mode.mode,
+            document: {
+              path: effectiveMetadata.sourcePath,
+              source: effectiveMetadata.source,
+              revision: effectiveMetadata.revision,
+            },
+            context: {
+              dirty: effectiveMetadata.dirty,
+              revision: effectiveMetadata.revision,
+              lastSavedAt: effectiveMetadata.lastSavedAt,
+            },
+            output,
+          },
+          pretty: `Exported final document to ${output.path}`,
+        };
       }
 
       const nextSourcePath = isInPlace ? sourcePath! : targetPath;
@@ -124,6 +175,7 @@ export async function runSave(tokens: string[], context: CommandContext): Promis
           contextId: updatedMetadata.contextId,
           saved: true,
           inPlace: isInPlace,
+          mode: mode.mode,
           document: {
             path: updatedMetadata.sourcePath,
             source: updatedMetadata.source,

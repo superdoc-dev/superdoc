@@ -20,6 +20,7 @@
     "@superdoc/common": "workspace:*",
     "@superdoc/contracts": "workspace:*",
     "@superdoc/dom-contract": "workspace:*",
+    "@superdoc/font-system": "workspace:*",
     "@superdoc/font-utils": "workspace:*",
     "@superdoc/preset-geometry": "workspace:*",
     "@superdoc/url-validation": "workspace:*"

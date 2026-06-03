@@ -1,8 +1,20 @@
 # SuperDoc Demos
 
-Source-only demos used by the [SuperDoc demo gallery](https://superdoc.dev). A demo composes multiple SuperDoc features into a workflow. If you want the smallest copy-pasteable path for one feature, use [`examples/`](../examples/) instead.
+Source-only demos used by the [SuperDoc demo gallery](https://superdoc.dev).
+
+Demos answer: "What can I build with SuperDoc?"
+
+A demo composes multiple SuperDoc features into a workflow, often with realistic UI, fake backend data, product copy, gallery metadata, or a video-ready scenario. If you want the smallest copy-pasteable path for one primitive, use [`examples/`](../examples/) instead.
 
 The machine-readable index lives in [`manifest.json`](./manifest.json).
+
+## Demos vs examples
+
+Use `demos/` when the point is the workflow: contract templates, grading papers, Slack redlining, browser extensions, Word add-ins, and similar product-shaped experiences.
+
+Use `examples/` when the point is the API call or integration pattern. Examples can overlap with demos, but the example should remove the product story and show the smallest useful code path.
+
+Before marking a demo as homepage-ready, make sure it has been verified locally, has a clear README, and has the gallery metadata or assets the homepage expects. Leave `homepage: false` while a demo is useful for source review but not ready for the gallery.
 
 ## Source demos vs live demos
 
@@ -14,6 +26,7 @@ Live demos that run at `demos.superdoc.dev` live in the separate `superdoc-dev/d
 
 | Demo | Category | Notes |
 |------|----------|-------|
+| [contract-templates](./contract-templates) | Editor | Content-controls workflow with smart fields, versioned clauses, and update detection |
 | [custom-ui](./custom-ui) | Editor | Full Custom UI reference workspace |
 | [grading-papers](./grading-papers) | Editor | Product workflow for paper review |
 | [slack-redlining](./slack-redlining) | AI | Slack and AI redlining workflow |

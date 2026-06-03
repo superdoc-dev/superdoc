@@ -13,6 +13,10 @@ const branches = [
 
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
+// stable -> main syncs (real merges) re-attribute prereleases to PRs already shipped on @latest.
+// Gate per-PR/issue success comments off on prereleases to avoid duplicate "shipped" comments.
+const shouldCommentOnRelease = !isPrerelease;
+
 const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
 
 const config = {
@@ -35,7 +39,7 @@ config.plugins.push([
   'semantic-release-linear-app',
   {
     teamKeys: ['SD'],
-    addComment: true,
+    addComment: shouldCommentOnRelease,
     packageName: 'create',
     commentTemplate: 'shipped in {package} {releaseLink} {channel}',
   },
@@ -46,6 +50,7 @@ config.plugins.push([
   {
     successComment:
       ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/create** v${nextRelease.version}\n\nThe release is available on [GitHub release](${releases.find(release => release.pluginName === "@semantic-release/github").url})',
+    successCommentCondition: shouldCommentOnRelease ? undefined : false,
   },
 ]);
 

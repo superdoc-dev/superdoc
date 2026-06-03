@@ -2,6 +2,11 @@
 import { NodeTranslator } from '@translator';
 import { createAttributeHandler } from '@converter/v3/handlers/utils.js';
 import { exportSchemaToJson } from '@converter/exporter.js';
+import {
+  resolveTrackedChangeImportIds,
+  stampImportTrackingAttrs,
+  withParentFrame,
+} from '../../../../v2/importer/importTrackingContext.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:del';
@@ -19,33 +24,42 @@ const validXmlAttributes = [
 
 /**
  * Encode the w:del element
- * @param {import('@translator').SCEncoderConfig} params
+ * @param {import('@translator').SCEncoderConfig & { importTrackingContext?: import('@extensions/track-changes/review-model/import-context.js').ImportTrackingContext }} params
+ * @param {Record<string, any>} [encodedAttrs]
  * @returns {import('@translator').SCEncoderResult}
  */
 const encode = (params, encodedAttrs = {}) => {
-  const { nodeListHandler, extraParams = {}, converter, filename } = params;
+  const { nodeListHandler, extraParams = {} } = params;
   const { node } = extraParams;
 
   // Preserve the original OOXML w:id for round-trip export fidelity.
   // The internal id is remapped to a shared UUID for replacement pairing.
-  const originalWordId = encodedAttrs.id;
-  const partPath = typeof filename === 'string' && filename.length > 0 ? `word/${filename}` : 'word/document.xml';
-  const trackedChangeIdMap =
-    converter?.trackedChangeIdMapsByPart?.get?.(partPath) ?? converter?.trackedChangeIdMap ?? null;
-  if (originalWordId && trackedChangeIdMap?.has(originalWordId)) {
-    encodedAttrs.id = trackedChangeIdMap.get(originalWordId);
-  }
-  encodedAttrs.sourceId = originalWordId || '';
+  const { partPath, sourceId, logicalId } = resolveTrackedChangeImportIds(params, encodedAttrs.id);
+  encodedAttrs.id = logicalId;
+  encodedAttrs.sourceId = sourceId;
+  const { context, frame } = stampImportTrackingAttrs({
+    params,
+    attrs: encodedAttrs,
+    side: 'deletion',
+    sourceId,
+    partPath,
+  });
 
-  const subs = nodeListHandler.handler({
+  const childParams = {
     ...params,
     insideTrackChange: true,
+    importTrackingContext: context ?? params.importTrackingContext,
     nodes: node.elements,
     path: [...(params.path || []), node],
-  });
+  };
+  const subs =
+    context && frame
+      ? withParentFrame(context, frame, () => nodeListHandler.handler(childParams))
+      : nodeListHandler.handler(childParams);
 
   encodedAttrs.importedAuthor = `${encodedAttrs.author} (imported)`;
 
+  const converter = /** @type {{ documentOrigin?: string } | undefined} */ (params.converter);
   if (converter?.documentOrigin) {
     encodedAttrs.origin = converter.documentOrigin;
   }
@@ -73,19 +87,23 @@ function decode(params) {
   const { node } = params;
 
   if (!node || !node.type) {
-    return null;
+    return /** @type {import('@translator').SCDecoderResult} */ (/** @type {unknown} */ (null));
   }
 
-  const trackingMarks = ['trackInsert', 'trackDelete'];
   const marks = Array.isArray(node.marks) ? node.marks : [];
   const trackedMark = marks.find((m) => m.type === 'trackDelete');
   if (!trackedMark) {
+    return /** @type {import('@translator').SCDecoderResult} */ (/** @type {unknown} */ (null));
+  }
+
+  node.marks = marks.filter((m) => m.type !== 'trackDelete');
+
+  const translatedTextNode = exportSchemaToJson({ ...params, node });
+
+  if (params.isFinalDoc) {
     return null;
   }
 
-  node.marks = marks.filter((m) => !trackingMarks.includes(m.type));
-
-  const translatedTextNode = exportSchemaToJson({ ...params, node });
   // ECMA-376 renames w:t → w:delText inside <w:del>. Other inline content —
   // w:noBreakHyphen, w:tab, w:br, etc. — stays as-is; the deletion is
   // conveyed by the <w:del> wrapper alone. Guard the rename so non-text
@@ -96,13 +114,52 @@ function decode(params) {
   return {
     name: 'w:del',
     attributes: {
-      'w:id': trackedMark.attrs.sourceId || trackedMark.attrs.id,
+      'w:id': resolveExportWordId(params, trackedMark.attrs),
       'w:author': trackedMark.attrs.author,
       'w:authorEmail': trackedMark.attrs.authorEmail,
       'w:date': trackedMark.attrs.date,
     },
     elements: [translatedTextNode],
   };
+}
+
+/**
+ * Resolve the `w:id` to write on export. Uses the Word revision id allocator
+ * when one is installed on the converter; otherwise falls through to
+ * `sourceId || id`.
+ *
+ * @param {import('@translator').SCDecoderConfig} params
+ * @param {Record<string, unknown>} attrs
+ * @returns {string}
+ */
+function resolveExportWordId(params, attrs) {
+  const sourceId = attrs?.sourceId;
+  /** @type {string | number | null | undefined} */
+  let exportSourceId;
+  if (typeof sourceId === 'string' || typeof sourceId === 'number') {
+    exportSourceId = sourceId;
+  } else if (sourceId === null) {
+    exportSourceId = null;
+  } else if (sourceId === undefined) {
+    exportSourceId = undefined;
+  } else {
+    exportSourceId = String(sourceId);
+  }
+  const logicalId = typeof attrs?.id === 'string' ? attrs.id : '';
+  const exportParams =
+    /** @type {import('@translator').SCDecoderConfig & { converter?: { wordIdAllocator?: import('@extensions/track-changes/review-model/word-id-allocator.js').WordIdAllocator | null }, currentPartPath?: string, filename?: string }} */ (
+      params
+    );
+  const allocator = exportParams?.converter?.wordIdAllocator;
+  const partPath =
+    exportParams?.currentPartPath ||
+    (typeof exportParams?.filename === 'string' && exportParams.filename.length > 0
+      ? `word/${exportParams.filename}`
+      : 'word/document.xml');
+  if (allocator) {
+    return allocator.allocate({ partPath, sourceId: exportSourceId, logicalId });
+  }
+  return /** @type {string} */ (sourceId || logicalId);
 }
 
 /** @type {import('@translator').NodeTranslatorConfig} */

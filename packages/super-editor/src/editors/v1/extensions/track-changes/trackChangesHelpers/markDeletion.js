@@ -4,6 +4,12 @@ import { Slice } from 'prosemirror-model';
 import { v4 as uuidv4 } from 'uuid';
 import { TrackDeleteMarkName, TrackInsertMarkName } from '../constants.js';
 import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
+import {
+  getCurrentUserIdentity,
+  getChangeAuthorIdentity,
+  matchesSameUserRefinement,
+  shouldCollapseNoEmailInsertion,
+} from '../review-model/identity.js';
 
 /**
  * Mark deletion.
@@ -17,19 +23,20 @@ import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
  * @returns {{ deletionMark: import('prosemirror-model').Mark, deletionMap: Mapping, nodes: import('prosemirror-model').Node[] }} Deletion map and deletion mark.
  */
 export const markDeletion = ({ tr, from, to, user, date, id: providedId }) => {
-  /**
-   * @param {unknown} value
-   */
-  const normalizeEmail = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
-  const userEmail = normalizeEmail(user?.email);
+  const currentIdentity = getCurrentUserIdentity({ options: { user } });
   /**
    * @param {import('prosemirror-model').Mark | null | undefined} mark
    */
   const isOwnInsertion = (mark) => {
-    const authorEmail = normalizeEmail(mark?.attrs?.authorEmail);
-    // Word imports often omit authorEmail, treat missing as "own" to allow deletion.
-    if (!authorEmail || !userEmail) return true;
-    return authorEmail === userEmail;
+    const changeIdentity = getChangeAuthorIdentity(mark);
+    if (matchesSameUserRefinement({ currentUser: currentIdentity, change: changeIdentity })) return true;
+    // No-email imported insertions collapse only when truly unattributed, or
+    // when their no-email display name matches the current user. A named
+    // different author with no email remains protected review state.
+    if (!changeIdentity.hasId && !changeIdentity.hasEmail) {
+      return shouldCollapseNoEmailInsertion({ currentUser: user, insertionAttrs: mark?.attrs });
+    }
+    return false;
   };
 
   const trackedMark =
@@ -39,7 +46,11 @@ export const markDeletion = ({ tr, from, to, user, date, id: providedId }) => {
         from,
         to,
         markName: TrackDeleteMarkName,
-        attrs: { authorEmail: user.email || '' },
+        predicate: (mark) =>
+          matchesSameUserRefinement({
+            currentUser: currentIdentity,
+            change: getChangeAuthorIdentity(mark),
+          }),
       })
     );
 
@@ -56,6 +67,7 @@ export const markDeletion = ({ tr, from, to, user, date, id: providedId }) => {
   const deletionMark = tr.doc.type.schema.marks[TrackDeleteMarkName].create({
     id,
     author: user.name || '',
+    authorId: user.id || '',
     authorEmail: user.email || '',
     authorImage: user.image || '',
     date,

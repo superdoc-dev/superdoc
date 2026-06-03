@@ -47,15 +47,23 @@ type EditorWithPresentationOwner = Editor & {
   _presentationEditor?: PresentationEditor | null;
 };
 
-const resolvePresentationEditor = (superdoc: {
+// SD-3213f: accept both the narrow SuperDoc method
+// (`getPresentationEditorForDocument`) and the legacy `superdocStore`
+// shape. The narrow method is preferred when present (SuperDoc
+// instances and host stubs that adopt the new API). The legacy fallback
+// keeps existing custom host stubs working without forcing a churn.
+type ToolbarHostShape = {
   activeEditor?: Editor | null;
+  getPresentationEditorForDocument?: (documentId: string) => PresentationEditor | null;
   superdocStore?: {
     documents?: Array<{
       getPresentationEditor?: () => PresentationEditor | null | undefined;
       getEditor?: () => Editor | null | undefined;
     }>;
   };
-}): PresentationEditor | null => {
+};
+
+const resolvePresentationEditor = (superdoc: ToolbarHostShape): PresentationEditor | null => {
   const activeEditor = (superdoc.activeEditor as EditorWithPresentationOwner | null | undefined) ?? null;
   const directPresentationEditor = activeEditor?.presentationEditor ?? activeEditor?._presentationEditor ?? null;
   if (directPresentationEditor) {
@@ -65,21 +73,20 @@ const resolvePresentationEditor = (superdoc: {
   const documentId = activeEditor?.options?.documentId;
   if (!documentId) return null;
 
-  // Resolve the PresentationEditor for the same document as the current raw editor.
+  // Prefer the narrow public method (SD-3213f) when the host provides it.
+  if (typeof superdoc.getPresentationEditorForDocument === 'function') {
+    return superdoc.getPresentationEditorForDocument(documentId);
+  }
+
+  // Legacy fallback: resolve the PresentationEditor for the same document
+  // as the current raw editor by walking `superdocStore.documents[]`.
+  // Kept for custom host stubs that pre-date the narrow method.
   const documents = superdoc.superdocStore?.documents ?? [];
   const matchedDoc = documents.find((doc) => doc.getEditor?.()?.options?.documentId === documentId);
   return matchedDoc?.getPresentationEditor?.() ?? null;
 };
 
-export const resolveToolbarSources = (superdoc: {
-  activeEditor?: Editor | null;
-  superdocStore?: {
-    documents?: Array<{
-      getPresentationEditor?: () => PresentationEditor | null | undefined;
-      getEditor?: () => Editor | null | undefined;
-    }>;
-  };
-}): ResolvedToolbarSources => {
+export const resolveToolbarSources = (superdoc: ToolbarHostShape): ResolvedToolbarSources => {
   const presentationEditor = resolvePresentationEditor(superdoc);
 
   if (presentationEditor) {

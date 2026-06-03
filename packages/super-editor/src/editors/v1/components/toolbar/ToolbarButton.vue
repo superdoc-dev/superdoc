@@ -34,6 +34,18 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // When true, Enter does not stopPropagation at this button - the event
+  // bubbles up to whatever parent listens for keyboard activation (e.g.
+  // ButtonGroup's roving-tabindex handler when this button is the visual
+  // trigger inside a ToolbarDropdown). Plain-button uses keep the default
+  // (false) so the parent does not double-fire the command emission.
+  // Note: split buttons stop propagation internally inside
+  // handleSplitMainClick, so this prop has no effect for them - Enter still
+  // runs the main command on a split button regardless.
+  allowEnterPropagation: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const {
@@ -89,6 +101,11 @@ const handleOuterEnter = (event) => {
   handleClick();
 };
 
+const onEnterKeydown = (event) => {
+  if (!props.allowEnterPropagation) event.stopPropagation();
+  handleOuterEnter(event);
+};
+
 const handleInputSubmit = () => {
   const value = inlineTextInput.value;
   const cleanValue = value.match(/^\d+(\.5)?$/) ? value : Math.floor(parseFloat(value)).toString();
@@ -115,19 +132,20 @@ const caretIcon = computed(() => {
 
 <template>
   <div
-    :class="['toolbar-item', attributes.className]"
+    :class="['sd-toolbar-item', attributes.className]"
     :style="getStyle"
     :role="isOverflowItem ? 'menuitem' : 'button'"
     :aria-label="attributes.ariaLabel"
+    data-sd-part="toolbar-item"
     @click="handleOuterClick"
-    @keydown.enter.stop="handleOuterEnter($event)"
+    @keydown.enter="onEnterKeydown($event)"
     tabindex="0"
   >
     <div
-      class="toolbar-button"
+      class="sd-toolbar-button"
       :class="{
-        active,
-        disabled,
+        'sd-active': active,
+        'sd-disabled': disabled,
         narrow: isNarrow,
         wide: isWide,
         split: isSplit,
@@ -138,31 +156,31 @@ const caretIcon = computed(() => {
     >
       <div
         v-if="isSplit"
-        class="toolbar-button__main"
+        class="sd-toolbar-button__main"
         :data-item="`btn-${name || ''}-main`"
         @click="handleSplitMainClick($event)"
       >
-        <ToolbarButtonIcon v-if="icon" :color="iconColor" class="toolbar-icon" :icon="icon" :name="name">
+        <ToolbarButtonIcon v-if="icon" :color="iconColor" class="sd-toolbar-icon" :icon="icon" :name="name">
         </ToolbarButtonIcon>
-        <div class="button-label" v-if="label && !hideLabel && !inlineTextInputVisible">
+        <div class="sd-button-label" v-if="label && !hideLabel && !inlineTextInputVisible">
           {{ label }}
         </div>
       </div>
       <div
         v-if="isSplit"
-        class="toolbar-button__caret"
+        class="sd-toolbar-button__caret"
         :data-item="`btn-${name || ''}-caret`"
         :aria-label="`${attributes.ariaLabel} options`"
         role="button"
       >
-        <div class="dropdown-caret" v-html="caretIcon" :style="{ opacity: disabled ? 0.6 : 1 }"></div>
+        <div class="sd-dropdown-caret" v-html="caretIcon" :style="{ opacity: disabled ? 0.6 : 1 }"></div>
       </div>
 
       <template v-else>
-        <ToolbarButtonIcon v-if="icon" :color="iconColor" class="toolbar-icon" :icon="icon" :name="name">
+        <ToolbarButtonIcon v-if="icon" :color="iconColor" class="sd-toolbar-icon" :icon="icon" :name="name">
         </ToolbarButtonIcon>
 
-        <div class="button-label" v-if="label && !hideLabel && !inlineTextInputVisible">
+        <div class="sd-button-label" v-if="label && !hideLabel && !inlineTextInputVisible">
           {{ label }}
         </div>
 
@@ -191,10 +209,15 @@ const caretIcon = computed(() => {
           />
         </span>
 
-        <div v-if="hasCaret" class="dropdown-caret" v-html="caretIcon" :style="{ opacity: disabled ? 0.6 : 1 }"></div>
+        <div
+          v-if="hasCaret"
+          class="sd-dropdown-caret"
+          v-html="caretIcon"
+          :style="{ opacity: disabled ? 0.6 : 1 }"
+        ></div>
       </template>
 
-      <div aria-live="polite" class="visually-hidden">
+      <div aria-live="polite" class="sd-visually-hidden">
         {{ `${attributes.ariaLabel} ${active ? 'selected' : 'unset'}` }}
       </div>
     </div>
@@ -202,14 +225,14 @@ const caretIcon = computed(() => {
 </template>
 
 <style scoped>
-.toolbar-item {
+.sd-toolbar-item {
   position: relative;
   z-index: 1;
   min-width: 30px;
   margin: 0 calc(var(--sd-ui-toolbar-item-gap, 2px) / 2);
 }
 
-.visually-hidden {
+.sd-visually-hidden {
   position: absolute;
   left: -9999px;
   height: 1px;
@@ -217,7 +240,7 @@ const caretIcon = computed(() => {
   overflow: hidden;
 }
 
-.toolbar-button {
+.sd-toolbar-button {
   padding: var(--sd-ui-toolbar-item-padding, 5px);
   height: var(--sd-ui-toolbar-height, 32px);
   max-height: var(--sd-ui-toolbar-height, 32px);
@@ -234,10 +257,10 @@ const caretIcon = computed(() => {
   box-sizing: border-box;
 }
 
-.toolbar-button:hover {
+.sd-toolbar-button:hover {
   background-color: var(--sd-ui-toolbar-button-hover-bg, var(--sd-ui-hover-bg, #dbdbdb));
 
-  .toolbar-icon {
+  .sd-toolbar-icon {
     &.high-contrast {
       color: #fff;
     }
@@ -249,12 +272,12 @@ const caretIcon = computed(() => {
   }
 }
 
-.toolbar-button:active,
-.active {
+.sd-toolbar-button:active,
+.sd-active {
   background-color: var(--sd-ui-toolbar-button-active-bg, var(--sd-ui-active-bg, #c8d0d8));
 }
 
-.button-label {
+.sd-button-label {
   overflow: hidden;
   width: 100%;
   text-align: center;
@@ -265,17 +288,17 @@ const caretIcon = computed(() => {
   margin: 5px;
 }
 
-.toolbar-icon + .dropdown-caret {
+.sd-toolbar-icon + .sd-dropdown-caret {
   margin-left: 4px;
 }
 
-.toolbar-button.split {
+.sd-toolbar-button.split {
   padding: 0;
   gap: 0;
 }
 
-.toolbar-button.split .toolbar-button__main,
-.toolbar-button.split .toolbar-button__caret {
+.sd-toolbar-button.split .sd-toolbar-button__main,
+.sd-toolbar-button.split .sd-toolbar-button__caret {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -285,13 +308,13 @@ const caretIcon = computed(() => {
   z-index: 1;
 }
 
-.toolbar-button.split .toolbar-button__main {
+.sd-toolbar-button.split .sd-toolbar-button__main {
   padding: 0 3px 0 var(--sd-ui-toolbar-item-padding, 5px);
   border-top-left-radius: var(--sd-ui-radius, 6px);
   border-bottom-left-radius: var(--sd-ui-radius, 6px);
 }
 
-.toolbar-button.split .toolbar-button__caret {
+.sd-toolbar-button.split .sd-toolbar-button__caret {
   padding: 0 4px 0 2px;
   border-top-right-radius: var(--sd-ui-radius, 6px);
   border-bottom-right-radius: var(--sd-ui-radius, 6px);
@@ -300,18 +323,18 @@ const caretIcon = computed(() => {
 /* Unified hover: hovering anywhere on the split button highlights the whole
    button so it reads as a single grouped item, with a slightly darker tint
    on the half the cursor is actually over. */
-.toolbar-button.split:hover {
+.sd-toolbar-button.split:hover {
   background-color: var(--sd-ui-toolbar-button-hover-bg, var(--sd-ui-hover-bg, #dbdbdb));
 }
 
-.toolbar-button.split .toolbar-button__main:hover,
-.toolbar-button.split .toolbar-button__caret:hover {
+.sd-toolbar-button.split .sd-toolbar-button__main:hover,
+.sd-toolbar-button.split .sd-toolbar-button__caret:hover {
   background-color: var(--sd-ui-toolbar-button-active-bg, var(--sd-ui-active-bg, #c8d0d8));
 }
 
 /* Subtle divider only appears on hover, hinting at the two affordances
    without making them look like separate buttons at rest. */
-.toolbar-button.split .toolbar-button__caret::before {
+.sd-toolbar-button.split .sd-toolbar-button__caret::before {
   content: '';
   position: absolute;
   left: 0;
@@ -322,26 +345,26 @@ const caretIcon = computed(() => {
   transition: background-color 0.15s ease-out;
 }
 
-.toolbar-button.split:hover .toolbar-button__caret::before {
+.sd-toolbar-button.split:hover .sd-toolbar-button__caret::before {
   background-color: var(--sd-ui-border, rgba(71, 72, 74, 0.2));
 }
 
-.toolbar-button.split.disabled,
-.toolbar-button.split.disabled:hover {
+.sd-toolbar-button.split.sd-disabled,
+.sd-toolbar-button.split.sd-disabled:hover {
   background-color: initial;
 }
 
-.toolbar-button.split.disabled .toolbar-button__main,
-.toolbar-button.split.disabled .toolbar-button__caret {
+.sd-toolbar-button.split.sd-disabled .sd-toolbar-button__main,
+.sd-toolbar-button.split.sd-disabled .sd-toolbar-button__caret {
   cursor: default;
 }
 
-.toolbar-button.split.disabled .toolbar-button__main:hover,
-.toolbar-button.split.disabled .toolbar-button__caret:hover {
+.sd-toolbar-button.split.sd-disabled .sd-toolbar-button__main:hover,
+.sd-toolbar-button.split.sd-disabled .sd-toolbar-button__caret:hover {
   background-color: initial;
 }
 
-.toolbar-button.split.disabled .toolbar-button__caret::before {
+.sd-toolbar-button.split.sd-disabled .sd-toolbar-button__caret::before {
   background-color: transparent;
 }
 
@@ -357,25 +380,18 @@ const caretIcon = computed(() => {
   cursor: text;
 }
 
-.disabled {
+.sd-disabled {
   cursor: default;
 }
 
-.disabled:hover {
+.sd-disabled:hover {
   cursor: default;
   background-color: initial;
 }
 
-.disabled .toolbar-icon,
-.disabled .caret,
-.disabled .button-label {
+.sd-disabled .sd-toolbar-icon,
+.sd-disabled .sd-button-label {
   opacity: 0.35;
-}
-
-.caret {
-  font-size: 1em;
-  padding-left: 2px;
-  padding-right: 2px;
 }
 
 .button-text-input {
@@ -405,7 +421,7 @@ const caretIcon = computed(() => {
   color: var(--sd-ui-toolbar-button-text, #47484a);
 }
 
-.dropdown-caret {
+.sd-dropdown-caret {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -415,19 +431,19 @@ const caretIcon = computed(() => {
   height: 10px;
 }
 
-.toolbar-item--doc-mode-compact .button-label {
+.sd-toolbar-item--doc-mode-compact .sd-button-label {
   display: none;
 }
 
-.toolbar-item--doc-mode-compact .toolbar-icon {
+.sd-toolbar-item--doc-mode-compact .sd-toolbar-icon {
   margin-right: 5px;
 }
 
-.toolbar-item--linked-styles-compact {
+.sd-toolbar-item--linked-styles-compact {
   width: auto !important;
 }
 
-.toolbar-item--linked-styles-compact .button-label {
+.sd-toolbar-item--linked-styles-compact .sd-button-label {
   display: none;
 }
 </style>

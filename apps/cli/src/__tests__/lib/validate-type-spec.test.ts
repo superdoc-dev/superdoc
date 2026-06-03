@@ -179,6 +179,39 @@ describe('doc.find select schema — accepts canonical and shorthand forms', () 
   });
 });
 
+describe('comments target schema — accepts selection and tracked-change targets', () => {
+  const createMetadata = CLI_OPERATION_METADATA['doc.comments.create'];
+  const patchMetadata = CLI_OPERATION_METADATA['doc.comments.patch'];
+  const createTargetSchema = createMetadata.params.find((p) => p.name === 'target')?.schema;
+  const patchTargetSchema = patchMetadata.params.find((p) => p.name === 'target')?.schema;
+
+  if (!createTargetSchema || !patchTargetSchema) {
+    throw new Error('comments metadata missing target schema');
+  }
+
+  const selectionTarget = {
+    kind: 'selection',
+    start: { kind: 'text', blockId: '36D666B6', offset: 10 },
+    end: { kind: 'text', blockId: '36D666B6', offset: 18 },
+  };
+
+  test('accepts SelectionTarget for comments.create', () => {
+    expect(() => validateValueAgainstTypeSpec(selectionTarget, createTargetSchema, 'target')).not.toThrow();
+  });
+
+  test('accepts SelectionTarget for comments.patch', () => {
+    expect(() => validateValueAgainstTypeSpec(selectionTarget, patchTargetSchema, 'target')).not.toThrow();
+  });
+
+  test('accepts tracked-change target without explicit kind for comments.create', () => {
+    expect(() => validateValueAgainstTypeSpec({ trackedChangeId: 'tc-1' }, createTargetSchema, 'target')).not.toThrow();
+  });
+
+  test('accepts tracked-change target without explicit kind for comments.patch', () => {
+    expect(() => validateValueAgainstTypeSpec({ trackedChangeId: 'tc-1' }, patchTargetSchema, 'target')).not.toThrow();
+  });
+});
+
 describe('validateValueAgainstTypeSpec – object without explicit properties', () => {
   // type: 'object' schemas that use additionalProperties (or nothing at all)
   // must not crash the validator when `properties` is absent.

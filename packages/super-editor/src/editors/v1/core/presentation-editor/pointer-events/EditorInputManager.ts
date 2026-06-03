@@ -69,6 +69,10 @@ const PM_TRACK_CHANGE_SELECTOR = '.track-insert[data-id], .track-delete[data-id]
 const VISIBLE_HEADER_FOOTER_SELECTOR = '.superdoc-page-header, .superdoc-page-footer';
 const VISIBLE_BODY_CONTENT_SELECTOR = '.superdoc-line, .superdoc-fragment, [data-block-id]';
 const COMMENT_THREAD_HIT_TOLERANCE_PX = 3;
+const INLINE_SDT_LABEL_SELECTOR = `.${DOM_CLASS_NAMES.INLINE_SDT_LABEL}`;
+const BLOCK_SDT_LABEL_SELECTOR = `.${DOM_CLASS_NAMES.BLOCK_SDT_LABEL}`;
+const SDT_LABEL_SELECTOR = `${INLINE_SDT_LABEL_SELECTOR}, ${BLOCK_SDT_LABEL_SELECTOR}`;
+const EMPTY_SDT_PLACEHOLDER_SELECTOR = '.superdoc-empty-sdt-placeholder';
 const COMMENT_THREAD_HIT_SAMPLE_OFFSETS: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
   [-COMMENT_THREAD_HIT_TOLERANCE_PX, 0],
@@ -596,6 +600,12 @@ export class EditorInputManager {
 
   // Focus suppression (for draggable annotations)
   #suppressFocusInFromDraggable = false;
+  #pendingStructuredContentLabelGesture: {
+    label: HTMLElement;
+    clientX: number;
+    clientY: number;
+    pointerId: number;
+  } | null = null;
 
   // Debug state
   #debugLastPointer: { clientX: number; clientY: number; x: number; y: number } | null = null;
@@ -607,6 +617,10 @@ export class EditorInputManager {
   } | null = null;
 
   // Bound handlers for event listener cleanup
+  #boundHandleStructuredContentLabelPointerDown: ((e: PointerEvent) => void) | null = null;
+  #boundHandleStructuredContentLabelPointerUp: ((e: PointerEvent) => void) | null = null;
+  #boundHandleStructuredContentLabelPointerCancel: ((e: PointerEvent) => void) | null = null;
+  #boundHandleStructuredContentLabelClick: ((e: MouseEvent) => void) | null = null;
   #boundHandlePointerDown: ((e: PointerEvent) => void) | null = null;
   #boundHandlePointerMove: ((e: PointerEvent) => void) | null = null;
   #boundHandlePointerUp: ((e: PointerEvent) => void) | null = null;
@@ -655,6 +669,10 @@ export class EditorInputManager {
     const doc = viewportHost.ownerDocument ?? document;
 
     // Create bound handlers
+    this.#boundHandleStructuredContentLabelPointerDown = this.#handleStructuredContentLabelPointerDown.bind(this);
+    this.#boundHandleStructuredContentLabelPointerUp = this.#handleStructuredContentLabelPointerUp.bind(this);
+    this.#boundHandleStructuredContentLabelPointerCancel = this.#handleStructuredContentLabelPointerCancel.bind(this);
+    this.#boundHandleStructuredContentLabelClick = this.#handleStructuredContentLabelClickEvent.bind(this);
     this.#boundHandlePointerDown = this.#handlePointerDown.bind(this);
     this.#boundHandlePointerMove = this.#handlePointerMove.bind(this);
     this.#boundHandlePointerUp = this.#handlePointerUp.bind(this);
@@ -667,6 +685,10 @@ export class EditorInputManager {
     this.#boundHandleEditorBlur = this.#handleEditorBlur.bind(this);
 
     // Attach pointer event listeners
+    doc.addEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
+    doc.addEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
+    doc.addEventListener('pointercancel', this.#boundHandleStructuredContentLabelPointerCancel, true);
+    doc.addEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
     viewportHost.addEventListener('pointerdown', this.#boundHandlePointerDown);
     viewportHost.addEventListener('pointermove', this.#boundHandlePointerMove);
     viewportHost.addEventListener('pointerup', this.#boundHandlePointerUp);
@@ -695,7 +717,20 @@ export class EditorInputManager {
 
     const viewportHost = this.#deps.getViewportHost();
     const visibleHost = this.#deps.getVisibleHost();
+    const doc = viewportHost.ownerDocument ?? document;
 
+    if (this.#boundHandleStructuredContentLabelPointerDown) {
+      doc.removeEventListener('pointerdown', this.#boundHandleStructuredContentLabelPointerDown, true);
+    }
+    if (this.#boundHandleStructuredContentLabelPointerUp) {
+      doc.removeEventListener('pointerup', this.#boundHandleStructuredContentLabelPointerUp, true);
+    }
+    if (this.#boundHandleStructuredContentLabelPointerCancel) {
+      doc.removeEventListener('pointercancel', this.#boundHandleStructuredContentLabelPointerCancel, true);
+    }
+    if (this.#boundHandleStructuredContentLabelClick) {
+      doc.removeEventListener('click', this.#boundHandleStructuredContentLabelClick, true);
+    }
     if (this.#boundHandlePointerDown) {
       viewportHost.removeEventListener('pointerdown', this.#boundHandlePointerDown);
     }
@@ -731,6 +766,10 @@ export class EditorInputManager {
     }
 
     // Clear bound handlers
+    this.#boundHandleStructuredContentLabelPointerDown = null;
+    this.#boundHandleStructuredContentLabelPointerUp = null;
+    this.#boundHandleStructuredContentLabelPointerCancel = null;
+    this.#boundHandleStructuredContentLabelClick = null;
     this.#boundHandlePointerDown = null;
     this.#boundHandlePointerMove = null;
     this.#boundHandlePointerUp = null;
@@ -993,44 +1032,6 @@ export class EditorInputManager {
   ): { selAnchor: number; selHead: number } {
     const layoutState = this.#deps?.getLayoutState();
     return calculateExtendedSelection(layoutState?.blocks ?? [], anchor, head, mode);
-  }
-
-  /**
-   * When the drag anchor is outside an isolating node (table), prevent the head
-   * from resolving inside one. If the head is inside a table cell, clamp it to
-   * just before or after the table boundary (depending on drag direction).
-   *
-   * Selections that span PAST a table (anchor before, head after) are allowed —
-   * only positions resolving INSIDE the table are clamped.
-   */
-  #clampHeadAtIsolatingBoundary(doc: ProseMirrorNode, anchor: number, head: number): number {
-    const forward = head >= anchor;
-
-    try {
-      const $head = doc.resolve(head);
-      // Find the outermost isolating ancestor. Walk from innermost to outermost,
-      // tracking the shallowest isolating depth. Using the outermost ensures that
-      // we clamp to just before/after the entire table, not to a boundary between
-      // cells within the same table.
-      let isolatingDepth = -1;
-      for (let d = $head.depth; d > 0; d--) {
-        const node = $head.node(d);
-        if (node.type.spec.isolating || node.type.spec.tableRole === 'table') {
-          isolatingDepth = d;
-        }
-      }
-
-      if (isolatingDepth > 0) {
-        const boundary = forward ? $head.before(isolatingDepth) : $head.after(isolatingDepth);
-        const near = Selection.near(doc.resolve(boundary), forward ? -1 : 1);
-        if (near instanceof TextSelection) return near.head;
-        return anchor;
-      }
-    } catch {
-      /* position resolution failed */
-    }
-
-    return head;
   }
 
   #shouldUseCellSelection(currentTableHit: TableHitResult | null): boolean {
@@ -1353,6 +1354,11 @@ export class EditorInputManager {
     // Skip ruler handle clicks
     if (target?.closest?.('.superdoc-ruler-handle') != null) return;
 
+    if (this.#pendingStructuredContentLabelGesture) {
+      this.#suppressFocusInFromDraggable = target?.closest?.(DRAG_SOURCE_SELECTOR) != null;
+      return;
+    }
+
     // Handle link clicks - dispatch custom event on pointerdown for immediate UI response
     // Navigation prevention happens in #handleClick (on 'click' event)
     const linkEl = target?.closest?.('a.superdoc-link') as HTMLAnchorElement | null;
@@ -1365,11 +1371,17 @@ export class EditorInputManager {
     const annotationEl = target?.closest?.(buildAnnotationSelector()) as HTMLElement | null;
     const isDraggableAnnotation = target?.closest?.(DRAGGABLE_SELECTOR) != null;
     const isNativeDragSource = target?.closest?.(DRAG_SOURCE_SELECTOR) != null;
+    const structuredContentDragSource = target?.closest?.(
+      '[data-drag-source-kind="structuredContent"]',
+    ) as HTMLElement | null;
     const suppressFocusForDrag = isDraggableAnnotation || isNativeDragSource;
     this.#suppressFocusInFromDraggable = suppressFocusForDrag;
 
     if (annotationEl) {
       this.#handleAnnotationClick(event, annotationEl);
+      return;
+    }
+    if (structuredContentDragSource) {
       return;
     }
 
@@ -1533,43 +1545,6 @@ export class EditorInputManager {
       event.preventDefault();
     }
 
-    const inlineStructuredContentLabel = target?.closest?.(
-      '.superdoc-structured-content-inline__label',
-    ) as HTMLElement | null;
-    if (inlineStructuredContentLabel && doc) {
-      const resolved = this.#resolveStructuredContentInlineFromElement(doc, inlineStructuredContentLabel);
-      if (resolved) {
-        try {
-          const tr = editor.state.tr.setSelection(TextSelection.create(doc, resolved.start, resolved.end));
-          editor.view?.dispatch(tr);
-        } catch {}
-
-        this.#callbacks.scheduleSelectionUpdate?.();
-        this.#focusEditor();
-        return;
-      }
-    }
-
-    const structuredContentLabel = target?.closest?.('.superdoc-structured-content__label') as HTMLElement | null;
-    if (structuredContentLabel && doc) {
-      const resolved = this.#resolveStructuredContentBlockFromElement(doc, structuredContentLabel);
-      if (resolved) {
-        try {
-          const contentRange = this.#findStructuredContentBlockContentRange(resolved);
-          const selection =
-            contentRange != null
-              ? TextSelection.create(doc, contentRange.from, contentRange.to)
-              : NodeSelection.create(editor.state.doc, resolved.pos);
-          const tr = editor.state.tr.setSelection(selection);
-          editor.view?.dispatch(tr);
-        } catch {}
-
-        this.#callbacks.scheduleSelectionUpdate?.();
-        this.#focusEditor();
-        return;
-      }
-    }
-
     // Handle click outside text content — keep cursor and scroll position unchanged.
     if (!rawHit) {
       this.#focusEditor();
@@ -1704,36 +1679,27 @@ export class EditorInputManager {
     // Set selection for single click
     if (!handledByDepth) {
       try {
-        // SD-1584: clicking inside a block SDT selects the node (NodeSelection).
-        // Exception: clicks inside tables nested in this SDT should use text
-        // selection so caret placement/editing inside table cells works.
-        const sdtBlock = clickDepth === 1 ? findStructuredContentBlockAtPos(doc, hit.pos) : null;
         let nextSelection: Selection;
         let inlineSdtBoundaryPos: number | null = null;
         let inlineSdtBoundaryDirection: 'before' | 'after' | null = null;
-        const insideTableInSdt =
-          !!sdtBlock && this.#isInsideTableWithinStructuredContentBlock(doc, hit.pos, sdtBlock.pos);
-        if (sdtBlock && !insideTableInSdt) {
-          nextSelection = NodeSelection.create(doc, sdtBlock.pos);
+        const clickedEmptySdtPlaceholder = target?.closest?.(EMPTY_SDT_PLACEHOLDER_SELECTOR) != null;
+        const inlineSdt = clickDepth === 1 ? findStructuredContentInlineAtPos(doc, hit.pos) : null;
+        if (!clickedEmptySdtPlaceholder && inlineSdt && hit.pos >= inlineSdt.end) {
+          const afterInlineSdt = inlineSdt.pos + inlineSdt.node.nodeSize;
+          inlineSdtBoundaryPos = afterInlineSdt;
+          inlineSdtBoundaryDirection = 'after';
+          nextSelection = TextSelection.create(doc, afterInlineSdt);
+        } else if (!clickedEmptySdtPlaceholder && inlineSdt && hit.pos <= inlineSdt.start) {
+          inlineSdtBoundaryPos = inlineSdt.pos;
+          inlineSdtBoundaryDirection = 'before';
+          nextSelection = TextSelection.create(doc, inlineSdt.pos);
         } else {
-          const inlineSdt = clickDepth === 1 ? findStructuredContentInlineAtPos(doc, hit.pos) : null;
-          if (inlineSdt && hit.pos >= inlineSdt.end) {
-            const afterInlineSdt = inlineSdt.pos + inlineSdt.node.nodeSize;
-            inlineSdtBoundaryPos = afterInlineSdt;
-            inlineSdtBoundaryDirection = 'after';
-            nextSelection = TextSelection.create(doc, afterInlineSdt);
-          } else if (inlineSdt && hit.pos <= inlineSdt.start) {
-            inlineSdtBoundaryPos = inlineSdt.pos;
-            inlineSdtBoundaryDirection = 'before';
-            nextSelection = TextSelection.create(doc, inlineSdt.pos);
-          } else {
-            nextSelection = TextSelection.create(doc, hit.pos);
-          }
-          if (!nextSelection.$from.parent.inlineContent) {
-            nextSelection = Selection.near(doc.resolve(hit.pos), 1);
-          }
+          nextSelection = TextSelection.create(doc, hit.pos);
         }
-        let tr = editor.state.tr.setSelection(nextSelection);
+        if (!nextSelection.$from.parent.inlineContent) {
+          nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+        }
+        let tr = editor.state.tr.setSelection(nextSelection).setMeta('uiEvent', 'click');
         if (inlineSdtBoundaryPos != null && inlineSdtBoundaryDirection) {
           tr = applyEditableSlotAtInlineBoundary(tr, inlineSdtBoundaryPos, inlineSdtBoundaryDirection);
           nextSelection = tr.selection;
@@ -1749,6 +1715,63 @@ export class EditorInputManager {
     }
 
     this.#callbacks.scheduleSelectionUpdate?.();
+  }
+
+  #handleStructuredContentLabelPointerDown(event: PointerEvent): void {
+    if (!this.#deps) return;
+    this.#pendingStructuredContentLabelGesture = null;
+    if (event.button !== 0) return;
+
+    const target = event.target as HTMLElement | null;
+    const label = this.#resolveStructuredContentLabelTarget(event, target);
+    this.#pendingStructuredContentLabelGesture = label
+      ? { label, clientX: event.clientX, clientY: event.clientY, pointerId: event.pointerId }
+      : null;
+  }
+
+  #handleStructuredContentLabelPointerUp(event: PointerEvent): void {
+    if (!this.#deps) return;
+    if (event.button !== 0) return;
+
+    const pending = this.#pendingStructuredContentLabelGesture;
+    if (!pending) return;
+    if (pending.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - pending.clientX;
+    const deltaY = event.clientY - pending.clientY;
+    const movedDistance = Math.hypot(deltaX, deltaY);
+    if (movedDistance > DRAG_SELECTION_DISTANCE_THRESHOLD_PX) {
+      this.#pendingStructuredContentLabelGesture = null;
+    }
+  }
+
+  #handleStructuredContentLabelPointerCancel(event: PointerEvent): void {
+    const pending = this.#pendingStructuredContentLabelGesture;
+    if (!pending || pending.pointerId !== event.pointerId) {
+      return;
+    }
+
+    this.#pendingStructuredContentLabelGesture = null;
+  }
+
+  #handleStructuredContentLabelClickEvent(event: MouseEvent): void {
+    if (!this.#deps) return;
+
+    const target = event.target as HTMLElement | null;
+    const bodyEditor = this.#deps.getEditor();
+    try {
+      if (this.#handleStructuredContentLabelClick(event, target, bodyEditor)) {
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      const editor = this.#deps.getActiveEditor();
+      if (bodyEditor !== editor && this.#handleStructuredContentLabelClick(event, target, editor)) {
+        event.stopImmediatePropagation();
+      }
+    } finally {
+      this.#pendingStructuredContentLabelGesture = null;
+    }
   }
 
   #handlePointerMove(event: PointerEvent): void {
@@ -2059,38 +2082,135 @@ export class EditorInputManager {
     }
   }
 
-  #isInsideTableWithinStructuredContentBlock(doc: ProseMirrorNode, pos: number, sdtPos: number): boolean {
-    if (!Number.isFinite(pos) || !Number.isFinite(sdtPos)) return false;
+  #handleStructuredContentLabelClick(event: MouseEvent, target: HTMLElement | null, editor: Editor): boolean {
+    const doc = editor.state?.doc;
+    if (!doc) return false;
 
-    try {
-      const $pos = doc.resolve(pos);
-      let tableDepth = -1;
-      let blockDepth = -1;
+    const labelTarget = this.#resolveStructuredContentLabelTarget(event, target);
+    const inlineLabel = labelTarget?.closest?.(INLINE_SDT_LABEL_SELECTOR) as HTMLElement | null;
+    if (inlineLabel) {
+      const resolved = this.#resolveStructuredContentInlineFromElement(doc, inlineLabel);
+      if (resolved) {
+        event.preventDefault();
+        const applyNodeSelection = () => {
+          const state = editor.view?.state ?? editor.state;
+          const tr = state.tr.setSelection(NodeSelection.create(state.doc, resolved.pos));
+          editor.view?.dispatch(tr);
+        };
+        try {
+          applyNodeSelection();
+        } catch {
+          const tr = editor.state.tr.setSelection(TextSelection.create(doc, resolved.start, resolved.end));
+          editor.view?.dispatch(tr);
+        }
 
-      for (let depth = $pos.depth; depth > 0; depth--) {
-        const nodeName = $pos.node(depth)?.type?.name;
-        if (tableDepth === -1 && nodeName === 'table') {
-          tableDepth = depth;
-        }
-        if (nodeName === 'structuredContentBlock') {
-          const candidatePos = $pos.before(depth);
-          if (candidatePos === sdtPos) {
-            blockDepth = depth;
-            break;
-          }
-        }
+        this.#callbacks.scheduleSelectionUpdate?.();
+        this.#focusEditor();
+        return true;
       }
-
-      return tableDepth !== -1 && blockDepth !== -1 && tableDepth > blockDepth;
-    } catch {
-      return false;
     }
+
+    const blockLabel = labelTarget?.closest?.(BLOCK_SDT_LABEL_SELECTOR) as HTMLElement | null;
+    if (blockLabel) {
+      const resolved = this.#resolveStructuredContentBlockFromElement(doc, blockLabel);
+      if (resolved) {
+        event.preventDefault();
+
+        const applySelection = () => {
+          const state = editor.view?.state ?? editor.state;
+          const selection = NodeSelection.create(state.doc, resolved.pos);
+          const tr = state.tr.setSelection(selection);
+          editor.view?.dispatch(tr);
+        };
+
+        try {
+          applySelection();
+        } catch {
+          const state = editor.view?.state ?? editor.state;
+          const tr = state.tr.setSelection(TextSelection.create(state.doc, resolved.start, resolved.end));
+          editor.view?.dispatch(tr);
+        }
+
+        this.#callbacks.scheduleSelectionUpdate?.();
+        this.#focusEditor();
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  #resolveStructuredContentLabelTarget(event: MouseEvent, target: HTMLElement | null): HTMLElement | null {
+    const directLabel = target?.closest?.(SDT_LABEL_SELECTOR) as HTMLElement | null;
+    if (directLabel && this.#isStructuredContentLabelOwned(directLabel)) return directLabel;
+
+    const doc = target?.ownerDocument ?? document;
+    const elementsFromPoint = doc.elementsFromPoint?.bind(doc);
+    if (!elementsFromPoint) return null;
+
+    const pointElements = elementsFromPoint(event.clientX, event.clientY);
+    const topElement = doc.elementFromPoint?.(event.clientX, event.clientY) ?? pointElements[0] ?? null;
+
+    for (const element of pointElements) {
+      if (!(element instanceof HTMLElement)) continue;
+      const label = element.closest?.(SDT_LABEL_SELECTOR) as HTMLElement | null;
+      if (
+        label &&
+        this.#isStructuredContentLabelOwned(label) &&
+        this.#isStructuredContentLabelTopHit(label, topElement)
+      ) {
+        return label;
+      }
+    }
+
+    for (const label of Array.from(doc.querySelectorAll<HTMLElement>(SDT_LABEL_SELECTOR))) {
+      if (!this.#isStructuredContentLabelOwned(label)) {
+        continue;
+      }
+      const rect = label.getBoundingClientRect();
+      if (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom &&
+        this.#isStructuredContentLabelTopHit(label, topElement)
+      ) {
+        return label;
+      }
+    }
+
+    return null;
+  }
+
+  #isStructuredContentLabelTopHit(label: HTMLElement, topElement: Element | null): boolean {
+    return Boolean(topElement && (label === topElement || label.contains(topElement)));
+  }
+
+  #isStructuredContentLabelOwned(label: HTMLElement): boolean {
+    const visibleHost = this.#deps?.getVisibleHost();
+    const viewportHost = this.#deps?.getViewportHost();
+    return Boolean(visibleHost?.contains(label) || viewportHost?.contains(label));
   }
 
   #resolveStructuredContentBlockFromElement(
     doc: ProseMirrorNode,
     element: HTMLElement,
   ): StructuredContentSelection | null {
+    const elementSdtId = element.dataset?.sdtId;
+    if (elementSdtId) {
+      const match = findStructuredContentBlockById(doc, elementSdtId);
+      if (match) return match;
+    }
+
+    const elementPmStartRaw = element.dataset?.pmStart;
+    const elementPmStart = elementPmStartRaw != null ? Number(elementPmStartRaw) : NaN;
+    if (Number.isFinite(elementPmStart)) {
+      const match = findStructuredContentBlockAtPos(doc, elementPmStart);
+      if (match) return match;
+    }
+
     const container = element.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
     if (!container) return null;
 
@@ -2119,6 +2239,19 @@ export class EditorInputManager {
     doc: ProseMirrorNode,
     element: HTMLElement,
   ): StructuredContentSelection | null {
+    const elementSdtId = element.dataset?.sdtId;
+    if (elementSdtId) {
+      const match = findStructuredContentInlineById(doc, elementSdtId);
+      if (match) return match;
+    }
+
+    const elementPmStartRaw = element.dataset?.pmStart;
+    const elementPmStart = elementPmStartRaw != null ? Number(elementPmStartRaw) : NaN;
+    if (Number.isFinite(elementPmStart)) {
+      const match = findStructuredContentInlineAtPos(doc, elementPmStart);
+      if (match) return match;
+    }
+
     const container = element.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
     if (!container) return null;
 
@@ -2135,24 +2268,6 @@ export class EditorInputManager {
     }
 
     return null;
-  }
-
-  #findStructuredContentBlockContentRange(resolved: StructuredContentSelection): { from: number; to: number } | null {
-    let from: number | null = null;
-    let to: number | null = null;
-    resolved.node.descendants((child, pos) => {
-      if (!child.isTextblock) return true;
-      const basePos = resolved.pos + 1 + pos;
-      const childFrom = basePos + 1;
-      const childTo = basePos + child.nodeSize - 1;
-      if (from == null) {
-        from = childFrom;
-      }
-      to = childTo;
-      return true;
-    });
-    if (from == null || to == null) return null;
-    return { from, to };
   }
 
   #handleClickWithoutLayout(event: PointerEvent, isDraggableAnnotation: boolean): void {
@@ -2463,14 +2578,7 @@ export class EditorInputManager {
 
     // Text selection mode
     const anchor = this.#dragAnchor!;
-    let head = hit.pos;
-
-    // When the drag started outside a table, prevent the head from entering an isolating
-    // node (table). If the head resolves inside a table, ProseMirror-tables' appendTransaction
-    // converts the TextSelection into a CellSelection, causing the anchor to jump.
-    if (!this.#cellAnchor) {
-      head = this.#clampHeadAtIsolatingBoundary(doc, anchor, head);
-    }
+    const head = hit.pos;
 
     const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
 

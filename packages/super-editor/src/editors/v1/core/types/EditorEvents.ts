@@ -3,16 +3,46 @@ import type { Editor } from '../Editor.js';
 import type { DefaultEventMap } from '../EventEmitter.js';
 import type { PartChangedEvent } from '../parts/types.js';
 import type { DocumentProtectionState, StoryLocator } from '@superdoc/document-api';
+import type { FontResolutionRecord, FontLoadSummary } from '@superdoc/font-system';
 
 /** Source of a protection state change. */
 export type ProtectionChangeSource = 'init' | 'local-mutation' | 'remote-part-sync';
 
 /**
- * Payload for fonts-resolved events
+ * Payload for `fonts-resolved` events.
+ *
+ * LEGACY / EARLY signal: emitted once at editor init, before any font has loaded, from
+ * `converter.getDocumentFonts()` + a browser `canRenderFont()` probe. It answers "which
+ * font names did the document declare, and which can't this browser render natively" - it
+ * is NOT substitution- or load-aware. `unsupportedFonts` will list families (Calibri,
+ * Arial, ...) that in fact render faithfully through a bundled substitute. For the
+ * authoritative, load-settled picture listen to `fonts-changed` instead. Kept unchanged
+ * for backward compatibility.
  */
 export interface FontsResolvedPayload {
   documentFonts: string[];
   unsupportedFonts: string[];
+}
+
+/**
+ * Payload for `fonts-changed` events: the authoritative, substitution- and load-aware
+ * font report for the current document. Emitted after the load-before-measure gate
+ * settles (`source: 'initial'`), again when a face arrives after a timed-out first paint
+ * (`'late-load'`). `version` is the document's font-config epoch; it increases on every change.
+ *
+ * `documentFonts` are the document's DECLARED logical families (font table + theme +
+ * defaults), deduped - not only the fonts visible on screen. (A separate rendered-fonts
+ * view may follow.) `resolutions` maps each to its physical render family, the reason,
+ * and its load status; `missingFonts` are the declared families with no faithful render
+ * font loaded (the substitution-aware replacement for the legacy `unsupportedFonts`).
+ */
+export interface FontsChangedPayload {
+  documentFonts: string[];
+  resolutions: FontResolutionRecord[];
+  missingFonts: string[];
+  loadSummary: FontLoadSummary;
+  source: 'initial' | 'late-load';
+  version: number;
 }
 
 /**
@@ -46,10 +76,14 @@ export interface Comment {
   commentId: string;
   /** Timestamp when the comment was created (ms since epoch) */
   createdTime: number | null;
+  /** Stable actor id of the comment author */
+  creatorId?: string | null;
   /** Display name of the comment author */
   creatorName: string | null;
   /** Email address of the comment author */
   creatorEmail: string | null;
+  /** Stable actor id of the resolver */
+  resolvedById?: string | null;
   /** Avatar URL of the comment author */
   creatorImage?: string | null;
   /** Structured body content of the comment */
@@ -130,6 +164,35 @@ export interface TrackedChangesChangedPayload {
   source?: string;
 }
 
+export interface SdtRef {
+  id: string;
+  tag?: string;
+  alias?: string;
+  controlType: string;
+  scope: 'inline' | 'block';
+}
+
+export interface ContentControlFocusPayload {
+  active: SdtRef;
+  previous: SdtRef | null;
+  /** Active control stack, innermost first (matches ui.contentControls activeIds). */
+  activePath: SdtRef[];
+  source: 'keyboard' | 'pointer';
+}
+
+export interface ContentControlBlurPayload {
+  active: null;
+  previous: SdtRef;
+  /** Empty on blur: selection left all controls. */
+  activePath: SdtRef[];
+  source: 'keyboard' | 'pointer';
+}
+
+export interface ContentControlClickPayload {
+  target: SdtRef;
+  source: 'pointer';
+}
+
 /**
  * Event map for the Editor class
  */
@@ -158,8 +221,13 @@ export interface EditorEventMap extends DefaultEventMap {
   /** Called when editor is destroyed */
   destroy: [];
 
-  /** Called when there's a content error */
-  contentError: [{ editor: Editor; error: Error }];
+  /**
+   * Called when there's a content error. `error` is `unknown` because
+   * the emit sites do not normalize uniformly (see `EditorConfig.onContentError`).
+   * `disableCollaboration` is provided by the `insertContentAt` emit
+   * path and absent on `Editor.ts`'s emit.
+   */
+  contentError: [{ editor: Editor; error: unknown; disableCollaboration?: () => void }];
 
   /** Called when tracked changes update */
   trackedChangesUpdate: [{ changes: unknown }];
@@ -194,8 +262,20 @@ export interface EditorEventMap extends DefaultEventMap {
   /** Called when list definitions change */
   'list-definitions-change': [ListDefinitionsPayload];
 
-  /** Called when all fonts used in the document are determined */
+  /** Called once at init with declared font names + a native-render probe (legacy/early). */
   'fonts-resolved': [FontsResolvedPayload];
+
+  /** Called with the authoritative substitution + load-aware font report once it settles and on change. */
+  'fonts-changed': [FontsChangedPayload];
+
+  /** Called when active content control changes to a new control (or A -> B). */
+  contentControlFocus: [ContentControlFocusPayload];
+
+  /** Called when selection leaves content controls (A -> null). */
+  contentControlBlur: [ContentControlBlurPayload];
+
+  /** Called on pointer click inside an active content control. */
+  contentControlClick: [ContentControlClickPayload];
 
   // Document Lifecycle Events
 
@@ -204,6 +284,18 @@ export interface EditorEventMap extends DefaultEventMap {
 
   /** Called when a document is closed via editor.close() */
   documentClose: [{ editor: Editor }];
+
+  /**
+   * Called when the underlying document file has been replaced via `Editor.replaceFile()`.
+   *
+   * In collaboration mode, `replaceFile` writes the new converter snapshot directly
+   * to the Y.Doc parts map without going through the local `mutateParts` pipeline,
+   * so no `partChanged` event fires on the importing client. Other clients receive
+   * the parts via the consumer → `mutateParts` → `partChanged` and refresh
+   * automatically. The importer relies on this signal to refresh derived state
+   * (such as the header/footer registry) that was bound to the previous document.
+   */
+  documentReplaced: [{ editor: Editor }];
 
   /** Called when page styles are updated */
   pageStyleUpdate: [{ pageMargins?: Record<string, unknown>; pageStyles: Record<string, unknown> }];

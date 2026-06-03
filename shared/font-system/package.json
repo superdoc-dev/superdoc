@@ -1,0 +1,35 @@
+{
+  "name": "@superdoc/font-system",
+  "version": "0.1.0",
+  "description": "Runtime font registry, load-state, and logical-to-physical resolution for SuperDoc rendering",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./bundled": {
+      "source": "./src/bundled.ts",
+      "types": "./src/bundled.ts",
+      "default": "./src/bundled.ts"
+    }
+  },
+  "files": [
+    "src",
+    "assets"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.json --emitDeclarationOnly",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

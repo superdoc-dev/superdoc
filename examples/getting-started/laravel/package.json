@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev": "concurrently \"php artisan serve --host=0.0.0.0 --port=8000\" \"vite\"",
-    "start": "vite build && php artisan serve --host=127.0.0.1 --port=8000"
+    "build": "node copy-fonts.mjs && vite build",
+    "dev": "node copy-fonts.mjs && concurrently \"php artisan serve --host=0.0.0.0 --port=8000\" \"vite\"",
+    "start": "node copy-fonts.mjs && vite build && php artisan serve --host=127.0.0.1 --port=8000"
   },
   "dependencies": {
     "concurrently": "^9.0.0",

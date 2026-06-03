@@ -123,9 +123,18 @@ export type {
   TrackChangesItem,
   TrackChangesSlice,
 
+  // Content controls (SD-3157)
+  ContentControlsHandle,
+  ContentControlsSlice,
+
+  // Anchored metadata (SD-3204)
+  MetadataHandle,
+
   // Viewport
+  ContentControlViewportAddress,
   ViewportContext,
   ViewportContextAtInput,
+  ViewportEntityAddress,
   ViewportEntityAtInput,
   ViewportEntityHit,
   ViewportGetRectInput,

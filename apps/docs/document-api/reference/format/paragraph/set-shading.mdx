@@ -29,21 +29,21 @@ Returns a ParagraphMutationResult; reports NO_OP if the shading already matches.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `fill` | string | yes |  |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 2 (required: color)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `color` | string | yes |  |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 3 (required: pattern)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `pattern` | string | yes |  |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Example request
 
@@ -65,9 +65,9 @@ Returns a ParagraphMutationResult; reports NO_OP if the shading already matches.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `resolution` | object | yes |  |
-| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 | `success` | `true` | yes | Constant: `true` |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 2 (success=false)
 
@@ -78,7 +78,7 @@ Returns a ParagraphMutationResult; reports NO_OP if the shading already matches.
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `resolution` | object | no |  |
-| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 | `success` | `false` | yes | Constant: `false` |
 
 ### Example response

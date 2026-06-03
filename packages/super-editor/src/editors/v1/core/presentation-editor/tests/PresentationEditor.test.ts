@@ -4,6 +4,8 @@ import { PresentationEditor } from '../PresentationEditor.js';
 import type { Editor as EditorInstance } from '../../Editor.js';
 import { Editor } from '../../Editor.js';
 import { HeaderFooterEditorManager, HeaderFooterLayoutAdapter } from '../../header-footer/HeaderFooterRegistry.js';
+import { buildMultiSectionIdentifier } from '@superdoc/layout-bridge';
+import { NodeSelection } from 'prosemirror-state';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
   mock: {
@@ -291,14 +293,12 @@ vi.mock('../../Editor', () => {
   };
 });
 
-// Mock pm-adapter functions
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
-  return {
-    ...actual,
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const { buildLayoutDocumentAdapterVitestMock } = await import('./mock-layout-document-adapter-vitest.js');
+  return buildLayoutDocumentAdapterVitestMock(importOriginal, {
     toFlowBlocks: mockToFlowBlocks,
     FlowBlockCache: MockFlowBlockCache,
-  };
+  });
 });
 
 // Mock layout-bridge functions
@@ -395,6 +395,36 @@ describe('PresentationEditor', () => {
   let container: HTMLElement;
   let editor: PresentationEditor;
 
+  const makeNodeSelection = (from: number, to: number, node: Record<string, unknown>) => {
+    const selection = Object.create(NodeSelection.prototype);
+    Object.defineProperty(selection, 'from', { value: from, configurable: true });
+    Object.defineProperty(selection, 'to', { value: to, configurable: true });
+    Object.defineProperty(selection, 'anchor', { value: from, configurable: true });
+    Object.defineProperty(selection, 'head', { value: to, configurable: true });
+    Object.defineProperty(selection, 'empty', { value: false, configurable: true });
+    Object.defineProperty(selection, 'node', { value: node, configurable: true });
+    return selection as NodeSelection;
+  };
+
+  const getLastEditorInstance = () => {
+    const results = (Editor as unknown as MockedEditor).mock.results;
+    return results[results.length - 1].value;
+  };
+
+  const getSelectionUpdateHandler = (editorInstance: EditorInstance) => {
+    const onMock = editorInstance.on as unknown as Mock;
+    const call = onMock.mock.calls.find(([event]) => event === 'selectionUpdate');
+    expect(call).toBeTruthy();
+    return call![1] as () => void;
+  };
+
+  const syncViewState = (editorInstance: EditorInstance) => {
+    (
+      editorInstance.view as typeof editorInstance.view & { state?: EditorInstance['state']; hasFocus?: () => boolean }
+    ).state = editorInstance.state;
+    (editorInstance.view as typeof editorInstance.view & { hasFocus?: () => boolean }).hasFocus = vi.fn(() => true);
+  };
+
   beforeEach(() => {
     // Create a container element for the presentation editor
     container = document.createElement('div');
@@ -460,6 +490,113 @@ describe('PresentationEditor', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(editor.historyCoordinator).toBeNull();
+    });
+  });
+
+  describe('structured content selected chrome', () => {
+    it('marks a block SDT selected when an image NodeSelection is inside it', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'sdt-image-selection-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const editorInstance = getLastEditorInstance();
+      syncViewState(editorInstance);
+
+      const sdtNode = {
+        type: { name: 'structuredContentBlock' },
+        attrs: { id: 'sdt-image-block' },
+        nodeSize: 24,
+      };
+      const imageNode = {
+        type: { name: 'image' },
+        attrs: {},
+        isBlock: false,
+        isInline: true,
+        isLeaf: true,
+        nodeSize: 1,
+      };
+      const doc = {
+        ...editorInstance.state.doc,
+        nodeAt: vi.fn(() => imageNode),
+        resolve: vi.fn((pos: number) => ({
+          pos,
+          depth: 2,
+          node: (depth: number) => {
+            if (depth === 1) return sdtNode;
+            if (depth === 2) return { type: { name: 'paragraph' } };
+            return { type: { name: 'doc' } };
+          },
+          before: (depth: number) => (depth === 1 ? 90 : 93),
+          start: (depth: number) => (depth === 1 ? 91 : 94),
+          end: (depth: number) => (depth === 1 ? 113 : 95),
+        })),
+      };
+      editorInstance.state.doc = doc as never;
+      (editorInstance.view as typeof editorInstance.view & { state: EditorInstance['state'] }).state =
+        editorInstance.state;
+      editorInstance.state.selection = makeNodeSelection(94, 95, imageNode);
+
+      const sdtWrapper = document.createElement('div');
+      sdtWrapper.className = 'superdoc-structured-content-block';
+      sdtWrapper.dataset.sdtId = 'sdt-image-block';
+      sdtWrapper.dataset.pmStart = '94';
+      sdtWrapper.dataset.pmEnd = '95';
+      container.querySelector('.presentation-editor__pages')?.appendChild(sdtWrapper);
+
+      getSelectionUpdateHandler(editorInstance)();
+
+      expect(sdtWrapper.classList.contains('ProseMirror-selectednode')).toBe(true);
+    });
+
+    it('does not mark a block SDT selected when an image NodeSelection is outside it', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'outside-sdt-image-selection-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const editorInstance = getLastEditorInstance();
+      syncViewState(editorInstance);
+
+      const imageNode = {
+        type: { name: 'image' },
+        attrs: {},
+        isBlock: false,
+        isInline: true,
+        isLeaf: true,
+        nodeSize: 1,
+      };
+      const doc = {
+        ...editorInstance.state.doc,
+        nodeAt: vi.fn(() => imageNode),
+        resolve: vi.fn((pos: number) => ({
+          pos,
+          depth: 1,
+          node: (depth: number) => (depth === 1 ? { type: { name: 'paragraph' } } : { type: { name: 'doc' } }),
+          before: () => 10,
+          start: () => 11,
+          end: () => 20,
+        })),
+      };
+      editorInstance.state.doc = doc as never;
+      (editorInstance.view as typeof editorInstance.view & { state: EditorInstance['state'] }).state =
+        editorInstance.state;
+      editorInstance.state.selection = makeNodeSelection(40, 41, imageNode);
+
+      const sdtWrapper = document.createElement('div');
+      sdtWrapper.className = 'superdoc-structured-content-block';
+      sdtWrapper.dataset.sdtId = 'unrelated-sdt-block';
+      sdtWrapper.dataset.pmStart = '90';
+      sdtWrapper.dataset.pmEnd = '113';
+      container.querySelector('.presentation-editor__pages')?.appendChild(sdtWrapper);
+
+      getSelectionUpdateHandler(editorInstance)();
+
+      expect(sdtWrapper.classList.contains('ProseMirror-selectednode')).toBe(false);
     });
   });
 
@@ -907,6 +1044,41 @@ describe('PresentationEditor', () => {
       };
       expect(layoutOptions.flowMode).toBe('paginated');
       expect(layoutOptions.alternateHeaders).toBe(false);
+    });
+
+    it('derives alternateHeaders from word/settings.xml when pageStyles is stale or missing', async () => {
+      mockEditorConverterStore.current.pageStyles = { alternateHeaders: false };
+      mockEditorConverterStore.current.convertedXml = {
+        ...(mockEditorConverterStore.current.convertedXml ?? {}),
+        'word/settings.xml': {
+          type: 'element',
+          name: 'document',
+          elements: [
+            {
+              type: 'element',
+              name: 'w:settings',
+              elements: [{ type: 'element', name: 'w:evenAndOddHeaders' }],
+            },
+          ],
+        },
+      };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'alt-headers-settings-doc',
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        alternateHeaders?: boolean;
+      };
+      expect(layoutOptions.alternateHeaders).toBe(true);
+      const sectionIdCall = (buildMultiSectionIdentifier as unknown as Mock).mock.calls.at(-1) as
+        | [unknown, { alternateHeaders?: boolean }]
+        | undefined;
+      expect(sectionIdCall?.[1]?.alternateHeaders).toBe(true);
     });
 
     it('coerces falsy but non-boolean pageStyles.alternateHeaders values to false', async () => {
@@ -2764,9 +2936,16 @@ describe('PresentationEditor', () => {
     });
 
     it('emits headerFooterEditBlocked when keyboard shortcut has no matching region', async () => {
-      const layoutNoHeaders = buildLayoutResult();
-      layoutNoHeaders.headers = [];
-      mockIncrementalLayout.mockResolvedValueOnce(layoutNoHeaders);
+      // Header/footer regions are derived from the resolved layout's PAGES
+      // (HeaderFooterSessionManager.rebuildRegions builds one region per page), not
+      // from the headers[] array. To exercise the "no matching region" path the
+      // resolved layout must have no page 0 at all; emptying headers[] still leaves a
+      // per-page region and takes the activation path instead. With no pages,
+      // getRegionForPage('header', 0) returns null deterministically, independent of
+      // render timing.
+      const layoutNoPages = buildLayoutResult();
+      layoutNoPages.layout.pages = [];
+      mockIncrementalLayout.mockResolvedValueOnce(layoutNoPages);
 
       const blockedSpy = vi.fn();
 
@@ -2783,7 +2962,9 @@ describe('PresentationEditor', () => {
         new KeyboardEvent('keydown', { ctrlKey: true, altKey: true, code: 'KeyH', bubbles: true }),
       );
 
-      expect(blockedSpy).toHaveBeenCalledWith(expect.objectContaining({ reason: 'missingRegion' }));
+      await vi.waitFor(() =>
+        expect(blockedSpy).toHaveBeenCalledWith(expect.objectContaining({ reason: 'missingRegion' })),
+      );
     });
 
     it('returns false without emitting an error when an unqualified bookmark is not found', async () => {
@@ -2821,7 +3002,7 @@ describe('PresentationEditor', () => {
           y: 120,
         },
       ];
-      mockIncrementalLayout.mockResolvedValueOnce(layoutResult);
+      mockIncrementalLayout.mockResolvedValue(layoutResult);
       bookmarkResolverMocks.findAllBookmarksInDocument.mockReturnValueOnce([
         { name: 'body-bm', bookmarkId: '7', storyKey: 'body' },
       ]);
@@ -3284,6 +3465,28 @@ describe('PresentationEditor', () => {
 
       expect(didNavigate).toBe(true);
       expect(setCursorById).toHaveBeenCalledWith('tc-note-1', { preferredActiveThreadId: 'tc-note-1' });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
+    });
+
+    it('uses the public Word tracked-change id during story navigation when the note session supports it', async () => {
+      const { sessionEditor } = await activateFootnoteSession();
+      const setCursorById = vi.fn((id: string) => id === 'word:trackInsert:101');
+      if (sessionEditor?.commands) {
+        sessionEditor.commands.setCursorById = setCursorById;
+      }
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'word:trackInsert:101',
+        story: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(setCursorById).toHaveBeenCalledTimes(1);
+      expect(setCursorById).toHaveBeenCalledWith('word:trackInsert:101', {
+        preferredActiveThreadId: 'word:trackInsert:101',
+      });
       expect(sessionEditor?.view.focus).toHaveBeenCalled();
     });
 

@@ -20,7 +20,7 @@ Retrieve a single tracked change by ID.
 
 ## Expected result
 
-Returns a TrackChangeInfo object with the change type, author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available.
+Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `replacement`, `format`), author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available.
 
 ## Input fields
 
@@ -54,9 +54,13 @@ Returns a TrackChangeInfo object with the change type, author, date, affected co
 | `authorEmail` | string | no |  |
 | `authorImage` | string | no |  |
 | `date` | string | no |  |
+| `deletedText` | string | no |  |
 | `excerpt` | string | no |  |
+| `grouping` | enum | no | `"standalone"`, `"replacement-pair"`, `"unknown"` |
 | `id` | string | yes |  |
-| `type` | enum | yes | `"insert"`, `"delete"`, `"format"` |
+| `insertedText` | string | no |  |
+| `pairedWithChangeId` | string \| null | no |  |
+| `type` | enum | yes | `"insert"`, `"delete"`, `"replacement"`, `"format"` |
 | `wordRevisionIds` | object | no |  |
 | `wordRevisionIds.delete` | string | no |  |
 | `wordRevisionIds.format` | string | no |  |
@@ -75,13 +79,10 @@ Returns a TrackChangeInfo object with the change type, author, date, affected co
       "storyType": "body"
     }
   },
-  "author": "Jane Doe",
+  "grouping": "standalone",
   "id": "id-001",
-  "type": "insert",
-  "wordRevisionIds": {
-    "delete": "example",
-    "insert": "example"
-  }
+  "pairedWithChangeId": null,
+  "type": "insert"
 }
 ```
 
@@ -135,16 +136,36 @@ Returns a TrackChangeInfo object with the change type, author, date, affected co
     "date": {
       "type": "string"
     },
+    "deletedText": {
+      "type": "string"
+    },
     "excerpt": {
       "type": "string"
     },
+    "grouping": {
+      "enum": [
+        "standalone",
+        "replacement-pair",
+        "unknown"
+      ]
+    },
     "id": {
       "type": "string"
+    },
+    "insertedText": {
+      "type": "string"
+    },
+    "pairedWithChangeId": {
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "type": {
       "enum": [
         "insert",
         "delete",
+        "replacement",
         "format"
       ]
     },

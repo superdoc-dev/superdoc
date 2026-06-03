@@ -9,7 +9,7 @@ import type {
   ResolvedDropCapItem,
   ResolvedListMarkerItem,
 } from '@superdoc/contracts';
-import { adjustAvailableWidthForTextIndent } from '@superdoc/contracts';
+import { adjustAvailableWidthForTextIndent, getParagraphInlineDirection } from '@superdoc/contracts';
 import {
   isMinimalWordLayout,
   resolveListMarkerGeometry,
@@ -22,7 +22,7 @@ import {
 
 /**
  * Resolves marker width using the already-measured glyph width from layout whenever possible.
- * Mirrors resolvePainterMarkerTextWidth from painters/dom/src/utils/marker-helpers.ts.
+ * Mirrors resolvePainterMarkerTextWidth from painters/dom/src/paragraph/list-marker.ts.
  */
 function resolveMarkerTextWidth(
   markerTextWidthPx: number | undefined,
@@ -93,7 +93,7 @@ export function resolveParagraphContent(
   const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
   const paraIndentLeft = paraIndent?.left ?? 0;
   const paraIndentRight = paraIndent?.right ?? 0;
-  const isRtl = (block.attrs as ParagraphAttrs | undefined)?.direction === 'rtl';
+  const isRtl = getParagraphInlineDirection(block.attrs) === 'rtl';
   const {
     anchorIndentPx: paraMarkerAnchorIndent,
     firstLinePx: markerFirstLine,
@@ -205,6 +205,13 @@ export function resolveParagraphContent(
         italic: m.run?.italic,
         color: m.run?.color,
         letterSpacing: m.run?.letterSpacing,
+        // SD-2656: preserve caps marks ( w:caps / w:smallCaps ) so the
+        // painter can apply text-transform: uppercase or font-variant:
+        // small-caps to the marker text. Word's legal/contract list styles
+        // ("FIRST:", "SECOND:") rely on this — without it the marker renders
+        // as "First", "Second" (verbatim from the ordinal-text numbering).
+        allCaps: m.run?.allCaps,
+        smallCaps: m.run?.smallCaps,
       },
       sourceAnchor: block.sourceAnchor,
     };

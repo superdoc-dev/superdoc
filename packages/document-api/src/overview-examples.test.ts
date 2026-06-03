@@ -169,9 +169,17 @@ function makeParagraphsAdapter() {
 
 function makeCommentsAdapter() {
   return {
-    add: mock(() => ({ success: true as const })),
+    add: mock(() => ({
+      success: true as const,
+      id: 'c1',
+      inserted: [{ kind: 'entity' as const, entityType: 'comment' as const, entityId: 'c1' }],
+    })),
     edit: mock(() => ({ success: true as const })),
-    reply: mock(() => ({ success: true as const })),
+    reply: mock(() => ({
+      success: true as const,
+      id: 'c2',
+      inserted: [{ kind: 'entity' as const, entityType: 'comment' as const, entityId: 'c2' }],
+    })),
     move: mock(() => ({ success: true as const })),
     resolve: mock(() => ({ success: true as const })),
     remove: mock(() => ({ success: true as const })),

@@ -1,30 +1,15 @@
-# SuperDoc: Node.js Example
+# Archived: headless Node.js Editor
 
-A headless Node.js example using SuperDoc's Editor class with Express.
+This demo is no longer recommended and has been removed from the demo gallery.
 
-> Requires Node >= 20. Earlier versions are missing the `File` object. If you must use Node < 20, see the file polyfill in this example.
+## Why archived
 
-## Quick start
+This demo wrapped SuperDoc's `Editor` class directly behind an Express server, which predates the supported server-side path. Headless Document API operations now run through the Node SDK and the CLI, which keep the same `editor.doc.*` surface as the browser editor.
 
-```bash
-npm install && npm run dev
-```
+## Use instead
 
-Runs an Express server at `http://localhost:3000` with a single root endpoint that returns a `.docx` file.
+- [`examples/editor/collaboration/backends/node-sdk`](../../examples/editor/collaboration/backends/node-sdk) for a headless Node client that mutates documents through the Document API.
+- [`examples/document-engine/ai-redlining`](../../examples/document-engine/ai-redlining) for a server-side AI-driven flow with the same engine.
+- [Document Engine SDKs](https://docs.superdoc.dev/document-engine/sdks) for the full surface.
 
-## Usage
-
-```
-# Returns the unchanged .docx template
-http://localhost:3000
-
-# Insert text
-http://localhost:3000?text=hello world!
-
-# Insert HTML
-http://localhost:3000?html=<p>I am a paragraph</p><p><strong>I AM BOLD!</strong></p>
-```
-
-## Additional docs
-
-See the [SuperDoc docs](https://docs.superdoc.dev/advanced/supereditor/methods) for all available editor commands and hooks.
+The source in this directory is kept for archival reference but is not maintained.

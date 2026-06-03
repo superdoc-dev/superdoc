@@ -1,5 +1,27 @@
 /**
- * Find tracked mark between positions by mark name and attrs.
+ * Find a tracked mark in a document range by mark name and (optionally)
+ * a partial attrs match. Returns the first hit; expands by `offset`
+ * around the requested range so non-inclusive marks just outside it
+ * are still considered. If nothing matches inside the range, falls
+ * back to inspecting nodes adjacent to the range boundaries (handles
+ * Google-Docs-style text inserted directly under a paragraph without
+ * a wrapping run, and Firefox-vs-Chrome wrapping differences).
+ *
+ * @param {object} args
+ * @param {import('./types.js').Transaction} args.tr - Transaction
+ *   whose `tr.doc` is searched.
+ * @param {number} args.from - Range start.
+ * @param {number} args.to - Range end.
+ * @param {string} args.markName - Mark type name to match.
+ * @param {import('./types.js').Attrs} [args.attrs] - Partial attrs
+ *   to match; every key listed must equal the candidate's attr value.
+ *   Defaults to `{}` (no attr constraint).
+ * @param {((mark: import('./types.js').PmMark) => boolean) | null} [args.predicate] -
+ *   Additional predicate a candidate mark must satisfy.
+ * @param {number} [args.offset] - Expand the range by this many
+ *   positions on each side. Defaults to `1` to catch non-inclusive marks.
+ * @returns {import('./types.js').TrackedMarkRange | null} The first
+ *   match `{ from, to, mark }`, or `null` if no candidate matches.
  */
 export const findTrackedMarkBetween = ({
   tr,
@@ -7,6 +29,7 @@ export const findTrackedMarkBetween = ({
   to,
   markName,
   attrs = {},
+  predicate = null,
   offset = 1, // To get non-inclusive marks.
 }) => {
   const { doc } = tr;
@@ -14,6 +37,7 @@ export const findTrackedMarkBetween = ({
   const startPos = Math.max(from - offset, 0); // $from.start()
   const endPos = Math.min(to + offset, doc.content.size); // $from.end()
 
+  /** @type {import('./types.js').TrackedMarkRange | null} */
   let markFound = null;
 
   const tryMatch = (node, pos) => {
@@ -22,7 +46,10 @@ export const findTrackedMarkBetween = ({
     }
 
     const mark = node.marks?.find(
-      (mark) => mark.type.name === markName && Object.keys(attrs).every((attr) => mark.attrs[attr] === attrs[attr]),
+      (mark) =>
+        mark.type.name === markName &&
+        Object.keys(attrs).every((attr) => mark.attrs[attr] === attrs[attr]) &&
+        (typeof predicate !== 'function' || predicate(mark)),
     );
 
     if (mark && !markFound) {

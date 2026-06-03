@@ -347,7 +347,13 @@ async function testExportDocx(editor: Editor) {
 
   // Specific overloads → narrowed return types
   const xml: string = await editor.exportDocx({ exportXmlOnly: true });
-  const json: string = await editor.exportDocx({ exportJsonOnly: true });
+  // SD-3248: exportJsonOnly returns the xml-js intermediate tree (recursive
+  // `name` / `attributes` / `elements` shape), NOT a JSON string. The
+  // previous `string` annotation was a type lie that did not match runtime
+  // (callers were already walking `.elements[0]` directly in tests).
+  const json: { name?: string; attributes?: Record<string, unknown>; elements?: unknown[] } = await editor.exportDocx({
+    exportJsonOnly: true,
+  });
   const docs: Record<string, string | null> = await editor.exportDocx({ getUpdatedDocs: true });
 }
 
@@ -616,7 +622,11 @@ function testEditorEvents(editor: Editor) {
   });
 
   editor.on('contentError', ({ error, editor: ed }) => {
-    console.error(error.message);
+    // `error` is `unknown` (super-editor emits the raw caught value
+    // from `insertContentAt` and a normalized Error from `Editor.ts`).
+    // Consumers narrow before reading shape-specific fields.
+    if (error instanceof Error) console.error(error.message);
+    else console.error(String(error));
   });
 
   editor.on('documentModeChange', ({ documentMode, editor: ed }) => {

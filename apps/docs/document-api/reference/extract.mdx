@@ -304,10 +304,11 @@ _No fields._
             "type": "string"
           },
           "type": {
-            "description": "Aggregate type at the entity level. In paired replacement mode, a delete+insert pair shares one entity and this collapses to 'insert'; per-half type lives on block.textSpans[].trackedChanges[].",
+            "description": "Entity-level type. In paired replacement mode, a delete+insert pair shares one entity with type 'replacement'; per-half type lives on block.textSpans[].trackedChanges[].",
             "enum": [
               "insert",
               "delete",
+              "replacement",
               "format"
             ],
             "type": "string"

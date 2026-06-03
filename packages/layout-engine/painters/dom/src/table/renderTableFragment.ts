@@ -8,11 +8,19 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
+import { getTableVisualDirection } from '@superdoc/contracts';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
-import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
+import {
+  applySdtContainerChrome,
+  getSdtContainerKey,
+  getSdtContainerMetadata,
+  hasExplicitSdtContainerKey,
+  type SdtAncestorOptions,
+  type SdtBoundaryOptions,
+} from '../sdt/container.js';
 import { applyBorder, borderValueToSpec, hasExplicitCellBorders } from './border-utils.js';
 import { getTableCellGridBounds } from './grid-geometry.js';
 
@@ -40,6 +48,18 @@ export type TableRenderDependencies = {
   effectiveColumnWidths: number[];
   /** Optional SDT boundary overrides for container styling */
   sdtBoundary?: SdtBoundaryOptions;
+  /** Ancestor SDT key used to suppress duplicate container chrome in nested tables */
+  ancestorContainerKey?: string | null;
+  /** Ancestor SDT metadata used to suppress duplicate id-less container chrome in nested tables */
+  ancestorContainerSdt?: SdtMetadata | null;
+  /** Ancestor SDT keys used to suppress duplicate container chrome in nested tables */
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  /** Ancestor SDT metadata chain used to suppress duplicate id-less container chrome in nested tables */
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
+  /** Receives notification when this table fragment or descendants render SDT container chrome */
+  onSdtContainerChrome?: () => void;
+  /** Built-in SDT chrome rendering mode. */
+  chrome?: 'default' | 'none';
   /** Function to render a line of paragraph content */
   renderLine: (
     block: ParagraphBlock,
@@ -83,7 +103,7 @@ export type TableRenderDependencies = {
  *
  * **SDT Container Styling:**
  * If the table block has SDT metadata (`block.attrs?.sdt`), applies appropriate
- * container styling via `applySdtContainerStyling()`:
+ * container styling via `applySdtContainerChrome()`:
  * - Document sections: Gray border with hover tooltip
  * - Structured content blocks: Blue border with label
  * Uses type-safe helper functions to avoid unsafe type assertions.
@@ -140,8 +160,14 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     measure,
     cellSpacingPx,
     effectiveColumnWidths,
+    chrome,
     context,
     sdtBoundary,
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
+    onSdtContainerChrome,
     renderLine,
     captureLineSnapshot,
     renderDrawingContent,
@@ -173,8 +199,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   // RTL table: w:bidiVisual (ECMA-376 §17.4.1) — cells displayed right-to-left,
   // table-level properties (borders, margins, indent) are mirrored.
-  const tableProperties = block.attrs?.tableProperties as Record<string, unknown> | undefined;
-  const isRtl = tableProperties?.rightToLeft === true;
+  const isRtl = getTableVisualDirection(block.attrs) === 'rtl';
   // Note: We don't use createTableBorderOverlay because we implement single-owner
   // border model where cells handle all borders (including outer table borders)
   // to prevent double borders when rendering with absolutely-positioned divs.
@@ -202,7 +227,36 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const contentTop = tableBorderWidths?.top ?? 0;
 
   // Apply SDT container styling (document sections, structured content blocks)
-  applySdtContainerStyling(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
+  if (
+    applySdtContainerChrome(
+      doc,
+      container,
+      block.attrs?.sdt,
+      block.attrs?.containerSdt,
+      sdtBoundary,
+      {
+        ancestorContainerKey,
+        ancestorContainerSdt,
+        ancestorContainerKeys,
+        ancestorContainerSdts,
+      },
+      chrome,
+    )
+  ) {
+    onSdtContainerChrome?.();
+  }
+  const tableContainerSdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
+  const tableContainerKey = getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
+  const nextAncestorContainerKeys = [
+    ...(ancestorContainerKeys ?? []),
+    ancestorContainerKey,
+    hasExplicitSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt) ? tableContainerKey : null,
+  ].filter((key): key is string => Boolean(key));
+  const nextAncestorContainerSdts = [...(ancestorContainerSdts ?? []), ancestorContainerSdt, tableContainerSdt].filter(
+    (sdt): sdt is SdtMetadata => Boolean(sdt),
+  );
+  const nextAncestorContainerKey = nextAncestorContainerKeys[nextAncestorContainerKeys.length - 1] ?? null;
+  const nextAncestorContainerSdt = nextAncestorContainerSdts[nextAncestorContainerSdts.length - 1] ?? null;
 
   // Add table-specific class for resize overlay targeting and click mapping
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
@@ -306,6 +360,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         min: boundary.minWidth,
         r: boundary.resizable ? 1 : 0,
       })),
+      rtl: isRtl,
       // Add segments for each column boundary (segments where resize handle should appear)
       segments: boundarySegments.map((segs, colIndex) =>
         segs.map((seg) => ({
@@ -337,7 +392,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   }
 
   const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
-  if (borderCollapse === 'separate' && block.attrs?.cellSpacing && tableBorders) {
+  if (borderCollapse === 'separate' && tableBorders) {
     applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
     applyBorder(container, 'Right', borderValueToSpec(isRtl ? tableBorders.left : tableBorders.right));
     applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));
@@ -384,7 +439,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         captureLineSnapshot,
         renderDrawingContent,
         applySdtDataset,
-        tableSdt: block.attrs?.sdt ?? null,
+        ancestorContainerKey: nextAncestorContainerKey,
+        ancestorContainerSdt: nextAncestorContainerSdt,
+        ancestorContainerKeys: nextAncestorContainerKeys,
+        ancestorContainerSdts: nextAncestorContainerSdts,
+        onSdtContainerChrome,
+        chrome,
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
@@ -546,7 +606,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       captureLineSnapshot,
       renderDrawingContent,
       applySdtDataset,
-      tableSdt: block.attrs?.sdt ?? null,
+      ancestorContainerKey: nextAncestorContainerKey,
+      ancestorContainerSdt: nextAncestorContainerSdt,
+      ancestorContainerKeys: nextAncestorContainerKeys,
+      ancestorContainerSdts: nextAncestorContainerSdts,
+      onSdtContainerChrome,
+      chrome,
       // Draw top border if table continues from previous fragment (MS Word behavior)
       continuesFromPrev: isFirstRenderedBodyRow && fragment.continuesFromPrev === true,
       // Draw bottom border if table continues on next fragment (MS Word behavior)

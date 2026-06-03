@@ -1,7 +1,5 @@
-# SuperDoc: Init a DOCX from HTML Content
+# Moved to demos/editor/superdoc/docx-from-html
 
-An example of initializing SuperDoc with HTML content.
+The "init a DOCX from HTML" demo moved to [`demos/editor/superdoc/docx-from-html`](../editor/superdoc/docx-from-html).
 
-This will load a DOCX file (or a blank document), replacing the main contents with the provided HTML.
-
-In the example we pass `document: sample-document.docx` to load a template with a header and footer. You can omit this key to start with a blank document.
+It now sits under `demos/editor/superdoc/` because it teaches an editor-side initialization pattern (passing HTML to `<SuperDoc>`), not a headless Document API operation.

@@ -76,6 +76,20 @@ export interface ParagraphCommands {
 
   /** Reset line height to default */
   unsetLineHeight: () => boolean;
+
+  // ============================================
+  // PARAGRAPH DIRECTION COMMANDS
+  // ============================================
+
+  /**
+   * Set paragraph direction (LTR/RTL) on every paragraph in the current selection.
+   * When `alignmentPolicy` is `"matchDirection"`, an explicit `justification` of
+   * `"left"` ↔ `"right"` is mirrored to follow the new direction.
+   */
+  setParagraphDirection: (input: { direction: 'ltr' | 'rtl'; alignmentPolicy?: 'matchDirection' }) => boolean;
+
+  /** Clear an explicit paragraph direction override (revert to auto-resolved). */
+  clearParagraphDirection: () => boolean;
 }
 
 declare module '../../core/types/ChainedCommands.js' {

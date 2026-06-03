@@ -61,7 +61,9 @@ import {
   type CellSpacing,
   type TableBorders,
   type TableBorderValue,
+  EMPTY_SDT_PLACEHOLDER_TEXT,
   effectiveTableCellSpacing,
+  isEmptySdtPlaceholderRun,
   LeaderDecoration,
   resolveBaseFontSizeForVerticalText,
 } from '@superdoc/contracts';
@@ -76,6 +78,7 @@ import {
 import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
 import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
 import { toCssFontFamily } from '@superdoc/font-utils';
+import { resolvePhysicalFamily } from '@superdoc/font-system';
 export { installNodeCanvasPolyfill } from './setup.js';
 import { clearMeasurementCache, getMeasuredTextWidth, setCacheSize } from './measurementCache.js';
 import { getFontMetrics, clearFontMetricsCache, type FontInfo } from './fontMetricsCache.js';
@@ -86,6 +89,7 @@ import type { FixedLayoutResult } from './fixed-table-columns.js';
 import {
   buildAutoFitTableResultCacheKey,
   buildTableCellContentMetricsCacheKey,
+  clearTableAutoFitMeasurementCaches,
   getCachedAutoFitTableResult,
   type TableAutoFitContentMetricsResult,
   measureTableAutoFitContentMetrics,
@@ -93,6 +97,27 @@ import {
 } from './table-autofit-metrics.js';
 
 export { clearFontMetricsCache };
+export { clearTableAutoFitMeasurementCaches };
+
+/**
+ * Clear every font-dependent text-measurement cache owned by `measuring/dom`:
+ * text advance widths, font ascent/descent metrics, and AutoFit cell metrics.
+ *
+ * Call this when the set of available fonts changes (a face finishes loading,
+ * or a substitution/mapping is added) so the next measurement pass re-measures
+ * with the correct font instead of reusing results taken against a fallback.
+ * The caller is also responsible for clearing the layout-bridge block-measure
+ * cache (`measureCache.clear()`), which holds derived block measures.
+ */
+export function clearTextMeasurementCaches(): void {
+  clearMeasurementCache();
+  clearFontMetricsCache();
+  clearTableAutoFitMeasurementCaches();
+  // Drop the persistent measuring canvas. A 2D context caches its font resolution: once it
+  // measured a family while the font was absent (falling back), it keeps using the fallback
+  // even after the font loads. A fresh context re-resolves to the now-available font.
+  canvasContext = null;
+}
 
 const { computeTabStops } = Engines;
 
@@ -208,7 +233,6 @@ const FIELD_ANNOTATION_VERTICAL_PADDING = 6; // Vertical padding/border for pill
 const DEFAULT_FIELD_ANNOTATION_FONT_SIZE = 16; // Default font size for field annotations
 const DEFAULT_PARAGRAPH_FONT_SIZE = 12;
 const DEFAULT_PARAGRAPH_FONT_FAMILY = 'Arial';
-
 const isValidFontSize = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
 
@@ -300,19 +324,26 @@ function buildFontString(run: { fontFamily: string; fontSize: number; bold?: boo
   if (run.bold) parts.push('bold');
   parts.push(`${run.fontSize}px`);
 
+  // Resolve the logical family (e.g. "Calibri") to the physical render family
+  // (e.g. "Carlito") so text is MEASURED in the same font it is painted with. The
+  // measure cache keys on this font string, so the physical family is in the key.
+  const physicalFamily = resolvePhysicalFamily(run.fontFamily);
+
   if (measurementConfig.mode === 'deterministic') {
+    // Deterministic mode still flattens to one family for reproducible server-side
+    // measurement; per-font resolution here is follow-up T1 work (browser mode first).
     parts.push(
       measurementConfig.fonts.fallbackStack.length > 0
         ? measurementConfig.fonts.fallbackStack.join(', ')
         : measurementConfig.fonts.deterministicFamily,
     );
   } else {
-    parts.push(run.fontFamily);
+    parts.push(physicalFamily);
   }
 
   return {
     font: parts.join(' '),
-    fontFamily: run.fontFamily,
+    fontFamily: physicalFamily,
   };
 }
 
@@ -1032,7 +1063,11 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   }
 
   const emptyParagraphRun =
-    normalizedRuns.length === 1 && isEmptyTextRun(normalizedRuns[0] as Run) ? (normalizedRuns[0] as TextRun) : null;
+    normalizedRuns.length === 1 &&
+    isEmptyTextRun(normalizedRuns[0] as Run) &&
+    !isEmptySdtPlaceholderRun(normalizedRuns[0] as Run)
+      ? (normalizedRuns[0] as TextRun)
+      : null;
   if (emptyParagraphRun) {
     const fontSize = emptyParagraphRun.fontSize ?? DEFAULT_PARAGRAPH_FONT_SIZE;
     const metrics = calculateEmptyParagraphMetrics(fontSize, spacing, getFontInfoFromRun(emptyParagraphRun));
@@ -2008,6 +2043,84 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     // The remaining run must be TextRun (which has text, fontSize, etc.)
     if (!('text' in run) || !('fontSize' in run)) {
       // Safety check - skip if this isn't a TextRun
+      pendingRunSpacing = 0;
+      continue;
+    }
+
+    if (isEmptySdtPlaceholderRun(run)) {
+      const placeholderFont = buildFontString(run).font;
+      const placeholderText = applyTextTransform(EMPTY_SDT_PLACEHOLDER_TEXT, run);
+      const measuredPlaceholderWidth = getMeasuredTextWidth(
+        placeholderText,
+        placeholderFont,
+        run.letterSpacing ?? 0,
+        ctx,
+      );
+      const fallbackPlaceholderWidth = placeholderText.length * run.fontSize * 0.45;
+      const placeholderWidth =
+        run.sdt?.type === 'structuredContent' && run.sdt.appearance === 'hidden'
+          ? 0
+          : measuredPlaceholderWidth > 0
+            ? measuredPlaceholderWidth
+            : fallbackPlaceholderWidth;
+
+      if (!currentLine) {
+        currentLine = {
+          fromRun: runIndex,
+          fromChar: 0,
+          toRun: runIndex,
+          toChar: 0,
+          width: placeholderWidth,
+          maxFontSize: lineHeightFontSize(run),
+          maxFontInfo: getFontInfoFromRun(run),
+          maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
+          segments: [{ runIndex, fromChar: 0, toChar: 0, width: placeholderWidth }],
+          spaceCount: 0,
+        };
+      } else {
+        const boundarySpacing = resolveBoundarySpacing(currentLine.width, true, run);
+        if (
+          currentLine.width + boundarySpacing + placeholderWidth > currentLine.maxWidth - WIDTH_FUDGE_PX &&
+          currentLine.width > 0
+        ) {
+          trimTrailingWrapSpaces(currentLine);
+          const metrics = finalizeLineMetrics(currentLine, spacing);
+          const completedLine: Line = {
+            ...currentLine,
+            ...metrics,
+          };
+          addBarTabsToLine(completedLine);
+          lines.push(completedLine);
+          tabStopCursor = 0;
+          pendingTabAlignment = null;
+          pendingLeader = null;
+          lastAppliedTabAlign = null;
+          activeTabGroup = null;
+
+          currentLine = {
+            fromRun: runIndex,
+            fromChar: 0,
+            toRun: runIndex,
+            toChar: 0,
+            width: placeholderWidth,
+            maxFontSize: lineHeightFontSize(run),
+            maxFontInfo: getFontInfoFromRun(run),
+            maxWidth: getEffectiveWidth(bodyContentWidth),
+            segments: [{ runIndex, fromChar: 0, toChar: 0, width: placeholderWidth }],
+            spaceCount: 0,
+          };
+        } else {
+          currentLine.toRun = runIndex;
+          currentLine.toChar = 0;
+          currentLine.width = roundValue(currentLine.width + boundarySpacing + placeholderWidth);
+          currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
+          currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
+          appendSegment(currentLine.segments, runIndex, 0, 0, placeholderWidth);
+        }
+      }
+
+      lastFontSize = run.fontSize;
+      hasSeenTextRun = true;
       pendingRunSpacing = 0;
       continue;
     }

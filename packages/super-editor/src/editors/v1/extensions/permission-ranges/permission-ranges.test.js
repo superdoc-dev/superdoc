@@ -66,6 +66,21 @@ const docWithUserSpecificPermission = {
   ],
 };
 
+const docWithActorIdPermission = {
+  type: 'doc',
+  content: [
+    {
+      type: 'paragraph',
+      content: [
+        { type: 'permStart', attrs: { id: 'actor-1', ed: 'alice-id' } },
+        { type: 'text', text: 'Actor specific section. ' },
+        { type: 'permEnd', attrs: { id: 'actor-1', ed: 'alice-id' } },
+        { type: 'text', text: 'Locked section.' },
+      ],
+    },
+  ],
+};
+
 const findTextPos = (doc, searchText) => {
   let found = null;
   doc.descendants((node, pos) => {
@@ -777,6 +792,15 @@ describe('PermissionRanges extension', () => {
       user: { name: 'Gabriel', email: 'gabriel@superdoc.dev' },
     });
     // No permissionPrincipals → email fallback should match the ed range
+    expect(instance.isEditable).toBe(true);
+    expect(instance.storage.permissionRanges?.ranges?.length).toBeGreaterThan(0);
+  });
+
+  it('matches permission ranges by actor id when no explicit permissionPrincipals are set', () => {
+    const instance = createProtectedEditor(docWithActorIdPermission, {
+      user: { id: 'alice-id', name: 'Alice', email: 'shared@example.com' },
+    });
+
     expect(instance.isEditable).toBe(true);
     expect(instance.storage.permissionRanges?.ranges?.length).toBeGreaterThan(0);
   });

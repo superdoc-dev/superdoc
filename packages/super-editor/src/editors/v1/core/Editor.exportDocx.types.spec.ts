@@ -13,14 +13,19 @@
 
 import { describe, it, expect } from 'vitest';
 import type { Editor } from './Editor.js';
+import type { ConvertedXmlPart } from './types/EditorPublicSurfaces.js';
 
-// Never invoked — pure type-level assertions. Wrapped in a function so vitest
+// Never invoked. Pure type-level assertions. Wrapped in a function so vitest
 // doesn't try to execute the assignments at module load time.
 
 function _typeOnlyAssertions(editor: Editor): void {
   // Three narrow overloads.
   const _xmlOnly: Promise<string> = editor.exportDocx({ exportXmlOnly: true });
-  const _jsonOnly: Promise<string> = editor.exportDocx({ exportJsonOnly: true });
+  // SD-3248: exportJsonOnly returns the xml-js intermediate tree, NOT a
+  // JSON string. The original `Promise<string>` overload was a type lie;
+  // runtime always returned an object with a recursive `name` /
+  // `attributes` / `elements` shape.
+  const _jsonOnly: Promise<ConvertedXmlPart> = editor.exportDocx({ exportJsonOnly: true });
   const _updatedDocs: Promise<Record<string, string | null>> = editor.exportDocx({ getUpdatedDocs: true });
 
   // Default overload: T defaults to Blob, so browser consumers get

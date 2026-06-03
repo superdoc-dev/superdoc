@@ -1,0 +1,128 @@
+---
+title: YHub
+sidebarTitle: YHub
+keywords: "yhub, yjs collaboration, revision history, attribution, self-hosted collaboration"
+---
+
+[YHub](https://github.com/yjs/yhub) is a Yjs backend for teams that need attribution, activity, revision-history, or rollback workflows.
+
+<Warning>
+YHub is in beta and requires Node.js 22+. Validate licensing (AGPL or proprietary) and infrastructure requirements before production use. Production YHub typically pairs Redis with Postgres and an object store (S3 or MinIO) for persisted update blobs; see [YHub's setup docs](https://github.com/yjs/yhub) for the exact architecture. The bundled local server in our example is intentionally local-only (Redis + Postgres, no object store) and is not production infrastructure.
+</Warning>
+
+## When to choose YHub
+
+Reach for YHub when:
+
+- You need built-in attribution or per-update authorship tracking.
+- You need revision history, changesets, or rollback APIs as a first-class concept.
+- You're comfortable operating Redis and Postgres for collaboration state.
+
+For most teams without those requirements, [Hocuspocus](/guides/collaboration/hocuspocus) is a simpler self-hosted starting point, and [Liveblocks](/guides/collaboration/liveblocks) covers the managed path.
+
+## Client setup
+
+YHub speaks the standard y-websocket protocol, so the SuperDoc client uses `WebsocketProvider` from `y-websocket`. No YHub-specific provider class is needed.
+
+The snippet below connects to the bundled local SuperDoc example server. Production YHub deployments may use a different URL and auth parameter shape (for example, yauth JWT params and `/ws/{org}/{docid}` style paths). Check your deployment's docs.
+
+```bash
+npm install yjs y-websocket
+```
+
+```typescript
+import * as Y from "yjs";
+import { WebsocketProvider } from "y-websocket";
+import { SuperDoc } from "superdoc";
+
+const documentId = "document-123";
+const ydoc = new Y.Doc();
+const provider = new WebsocketProvider(
+  "ws://127.0.0.1:8081/v1/collaboration",
+  documentId,
+  ydoc,
+  {
+    params: {
+      token: "YOUR_PRIVATE_TOKEN",
+      userId: "user-123",
+    },
+  },
+);
+
+// Guard against the `sync` event firing on reconnect after a network drop.
+let superdoc;
+provider.on("sync", (isSynced) => {
+  if (!isSynced || superdoc) return;
+  superdoc = new SuperDoc({
+    selector: "#editor",
+    user: { name: "User 123", email: "user-123@example.com" },
+    modules: {
+      collaboration: { ydoc, provider },
+    },
+  });
+});
+```
+
+For the bundled local server, `params.token` is the shared secret and `params.userId` is the identifier recorded for attribution. In production, use the auth flow configured for your YHub deployment.
+
+## Server
+
+Running a YHub server requires Redis and Postgres. See the [bundled local server example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/backends/fastapi/yjs-hub) for a working setup with Docker Compose. Use it as a starting point, not as a production deployment.
+
+For production, follow [YHub's own setup guide](https://github.com/yjs/yhub) and pair it with your existing auth, persistence, and ops tooling.
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card
+    title="SuperDoc + YHub example"
+    icon="github"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/providers/yhub"
+  >
+    Complete React + Vite client paired with the bundled local server
+  </Card>
+
+  <Card
+    title="Bundled YHub server"
+    icon="server"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/backends/fastapi/yjs-hub"
+  >
+    Local Node + Redis + Postgres reference for development
+  </Card>
+
+  <Card
+    title="YHub repo"
+    icon="book"
+    href="https://github.com/yjs/yhub"
+  >
+    Upstream project, setup, and licensing
+  </Card>
+
+  <Card
+    title="YHub API"
+    icon="code"
+    href="https://github.com/yjs/yhub/blob/master/API.md"
+  >
+    Attribution, activity, changesets, rollback
+  </Card>
+</CardGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Self-hosted overview"
+    icon="layers"
+    href="/guides/collaboration/self-hosted-overview"
+  >
+    Compare YHub with Hocuspocus and the SuperDoc Yjs reference server
+  </Card>
+
+  <Card
+    title="Client configuration"
+    icon="settings"
+    href="/editor/collaboration/configuration"
+  >
+    All SuperDoc collaboration options and events
+  </Card>
+</CardGroup>

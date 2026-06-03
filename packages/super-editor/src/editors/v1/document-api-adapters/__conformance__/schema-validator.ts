@@ -8,6 +8,8 @@ type JsonSchema = {
   enum?: unknown[];
   oneOf?: JsonSchema[];
   anyOf?: JsonSchema[];
+  minLength?: number;
+  maxLength?: number;
   $ref?: string;
   $defs?: Record<string, JsonSchema>;
 };
@@ -22,6 +24,8 @@ const SUPPORTED_SCHEMA_KEYWORDS = new Set([
   'enum',
   'oneOf',
   'anyOf',
+  'minLength',
+  'maxLength',
   '$ref',
   '$defs',
   'description',
@@ -135,6 +139,15 @@ function validateInternal(
     if (!hasTypeMatch) {
       errors.push(`${path}: expected type ${expectedTypes.join('|')}`);
       return;
+    }
+  }
+
+  if (typeof value === 'string') {
+    if (schema.minLength !== undefined && value.length < schema.minLength) {
+      errors.push(`${path}: expected minLength ${schema.minLength}, got ${value.length}`);
+    }
+    if (schema.maxLength !== undefined && value.length > schema.maxLength) {
+      errors.push(`${path}: expected maxLength ${schema.maxLength}, got ${value.length}`);
     }
   }
 

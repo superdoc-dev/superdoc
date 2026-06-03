@@ -209,7 +209,17 @@ export class CommandService {
       get commands() {
         return Object.fromEntries(
           Object.entries(rawCommands).map(([name, command]) => {
-            return [name, (...args) => command(...args)(props)];
+            // SD-3240: SurfaceCommandCallable types `props` as the public
+            // `CommandProps` shape, while the locally-built props here is
+            // a structurally-compatible JS object (the JS file's `state`
+            // helper returns `any` until typed). Cast at the boundary.
+            return [
+              name,
+              (...args) =>
+                command(...args)(
+                  /** @type {import('./types/ChainedCommands.js').CommandProps} */ (/** @type {unknown} */ (props)),
+                ),
+            ];
           }),
         );
       },

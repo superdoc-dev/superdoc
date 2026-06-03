@@ -113,24 +113,23 @@ jobs:
       - name: Typecheck
         run: pnpm run type-check
 
-      - name: Public-contract checkJs (SD-2863)
-        # Gated subset of public-contract files run with `// @ts-check`. The
-        # script greps tsc output for errors in the curated file list and
-        # ignores the wider 1500+ errors from the broader super-editor source
-        # tree (those are tracked under SD-2863 follow-up tickets).
-        run: pnpm --filter superdoc run check:jsdoc
-
-      - name: Consumer typecheck (matrix)
-        # The matrix script owns the published-package validation path:
-        # it packs superdoc, installs the tarball into the standalone
-        # fixture (`pnpm install --ignore-workspace`), then runs every
-        # scenario under its declared resolution mode and strictness
-        # settings. Replaces the pre-SD-2831 bare `tsc --noEmit` step
-        # so the new pack-and-install scenarios are actually exercised
-        # in CI, not just locally.
-        run: |
-          cd tests/consumer-typecheck
-          node typecheck-matrix.mjs
+      - name: SuperDoc public interface check
+        # Single wrapper covering all SuperDoc public-surface gates,
+        # ordered cheap-to-expensive:
+        #   - contract-tiers-test (pure validator unit tests)
+        #   - contract-tiers (package.json#exports vs publicContract)
+        #   - jsdoc-ratchet (checkJs gate + per-file ratchet)
+        #   - build (skipped here; the Build step above already ran it)
+        #   - consumer-typecheck-matrix (packs superdoc, runs every scenario)
+        #   - deep-type-audit-supported-root (any-leak gate)
+        #   - package-shape (publint + attw)
+        #   - export-snapshots (super-editor / legacy / root no-growth)
+        #   - root-classification-closure (SD-3212 A1b)
+        # Stages 5-9 share one packed-and-installed fixture; stage 5
+        # produces it, the rest reuse it. --skip-build skips stage 4
+        # because the Build step above already ran `pnpm run build`.
+        # Local equivalent: `pnpm check:public:superdoc` (with build).
+        run: pnpm check:public:superdoc --skip-build
 
   unit-tests:
     needs: build

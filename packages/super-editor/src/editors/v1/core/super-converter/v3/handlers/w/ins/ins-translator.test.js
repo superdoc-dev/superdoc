@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { config, translator } from './ins-translator.js';
 import { NodeTranslator } from '@translator';
 import { exportSchemaToJson } from '@converter/exporter.js';
+import { createImportTrackingContext } from '@extensions/track-changes/review-model/import-context.js';
 
 vi.mock('@converter/exporter.js', () => ({
   exportSchemaToJson: vi.fn(),
@@ -111,6 +112,50 @@ describe('w:ins translator', () => {
       expect(attrs.id).toBe('header-uuid');
       expect(attrs.sourceId).toBe('123');
     });
+
+    it('flows import tracking context through nested insertion content', () => {
+      const context = createImportTrackingContext({});
+      context.pushParent({
+        logicalId: 'parent-delete',
+        side: 'deletion',
+        sourceId: '9',
+        author: 'Parent',
+        date: '2026-05-21T00:00:00Z',
+      });
+      const childFrames = [];
+      const mockSubNodes = [{ content: [{ type: 'text', text: 'added text' }] }];
+      const mockNodeListHandler = {
+        handler: vi.fn((childParams) => {
+          childFrames.push(childParams.importTrackingContext.currentParent());
+          return mockSubNodes;
+        }),
+      };
+
+      const result = config.encode(
+        {
+          nodeListHandler: mockNodeListHandler,
+          extraParams: { node: mockNode },
+          importTrackingContext: context,
+          path: [],
+        },
+        {
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          id: '123',
+          date: '2025-10-09T12:00:00Z',
+        },
+      );
+
+      expect(childFrames[0]).toMatchObject({ logicalId: '123', side: 'insertion' });
+      expect(context.currentParent()).toMatchObject({ logicalId: 'parent-delete' });
+      expect(getMarkAttrs(result)).toEqual(
+        expect.objectContaining({
+          id: '123',
+          sourceId: '123',
+          overlapParentId: 'parent-delete',
+        }),
+      );
+    });
   });
 
   describe('decode', () => {
@@ -168,6 +213,78 @@ describe('w:ins translator', () => {
       const result = config.decode({ node });
 
       expect(result.attributes['w:id']).toBe('456');
+    });
+
+    it('returns accepted content directly in final-doc export mode', () => {
+      const mockTrackedMark = {
+        type: 'trackInsert',
+        attrs: {
+          id: '123',
+          sourceId: '',
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          date: '2025-10-09T12:00:00Z',
+        },
+      };
+      const mockTranslatedNode = { name: 'w:r', elements: [{ name: 'w:t', text: 'added text' }] };
+
+      exportSchemaToJson.mockReturnValue(mockTranslatedNode);
+
+      const node = {
+        type: 'text',
+        text: 'added text',
+        marks: [mockTrackedMark, { type: 'bold' }],
+      };
+
+      const result = config.decode({ node, isFinalDoc: true });
+
+      expect(result).toEqual(mockTranslatedNode);
+      expect(exportSchemaToJson).toHaveBeenCalledWith(
+        expect.objectContaining({
+          node: expect.objectContaining({
+            marks: [{ type: 'bold' }],
+          }),
+        }),
+      );
+    });
+
+    it('allocates Word ids in the current OOXML part namespace under overlap', () => {
+      const mockTrackedMark = {
+        type: 'trackInsert',
+        attrs: {
+          id: 'logical-header',
+          sourceId: '',
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          date: '2025-10-09T12:00:00Z',
+        },
+      };
+      const calls = [];
+      const converter = {
+        wordIdAllocator: {
+          allocate: vi.fn((input) => {
+            calls.push(input);
+            return input.partPath === 'word/header1.xml' ? '1' : '99';
+          }),
+        },
+      };
+
+      exportSchemaToJson.mockReturnValue({ elements: [{ name: 'w:t' }] });
+
+      const result = config.decode({
+        node: { type: 'text', marks: [mockTrackedMark] },
+        converter,
+        currentPartPath: 'word/header1.xml',
+      });
+
+      expect(result.attributes['w:id']).toBe('1');
+      expect(calls).toEqual([
+        {
+          partPath: 'word/header1.xml',
+          sourceId: '',
+          logicalId: 'logical-header',
+        },
+      ]);
     });
 
     it('returns null if node is missing or invalid', () => {

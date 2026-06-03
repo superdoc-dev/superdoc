@@ -17,6 +17,11 @@ import type { SearchMatch, SuperDoc } from 'superdoc';
 declare const sd: SuperDoc;
 
 const results: SearchMatch[] | undefined = sd.search('hello');
+// `search` also accepts a RegExp at runtime; the type must include it.
+// Regression guard: a TS-only narrowing to `string` (e.g. during a JS→TS
+// migration of SuperDoc) would silently break this call until consumer
+// upgrade-time. SD-typecheck-superdoc-ts.
+sd.search(/hello/i);
 
 if (results && results.length > 0) {
   const first: SearchMatch = results[0];
@@ -41,6 +46,7 @@ type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ?
 type AssertEqual<A, B> = Equal<A, B> extends true ? true : never;
 
 const _searchReturnTypeIsExact: AssertEqual<ReturnType<SuperDoc['search']>, SearchMatch[] | undefined> = true;
+const _searchParamTypeIsExact: AssertEqual<Parameters<SuperDoc['search']>[0], string | RegExp> = true;
 const _goToParamTypeIsExact: AssertEqual<Parameters<SuperDoc['goToSearchResult']>[0], SearchMatch> = true;
 
-void [_searchReturnTypeIsExact, _goToParamTypeIsExact, results];
+void [_searchReturnTypeIsExact, _searchParamTypeIsExact, _goToParamTypeIsExact, results];

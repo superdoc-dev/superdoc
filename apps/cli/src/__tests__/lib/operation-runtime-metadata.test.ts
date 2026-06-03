@@ -75,4 +75,32 @@ describe('operation runtime metadata', () => {
     const optionNames = openOptions.map((o) => o.name);
     expect(optionNames).toContain('password');
   });
+
+  test('doc.open metadata includes trackChanges JSON param', () => {
+    const openMeta = CLI_OPERATION_METADATA['doc.open'];
+    const trackChangesParam = openMeta.params.find((p) => p.name === 'trackChanges');
+
+    expect(trackChangesParam).toBeDefined();
+    expect(trackChangesParam!.kind).toBe('jsonFlag');
+    expect(trackChangesParam!.type).toBe('json');
+    expect(trackChangesParam!.flag).toBe('track-changes-json');
+    expect(trackChangesParam!.schema).toEqual({
+      type: 'object',
+      properties: {
+        replacements: {
+          type: 'string',
+          enum: ['paired', 'independent'],
+          description: 'Tracked replacement grouping mode.',
+        },
+      },
+    });
+  });
+
+  test('doc.open option specs include track-changes-json flag', () => {
+    const openOptions = CLI_OPERATION_OPTION_SPECS['doc.open'];
+    const trackChangesOption = openOptions.find((o) => o.name === 'track-changes-json');
+
+    expect(trackChangesOption).toBeDefined();
+    expect(trackChangesOption!.type).toBe('string');
+  });
 });

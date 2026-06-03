@@ -42,6 +42,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listTags, pruneLocalOnlyReleaseTags, run, runSemanticRelease } from './release-local.mjs';
+import { shouldRecoverPackageRelease } from './release-recovery-state.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -73,6 +74,11 @@ const SDK_PYTHON_PACKAGES = [
   'superdoc-sdk-cli-windows-x64',
   'superdoc-sdk',
 ];
+
+// SDK PyPI publishing is handled by release-stable.yml through trusted
+// publishing. Keep this enabled so recovery treats missing Python packages as
+// incomplete and hands rebuilt artifacts back to the workflow when needed.
+const SDK_PYPI_ENABLED = true;
 
 // superdoc ships under two npm names: `superdoc` (unscoped) and a
 // `@harbour-enterprises/superdoc` mirror published from the same tarball.
@@ -679,6 +685,7 @@ function resumeMcpPublish(workspaceRoot, distTag, options = {}) {
 }
 
 function prepareSdkPythonSnapshot(workspaceRoot, tag) {
+  runInWorkspace(workspaceRoot, 'pnpm', ['run', 'generate:all']);
   runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'packages/sdk/scripts/build-python-sdk.mjs')]);
   return copySdkPythonArtifacts(workspaceRoot, tag);
 }
@@ -812,14 +819,20 @@ async function maybeRecoverIncompleteRelease(pkg, branchRef) {
     version,
   });
 
-  const needsSnapshotPython = Boolean(pkg.pythonPackages) && !state.pythonPublished && !isTagAtHead(latestTag);
-  const needsRecovery = !state.publishComplete || !state.githubComplete || needsSnapshotPython;
+  const tagAtHead = isTagAtHead(latestTag);
+  const needsRecovery = shouldRecoverPackageRelease({
+    publishComplete: state.publishComplete,
+    githubComplete: state.githubComplete,
+    pythonPublished: state.pythonPublished,
+    hasPythonPackages: Boolean(pkg.pythonPackages),
+    tagAtHead,
+  });
   if (!needsRecovery) {
     return null;
   }
 
   console.log(
-    `\nRecovering incomplete ${pkg.name} release ${latestTag}${isTagAtHead(latestTag) ? ' from current HEAD' : ' from tagged snapshot'}.`,
+    `\nRecovering incomplete ${pkg.name} release ${latestTag}${tagAtHead ? ' from current HEAD' : ' from tagged snapshot'}.`,
   );
   const recovery = await recoverPackageRelease(pkg, {
     tag: latestTag,
@@ -894,9 +907,13 @@ const packages = [
     tagPrefix: 'sdk-v',
     tagPattern: 'sdk-v*',
     npmPackages: SDK_NODE_NPM_PACKAGES,
-    pythonPackages: SDK_PYTHON_PACKAGES,
     resumePublish: resumeSdkPublish,
-    preparePythonSnapshot: prepareSdkPythonSnapshot,
+    ...(SDK_PYPI_ENABLED
+      ? {
+          pythonPackages: SDK_PYTHON_PACKAGES,
+          preparePythonSnapshot: prepareSdkPythonSnapshot,
+        }
+      : {}),
   },
   {
     name: 'mcp',

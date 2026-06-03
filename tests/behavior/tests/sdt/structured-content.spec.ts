@@ -1,4 +1,5 @@
 import { test, expect } from '../../fixtures/superdoc.js';
+import type { Page } from '@playwright/test';
 import {
   insertBlockSdt,
   insertInlineSdt,
@@ -19,6 +20,56 @@ const BLOCK_LABEL = '.superdoc-structured-content__label';
 const INLINE_SDT = '.superdoc-structured-content-inline';
 const INLINE_LABEL = '.superdoc-structured-content-inline__label';
 const HOVER_CLASS = 'sdt-group-hover';
+
+async function getTextPoint(page: Page, selector: string, text: string, offset = 0): Promise<{ x: number; y: number }> {
+  return page.evaluate(
+    ({ selector, text, offset }) => {
+      const root = document.querySelector(selector);
+      if (!root) throw new Error(`Element not found: ${selector}`);
+
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode() as Text | null;
+      while (node) {
+        const index = node.data.indexOf(text);
+        if (index !== -1) {
+          const start = Math.min(index + offset, node.data.length - 1);
+          const range = document.createRange();
+          range.setStart(node, start);
+          range.setEnd(node, Math.min(start + 1, node.data.length));
+          const rect = range.getBoundingClientRect();
+          range.detach();
+          if (rect.width || rect.height) {
+            return { x: rect.left + 1, y: rect.top + rect.height / 2 };
+          }
+        }
+        node = walker.nextNode() as Text | null;
+      }
+
+      throw new Error(`Text not found: ${text}`);
+    },
+    { selector, text, offset },
+  );
+}
+
+async function getSelectionInfo(page: Page) {
+  return page.evaluate(() => {
+    const { state } = (window as any).editor;
+    const { selection } = state;
+    const parentTypes: string[] = [];
+    const $pos = selection.$from;
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      parentTypes.push($pos.node(depth).type.name);
+    }
+    return {
+      from: selection.from,
+      to: selection.to,
+      empty: selection.empty,
+      nodeType: selection.node?.type?.name ?? null,
+      parentTypes,
+      selectedText: state.doc.textBetween(selection.from, selection.to),
+    };
+  });
+}
 
 // ==========================================================================
 // Block SDT Tests
@@ -61,7 +112,7 @@ test.describe('block structured content', () => {
       if (!label) return false;
       return getComputedStyle(label).display !== 'none';
     }, BLOCK_LABEL);
-    expect(labelVisible).toBe(true);
+    expect(labelVisible).toBe(false);
 
     await superdoc.snapshot('block SDT hovered');
   });
@@ -87,9 +138,31 @@ test.describe('block structured content', () => {
     await superdoc.page.mouse.click(center.x, center.y);
     await superdoc.waitForStable();
 
-    expect(await isSelectionOnBlockSdt(superdoc.page)).toBe(true);
+    const selection = await getSelectionInfo(superdoc.page);
+    expect(selection.empty).toBe(true);
+    expect(selection.nodeType).toBeNull();
+    expect(selection.parentTypes).toContain('structuredContentBlock');
+    expect(await hasClass(superdoc.page, BLOCK_SDT, 'ProseMirror-selectednode')).toBe(true);
 
     await superdoc.snapshot('block SDT cursor placed');
+  });
+
+  test('repeated clicks inside block SDT move the cursor', async ({ superdoc }) => {
+    const first = await getTextPoint(superdoc.page, BLOCK_SDT, 'content', 1);
+    await superdoc.page.mouse.click(first.x, first.y);
+    await superdoc.waitForStable();
+    const firstSelection = await getSelectionInfo(superdoc.page);
+
+    const second = await getTextPoint(superdoc.page, BLOCK_SDT, 'here', 2);
+    await superdoc.page.mouse.click(second.x, second.y);
+    await superdoc.waitForStable();
+    const secondSelection = await getSelectionInfo(superdoc.page);
+
+    expect(firstSelection.empty).toBe(true);
+    expect(secondSelection.empty).toBe(true);
+    expect(firstSelection.nodeType).toBeNull();
+    expect(secondSelection.nodeType).toBeNull();
+    expect(firstSelection.from).not.toBe(secondSelection.from);
   });
 
   test('moving cursor outside block SDT leaves the block', async ({ superdoc }) => {
@@ -184,20 +257,19 @@ test.describe('inline structured content', () => {
     await superdoc.snapshot('inline SDT hovered');
   });
 
-  test('first click inside inline SDT selects all content', async ({ superdoc }) => {
-    const center = await getCenter(superdoc.page, INLINE_SDT);
-    await superdoc.page.mouse.click(center.x, center.y);
+  test('first click inside inline SDT places the cursor', async ({ superdoc }) => {
+    const point = await getTextPoint(superdoc.page, INLINE_SDT, 'inline value', 2);
+    await superdoc.page.mouse.click(point.x, point.y);
     await superdoc.waitForStable();
 
-    const selection = await superdoc.page.evaluate(() => {
-      const { state } = (window as any).editor;
-      const { from, to } = state.selection;
-      return state.doc.textBetween(from, to);
-    });
+    const selection = await getSelectionInfo(superdoc.page);
 
-    expect(selection).toBe('inline value');
+    expect(selection.empty).toBe(true);
+    expect(selection.nodeType).toBeNull();
+    expect(selection.parentTypes).toContain('structuredContent');
+    expect(selection.selectedText).toBe('');
 
-    await superdoc.snapshot('inline SDT content selected');
+    await superdoc.snapshot('inline SDT cursor placed');
   });
 
   test('second click inside inline SDT allows cursor placement', async ({ superdoc }) => {

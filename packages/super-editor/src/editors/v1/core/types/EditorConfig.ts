@@ -7,11 +7,32 @@ import type { Mark as EditorMark } from '../Mark.js';
 import type { EditorRenderer } from '../renderers/EditorRenderer.js';
 import type {
   FontsResolvedPayload,
+  FontsChangedPayload,
   Comment,
   CommentsPayload,
   CommentLocationsPayload,
   ListDefinitionsPayload,
 } from './EditorEvents.js';
+import type { FontAssetUrlResolver } from '@superdoc/font-system';
+
+/**
+ * Configuration for SuperDoc's font system. Currently the served location of the bundled
+ * metric-compatible substitute pack; the resolver/registry/gate path is unaffected.
+ */
+export interface FontsConfig {
+  /**
+   * Base URL the bundled font `.woff2` are served from, e.g. `/fonts/` or
+   * `https://cdn.example.com/superdoc-fonts/v1/`. Required for npm/SSR/framework deploys
+   * that serve the assets from a non-root path; the CDN `<script>` build auto-detects a
+   * script-relative `./fonts/` default.
+   */
+  assetBaseUrl?: string;
+  /**
+   * Resolve each bundled asset's URL for signed / versioned / tenant-specific hosting.
+   * Synchronous (font resolution stays deterministic). Takes precedence over `assetBaseUrl`.
+   */
+  resolveAssetUrl?: FontAssetUrlResolver;
+}
 import type { ProseMirrorJSON } from './EditorTypes.js';
 
 /**
@@ -122,6 +143,8 @@ export interface FontConfig {
  * User information for collaboration
  */
 export interface User {
+  /** Stable actor id for authorship and ownership checks. */
+  id?: string | null;
   /** The user's name */
   name?: string;
 
@@ -209,11 +232,18 @@ export interface Awareness {
 /**
  * Collaboration provider interface.
  * Accepts any Yjs-compatible provider (HocuspocusProvider, LiveblocksYjsProvider, TiptapCollabProvider, etc.)
+ *
+ * `on`/`off` use `(event: string, handler: (...args: unknown[]) => void)`
+ * to match the established pattern on `Awareness` above and the internal
+ * `ProviderEventHandler` cast in `helpers/collaboration-provider-sync.ts`.
+ * Consumers narrow `args` before reading; this is a TS-only tightening
+ * (no runtime change) that drains 32 SD-3213 supported-root any[]
+ * findings on EditorConfig.d.ts in a single source edit.
  */
 export interface CollaborationProvider {
   awareness?: Awareness | null;
-  on?(event: any, handler: (...args: any[]) => void): void;
-  off?(event: any, handler: (...args: any[]) => void): void;
+  on?(event: string, handler: (...args: unknown[]) => void): void;
+  off?(event: string, handler: (...args: unknown[]) => void): void;
   disconnect?(): void;
   destroy?(): void;
   /** Whether provider is synced - some use `synced`, others `isSynced` */
@@ -371,6 +401,15 @@ export interface EditorOptions {
   comments?: CommentConfig;
 
   /**
+   * Public SuperDoc module configuration accepted by direct/headless
+   * `Editor.open()` callers. SuperDoc app config normalizes this before it
+   * reaches the editor; CLI/SDK headless callers pass it directly.
+   */
+  modules?: {
+    trackChanges?: EditorOptions['trackedChanges'] | null;
+  };
+
+  /**
    * Track-changes runtime configuration forwarded from the SuperDoc-level
    * `modules.trackChanges` config. Read by the TrackChanges extension and
    * by the SuperConverter during import. Fields are all optional; missing
@@ -431,6 +470,9 @@ export interface EditorOptions {
 
   /** Concrete header/footer surface kind for child editors */
   headerFooterType?: 'header' | 'footer';
+
+  /** OOXML relationship id for this header/footer part (e.g. `rId7`). */
+  headerFooterRefId?: string;
 
   /** Optional pagination metadata */
   lastSelection?: unknown | null;
@@ -523,8 +565,15 @@ export interface EditorOptions {
   /** Called when editor is destroyed */
   onDestroy?: () => void;
 
-  /** Called when there's a content error */
-  onContentError?: (params: { editor: Editor; error: Error }) => void;
+  /**
+   * Called when there's a content error. `error` is `unknown` because
+   * the emit sites do not normalize uniformly: `Editor.ts` wraps caught
+   * values in `Error`, but `insertContentAt` forwards the raw caught
+   * value. `disableCollaboration` is provided by the insertion path so
+   * callers can recover by detaching collaboration; absent on the
+   * Editor.ts emit.
+   */
+  onContentError?: (params: { editor: Editor; error: unknown; disableCollaboration?: () => void }) => void;
 
   /** Called when tracked changes update */
   onTrackedChangesUpdate?: (params: { changes: unknown }) => void;
@@ -562,6 +611,9 @@ export interface EditorOptions {
 
   /** Called when all fonts used in the document are determined */
   onFontsResolved?: ((payload: FontsResolvedPayload) => void) | null;
+
+  /** Called with the authoritative substitution + load-aware font report once it settles and on change. */
+  onFontsChanged?: ((payload: FontsChangedPayload) => void) | null;
 
   /** Handler for image uploads - async (file) => url */
   handleImageUpload?: ((file: File) => Promise<string>) | null;

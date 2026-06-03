@@ -11,8 +11,15 @@
  */
 
 import { Map as YMap } from 'yjs';
-import type { Doc as YDoc, Array as YArray } from 'yjs';
+import type { Doc as YDoc, Array as YArray, YArrayEvent } from 'yjs';
+import { syncCommentEntitiesFromCollaboration } from 'superdoc/super-editor';
 import type { UserIdentity } from './types';
+
+// Editor handle is intentionally typed as `unknown` here — the bridge only
+// forwards it to `syncCommentEntitiesFromCollaboration`, which owns the
+// engine-specific knowledge. Keeping the type opaque preserves the CLI's
+// engine-agnostic boundary.
+type EditorHandle = Parameters<typeof syncCommentEntitiesFromCollaboration>[0];
 
 // ---------------------------------------------------------------------------
 // Yjs write helpers (mirrors collaboration-comments.js)
@@ -144,7 +151,23 @@ export interface HeadlessCommentBridgeResult {
     onCommentsUpdate: (params: Record<string, unknown>) => void;
     onCommentsLoaded: (params: { editor: unknown; comments: unknown[] }) => void;
   };
-  /** Cleanup — clears internal registry */
+  /**
+   * Wire the bridge to an Editor instance once `Editor.open()` resolves.
+   *
+   * Seeds the editor's CommentEntityStore from the current Y.Array contents,
+   * then installs a Y.Array observer that mirrors remote (other-client)
+   * comment additions, updates, and removals into the store. Without this,
+   * `editor.doc.comments.list()` only sees PM-anchor data for browser-
+   * authored comments and the text/creatorName/createdTime fields are empty.
+   *
+   * Origin filter: events whose `transaction.origin.user` matches the bridge
+   * user are skipped — those came from this client's own writes and are
+   * already in the store via the normal `onCommentsUpdate` path.
+   *
+   * Safe to call multiple times; only the most recent editor is observed.
+   */
+  attachEditor(editor: EditorHandle): void;
+  /** Cleanup — clears internal registry and detaches Y.Array observer */
   dispose(): void;
 }
 
@@ -274,6 +297,54 @@ export function buildHeadlessCommentBridge(ydoc: unknown, user?: UserIdentity): 
     );
   }
 
+  // ---- Y.Array → CommentEntityStore observer (SD-3214) ----
+
+  let attachedEditor: EditorHandle | null = null;
+  let yArrayObserver: ((event: YArrayEvent<YMap<unknown>>) => void) | null = null;
+  // Set of commentIds previously synced from Y.Array. The helper uses this
+  // to detect remote deletions and prune them from the store.
+  let previousSyncedIds: ReadonlySet<string> = new Set<string>();
+
+  function syncYArrayToStore(): void {
+    if (!attachedEditor) return;
+    const entries = yArray.toJSON() as Array<Record<string, unknown>>;
+    previousSyncedIds = syncCommentEntitiesFromCollaboration(attachedEditor, entries, {
+      previouslySynced: previousSyncedIds,
+    });
+  }
+
+  function detachYArrayObserver(): void {
+    if (yArrayObserver) {
+      yArray.unobserve(yArrayObserver);
+      yArrayObserver = null;
+    }
+  }
+
+  function attachEditor(editor: EditorHandle): void {
+    detachYArrayObserver();
+    attachedEditor = editor;
+    // Reset the prior-sync set so a re-attach (e.g. document re-open) doesn't
+    // prune entries that are genuinely fresh from this editor's perspective.
+    previousSyncedIds = new Set<string>();
+
+    // Initial seed: pull whatever is already in the room.
+    syncYArrayToStore();
+
+    yArrayObserver = () => {
+      // Re-sync on every Y.Array event, including own-origin writes. For own
+      // writes the store is already coherent (the wrapper's `commentsUpdate`
+      // emit pre-populates it before this observer fires), but the prune
+      // step relies on `previousSyncedIds` knowing every collab-synced id —
+      // including ids we authored ourselves — so a later remote delete of
+      // an agent-authored comment can be detected and cascaded. The sync
+      // is idempotent for entries already present, so iterating over our
+      // own writes is a no-op on store contents and only refreshes the
+      // synced-id bookkeeping.
+      syncYArrayToStore();
+    };
+    yArray.observe(yArrayObserver);
+  }
+
   return {
     editorOptions: {
       isCommentsEnabled: true,
@@ -281,7 +352,11 @@ export function buildHeadlessCommentBridge(ydoc: unknown, user?: UserIdentity): 
       onCommentsUpdate: handleCommentsUpdate,
       onCommentsLoaded: handleCommentsLoaded,
     },
+    attachEditor,
     dispose() {
+      detachYArrayObserver();
+      attachedEditor = null;
+      previousSyncedIds = new Set<string>();
       registry.clear();
     },
   };

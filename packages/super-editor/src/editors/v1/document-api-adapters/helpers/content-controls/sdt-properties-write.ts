@@ -11,7 +11,7 @@
 
 import type { Editor } from '../../../core/Editor.js';
 import type { ContentControlTarget } from '@superdoc/document-api';
-import { resolveSdtByTarget } from './target-resolution.js';
+import { resolveSdtByTarget, SDT_NODE_NAMES } from './target-resolution.js';
 
 // ---------------------------------------------------------------------------
 // XML element helpers for sdtPr.elements
@@ -68,13 +68,64 @@ function removeSdtPrChild(sdtPr: SdtPrElement, childName: string): SdtPrElement 
 // ---------------------------------------------------------------------------
 
 /**
- * Apply an attribute patch to an SDT node via updateStructuredContentById.
- * Returns true if the command executed successfully.
+ * PM node-type names that carry a content-control SDT identity. Imported from
+ * `target-resolution.ts` so the search here resolves the same nodes the
+ * upstream `resolveSdtByTarget` would resolve. `documentSection` and
+ * `documentPartObject` are intentionally not in `SDT_NODE_NAMES` — they have
+ * their own write paths and could otherwise collide on `id` and cause this
+ * loop to find and mutate the wrong node.
+ */
+const SDT_NODE_TYPES = new Set<string>(SDT_NODE_NAMES);
+
+/**
+ * Apply an attribute patch to an SDT node.
+ *
+ * Uses `tr.setNodeAttribute` per key, which emits PM AttrSteps. AttrSteps
+ * have no `from`/`to` range and are explicitly skipped by the structured-
+ * content lock plugin's `filterTransaction`, so this path can mutate
+ * metadata (id, tag, alias, lockMode, controlType, sdtPr, appearance, ...)
+ * on `sdtLocked` and `sdtContentLocked` controls without tripping the
+ * wrapper-damage check.
+ *
+ * The previous implementation delegated to `editor.commands.updateStructuredContentById`,
+ * which dispatches `tr.replaceWith(pos, pos + node.nodeSize, ...)`. That
+ * step's range covered the entire SDT, which the lock plugin read as
+ * wrapper damage and silently filtered for locked controls — producing
+ * false-success mutations.
+ *
+ * Returns true if a matching SDT was found and the transaction dispatched,
+ * false if no SDT matched the given id or the editor cannot dispatch.
  */
 export function applyAttrsUpdate(editor: Editor, nodeId: string, attrsPatch: Record<string, unknown>): boolean {
-  const updateCmd = editor.commands?.updateStructuredContentById;
-  if (typeof updateCmd !== 'function') return false;
-  return Boolean(updateCmd(nodeId, { attrs: attrsPatch }));
+  if (!editor?.state) return false;
+
+  let foundPos: number | null = null;
+  editor.state.doc.descendants((node, pos) => {
+    if (foundPos !== null) return false;
+    if (SDT_NODE_TYPES.has(node.type.name) && String(node.attrs.id) === String(nodeId)) {
+      foundPos = pos;
+      return false;
+    }
+    return true;
+  });
+
+  if (foundPos === null) return false;
+
+  const tr = editor.state.tr;
+  for (const [key, value] of Object.entries(attrsPatch)) {
+    tr.setNodeAttribute(foundPos, key, value);
+  }
+
+  if (tr.steps.length === 0) return true;
+
+  if (editor.view?.dispatch) {
+    editor.view.dispatch(tr);
+  } else if (typeof editor.dispatch === 'function') {
+    editor.dispatch(tr);
+  } else {
+    return false;
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------

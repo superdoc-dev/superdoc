@@ -6,7 +6,9 @@ import type {
   ParagraphMeasure,
   TableCell,
   TableCellMeasure,
+  TableBlock,
   TableMeasure,
+  SdtMetadata,
   ImageBlock,
   DrawingBlock,
   DrawingMeasure,
@@ -33,6 +35,18 @@ describe('renderTableCell', () => {
     const b = Number.parseInt(normalizedHex.slice(5, 7), 16);
     const rgb = `rgb(${r},${g},${b})`;
     expect([normalizedHex, rgb]).toContain(normalizedActual);
+  };
+
+  const getParagraphBorderLayer = (paraWrapper: HTMLElement): HTMLElement => {
+    const layer = paraWrapper.querySelector<HTMLElement>('.superdoc-paragraph-border');
+    expect(layer).toBeTruthy();
+    return layer!;
+  };
+
+  const getParagraphShadingLayer = (paraWrapper: HTMLElement): HTMLElement => {
+    const layer = paraWrapper.querySelector<HTMLElement>('.superdoc-paragraph-shading');
+    expect(layer).toBeTruthy();
+    return layer!;
   };
 
   const paragraphBlock: ParagraphBlock = {
@@ -227,6 +241,111 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.height).toBe('40px');
   });
 
+  it('forces flowing image blocks to block display inside table cells', () => {
+    const imageBlock: ImageBlock = {
+      kind: 'image',
+      id: 'img-inline-display',
+      src: 'data:image/png;base64,AAA',
+      display: 'inline',
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [{ kind: 'image' as const, width: 50, height: 40 }],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-inline-display-image', blocks: [imageBlock], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.style.display).toBe('block');
+  });
+
+  it('applies top-level clipPath to flowing image blocks inside table cells', () => {
+    const imageBlock = {
+      kind: 'image',
+      id: 'img-clipped-flow',
+      src: 'data:image/png;base64,AAA',
+      clipPath: 'inset(10% 20% 30% 40%)',
+    } as ImageBlock;
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [{ kind: 'image' as const, width: 50, height: 40 }],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-clipped-flow', blocks: [imageBlock], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.style.clipPath).toBe('inset(10% 20% 30% 40%)');
+    expect(imgEl?.parentElement?.style.overflow).toBe('hidden');
+  });
+
+  it('applies filter styles to flowing image blocks inside table cells', () => {
+    const imageBlock: ImageBlock = {
+      kind: 'image',
+      id: 'img-filtered-flow',
+      src: 'data:image/png;base64,AAA',
+      grayscale: true,
+      gain: 2,
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [{ kind: 'image' as const, width: 50, height: 40 }],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-filtered-flow', blocks: [imageBlock], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.style.filter).toContain('grayscale(100%)');
+    expect(imgEl?.style.filter).toContain('contrast(2)');
+  });
+
+  it('wraps flowing image blocks with hyperlinks inside table cells', () => {
+    const imageBlock: ImageBlock = {
+      kind: 'image',
+      id: 'img-linked-flow',
+      src: 'data:image/png;base64,AAA',
+      hyperlink: { url: 'https://example.com/image', tooltip: 'Open image' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [{ kind: 'image' as const, width: 50, height: 40 }],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-linked-flow', blocks: [imageBlock], attrs: {} },
+    });
+
+    const anchor = cellElement.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+    expect(anchor).toBeTruthy();
+    expect(anchor?.href).toBe('https://example.com/image');
+    expect(anchor?.querySelector('img.superdoc-table-image')).toBeTruthy();
+  });
+
   it('absolutely positions anchored image blocks inside table cells', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',
@@ -276,6 +395,112 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.position).toBe('absolute');
     expect(imgEl?.parentElement?.style.left).toBe('10px');
     expect(imgEl?.parentElement?.style.top).toBe('5px');
+  });
+
+  it('applies top-level clipPath to anchored image blocks inside table cells', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor-clip',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchoredImage = {
+      kind: 'image',
+      id: 'img-clipped-anchor',
+      src: 'data:image/png;base64,AAA',
+      clipPath: 'inset(5% 10% 15% 20%)',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 10, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor-clip' },
+    } as ImageBlock;
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 30,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-clipped-anchor', blocks: [para, anchoredImage], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.style.clipPath).toBe('inset(5% 10% 15% 20%)');
+    expect(imgEl?.parentElement?.style.overflow).toBe('hidden');
+  });
+
+  it('applies filter styles to anchored image blocks inside table cells', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor-filter',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-filtered-anchor',
+      src: 'data:image/png;base64,AAA',
+      grayscale: true,
+      lum: { bright: 25000, contrast: -50000 },
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 10, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor-filter' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 30,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-filtered-anchor', blocks: [para, anchoredImage], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.style.filter).toContain('grayscale(100%)');
+    expect(imgEl?.style.filter).toContain('contrast(0.5)');
+    expect(imgEl?.style.filter).toContain('brightness(1.25)');
+  });
+
+  it('wraps anchored image blocks with hyperlinks inside table cells', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor-link',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-linked-anchor',
+      src: 'data:image/png;base64,AAA',
+      hyperlink: { url: 'https://example.com/anchored-image' },
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 10, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor-link' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 30,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-linked-anchor', blocks: [para, anchoredImage], attrs: {} },
+    });
+
+    const anchor = cellElement.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
+    expect(anchor).toBeTruthy();
+    expect(anchor?.href).toBe('https://example.com/anchored-image');
+    expect(anchor?.parentElement?.style.position).toBe('absolute');
+    expect(anchor?.querySelector('img.superdoc-table-image')).toBeTruthy();
   });
 
   it('keeps partial-row segment indexing aligned when anchored blocks are between paragraphs', () => {
@@ -1840,21 +2065,21 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Verify borders are applied
-      expect(paraWrapper.style.boxSizing).toBe('border-box');
-      expect(paraWrapper.style.borderTopWidth).toBe('2px');
-      expect(paraWrapper.style.borderTopStyle).toBe('solid');
-      expectCssColor(paraWrapper.style.borderTopColor, '#ff0000');
-      expect(paraWrapper.style.borderBottomWidth).toBe('1px');
-      expect(paraWrapper.style.borderBottomStyle).toBe('dashed');
-      expectCssColor(paraWrapper.style.borderBottomColor, '#0000ff');
-      expect(paraWrapper.style.borderLeftWidth).toBe('3px');
-      expect(paraWrapper.style.borderLeftStyle).toBe('dotted');
-      expectCssColor(paraWrapper.style.borderLeftColor, '#00ff00');
-      expect(paraWrapper.style.borderRightWidth).toBe('1px');
-      expect(paraWrapper.style.borderRightStyle).toBe('solid');
-      expectCssColor(paraWrapper.style.borderRightColor, '#000000');
+      expect(borderLayer.style.boxSizing).toBe('border-box');
+      expect(borderLayer.style.borderTopWidth).toBe('2px');
+      expect(borderLayer.style.borderTopStyle).toBe('solid');
+      expectCssColor(borderLayer.style.borderTopColor, '#ff0000');
+      expect(borderLayer.style.borderBottomWidth).toBe('1px');
+      expect(borderLayer.style.borderBottomStyle).toBe('dashed');
+      expectCssColor(borderLayer.style.borderBottomColor, '#0000ff');
+      expect(borderLayer.style.borderLeftWidth).toBe('3px');
+      expect(borderLayer.style.borderLeftStyle).toBe('dotted');
+      expectCssColor(borderLayer.style.borderLeftColor, '#00ff00');
+      expect(borderLayer.style.borderRightWidth).toBe('1px');
+      expect(borderLayer.style.borderRightStyle).toBe('solid');
+      expectCssColor(borderLayer.style.borderRightColor, '#000000');
     });
 
     it('should apply paragraph shading (background) to paraWrapper', () => {
@@ -1909,9 +2134,9 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const shadingLayer = getParagraphShadingLayer(paraWrapper);
 
-      // Verify shading is applied
-      expectCssColor(paraWrapper.style.backgroundColor, '#ffff00');
+      expectCssColor(shadingLayer.style.backgroundColor, '#ffff00');
     });
 
     it('should apply both borders and shading to the same paragraph', () => {
@@ -1970,11 +2195,12 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
+      const shadingLayer = getParagraphShadingLayer(paraWrapper);
 
-      // Verify both borders and shading are applied
-      expect(paraWrapper.style.borderTopWidth).toBe('1px');
-      expect(paraWrapper.style.borderBottomWidth).toBe('1px');
-      expectCssColor(paraWrapper.style.backgroundColor, '#e0e0e0');
+      expect(borderLayer.style.borderTopWidth).toBe('1px');
+      expect(borderLayer.style.borderBottomWidth).toBe('1px');
+      expectCssColor(shadingLayer.style.backgroundColor, '#e0e0e0');
     });
 
     it('should handle multiple paragraphs with different borders in same cell', () => {
@@ -2043,14 +2269,16 @@ describe('renderTableCell', () => {
 
       // First paragraph has bottom border
       const wrapper1 = paraWrappers[0] as HTMLElement;
-      expect(wrapper1.style.borderBottomWidth).toBe('2px');
-      expectCssColor(wrapper1.style.borderBottomColor, '#ff0000');
+      const borderLayer1 = getParagraphBorderLayer(wrapper1);
+      expect(borderLayer1.style.borderBottomWidth).toBe('2px');
+      expectCssColor(borderLayer1.style.borderBottomColor, '#ff0000');
 
       // Second paragraph has top border
       const wrapper2 = paraWrappers[1] as HTMLElement;
-      expect(wrapper2.style.borderTopWidth).toBe('1px');
-      expect(wrapper2.style.borderTopStyle).toBe('dashed');
-      expectCssColor(wrapper2.style.borderTopColor, '#0000ff');
+      const borderLayer2 = getParagraphBorderLayer(wrapper2);
+      expect(borderLayer2.style.borderTopWidth).toBe('1px');
+      expect(borderLayer2.style.borderTopStyle).toBe('dashed');
+      expectCssColor(borderLayer2.style.borderTopColor, '#0000ff');
     });
 
     it('should not apply borders when paragraph has no borders attribute', () => {
@@ -2161,10 +2389,10 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Border style 'none' should result in no visible border
-      expect(paraWrapper.style.borderTopStyle).toBe('none');
-      expect(paraWrapper.style.borderTopWidth).toBe('0px');
+      expect(borderLayer.style.borderTopStyle).toBe('none');
+      expect(borderLayer.style.borderTopWidth).toBe('0px');
     });
 
     it('should handle zero width borders (width: 0)', () => {
@@ -2219,11 +2447,11 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Zero width should render as '0px'
-      expect(paraWrapper.style.borderTopWidth).toBe('0px');
-      expect(paraWrapper.style.borderTopStyle).toBe('solid');
-      expectCssColor(paraWrapper.style.borderTopColor, '#ff0000');
+      expect(borderLayer.style.borderTopWidth).toBe('0px');
+      expect(borderLayer.style.borderTopStyle).toBe('solid');
+      expectCssColor(borderLayer.style.borderTopColor, '#ff0000');
     });
 
     it('should clamp negative width borders to 0px', () => {
@@ -2278,11 +2506,11 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Negative width should be clamped to '0px'
-      expect(paraWrapper.style.borderLeftWidth).toBe('0px');
-      expect(paraWrapper.style.borderLeftStyle).toBe('solid');
-      expectCssColor(paraWrapper.style.borderLeftColor, '#0000ff');
+      expect(borderLayer.style.borderLeftWidth).toBe('0px');
+      expect(borderLayer.style.borderLeftStyle).toBe('solid');
+      expectCssColor(borderLayer.style.borderLeftColor, '#0000ff');
     });
 
     it('should default to 1px when width is undefined', () => {
@@ -2337,11 +2565,11 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Undefined width should default to '1px'
-      expect(paraWrapper.style.borderBottomWidth).toBe('1px');
-      expect(paraWrapper.style.borderBottomStyle).toBe('dashed');
-      expectCssColor(paraWrapper.style.borderBottomColor, '#00ff00');
+      expect(borderLayer.style.borderBottomWidth).toBe('1px');
+      expect(borderLayer.style.borderBottomStyle).toBe('dashed');
+      expectCssColor(borderLayer.style.borderBottomColor, '#00ff00');
     });
 
     it('should only apply border to specified sides (e.g., only top)', () => {
@@ -2396,16 +2624,16 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Only top border should be set
-      expect(paraWrapper.style.borderTopWidth).toBe('3px');
-      expect(paraWrapper.style.borderTopStyle).toBe('solid');
-      expectCssColor(paraWrapper.style.borderTopColor, '#ff00ff');
+      expect(borderLayer.style.borderTopWidth).toBe('3px');
+      expect(borderLayer.style.borderTopStyle).toBe('solid');
+      expectCssColor(borderLayer.style.borderTopColor, '#ff00ff');
 
       // Left, right, and bottom borders should remain unset
-      expect(paraWrapper.style.borderLeftWidth).toBe('');
-      expect(paraWrapper.style.borderRightWidth).toBe('');
-      expect(paraWrapper.style.borderBottomWidth).toBe('');
+      expect(borderLayer.style.borderLeftWidth).toBe('');
+      expect(borderLayer.style.borderRightWidth).toBe('');
+      expect(borderLayer.style.borderBottomWidth).toBe('');
     });
 
     it('should handle empty shading object (shading: {})', () => {
@@ -3677,12 +3905,18 @@ describe('renderTableCell', () => {
       expect(cellElement.style.overflow).toBe('hidden');
     });
 
-    it('should not apply SDT container styling when block SDT matches tableSdt', () => {
-      const tableSdt = {
+    it('should not apply SDT container styling when block SDT key matches ancestor table SDT key', () => {
+      const tableSdt: SdtMetadata = {
         type: 'structuredContent' as const,
         scope: 'block' as const,
         id: 'table-sdt',
         alias: 'Table Container',
+      };
+      const blockSdt: SdtMetadata = {
+        type: 'structuredContent' as const,
+        scope: 'block' as const,
+        id: 'table-sdt',
+        alias: 'Cell Container',
       };
 
       const para: ParagraphBlock = {
@@ -3690,7 +3924,7 @@ describe('renderTableCell', () => {
         id: 'para-same-sdt',
         runs: [{ text: 'Content in table SDT', fontFamily: 'Arial', fontSize: 16 }],
         attrs: {
-          sdt: tableSdt, // Same reference as tableSdt
+          sdt: blockSdt,
         },
       };
 
@@ -3730,12 +3964,64 @@ describe('renderTableCell', () => {
         ...createBaseDeps(),
         cellMeasure,
         cell,
-        tableSdt, // Pass the same SDT as the table level
+        ancestorContainerKey: 'structuredContent:table-sdt',
       });
 
-      // Cell should keep overflow:hidden because block SDT matches tableSdt
-      // (no duplicate container styling needed)
       expect(cellElement.style.overflow).toBe('hidden');
+      expect(cellElement.querySelector('.superdoc-structured-content-block')).toBeFalsy();
+    });
+
+    it('should not apply SDT container styling when id-less block SDT matches ancestor table SDT metadata', () => {
+      const sharedSdt: SdtMetadata = {
+        type: 'structuredContent' as const,
+        scope: 'block' as const,
+        alias: 'Table Container',
+      };
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-same-idless-sdt',
+        runs: [{ text: 'Content in id-less table SDT', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {
+          sdt: sharedSdt,
+        },
+      };
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 28,
+            width: 100,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [measure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-table-idless-sdt',
+          blocks: [para],
+          attrs: {},
+        },
+        ancestorContainerSdt: sharedSdt,
+      });
+
+      expect(cellElement.style.overflow).toBe('hidden');
+      expect(cellElement.querySelector('.superdoc-structured-content-block')).toBeFalsy();
     });
 
     it('should keep overflow:hidden for inline scope structuredContent (not a block container)', () => {
@@ -3793,6 +4079,1235 @@ describe('renderTableCell', () => {
 
       // Inline SDTs don't get container styling, so overflow stays hidden
       expect(cellElement.style.overflow).toBe('hidden');
+      expect(cellElement.querySelector('.superdoc-structured-content-block')).toBeFalsy();
+      expect(cellElement.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
+    it('should set overflow:visible and render chrome when cell contains nested table SDT', () => {
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-sdt-table',
+        attrs: {
+          sdt: {
+            type: 'structuredContent',
+            scope: 'block',
+            id: 'nested-table-sdt',
+            alias: 'Nested Table',
+          },
+        },
+        rows: [
+          {
+            id: 'nested-row',
+            cells: [
+              {
+                id: 'nested-cell',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+      const cellMeasure: TableCellMeasure = {
+        blocks: [nestedMeasure],
+        width: 120,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+      const cell: TableCell = {
+        id: 'cell-nested-table-sdt',
+        blocks: [nestedTable],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      expect(cellElement.style.overflow).toBe('visible');
+      const tableChrome = cellElement.querySelector('[data-block-id="nested-sdt-table"]') as HTMLElement;
+      expect(tableChrome?.classList.contains('superdoc-structured-content-block')).toBe(true);
+      expect(tableChrome?.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Nested Table');
+    });
+
+    it('omits the nested table SDT label but keeps the wrapper when chrome is none', () => {
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-sdt-para-none',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-sdt-table-none',
+        attrs: {
+          sdt: {
+            type: 'structuredContent',
+            scope: 'block',
+            id: 'nested-table-sdt-none',
+            alias: 'Nested Table',
+          },
+        },
+        rows: [
+          {
+            id: 'nested-row-none',
+            cells: [
+              {
+                id: 'nested-cell-none',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+      const cellMeasure: TableCellMeasure = {
+        blocks: [nestedMeasure],
+        width: 120,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+      const cell: TableCell = {
+        id: 'cell-nested-table-sdt-none',
+        blocks: [nestedTable],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+        chrome: 'none',
+      });
+
+      const tableChrome = cellElement.querySelector('[data-block-id="nested-sdt-table-none"]') as HTMLElement;
+      // Wrapper survives so host/custom UI and the geometry APIs still resolve it...
+      expect(tableChrome?.classList.contains('superdoc-structured-content-block')).toBe(true);
+      // ...but the built-in label is not emitted under chrome: 'none'.
+      expect(tableChrome?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
+    it('should set overflow:visible when only rendered nested descendants have SDT chrome', () => {
+      const descendantSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'nested-descendant-sdt',
+        alias: 'Nested Descendant',
+      };
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-descendant-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: descendantSdt },
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-table-with-descendant-sdt',
+        rows: [
+          {
+            id: 'nested-descendant-row',
+            cells: [
+              {
+                id: 'nested-descendant-cell',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-nested-descendant-sdt',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+      });
+
+      expect(cellElement.style.overflow).toBe('visible');
+      expect(cellElement.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Nested Descendant');
+    });
+
+    it('should not apply nested table chrome when its SDT key matches the ancestor table SDT key', () => {
+      const sharedSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'ancestor-table-sdt',
+        alias: 'Ancestor Table',
+      };
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-ancestor-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-ancestor-sdt-table',
+        attrs: { sdt: sharedSdt },
+        rows: [
+          {
+            id: 'nested-ancestor-row',
+            cells: [
+              {
+                id: 'nested-ancestor-cell',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-nested-ancestor-sdt-table',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+        ancestorContainerKey: 'structuredContent:ancestor-table-sdt',
+        ancestorContainerSdt: sharedSdt,
+      });
+
+      const tableElement = cellElement.querySelector('[data-block-id="nested-ancestor-sdt-table"]') as HTMLElement;
+      expect(cellElement.style.overflow).toBe('hidden');
+      expect(tableElement?.classList.contains('superdoc-structured-content-block')).toBe(false);
+      expect(tableElement?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
+    it('should preserve ancestor SDT suppression for paragraphs inside nested tables without table SDT', () => {
+      const sharedSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'outer-table-sdt',
+        alias: 'Outer Table',
+      };
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-inherited-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: sharedSdt },
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-table-with-inherited-sdt-child',
+        rows: [
+          {
+            id: 'nested-inherited-row',
+            cells: [
+              {
+                id: 'nested-inherited-cell',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-nested-table-inherited-sdt-child',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+        ancestorContainerKey: 'structuredContent:outer-table-sdt',
+        ancestorContainerSdt: sharedSdt,
+      });
+
+      expect(cellElement.querySelector('.superdoc-structured-content-block')).toBeFalsy();
+      expect(cellElement.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
+    it('should allow overflow when a suppressed nested table contains distinct descendant SDT chrome', () => {
+      const ancestorSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'outer-table-sdt',
+        alias: 'Outer Table',
+      };
+      const descendantSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'descendant-sdt',
+        alias: 'Descendant',
+      };
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-distinct-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: descendantSdt },
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-suppressed-table-with-distinct-child',
+        attrs: { sdt: ancestorSdt },
+        rows: [
+          {
+            id: 'nested-distinct-row',
+            cells: [
+              {
+                id: 'nested-distinct-cell',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-nested-distinct-sdt-child',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+        ancestorContainerKey: 'structuredContent:outer-table-sdt',
+        ancestorContainerSdt: ancestorSdt,
+      });
+
+      expect(cellElement.style.overflow).toBe('visible');
+      expect(cellElement.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Descendant');
+    });
+
+    it('should preserve outer ancestor suppression when a nested table has distinct SDT chrome', () => {
+      const ancestorSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'outer-table-sdt',
+        alias: 'Outer Table',
+      };
+      const nestedTableSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'nested-table-sdt',
+        alias: 'Nested Table',
+      };
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-inherited-outer-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { containerSdt: ancestorSdt },
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-distinct-table-with-outer-child',
+        attrs: { sdt: nestedTableSdt },
+        rows: [
+          {
+            id: 'nested-outer-child-row',
+            cells: [{ id: 'nested-outer-child-cell', blocks: [nestedParagraph], attrs: {} }],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-nested-distinct-table-with-outer-child',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+        ancestorContainerKey: 'structuredContent:outer-table-sdt',
+        ancestorContainerSdt: ancestorSdt,
+      });
+
+      const labels = cellElement.querySelectorAll<HTMLElement>('.superdoc-structured-content__label');
+      expect(labels).toHaveLength(1);
+      expect(labels[0]?.textContent).toBe('Nested Table');
+    });
+
+    it('should keep overflow hidden when top-level SDT chrome is outside the rendered cell range', () => {
+      const hiddenSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'hidden-top-level-sdt',
+        alias: 'Hidden',
+      };
+      const firstParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'visible-top-level-para',
+        runs: [{ text: 'Visible', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const secondParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'hidden-top-level-sdt-para',
+        runs: [{ text: 'Hidden', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: hiddenSdt },
+      };
+      const paragraphMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 7,
+            width: 60,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+      let chromeNotifications = 0;
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [paragraphMeasure, paragraphMeasure],
+          width: 120,
+          height: 20,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-partial-top-level-hidden-sdt',
+          blocks: [firstParagraph, secondParagraph],
+          attrs: {},
+        },
+        fromLine: 0,
+        toLine: 1,
+        onSdtContainerChrome: () => {
+          chromeNotifications += 1;
+        },
+      });
+
+      expect(cellElement.style.overflow).toBe('hidden');
+      expect(cellElement.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+      expect(chromeNotifications).toBe(0);
+    });
+
+    it('should keep overflow hidden when descendant SDT chrome is outside the rendered nested table range', () => {
+      const descendantSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'unrendered-descendant-sdt',
+        alias: 'Unrendered',
+      };
+      const firstParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'visible-nested-para',
+        runs: [{ text: 'Visible', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const secondParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'unrendered-nested-sdt-para',
+        runs: [{ text: 'Hidden', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: descendantSdt },
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'partial-nested-table-with-unrendered-sdt',
+        rows: [
+          {
+            id: 'visible-nested-row',
+            cells: [{ id: 'visible-nested-cell', blocks: [firstParagraph], attrs: {} }],
+          },
+          {
+            id: 'unrendered-nested-row',
+            cells: [{ id: 'unrendered-nested-cell', blocks: [secondParagraph], attrs: {} }],
+          },
+        ],
+      };
+      const paragraphMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 7,
+            width: 60,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 20,
+            cells: [
+              {
+                width: 80,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [paragraphMeasure],
+              },
+            ],
+          },
+          {
+            height: 20,
+            cells: [
+              {
+                width: 80,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [paragraphMeasure],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 40,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 20,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-partial-nested-unrendered-sdt',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+        fromLine: 0,
+        toLine: 1,
+      });
+
+      expect(cellElement.style.overflow).toBe('hidden');
+      expect(cellElement.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
+    it('should continue SDT boundaries across adjacent paragraph and nested table blocks', () => {
+      const sharedSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'shared-block-sdt',
+        alias: 'Shared Block',
+      };
+      const paragraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'sdt-paragraph-before-table',
+        runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: sharedSdt },
+      };
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-shared-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-shared-sdt-table',
+        attrs: { sdt: sharedSdt },
+        rows: [
+          {
+            id: 'nested-shared-row',
+            cells: [
+              {
+                id: 'nested-shared-cell',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const paragraphMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 6,
+            width: 60,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [paragraphMeasure, nestedMeasure],
+          width: 120,
+          height: 44,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-shared-sdt-paragraph-table',
+          blocks: [paragraph, nestedTable],
+          attrs: {},
+        },
+      });
+
+      const chromeElements = cellElement.querySelectorAll<HTMLElement>('.superdoc-structured-content-block');
+      const paragraphChrome = chromeElements[0];
+      const tableChrome = cellElement.querySelector('[data-block-id="nested-shared-sdt-table"]') as HTMLElement;
+      expect(chromeElements).toHaveLength(2);
+      expect(paragraphChrome?.dataset.sdtContainerStart).toBe('true');
+      expect(paragraphChrome?.dataset.sdtContainerEnd).toBe('false');
+      expect(tableChrome?.dataset.sdtContainerStart).toBe('false');
+      expect(tableChrome?.dataset.sdtContainerEnd).toBe('true');
+      expect(tableChrome?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
+    it('should not let media-only blocks consume SDT container start boundaries', () => {
+      const sharedSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'media-before-paragraph-sdt',
+        alias: 'Media Container',
+      };
+      const imageBlock: ImageBlock = {
+        kind: 'image',
+        id: 'sdt-image-before-paragraph',
+        src: 'data:image/png;base64,AAA',
+        attrs: { sdt: sharedSdt },
+      };
+      const paragraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'sdt-paragraph-after-image',
+        runs: [{ text: 'After image', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: sharedSdt },
+      };
+      const imageMeasure = {
+        kind: 'image' as const,
+        width: 40,
+        height: 20,
+      };
+      const paragraphMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 11,
+            width: 70,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [imageMeasure, paragraphMeasure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-media-before-sdt-paragraph',
+          blocks: [imageBlock, paragraph],
+          attrs: {},
+        },
+      });
+
+      const paragraphChrome = cellElement.querySelector<HTMLElement>('.superdoc-structured-content-block');
+      expect(paragraphChrome?.dataset.sdtContainerStart).toBe('true');
+      expect(paragraphChrome?.dataset.sdtContainerEnd).toBe('true');
+      expect(paragraphChrome?.querySelector('.superdoc-structured-content__label')?.textContent).toBe(
+        'Media Container',
+      );
+    });
+
+    it('should continue SDT paragraph boundaries across split table-cell fragments', () => {
+      const paragraphSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'split-paragraph-sdt',
+        alias: 'Split Paragraph',
+      };
+      const paragraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'split-sdt-paragraph',
+        runs: [{ text: 'Split paragraph', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: paragraphSdt },
+      };
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 5,
+            width: 60,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 0,
+            fromChar: 6,
+            toRun: 0,
+            toChar: 15,
+            width: 80,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 40,
+      };
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 120,
+        height: 20,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+      const cell: TableCell = {
+        id: 'cell-split-sdt-paragraph',
+        blocks: [paragraph],
+        attrs: {},
+      };
+
+      const firstFragment = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+        fromLine: 0,
+        toLine: 1,
+      }).cellElement.querySelector<HTMLElement>('.superdoc-structured-content-block');
+      const continuationFragment = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+        fromLine: 1,
+        toLine: 2,
+      }).cellElement.querySelector<HTMLElement>('.superdoc-structured-content-block');
+
+      expect(firstFragment?.dataset.sdtContainerStart).toBe('true');
+      expect(firstFragment?.dataset.sdtContainerEnd).toBe('false');
+      expect(firstFragment?.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Split Paragraph');
+      expect(continuationFragment?.dataset.sdtContainerStart).toBe('false');
+      expect(continuationFragment?.dataset.sdtContainerEnd).toBe('true');
+      expect(continuationFragment?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
+    it('should continue SDT boundaries across partial nested table renders', () => {
+      const nestedTableSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'partial-nested-table-sdt',
+        alias: 'Partial Nested Table',
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'partial-nested-table',
+        attrs: { sdt: nestedTableSdt },
+        rows: [
+          {
+            id: 'partial-nested-row-1',
+            cells: [
+              {
+                id: 'partial-nested-cell-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'partial-nested-para-1',
+                    runs: [{ text: 'One', fontFamily: 'Arial', fontSize: 16 }],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            id: 'partial-nested-row-2',
+            cells: [
+              {
+                id: 'partial-nested-cell-2',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'partial-nested-para-2',
+                    runs: [{ text: 'Two', fontFamily: 'Arial', fontSize: 16 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 20,
+            cells: [
+              {
+                width: 80,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 3,
+                        width: 30,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            height: 20,
+            cells: [
+              {
+                width: 80,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 3,
+                        width: 30,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 40,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 20,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-partial-nested-table-sdt',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+        fromLine: 1,
+        toLine: 2,
+      });
+
+      const tableChrome = cellElement.querySelector('[data-block-id="partial-nested-table"]') as HTMLElement;
+      expect(tableChrome?.dataset.sdtContainerStart).toBe('false');
+      expect(tableChrome?.dataset.sdtContainerEnd).toBe('true');
+      expect(tableChrome?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
     });
   });
 });

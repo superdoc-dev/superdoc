@@ -132,6 +132,45 @@ describe('TrackedChangeIndex — per-story cache', () => {
     });
   });
 
+  it('preserves overlap metadata on snapshots', () => {
+    const editor = makeEditor();
+    mocks.groupTrackedChanges.mockReturnValueOnce([
+      {
+        ...makeGroupedChange('parent-insert', 0, 5),
+        overlap: {
+          visualLayers: [
+            { id: 'stale-parent-id', rawId: 'parent-insert', type: 'insert', relationship: 'parent' },
+            { id: 'stale-child-id', rawId: 'child-delete', type: 'delete', relationship: 'child' },
+          ],
+          preferredContextTargetId: 'stale-child-id',
+          preferredContextTarget: {
+            id: 'stale-child-id',
+            rawId: 'child-delete',
+            type: 'delete',
+            relationship: 'child',
+          },
+        },
+      },
+      {
+        ...makeGroupedChange('child-delete', 1, 4),
+        hasInsert: false,
+        hasDelete: true,
+      },
+    ]);
+
+    const index = getTrackedChangeIndex(editor);
+    const snapshots = index.get({ kind: 'story', storyType: 'body' });
+
+    expect(snapshots[0]?.overlap).toEqual({
+      visualLayers: [
+        { id: 'canon-parent-insert', type: 'insert', relationship: 'parent' },
+        { id: 'canon-child-delete', type: 'delete', relationship: 'child' },
+      ],
+      preferredContextTargetId: 'canon-child-delete',
+      preferredContextTarget: { id: 'canon-child-delete', type: 'delete', relationship: 'child' },
+    });
+  });
+
   it('returns story-scoped anchor keys for footnote stories', () => {
     const editor = makeEditor();
     mocks.enumerateRevisionCapableStories.mockReturnValue([
@@ -292,5 +331,34 @@ describe('TrackedChangeIndex — broadcast', () => {
     index.invalidate({ kind: 'story', storyType: 'body' });
     await Promise.resolve();
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  // Phase 005 — v1-3220 collaboration requirement: remote (Yjs-origin)
+  // transactions still produce a `transaction` event with `docChanged: true`
+  // because the synced ProseMirror plugin applies steps locally. The
+  // tracked-change-index must broadcast `tracked-changes-changed` for those
+  // remote-origin transactions so bubble / sidebar / extract consumers see
+  // newly merged tracked marks without an extra local edit.
+  it('broadcasts after remote (Yjs-origin) transactions that change the doc', async () => {
+    const editor = makeEditor();
+    const index = getTrackedChangeIndex(editor);
+
+    // Simulate a remote Yjs update that mutated the document. The index does
+    // not inspect tr.meta(ySyncPluginKey) — it only requires docChanged so
+    // that remote applies trigger the same refresh path local edits use.
+    editor._emit('transaction', { transaction: { docChanged: true } });
+
+    await Promise.resolve();
+
+    expect(editor.emit).toHaveBeenCalledTimes(1);
+    expect(editor.emit).toHaveBeenCalledWith(
+      'tracked-changes-changed',
+      expect.objectContaining({
+        editor,
+        source: 'body-edit',
+        stories: expect.arrayContaining([{ kind: 'story', storyType: 'body' }]),
+      }),
+    );
+    void index;
   });
 });

@@ -3,6 +3,25 @@ import type { PresentationEditor } from '../editors/v1/core/presentation-editor/
 import type { DocumentApi } from '@superdoc/document-api';
 
 /**
+ * Event names the headless toolbar host subscribes to. Narrow union
+ * so a real `SuperDoc` instance (with the SD-3213 closed
+ * `SuperDocEventMap`-typed `on`) satisfies the structural host
+ * contract. Custom host stubs typed with a wider
+ * `on?: (event: string, ...) => void` are still assignable.
+ *
+ * Split from the UI controller's narrower
+ * `SuperDocUIHostEvent` (`ui/types.ts`, 3 events) because the toolbar
+ * additionally subscribes to `formatting-marks-change`; requiring the
+ * UI controller's `SuperDocLike` stub to accept that 4th event would
+ * be wider than the UI side actually consumes.
+ */
+export type HeadlessToolbarSuperdocHostEvent =
+  | 'editorCreate'
+  | 'document-mode-change'
+  | 'formatting-marks-change'
+  | 'zoomChange';
+
+/**
  * The editable surface that currently owns the toolbar context.
  *
  * `note` and `endnote` were added in Phase 2 of the unified-history rollout
@@ -39,6 +58,8 @@ export const BUILT_IN_COMMAND_IDS = [
   'numbered-list',
   'indent-increase',
   'indent-decrease',
+  'direction-ltr',
+  'direction-rtl',
   'undo',
   'redo',
   'ruler',
@@ -50,6 +71,7 @@ export const BUILT_IN_COMMAND_IDS = [
   'track-changes-accept-selection',
   'track-changes-reject-selection',
   'image',
+  'table-of-contents-insert',
   'table-insert',
   'table-add-row-before',
   'table-add-row-after',
@@ -87,6 +109,11 @@ export type ToolbarPayloadMap = {
   'numbered-list': never;
   'indent-increase': never;
   'indent-decrease': never;
+  // Direction + alignmentPolicy are baked into createParagraphDirectionExecute
+  // (see headless-toolbar/helpers/paragraph.ts). Headless callers can't
+  // override either — payload is `never` so TS catches misuse at the call site.
+  'direction-ltr': never;
+  'direction-rtl': never;
   undo: never;
   redo: never;
   ruler: never;
@@ -98,6 +125,7 @@ export type ToolbarPayloadMap = {
   'track-changes-accept-selection': never;
   'track-changes-reject-selection': never;
   image: never;
+  'table-of-contents-insert': never;
   'table-insert': { rows: number; cols: number };
   'table-add-row-before': never;
   'table-add-row-after': never;
@@ -133,6 +161,8 @@ export type ToolbarValueMap = {
   'numbered-list': undefined;
   'indent-increase': undefined;
   'indent-decrease': undefined;
+  'direction-ltr': 'ltr' | 'rtl';
+  'direction-rtl': 'ltr' | 'rtl';
   undo: undefined;
   redo: undefined;
   ruler: undefined;
@@ -144,6 +174,7 @@ export type ToolbarValueMap = {
   'track-changes-accept-selection': undefined;
   'track-changes-reject-selection': undefined;
   image: undefined;
+  'table-of-contents-insert': undefined;
   'table-insert': undefined;
   'table-add-row-before': undefined;
   'table-add-row-after': undefined;
@@ -165,8 +196,18 @@ export type ToolbarCommandState = {
 };
 
 // Minimal execution surface for headless toolbar consumers.
+//
+// `commands` is the heterogeneous registry of editor commands documented
+// as an escape hatch for direct access when `execute()` doesn't cover
+// the use case (see headless-toolbar/README.md and apps/docs/advanced/
+// headless-toolbar.mdx). Each command has its own arg shape, so the
+// index-signature value is `(...args: unknown[]) => unknown` instead
+// of the previous `any[] => any`. This mirrors the established
+// `AnyCommand` pattern used by `EditorCommands` (ChainedCommands.ts:31)
+// and drains 3 SD-3213 supported-root any-leak findings. Consumers
+// narrow at the call site for the specific command they're invoking.
 export type ToolbarTarget = {
-  commands: Record<string, (...args: any[]) => any>;
+  commands: Record<string, (...args: unknown[]) => unknown>;
   doc?: DocumentApi;
 };
 
@@ -235,7 +276,12 @@ export type HeadlessToolbarController = {
  */
 export type ToolbarExecuteFn = (id: PublicToolbarItemId, payload?: unknown) => boolean;
 
-export type HeadlessToolbarSuperdocHost = {
+/**
+ * Common fields shared by every accepted `createHeadlessToolbar` host
+ * shape. Pulled out so the two host branches below stay aligned without
+ * duplication.
+ */
+type HeadlessToolbarSuperdocHostBase = {
   activeEditor?: Editor | null;
   config?: {
     layoutEngineOptions?: {
@@ -243,8 +289,39 @@ export type HeadlessToolbarSuperdocHost = {
     };
   };
   toggleFormattingMarks?: () => void;
-  on?: (event: string, listener: (...args: any[]) => void) => void;
-  off?: (event: string, listener: (...args: any[]) => void) => void;
+  // The toolbar only subscribes to these SuperDoc events; keeping the
+  // host event names narrow lets strict event maps satisfy this
+  // structural host contract. See `HeadlessToolbarSuperdocHostEvent` above.
+  on?: (event: HeadlessToolbarSuperdocHostEvent, listener: (...args: any[]) => void) => void;
+  off?: (event: HeadlessToolbarSuperdocHostEvent, listener: (...args: any[]) => void) => void;
+};
+
+/**
+ * Narrow host shape introduced in SD-3213f. `SuperDoc` instances satisfy
+ * this branch directly: the two narrow methods replace the raw-store
+ * reach that `resolveToolbarSources` and `track-changes.ts` used before.
+ */
+type HeadlessToolbarSuperdocHostNarrow = HeadlessToolbarSuperdocHostBase & {
+  getPresentationEditorForDocument?: (documentId: string) => PresentationEditor | null;
+  getComment?: (commentId: string) => Record<string, unknown> | null;
+};
+
+/**
+ * Legacy host shape kept for pre-SD-3213f typed custom host stubs that
+ * pass `superdocStore.documents[]` directly. The runtime still accepts
+ * this path; the type is retained so inline object-literal custom hosts
+ * compile without `any` casts.
+ *
+ * `commentsStore` was never advertised on this type pre-SD-3213f, so it
+ * is intentionally not added here even though `track-changes.ts`
+ * accepts the field at runtime. Adding it now would be public-surface
+ * growth, not backward-compat.
+ *
+ * @deprecated Prefer the narrow host methods on
+ *   `HeadlessToolbarSuperdocHostNarrow` (SD-3213f). Will be removed in
+ *   a future major after custom host stubs adopt the narrow methods.
+ */
+type HeadlessToolbarSuperdocHostLegacy = HeadlessToolbarSuperdocHostBase & {
   superdocStore?: {
     documents?: Array<{
       getPresentationEditor?: () => PresentationEditor | null | undefined;
@@ -252,6 +329,14 @@ export type HeadlessToolbarSuperdocHost = {
     }>;
   };
 };
+
+/**
+ * Host accepted by `createHeadlessToolbar({ superdoc })`. Union of the
+ * narrow SD-3213f shape (preferred; SuperDoc satisfies it) and the
+ * legacy `superdocStore` shape (deprecated; kept so inline custom host
+ * stubs from before SD-3213f keep compiling without `any` casts).
+ */
+export type HeadlessToolbarSuperdocHost = HeadlessToolbarSuperdocHostNarrow | HeadlessToolbarSuperdocHostLegacy;
 
 export type CreateHeadlessToolbarOptions = {
   superdoc: HeadlessToolbarSuperdocHost;

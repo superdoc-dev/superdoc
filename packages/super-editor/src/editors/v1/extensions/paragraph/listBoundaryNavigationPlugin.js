@@ -1,4 +1,5 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
+import { getParagraphInlineDirection } from '@superdoc/contracts';
 
 function isListParagraph(node) {
   return (
@@ -9,11 +10,7 @@ function isListParagraph(node) {
 }
 
 function isRtlParagraph(node) {
-  return (
-    node?.attrs?.paragraphProperties?.rightToLeft === true ||
-    node?.attrs?.direction === 'rtl' ||
-    node?.attrs?.rtl === true
-  );
+  return getParagraphInlineDirection(node?.attrs) === 'rtl';
 }
 
 function getParagraphContext($pos) {
@@ -92,12 +89,12 @@ export function createListBoundaryNavigationPlugin() {
 
         const paragraph = getParagraphContext(selection.$from);
         if (!paragraph || !isListParagraph(paragraph.node)) return false;
-        if (isRtlParagraph(paragraph.node)) return false;
 
         const bounds = getParagraphTextBounds(paragraph.node, paragraph.start);
         if (!bounds) return false;
 
-        const direction = event.key === 'ArrowLeft' ? -1 : 1;
+        const isRtl = isRtlParagraph(paragraph.node);
+        const direction = isRtl ? (event.key === 'ArrowRight' ? -1 : 1) : event.key === 'ArrowLeft' ? -1 : 1;
         const atLeftBoundary = direction < 0 && selection.from <= bounds.first;
         const atRightBoundary = direction > 0 && selection.from >= bounds.last;
         if (!atLeftBoundary && !atRightBoundary) return false;

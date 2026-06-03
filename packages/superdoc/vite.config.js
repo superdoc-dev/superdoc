@@ -9,6 +9,8 @@ import { fileURLToPath, URL } from 'node:url';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { visualizer } from 'rollup-plugin-visualizer';
 import vue from '@vitejs/plugin-vue'
+import layeredCssPlugin from './vite-plugin-layered-css.mjs';
+import bundledFontsPlugin from './vite-plugin-bundled-fonts.mjs';
 
 import { version } from './package.json';
 import sourceResolve from '../../vite.sourceResolve';
@@ -118,6 +120,8 @@ export default defineConfig(({ mode, command }) => {
   const skipDts = process.env.SUPERDOC_SKIP_DTS === '1';
   const plugins = [
     vue(),
+    layeredCssPlugin(),
+    bundledFontsPlugin(),
     !skipDts && dts({
       // Foundational sources (superdoc, super-editor, document-api) are
       // always included; relocation patterns come from the canonical
@@ -237,6 +241,46 @@ export default defineConfig(({ mode, command }) => {
           'super-editor/docx-zipper': '@core/DocxZipper',
           'super-editor/converter': '@core/super-converter/SuperConverter',
           'super-editor/file-zipper': '@core/super-converter/zipper.js',
+          // SD-3178 (Phase 3 of SD-3175): explicit public facade entries.
+          // Build emits the artifacts alongside the existing entries so the
+          // facade declarations are available for postbuild verification.
+          // AIDEV-NOTE: `package.json#exports` is intentionally not yet
+          // updated to point at these entries. Phase 4 (a separate child
+          // of SD-3175) owns the contract switch. Adding `./public` or
+          // `./public/...` entries here without that ticket ships new
+          // public subpaths under the radar.
+          'public': 'src/public/index.ts',
+          // SD-3179: legacy headless-toolbar facade entry. Classified as
+          // legacy public compatibility surface in
+          // `docs/architecture/package-boundaries.md` Decision 4. New
+          // custom UI integrations should use the `superdoc/ui` /
+          // `superdoc/ui/react` entries instead.
+          'public/legacy/headless-toolbar': 'src/public/legacy/headless-toolbar.ts',
+          // SD-3207: legacy headless-toolbar framework helpers. Paired
+          // with the root above; same legacy classification. Each entry
+          // re-exports `useHeadlessToolbar` only.
+          'public/legacy/headless-toolbar-react': 'src/public/legacy/headless-toolbar-react.ts',
+          'public/legacy/headless-toolbar-vue': 'src/public/legacy/headless-toolbar-vue.ts',
+          // SD-3180: legacy leaf facade entries mirroring the existing
+          // single-export legacy subpaths. Same classification as
+          // headless-toolbar above.
+          'public/legacy/converter': 'src/public/legacy/converter.ts',
+          'public/legacy/docx-zipper': 'src/public/legacy/docx-zipper.ts',
+          'public/legacy/file-zipper': 'src/public/legacy/file-zipper.ts',
+          // SD-3182: first supported-surface facade entry. The
+          // `superdoc/ui/react` subpath is the strategic React binding
+          // surface. SD-3147 classification: 12 public + 1 legacy/public-compat.
+          'public/ui-react': 'src/public/ui-react.ts',
+          // SD-3183: ui controller facade. 70 symbols (49 public + 21
+          // legacy/public-compat per SD-3147). Re-export source MUST stay
+          // `@superdoc/super-editor/ui` (narrow), not the root barrel —
+          // `audit-bundle.cjs` enforces shape on `dist/public/ui.es.js`.
+          'public/ui': 'src/public/ui.ts',
+          // SD-3184: types facade — type-only entry. 116 names, all
+          // `export type { ... }`. The existing `./types` subpath has
+          // split types.import/types.require declarations, so this
+          // facade adds a `public/types.d.cts` shim via ensure-types.cjs.
+          'public/types': 'src/public/types.ts',
         },
         external: [
           'yjs',
@@ -298,7 +342,20 @@ export default defineConfig(({ mode, command }) => {
       },
     },
     resolve: {
-      alias: getAliases(isDev),
+      // Under Vitest, alias @superdoc/font-system to its source so cdn-entry.test.js can
+      // resolve the import cdn-entry.js makes. The production CDN build aliases it in
+      // vite.config.cdn.js; the ES build never imports cdn-entry. Kept OUT of getAliases so
+      // the vite-plugin-dts build (which reads resolve.alias) is unaffected - an alias there
+      // makes it emit unresolvable source paths. The /bundled subpath precedes the bare one.
+      alias: [
+        ...(process.env.VITEST
+          ? [
+              { find: '@superdoc/font-system/bundled', replacement: path.resolve(__dirname, '../../shared/font-system/src/bundled.ts') },
+              { find: '@superdoc/font-system', replacement: path.resolve(__dirname, '../../shared/font-system/src/index.ts') },
+            ]
+          : []),
+        ...getAliases(isDev),
+      ],
       dedupe: ['prosemirror-model', 'prosemirror-state', 'prosemirror-transform', 'prosemirror-view', 'y-prosemirror'],
       extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
       conditions: ['source'],

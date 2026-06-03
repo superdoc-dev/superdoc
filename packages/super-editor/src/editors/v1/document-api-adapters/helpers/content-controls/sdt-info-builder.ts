@@ -23,6 +23,7 @@ import { findSdtPrChild, getSdtPrChildAttrs, type SdtPrElement } from './sdt-pro
 
 const VALID_CONTROL_TYPES: readonly string[] = [
   'text',
+  'richText',
   'date',
   'checkbox',
   'comboBox',

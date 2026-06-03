@@ -45,6 +45,18 @@ import type { ParagraphAttrs, TableAttrs, TableCellAttrs, ImageAttrs } from '../
 import { getHeadingLevel } from './node-address-resolver.js';
 import { parseTocInstruction } from '../../core/super-converter/field-references/shared/toc-switches.js';
 import { resolveSectionProjections, type SectionProjection } from './sections-resolver.js';
+import { textContentInBlock, type TextOffsetOptions } from './text-offset-resolver.js';
+import { TrackDeleteMarkName } from '../../extensions/track-changes/constants.js';
+
+type ProjectionOptions = TextOffsetOptions;
+
+function isVisibleProjection(options?: ProjectionOptions): boolean {
+  return options?.textModel === 'visible';
+}
+
+function hasTrackDeleteMark(pmNode: ProseMirrorNode): boolean {
+  return pmNode.marks?.some((mark) => mark.type.name === TrackDeleteMarkName) ?? false;
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -53,15 +65,15 @@ import { resolveSectionProjections, type SectionProjection } from './sections-re
 /**
  * Projects a single ProseMirror content node into an SDM/1 SDContentNode.
  */
-export function projectContentNode(pmNode: ProseMirrorNode): SDContentNode {
-  return projectBlock(pmNode);
+export function projectContentNode(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDContentNode {
+  return projectBlock(pmNode, options);
 }
 
 /**
  * Projects a ProseMirror text node (with marks) into SDM/1 inline nodes.
  */
-export function projectInlineNode(pmNode: ProseMirrorNode): SDInlineNode {
-  return projectInline(pmNode);
+export function projectInlineNode(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDInlineNode {
+  return projectInline(pmNode, options) ?? { kind: 'run', run: { text: '' } };
 }
 
 /**
@@ -163,9 +175,10 @@ export function resolveTextByBlockId(
 export function projectDocument(editor: Editor, options?: SDReadOptions): SDDocument {
   const doc = editor.state.doc;
   const body: SDContentNode[] = [];
+  const projectionOptions: ProjectionOptions = { textModel: 'visible' };
 
   doc.forEach((child) => {
-    body.push(projectBlock(child));
+    body.push(projectBlock(child, projectionOptions));
   });
 
   const sections = projectSections(editor);
@@ -319,28 +332,28 @@ interface TranslatedLevel {
 // Block-level dispatch
 // ---------------------------------------------------------------------------
 
-function projectBlock(pmNode: ProseMirrorNode): SDContentNode {
+function projectBlock(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDContentNode {
   const typeName = pmNode.type.name;
 
   switch (typeName) {
     case 'paragraph':
-      return projectParagraphOrHeading(pmNode);
+      return projectParagraphOrHeading(pmNode, options);
     case 'heading':
-      return projectHeadingNode(pmNode);
+      return projectHeadingNode(pmNode, options);
     case 'table':
-      return projectTable(pmNode);
+      return projectTable(pmNode, options);
     case 'bulletList':
     case 'orderedList':
-      return projectList(pmNode, typeName === 'orderedList');
+      return projectList(pmNode, typeName === 'orderedList', options);
     case 'listItem':
-      return projectListItemAsContent(pmNode);
+      return projectListItemAsContent(pmNode, options);
     case 'image':
       return projectBlockImage(pmNode);
     case 'tableOfContents':
       return projectToc(pmNode);
     case 'sdt':
     case 'structuredContentBlock':
-      return projectBlockSdt(pmNode);
+      return projectBlockSdt(pmNode, options);
     case 'sectionBreak':
       return projectSectionBreak(pmNode);
     case 'pageBreak':
@@ -349,7 +362,7 @@ function projectBlock(pmNode: ProseMirrorNode): SDContentNode {
     case 'drawing':
       return projectBlockDrawing(pmNode);
     default:
-      return projectFallbackBlock(pmNode);
+      return projectFallbackBlock(pmNode, options);
   }
 }
 
@@ -357,26 +370,30 @@ function projectBlock(pmNode: ProseMirrorNode): SDContentNode {
 // Paragraph / Heading
 // ---------------------------------------------------------------------------
 
-function projectParagraphOrHeading(pmNode: ProseMirrorNode): SDParagraph | SDHeading {
+function projectParagraphOrHeading(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDParagraph | SDHeading {
   const attrs = pmNode.attrs as ParagraphAttrs | undefined;
   const headingLevel = getHeadingLevel(attrs?.paragraphProperties?.styleId);
 
   if (headingLevel && headingLevel >= 1 && headingLevel <= 6) {
-    return buildHeading(pmNode, attrs, headingLevel as 1 | 2 | 3 | 4 | 5 | 6);
+    return buildHeading(pmNode, attrs, headingLevel as 1 | 2 | 3 | 4 | 5 | 6, options);
   }
 
-  return buildParagraph(pmNode, attrs);
+  return buildParagraph(pmNode, attrs, options);
 }
 
-function projectHeadingNode(pmNode: ProseMirrorNode): SDHeading {
+function projectHeadingNode(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDHeading {
   const attrs = pmNode.attrs as ParagraphAttrs | undefined;
   const rawLevel = (pmNode.attrs as any)?.level;
   const level = (rawLevel ?? getHeadingLevel(attrs?.paragraphProperties?.styleId) ?? 1) as 1 | 2 | 3 | 4 | 5 | 6;
-  return buildHeading(pmNode, attrs, level);
+  return buildHeading(pmNode, attrs, level, options);
 }
 
-function buildParagraph(pmNode: ProseMirrorNode, attrs: ParagraphAttrs | undefined): SDParagraph {
-  const inlines = projectInlineChildren(pmNode);
+function buildParagraph(
+  pmNode: ProseMirrorNode,
+  attrs: ParagraphAttrs | undefined,
+  options?: ProjectionOptions,
+): SDParagraph {
+  const inlines = projectInlineChildren(pmNode, options);
   const result: SDParagraph = {
     kind: 'paragraph',
     id: resolveNodeId(pmNode),
@@ -396,8 +413,9 @@ function buildHeading(
   pmNode: ProseMirrorNode,
   attrs: ParagraphAttrs | undefined,
   level: 1 | 2 | 3 | 4 | 5 | 6,
+  options?: ProjectionOptions,
 ): SDHeading {
-  const inlines = projectInlineChildren(pmNode);
+  const inlines = projectInlineChildren(pmNode, options);
   const result: SDHeading = {
     kind: 'heading',
     id: resolveNodeId(pmNode),
@@ -417,14 +435,14 @@ function buildHeading(
 // Table
 // ---------------------------------------------------------------------------
 
-function projectTable(pmNode: ProseMirrorNode): SDTable {
+function projectTable(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDTable {
   const attrs = pmNode.attrs as TableAttrs | undefined;
   const pmAttrs = pmNode.attrs as Record<string, unknown>;
   const rows: SDTableRow[] = [];
 
   pmNode.forEach((child) => {
     if (child.type.name === 'tableRow') {
-      rows.push(projectTableRow(child));
+      rows.push(projectTableRow(child, options));
     }
   });
 
@@ -464,11 +482,11 @@ function projectTable(pmNode: ProseMirrorNode): SDTable {
   return result;
 }
 
-function projectTableRow(pmNode: ProseMirrorNode): SDTableRow {
+function projectTableRow(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDTableRow {
   const cells: SDTableCell[] = [];
   pmNode.forEach((child) => {
     if (child.type.name === 'tableCell' || child.type.name === 'tableHeader') {
-      cells.push(projectTableCell(child));
+      cells.push(projectTableCell(child, options));
     }
   });
 
@@ -482,11 +500,11 @@ function projectTableRow(pmNode: ProseMirrorNode): SDTableRow {
   return row;
 }
 
-function projectTableCell(pmNode: ProseMirrorNode): SDTableCell {
+function projectTableCell(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDTableCell {
   const attrs = pmNode.attrs as TableCellAttrs | undefined;
   const content: SDContentNode[] = [];
   pmNode.forEach((child) => {
-    content.push(projectBlock(child));
+    content.push(projectBlock(child, options));
   });
 
   const cell: SDTableCell = { content };
@@ -506,11 +524,11 @@ function projectTableCell(pmNode: ProseMirrorNode): SDTableCell {
 // List
 // ---------------------------------------------------------------------------
 
-function projectList(pmNode: ProseMirrorNode, ordered: boolean): SDList {
+function projectList(pmNode: ProseMirrorNode, ordered: boolean, options?: ProjectionOptions): SDList {
   const items: SDListItem[] = [];
   pmNode.forEach((child) => {
     if (child.type.name === 'listItem') {
-      items.push(projectListItem(child));
+      items.push(projectListItem(child, options));
     }
   });
 
@@ -529,10 +547,10 @@ function projectList(pmNode: ProseMirrorNode, ordered: boolean): SDList {
   return result;
 }
 
-function projectListItem(pmNode: ProseMirrorNode): SDListItem {
+function projectListItem(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDListItem {
   const content: SDContentNode[] = [];
   pmNode.forEach((child) => {
-    content.push(projectBlock(child));
+    content.push(projectBlock(child, options));
   });
 
   const item: SDListItem = {
@@ -544,8 +562,8 @@ function projectListItem(pmNode: ProseMirrorNode): SDListItem {
 }
 
 /** When a listItem appears at top-level (orphan), wrap it in a paragraph. */
-function projectListItemAsContent(pmNode: ProseMirrorNode): SDParagraph {
-  const inlines = projectInlineChildren(pmNode);
+function projectListItemAsContent(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDParagraph {
+  const inlines = projectInlineChildren(pmNode, options);
   return {
     kind: 'paragraph',
     id: resolveNodeId(pmNode),
@@ -616,10 +634,10 @@ function extractSdtMetadata(attrs: Record<string, unknown>): Omit<SDSdt['sdt'], 
   };
 }
 
-function projectBlockSdt(pmNode: ProseMirrorNode): SDSdt {
+function projectBlockSdt(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDSdt {
   const children: SDContentNode[] = [];
   pmNode.forEach((child) => {
-    children.push(projectBlock(child));
+    children.push(projectBlock(child, options));
   });
 
   return {
@@ -633,8 +651,8 @@ function projectBlockSdt(pmNode: ProseMirrorNode): SDSdt {
   };
 }
 
-function projectInlineSdt(pmNode: ProseMirrorNode): SDSdt {
-  const inlines = projectInlineChildren(pmNode);
+function projectInlineSdt(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDSdt {
+  const inlines = projectInlineChildren(pmNode, options);
 
   return {
     kind: 'sdt',
@@ -690,8 +708,8 @@ function projectBlockDrawing(pmNode: ProseMirrorNode): SDContentNode {
 // Fallback block
 // ---------------------------------------------------------------------------
 
-function projectFallbackBlock(pmNode: ProseMirrorNode): SDParagraph {
-  const inlines = projectInlineChildren(pmNode);
+function projectFallbackBlock(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDParagraph {
+  const inlines = projectInlineChildren(pmNode, options);
   return {
     kind: 'paragraph',
     id: resolveNodeId(pmNode),
@@ -703,23 +721,23 @@ function projectFallbackBlock(pmNode: ProseMirrorNode): SDParagraph {
 // Inline projection
 // ---------------------------------------------------------------------------
 
-function projectInlineChildren(pmNode: ProseMirrorNode): SDInlineNode[] {
+function projectInlineChildren(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDInlineNode[] {
   const inlines: SDInlineNode[] = [];
   pmNode.forEach((child) => {
-    const projected = projectInline(child);
-    inlines.push(projected);
+    const projected = projectInline(child, options);
+    if (projected) inlines.push(projected);
   });
   return inlines;
 }
 
-function projectInline(pmNode: ProseMirrorNode): SDInlineNode {
+function projectInline(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDInlineNode | null {
   if (pmNode.isText) {
-    return projectTextRun(pmNode);
+    return projectTextRun(pmNode, options);
   }
 
   switch (pmNode.type.name) {
     case 'run':
-      return projectRunNode(pmNode);
+      return projectRunNode(pmNode, options);
     case 'image':
       return projectInlineImage(pmNode);
     case 'tab':
@@ -736,9 +754,9 @@ function projectInline(pmNode: ProseMirrorNode): SDInlineNode {
     case 'field':
       return projectInlineField(pmNode);
     case 'structuredContent':
-      return projectInlineSdt(pmNode);
+      return projectInlineSdt(pmNode, options);
     default:
-      return projectInlineFallback(pmNode);
+      return projectInlineFallback(pmNode, options);
   }
 }
 
@@ -746,10 +764,11 @@ function projectInline(pmNode: ProseMirrorNode): SDInlineNode {
 // Run node (SuperDoc schema: paragraph → run → text)
 // ---------------------------------------------------------------------------
 
-function projectRunNode(pmNode: ProseMirrorNode): SDRun | SDHyperlink {
+function projectRunNode(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDRun | SDHyperlink | null {
   const attrs = (pmNode.attrs ?? {}) as Record<string, any>;
   const runProperties = attrs.runProperties as Record<string, any> | undefined;
-  const text = pmNode.textContent;
+  const text = isVisibleProjection(options) ? textContentInBlock(pmNode, options) : pmNode.textContent;
+  if (isVisibleProjection(options) && text.length === 0) return null;
 
   // Check for hyperlink wrapping via link mark on children
   let linkMark: ProseMirrorMark | undefined;
@@ -760,7 +779,7 @@ function projectRunNode(pmNode: ProseMirrorNode): SDRun | SDHyperlink {
   });
 
   if (linkMark) {
-    return buildHyperlinkFromRunNode(pmNode, linkMark);
+    return buildHyperlinkFromRunNode(pmNode, linkMark, options);
   }
 
   const run: SDRun = { kind: 'run', run: { text } };
@@ -779,11 +798,17 @@ function projectRunNode(pmNode: ProseMirrorNode): SDRun | SDHyperlink {
   return run;
 }
 
-function buildHyperlinkFromRunNode(pmNode: ProseMirrorNode, linkMark: ProseMirrorMark): SDHyperlink {
+function buildHyperlinkFromRunNode(
+  pmNode: ProseMirrorNode,
+  linkMark: ProseMirrorMark,
+  options?: ProjectionOptions,
+): SDHyperlink | null {
   const attrs = linkMark.attrs as Record<string, unknown>;
+  const text = isVisibleProjection(options) ? textContentInBlock(pmNode, options) : pmNode.textContent;
+  if (isVisibleProjection(options) && text.length === 0) return null;
   const childRun: SDRun = {
     kind: 'run',
-    run: { text: pmNode.textContent },
+    run: { text },
   };
 
   const runProperties = (pmNode.attrs as Record<string, any>)?.runProperties;
@@ -918,7 +943,9 @@ function extractRunPropsFromRunProperties(runProperties: Record<string, any> | u
 // Text run (bare PM text nodes — used in schemas without the run node wrapper)
 // ---------------------------------------------------------------------------
 
-function projectTextRun(pmNode: ProseMirrorNode): SDRun | SDHyperlink {
+function projectTextRun(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDRun | SDHyperlink | null {
+  if (isVisibleProjection(options) && hasTrackDeleteMark(pmNode)) return null;
+
   const marks = pmNode.marks;
 
   // Check if wrapped in a link mark → hyperlink
@@ -1025,10 +1052,12 @@ function projectInlineField(pmNode: ProseMirrorNode): SDField {
   };
 }
 
-function projectInlineFallback(pmNode: ProseMirrorNode): SDRun {
+function projectInlineFallback(pmNode: ProseMirrorNode, options?: ProjectionOptions): SDRun | null {
+  const text = isVisibleProjection(options) ? textContentInBlock(pmNode, options) : (pmNode.textContent ?? '\ufffc');
+  if (isVisibleProjection(options) && text.length === 0) return null;
   return {
     kind: 'run',
-    run: { text: pmNode.textContent ?? '\ufffc' },
+    run: { text },
   };
 }
 

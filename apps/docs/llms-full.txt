@@ -253,10 +253,11 @@ Three preset themes included: Google Docs, Microsoft Word, and Blueprint.
 
 ## Collaboration
 
-Real-time multiplayer editing using Yjs (CRDT). Providers supported:
-- Liveblocks (cloud)
-- SuperDoc Yjs server (self-hosted)
-- Hocuspocus (self-hosted)
+Real-time multiplayer editing using Yjs (CRDT). The integration contract is provider-agnostic: pass `{ ydoc, provider }` to `modules.collaboration` on the client. Any Yjs-compatible server works. Examples:
+- YHub (advanced Yjs backend for attribution, activity, and revision-history workflows; beta)
+- Hocuspocus (mature self-hosted Yjs server)
+- Liveblocks (managed cloud service)
+- SuperDoc Yjs (minimal reference server, not production infrastructure)
 
 ---
 

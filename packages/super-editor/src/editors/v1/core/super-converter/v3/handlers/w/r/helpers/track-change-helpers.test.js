@@ -117,5 +117,29 @@ describe('track-change-helpers', () => {
       expect(wrapper.elements[0].elements[0].name).toBe('w:delText');
       expect(run.elements[0].name).toBe('w:t');
     });
+
+    it('unwraps insert runs in final-doc export mode', () => {
+      const runs = [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ text: 'Accepted', type: 'text' }] }] }];
+      const mark = {
+        type: TrackInsertMarkName,
+        attrs: { id: 'track-4', author: 'Carol', authorEmail: 'carol@example.com', date: '2024-01-01T00:00:00Z' },
+      };
+      const trackingMap = new Map([[TrackInsertMarkName, mark]]);
+
+      const result = ensureTrackedWrapper(runs, trackingMap, { isFinalDoc: true });
+
+      expect(result).toBe(runs);
+      expect(result[0].name).toBe('w:r');
+    });
+
+    it('drops delete runs in final-doc export mode', () => {
+      const runs = [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ text: 'Rejected', type: 'text' }] }] }];
+      const mark = { type: TrackDeleteMarkName, attrs: { id: 'track-5' } };
+      const trackingMap = new Map([[TrackDeleteMarkName, mark]]);
+
+      const result = ensureTrackedWrapper(runs, trackingMap, { isFinalDoc: true });
+
+      expect(result).toEqual([]);
+    });
   });
 });

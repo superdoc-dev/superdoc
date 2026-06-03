@@ -47,14 +47,17 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   });
 }
 
-function launchHost(stateDir: string): {
+function launchHost(
+  stateDir: string,
+  extraArgs: string[] = [],
+): {
   child: ChildProcessWithoutNullStreams;
   request(method: string, params?: unknown): Promise<JsonRpcMessage>;
   sendRaw(frame: string): void;
   nextMessage(): Promise<JsonRpcMessage>;
   shutdown(): Promise<void>;
 } {
-  const child = spawn('bun', [CLI_BIN, 'host', '--stdio'], {
+  const child = spawn('bun', [CLI_BIN, 'host', '--stdio', ...extraArgs], {
     cwd: REPO_ROOT,
     env: {
       ...process.env,
@@ -386,6 +389,64 @@ describe('CLI host mode', () => {
       expect(invalidDescribe.error?.code).toBe(-32602);
 
       await host.shutdown();
+    },
+    HOST_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    'honors --request-timeout-ms for a real cli.invoke ceiling',
+    async () => {
+      const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
+      cleanup.push(stateDir);
+      await mkdir(stateDir, { recursive: true });
+
+      const sourceDoc = await resolveSourceDocFixture();
+      const docCopy = path.join(stateDir, 'doc.docx');
+      await copyFile(sourceDoc, docCopy);
+
+      // 1ms is well below any real cli.invoke wall time, so the host's
+      // settleWithTimeout must fire and return a RequestTimeout error
+      // carrying the configured value.
+      const host = launchHost(stateDir, ['--request-timeout-ms', '1']);
+
+      const response = await host.request('cli.invoke', {
+        argv: ['open', docCopy],
+        stdinBase64: '',
+      });
+
+      expect(response.error?.code).toBe(-32011);
+      const errorData = response.error?.data as { timeoutMs?: number };
+      expect(errorData.timeoutMs).toBe(1);
+
+      await host.shutdown();
+    },
+    HOST_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    'rejects --request-timeout-ms with a non-numeric value',
+    async () => {
+      const child = spawn('bun', [CLI_BIN, 'host', '--stdio', '--request-timeout-ms', 'not-a-number'], {
+        cwd: REPO_ROOT,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      let stderrBuffer = '';
+      child.stderr.on('data', (chunk) => {
+        stderrBuffer += String(chunk);
+      });
+
+      const exitCode = await withTimeout(
+        new Promise<number>((resolve) => {
+          child.on('close', (code) => resolve(code ?? -1));
+        }),
+        5_000,
+        'Timed out waiting for host to exit on invalid --request-timeout-ms.',
+      );
+
+      expect(exitCode).not.toBe(0);
+      expect(stderrBuffer).toContain('--request-timeout-ms');
+      expect(stderrBuffer).toContain('positive finite number');
     },
     HOST_TEST_TIMEOUT_MS,
   );

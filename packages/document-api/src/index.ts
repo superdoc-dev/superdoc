@@ -69,9 +69,17 @@ import type {
   TrackChangesListResult,
   ExtractResult,
 } from './types/index.js';
-import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
+import type {
+  CommentInfo,
+  CommentTarget,
+  CommentsListQuery,
+  CommentsListResult,
+  CommentTrackedChangeLink,
+  TrackedChangeCommentTarget,
+} from './comments/comments.types.js';
 import type {
   CommentsAdapter,
+  CommentsCreateReceipt,
   CommentsApi,
   CommentsCreateInput,
   CommentsPatchInput,
@@ -90,6 +98,7 @@ import { executeFind, type FindAdapter } from './find/find.js';
 import type { SDFindInput, SDFindResult, SDGetInput, SDNodeResult } from './types/sd-envelope.js';
 import type {
   FormatApi,
+  FormatRangeInput,
   FormatInlineAliasApi,
   FormatInlineAliasInput,
   FormatStrikethroughInput,
@@ -680,6 +689,48 @@ import type {
   BookmarkMutationResult,
 } from './bookmarks/bookmarks.types.js';
 
+import type { CustomXmlApi, CustomXmlAdapter } from './customXml/customXml.js';
+import {
+  executeCustomXmlPartsList,
+  executeCustomXmlPartsGet,
+  executeCustomXmlPartsCreate,
+  executeCustomXmlPartsPatch,
+  executeCustomXmlPartsRemove,
+} from './customXml/customXml.js';
+import type {
+  CustomXmlPartsListInput,
+  CustomXmlPartsListResult,
+  CustomXmlPartsGetInput,
+  CustomXmlPartInfo,
+  CustomXmlPartsCreateInput,
+  CustomXmlPartsCreateResult,
+  CustomXmlPartsPatchInput,
+  CustomXmlPartsRemoveInput,
+  CustomXmlPartsMutationResult,
+} from './customXml/customXml.types.js';
+import {
+  executeAnchoredMetadataAttach,
+  executeAnchoredMetadataList,
+  executeAnchoredMetadataGet,
+  executeAnchoredMetadataUpdate,
+  executeAnchoredMetadataRemove,
+  executeAnchoredMetadataResolve,
+} from './metadata/anchored-metadata.js';
+import type { AnchoredMetadataApi, AnchoredMetadataAdapter } from './metadata/anchored-metadata.js';
+import type {
+  AnchoredMetadataAttachInput,
+  AnchoredMetadataAttachResult,
+  AnchoredMetadataListInput,
+  AnchoredMetadataListResult,
+  AnchoredMetadataGetInput,
+  AnchoredMetadataInfo,
+  AnchoredMetadataUpdateInput,
+  AnchoredMetadataRemoveInput,
+  AnchoredMetadataResolveInput,
+  AnchoredMetadataMutationResult,
+  AnchoredMetadataResolveInfo,
+} from './metadata/anchored-metadata.types.js';
+
 import type { ProtectionApi, ProtectionAdapter } from './protection/protection.js';
 import {
   executeProtectionGet,
@@ -915,6 +966,7 @@ export type {
   FormatInlineAliasInput,
   FormatBoldInput,
   FormatItalicInput,
+  FormatRangeInput,
   FormatUnderlineInput,
   FormatStrikethroughInput,
   StyleApplyInput,
@@ -986,7 +1038,9 @@ export type {
   TrackChangesRejectInput,
   TrackChangesAcceptAllInput,
   TrackChangesRejectAllInput,
+  TrackChangesRangeInput,
   ReviewDecideInput,
+  ReviewDecisionTarget,
 } from './track-changes/track-changes.js';
 export type { BlocksAdapter } from './blocks/blocks.js';
 export type { ImagesAdapter, ImagesApi, CreateImageAdapter } from './images/images.js';
@@ -1034,6 +1088,13 @@ export type {
 } from './images/images.types.js';
 export type { TocApi, TocAdapter } from './toc/toc.js';
 export type { BookmarksApi, BookmarksAdapter } from './bookmarks/bookmarks.js';
+export type {
+  CustomXmlApi,
+  CustomXmlAdapter,
+  CustomXmlPartsApi,
+  CustomXmlPartsAdapter,
+} from './customXml/customXml.js';
+export type { AnchoredMetadataApi, AnchoredMetadataAdapter } from './metadata/anchored-metadata.js';
 
 export type { ProtectionApi, ProtectionAdapter } from './protection/protection.js';
 export * from './protection/protection.types.js';
@@ -1201,6 +1262,8 @@ export type {
   HyperlinksRemoveInput,
 } from './hyperlinks/hyperlinks.types.js';
 export type * from './bookmarks/bookmarks.types.js';
+export type * from './customXml/customXml.types.js';
+export type * from './metadata/anchored-metadata.types.js';
 
 export type * from './footnotes/footnotes.types.js';
 export type * from './cross-refs/cross-refs.types.js';
@@ -1392,6 +1455,7 @@ export type {
   SectionsSetVerticalAlignInput,
 } from './sections/sections.types.js';
 export type {
+  CommentsCreateReceipt,
   CommentsCreateInput,
   CommentsPatchInput,
   CommentsDeleteInput,
@@ -1409,7 +1473,14 @@ export type {
   GoToCommentInput,
   SetCommentActiveInput,
 } from './comments/comments.js';
-export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
+export type {
+  CommentInfo,
+  CommentTarget,
+  CommentsListQuery,
+  CommentsListResult,
+  CommentTrackedChangeLink,
+  TrackedChangeCommentTarget,
+} from './comments/comments.types.js';
 export { DocumentApiValidationError } from './errors.js';
 export { textReceiptToSDReceipt, buildStructuralReceipt } from './receipt-bridge.js';
 export type { StructuralReceiptParams } from './receipt-bridge.js';
@@ -1591,6 +1662,12 @@ export interface DocumentApi {
    */
   format: FormatApi & { paragraph: ParagraphFormatApi };
   /**
+   * Legacy root-level alias for inline range formatting.
+   *
+   * Routes to {@link DocumentApi.format.apply}.
+   */
+  formatRange(input: FormatRangeInput, options?: MutationOptions): TextMutationReceipt;
+  /**
    * Stylesheet operations (docDefaults, style definitions, paragraph style references).
    */
   styles: StylesApi & { paragraph: ParagraphStylesApi };
@@ -1705,6 +1782,18 @@ export interface DocumentApi {
    */
   permissionRanges: PermissionRangesApi;
   /**
+   * Custom XML Data Storage Part operations (ECMA-376 §15.2.5, §15.2.6).
+   * Read and write raw custom XML parts in the OOXML package.
+   */
+  customXml: CustomXmlApi;
+  /**
+   * Anchored metadata — attach a JSON payload to a span of text and read
+   * it back across DOCX round-trips. Backed by hidden inline content
+   * controls and namespaced Custom XML Data Storage Parts; consumers see
+   * one operation set.
+   */
+  metadata: AnchoredMetadataApi;
+  /**
    * Runtime capability introspection.
    *
    * Callable directly (`capabilities()`) or via `.get()`.
@@ -1776,6 +1865,13 @@ export interface DocumentApiAdapters {
   history: HistoryAdapter;
   protection: ProtectionAdapter;
   permissionRanges: PermissionRangesAdapter;
+  /** Custom XML Data Storage Part operations. Optional; not all engines support custom XML. */
+  customXml?: CustomXmlAdapter;
+  /**
+   * Anchored-metadata operations (metadata.*). Optional; not all engines
+   * support attaching JSON metadata to anchored spans.
+   */
+  metadata?: AnchoredMetadataAdapter;
 }
 
 /**
@@ -1948,7 +2044,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       return executeClearContent(adapters.clearContent, input, options);
     },
     comments: {
-      create(input: CommentsCreateInput, options?: RevisionGuardOptions): Receipt {
+      create(input: CommentsCreateInput, options?: RevisionGuardOptions): CommentsCreateReceipt {
         return executeCommentsCreate(adapters.comments, input, options);
       },
       patch(input: CommentsPatchInput, options?: RevisionGuardOptions): Receipt {
@@ -1972,6 +2068,22 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     delete(input: DeleteInput, options?: MutationOptions): TextMutationReceipt {
       return executeDelete(adapters.selectionMutation, input, options);
+    },
+    formatRange(input: FormatRangeInput, options?: MutationOptions): TextMutationReceipt {
+      const raw = input as unknown;
+      if (!raw || typeof raw !== 'object') {
+        return executeStyleApply(adapters.selectionMutation, raw as StyleApplyInput, options);
+      }
+      const { properties, changeMode, dryRun, expectedRevision, ...rest } = raw as FormatRangeInput;
+      const styleInput: StyleApplyInput =
+        typeof rest.ref === 'string'
+          ? { ref: rest.ref, inline: properties, ...(rest.in ? { in: rest.in } : {}) }
+          : { target: rest.target, inline: properties, ...(rest.in ? { in: rest.in } : {}) };
+      return executeStyleApply(adapters.selectionMutation, styleInput, {
+        expectedRevision: expectedRevision ?? options?.expectedRevision,
+        changeMode: changeMode ?? options?.changeMode,
+        dryRun: dryRun ?? options?.dryRun,
+      });
     },
     format: {
       ...inlineAliasApi,
@@ -3264,6 +3376,45 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         options?: MutationOptions,
       ): PermissionRangeMutationResult {
         return executePermissionRangesUpdatePrincipal(adapters.permissionRanges, input, options);
+      },
+    },
+    customXml: {
+      parts: {
+        list(input?: CustomXmlPartsListInput): CustomXmlPartsListResult {
+          return executeCustomXmlPartsList(requireAdapter(adapters.customXml, 'customXml').parts, input);
+        },
+        get(input: CustomXmlPartsGetInput): CustomXmlPartInfo | null {
+          return executeCustomXmlPartsGet(requireAdapter(adapters.customXml, 'customXml').parts, input);
+        },
+        create(input: CustomXmlPartsCreateInput, options?: MutationOptions): CustomXmlPartsCreateResult {
+          return executeCustomXmlPartsCreate(requireAdapter(adapters.customXml, 'customXml').parts, input, options);
+        },
+        patch(input: CustomXmlPartsPatchInput, options?: MutationOptions): CustomXmlPartsMutationResult {
+          return executeCustomXmlPartsPatch(requireAdapter(adapters.customXml, 'customXml').parts, input, options);
+        },
+        remove(input: CustomXmlPartsRemoveInput, options?: MutationOptions): CustomXmlPartsMutationResult {
+          return executeCustomXmlPartsRemove(requireAdapter(adapters.customXml, 'customXml').parts, input, options);
+        },
+      },
+    },
+    metadata: {
+      attach(input: AnchoredMetadataAttachInput, options?: MutationOptions): AnchoredMetadataAttachResult {
+        return executeAnchoredMetadataAttach(requireAdapter(adapters.metadata, 'metadata'), input, options);
+      },
+      list(input?: AnchoredMetadataListInput): AnchoredMetadataListResult {
+        return executeAnchoredMetadataList(requireAdapter(adapters.metadata, 'metadata'), input);
+      },
+      get(input: AnchoredMetadataGetInput): AnchoredMetadataInfo | null {
+        return executeAnchoredMetadataGet(requireAdapter(adapters.metadata, 'metadata'), input);
+      },
+      update(input: AnchoredMetadataUpdateInput, options?: MutationOptions): AnchoredMetadataMutationResult {
+        return executeAnchoredMetadataUpdate(requireAdapter(adapters.metadata, 'metadata'), input, options);
+      },
+      remove(input: AnchoredMetadataRemoveInput, options?: MutationOptions): AnchoredMetadataMutationResult {
+        return executeAnchoredMetadataRemove(requireAdapter(adapters.metadata, 'metadata'), input, options);
+      },
+      resolve(input: AnchoredMetadataResolveInput): AnchoredMetadataResolveInfo | null {
+        return executeAnchoredMetadataResolve(requireAdapter(adapters.metadata, 'metadata'), input);
       },
     },
     invoke(request: DynamicInvokeRequest): unknown {

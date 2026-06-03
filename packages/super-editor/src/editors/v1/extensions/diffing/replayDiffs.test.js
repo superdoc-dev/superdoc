@@ -382,6 +382,11 @@ const getReplayFixturePairs = () => [
   ['diff_before7.docx', 'diff_after7.docx'],
   ['diff_before8.docx', 'diff_after8.docx'],
   ['diff_before9.docx', 'diff_after9.docx'],
+  // IT-1065: combined structural (table removal) + text change. Google Docs
+  // renumbers paraIds across the structural change, so cell paragraphs in
+  // before share paraIds with body paragraphs in after. Depth-gated identity
+  // prevents false matches.
+  ['diff_before_it1065.docx', 'diff_after_it1065.docx'],
 ];
 
 /**
@@ -453,6 +458,26 @@ describe('replayDifferences can()', () => {
   });
 });
 describe('replayDiffs tracked changes', runTrackedReplayDiffsSuite);
+describe('replayDiffs tracked structural replay', () => {
+  it('replays the IT-1065 table/text collision fixture with tracked changes enabled', async () => {
+    const testUser = { name: 'Test User', email: 'test@example.com' };
+    const beforeEditor = await getEditorFromFixture('diff_before_it1065.docx', testUser);
+    const afterEditor = await getEditorFromFixture('diff_after_it1065.docx');
+
+    try {
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
+      const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+
+      expect(success).toBe(true);
+      expect(getTrackChanges(beforeEditor.state).length).toBeGreaterThan(0);
+      expect(beforeEditor.commands.acceptAllTrackedChanges()).toBe(true);
+      expect(beforeEditor.state.doc.textContent).toBe(afterEditor.state.doc.textContent);
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+});
 describe('replayDiffs tracked-change ids', () => {
   it('keeps tracked mark ids populated for diff_before8 replay', async () => {
     await expectTrackedReplayMarksHaveIds('diff_before8.docx', 'diff_after8.docx');

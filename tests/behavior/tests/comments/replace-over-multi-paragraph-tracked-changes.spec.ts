@@ -130,9 +130,23 @@ test('replace over multi-paragraph tracked changes stays coherent', async ({ sup
   await superdoc.press('Backspace');
   await superdoc.waitForStable();
 
-  // Both words should still exist in PM (as tracked deletions, not truly removed)
-  await superdoc.assertTextContains('tailword2');
-  await superdoc.assertTextContains('tailword3');
+  // Public text is visible/effective text, so unresolved deletions are hidden.
+  await superdoc.assertTextNotContains('tailword2');
+  await superdoc.assertTextNotContains('tailword3');
+
+  // Both words should still exist in PM as tracked deletions, not truly removed.
+  const deletedTextAfterStep2 = await superdoc.page.evaluate(() => {
+    const editor = (window as any).editor;
+    let text = '';
+    editor.state.doc.descendants((node: any) => {
+      if (!node.isText || !node.text) return;
+      const hasDeleteMark = (node.marks ?? []).some((mark: any) => mark.type?.name === 'trackDelete');
+      if (hasDeleteMark) text += node.text;
+    });
+    return text;
+  });
+  expect(deletedTextAfterStep2).toContain('tailword2');
+  expect(deletedTextAfterStep2).toContain('tailword3');
 
   // Tracked delete marks should exist
   const deletionCountAfterStep2 = await superdoc.page.evaluate(() => {

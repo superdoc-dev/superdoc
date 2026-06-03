@@ -19,6 +19,22 @@ document.documentElement.classList.add(theme);
 
 Five properties theme the entire UI.
 
+## Optional layered stylesheet
+
+Default usage remains:
+
+```javascript
+import 'superdoc/style.css';
+```
+
+If your application uses CSS cascade layers and you want explicit layer ordering, use:
+
+```css
+@layer reset, superdoc, app;
+@import 'superdoc/style.layered.css';
+@import 'your-app.css' layer(app);
+```
+
 ## `createTheme()`
 
 Pass a config object, get back a CSS class name. Apply it to `<html>`.

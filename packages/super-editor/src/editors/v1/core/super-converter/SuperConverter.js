@@ -27,6 +27,7 @@ import { ensureSettingsRoot, hasUpdateFields, setUpdateFields } from '../../docu
 import { importFootnoteData, importEndnoteData } from './v2/importer/documentFootnotesImporter.js';
 import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
+import { getWordPartRelsPath, normalizeWordPartPath } from '../helpers/word-part-path.js';
 import { COMMENT_RELATIONSHIP_TYPES } from './constants.js';
 import {
   createEmptyBibliographyPart,
@@ -34,11 +35,6 @@ import {
   syncBibliographyPartToPackage,
   getBibliographyPartExportPaths,
 } from './citation-sources.js';
-import {
-  collectReferencedNumIds,
-  filterOrphanedNumberingDefinitions,
-} from './export-helpers/strip-orphaned-numbering.js';
-
 const FONT_FAMILY_FALLBACKS = Object.freeze({
   swiss: 'Arial, sans-serif',
   roman: 'Times New Roman, serif',
@@ -52,6 +48,8 @@ const FONT_FAMILY_FALLBACKS = Object.freeze({
 const DEFAULT_GENERIC_FALLBACK = 'sans-serif';
 const DEFAULT_FONT_SIZE_PT = 10;
 const CURRENT_APP_VERSION = typeof __APP_VERSION__ === 'string' && __APP_VERSION__ ? __APP_VERSION__ : '0.0.0';
+const SUPERDOC_DOCUMENT_ORIGIN_PROPERTY = 'SuperdocDocumentOrigin';
+const STORED_DOCUMENT_ORIGINS = new Set(['word', 'google-docs', 'unknown', 'superdoc']);
 
 /**
  * Pull default run formatting (font family, size, kern) out of a DOCX run properties node.
@@ -215,6 +213,14 @@ class SuperConverter {
      * @type {{ replacements?: 'paired' | 'independent' } | null}
      */
     this.trackedChangesOptions = params?.trackedChangesOptions || null;
+
+    /**
+     * Word revision id allocator. Built lazily at export time; preserves
+     * imported decimal `w:id` values and mints fresh part-local decimal ids
+     * for native revisions / successor fragments.
+     * @type {import('@extensions/track-changes/review-model/word-id-allocator').WordIdAllocator | null}
+     */
+    this.wordIdAllocator = null;
 
     this.addedMedia = {};
     this.comments = [];
@@ -1274,6 +1280,13 @@ class SuperConverter {
 
     // Store SuperDoc version
     SuperConverter.setStoredSuperdocVersion(this.convertedXml);
+    const storedDocumentOrigin = STORED_DOCUMENT_ORIGINS.has(this.documentOrigin) ? this.documentOrigin : 'superdoc';
+    SuperConverter.setStoredCustomProperty(
+      this.convertedXml,
+      SUPERDOC_DOCUMENT_ORIGIN_PROPERTY,
+      storedDocumentOrigin,
+      false,
+    );
 
     // Store document GUID if document was modified
     if (this.documentModified || this.documentGuid) {
@@ -1306,6 +1319,8 @@ class SuperConverter {
     fieldsHighlightColor = null,
     preserveSdtWrappers = false,
     statFieldCacheMap = undefined,
+    existingRelationships = [],
+    partPath = 'word/document.xml',
   }) {
     const bodyNode = this.savedTagsToRestore.find((el) => el.name === 'w:body');
 
@@ -1342,6 +1357,8 @@ class SuperConverter {
       fieldsHighlightColor,
       preserveSdtWrappers,
       statFieldCacheMap: resolvedCacheMap,
+      existingRelationships,
+      currentPartPath: partPath,
     });
 
     return { result, params };
@@ -1429,23 +1446,27 @@ class SuperConverter {
 
   #exportNumberingFile() {
     const numberingPath = 'word/numbering.xml';
+    // SD-2911: source presence must be captured before the baseNumbering fallback —
+    // the importer fills `this.numbering` from baseNumbering when the source had no
+    // numbering part, so it can't be inferred from `this.numbering` at write time.
+    const sourceHadNumberingXml = Boolean(this.convertedXml[numberingPath]);
     let numberingXml = this.convertedXml[numberingPath];
 
     if (!numberingXml) numberingXml = baseNumbering;
     const currentNumberingXml = numberingXml.elements[0];
 
-    // D7: Strip orphaned numbering definitions (entries not referenced by any
-    // paragraph in the exported document parts).
-    const referencedNumIds = collectReferencedNumIds(this.convertedXml);
+    if (!sourceHadNumberingXml && !hasBodyNumberingReferences(this.convertedXml['word/document.xml'])) {
+      return;
+    }
 
     if (this.numbering?.definitions && this.numbering?.abstracts) {
-      const { liveAbstracts, liveDefinitions } = filterOrphanedNumberingDefinitions(this.numbering, referencedNumIds);
-      currentNumberingXml.elements = [...liveAbstracts, ...liveDefinitions];
+      const abstracts = Object.values(this.numbering.abstracts);
+      const definitions = Object.values(this.numbering.definitions);
+      currentNumberingXml.elements = [...abstracts, ...definitions];
     } else {
       currentNumberingXml.elements = [];
     }
 
-    // Update the numbering file
     this.convertedXml[numberingPath] = numberingXml;
   }
 
@@ -1479,9 +1500,13 @@ class SuperConverter {
     const newDocRels = [];
 
     Object.entries(this.headers).forEach(([id, header], index) => {
-      const fileName =
+      const relationshipTarget =
         relationships.elements.find((el) => el.attributes.Id === id)?.attributes.Target || `header${index + 1}.xml`;
+      const partPath = normalizeWordPartPath(relationshipTarget);
+      const relsPath = getWordPartRelsPath(partPath);
       const headerEditor = this.headerEditors.find((item) => item.id === id);
+      const existingRelationships =
+        this.convertedXml[relsPath]?.elements?.find((x) => x.name === 'Relationships')?.elements || [];
 
       if (!headerEditor) return;
 
@@ -1493,13 +1518,15 @@ class SuperConverter {
         commentDefinitions: [],
         isHeaderFooter: true,
         isFinalDoc,
+        existingRelationships,
+        partPath,
       });
 
       const bodyContent = result.elements[0].elements;
-      const file = this.convertedXml[`word/${fileName}`];
+      const file = this.convertedXml[partPath];
 
       if (!file) {
-        this.convertedXml[`word/${fileName}`] = {
+        this.convertedXml[partPath] = {
           declaration: this.initialJSON?.declaration,
           elements: [
             {
@@ -1516,18 +1543,15 @@ class SuperConverter {
           attributes: {
             Id: id,
             Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header',
-            Target: fileName,
+            Target: partPath.replace(/^word\//, ''),
           },
         });
       }
 
-      this.convertedXml[`word/${fileName}`].elements[0].elements = bodyContent;
+      this.convertedXml[partPath].elements[0].elements = bodyContent;
 
       if (params.relationships.length) {
-        const relationships =
-          this.convertedXml[`word/_rels/${fileName}.rels`]?.elements?.find((x) => x.name === 'Relationships')
-            ?.elements || [];
-        this.convertedXml[`word/_rels/${fileName}.rels`] = {
+        this.convertedXml[relsPath] = {
           declaration: this.initialJSON?.declaration,
           elements: [
             {
@@ -1535,7 +1559,7 @@ class SuperConverter {
               attributes: {
                 xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships',
               },
-              elements: [...relationships, ...params.relationships],
+              elements: mergeRelationshipElements(existingRelationships, params.relationships),
             },
           ],
         };
@@ -1543,9 +1567,13 @@ class SuperConverter {
     });
 
     Object.entries(this.footers).forEach(([id, footer], index) => {
-      const fileName =
+      const relationshipTarget =
         relationships.elements.find((el) => el.attributes.Id === id)?.attributes.Target || `footer${index + 1}.xml`;
+      const partPath = normalizeWordPartPath(relationshipTarget);
+      const relsPath = getWordPartRelsPath(partPath);
       const footerEditor = this.footerEditors.find((item) => item.id === id);
+      const existingRelationships =
+        this.convertedXml[relsPath]?.elements?.find((x) => x.name === 'Relationships')?.elements || [];
 
       if (!footerEditor) return;
 
@@ -1557,13 +1585,15 @@ class SuperConverter {
         commentDefinitions: [],
         isHeaderFooter: true,
         isFinalDoc,
+        existingRelationships,
+        partPath,
       });
 
       const bodyContent = result.elements[0].elements;
-      const file = this.convertedXml[`word/${fileName}`];
+      const file = this.convertedXml[partPath];
 
       if (!file) {
-        this.convertedXml[`word/${fileName}`] = {
+        this.convertedXml[partPath] = {
           declaration: this.initialJSON?.declaration,
           elements: [
             {
@@ -1580,18 +1610,15 @@ class SuperConverter {
           attributes: {
             Id: id,
             Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer',
-            Target: fileName,
+            Target: partPath.replace(/^word\//, ''),
           },
         });
       }
 
-      this.convertedXml[`word/${fileName}`].elements[0].elements = bodyContent;
+      this.convertedXml[partPath].elements[0].elements = bodyContent;
 
       if (params.relationships.length) {
-        const relationships =
-          this.convertedXml[`word/_rels/${fileName}.rels`]?.elements?.find((x) => x.name === 'Relationships')
-            ?.elements || [];
-        this.convertedXml[`word/_rels/${fileName}.rels`] = {
+        this.convertedXml[relsPath] = {
           declaration: this.initialJSON?.declaration,
           elements: [
             {
@@ -1599,7 +1626,7 @@ class SuperConverter {
               attributes: {
                 xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships',
               },
-              elements: [...relationships, ...params.relationships],
+              elements: mergeRelationshipElements(existingRelationships, params.relationships),
             },
           ],
         };
@@ -1738,4 +1765,17 @@ function generateCustomXml() {
   return DEFAULT_CUSTOM_XML;
 }
 
-export { SuperConverter };
+/** @returns {boolean} True if any descendant of `documentXml` is a `w:numPr` element. */
+function hasBodyNumberingReferences(documentXml) {
+  if (!documentXml || typeof documentXml !== 'object') return false;
+  const stack = Array.isArray(documentXml.elements) ? [...documentXml.elements] : [];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node || typeof node !== 'object') continue;
+    if (node.name === 'w:numPr') return true;
+    if (Array.isArray(node.elements)) stack.push(...node.elements);
+  }
+  return false;
+}
+
+export { SuperConverter, hasBodyNumberingReferences };

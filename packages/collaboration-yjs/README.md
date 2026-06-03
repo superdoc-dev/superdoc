@@ -1,6 +1,10 @@
 # SuperDoc Yjs collaboration library
 
-`@superdoc-dev/superdoc-yjs-collaboration` is a library for integrating Yjs-based real-time collaborative editing into any Node.js WebSocket-enabled server framework. It is designed to work out-of-the-box for **SuperDoc**.
+`@superdoc-dev/superdoc-yjs-collaboration` is a minimal Yjs WebSocket server for SuperDoc, shipped as a reference implementation for prototypes and local development.
+
+> **Use this package for prototypes and local development.** It does not include production auth, persistence, scaling, or observability.
+>
+> SuperDoc works with any Yjs-compatible server. For self-hosted, see [YHub](https://github.com/yjs/yhub) (advanced; attribution and revision history; beta) or [Hocuspocus](https://tiptap.dev/docs/hocuspocus) (mature). For managed, see [Liveblocks](https://liveblocks.io/). SuperDoc's integration contract is provider-agnostic: pass `{ ydoc, provider }` to `modules.collaboration` on the client.
 
 It provides:
 
@@ -25,9 +29,9 @@ It provides:
 
 ## Examples
 
-Please see a [quick start example here](https://github.com/superdoc-dev/superdoc/tree/develop/examples/collaboration/fastify-server)
+Please see a [quick start example here](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/providers/superdoc-yjs).
 
-For more collaboration examples, see the [collaboration examples folder](https://github.com/superdoc-dev/superdoc/tree/develop/examples/collaboration)
+For more collaboration examples, see the [collaboration examples folder](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration).
 
 ## Installation
 
@@ -66,7 +70,7 @@ Below is an example using Fastify, but you can adapt it to any server framework.
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import { v4 as uuidv4 } from 'uuid';
-import SuperDocCollaboration from '@superdoc-dev/superdoc-yjs-collaboration';
+import { CollaborationBuilder } from '@superdoc-dev/superdoc-yjs-collaboration';
 
 const app = Fastify();
 app.register(websocket);
@@ -79,7 +83,7 @@ const onLoad = (params) => {}; // Load your document from persistence (ie: S3)
 const onAutoSave = (params) => {}; // Debounced onChange hook based on 'withDebounce' setting. Save to persistence.
 const onChange = (params) => {}; // On change hook. This gets triggered a lot!
 
-const service = new SuperDocCollaboration()
+const service = new CollaborationBuilder()
   .withName(`sdc-${uuidv4()}`)
   .withDebounce(500)
   .onAuthenticate(onAuthenticate)
@@ -93,7 +97,7 @@ app.get('/collaboration/:documentId', { websocket: true }, (socket, request) => 
 app.listen({ port: 3000 });
 ```
 
-See [examples/collaboration/fastify-server](https://github.com/superdoc-dev/superdoc/tree/develop/examples/collaboration/fastify-server) for more details
+See [examples/editor/collaboration/providers/superdoc-yjs](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/providers/superdoc-yjs) for more details.
 
 ---
 

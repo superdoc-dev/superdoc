@@ -196,7 +196,23 @@ export class RemoteCursorManager {
    */
   setup(): void {
     const provider = this.#options.collaborationProvider;
-    if (!provider?.awareness) return;
+    const awareness = provider?.awareness;
+    // The CollaborationProviderLike type declares `on`/`off` as required
+    // methods on `awareness`, but the upstream shared `CollaborationProvider`
+    // (now used by `PresentationEditorOptions.collaborationProvider`) marks
+    // them optional. The boundary cast in `PresentationEditor.ts` widens
+    // both ways, so a consumer-provided provider whose `awareness` lacks
+    // event hooks compiles but would crash here without this guard.
+    if (!awareness || typeof awareness.on !== 'function' || typeof awareness.off !== 'function') {
+      if (awareness) {
+        // Warn so consumer misconfigurations (provider present but missing
+        // event hooks) are debuggable; remote cursors stay disabled.
+        console.warn(
+          '[remote-cursors] provider.awareness is missing on/off methods; remote cursors will not be wired.',
+        );
+      }
+      return;
+    }
 
     // Prevent double-initialization: cleanup existing subscriptions
     this.#cleanupSubscriptions();
@@ -206,13 +222,13 @@ export class RemoteCursorManager {
       this.scheduleUpdate();
     };
 
-    provider.awareness.on('change', handleAwarenessChange);
-    provider.awareness.on('update', handleAwarenessChange);
+    awareness.on('change', handleAwarenessChange);
+    awareness.on('update', handleAwarenessChange);
 
     // Store cleanup function for awareness subscriptions
     this.#awarenessCleanup = () => {
-      provider.awareness?.off('change', handleAwarenessChange);
-      provider.awareness?.off('update', handleAwarenessChange);
+      awareness.off?.('change', handleAwarenessChange);
+      awareness.off?.('update', handleAwarenessChange);
     };
 
     // Setup scroll listener for virtualization updates

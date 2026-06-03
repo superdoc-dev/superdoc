@@ -74,6 +74,96 @@ const HARDCODED_PATH = /\/Users\/[a-z][a-zA-Z0-9_-]*\//g;
 type Issue = { file: string; line: number; kind: string; detail: string };
 const issues: Issue[] = [];
 
+// Manifest entry schema (SD-3217 round 4). Every entry in
+// demos/manifest.json and examples/manifest.json must declare these.
+const ALLOWED_SECTIONS = new Set(['editor', 'document-engine', 'ai', 'solutions', 'getting-started', 'advanced']);
+const ALLOWED_KINDS = new Set(['minimal-example', 'integration-example', 'workflow-demo', 'reference-workspace']);
+const ALLOWED_STATUSES = new Set(['active', 'hidden', 'archived', 'shim']);
+const ALLOWED_SOURCE_KINDS = new Set(['local', 'external']);
+
+function validateManifest(manifestPath: string, relPath: string): void {
+  let entries: unknown;
+  try {
+    entries = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  } catch (err) {
+    issues.push({ file: relPath, line: 0, kind: 'invalid-json', detail: String(err).split('\n')[0] });
+    return;
+  }
+  if (!Array.isArray(entries)) {
+    issues.push({ file: relPath, line: 0, kind: 'manifest-shape', detail: 'top-level must be an array' });
+    return;
+  }
+  for (const [index, entry] of entries.entries()) {
+    if (typeof entry !== 'object' || entry === null) {
+      issues.push({
+        file: relPath,
+        line: 0,
+        kind: 'manifest-shape',
+        detail: `entry at index ${index} must be a JSON object with id and metadata fields`,
+      });
+      continue;
+    }
+    const e = entry as Record<string, unknown>;
+    const eid = typeof e.id === 'string' ? e.id : '<no-id>';
+    if (typeof e.section !== 'string' || !ALLOWED_SECTIONS.has(e.section)) {
+      issues.push({
+        file: relPath,
+        line: 0,
+        kind: 'manifest-schema',
+        detail: `${eid}: section missing or not one of ${[...ALLOWED_SECTIONS].join(', ')}`,
+      });
+    }
+    if (typeof e.subsection !== 'string' || e.subsection.length === 0) {
+      issues.push({
+        file: relPath,
+        line: 0,
+        kind: 'manifest-schema',
+        detail: `${eid}: subsection missing or empty (use 'core' if no natural subsection)`,
+      });
+    }
+    if (typeof e.kind !== 'string' || !ALLOWED_KINDS.has(e.kind)) {
+      issues.push({
+        file: relPath,
+        line: 0,
+        kind: 'manifest-schema',
+        detail: `${eid}: kind missing or not one of ${[...ALLOWED_KINDS].join(', ')}`,
+      });
+    }
+    if (typeof e.status !== 'string' || !ALLOWED_STATUSES.has(e.status)) {
+      issues.push({
+        file: relPath,
+        line: 0,
+        kind: 'manifest-schema',
+        detail: `${eid}: status missing or not one of ${[...ALLOWED_STATUSES].join(', ')}`,
+      });
+    }
+    if (typeof e.sourceKind !== 'string' || !ALLOWED_SOURCE_KINDS.has(e.sourceKind)) {
+      issues.push({
+        file: relPath,
+        line: 0,
+        kind: 'manifest-schema',
+        detail: `${eid}: sourceKind missing or not one of ${[...ALLOWED_SOURCE_KINDS].join(', ')}`,
+      });
+    }
+    // sourceKind must agree with sourceRepo: monorepo entries are local,
+    // anything else is external. Cheap drift check.
+    if (typeof e.sourceRepo === 'string' && typeof e.sourceKind === 'string') {
+      const expectedKind = e.sourceRepo === 'superdoc-dev/superdoc' ? 'local' : 'external';
+      if (e.sourceKind !== expectedKind) {
+        issues.push({
+          file: relPath,
+          line: 0,
+          kind: 'manifest-schema',
+          detail: `${eid}: sourceKind '${e.sourceKind}' does not match sourceRepo '${e.sourceRepo}' (expected '${expectedKind}')`,
+        });
+      }
+    }
+  }
+}
+
+validateManifest(join(REPO_ROOT, 'demos/manifest.json'), 'demos/manifest.json');
+validateManifest(join(REPO_ROOT, 'examples/manifest.json'), 'examples/manifest.json');
+
 function walk(dir: string, files: string[] = []): string[] {
   let entries: string[];
   try {

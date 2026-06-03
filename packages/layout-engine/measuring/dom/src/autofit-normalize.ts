@@ -75,6 +75,13 @@ export type WorkingTableGridInput = {
    * force growth.
    */
   preserveExplicitAutoGrid?: boolean;
+  /**
+   * AutoFit tables with auto-width semantics and a complete authored grid that
+   * fits the available width should use the grid sum as their outer width
+   * budget. Cell `tcW` preferences may still reshape columns inside this budget,
+   * but should not by themselves expand the table beyond it.
+   */
+  autoGridWidthBudget?: number;
   /** Preferred table width target, in pixels, if resolvable. */
   preferredTableWidth?: number;
   /** Preferred/authored grid widths, in pixels, in logical-column order. */
@@ -144,10 +151,8 @@ export function buildAutoFitWorkingGridInput(
 ): WorkingTableGridInput {
   const maxTableWidth = sanitizePositiveNumber(constraints.maxWidth);
   const layoutMode = resolveLayoutMode(block.attrs?.tableLayout);
-  const preferredTableWidth = resolvePreferredTableWidth(
-    block.attrs?.tableWidth as TableWidthAttr | undefined,
-    maxTableWidth,
-  );
+  const tableWidth = block.attrs?.tableWidth as TableWidthAttr | undefined;
+  const preferredTableWidth = resolvePreferredTableWidth(tableWidth, maxTableWidth);
   const rawPreferredColumnWidths = normalizePreferredColumnWidths(block.columnWidths);
   const logicalColumnLimit = resolveTrailingPlaceholderColumnLimit(rawPreferredColumnWidths);
   let activeRowSpans: number[] = [];
@@ -181,6 +186,14 @@ export function buildAutoFitWorkingGridInput(
     gridColumnCount,
     rows,
   });
+  const autoGridWidthBudget = resolveAutoGridWidthBudget({
+    layoutMode,
+    tableWidth,
+    preferredColumnWidths,
+    preferredTableWidth,
+    gridColumnCount,
+    maxTableWidth,
+  });
 
   return {
     layoutMode,
@@ -188,6 +201,7 @@ export function buildAutoFitWorkingGridInput(
     ...(preserveAuthoredGrid ? { preserveAuthoredGrid } : {}),
     ...(preserveAutoGrid ? { preserveAutoGrid } : {}),
     ...(preserveExplicitAutoGrid ? { preserveExplicitAutoGrid } : {}),
+    ...(autoGridWidthBudget != null ? { autoGridWidthBudget } : {}),
     preferredTableWidth,
     preferredColumnWidths,
     gridColumnCount,
@@ -248,6 +262,37 @@ function shouldPreserveExplicitAutoGrid(args: {
   if (!hasNonUniformGrid(preferredColumnWidths) && !hasConcreteCellWidthRequest(rows)) return false;
 
   return approximatelyEqual(sumWidths(preferredColumnWidths), preferredTableWidth);
+}
+
+function resolveAutoGridWidthBudget(args: {
+  layoutMode: AutoFitLayoutMode;
+  tableWidth: TableWidthAttr | undefined;
+  preferredColumnWidths: number[];
+  preferredTableWidth: number | undefined;
+  gridColumnCount: number;
+  maxTableWidth: number;
+}): number | undefined {
+  const { layoutMode, tableWidth, preferredColumnWidths, preferredTableWidth, gridColumnCount, maxTableWidth } = args;
+  if (layoutMode !== 'autofit') return undefined;
+  if (!hasAutoTableWidthSemantics(tableWidth)) return undefined;
+  if (preferredTableWidth != null) return undefined;
+  if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return undefined;
+
+  const gridWidth = sumWidths(preferredColumnWidths);
+  if (gridWidth <= 0) return undefined;
+  if (gridWidth > maxTableWidth + 0.5) return undefined;
+
+  return gridWidth;
+}
+
+function hasAutoTableWidthSemantics(tableWidth: TableWidthAttr | undefined): boolean {
+  if (tableWidth == null) return false;
+  if (typeof tableWidth !== 'object') return false;
+  const type = typeof tableWidth.type === 'string' ? tableWidth.type.toLowerCase() : undefined;
+  if (type !== 'auto') return false;
+
+  const rawWidth = tableWidth.width ?? tableWidth.value;
+  return rawWidth == null || (typeof rawWidth === 'number' && Number.isFinite(rawWidth) && rawWidth <= 0);
 }
 
 function hasNonUniformGrid(widths: number[]): boolean {

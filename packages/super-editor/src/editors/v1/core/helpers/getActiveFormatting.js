@@ -1,6 +1,33 @@
 import { getMarksFromSelection } from './getMarksFromSelection.js';
 import { findMark } from './findMark.js';
 
+/**
+ * Result entry from `getActiveFormatting`. Discriminated union: the
+ * synthetic `copyFormat` flag uses `attrs: true`; every other entry
+ * carries a `Record<string, unknown>` attribute object.
+ *
+ * @typedef {{ name: 'copyFormat'; attrs: true }
+ *           | { name: string; attrs: Record<string, unknown> }} ActiveFormattingEntry
+ */
+
+/**
+ * Narrow structural editor shape consumed by `getActiveFormatting`.
+ * Only `state` (PM EditorState) + `storage.formatCommands.storedStyle`
+ * are needed. Avoids resurfacing SD-3240 debt through full Editor.
+ *
+ * @typedef {{
+ *   state: import('prosemirror-state').EditorState;
+ *   storage: { formatCommands?: { storedStyle?: unknown } };
+ * }} ActiveFormattingEditorLike
+ */
+
+/**
+ * Compute the active formatting at the current selection. SD-3213 /
+ * SD-3245: typed signature replaces previous `(editor: any): any`.
+ *
+ * @param {ActiveFormattingEditorLike} editor
+ * @returns {ActiveFormattingEntry[]}
+ */
 export function getActiveFormatting(editor) {
   const { state } = editor;
   const { selection } = state;

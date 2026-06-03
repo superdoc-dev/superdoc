@@ -458,11 +458,10 @@ describe('resolveCurrentSelectionInfo > entity ids', () => {
   });
 
   it('collects changeIds from trackInsert/trackDelete/trackFormat marks (translated through canonical resolver)', () => {
-    // Raw mark ids and canonical Document API ids differ: the canonical
-    // id is a derived hash from `groupTrackedChanges`. We mock that map
-    // so the resolver sees raw 'tc1' / 'tc2' / 'tc3' and returns the
-    // canonical 'tcA' / 'tcB' / 'tcC' that consumers see in
-    // `trackChanges.list().items[].id`.
+    // Raw mark ids and canonical Document API ids can differ. We mock
+    // that map so the resolver sees raw 'tc1' / 'tc2' / 'tc3' and
+    // returns the canonical 'tcA' / 'tcB' / 'tcC' that consumers see
+    // in `trackChanges.list().items[].id`.
     setTrackedChangeMapping([
       { rawId: 'tc1', canonical: 'tcA' },
       { rawId: 'tc2', canonical: 'tcB' },

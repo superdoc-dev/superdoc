@@ -22,7 +22,9 @@ import type {
   ResolvedPaintItem,
   ResolvedLayout,
   ResolvedPage,
+  LayoutStoryLocator,
 } from '@superdoc/contracts';
+import { namedStoryLocator } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
 import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
 import type { HeaderFooterPartStoryLocator } from '@superdoc/document-api';
@@ -74,6 +76,11 @@ type SurfacePmEntry = {
   el: HTMLElement;
 };
 
+// AIDEV-NOTE: compat-fallback - header/footer session interaction still keys
+// off `data-pm-*` (prep-002). DomPainter also stamps the parallel neutral
+// dataset (`data-layout-fragment-id` etc.) which a future v2 consumer can
+// pick up via `LayoutHitV1Compat.readRenderedElementIdentity`. Do not strip
+// the PM reads here without an explicit migration plan.
 function buildSurfacePmEntries(surface: HTMLElement): SurfacePmEntry[] {
   const nodes = Array.from(surface.querySelectorAll<HTMLElement>('[data-pm-start][data-pm-end]'));
   const nonLeaf = new WeakSet<HTMLElement>();
@@ -358,8 +365,18 @@ type HeaderFooterActivationOptions = {
  * Paired with the originals so the decoration provider can deliver aligned
  * `items` alongside `fragments`.
  */
-function resolveResult(result: HeaderFooterLayoutResult): ResolvedHeaderFooterLayout {
-  return resolveHeaderFooterLayout(result.layout, result.blocks, result.measures);
+function buildHeaderFooterStory(kind: 'header' | 'footer', id: string | null | undefined): LayoutStoryLocator {
+  const normalizedId = typeof id === 'string' && id.length > 0 ? id : undefined;
+  return normalizedId ? namedStoryLocator(kind, normalizedId) : { kind };
+}
+
+function storyIdFromHeaderFooterLayoutKey(key: string): string {
+  return key.replace(/::s\d+$/, '');
+}
+
+function resolveResult(result: HeaderFooterLayoutResult, storyId?: string | null): ResolvedHeaderFooterLayout {
+  const story = buildHeaderFooterStory(result.kind, storyId ?? String(result.type));
+  return resolveHeaderFooterLayout(result.layout, result.blocks, result.measures, story);
 }
 
 function shiftResolvedPaintItemY(item: ResolvedPaintItem, yOffset: number): ResolvedPaintItem {
@@ -524,9 +541,13 @@ export class HeaderFooterSessionManager {
    * interactive header/footer UI, for example through document-api commands.
    * We refresh the descriptor registry and clear all derived FlowBlock caches
    * so the next layout pass sees the new structure immediately.
+   *
+   * Pass `purgeCachedEditors: true` after a full document file replace: cached
+   * sub-editors keyed by relationship id must not outlive the new converter
+   * snapshot when ids are reused.
    */
-  refreshStructure(): void {
-    this.#headerFooterManager?.refresh();
+  refreshStructure(options?: { purgeCachedEditors?: boolean }): void {
+    this.#headerFooterManager?.refresh(options?.purgeCachedEditors ? { purgeCachedEditors: true } : undefined);
     this.#headerFooterAdapter?.invalidateAll();
   }
 
@@ -555,7 +576,7 @@ export class HeaderFooterSessionManager {
   /** Set header layout results */
   set headerLayoutResults(results: HeaderFooterLayoutResult[] | null) {
     this.#headerLayoutResults = results;
-    this.#resolvedHeaderLayouts = results ? results.map(resolveResult) : null;
+    this.#resolvedHeaderLayouts = results ? results.map((result) => resolveResult(result)) : null;
   }
 
   /** Footer layout results */
@@ -566,7 +587,7 @@ export class HeaderFooterSessionManager {
   /** Set footer layout results */
   set footerLayoutResults(results: HeaderFooterLayoutResult[] | null) {
     this.#footerLayoutResults = results;
-    this.#resolvedFooterLayouts = results ? results.map(resolveResult) : null;
+    this.#resolvedFooterLayouts = results ? results.map((result) => resolveResult(result)) : null;
   }
 
   /** Header layouts by rId */
@@ -677,8 +698,8 @@ export class HeaderFooterSessionManager {
   ): void {
     this.#headerLayoutResults = headerResults;
     this.#footerLayoutResults = footerResults;
-    this.#resolvedHeaderLayouts = headerResults ? headerResults.map(resolveResult) : null;
-    this.#resolvedFooterLayouts = footerResults ? footerResults.map(resolveResult) : null;
+    this.#resolvedHeaderLayouts = headerResults ? headerResults.map((result) => resolveResult(result)) : null;
+    this.#resolvedFooterLayouts = footerResults ? footerResults.map((result) => resolveResult(result)) : null;
   }
 
   /**
@@ -1213,6 +1234,8 @@ export class HeaderFooterSessionManager {
       this.#emitModeChanged();
       this.#emitEditingContext(editor);
       this.#deps?.notifyInputBridgeTargetChanged();
+      this.#deps?.setPendingDocChange();
+      this.#deps?.scheduleRerender();
       return editor;
     } catch (error) {
       console.error('[HeaderFooterSessionManager] Unexpected error in enterMode:', error);
@@ -1340,6 +1363,18 @@ export class HeaderFooterSessionManager {
     this.#callbacks.onUpdateAwarenessSession?.(this.#session);
     this.#updateModeBanner();
     this.#syncActiveBorder();
+  }
+
+  #isActiveDecoration(kind: 'header' | 'footer', headerFooterRefId: string | undefined, pageNumber: number): boolean {
+    if (this.#session.mode !== kind) {
+      return false;
+    }
+
+    if (headerFooterRefId && this.#session.headerFooterRefId) {
+      return headerFooterRefId === this.#session.headerFooterRefId;
+    }
+
+    return this.#session.pageNumber === pageNumber;
   }
 
   #emitEditingContext(editor: Editor): void {
@@ -1629,11 +1664,11 @@ export class HeaderFooterSessionManager {
     // Rebuild resolved maps aligned 1:1 with the raw rId maps.
     this.#resolvedHeaderByRId.clear();
     for (const [key, result] of this.#headerLayoutsByRId) {
-      this.#resolvedHeaderByRId.set(key, resolveResult(result));
+      this.#resolvedHeaderByRId.set(key, resolveResult(result, storyIdFromHeaderFooterLayoutKey(key)));
     }
     this.#resolvedFooterByRId.clear();
     for (const [key, result] of this.#footerLayoutsByRId) {
-      this.#resolvedFooterByRId.set(key, resolveResult(result));
+      this.#resolvedFooterByRId.set(key, resolveResult(result, storyIdFromHeaderFooterLayoutKey(key)));
     }
   }
 
@@ -2274,6 +2309,7 @@ export class HeaderFooterSessionManager {
     result: HeaderFooterLayoutResult,
     cachedResolvedLayout: ResolvedHeaderFooterLayout | undefined,
     contextLabel: string,
+    storyId?: string | null,
   ): ResolvedPaintItem[] | undefined {
     const cachedPage = cachedResolvedLayout?.pages.find((page) => page.number === slotPageNumber);
     const cachedItems = cachedPage?.items;
@@ -2286,7 +2322,7 @@ export class HeaderFooterSessionManager {
       );
     }
 
-    const freshResolvedLayout = resolveHeaderFooterLayout(result.layout, result.blocks, result.measures);
+    const freshResolvedLayout = resolveResult(result, storyId);
     const freshPage = freshResolvedLayout.pages.find((page) => page.number === slotPageNumber);
     const freshItems = freshPage?.items;
     if (freshItems && freshItems.length === fragments.length) {
@@ -2400,6 +2436,7 @@ export class HeaderFooterSessionManager {
               rIdLayout,
               rIdResolvedLayout,
               `rId '${rIdLayoutKey}' page ${pageNumber}`,
+              sectionRId,
             );
             if (!alignedItems) {
               return null;
@@ -2421,6 +2458,7 @@ export class HeaderFooterSessionManager {
             const layoutMinY = rIdLayout.layout.minY ?? 0;
             const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
             const normalizedItems = normalizeDecorationItems(alignedItems, layoutMinY);
+            const isActiveHeaderFooter = this.#isActiveDecoration(kind, sectionRId, pageNumber);
 
             return {
               fragments: normalizedFragments,
@@ -2432,6 +2470,7 @@ export class HeaderFooterSessionManager {
               contentWidth: effectiveWidth,
               headerFooterRefId: sectionRId,
               sectionType: headerFooterType,
+              isActiveHeaderFooter,
               minY: layoutMinY,
               box: { x: box.x, y: metrics.offset, width: effectiveWidth, height: metrics.containerHeight },
               hitRegion: { x: box.x, y: metrics.offset, width: effectiveWidth, height: metrics.containerHeight },
@@ -2456,6 +2495,8 @@ export class HeaderFooterSessionManager {
         return null;
       }
       const fragments = slotPage.fragments ?? [];
+      const fallbackId = this.#headerFooterManager?.getVariantId(kind, headerFooterType);
+      const finalHeaderId = sectionRId ?? fallbackId ?? undefined;
 
       const resolvedVariant = resolvedResults?.[variantIndex];
       const alignedVariantItems = this.resolveAlignedDecorationItems(
@@ -2464,6 +2505,7 @@ export class HeaderFooterSessionManager {
         variant,
         resolvedVariant,
         `variant '${headerFooterType}' page ${pageNumber}`,
+        finalHeaderId ?? headerFooterType,
       );
       if (!alignedVariantItems) {
         return null;
@@ -2478,12 +2520,11 @@ export class HeaderFooterSessionManager {
 
       const rawLayoutHeight = variant.layout.height ?? 0;
       const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
-      const fallbackId = this.#headerFooterManager?.getVariantId(kind, headerFooterType);
-      const finalHeaderId = sectionRId ?? fallbackId ?? undefined;
 
       const layoutMinY = variant.layout.minY ?? 0;
       const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
       const normalizedItems = normalizeDecorationItems(alignedVariantItems, layoutMinY);
+      const isActiveHeaderFooter = this.#isActiveDecoration(kind, finalHeaderId, pageNumber);
 
       return {
         fragments: normalizedFragments,
@@ -2495,6 +2536,7 @@ export class HeaderFooterSessionManager {
         contentWidth: box.width,
         headerFooterRefId: finalHeaderId,
         sectionType: headerFooterType,
+        isActiveHeaderFooter,
         minY: layoutMinY,
         box: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },
         hitRegion: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },

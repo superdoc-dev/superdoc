@@ -60,6 +60,12 @@ operation-definitions.ts    types.ts (re-exports + CommandCatalog, guards)
 - `operation-registry.ts` is the single source of truth for type signatures (input/options/output per operation).
 - `TypedDispatchTable` (in `invoke.ts`) validates at compile time that dispatch wiring conforms to the registry.
 
+## Receipt Failure Metadata
+
+For operations that return receipt-shaped results, `possibleFailureCodes` must be the complete set of codes that can appear in a returned `{ success: false, failure }` receipt. `throws.preApply` is only for validation or adapter errors thrown before a receipt is produced; listing a code there does not make it valid for receipt output.
+
+Generated SDK/CLI schemas derive their `failure.code` enums from `possibleFailureCodes`. When an adapter bridges runtime engine failures into receipt failures, add a local parity test proving every bridged code is present in `possibleFailureCodes` before regenerating downstream artifacts.
+
 ## OperationRegistry and invoke
 
 `operation-registry.ts` is the canonical type-level mapping from `OperationId` to `{ input, options, output }`. Bidirectional `Assert` checks guarantee every `OperationId` has a registry entry and vice versa.

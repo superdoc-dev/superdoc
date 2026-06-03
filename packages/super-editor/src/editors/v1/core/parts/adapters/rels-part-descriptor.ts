@@ -11,9 +11,9 @@
 
 import type { Editor } from '../../Editor.js';
 import type { PartDescriptor } from '../types.js';
+import { createRelationshipsPart, getRelationshipsRoot } from '../../helpers/rels-part-helpers.js';
 
 const RELS_PART_ID = 'word/_rels/document.xml.rels' as const;
-const RELS_XMLNS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
 const HEADER_RELATIONSHIP_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
 const FOOTER_RELATIONSHIP_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
@@ -66,8 +66,7 @@ function syncHeaderFooterCaches(editor: Editor, part: unknown): void {
   const converter = getConverter(editor);
   if (!converter) return;
 
-  const root = part as XmlElement;
-  const relsRoot = root?.elements?.find((el) => el.name === 'Relationships');
+  const relsRoot = getRelationshipsRoot(part as XmlElement);
   if (!relsRoot?.elements) return;
 
   let changed = false;
@@ -111,18 +110,7 @@ export const relsPartDescriptor: PartDescriptor = {
   id: RELS_PART_ID,
 
   ensurePart() {
-    return {
-      type: 'element',
-      name: 'document',
-      elements: [
-        {
-          type: 'element',
-          name: 'Relationships',
-          attributes: { xmlns: RELS_XMLNS },
-          elements: [],
-        },
-      ],
-    };
+    return createRelationshipsPart();
   },
 
   afterCommit({ editor, part }) {

@@ -114,7 +114,11 @@ const handleToolbarButtonClick = (item, argument = null) => {
   }
 
   emit('item-clicked');
-  emit('command', { item, argument });
+  // Forward the item's static `argument` (set via `useToolbarItem({ argument })`)
+  // when no caller-provided argument exists. Lets buttons carry fixed args like
+  // `{ direction: 'rtl' }` without needing a dropdown.
+  const resolved = argument ?? item.argument?.value ?? null;
+  emit('command', { item, argument: resolved });
 };
 
 const handleToolbarButtonTextSubmit = (item, argument) => {
@@ -168,7 +172,7 @@ const dropdownOptions = (item) => {
       ...option,
       props: {
         ...option.props,
-        class: isSelected ? 'selected' : '',
+        class: isSelected ? 'sd-selected' : '',
       },
     };
   });
@@ -183,7 +187,7 @@ const getDropdownAttributes = (option, item) => {
 
 const moveToNextButton = (e) => {
   const currentButton = e.target;
-  const nextButton = e.target.closest('.toolbar-item-ctn').nextElementSibling;
+  const nextButton = e.target.closest('.sd-toolbar-item-ctn').nextElementSibling;
   if (nextButton) {
     currentButton.setAttribute('tabindex', '-1');
     nextButton.setAttribute('tabindex', '0');
@@ -193,7 +197,7 @@ const moveToNextButton = (e) => {
 
 const moveToPreviousButton = (e) => {
   const currentButton = e.target;
-  const previousButton = e.target.closest('.toolbar-item-ctn').previousElementSibling;
+  const previousButton = e.target.closest('.sd-toolbar-item-ctn').previousElementSibling;
   if (previousButton) {
     currentButton.setAttribute('tabindex', '-1');
     previousButton.setAttribute('tabindex', '0');
@@ -223,6 +227,17 @@ const moveToPreviousButtonGroup = (e) => {
   }
 };
 
+const activateToolbarItem = (item) => {
+  if (item.disabled.value) return;
+
+  if (isDropdown(item)) {
+    handleDropdownUpdateShowForItem(!getExpanded(item), item);
+    return;
+  }
+
+  handleToolbarButtonClick(item, null, false);
+};
+
 // Implement keyboard navigation using Roving Tabindex
 // https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/#kbd_roving_tabindex
 // Set tabindex to 0 for the current focused button
@@ -235,11 +250,16 @@ const handleKeyDown = (e, item) => {
   if (isTypingField && isTypingToolbarItem) {
     return;
   }
+
+  const handledKeys = ['Enter', ' ', 'Spacebar', 'Escape', 'ArrowRight', 'ArrowLeft', 'Tab'];
+  if (!handledKeys.includes(e.key)) return;
   e.preventDefault();
 
   switch (e.key) {
     case 'Enter':
-      handleToolbarButtonClick(item, null, false);
+    case ' ':
+    case 'Spacebar':
+      activateToolbarItem(item);
       break;
     case 'Escape':
       closeDropdowns();
@@ -265,7 +285,7 @@ const handleKeyDown = (e, item) => {
 };
 const handleFocus = (e) => {
   // Set the focus to the first button inside the button group that is not disabled
-  const firstButton = toolbarItemRefs.value.find((item) => !item.classList.contains('disabled'));
+  const firstButton = toolbarItemRefs.value.find((item) => !item.classList.contains('sd-disabled'));
   if (firstButton) {
     firstButton.setAttribute('tabindex', '0');
     firstButton.focus();
@@ -331,10 +351,10 @@ onBeforeUnmount(() => {
       :class="{
         narrow: item.isNarrow.value,
         wide: item.isWide.value,
-        disabled: item.disabled.value,
+        'sd-disabled': item.disabled.value,
       }"
       @keydown="(e) => handleKeyDown(e, item)"
-      class="toolbar-item-ctn"
+      class="sd-toolbar-item-ctn"
       ref="toolbarItemRefs"
       :tabindex="index === 0 ? 0 : -1"
       :data-item-id="item.id.value"
@@ -350,7 +370,7 @@ onBeforeUnmount(() => {
         :show="getExpanded(item)"
         :content-style="{ fontFamily: props.uiFontFamily }"
         placement="bottom-start"
-        class="toolbar-button sd-editor-toolbar-dropdown"
+        class="sd-toolbar-button sd-editor-toolbar-dropdown"
         @select="(key, option) => handleSelect(item, option)"
         @update:show="(open) => handleDropdownUpdateShowForItem(open, item)"
         :style="item.dropdownStyles.value"
@@ -373,6 +393,7 @@ onBeforeUnmount(() => {
               <ToolbarButton
                 :toolbar-item="item"
                 :disabled="item.disabled.value"
+                :allow-enter-propagation="true"
                 @textSubmit="handleToolbarButtonTextSubmit(item, $event)"
                 @mainClick="handleSplitButtonMainClick(item)"
               />

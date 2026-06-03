@@ -346,28 +346,40 @@ function alreadyMatchesPlainTextReplacement(
   return isCanonicalPlainTextParagraph(getOnlyChild(sdt.node), expectedText);
 }
 
+/**
+ * Replace the text content of an SDT, operating on the inner content range
+ * (pos+1 to pos+nodeSize-1) instead of rewriting the whole wrapper. This
+ * keeps the wrapper node intact so the structured-content lock plugin's
+ * filterTransaction doesn't read the change as wrapper damage on `sdtLocked`
+ * controls, which would silently no-op (spec: sdtLocked protects the wrapper
+ * but the content is editable).
+ *
+ * Callers that need to enforce content-lock semantics (`contentLocked` and
+ * `sdtContentLocked`) must call `assertNotContentLocked` before reaching
+ * here; this helper trusts that guard and emits a content-range step.
+ */
 function replaceSdtTextContent(editor: Editor, target: ContentControlTarget, text: string): boolean {
   const resolved = resolveSdtByTarget(editor.state.doc, target);
+  const { tr } = editor.state;
+  const innerFrom = resolved.pos + 1;
+  const innerTo = resolved.pos + resolved.node.nodeSize - 1;
 
   if (resolved.kind === 'inline') {
-    const updateCmd = editor.commands?.updateStructuredContentById;
     if (text.length > 0) {
-      return Boolean(updateCmd?.(target.nodeId, { text }));
+      const textNode = editor.schema.text(text);
+      tr.replaceWith(innerFrom, innerTo, textNode);
+    } else {
+      tr.delete(innerFrom, innerTo);
     }
-
-    const updatedNode = resolved.node.type.create({ ...resolved.node.attrs }, null, resolved.node.marks);
-    const { tr } = editor.state;
-    tr.replaceWith(resolved.pos, resolved.pos + resolved.node.nodeSize, updatedNode);
     dispatchTransaction(editor, tr);
     return true;
   }
 
   const paragraph = buildEmptyBlockContent(editor, resolved.node);
+  if (!paragraph) return false;
   const paragraphText = text.length > 0 ? buildTextWithTabs(editor.schema, text, undefined) : null;
-  const updatedParagraph = paragraph?.type.create(paragraph.attrs ?? null, paragraphText, paragraph.marks) ?? null;
-  const updatedNode = resolved.node.type.create({ ...resolved.node.attrs }, updatedParagraph, resolved.node.marks);
-  const { tr } = editor.state;
-  tr.replaceWith(resolved.pos, resolved.pos + resolved.node.nodeSize, updatedNode);
+  const updatedParagraph = paragraph.type.create(paragraph.attrs ?? null, paragraphText, paragraph.marks);
+  tr.replaceWith(innerFrom, innerTo, updatedParagraph);
   dispatchTransaction(editor, tr);
   return true;
 }
@@ -493,8 +505,18 @@ function wrapWrapper(
     const nodeType = editor.schema.nodes[nodeTypeName];
     if (!nodeType) return false;
 
+    // ECMA-376 §17.5.2.26: typeless sdtPr resolves to richText. Default here so
+    // the wrapper classifies the same in-session and after reimport.
     const wrapperNode = nodeType.create(
-      { id, tag: input.tag, alias: input.alias, lockMode: input.lockMode ?? 'unlocked' },
+      {
+        id,
+        tag: input.tag,
+        alias: input.alias,
+        lockMode: input.lockMode ?? 'unlocked',
+        controlType: 'richText',
+        type: 'richText',
+        sdtPr: buildDefaultSdtPr('richText'),
+      },
       resolved.node,
     );
     const { tr } = editor.state;
@@ -626,6 +648,7 @@ function setLockModeWrapper(
 /** Maps control types to their sdtPr element name. Types not listed have no element. */
 const CONTROL_TYPE_SDT_PR_ELEMENTS: Record<string, string> = {
   text: 'w:text',
+  richText: 'w:richText',
   date: 'w:date',
   checkbox: 'w14:checkbox',
   comboBox: 'w:comboBox',
@@ -785,6 +808,8 @@ function buildDefaultTypeSdtPrElement(controlType: string | undefined): SdtPrEle
   switch (controlType) {
     case 'text':
       return { name: 'w:text', type: 'element' };
+    case 'richText':
+      return { name: 'w:richText', type: 'element' };
     case 'date':
       return {
         name: 'w:date',
@@ -1806,15 +1831,18 @@ function createWrapper(
   }
 
   return executeSdtMutation(editor, target, options, () => {
+    // ECMA-376 §17.5.2.26: typeless sdtPr resolves to richText. 'unknown' is for
+    // unsupported/unrecognized type children, not a default for new controls.
+    const controlType = input.controlType ?? 'richText';
     const attrs: Record<string, unknown> = {
       id,
       tag: input.tag,
       alias: input.alias,
       lockMode: input.lockMode ?? 'unlocked',
-      controlType: input.controlType ?? 'unknown',
-      type: input.controlType ?? 'unknown',
+      controlType,
+      type: controlType,
     };
-    const defaultSdtPr = buildDefaultSdtPr(input.controlType ?? 'unknown');
+    const defaultSdtPr = buildDefaultSdtPr(controlType);
     const isDateCreate = input.controlType === 'date' && input.content == null;
     const dateDefaults = isDateCreate ? buildDateControlDefaults() : null;
     const sdtPrWithDateDefaults = dateDefaults ? applyDateDefaultsToSdtPr(defaultSdtPr, dateDefaults) : defaultSdtPr;

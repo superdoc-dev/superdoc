@@ -4,89 +4,150 @@ sidebarTitle: Storage
 keywords: "storage, versioning, document storage, S3, cloud storage, Yjs, CRDT, collaboration"
 ---
 
-SuperDoc is a self-hosted solution where you decide how and when documents are stored. Existing storage solutions like S3 and Cloud Storage are secure and work well.
+Storage depends on how your users edit.
+
+For real-time collaboration, store the Yjs document state. That is the live
+source of truth. A DOCX file can seed an empty room, and you can export DOCX
+snapshots whenever you need Word interop, downloads, audit records, or pinned
+versions.
+
+For single-user or check-in/check-out flows, store DOCX versions directly.
 
 ## Storage approaches
-How and when a document is stored often depends on the level of document collaboration needed.
 
-| Collaboration Level | Approach | Complexity | When Changes Are Stored |
-|---------------------|----------|------------|------------------------|
-| [High](#high-collaboration) | Yjs/CRDT | Medium | Continuously (backend) |
-| [Low](#low-collaboration) | Check in/out | Low | User-triggered (frontend) |
+| Collaboration level | Approach | Canonical store | When changes are stored |
+|---------------------|----------|-----------------|-------------------------|
+| [High](#high-collaboration) | Yjs/CRDT | Yjs update or snapshot | Continuously on the backend |
+| [Low](#low-collaboration) | Check in/out | DOCX binary | When the user saves or checks in |
 
 ### High collaboration
 
-For real-time, multi-user collaboration (similar to Google Docs) using Yjs/CRDT, each client connects to a [realtime collaboration service](/editor/collaboration/overview) that merges all user updates.
+For real-time, multi-user collaboration, each client connects to a
+[real-time collaboration service](/editor/collaboration/overview). Only Yjs
+updates move through that service. The collaboration server merges those
+updates and stores the current Yjs state.
 
 <Info>
-**Complexity: Medium**: Requires a server-side [Yjs/CRDT service](/guides/collaboration/self-hosted-overview)
+**Complexity: medium**: Requires a server-side [Yjs service](/guides/collaboration/self-hosted-overview)
 </Info>
 
 **How it works:**
-- Every document edit (as a Yjs byte array) is automatically sent via WebSocket to the Yjs/CRDT service
-- When all changes are merged, the service stores the new document
-- Storage happens continuously on the backend
+- The first DOCX can seed an empty room.
+- After that, the Yjs document is canonical.
+- Each edit is sent as a Yjs update over WebSocket.
+- The server stores Yjs updates or periodic Yjs snapshots.
+- SuperDoc exports a fresh DOCX from the current Yjs-backed editor state when you need a file.
+
+```typescript
+import * as Y from "yjs";
+
+async function loadYdoc(documentId: string) {
+  const ydoc = new Y.Doc();
+  const update = await storage.get(`ydocs/${documentId}.bin`);
+
+  if (update) {
+    Y.applyUpdate(ydoc, new Uint8Array(update));
+  }
+
+  return ydoc;
+}
+
+async function saveYdoc(documentId: string, ydoc: Y.Doc) {
+  const update = Y.encodeStateAsUpdate(ydoc);
+  await storage.put(`ydocs/${documentId}.bin`, Buffer.from(update));
+}
+```
+
+The Yjs document carries the document body, package parts, media, comments, and
+document metadata needed for SuperDoc to rebuild the editor state.
+
+### DOCX archive snapshots
+
+DOCX exports are still useful in real-time collaboration. They are just not the
+live collaboration store.
+
+Use DOCX exports for:
+
+- User downloads
+- Word or Microsoft 365 workflows
+- Audit snapshots
+- Version pinning
+- Legal review packages
+- Backup and restore workflows
+
+```typescript
+const blob = await superdoc.export({
+  triggerDownload: false,
+  isFinalDoc: true,
+});
+
+await storage.put(`versions/${documentId}/${versionId}.docx`, blob);
+```
 
 ### Low collaboration
 
-For scenarios where only one user edits at a time (like SharePoint), implement a locking mechanism where users check out documents before editing.
+For scenarios where one user edits at a time, use a locking flow. Users check
+out a document, edit it, and save or check it back in.
 
 <Info>
-**Complexity: Low**: Requires storing and querying document lock/unlock state
+**Complexity: low**: Requires storing and querying document lock state
 </Info>
 
 **How it works:**
-- When the active user [makes an edit](/advanced/supereditor/events#onupdate), debounced changes are sent to your server which stores the document
-- Alternatively, when a user saves/checks in the document, it is sent to your server for storage
-- Storage is triggered by user actions on the frontend
-
-## What to store
-
-In both [low collaboration](#low-collaboration) and [high collaboration](#high-collaboration) approaches, when the document arrives at your backend:
+- The active user opens a DOCX.
+- Your app prevents other users from editing the same document.
+- On save or check-in, export a DOCX and upload it to your backend.
 
 <Steps>
-  <Step title="Create a unique version ID">
-    Generate a unique identifier for the document version:
+  <Step title="Create a version ID">
+    Generate a unique identifier for the document version.
+
     ```
     document_revision1764976265.docx
     ```
   </Step>
 
-  <Step title="Store the document version">
-    Save the full DOCX binary to your cloud storage:
+  <Step title="Export the DOCX">
+    Ask SuperDoc for the raw `Blob` so your app can upload it.
+
+    ```typescript
+    const blob = await superdoc.export({
+      triggerDownload: false,
+      isFinalDoc: true,
+    });
+    ```
+  </Step>
+
+  <Step title="Store the version">
+    Save the DOCX binary to your storage layer.
+
     ```
     s3://documents_bucket/versions/document_revision1764976265.docx
     ```
   </Step>
 
-  <Step title="Save version metadata">
-    Store the document version ID and its storage path in your database for later retrieval.
+  <Step title="Save metadata">
+    Store the version ID, storage path, author, and timestamp in your database.
   </Step>
 </Steps>
 
-When the document is requested later, look up the latest version in your database and serve it from cloud storage.
-
 ## Export methods
 
-The ways to export a document are covered in [Import/Export](/getting-started/import-export#export-options).
-
-<Note>
-Store the [full DOCX binary](/getting-started/import-export#docx-export-full-fidelity) for the highest fidelity version of the document.
-</Note>
+The export APIs are covered in [Import/Export](/getting-started/import-export#export-options).
 
 ## Best practices
 
 <CardGroup cols={2}>
-  <Card title="Unique Version IDs" icon="fingerprint">
-    Include timestamps or UUIDs to ensure uniqueness
+  <Card title="Store Yjs for live rooms" icon="database">
+    In real-time collaboration, store Yjs updates or snapshots as the canonical state.
   </Card>
-  <Card title="Store Full DOCX" icon="file">
-    Preserves all formatting, comments, and tracked changes
+  <Card title="Export DOCX snapshots" icon="file-output">
+    Create DOCX versions for downloads, audit records, Word workflows, and pinned releases.
   </Card>
-  <Card title="Keep Version History" icon="clock">
-    Store multiple versions for audit trails and recovery
+  <Card title="Keep version history" icon="clock">
+    Store enough history to audit, compare, and recover documents.
   </Card>
-  <Card title="Use Cloud Storage" icon="cloud">
-    S3, Google Cloud Storage, or Azure Blob Storage
+  <Card title="Use durable storage" icon="cloud">
+    Use S3, Google Cloud Storage, Azure Blob Storage, PostgreSQL, or your existing storage layer.
   </Card>
 </CardGroup>

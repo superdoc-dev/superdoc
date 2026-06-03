@@ -191,6 +191,18 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Permission range exception operations for protected documents.',
     pagePath: 'permission-ranges/index.mdx',
   },
+  customXml: {
+    title: 'Custom XML',
+    description:
+      'Custom XML Data Storage Part operations (ECMA-376 §15.2.5, §15.2.6). Raw read and write of custom XML parts in the OOXML package.',
+    pagePath: 'custom-xml/index.mdx',
+  },
+  metadata: {
+    title: 'Anchored Metadata',
+    description:
+      'Attach a JSON payload to a span of text and read it back across DOCX round-trips. Backed by hidden inline content controls and namespaced Custom XML Data Storage Parts; consumers see one operation set.',
+    pagePath: 'metadata/index.mdx',
+  },
 };
 
 export const REFERENCE_OPERATION_GROUPS: readonly ReferenceOperationGroupDefinition[] = (

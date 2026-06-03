@@ -16,7 +16,13 @@ export type {
   RunBidiContext,
   RunScriptContext,
 } from './direction-context.js';
-import type { ParagraphDirectionContext } from './direction-context.js';
+export { getParagraphInlineDirection, getTableVisualDirection } from './direction-context.js';
+import type {
+  ParagraphDirectionContext,
+  RunBidiContext,
+  RunScriptContext,
+  TableDirectionContext,
+} from './direction-context.js';
 
 // Export table contracts
 export {
@@ -72,8 +78,44 @@ export {
 } from './vertical-text.js';
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
+
+// Editor-neutral layout identity primitives (prep-001).
+// Additive only — `pmStart`/`pmEnd` and PM-shaped fields remain available
+// alongside these on every fragment/run.
+export {
+  LAYOUT_BOUNDARY_SCHEMA,
+  bodyStoryLocator,
+  namedStoryLocator,
+  computeLayoutFragmentId,
+  buildLayoutSourceIdentity,
+  buildLayoutSourceIdentityForFragment,
+} from './layout-identity.js';
+export type {
+  LayoutBlockRef,
+  LayoutFragmentId,
+  LayoutPartialRowIdentity,
+  LayoutSourceIdentity,
+  LayoutStoryKind,
+  LayoutStoryLocator,
+} from './layout-identity.js';
+import type { LayoutSourceIdentity } from './layout-identity.js';
 export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
 export type { NormalizedColumnLayout } from './column-layout.js';
+export {
+  composeAuthorColorResolver,
+  fallbackAuthorColor,
+  authorIdentityKey,
+  authorFromTrackedChangeMeta,
+  stampTrackedChangeColors,
+} from './author-colors.js';
+export type { AuthorColorsConfig, TrackChangeAuthorColorResolver } from './author-colors.js';
+export {
+  getSdtContainerKey,
+  getSdtContainerKeyForBlock,
+  getSdtContainerMetadata,
+  hasExplicitSdtContainerKey,
+  isSdtContainerMetadata,
+} from './sdt-container.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -115,6 +157,18 @@ export type FieldAnnotationMetadata = {
 
 export type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
 
+/**
+ * Visual chrome / labelling behavior of an SDT, mirroring
+ * `<w15:appearance w15:val="…">` (ECMA-376 §17.5.2.6 / OOXML 2010+).
+ *
+ *   - `'boundingBox'` (default): visible chrome around the SDT content.
+ *   - `'tags'`: tags-only mode (start/end markers).
+ *   - `'hidden'`: no chrome at all; the SDT exists in the document but is
+ *     visually transparent. The alias label MUST NOT leak into the rendered
+ *     DOM textContent (a11y / copy-paste behavior).
+ */
+export type StructuredContentAppearance = 'boundingBox' | 'tags' | 'hidden';
+
 export type StructuredContentMetadata = {
   type: 'structuredContent';
   scope: 'inline' | 'block';
@@ -122,6 +176,8 @@ export type StructuredContentMetadata = {
   tag?: string | null;
   alias?: string | null;
   lockMode?: StructuredContentLockMode;
+  /** Appearance from the SDT's `<w15:appearance>` element, when present. */
+  appearance?: StructuredContentAppearance;
   sdtPr?: unknown;
 };
 
@@ -207,6 +263,20 @@ export type TrackedChangeKind = 'insert' | 'delete' | 'format';
 
 export type TrackedChangesMode = 'review' | 'original' | 'final' | 'off';
 
+/**
+ * Identity of a tracked-change author, used to resolve a per-author color.
+ *
+ * Mirrors the author metadata carried on {@link TrackedChangeMeta}
+ * (`author` → `name`, `authorEmail` → `email`, `authorImage` → `image`).
+ * Hosts configure per-author colors through this shape (see the
+ * `modules.trackChanges.authorColors` config on the `superdoc` package).
+ */
+export type TrackChangeAuthor = {
+  name?: string;
+  email?: string;
+  image?: string;
+};
+
 /** Formatting mark for track-format metadata. */
 export type RunMark = {
   type: string;
@@ -216,6 +286,8 @@ export type RunMark = {
 export type TrackedChangeMeta = {
   kind: TrackedChangeKind;
   id: string;
+  overlapParentId?: string;
+  relationship?: 'parent' | 'child' | 'standalone';
   /**
    * Internal story key identifying which content story owns this tracked
    * change (`'body'`, `'hf:part:…'`, `'fn:…'`, `'en:…'`).
@@ -231,6 +303,15 @@ export type TrackedChangeMeta = {
   date?: string;
   before?: RunMark[];
   after?: RunMark[];
+  /**
+   * Paint-ready per-author color, resolved upstream (in/around the
+   * pm-adapter data-preparation pass) from the author identity. DomPainter
+   * reads only this field and stamps the element-scoped tracked-change CSS
+   * variables from it — it never invokes resolvers or touches app config.
+   * Undefined when per-author colors are disabled or unconfigured, in which
+   * case the static default tracked-change palette applies.
+   */
+  color?: string;
 };
 
 export type FlowRunLinkTarget = '_blank' | '_self' | '_parent' | '_top';
@@ -248,6 +329,10 @@ export type FlowRunLink = {
   name?: string;
   history?: boolean;
 };
+
+export const EMPTY_SDT_PLACEHOLDER_TEXT = 'Click or tap here to enter text';
+
+export type SdtVisualPlaceholder = 'emptyInlineSdt' | 'emptyBlockSdt';
 
 /**
  * Common formatting marks that can be applied to any run type.
@@ -301,6 +386,8 @@ export type TextRun = RunMarks & {
    */
   dataAttrs?: Record<string, string>;
   sdt?: SdtMetadata;
+  /** Layout-only placeholder for visual affordances that do not represent document text. */
+  visualPlaceholder?: SdtVisualPlaceholder;
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
   token?: 'pageNumber' | 'totalPageCount' | 'pageReference';
@@ -315,6 +402,21 @@ export type TextRun = RunMarks & {
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;
+  /** All tracked-change layers on this run, preserving overlap order. */
+  trackedChanges?: TrackedChangeMeta[];
+  /**
+   * Run-level bidi signals preserved from the source DOCX (run rtl flag,
+   * embedding/override directions). Direction-only - script formatting lives
+   * on `script`. Populated by pm-adapter from raw run properties; not yet
+   * rendered (Wave 1c consumes embedding/override).
+   */
+  bidi?: RunBidiContext;
+  /**
+   * Run-level script context preserved from the source DOCX (complex-script
+   * flag, per-script language metadata). Wave 1b uses `complexScript` to gate
+   * the formatting-stack selection (Latin variants vs CS variants).
+   */
+  script?: RunScriptContext;
 };
 
 export type TabRun = RunMarks & {
@@ -402,10 +504,10 @@ export type ImageRun = {
 
   /**
    * Vertical alignment of image relative to text baseline.
-   * Currently only 'bottom' is supported (image sits on baseline).
-   * Future: 'top', 'middle', 'baseline', 'text-top', 'text-bottom'.
+   * 'top' keeps the image box inside the measured line height; 'bottom'
+   * preserves legacy baseline alignment for existing callers.
    */
-  verticalAlign?: 'bottom';
+  verticalAlign?: 'top' | 'bottom';
 
   /** Absolute ProseMirror position (inclusive) of this image run. */
   pmStart?: number;
@@ -443,6 +545,7 @@ export type BreakRun = {
   pmEnd?: number;
   sdt?: SdtMetadata;
   trackedChange?: TrackedChangeMeta;
+  trackedChanges?: TrackedChangeMeta[];
 };
 
 /**
@@ -606,10 +709,28 @@ export type TableCellAttrs = {
   tableCellProperties?: Record<string, unknown>;
 };
 
+export type TablePropertiesAttrs = {
+  rightToLeft?: boolean;
+  [key: string]: unknown;
+};
+
 export type TableAttrs = {
   borders?: TableBorders;
   borderCollapse?: 'collapse' | 'separate';
   cellSpacing?: CellSpacing;
+  tableProperties?: TablePropertiesAttrs;
+  /**
+   * Resolved table direction context (SD-3138). Populated by pm-adapter from
+   * cascade-resolved table properties via `resolveTableDirection`. Consumers
+   * should call `getTableVisualDirection(attrs)` instead of reading
+   * `tableProperties.rightToLeft` directly — the helper prefers this field
+   * and falls back to the legacy raw read for compatibility.
+   *
+   * Per ECMA-376 §17.4.1, `w:bidiVisual` affects cell ordering and
+   * table-visual properties only; it does NOT propagate to cell paragraphs
+   * as inline direction.
+   */
+  tableDirectionContext?: TableDirectionContext;
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
   [key: string]: unknown;
@@ -1497,17 +1618,27 @@ export type ParagraphAttrs = {
   /** Marks an empty paragraph that only exists to carry section properties. */
   sectPrMarker?: boolean;
   /**
-   * Resolved paragraph inline base direction. Populated from `directionContext.inlineDirection`
-   * during pm-adapter conversion; left undefined when no explicit bidi is set so the browser
-   * can apply UBA via missing `dir` attribute.
+   * The paragraph break should not produce a visible line break: the next
+   * paragraph's runs fuse into this block during pm-adapter post-processing
+   * and the successor's auto-generated list marker disappears with it.
+   * Numbering counters on subsequent paragraphs still advance per OOXML
+   * paragraph, matching Word.
    *
-   * Prefer reading `directionContext` (typed, complete) over this scalar field. The scalar
-   * remains for backwards compatibility with consumers that only need inline direction.
+   * Triggered by `w:vanish` on the paragraph-mark rPr (`w:pPr/w:rPr`).
+   * ECMA-376 §17.3.2.36 reads as if `w:specVanish` is the trigger ("a
+   * paragraph mark shall never be used to break the end of a paragraph for
+   * display"), but Word 16.0 fuses on `w:vanish` and leaves `w:specVanish`
+   * standalone as a no-op for the paragraph break (SD-3269 fixture matrix).
+   * Matching Word, not the literal spec, is the rendering goal.
    */
-  direction?: 'ltr' | 'rtl';
+  suppressParagraphBreak?: boolean;
   /**
    * Resolved direction context for the paragraph (inline direction + writing mode).
    * Single source of truth for paragraph direction-aware rendering decisions.
+   *
+   * Read via `getParagraphInlineDirection(attrs)` rather than inspecting this
+   * field directly so the helper can normalize `null` vs `undefined` and fall
+   * back to `paragraphProperties.rightToLeft` for PM-node / editor paths.
    *
    * See `@superdoc/contracts/direction-context` for axis semantics.
    */
@@ -1796,6 +1927,64 @@ export type Measure =
   | ColumnBreakMeasure;
 
 /** A rendered page containing positioned fragments. Page numbers are 1-indexed. */
+/**
+ * SD-2656: per-page footnote planning ledger.
+ *
+ * The single source of truth that body pagination, footnote placement, and
+ * continuation carry must all agree on. Without it the three subsystems read
+ * different numbers (body reserves X, planner paints Y, carry-forward thinks
+ * Z) and the resulting drift compounds across the document.
+ *
+ * Mandatory invariants checked by `tools/sd-2656-footnote-analyzer`:
+ *   1. `actualBandHeight <= appliedBodyReserve`  (band fits)
+ *   2. `mandatorySlices` always equals `full(non-last) + firstLine(last)` of
+ *      the page's anchored cluster (rule).
+ *   3. `continuationIn[P]` matches `continuationOut[P-1]` (carry parity).
+ *   4. `deadReserve = appliedBodyReserve - actualBandHeight` is small (drift
+ *      fuel above ~30 px is a planning bug).
+ */
+export type FootnoteContinuationEntry = {
+  /** Footnote id (OOXML id, not the Word visible number). */
+  id: string;
+  /** How many ranges remain to render. */
+  remainingRangeCount: number;
+  /** Total height of the remaining ranges. */
+  remainingHeightPx: number;
+};
+
+export type FootnotePageLedger = {
+  pageIndex: number;
+  /** Ordered footnote ids whose body refs are anchored on this page. */
+  anchorIds: string[];
+  /** Slices required by the rule: full of non-last + firstLine of last. */
+  mandatorySliceIds: string[];
+  /** Slices for content drained from prior pages. */
+  continuationSliceIds: string[];
+  /** Slices for last-anchor content beyond firstLine (rendered only if there
+   *  is leftover space after mandatory + continuation). */
+  extendedSliceIds: string[];
+  /** Continuations arriving from page-1. */
+  continuationIn: FootnoteContinuationEntry[];
+  /** Continuations deferred to page+1. */
+  continuationOut: FootnoteContinuationEntry[];
+  /** Mandatory-reserve px: mandatorySlices height + overhead. */
+  mandatoryReservePx: number;
+  /** SD-2656 Phase 7: Word-like "preferred" reserve px. Body slicer is allowed
+   *  to reserve this much when doing so does not cause cluster spill or
+   *  continuation overflow. = full(non-last) + asMuchAsFits(last) + overhead. */
+  preferredReservePx: number;
+  /** Total painted band height in px, including separator + gaps. */
+  actualBandHeightPx: number;
+  /** Body's applied reserve (i.e. `page.footnoteReserved`) for this page. */
+  appliedBodyReservePx: number;
+  /** appliedBodyReservePx - actualBandHeightPx — wasted body area. */
+  deadReservePx: number;
+  /** Number of measured lines actually rendered for the LAST anchor on this
+   *  page (0 if there is no cluster anchor). Used to flag "mandatory-only"
+   *  pages where Word would have rendered more. */
+  lastAnchorRenderedLines: number;
+};
+
 export type Page = {
   number: number;
   fragments: Fragment[];
@@ -1806,6 +1995,12 @@ export type Page = {
    * decoration boxes anchored to the real bottom margin while the body shrinks.
    */
   footnoteReserved?: number;
+  /**
+   * SD-2656: page-level footnote planning ledger. Populated by the layout
+   * bridge when footnotes are present. Read by the diagnostic toolkit and
+   * (in later phases) by body pagination itself.
+   */
+  footnoteLedger?: FootnotePageLedger;
   numberText?: string;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';
@@ -1891,6 +2086,15 @@ export type ParaFragment = {
   pmStart?: number;
   pmEnd?: number;
   sourceAnchor?: SourceAnchor;
+  /**
+   * Optional editor-neutral identity for this fragment.
+   *
+   * Additive (prep-001). PM-facing `pmStart`/`pmEnd` and `blockId` remain
+   * authoritative for v1 consumers; this field exists so downstream surfaces
+   * can address rendered output without requiring `pmStart`/`pmEnd`. See
+   * `layout-identity.ts`.
+   */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type TableColumnBoundary = {
@@ -1957,6 +2161,8 @@ export type TableFragment = {
    *  When set, the renderer uses these instead of measure.columnWidths. */
   columnWidths?: number[];
   sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type ImageFragment = {
@@ -1973,6 +2179,8 @@ export type ImageFragment = {
   pmEnd?: number;
   metadata?: ImageFragmentMetadata;
   sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type DrawingFragment = {
@@ -1992,6 +2200,8 @@ export type DrawingFragment = {
   pmStart?: number;
   pmEnd?: number;
   sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type ListItemFragment = {
@@ -2007,6 +2217,8 @@ export type ListItemFragment = {
   continuesFromPrev?: boolean;
   continuesOnNext?: boolean;
   sourceAnchor?: SourceAnchor;
+  /** Optional editor-neutral identity (prep-001). See `ParaFragment.layoutSourceIdentity`. */
+  layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
 export type Fragment = ParaFragment | ImageFragment | DrawingFragment | ListItemFragment | TableFragment;
@@ -2113,6 +2325,11 @@ export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from 
 
 // Pure transformations on inline-run shapes (used by pm-adapter, layout-bridge,
 // and painter-dom). Located in contracts to avoid reverse stage dependencies.
-export { expandRunsForInlineNewlines, sliceRunsForLine } from './run-helpers.js';
+export {
+  expandRunsForInlineNewlines,
+  isEmptyInlineSdtPlaceholderRun,
+  isEmptySdtPlaceholderRun,
+  sliceRunsForLine,
+} from './run-helpers.js';
 
 export * as Engines from './engines/index.js';

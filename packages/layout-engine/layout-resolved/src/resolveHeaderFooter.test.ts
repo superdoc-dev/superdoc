@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveHeaderFooterLayout } from './resolveHeaderFooter.js';
+import { namedStoryLocator } from '@superdoc/contracts';
 import type { FlowBlock, HeaderFooterLayout, Measure, ParaFragment, ResolvedFragmentItem } from '@superdoc/contracts';
 
 describe('resolveHeaderFooterLayout', () => {
@@ -32,6 +33,36 @@ describe('resolveHeaderFooterLayout', () => {
     expect(item.version).toBeDefined();
     expect(item.block?.kind).toBe('paragraph');
     expect(item.measure?.kind).toBe('paragraph');
+  });
+
+  it('stamps resolved fragment identities with the supplied header/footer story', () => {
+    const paraFragment: ParaFragment = {
+      kind: 'para',
+      blockId: 'header-p1',
+      fromLine: 0,
+      toLine: 1,
+      x: 72,
+      y: 10,
+      width: 468,
+    };
+    const layout: HeaderFooterLayout = {
+      height: 50,
+      pages: [{ number: 1, fragments: [paraFragment] }],
+    };
+    const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'header-p1', runs: [] }];
+    const measures: Measure[] = [
+      {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 100, ascent: 10, descent: 3, lineHeight: 18 }],
+        totalHeight: 18,
+      },
+    ];
+
+    const result = resolveHeaderFooterLayout(layout, blocks, measures, namedStoryLocator('header', 'rIdHeader1'));
+    const item = result.pages[0].items[0] as ResolvedFragmentItem;
+
+    expect(item.layoutSourceIdentity?.story).toEqual({ kind: 'header', id: 'rIdHeader1' });
+    expect(item.layoutSourceIdentity?.fragmentId).toContain('header:rIdHeader1');
   });
 
   it('preserves height, minY, maxY, renderHeight from input', () => {

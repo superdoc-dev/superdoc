@@ -49,6 +49,15 @@ describe('needsImageRegistration', () => {
     expect(needsImageRegistration(node)).toBe(true);
   });
 
+  it('skips imported VML text watermark previews', () => {
+    const node = createImageNode({
+      src: 'data:image/svg+xml;base64,PHN2Zy8+',
+      vmlTextWatermark: true,
+      vmlTextpathAttributes: { string: 'SAMPLE' },
+    });
+    expect(needsImageRegistration(node)).toBe(false);
+  });
+
   it('requires registration for relative paths (headless needs media path + rId)', () => {
     expect(needsImageRegistration(createImageNode({ src: '/images/photo.png' }))).toBe(true);
     expect(needsImageRegistration(createImageNode({ src: '/public/images/extensions/image-landscape.png' }))).toBe(

@@ -72,6 +72,14 @@ const superdoc = new SuperDoc({
 });
 ```
 
+Optional layered CSS mode:
+
+```css
+@layer reset, superdoc, app;
+@import 'superdoc/style.layered.css';
+@import 'your-app.css' layer(app);
+```
+
 Or use the CDN:
 
 ```html
@@ -171,6 +179,11 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/kiluazen"><img src="https://github.com/kiluazen.png" width="50" height="50" alt="kiluazen" title="Kushal" /></a>
 <a href="https://github.com/kendaller"><img src="https://github.com/kendaller.png" width="50" height="50" alt="kendaller" title="Kendall Ernst" /></a>
 <a href="https://github.com/christos8333"><img src="https://github.com/christos8333.png" width="50" height="50" alt="christos8333" title="Christos Kokosias" /></a>
+<a href="https://github.com/bjohas"><img src="https://github.com/bjohas.png" width="50" height="50" alt="bjohas" title="Bjoern" /></a>
+<a href="https://github.com/shri-scale"><img src="https://github.com/shri-scale.png" width="50" height="50" alt="shri-scale" title="Shri H" /></a>
+<a href="https://github.com/msviderok"><img src="https://github.com/msviderok.png" width="50" height="50" alt="msviderok" title="Myroslav Sviderok" /></a>
+<a href="https://github.com/sergiogomes"><img src="https://github.com/sergiogomes.png" width="50" height="50" alt="sergiogomes" title="Sérgio Paulo Gomes" /></a>
+<a href="https://github.com/wookieb"><img src="https://github.com/wookieb.png" width="50" height="50" alt="wookieb" title="Łukasz Kużyński" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

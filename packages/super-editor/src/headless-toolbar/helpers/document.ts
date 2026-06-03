@@ -1,6 +1,6 @@
 import { undoDepth, redoDepth } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
-import { isCommandDisabled } from './general.js';
+import { isCommandDisabled, isMutationCommandDisabled } from './general.js';
 import { resolveStateEditor } from './context.js';
 import type { ToolbarCommandState, ToolbarContext } from '../types.js';
 
@@ -59,6 +59,42 @@ export const getCurrentRedoDepth = (context: ToolbarContext | null) => {
     return 0;
   }
 };
+
+/**
+ * Disable a toolbar control when a document-api operation is unavailable
+ * (missing extension commands, tracked-mode restrictions, etc.).
+ */
+export const createDocumentOperationCapabilityStateDeriver =
+  (operationId: string) =>
+  ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {
+    if (isMutationCommandDisabled(context)) {
+      return {
+        active: false,
+        disabled: true,
+      };
+    }
+
+    const doc = context?.target?.doc;
+    if (typeof doc?.capabilities !== 'function') {
+      return {
+        active: false,
+        disabled: true,
+      };
+    }
+
+    try {
+      const available = Boolean(doc.capabilities().operations[operationId]?.available);
+      return {
+        active: false,
+        disabled: !available,
+      };
+    } catch {
+      return {
+        active: false,
+        disabled: true,
+      };
+    }
+  };
 
 export const createHistoryStateDeriver =
   (kind: 'undo' | 'redo') =>

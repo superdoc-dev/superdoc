@@ -17,13 +17,20 @@ describe('w:bidiVisual translator', () => {
   });
 
   describe('decode', () => {
-    it('creates a w:bidiVisual element if rightToLeft is true', () => {
+    it('creates a bare w:bidiVisual element when rightToLeft is true', () => {
       const { attributes: result } = translator.decode({ node: { attrs: { rightToLeft: true } } });
       expect(result).toEqual({});
     });
 
-    it('returns undefined if rightToLeft is false or missing', () => {
-      expect(translator.decode({ node: { attrs: { rightToLeft: false } } })).toBeUndefined();
+    // SD-3142: explicit false (from `<w:bidiVisual w:val="0"/>`) is a real
+    // signal per §17.4.1 + §17.17.4 and can override a style-cascade true.
+    // Drop it on export and the style cascade wins on the next open.
+    it('emits w:val="0" when rightToLeft is explicit false', () => {
+      const { attributes: result } = translator.decode({ node: { attrs: { rightToLeft: false } } });
+      expect(result).toEqual({ 'w:val': '0' });
+    });
+
+    it('returns undefined when rightToLeft is missing (omit the element)', () => {
       expect(translator.decode({ node: { attrs: {} } })).toBeUndefined();
     });
   });

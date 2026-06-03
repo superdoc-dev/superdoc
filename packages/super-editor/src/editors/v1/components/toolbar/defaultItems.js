@@ -404,6 +404,19 @@ export const makeDefaultItems = ({
     },
   });
 
+  const tableOfContents = useToolbarItem({
+    type: 'button',
+    name: 'tableOfContents',
+    command: 'insertTableOfContents',
+    icon: toolbarIcons.tableOfContents,
+    active: false,
+    tooltip: toolbarTexts.tableOfContents,
+    disabled: false,
+    attributes: {
+      ariaLabel: 'Table of contents',
+    },
+  });
+
   // table
   const tableItem = useToolbarItem({
     type: 'dropdown',
@@ -882,7 +895,7 @@ export const makeDefaultItems = ({
     disabled: role !== 'editor',
     attributes: {
       dropdownPosition: 'right',
-      className: 'toolbar-item--doc-mode',
+      className: 'sd-toolbar-item--doc-mode',
       ariaLabel: 'Document mode',
     },
     options: [
@@ -981,7 +994,7 @@ export const makeDefaultItems = ({
     suppressActiveHighlight: true,
     disabled: false,
     attributes: {
-      className: 'toolbar-item--linked-styles',
+      className: 'sd-toolbar-item--linked-styles',
       ariaLabel: 'Linked styles',
     },
     options: [
@@ -1066,18 +1079,20 @@ export const makeDefaultItems = ({
   const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'formattingMarks'];
   const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo'];
   const shouldUseLgCompactStyles = availableWidth <= RESPONSIVE_BREAKPOINTS.lg;
+  const shouldIncludeFormattingMarks = superToolbar.config?.showFormattingMarksButton === true;
+  const shouldIncludeTableOfContents = superToolbar.config?.showTableOfContentsButton === true;
 
   if (shouldUseLgCompactStyles) {
     documentMode.attributes.value = {
       ...documentMode.attributes.value,
-      className: `${documentMode.attributes.value.className} toolbar-item--doc-mode-compact`,
+      className: `${documentMode.attributes.value.className} sd-toolbar-item--doc-mode-compact`,
     };
   }
 
   if (shouldUseLgCompactStyles) {
     linkedStyles.attributes.value = {
       ...linkedStyles.attributes.value,
-      className: `${linkedStyles.attributes.value.className} toolbar-item--linked-styles-compact`,
+      className: `${linkedStyles.attributes.value.className} sd-toolbar-item--linked-styles-compact`,
     };
   }
 
@@ -1101,6 +1116,7 @@ export const makeDefaultItems = ({
     separator,
     link,
     image,
+    ...(shouldIncludeTableOfContents ? [tableOfContents] : []),
     tableItem,
     tableActionsItem,
     separator,
@@ -1114,7 +1130,7 @@ export const makeDefaultItems = ({
     linkedStyles,
     separator,
     ruler,
-    formattingMarks,
+    ...(shouldIncludeFormattingMarks ? [formattingMarks] : []),
     copyFormat,
     clearFormatting,
     aiButton,
@@ -1136,7 +1152,7 @@ export const makeDefaultItems = ({
     const getLinkedStylesIndex = toolbarItems.findIndex((item) => item.name.value === 'linkedStyles');
     toolbarItems.splice(getLinkedStylesIndex - 1, 2);
 
-    const filterItems = ['ruler', 'formattingMarks', 'zoom', 'undo', 'redo'];
+    const filterItems = ['ruler', 'zoom', 'undo', 'redo'];
     toolbarItems = toolbarItems.filter((item) => !filterItems.includes(item.name.value));
   }
 

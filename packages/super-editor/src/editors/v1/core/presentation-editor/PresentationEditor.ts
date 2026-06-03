@@ -22,6 +22,7 @@ import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
+import { resolveEvenAndOddHeadersFromSettingsPart } from '../super-converter/v2/importer/docxImporter.js';
 import { EventEmitter } from '../EventEmitter.js';
 import type { ProseMirrorJSON } from '../types/EditorTypes.js';
 import { EpochPositionMapper } from './layout/EpochPositionMapper.js';
@@ -49,11 +50,45 @@ import { getPageElementByIndex } from '../../dom-observer/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
 import { buildFootnotesInput, type NoteRenderOverride } from './layout/FootnotesBuilder.js';
+import { computeNoteNumbering, type SectionNoteConfig } from './layout/computeNoteNumbering.js';
+
+/** Stable serialization of section-level note configs for the flow-block cache key. */
+function serializeSectionConfigs(map: Map<number, SectionNoteConfig>): string {
+  if (map.size === 0) return '';
+  return [...map.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([i, c]) => `${i}:${c.numFmt ?? ''}/${c.numStart ?? ''}/${c.numRestart ?? ''}`)
+    .join(';');
+}
+
+/**
+ * Stable serialization of per-ref numbering / format maps for the flow-block
+ * cache key. The set of ids appears in `order` already, but the *values*
+ * (computed ordinals + per-id format overrides) must also vary the key —
+ * otherwise toggling `customMarkFollows` on a middle ref, or moving a ref
+ * across a section that changes its numFmt, leaves the cached reference
+ * runs out of date with the live numbering.
+ */
+function serializePerIdNumbering(
+  order: string[],
+  numberById: Record<string, number>,
+  formatById: Record<string, string> | undefined,
+): string {
+  if (order.length === 0) return '';
+  const parts: string[] = [];
+  for (const id of order) {
+    const n = numberById[id];
+    const f = formatById?.[id] ?? '';
+    parts.push(`${id}:${n ?? ''}/${f}`);
+  }
+  return parts.join(';');
+}
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import {
   elementsToRangeRects,
   findRenderedCommentElements,
+  findRenderedContentControlElements,
   findRenderedTrackedChangeElementsStrict,
 } from './dom/EntityRectFinder.js';
 import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
@@ -73,6 +108,7 @@ import { debugLog, updateSelectionDebugHud, type SelectionDebugHudState } from '
 import { renderCellSelectionOverlay } from './selection/CellSelectionOverlay.js';
 import { renderCaretOverlay, renderSelectionRects } from './selection/LocalSelectionOverlayRendering.js';
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from './selection/CaretGeometry.js';
+import { shouldUseNativeCaretFallback } from './selection/native-caret-fallback.js';
 import {
   computeCaretRectFromVisibleTextOffset as computeCaretRectFromVisibleTextOffsetFromHelper,
   computeSelectionRectsFromVisibleTextOffsets as computeSelectionRectsFromVisibleTextOffsetsFromHelper,
@@ -105,9 +141,21 @@ import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/r
 import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
-import { toFlowBlocks, FlowBlockCache } from '@superdoc/pm-adapter';
-import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
-import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
+import { toFlowBlocks, FlowBlockCache } from '@core/layout-adapter';
+import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
+import {
+  readSettingsRoot,
+  readDefaultTableStyle,
+  readFootnoteNumberFormat,
+  readEndnoteNumberFormat,
+  readFootnoteNumberStart,
+  readEndnoteNumberStart,
+  readFootnoteNumberRestart,
+  readEndnoteNumberRestart,
+  readFootnotePosition,
+  readEndnotePosition,
+  readSectionNoteConfigs,
+} from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
   selectionToRects,
@@ -129,6 +177,10 @@ import type {
 } from '@superdoc/layout-bridge';
 
 import { measureBlock } from '@superdoc/measuring-dom';
+import { resolvePhysicalFamilies, type FontResolutionRecord, type FontLoadSummary } from '@superdoc/font-system';
+import { installBundledSubstitutes } from '@superdoc/font-system/bundled';
+import { FontReadinessGate } from './fonts/FontReadinessGate';
+import type { FontsChangedPayload } from '../types/EditorEvents';
 import type {
   ColumnLayout,
   FlowBlock,
@@ -263,7 +315,10 @@ import {
   findAllBookmarksInDocument,
   resolveBookmarkTarget,
 } from '../../document-api-adapters/helpers/bookmark-resolver.js';
-import { resolveTrackedChange } from '../../document-api-adapters/helpers/tracked-change-resolver.js';
+import {
+  resolveTrackedChange,
+  resolveTrackedChangeInStory,
+} from '../../document-api-adapters/helpers/tracked-change-resolver.js';
 import { makeTrackedChangeAnchorKey } from '../../document-api-adapters/helpers/tracked-change-runtime-ref.js';
 import { getTrackedChangeIndex } from '../../document-api-adapters/tracked-changes/tracked-change-index.js';
 import { normalizeVariant } from './header-footer/header-footer-variant.js';
@@ -304,6 +359,7 @@ import type {
   EditorViewWithScrollFlag,
   PotentiallyMockedFunction,
   ResolvedLayoutOptions,
+  AwarenessWithSetField,
 } from './types.js';
 
 // Re-export public types for backward compatibility
@@ -452,6 +508,13 @@ export class PresentationEditor extends EventEmitter {
   #flowBlockCache: FlowBlockCache = new FlowBlockCache();
   #footnoteNumberSignature: string | null = null;
   #endnoteNumberSignature: string | null = null;
+  // §17.11.19 eachPage requires a two-pass pagination handshake that the
+  // layout pipeline does not yet implement; we coerce eachPage → continuous
+  // and emit a single warning per kind per editor instance.
+  #warnedUnsupportedRestart: { footnote: boolean; endnote: boolean } = {
+    footnote: false,
+    endnote: false,
+  };
   #painterAdapter = new PresentationPainterAdapter();
   #pageGeometryHelper: PageGeometryHelper | null = null;
   #dragDropManager: DragDropManager | null = null;
@@ -465,6 +528,12 @@ export class PresentationEditor extends EventEmitter {
   #pendingMapping: Mapping | null = null;
   #isRerendering = false;
   #selectionSync = new SelectionSyncCoordinator();
+  /** Load-before-measure gate: awaits required fonts before measurement, reflows on late load. */
+  #fontGate: FontReadinessGate | null = null;
+  /** Dedup key for `fonts-changed`: epoch + per-face load status. Null until the first emit. */
+  #lastFontsChangedKey: string | null = null;
+  /** Last emitted `fonts-changed` payload, so a late relay subscriber can replay it. */
+  #lastFontsChangedPayload: FontsChangedPayload | null = null;
   /**
    * When true, the next selection render scrolls the caret/selection head into view.
    * Only set for user-initiated actions (keyboard/mouse selection, image click, zoom).
@@ -474,6 +543,16 @@ export class PresentationEditor extends EventEmitter {
    * this unset so they don't fight the user's scroll position.
    */
   #shouldScrollSelectionIntoView = false;
+  /**
+   * SD-3315: while a search-owned scrollToPosition({ suppressSelectionSyncScroll: true }) is in
+   * flight (set before its sync scroll, cleared in its RAF re-assert), selection-sync must NOT
+   * scroll the viewport. Find navigation owns the scroll for that window; the spurious
+   * selectionUpdate fired by the find-input focus restore (which reverts the editor selection to
+   * its pre-search caret) would otherwise yank the viewport to that stale caret, producing a
+   * jump/flash on every navigation. The selection overlay still renders during the window; only
+   * #scrollActiveEndIntoView is skipped.
+   */
+  #suppressSelectionScrollUntilRaf = false;
   /** PM position for transient drag/drop insertion preview, rendered even while editor focus is elsewhere. */
   #dragDropIndicatorPos: number | null = null;
   #epochMapper = new EpochPositionMapper();
@@ -495,7 +574,8 @@ export class PresentationEditor extends EventEmitter {
   #semanticResizeDebounce: number | null = null;
   #lastSemanticContainerWidth: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
-  #scrollHandler: (() => void) | null = null;
+  #scrollHandler: ((event?: Event) => void) | null = null;
+  #handledScrollEvents = new WeakSet<Event>();
   #scrollContainer: Element | Window | null = null;
   #scrollContainerValidated = false;
   #sectionMetadata: SectionMetadata[] = [];
@@ -636,11 +716,13 @@ export class PresentationEditor extends EventEmitter {
       flowMode: requestedFlowMode,
       semanticOptions: options.layoutEngineOptions?.semanticOptions,
       trackedChanges: options.layoutEngineOptions?.trackedChanges,
+      resolveTrackedChangeColor: options.layoutEngineOptions?.resolveTrackedChangeColor,
       emitCommentPositionsInViewing: options.layoutEngineOptions?.emitCommentPositionsInViewing,
       enableCommentsInViewing: options.layoutEngineOptions?.enableCommentsInViewing,
       presence: validatedPresence,
       showBookmarks: options.layoutEngineOptions?.showBookmarks ?? false,
       showFormattingMarks: options.layoutEngineOptions?.showFormattingMarks ?? false,
+      contentControlsChrome: options.layoutEngineOptions?.contentControlsChrome,
     };
     this.#trackedChangesOverrides = options.layoutEngineOptions?.trackedChanges;
 
@@ -725,12 +807,18 @@ export class PresentationEditor extends EventEmitter {
     this.#selectionOverlay.appendChild(this.#localSelectionLayer);
     this.#viewportHost.appendChild(this.#selectionOverlay);
 
-    // Initialize remote cursor manager
+    // Initialize remote cursor manager. The cast widens the shared
+    // CollaborationProvider to the manager's internal CollaborationProviderLike
+    // shape, which asserts `awareness.setLocalStateField` exists. Runtime
+    // collaboration providers (HocuspocusProvider, y-websocket, etc.) expose
+    // it; the assertion documents the requirement at the boundary.
     this.#remoteCursorManager = new RemoteCursorManager({
       visibleHost: this.#visibleHost,
       remoteCursorOverlay: this.#remoteCursorOverlay,
       presence: validatedPresence,
-      collaborationProvider: options.collaborationProvider,
+      collaborationProvider: options.collaborationProvider as
+        | { awareness?: AwarenessWithSetField | null; disconnect?: () => void }
+        | undefined,
       fallbackColors: PresentationEditor.FALLBACK_COLORS,
       cursorStyles: PresentationEditor.CURSOR_STYLES,
       maxSelectionRectsPerUser: MAX_SELECTION_RECTS_PER_USER,
@@ -856,6 +944,41 @@ export class PresentationEditor extends EventEmitter {
       // Add reference back to PresentationEditor for event handler detection
       (this.#editor as Editor & { _presentationEditor?: PresentationEditor })._presentationEditor = this;
       this.#syncHiddenEditorA11yAttributes();
+      this.#fontGate = new FontReadinessGate({
+        getDocumentFonts: () => {
+          const converter = (this.#editor as Editor & { converter?: { getDocumentFonts?: () => string[] } }).converter;
+          return converter?.getDocumentFonts?.() ?? [];
+        },
+        requestReflow: () => {
+          // A font finished loading (or the resolution changed). Incremental layout reuses
+          // this editor's previousMeasures for unchanged blocks, so clearing the global
+          // measurement caches alone will not re-measure. Drop the cached blocks + measures
+          // to force a full re-measure, then schedule a DOCUMENT re-layout - #scheduleRerender
+          // with the pending-change flag, not #selectionSync.requestRender (selection-only).
+          this.#layoutState = { ...this.#layoutState, blocks: [], measures: [], layout: null };
+          this.#pendingDocChange = true;
+          this.#scheduleRerender();
+        },
+        // Wait on the resolved PHYSICAL families (Calibri -> Carlito), so the gate holds
+        // measurement until the substitute that measure + paint will use has loaded.
+        resolveFamilies: resolvePhysicalFamilies,
+        // Register the bundled substitute pack (Carlito) into the document's registry the
+        // first time it resolves, so the substitute is available with no manual setup.
+        onRegistryResolved: (registry) =>
+          installBundledSubstitutes(registry, {
+            assetBaseUrl: this.#options.fontAssets?.assetBaseUrl,
+            resolveAssetUrl: this.#options.fontAssets?.resolveAssetUrl,
+          }),
+        getFontEnvironment: () => {
+          // Bind the registry and the watched font set to THIS editor's document, so an
+          // editor inside an iframe awaits and listens on the same FontFaceSet.
+          const ownerDoc = this.#visibleHost?.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
+          const view = ownerDoc?.defaultView ?? (typeof window !== 'undefined' ? window : null);
+          const fontSet = ownerDoc?.fonts ?? null;
+          const FontFaceCtor = view?.FontFace ?? (typeof FontFace !== 'undefined' ? FontFace : null);
+          return fontSet && FontFaceCtor ? { fontSet, FontFaceCtor } : null;
+        },
+      });
       if (typeof this.#options.disableContextMenu === 'boolean') {
         this.setContextMenuDisabled(this.#options.disableContextMenu);
       }
@@ -935,6 +1058,14 @@ export class PresentationEditor extends EventEmitter {
    * - Skips wrapping if the focus function has a `mock` property (Vitest/Jest mocks)
    * - Prevents interference with test assertions and mock function tracking
    */
+  #warnUnsupportedNumberingRestart(kind: 'footnote' | 'endnote'): void {
+    if (this.#warnedUnsupportedRestart[kind]) return;
+    this.#warnedUnsupportedRestart[kind] = true;
+    console.warn(
+      `[PresentationEditor] ${kind} numRestart="eachPage" is not yet supported (requires a two-pass pagination handshake). Falling back to "continuous". Tracked for follow-up.`,
+    );
+  }
+
   #wrapOffscreenEditorFocus(editor: Editor | null | undefined): void {
     const view = editor?.view;
     if (!view || !view.dom || typeof view.focus !== 'function') {
@@ -1081,8 +1212,12 @@ export class PresentationEditor extends EventEmitter {
     this.#options.collaborationProvider = collaborationProvider;
 
     // 2. Update RemoteCursorManager's provider reference so setup() reads
-    //    the correct provider when collaborationReady fires.
-    this.#remoteCursorManager?.setCollaborationProvider(collaborationProvider);
+    //    the correct provider when collaborationReady fires. The cast
+    //    matches the boundary assertion in the constructor: collaboration
+    //    providers expose `awareness.setLocalStateField` at runtime.
+    this.#remoteCursorManager?.setCollaborationProvider(
+      collaborationProvider as { awareness?: AwarenessWithSetField | null; disconnect?: () => void },
+    );
 
     // 3. Delegate to the backing Editor — triggers plugin reconfigure + Y.js observers.
     //    The collaborationReady event fires asynchronously (setTimeout in initSyncListener).
@@ -1093,7 +1228,9 @@ export class PresentationEditor extends EventEmitter {
     } catch (err) {
       // Editor attach failed and rolled back its own state. Restore ours too.
       this.#options.collaborationProvider = prevProvider;
-      this.#remoteCursorManager?.setCollaborationProvider(prevProvider ?? null);
+      this.#remoteCursorManager?.setCollaborationProvider(
+        (prevProvider ?? null) as { awareness?: AwarenessWithSetField | null; disconnect?: () => void } | null,
+      );
       throw err;
     }
   }
@@ -2205,6 +2342,13 @@ export class PresentationEditor extends EventEmitter {
       elements = findRenderedTrackedChangeElementsStrict(host, entityId, escapeAttrValue, storyKey);
     } else if (entityType === 'comment') {
       elements = findRenderedCommentElements(host, entityId, storyKey);
+    } else if (entityType === 'contentControl') {
+      // SDT wrappers do not currently stamp `data-story-key`, so this
+      // helper accepts `storyKey` for signature parity but returns all
+      // painted occurrences regardless. v1 is body-only; an SDT in a
+      // header / footer will still match. See JSDoc on
+      // `findRenderedContentControlElements`.
+      elements = findRenderedContentControlElements(host, entityId, escapeAttrValue, storyKey);
     } else {
       return [];
     }
@@ -2739,6 +2883,89 @@ export class PresentationEditor extends EventEmitter {
       measures: this.#layoutState.measures,
       sectionMetadata: this.#sectionMetadata,
     };
+  }
+
+  /**
+   * Per-font resolution report for the current document: for each DECLARED (logical)
+   * font, the physical family SuperDoc rendered, why, its load status, and the family
+   * export preserves. The observable answer to "what font did SuperDoc actually use".
+   *
+   * Scope: this is a DOCUMENT-font report - it covers every family the document declares
+   * (font table + theme + defaults via `converter.getDocumentFonts()`), not only fonts
+   * currently visible on screen. A family declared but never painted still appears. A
+   * separate rendered-fonts view (only what is on screen) may follow. Surfaced publicly
+   * as `superdoc.fonts.getReport()`.
+   */
+  getFontReport(): FontResolutionRecord[] {
+    return this.#fontGate?.getReport() ?? [];
+  }
+
+  /**
+   * Declared families with no faithful render font loaded (substitution-aware): the
+   * subset of {@link getFontReport} where `missing` is true - genuinely absent fonts
+   * such as Aptos with no metric-compatible clone. The accurate replacement for the
+   * legacy `fonts-resolved.unsupportedFonts` probe. Surfaced as
+   * `superdoc.fonts.getMissingFonts()`.
+   */
+  getMissingFonts(): string[] {
+    return this.getFontReport()
+      .filter((record) => record.missing)
+      .map((record) => record.logicalFamily);
+  }
+
+  /**
+   * Emit `fonts-changed` on the hidden editor when the resolved/loaded font picture
+   * actually changed since the last emit, so consumers see one event per real change
+   * rather than one per render. The dedup key is the font epoch plus each required face's
+   * load status (cheap; from the gate's last summary). The full report is built only when
+   * we emit. First emit is `source: 'initial'`; an epoch bump (a late load) is
+   * `'late-load'`. Never throws - font reporting must not break layout.
+   */
+  #emitFontsChangedIfChanged(summary: FontLoadSummary | null): void {
+    const gate = this.#fontGate;
+    if (!gate) return;
+    const version = gate.fontConfigVersion;
+    const statusKey = summary
+      ? summary.results
+          .map((result) => `${result.family}:${result.status}`)
+          .sort()
+          .join(',')
+      : '';
+    const key = `${version}|${statusKey}`;
+    if (key === this.#lastFontsChangedKey) return;
+    const isInitial = this.#lastFontsChangedKey === null;
+    this.#lastFontsChangedKey = key;
+
+    let resolutions: FontResolutionRecord[];
+    try {
+      resolutions = gate.getReport();
+    } catch {
+      return;
+    }
+    const payload: FontsChangedPayload = {
+      documentFonts: resolutions.map((record) => record.logicalFamily),
+      resolutions,
+      missingFonts: resolutions.filter((record) => record.missing).map((record) => record.logicalFamily),
+      loadSummary: summary ?? { loaded: 0, failed: 0, timedOut: 0, fallbackUsed: 0, results: [] },
+      source: isInitial ? 'initial' : 'late-load',
+      version,
+    };
+    this.#lastFontsChangedPayload = payload;
+    try {
+      this.#editor.emit('fonts-changed', payload);
+    } catch {
+      /* font reporting must never break layout */
+    }
+  }
+
+  /**
+   * The last `fonts-changed` payload this editor emitted, or null if none yet. Lets a
+   * SuperDoc relay that subscribed after the emission replay the current report, so the
+   * active document's authoritative report is always delivered even when the relay
+   * attaches late (e.g. a document swap).
+   */
+  getLastFontsChangedPayload(): FontsChangedPayload | null {
+    return this.#lastFontsChangedPayload;
   }
 
   /**
@@ -3475,6 +3702,26 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Whether an element is fully within the vertical bounds of the active scroll container.
+   * Used by scrollToPosition's `ifNeeded` mode (SD-3315) to avoid moving the viewport for a
+   * target that is already visible. Measures with getBoundingClientRect because inline match
+   * spans report clientHeight 0. Vertical-only: search navigation is a block-axis concern.
+   */
+  #isElementFullyVisibleInScrollContainer(el: Element): boolean {
+    const rect = el.getBoundingClientRect();
+    const viewport =
+      this.#scrollContainer instanceof Window
+        ? { top: 0, bottom: this.#scrollContainer.innerHeight }
+        : this.#scrollContainer instanceof Element
+          ? this.#scrollContainer.getBoundingClientRect()
+          : this.#visibleHost?.ownerDocument?.defaultView
+            ? { top: 0, bottom: this.#visibleHost.ownerDocument.defaultView.innerHeight }
+            : null;
+    if (!viewport) return false;
+    return rect.top >= viewport.top && rect.bottom <= viewport.bottom;
+  }
+
+  /**
    * Scroll the visible host so a given document position is brought into view.
    *
    * This is primarily used by commands like search navigation when running in
@@ -3485,11 +3732,22 @@ export class PresentationEditor extends EventEmitter {
    * @param options - Scrolling options
    * @param options.block - Alignment within the viewport ('start' | 'center' | 'end' | 'nearest')
    * @param options.behavior - Scroll behavior ('auto' | 'smooth')
+   * @param options.ifNeeded - When true, skip movement if the target is already fully visible
+   *   (downgrades to 'nearest'); off-screen targets still use `block`. Used by search navigation.
+   * @param options.suppressSelectionSyncScroll - When true, selection-sync auto-scroll is
+   *   suppressed until this scroll's RAF re-assert runs, so it cannot fight this intentional
+   *   scroll. Used by search navigation, whose find-input focus restore otherwise scrolls the
+   *   viewport to a reverted/stale caret.
    * @returns True if the position could be mapped and scrolling was applied
    */
   scrollToPosition(
     pos: number,
-    options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
+    options: {
+      block?: 'start' | 'center' | 'end' | 'nearest';
+      behavior?: ScrollBehavior;
+      ifNeeded?: boolean;
+      suppressSelectionSyncScroll?: boolean;
+    } = {},
   ): boolean {
     // Cancel any pending focus-scroll RAF so this intentional scroll is not undone
     // by the wrapOffscreenEditorFocus safety net (e.g. search navigation after focus).
@@ -3507,7 +3765,9 @@ export class PresentationEditor extends EventEmitter {
     const clampedPos = Math.max(0, Math.min(pos, doc.content.size));
 
     const behavior = options.behavior ?? 'auto';
-    const block = options.block ?? 'center';
+    // SD-3315: the caller's requested landing. In ifNeeded mode an already-visible match
+    // downgrades this to 'nearest' (computed per-target below) so it does not re-center.
+    const requestedBlock = options.block ?? 'center';
 
     // Use a DOM marker + scrollIntoView so the browser finds the correct scroll container
     // (window, parent overflow container, etc.) without us guessing.
@@ -3533,7 +3793,59 @@ export class PresentationEditor extends EventEmitter {
         if (pageEl) {
           // Find the specific element containing this position for precise centering
           const targetEl = this.#findElementAtPosition(pageEl, clampedPos);
-          (targetEl ?? pageEl).scrollIntoView({ block, inline: 'nearest', behavior });
+          const elToScroll = targetEl ?? pageEl;
+
+          // SD-3315: "scroll only if needed" mode for search navigation. When the caller
+          // opts in and we resolved the precise target element (the match span, not the
+          // page-div fallback), and that element is already fully inside the scroll
+          // container, downgrade the scroll to 'nearest' — a no-op for a fully-visible
+          // element — so next/previous does not re-center an already-visible match (the
+          // ~50px jump). We deliberately do NOT early-return: the scrollIntoView + RAF
+          // re-assert below also override the hidden editor's selection-sync scroll
+          // (dispatched .scrollIntoView()), which otherwise jumps the viewport to the
+          // hidden editor's geometry. A null targetEl (page fallback) or an off-screen /
+          // partially-clipped match keeps the requested block (center).
+          const block =
+            options.ifNeeded && targetEl && this.#isElementFullyVisibleInScrollContainer(targetEl)
+              ? 'nearest'
+              : requestedBlock;
+          elToScroll.scrollIntoView({ block, inline: 'nearest', behavior });
+          // AIDEV-NOTE: SD-3045. Search nav (and any other caller of
+          // scrollToPosition) places the viewport intentionally — usually
+          // centring the match. The next #updateSelection that runs as part
+          // of the dispatched setSelection transaction would otherwise call
+          // #scrollActiveEndIntoView and re-scroll the caret to its minimal
+          // visible position (often the top of the viewport), undoing our
+          // centring. Consume the pending scroll-into-view request so that
+          // selection sync renders the caret overlay without moving the
+          // scroll back. Other selection updates (Shift+Arrow, typing) re-set
+          // this flag themselves before they need scroll, so this consume is
+          // safe.
+          this.#shouldScrollSelectionIntoView = false;
+          // Re-assert the scroll on the next animation frame. The flag we
+          // cleared above defends against handleSelection that has already
+          // run, but a *later* selectionUpdate (e.g. focus blur fired when
+          // the user moves focus back to the find input) re-sets the flag to
+          // true before the RAF-scheduled #updateSelection fires, and that
+          // pass scrolls the caret to its minimal-visibility position —
+          // visibly snapping the match out of view. Re-running scrollIntoView
+          // on the same element a frame later overrides that snap; the no-op
+          // case (no late scroll happened) just re-centres the same element
+          // and is cheap.
+          const win = this.#visibleHost.ownerDocument?.defaultView;
+          if (win) {
+            // SD-3315: own the scroll until the RAF re-assert. The find-input focus restore fires
+            // a selectionUpdate that reverts the editor selection and would selection-sync-scroll
+            // the viewport to that stale caret before this RAF runs. Suppress that here and
+            // release after re-asserting, so normal selection scroll resumes next frame. Paired
+            // with the RAF below (set inside `if (win)` so it is always cleared).
+            if (options.suppressSelectionSyncScroll) this.#suppressSelectionScrollUntilRaf = true;
+            win.requestAnimationFrame(() => {
+              elToScroll.scrollIntoView({ block, inline: 'nearest', behavior });
+              this.#shouldScrollSelectionIntoView = false;
+              this.#suppressSelectionScrollUntilRaf = false;
+            });
+          }
           return true;
         }
       }
@@ -3707,11 +4019,19 @@ export class PresentationEditor extends EventEmitter {
    * @param options - Scrolling options
    * @param options.block - Alignment within the viewport ('start' | 'center' | 'end' | 'nearest')
    * @param options.behavior - Scroll behavior ('auto' | 'smooth')
+   * @param options.ifNeeded - When true, skip movement if the target is already fully visible
+   *   (downgrades to 'nearest'); off-screen targets still use `block`. Used by search navigation.
+   * @param options.suppressSelectionSyncScroll - Forwarded to scrollToPosition; see there.
    * @returns Promise resolving to true if scrolling succeeded, false otherwise
    */
   async scrollToPositionAsync(
     pos: number,
-    options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
+    options: {
+      block?: 'start' | 'center' | 'end' | 'nearest';
+      behavior?: ScrollBehavior;
+      ifNeeded?: boolean;
+      suppressSelectionSyncScroll?: boolean;
+    } = {},
   ): Promise<boolean> {
     // Fast path: try sync scroll first (works if page already mounted)
     if (this.scrollToPosition(pos, options)) {
@@ -3754,8 +4074,149 @@ export class PresentationEditor extends EventEmitter {
       return false;
     }
 
-    // Retry now that page is mounted
-    return this.scrollToPosition(pos, options);
+    // Retry now that page is mounted. Reaching this path means the target was on an unmounted
+    // (off-screen) page at call time, and #scrollPageIntoView above only scrolled the page into
+    // view — not the specific match, which can now sit at a viewport edge. Force ifNeeded:false so
+    // the match centers, instead of letting the now-edge-visible match downgrade to 'nearest' and
+    // skip centering (SD-3315 review). suppressSelectionSyncScroll is preserved via the spread.
+    return this.scrollToPosition(pos, { ...options, ifNeeded: false });
+  }
+
+  /**
+   * Scroll a content control (SDT field/clause) into view by its id.
+   *
+   * Model-aware: the control's position is resolved from the document
+   * model, not the painted DOM, so this works even when the control sits
+   * on a not-yet-rendered (virtualized) page — `scrollToPositionAsync`
+   * mounts the page first, then scrolls. This is why it cannot reuse the
+   * paint-only `getEntityRects` rect path.
+   *
+   * Scroll-only: it does NOT move the selection or place the caret inside
+   * the control. Focusing/activating a control is a separate concern.
+   *
+   * v1 is body-only: it searches the body editor, and `scrollToPositionAsync`
+   * only scrolls in body mode, so a control inside a header/footer/note
+   * story does not resolve and returns `false`.
+   *
+   * @returns `true` once scrolled; `false` when the id is empty/unknown,
+   *   the control is in a non-body story, or no editor is available.
+   */
+  async scrollContentControlIntoView(
+    entityId: string,
+    options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
+  ): Promise<boolean> {
+    const pos = this.#resolveContentControlCaretPos(entityId);
+    if (pos == null) return false;
+    return this.scrollToPositionAsync(pos, {
+      behavior: options.behavior ?? 'smooth',
+      block: options.block ?? 'center',
+    });
+  }
+
+  /**
+   * Resolve a caret position inside the content control with `entityId`, or
+   * `null` when no such control exists in the body document.
+   *
+   * Prefers the first *text* position inside the control: only text positions
+   * reliably map to a layout fragment; wrapper boundaries (block, paragraph,
+   * run) sit between fragments. A deep `descendants` walk handles inline
+   * (`run > text`) and block (`paragraph > run > text`) nesting uniformly
+   * (`descendants` yields each child's position relative to the node's
+   * content, so the absolute position is `found.pos + 1 + rel`). An empty
+   * control with no text falls back to the first inside position.
+   *
+   * The id is normalized to a string before comparing: the id a consumer
+   * passes comes from the list / painted `data-sdt-id` (always a string), but
+   * the PM attr can be numeric, so a strict `===` would miss it.
+   */
+  #resolveContentControlCaretPos(entityId: string): number | null {
+    const editor = this.#editor;
+    if (!editor || typeof entityId !== 'string' || entityId.length === 0) return null;
+
+    let found: { pos: number; node: ReturnType<typeof editor.state.doc.nodeAt> } | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (found) return false;
+      const name = node.type?.name;
+      if ((name === 'structuredContent' || name === 'structuredContentBlock') && String(node.attrs?.id) === entityId) {
+        found = { pos, node };
+        return false;
+      }
+      return true;
+    });
+    if (!found) return null;
+
+    let contentPos = found.pos + 1;
+    let textFound = false;
+    found.node?.descendants((child, rel) => {
+      if (textFound) return false;
+      if (child.isText) {
+        contentPos = found.pos + 1 + rel;
+        textFound = true;
+        return false;
+      }
+      return true;
+    });
+    return contentPos;
+  }
+
+  /**
+   * Focus a content control (SDT field/clause) by its id: place the caret
+   * inside it and scroll it into view — the "take me there and let me edit"
+   * counterpart to the scroll-only {@link scrollContentControlIntoView}.
+   *
+   * Selection, not mutation: locks (`sdtLocked` / `contentLocked` / …) and
+   * `viewing` mode do NOT block placing the caret — they still block the edits
+   * the user then attempts, via the normal editing rules. So a custom UI can
+   * focus a locked clause to let the user inspect it.
+   *
+   * Caret-inside (not a wrapper NodeSelection): both SDT node types are
+   * `atom: false`, so a `TextSelection` inside is the meaningful selection.
+   *
+   * v1 is body-only: searches the body editor, so a control in a
+   * header/footer/note story resolves to `not-found`.
+   *
+   * @returns `{ success: true }` once focused, or `{ success: false, reason }`
+   *   for a real navigation problem: `not-ready` (no editor), `invalid-id`
+   *   (empty id), `not-found` (unknown id / non-body), `not-reachable`
+   *   (found but the page could not be scrolled into view).
+   */
+  async focusContentControl(
+    entityId: string,
+    options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
+  ): Promise<
+    { success: true } | { success: false; reason: 'not-ready' | 'invalid-id' | 'not-found' | 'not-reachable' }
+  > {
+    const editor = this.#editor;
+    if (!editor) return { success: false, reason: 'not-ready' };
+    if (typeof entityId !== 'string' || entityId.length === 0) return { success: false, reason: 'invalid-id' };
+
+    const pos = this.#resolveContentControlCaretPos(entityId);
+    if (pos == null) return { success: false, reason: 'not-found' };
+
+    // Without setTextSelection the editor can't place the caret, so focus
+    // can't honor its "caret placed" contract — fail before scrolling.
+    if (typeof editor.commands?.setTextSelection !== 'function') {
+      return { success: false, reason: 'not-ready' };
+    }
+
+    // Scroll first and honor the result. A focus that can't bring the control
+    // into view must not report success (it would leave a caret on a page that
+    // never mounted) — matches #scrollToBlockCandidate. Model-aware: mounts a
+    // virtualized page first.
+    const scrolled = await this.scrollToPositionAsync(pos, {
+      behavior: options.behavior ?? 'smooth',
+      block: options.block ?? 'center',
+    });
+    if (!scrolled) return { success: false, reason: 'not-reachable' };
+
+    // Place the caret inside the control and honor the result — report success
+    // only if the selection was actually placed. setTextSelection clamps and
+    // focuses the (hidden) editor view with preventScroll, so keyboard input
+    // goes to the control without re-jumping the viewport.
+    if (!editor.commands.setTextSelection({ from: pos, to: pos })) {
+      return { success: false, reason: 'not-reachable' };
+    }
+    return { success: true };
   }
 
   /**
@@ -3966,6 +4427,8 @@ export class PresentationEditor extends EventEmitter {
     this.#postPaintPipeline.destroy();
     this.#proofingManager?.dispose();
     this.#proofingManager = null;
+    this.#fontGate?.dispose();
+    this.#fontGate = null;
 
     // Cancel pending cursor awareness update
     if (this.#cursorUpdateTimer !== null) {
@@ -4017,11 +4480,12 @@ export class PresentationEditor extends EventEmitter {
 
     if (this.#scrollHandler) {
       if (this.#scrollContainer) {
-        this.#scrollContainer.removeEventListener('scroll', this.#scrollHandler);
+        this.#scrollContainer.removeEventListener('scroll', this.#scrollHandler, { capture: true });
       }
       const win = this.#visibleHost?.ownerDocument?.defaultView;
-      win?.removeEventListener('scroll', this.#scrollHandler);
+      win?.removeEventListener('scroll', this.#scrollHandler, { capture: true });
       this.#scrollHandler = null;
+      this.#handledScrollEvents = new WeakSet<Event>();
       this.#scrollContainer = null;
     }
     this.#inputBridge?.notifyTargetChanged();
@@ -4336,7 +4800,7 @@ export class PresentationEditor extends EventEmitter {
           transaction.docChanged &&
           (ySyncMeta?.isChangeOrigin || inputType === 'historyUndo' || inputType === 'historyRedo');
         if (shouldBypassFastRevision) {
-          this.#flowBlockCache?.setHasExternalChanges(true);
+          this.#flowBlockCache?.setHasExternalChanges?.(true);
         }
       }
       if (trackedChangesChanged || transaction?.docChanged) {
@@ -4467,7 +4931,7 @@ export class PresentationEditor extends EventEmitter {
     // These modify the OOXML part and derived cache but don't change the PM document,
     // so the normal 'update' event won't trigger a layout refresh.
     const handleNotesPartChanged = (event?: { source?: unknown }) => {
-      this.#flowBlockCache.setHasExternalChanges(true);
+      this.#flowBlockCache.setHasExternalChanges?.(true);
       this.#pendingDocChange = true;
       this.#selectionSync.onLayoutStart();
       this.#scheduleRerender();
@@ -4536,6 +5000,10 @@ export class PresentationEditor extends EventEmitter {
 
     const handleCollaborationReady = (payload: unknown) => {
       this.emit('collaborationReady', payload);
+      // Collaboration bootstrap can hydrate header/footer parts on this client
+      // without emitting partChanged. Force a header/footer refresh pass so the
+      // importer tab sees the same headers/footers immediately.
+      this.#refreshHeaderFooterStructureThenRerender();
       // Setup remote cursor rendering after collaboration is ready
       // Only setup if presence is enabled in layout options
       if (this.#options.collaborationProvider?.awareness && this.#layoutOptions.presence?.enabled !== false) {
@@ -4546,6 +5014,20 @@ export class PresentationEditor extends EventEmitter {
     this.#editorListeners.push({
       event: 'collaborationReady',
       handler: handleCollaborationReady as (...args: unknown[]) => void,
+    });
+
+    // `Editor.replaceFile()` swaps the converter and (in collaboration mode)
+    // seeds parts straight into the Y.Doc, so no `partChanged` fires on the
+    // importing client. Treat the signal like a structural rels change: rebuild
+    // header/footer descriptors against the new converter and rerender so the
+    // importer tab matches the collaborator tab without waiting for an edit.
+    const handleDocumentReplaced = () => {
+      this.#refreshHeaderFooterStructureThenRerender({ purgeCachedEditors: true });
+    };
+    this.#editor.on('documentReplaced', handleDocumentReplaced);
+    this.#editorListeners.push({
+      event: 'documentReplaced',
+      handler: handleDocumentReplaced as (...args: unknown[]) => void,
     });
     // Listen for comment selection changes and re-run the inline style layering
     // pipeline on the existing DOM. This avoids a full layout → paint cycle
@@ -4726,20 +5208,25 @@ export class PresentationEditor extends EventEmitter {
 
     // Scroll handler for virtualization - find the actual scroll container
     // by walking up the DOM tree to find the first scrollable ancestor
-    this.#scrollHandler = () => {
+    this.#handledScrollEvents = new WeakSet<Event>();
+    this.#scrollHandler = (event?: Event) => {
+      if (event) {
+        if (this.#handledScrollEvents.has(event)) return;
+        this.#handledScrollEvents.add(event);
+      }
       this.#painterAdapter.onScroll();
     };
 
     // Find the scrollable ancestor and attach listener there
     this.#scrollContainer = this.#findScrollableAncestor(this.#visibleHost);
     if (this.#scrollContainer) {
-      this.#scrollContainer.addEventListener('scroll', this.#scrollHandler, { passive: true });
+      this.#scrollContainer.addEventListener('scroll', this.#scrollHandler, { passive: true, capture: true });
     }
 
     // Also listen on window as fallback
     const win = this.#visibleHost.ownerDocument?.defaultView;
     if (win && this.#scrollContainer !== win) {
-      win.addEventListener('scroll', this.#scrollHandler, { passive: true });
+      win.addEventListener('scroll', this.#scrollHandler, { passive: true, capture: true });
     }
   }
 
@@ -4816,11 +5303,11 @@ export class PresentationEditor extends EventEmitter {
     if (!next || next === this.#scrollContainer) return;
 
     const prev = this.#scrollContainer;
-    prev.removeEventListener('scroll', this.#scrollHandler!);
+    prev.removeEventListener('scroll', this.#scrollHandler!, { capture: true });
     this.#scrollContainer = next;
 
     if (next instanceof Element) {
-      next.addEventListener('scroll', this.#scrollHandler!, { passive: true });
+      next.addEventListener('scroll', this.#scrollHandler!, { passive: true, capture: true });
     }
     this.#painterAdapter.setScrollContainer(next instanceof HTMLElement ? next : null);
   }
@@ -4866,11 +5353,9 @@ export class PresentationEditor extends EventEmitter {
    * This method encapsulates the common focus and blur logic used when
    * selecting both inline and block images.
    * @private
-   * @returns {void}
    */
   #focusEditorAfterImageSelection(): void {
     this.#shouldScrollSelectionIntoView = true;
-    this.#scheduleSelectionUpdate();
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -4879,6 +5364,7 @@ export class PresentationEditor extends EventEmitter {
       editorDom.focus();
       this.#editor.view?.focus();
     }
+    this.#scheduleSelectionUpdate({ immediate: true });
   }
 
   #resolveFieldAnnotationSelectionFromElement(
@@ -5054,7 +5540,7 @@ export class PresentationEditor extends EventEmitter {
             refId: headerId,
           });
           this.#headerFooterSession?.invalidateLayoutForRefs([headerId]);
-          this.#flowBlockCache.setHasExternalChanges(true);
+          this.#flowBlockCache.setHasExternalChanges?.(true);
           this.#pendingDocChange = true;
           this.#selectionSync.onLayoutStart();
           this.#scheduleRerender();
@@ -5346,6 +5832,7 @@ export class PresentationEditor extends EventEmitter {
     const { runtime, hostElement, activationOptions } = input;
     const editorContext = activationOptions.editorContext ?? {};
     const pmJson = runtime.editor.getJSON() as unknown as Record<string, unknown>;
+    const headerFooterRefId = runtime.locator.storyType === 'headerFooterPart' ? runtime.locator.refId : undefined;
     const fresh = createStoryEditor(this.#editor, pmJson, {
       documentId: runtime.storyKey,
       isHeaderOrFooter: runtime.kind === 'headerFooter',
@@ -5353,6 +5840,7 @@ export class PresentationEditor extends EventEmitter {
       element: hostElement,
       currentPageNumber: editorContext.currentPageNumber,
       totalPageCount: editorContext.totalPageCount,
+      editorOptions: headerFooterRefId ? { headerFooterRefId } : undefined,
     });
 
     return {
@@ -5883,6 +6371,20 @@ export class PresentationEditor extends EventEmitter {
     return calculateExtendedSelection(this.#layoutState.blocks, anchor, head, mode);
   }
 
+  /**
+   * Refreshes header/footer descriptors from the converter, invalidates cached
+   * layout input, and schedules a presentation rerender. Used when full-document
+   * hydration bypasses normal `partChanged` wiring (`collaborationReady`,
+   * `documentReplaced`).
+   */
+  #refreshHeaderFooterStructureThenRerender(options?: { purgeCachedEditors?: boolean }): void {
+    this.#headerFooterSession?.refreshStructure(options);
+    this.#flowBlockCache.setHasExternalChanges?.(true);
+    this.#pendingDocChange = true;
+    this.#selectionSync.onLayoutStart();
+    this.#scheduleRerender();
+  }
+
   #scheduleRerender() {
     if (this.#renderScheduled) {
       return;
@@ -5964,63 +6466,105 @@ export class PresentationEditor extends EventEmitter {
       const sectionMetadata: SectionMetadata[] = [];
       let blocks: FlowBlock[] | undefined;
       let bookmarks: Map<string, number> = new Map();
+      // TODO(footnote): the block below (settings read → numbering → cache
+      // signatures → converterContext) is OOXML-semantics work that doesn't
+      // belong in PresentationEditor (see layout-engine CLAUDE.md). Extract
+      // a `buildFootnoteConverterContext` helper alongside computeNoteNumbering
+      // so the cache-signature dance lives in one place and is testable in
+      // isolation. Deferred from PR SD-2656 review per reviewer's offer.
       let converterContext: ConverterContext | undefined = undefined;
       try {
         const converter = (this.#editor as Editor & { converter?: Record<string, unknown> }).converter;
-        // Compute visible footnote numbering (1-based) by first appearance in the document.
-        // This matches Word behavior even when OOXML ids are non-contiguous or start at 0.
-        const footnoteNumberById: Record<string, number> = {};
-        const footnoteOrder: string[] = [];
-        try {
-          const seen = new Set<string>();
-          let counter = 1;
-          this.#editor?.state?.doc?.descendants?.((node: any) => {
-            if (node?.type?.name !== 'footnoteReference') return;
-            const rawId = node?.attrs?.id;
-            if (rawId == null) return;
-            const key = String(rawId);
-            if (!key || seen.has(key)) return;
-            seen.add(key);
-            footnoteNumberById[key] = counter;
-            footnoteOrder.push(key);
-            counter += 1;
-          });
-        } catch (e) {
-          // Log traversal errors - footnote numbering may be incorrect if this fails
-          if (typeof console !== 'undefined' && console.warn) {
-            console.warn('[PresentationEditor] Failed to compute footnote numbering:', e);
+
+        // §17.11.12 (document-wide) + §17.11.11 (section-level) — read both layers.
+        let defaultTableStyleId: string | undefined;
+        let footnoteNumberFormat: string | undefined;
+        let endnoteNumberFormat: string | undefined;
+        let footnoteNumberStart = 1;
+        let endnoteNumberStart = 1;
+        let footnoteNumberRestart: 'continuous' | 'eachPage' | 'eachSect' | undefined;
+        let endnoteNumberRestart: 'continuous' | 'eachPage' | 'eachSect' | undefined;
+        let footnotePosition: 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd' | undefined;
+        let endnotePosition: 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd' | undefined;
+        let footnoteSectionConfigs = new Map<number, SectionNoteConfig>();
+        let endnoteSectionConfigs = new Map<number, SectionNoteConfig>();
+        if (converter) {
+          const settingsRoot = readSettingsRoot(converter);
+          if (settingsRoot) {
+            defaultTableStyleId = readDefaultTableStyle(settingsRoot) ?? undefined;
+            footnoteNumberFormat = readFootnoteNumberFormat(settingsRoot) ?? undefined;
+            endnoteNumberFormat = readEndnoteNumberFormat(settingsRoot) ?? undefined;
+            footnoteNumberStart = readFootnoteNumberStart(settingsRoot) ?? 1;
+            endnoteNumberStart = readEndnoteNumberStart(settingsRoot) ?? 1;
+            footnoteNumberRestart = readFootnoteNumberRestart(settingsRoot) ?? undefined;
+            endnoteNumberRestart = readEndnoteNumberRestart(settingsRoot) ?? undefined;
+            // §17.11.21 — document-level only; section-level pos is ignored.
+            footnotePosition = readFootnotePosition(settingsRoot) ?? undefined;
+            endnotePosition = readEndnotePosition(settingsRoot) ?? undefined;
+          }
+          const documentPart = (converter.convertedXml as Record<string, unknown> | undefined)?.['word/document.xml'];
+          if (documentPart) {
+            footnoteSectionConfigs = readSectionNoteConfigs(documentPart as never, 'w:footnotePr');
+            endnoteSectionConfigs = readSectionNoteConfigs(documentPart as never, 'w:endnotePr');
           }
         }
-        // Invalidate flow block cache when footnote order changes, since footnote
-        // numbers are embedded in cached blocks and must be recomputed.
-        const footnoteSignature = footnoteOrder.join('|');
+
+        // §17.11.19 numRestart=eachPage — requires a per-ref page-assignment
+        // map from a prior layout pass. The numbering runs BEFORE pagination,
+        // so refPageById is not available here. Coerce to `continuous` and
+        // warn once so the doc renders deterministic ordinals instead of
+        // silently rendering "continuous-looking but supposedly per-page"
+        // numbers. Wiring a real eachPage pass requires a two-pass handshake
+        // (number → layout → re-number → re-layout).
+        if (footnoteNumberRestart === 'eachPage') {
+          this.#warnUnsupportedNumberingRestart('footnote');
+          footnoteNumberRestart = 'continuous';
+        }
+        if (endnoteNumberRestart === 'eachPage') {
+          this.#warnUnsupportedNumberingRestart('endnote');
+          endnoteNumberRestart = 'continuous';
+        }
+        // Section-level overrides may also request eachPage; coerce the same
+        // way so the helper never sees a value it cannot honor.
+        for (const [secIndex, cfg] of footnoteSectionConfigs) {
+          if (cfg.numRestart === 'eachPage') {
+            footnoteSectionConfigs.set(secIndex, { ...cfg, numRestart: 'continuous' });
+            this.#warnUnsupportedNumberingRestart('footnote');
+          }
+        }
+        for (const [secIndex, cfg] of endnoteSectionConfigs) {
+          if (cfg.numRestart === 'eachPage') {
+            endnoteSectionConfigs.set(secIndex, { ...cfg, numRestart: 'continuous' });
+            this.#warnUnsupportedNumberingRestart('endnote');
+          }
+        }
+
+        // §17.11.14 / §17.11.20 / §17.11.19 / §17.11.11.
+        const footnoteNumbering = computeNoteNumbering(this.#editor?.state, 'footnoteReference', {
+          startCounter: footnoteNumberStart,
+          defaultNumFmt: footnoteNumberFormat,
+          defaultRestart: footnoteNumberRestart,
+          sectionConfigs: footnoteSectionConfigs,
+        });
+        const footnoteNumberById = footnoteNumbering.numberById;
+        const footnoteFormatById = footnoteNumbering.formatById;
+        const footnoteOrder = footnoteNumbering.order;
+        // Cache key: anything baked into cached reference runs.
+        const footnoteSignature = `${footnoteNumberStart}|${footnoteNumberFormat ?? ''}|${footnoteNumberRestart ?? ''}|${serializeSectionConfigs(footnoteSectionConfigs)}|${serializePerIdNumbering(footnoteOrder, footnoteNumberById, footnoteFormatById)}`;
         if (footnoteSignature !== this.#footnoteNumberSignature) {
           this.#flowBlockCache.clear();
           this.#footnoteNumberSignature = footnoteSignature;
         }
-        // Compute visible endnote numbering (same approach as footnotes).
-        const endnoteNumberById: Record<string, number> = {};
-        const endnoteOrder: string[] = [];
-        try {
-          const seen = new Set<string>();
-          let counter = 1;
-          this.#editor?.state?.doc?.descendants?.((node: any) => {
-            if (node?.type?.name !== 'endnoteReference') return;
-            const rawId = node?.attrs?.id;
-            if (rawId == null) return;
-            const key = String(rawId);
-            if (!key || seen.has(key)) return;
-            seen.add(key);
-            endnoteNumberById[key] = counter;
-            endnoteOrder.push(key);
-            counter += 1;
-          });
-        } catch (e) {
-          if (typeof console !== 'undefined' && console.warn) {
-            console.warn('[PresentationEditor] Failed to compute endnote numbering:', e);
-          }
-        }
-        const endnoteSignature = endnoteOrder.join('|');
+        const endnoteNumbering = computeNoteNumbering(this.#editor?.state, 'endnoteReference', {
+          startCounter: endnoteNumberStart,
+          defaultNumFmt: endnoteNumberFormat,
+          defaultRestart: endnoteNumberRestart,
+          sectionConfigs: endnoteSectionConfigs,
+        });
+        const endnoteNumberById = endnoteNumbering.numberById;
+        const endnoteFormatById = endnoteNumbering.formatById;
+        const endnoteOrder = endnoteNumbering.order;
+        const endnoteSignature = `${endnoteNumberStart}|${endnoteNumberFormat ?? ''}|${endnoteNumberRestart ?? ''}|${serializeSectionConfigs(endnoteSectionConfigs)}|${serializePerIdNumbering(endnoteOrder, endnoteNumberById, endnoteFormatById)}`;
         if (endnoteSignature !== this.#endnoteNumberSignature) {
           this.#flowBlockCache.clear();
           this.#endnoteNumberSignature = endnoteSignature;
@@ -6034,23 +6578,26 @@ export class PresentationEditor extends EventEmitter {
           }
         } catch {}
 
-        let defaultTableStyleId: string | undefined;
-        if (converter) {
-          const settingsRoot = readSettingsRoot(converter);
-          if (settingsRoot) {
-            defaultTableStyleId = readDefaultTableStyle(settingsRoot) ?? undefined;
-          }
-        }
-
+        // SD-3240: converter.convertedXml / translatedLinkedStyles /
+        // translatedNumbering are typed on the public surface as
+        // narrower (unknown-bearing) shapes than ConverterContext
+        // requires. Cast at the boundary; the runtime values match
+        // the shape ConverterContext expects.
         converterContext = converter
-          ? {
+          ? ({
               docx: converter.convertedXml,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
               ...(Object.keys(endnoteNumberById).length ? { endnoteNumberById } : {}),
+              ...(footnoteNumberFormat ? { footnoteNumberFormat } : {}),
+              ...(endnoteNumberFormat ? { endnoteNumberFormat } : {}),
+              ...(footnoteFormatById && Object.keys(footnoteFormatById).length ? { footnoteFormatById } : {}),
+              ...(endnoteFormatById && Object.keys(endnoteFormatById).length ? { endnoteFormatById } : {}),
+              ...(footnotePosition ? { footnotePosition } : {}),
+              ...(endnotePosition ? { endnotePosition } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
               ...(defaultTableStyleId ? { defaultTableStyleId } : {}),
-            }
+            } as unknown as ConverterContext)
           : undefined;
         const atomNodeTypes = getAtomNodeTypesFromSchema(this.#editor?.schema ?? null);
         const positionMapStart = perfNow();
@@ -6067,9 +6614,13 @@ export class PresentationEditor extends EventEmitter {
           sectionMetadata,
           trackedChangesMode: this.#trackedChangesMode,
           enableTrackedChanges: this.#trackedChangesEnabled,
+          resolveTrackedChangeColor: this.#layoutOptions.resolveTrackedChangeColor,
           enableComments: commentsEnabled,
           enableRichHyperlinks: true,
-          themeColors: this.#editor?.converter?.themeColors ?? undefined,
+          // SD-3240: converter.themeColors is `unknown` on the public
+          // EditorConverterSurface; cast to the consumer-expected type
+          // here. The runtime shape matches at call time.
+          themeColors: (this.#editor?.converter?.themeColors ?? undefined) as Record<string, string> | undefined,
           converterContext,
           flowBlockCache: this.#flowBlockCache,
           showBookmarks: this.#layoutOptions.showBookmarks ?? false,
@@ -6114,6 +6665,7 @@ export class PresentationEditor extends EventEmitter {
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
         activeFootnoteOverride,
+        this.#layoutOptions.resolveTrackedChangeColor,
       );
       const semanticFootnoteBlocks = isSemanticFlow
         ? buildSemanticFootnoteBlocks(footnotesLayoutInput, this.#layoutOptions.semanticOptions?.footnotesMode)
@@ -6125,6 +6677,7 @@ export class PresentationEditor extends EventEmitter {
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
         activeEndnoteOverride,
+        this.#layoutOptions.resolveTrackedChangeColor,
       );
       const blocksForLayout =
         semanticFootnoteBlocks.length > 0 || endnoteBlocks.length > 0
@@ -6149,6 +6702,20 @@ export class PresentationEditor extends EventEmitter {
       let extraMeasures: Measure[] | undefined;
       let resolveBlocks: FlowBlock[] = blocksForLayout;
       let resolveMeasures: Measure[] = previousMeasures;
+      // Load-before-measure gate (T3): wait for the fonts this document needs so the first
+      // measurement pass uses real metrics instead of a fallback that would reflow on load.
+      // Bounded by a per-font timeout; resolves to the cached summary once fonts are stable;
+      // never throws, so font readiness can never block layout.
+      try {
+        const fontSummary = (await this.#fontGate?.ensureReadyForMeasure()) ?? null;
+        // Now that the gate has settled, the font report reflects real load status. Emit
+        // the authoritative `fonts-changed` once the picture first resolves and whenever it
+        // changes (a late-load bumps the gate epoch and re-renders through here).
+        this.#emitFontsChangedIfChanged(fontSummary);
+      } catch {
+        /* font readiness must never break layout */
+      }
+
       const headerFooterInput = this.#buildHeaderFooterInput();
       try {
         const incrementalLayoutStart = perfNow();
@@ -6209,13 +6776,19 @@ export class PresentationEditor extends EventEmitter {
       }
 
       this.#sectionMetadata = sectionMetadata;
-      // Build multi-section identifier from section metadata for section-aware header/footer selection
-      // Pass converter's headerIds/footerIds as fallbacks for dynamically created headers/footers
+      // Build multi-section identifier from section metadata for section-aware header/footer selection.
+      // Derive odd/even mode from current settings.xml-aware resolution (not only converter.pageStyles),
+      // because collaborator sessions can have stale converter.pageStyles during remote hydration.
+      // Pass converter's headerIds/footerIds as fallbacks for dynamically created headers/footers.
       const converter = (this.#editor as EditorWithConverter).converter;
-      const multiSectionId = buildMultiSectionIdentifier(sectionMetadata, converter?.pageStyles, {
-        headerIds: converter?.headerIds,
-        footerIds: converter?.footerIds,
-      });
+      const multiSectionId = buildMultiSectionIdentifier(
+        sectionMetadata,
+        { alternateHeaders: this.#resolveAlternateHeadersFlag() },
+        {
+          headerIds: converter?.headerIds,
+          footerIds: converter?.footerIds,
+        },
+      );
       if (this.#headerFooterSession) {
         this.#headerFooterSession.multiSectionIdentifier = multiSectionId;
       }
@@ -6364,6 +6937,7 @@ export class PresentationEditor extends EventEmitter {
       ruler: this.#layoutOptions.ruler,
       pageGap: this.#layoutState.layout?.pageGap ?? effectiveGap,
       showFormattingMarks: this.#layoutOptions.showFormattingMarks ?? false,
+      contentControlsChrome: this.#layoutOptions.contentControlsChrome ?? 'default',
     });
 
     // Pass the current zoom so virtualization accounts for the CSS transform scale
@@ -6540,14 +7114,23 @@ export class PresentationEditor extends EventEmitter {
     let node: ProseMirrorNode | null = null;
     let pos: number | null = null;
     let id: string | null = null;
+    let fallbackPos: number | null = null;
 
     if (selection instanceof NodeSelection) {
-      if (selection.node?.type?.name !== 'structuredContentBlock') {
-        this.#clearSelectedStructuredContentBlockClass();
-        return;
+      if (selection.node?.type?.name === 'structuredContentBlock') {
+        node = selection.node;
+        pos = selection.from;
+      } else {
+        fallbackPos = selection.from;
+        const editorDoc = this.#editor?.view?.state?.doc;
+        const resolved = editorDoc ? findStructuredContentBlockAtPos(editorDoc, selection.from) : null;
+        if (!resolved) {
+          this.#clearSelectedStructuredContentBlockClass();
+          return;
+        }
+        node = resolved.node;
+        pos = resolved.pos;
       }
-      node = selection.node;
-      pos = selection.from;
     } else {
       const editorDoc = this.#editor?.view?.state?.doc;
       if (!editorDoc) {
@@ -6586,6 +7169,14 @@ export class PresentationEditor extends EventEmitter {
     if (elements.length === 0) {
       const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
       const container = elementAtPos?.closest?.(`.${DOM_CLASS_NAMES.BLOCK_SDT}`) as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0 && fallbackPos != null && fallbackPos !== pos) {
+      const elementAtFallbackPos = this.getElementAtPos(fallbackPos, { fallbackToCoords: true });
+      const container = elementAtFallbackPos?.closest?.(`.${DOM_CLASS_NAMES.BLOCK_SDT}`) as HTMLElement | null;
       if (container) {
         elements = [container];
       }
@@ -6814,7 +7405,6 @@ export class PresentationEditor extends EventEmitter {
    * This method is called after layout completes to ensure cursor positioning
    * is based on stable layout data.
    *
-   * @returns {void}
    *
    * @remarks
    * Edge cases handled:
@@ -7075,6 +7665,12 @@ export class PresentationEditor extends EventEmitter {
    * page into view to trigger mount; the next selection update handles precise scroll.
    */
   #scrollActiveEndIntoView(pageIndex: number): void {
+    // SD-3315: a search-owned scroll is in flight (find next/previous). Do not let selection-sync
+    // scroll the viewport to the (reverted/stale) caret — the search scroll and its RAF re-assert
+    // own positioning for this window. The selection overlay still renders in #updateSelection;
+    // only this scroll is skipped. Cleared on the search scroll's RAF, so normal keyboard/pointer
+    // selection scroll resumes the next frame.
+    if (this.#suppressSelectionScrollUntilRaf) return;
     // Check if the target page is mounted before trusting rendered element positions.
     const pageIsMounted = !!this.#painterHost.querySelector(`[data-page-index="${pageIndex}"]`);
     if (!pageIsMounted) {
@@ -7189,6 +7785,21 @@ export class PresentationEditor extends EventEmitter {
     overlay.appendChild(fragment);
   }
 
+  #resolveAlternateHeadersFlag(): boolean {
+    const converter = (this.#editor as EditorWithConverter | undefined)?.converter;
+    if (!converter) {
+      return false;
+    }
+
+    const settingsPart = (converter as { convertedXml?: Record<string, unknown> }).convertedXml?.['word/settings.xml'];
+    const fromSettings = resolveEvenAndOddHeadersFromSettingsPart(settingsPart);
+    if (fromSettings !== null) {
+      return fromSettings;
+    }
+
+    return converter.pageStyles?.alternateHeaders === true;
+  }
+
   #resolveLayoutOptions(blocks: FlowBlock[] | undefined, sectionMetadata: SectionMetadata[]): ResolvedLayoutOptions {
     const defaults = this.#computeDefaultLayoutDefaults();
     const firstSection = blocks?.find(
@@ -7266,9 +7877,7 @@ export class PresentationEditor extends EventEmitter {
 
     this.#hiddenHost.style.width = `${pageSize.w}px`;
 
-    const alternateHeaders = Boolean(
-      (this.#editor as EditorWithConverter | undefined)?.converter?.pageStyles?.alternateHeaders,
-    );
+    const alternateHeaders = this.#resolveAlternateHeadersFlag();
 
     return {
       flowMode: 'paginated',
@@ -8449,33 +9058,54 @@ export class PresentationEditor extends EventEmitter {
 
     const behavior = options.behavior ?? 'auto';
     const block = options.block ?? 'center';
+    const navigationIds = this.#resolveTrackedChangeNavigationIds(entityId, storyKey);
 
     if (storyKey && storyKey !== BODY_STORY_KEY) {
-      if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
-        return true;
-      }
-
-      if (await this.#activateTrackedChangeStorySurface(entityId, storyKey, preferredPageIndex)) {
-        if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
+      for (const id of navigationIds) {
+        if (this.#navigateToActiveStoryTrackedChange(id, storyKey)) {
           return true;
         }
       }
 
-      return this.#scrollToRenderedTrackedChange(entityId, storyKey, preferredPageIndex, { behavior, block });
+      for (const id of navigationIds) {
+        if (await this.#activateTrackedChangeStorySurface(id, storyKey, preferredPageIndex)) {
+          for (const activeId of navigationIds) {
+            if (this.#navigateToActiveStoryTrackedChange(activeId, storyKey)) {
+              return true;
+            }
+          }
+        }
+      }
+
+      for (const id of navigationIds) {
+        if (await this.#scrollToRenderedTrackedChange(id, storyKey, preferredPageIndex, { behavior, block })) {
+          return true;
+        }
+      }
+      return false;
     }
 
     const setCursorById = editor.commands?.setCursorById;
 
     // Try direct cursor placement, then scroll to the new selection.
-    if (typeof setCursorById === 'function' && setCursorById(entityId, { preferredActiveThreadId: entityId })) {
-      await this.scrollToPositionAsync(editor.state.selection.from, { behavior, block });
-      return true;
+    if (typeof setCursorById === 'function') {
+      for (const id of navigationIds) {
+        if (setCursorById(id, { preferredActiveThreadId: id })) {
+          await this.scrollToPositionAsync(editor.state.selection.from, { behavior, block });
+          return true;
+        }
+      }
     }
 
     // Fall back to resolving the tracked change position and scrolling.
-    const resolved = resolveTrackedChange(editor, entityId);
+    const resolved = navigationIds.map((id) => resolveTrackedChange(editor, id)).find(Boolean);
     if (!resolved) {
-      return this.#scrollToRenderedTrackedChange(entityId, undefined, preferredPageIndex, { behavior, block });
+      for (const id of navigationIds) {
+        if (await this.#scrollToRenderedTrackedChange(id, undefined, preferredPageIndex, { behavior, block })) {
+          return true;
+        }
+      }
+      return false;
     }
 
     // Try with the raw ID (tracked changes may use a different internal ID).
@@ -8496,6 +9126,45 @@ export class PresentationEditor extends EventEmitter {
     editor.commands?.setTextSelection?.({ from: resolved.from, to: resolved.from });
     editor.view?.focus?.();
     return true;
+  }
+
+  #resolveTrackedChangeNavigationIds(entityId: string, storyKey?: string): string[] {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    const add = (value: unknown) => {
+      if (value === undefined || value === null) return;
+      const id = String(value).trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+
+    add(entityId);
+
+    let story: StoryLocator | undefined;
+    if (storyKey && storyKey !== BODY_STORY_KEY) {
+      try {
+        story = parseStoryKey(storyKey);
+      } catch {
+        story = undefined;
+      }
+    }
+
+    try {
+      const resolved = resolveTrackedChangeInStory(this.#editor, {
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId,
+        ...(story ? { story } : {}),
+      });
+      add(resolved?.change?.commandRawId);
+      add(resolved?.change?.rawId);
+      add(resolved?.change?.id);
+    } catch {
+      // Navigation still has direct-id and rendered-DOM fallbacks.
+    }
+
+    return ids;
   }
 
   async #activateTrackedChangeStorySurface(
@@ -9695,9 +10364,16 @@ export class PresentationEditor extends EventEmitter {
 
   /**
    * Compute caret position, preferring DOM when available, falling back to geometry.
+   *
+   * SD-3170: the native-selection refinement inside computeCaretLayoutRectGeometry
+   * reads the browser's collapsed selection rect and prefers it over geometry.
+   * That's only sound when the requested `pos` is the local user's actual caret.
+   * Arbitrary-position queries (remote collaborator cursors, vertical-arrow
+   * navigation binary search) must not get the local rect substituted in.
    */
   #computeCaretLayoutRect(pos: number): { pageIndex: number; x: number; y: number; height: number } | null {
-    const geometry = this.#computeCaretLayoutRectGeometry(pos, true);
+    const useNativeFallback = shouldUseNativeCaretFallback(this.editor?.state?.selection, pos);
+    const geometry = this.#computeCaretLayoutRectGeometry(pos, useNativeFallback);
     let dom: { pageIndex: number; x: number; y: number } | null = null;
     try {
       dom = this.#computeDomCaretPageLocal(pos);

@@ -62,4 +62,26 @@ describe('convertSdtContentToRuns', () => {
     const result = convertSdtContentToRuns(emptyElement);
     expect(result).toEqual([]);
   });
+
+  it('keeps w:smartTagPr as smartTag metadata, not as a fake w:r (SD-2647)', () => {
+    const smartTagPr = {
+      name: 'w:smartTagPr',
+      elements: [{ name: 'w:attr', attributes: { 'w:name': 'CountryRegion', 'w:val': 'BR' } }],
+    };
+    const innerRun = { name: 'w:r', elements: [{ name: 'w:t', text: 'Brazil' }] };
+    const smartTag = {
+      name: 'w:smartTag',
+      attributes: { 'w:element': 'country-region' },
+      elements: [smartTagPr, innerRun],
+    };
+
+    const result = convertSdtContentToRuns([{ name: 'w:sdtPr' }, smartTag]);
+
+    expect(result).toHaveLength(1);
+    const wrapper = result[0];
+    expect(wrapper.name).toBe('w:smartTag');
+    expect(wrapper.elements[0]).toEqual(smartTagPr);
+    expect(wrapper.elements[1]).toBe(innerRun);
+    expect(wrapper.elements.every((el) => el.name !== 'w:r' || el === innerRun)).toBe(true);
+  });
 });

@@ -8,12 +8,19 @@ import type {
   ToolbarSnapshot,
 } from '../headless-toolbar/types.js';
 import type {
+  AnchoredMetadataResolveInfo,
   CommentsListResult,
+  ContentControlInfo,
+  ContentControlsListResult,
   Receipt,
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
+  SelectionTarget,
+  TextTarget,
   TrackChangesListResult,
 } from '@superdoc/document-api';
+import { composeAuthorColorResolver } from '@superdoc/contracts';
+import type { TrackChangeAuthorColorResolver } from '@superdoc/contracts';
 import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
 import { resolvePositionAt } from './position-at.js';
@@ -28,12 +35,15 @@ import type {
   CommandHandle,
   CommandsHandle,
   CommentsHandle,
+  ContentControlsHandle,
+  ContentControlsSlice,
   ContextMenuItem,
   DocumentExportInput,
   DocumentHandle,
   DocumentSlice,
   DynamicCommandHandle,
   EqualityFn,
+  MetadataHandle,
   TrackChangesHandle,
   TrackChangesItem,
   TrackChangesSlice,
@@ -58,6 +68,8 @@ import type {
   ViewportPositionAtInput,
   ViewportPositionHit,
   ViewportHandle,
+  ViewportGeometryEvent,
+  ContentControlFocusResult,
   ViewportRect,
   ViewportRectResult,
 } from './types.js';
@@ -210,6 +222,36 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
+ * SD-3213g: single documented bridge between `SuperDocLike` and
+ * `resolveToolbarSources`'s `ToolbarHostShape`. The cast lives here so
+ * callers don't repeat `superdoc as never` at every site.
+ *
+ * Why the cast is intentional, not type-system noise:
+ *
+ * - `SuperDocLike` is intentionally stub-friendly. Its `activeEditor`
+ *   is `SuperDocEditorLike | null` (a UI-level structural type) so
+ *   consumer tests can pass narrow handcrafted hosts without pulling
+ *   in the full `Editor` graph.
+ * - At runtime, a real `SuperDoc` instance's `activeEditor` is always
+ *   a real `Editor` that satisfies `ToolbarHostShape` structurally.
+ *   The two types describe the same runtime value at different
+ *   abstraction levels.
+ * - Custom commands (and other UI paths) require **late-bound** routing
+ *   resolved at execute time, not at controller construction; the
+ *   cached `toolbarSnapshot.context` only reflects state at the last
+ *   subscription event. So fresh `resolveToolbarSources` calls are
+ *   load-bearing for the `'execute receives the routed editor
+ *   late-bound'` contract pinned in `custom-commands.test.ts`.
+ *
+ * Use this helper anywhere the UI needs a fresh resolver walk. Do not
+ * call `resolveToolbarSources(superdoc as never)` elsewhere in this
+ * file.
+ */
+function resolveFreshToolbarSources(superdoc: SuperDocUIOptions['superdoc']) {
+  return resolveToolbarSources(superdoc as never);
+}
+
+/**
  * Resolve the **routed** editor — the body, header, footer, or note
  * editor that PresentationEditor currently routes input/selection to.
  * Falls back to `superdoc.activeEditor` when no presentation layer is
@@ -222,7 +264,7 @@ function deepFreeze<T>(value: T): T {
  */
 function resolveRoutedEditor(superdoc: SuperDocUIOptions['superdoc']): SuperDocEditorLike | null {
   try {
-    const sources = resolveToolbarSources(superdoc as never);
+    const sources = resolveFreshToolbarSources(superdoc);
     return (sources.activeEditor as unknown as SuperDocEditorLike | null) ?? null;
   } catch {
     return (superdoc.activeEditor ?? null) as SuperDocEditorLike | null;
@@ -256,7 +298,7 @@ function resolvePresentationEditor(superdoc: SuperDocUIOptions['superdoc']): {
   off?: (event: string, handler: (...args: unknown[]) => void) => unknown;
 } | null {
   try {
-    const sources = resolveToolbarSources(superdoc as never);
+    const sources = resolveFreshToolbarSources(superdoc);
     return (sources.presentationEditor as never) ?? null;
   } catch {
     return null;
@@ -331,7 +373,7 @@ function readActiveStoryLocator(
 ): import('@superdoc/document-api').StoryLocator | null {
   let presentation: { getActiveStoryLocator?: () => unknown } | null = null;
   try {
-    const sources = resolveToolbarSources(superdoc as never);
+    const sources = resolveFreshToolbarSources(superdoc);
     presentation = (sources.presentationEditor as never) ?? null;
   } catch {
     return null;
@@ -390,6 +432,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // same selector substrate as the rest of the controller. Per-command
   // state derivers in the registry are wrapped to default to disabled
   // on throw, so a partial editor never wedges snapshot construction.
+  // SD-3213g: documented bridge cast. Same rationale as the comment on
+  // `resolveFreshToolbarSources` above: SuperDocLike is intentionally
+  // stub-friendly, runtime SuperDoc.activeEditor is a real Editor that
+  // satisfies the host contract structurally. Concentrated here so the
+  // call site stays an obvious boundary, not scattered casts elsewhere.
   const toolbarController: HeadlessToolbarController = createHeadlessToolbar({
     superdoc: superdoc as unknown as HeadlessToolbarSuperdocHost,
     // Pass the full registry so snapshot.commands is populated for
@@ -481,6 +528,129 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     }
   };
   refreshTrackChangesListCache();
+
+  // Per-author tracked-change color resolver. Built once from the host
+  // `modules.trackChanges.authorColors` config so the snapshot colors match
+  // exactly what the layout engine paints (both go through
+  // `composeAuthorColorResolver`). `undefined` when colors are disabled /
+  // unconfigured, in which case items carry no `authorColor`.
+  const authorColorResolver: TrackChangeAuthorColorResolver | undefined = composeAuthorColorResolver(
+    superdoc.config?.modules?.trackChanges?.authorColors,
+  );
+
+  // Content-controls slice cache (SD-3157). Same posture as comments
+  // and tracked changes: list reads are O(N), so cache the list and
+  // refresh on document-changing events. `activeIds` derives from the
+  // selection inside `computeState()` (cheap walk over the cached
+  // items) so it stays current without a separate refresh trigger.
+  const EMPTY_CONTENT_CONTROLS_LIST: ContentControlsListResult = {
+    items: [],
+    total: 0,
+  };
+  let contentControlsListCache: ContentControlsListResult = EMPTY_CONTENT_CONTROLS_LIST;
+  const refreshContentControlsListCache = () => {
+    const editor = resolveRoutedEditor(superdoc);
+    const list = editor?.doc?.contentControls?.list;
+    if (typeof list !== 'function') {
+      contentControlsListCache = EMPTY_CONTENT_CONTROLS_LIST;
+      return;
+    }
+    try {
+      const result = list.call(editor.doc!.contentControls, undefined) as ContentControlsListResult | undefined;
+      contentControlsListCache = result ?? EMPTY_CONTENT_CONTROLS_LIST;
+    } catch {
+      // See refreshCommentsListCache: prefer empty over leaking the
+      // previous document's controls on swap.
+      contentControlsListCache = EMPTY_CONTENT_CONTROLS_LIST;
+    }
+  };
+  refreshContentControlsListCache();
+
+  /**
+   * Memoized content-controls slice. Items array reference stays
+   * stable when neither the list cache nor the `activeIds` derived
+   * from selection changes — without this, every selection update
+   * would mismatch shallowEqual on `state.contentControls` and
+   * re-fire every subscriber.
+   */
+  const EMPTY_ACTIVE_CONTENT_CONTROL_IDS: readonly string[] = Object.freeze<string[]>([]);
+  let lastContentControlsListItems: ContentControlsListResult['items'] | null = null;
+  let lastActiveContentControlIds: readonly string[] = EMPTY_ACTIVE_CONTENT_CONTROL_IDS;
+  let memoContentControlsSlice: ContentControlsSlice | null = null;
+
+  /**
+   * Compute the innermost-first chain of content-control ids that
+   * contain the current selection. Two cases:
+   *
+   *   1. TextSelection: walk the `$anchor` up from leaf to root and
+   *      collect every `structuredContent` / `structuredContentBlock`
+   *      ancestor's `nodeId`.
+   *   2. NodeSelection on the SDT wrapper itself (drag-handle click,
+   *      Esc-promotes-to-node, paste-replaces-control): `$anchor` is
+   *      positioned BEFORE the node, so the ancestor walk above never
+   *      visits the selected node. Read `selection.node` first; if it
+   *      IS a content control, prepend its id so the chip stays active.
+   *
+   * Intersect with the items cache so transient ghost ids during a
+   * doc swap don't leak through.
+   */
+  const computeActiveContentControlIds = (validIds: ReadonlySet<string>): readonly string[] => {
+    const editor = resolveRoutedEditor(superdoc) as unknown as {
+      state?: {
+        selection?: {
+          $anchor?: { depth?: number; node?: (depth: number) => unknown };
+          node?: { type?: { name?: string }; attrs?: { id?: unknown } };
+        };
+      };
+      view?: {
+        state?: {
+          selection?: {
+            $anchor?: { depth?: number; node?: (depth: number) => unknown };
+            node?: { type?: { name?: string }; attrs?: { id?: unknown } };
+          };
+        };
+      };
+    };
+    const pmState = editor?.state ?? editor?.view?.state;
+    const selection = pmState?.selection;
+    if (!selection) return EMPTY_ACTIVE_CONTENT_CONTROL_IDS;
+    const ids: string[] = [];
+
+    // NodeSelection branch: the selected node itself is a content
+    // control. PM `NodeSelection` exposes `selection.node`; other
+    // selection kinds either lack the property or carry an
+    // unselected node. Duck-typed to keep this module free of the
+    // `prosemirror-state` import (the existing `$anchor` walk does
+    // the same).
+    const selectedNode = selection.node;
+    if (
+      selectedNode &&
+      (selectedNode.type?.name === 'structuredContent' || selectedNode.type?.name === 'structuredContentBlock')
+    ) {
+      const id = selectedNode.attrs?.id;
+      if (typeof id === 'string' && id.length > 0 && validIds.has(id)) {
+        ids.push(id);
+      }
+    }
+
+    // Ancestor walk: TextSelection inside an SDT, or NodeSelection
+    // whose ancestor chain also contains SDTs (nested case).
+    const anchor = selection.$anchor;
+    if (anchor && typeof anchor.depth === 'number' && typeof anchor.node === 'function') {
+      for (let d = anchor.depth; d >= 0; d -= 1) {
+        const node = anchor.node(d) as { type?: { name?: string }; attrs?: { id?: unknown } } | null | undefined;
+        const typeName = node?.type?.name;
+        if (typeName !== 'structuredContent' && typeName !== 'structuredContentBlock') continue;
+        const id = node?.attrs?.id;
+        if (typeof id !== 'string' || id.length === 0) continue;
+        if (!validIds.has(id)) continue;
+        if (ids.includes(id)) continue; // dedupe NodeSelection + ancestor overlap
+        ids.push(id);
+      }
+    }
+    if (ids.length === 0) return EMPTY_ACTIVE_CONTENT_CONTROL_IDS;
+    return Object.freeze(ids);
+  };
 
   /**
    * Internal `activeTrackChangeId`. Mirrors selection-driven activity
@@ -637,17 +807,40 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     ) {
       trackChangesSlice = trackChangesMemo.slice;
     } else {
-      const items: TrackChangesItem[] = trackChangesListCache.items.map((change) => ({
-        id: change.id,
-        change,
-      }));
+      // Resolve per-author colors (when configured) for each change, plus the
+      // ordered unique author list. Resolution mirrors the layout-engine paint
+      // path so snapshot colors match what is rendered.
+      const authors: TrackChangesSlice['authors'] = [];
+      const seenAuthorKeys = new Set<string>();
+      const items: TrackChangesItem[] = trackChangesListCache.items.map((change) => {
+        if (!authorColorResolver) {
+          return { id: change.id, change };
+        }
+        const author = {
+          name: typeof change.author === 'string' ? change.author : undefined,
+          email: typeof change.authorEmail === 'string' ? change.authorEmail : undefined,
+          image: typeof change.authorImage === 'string' ? change.authorImage : undefined,
+        };
+        const authorColor = authorColorResolver(author);
+        if (authorColor && (author.name || author.email)) {
+          const key = JSON.stringify([author.name ?? '', author.email ?? '']);
+          if (!seenAuthorKeys.has(key)) {
+            seenAuthorKeys.add(key);
+            authors.push({ ...author, color: authorColor });
+          }
+        }
+        if (!authorColor) {
+          return { id: change.id, change };
+        }
+        return { id: change.id, change: { ...change, authorColor }, authorColor };
+      });
       // If the previously active id dropped out of the feed (e.g. an
       // accept/reject), reset to null. Compute *after* items is built
       // so the final slice matches the eventual activeTrackChangeId.
       if (activeTrackChangeId && !items.some((item) => item.id === activeTrackChangeId)) {
         activeTrackChangeId = null;
       }
-      trackChangesSlice = { items, total: items.length, activeId: activeTrackChangeId };
+      trackChangesSlice = { items, total: items.length, activeId: activeTrackChangeId, authors };
       trackChangesMemo = {
         changesRef: trackChangesListCache.items,
         activeId: activeTrackChangeId,
@@ -759,6 +952,35 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         activeIds: selectionSlice.activeCommentIds,
       },
       trackChanges: trackChangesSlice,
+      contentControls: (() => {
+        const items = contentControlsListCache.items;
+        const total = contentControlsListCache.total;
+        // Build the id-set once so the activeIds walk doesn't do a
+        // linear scan per ancestor depth.
+        const validIds = new Set<string>(items.map((it) => it.id));
+        const nextActive = computeActiveContentControlIds(validIds);
+        // Reuse the prior frozen array reference when the active set
+        // hasn't changed (by length + element equality) so
+        // shallowEqual on `state.contentControls` stays stable.
+        const activeIdsSame =
+          nextActive === lastActiveContentControlIds ||
+          (nextActive.length === lastActiveContentControlIds.length &&
+            nextActive.every((id, i) => id === lastActiveContentControlIds[i]));
+        const activeIds = activeIdsSame ? lastActiveContentControlIds : nextActive;
+        const itemsSame = items === lastContentControlsListItems;
+        if (memoContentControlsSlice && itemsSame && activeIdsSame) {
+          return memoContentControlsSlice;
+        }
+        lastContentControlsListItems = items;
+        lastActiveContentControlIds = activeIds;
+        memoContentControlsSlice = {
+          total,
+          items,
+          activeIds: activeIds as string[],
+          activeId: activeIds[0] ?? null,
+        };
+        return memoContentControlsSlice;
+      })(),
     };
 
     const customCommandStates = customCommandsRegistry.computeStates(partial);
@@ -772,6 +994,81 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     };
   };
 
+  // --- Viewport geometry-invalidation signal (ui.viewport.observe) ---------
+  // One "your cached getRect() coords may be stale, re-query" notification.
+  // Sources: layout/pagination repaints (post-paint), zoom, and DOM scroll /
+  // resize. rAF-coalesced, so a burst collapses to one notification per frame.
+  const geometryListeners = new Set<(event: ViewportGeometryEvent) => void>();
+  const pendingGeometryReasons = new Set<Exclude<ViewportGeometryEvent['reason'], 'mixed'>>();
+  let geometryRaf: number | null = null;
+  let zoomPending = false;
+
+  const cancelGeometryFrame = () => {
+    if (geometryRaf == null) return;
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(geometryRaf);
+    else clearTimeout(geometryRaf as unknown as ReturnType<typeof setTimeout>);
+    geometryRaf = null;
+  };
+  const flushGeometry = () => {
+    geometryRaf = null;
+    const reasons = [...pendingGeometryReasons];
+    pendingGeometryReasons.clear();
+    if (geometryListeners.size === 0 || reasons.length === 0) return;
+    const reason: ViewportGeometryEvent['reason'] = reasons.length === 1 ? reasons[0] : 'mixed';
+    [...geometryListeners].forEach((listener) => {
+      try {
+        listener({ reason });
+      } catch {
+        // Isolate a faulty consumer; the others still get notified.
+      }
+    });
+  };
+  const scheduleGeometry = (reason: Exclude<ViewportGeometryEvent['reason'], 'mixed'>) => {
+    if (geometryListeners.size === 0) return;
+    pendingGeometryReasons.add(reason);
+    if (geometryRaf != null) return;
+    geometryRaf =
+      typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame(flushGeometry)
+        : (setTimeout(flushGeometry, 0) as unknown as number);
+  };
+  // zoomChange fires *before* the re-render, so notifying then would hand
+  // consumers stale rects. Tag the next post-paint layout flush as 'zoom'.
+  const onGeometryZoom = () => {
+    zoomPending = true;
+  };
+  const onGeometryLayout = () => {
+    if (zoomPending) {
+      zoomPending = false;
+      scheduleGeometry('zoom');
+    } else {
+      scheduleGeometry('layout');
+    }
+  };
+  const onWindowScrollGeometry = () => scheduleGeometry('scroll');
+  const onWindowResizeGeometry = () => scheduleGeometry('resize');
+  let domGeometryAttached = false;
+  const attachDomGeometryListeners = () => {
+    if (domGeometryAttached || typeof window === 'undefined') return;
+    domGeometryAttached = true;
+    // Capture phase so scrolls inside the editor's own scroll container
+    // (scroll events don't bubble) are still observed.
+    window.addEventListener('scroll', onWindowScrollGeometry, true);
+    window.addEventListener('resize', onWindowResizeGeometry);
+  };
+  const detachDomGeometryListeners = () => {
+    if (!domGeometryAttached || typeof window === 'undefined') return;
+    domGeometryAttached = false;
+    window.removeEventListener('scroll', onWindowScrollGeometry, true);
+    window.removeEventListener('resize', onWindowResizeGeometry);
+  };
+  teardown.push(() => {
+    detachDomGeometryListeners();
+    cancelGeometryFrame();
+    geometryListeners.clear();
+    pendingGeometryReasons.clear();
+  });
+
   // Wire SuperDoc-instance events. The wrapper-side bus (editorCreate /
   // document-mode-change / zoomChange) is the only path for some of
   // these signals today; if the wrapper migrates them to the editor
@@ -780,8 +1077,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     SUPERDOC_EVENTS.forEach((name) => {
       superdoc.on?.(name, scheduleNotify);
     });
+    // zoom drives geometry (post-paint, tagged via onGeometryLayout) — separate
+    // from the slice recompute that SUPERDOC_EVENTS triggers.
+    superdoc.on?.('zoomChange', onGeometryZoom);
     teardown.push(() => {
       SUPERDOC_EVENTS.forEach((name) => superdoc.off?.(name, scheduleNotify));
+      superdoc.off?.('zoomChange', onGeometryZoom);
     });
   }
 
@@ -796,6 +1097,25 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     refreshCommentsListCache();
     refreshTrackChangesListCache();
     scheduleNotify();
+  };
+
+  /**
+   * Content-controls list refreshes on document-changing transactions
+   * (insertions / deletions of SDTs). Deliberately NOT part of
+   * `refreshAndNotify` above — that helper runs on `commentsUpdate` /
+   * `commentsLoaded` / `tracked-changes-changed`, none of which can
+   * add or remove SDTs. Bundling them in would waste an O(N) list
+   * walk on every comment / tracked-change event on the editing hot
+   * path.
+   */
+  const refreshContentControlsAndNotify = () => {
+    refreshContentControlsListCache();
+    scheduleNotify();
+  };
+
+  const onDocChangedForContentControls = (payload: unknown) => {
+    const tr = (payload as { transaction?: { docChanged?: unknown } } | undefined)?.transaction;
+    if (tr && tr.docChanged === true) refreshContentControlsAndNotify();
   };
 
   /**
@@ -842,15 +1162,21 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // 'transaction' (kept separate so `dirty` reads the transaction
     // payload before the snapshot is recomputed).
     next.on?.('transaction', onTransaction);
+    // Content-controls list refresh on doc-changing transactions. Same
+    // 'transaction' event as the dirty-flag listener, separate handler
+    // so the doc-changed gating stays explicit.
+    next.on?.('transaction', onDocChangedForContentControls);
     currentEditorTeardown = () => {
       EDITOR_EVENTS.forEach((name) => next.off?.(name, scheduleNotify));
       LIST_REFRESH_EVENTS.forEach((name) => next.off?.(name, refreshAndNotify));
       next.off?.('transaction', onTransaction);
+      next.off?.('transaction', onDocChangedForContentControls);
     };
     // The set of source events changed and the routed editor swapped
-    // — refresh the comments cache for the new editor and recompute
-    // state so subscribers see the new selection.
+    // — refresh the comments + content-controls caches for the new
+    // editor and recompute state so subscribers see the new selection.
     refreshCommentsListCache();
+    refreshContentControlsListCache();
     scheduleNotify();
   };
 
@@ -878,8 +1204,18 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     PRESENTATION_EVENTS.forEach((name) => {
       next.on?.(name, onPresentationChange);
     });
+    // Geometry-only: layout repaints move painted rects without a body
+    // `transaction`. Drive the viewport geometry signal, NOT the slice
+    // recompute (which would re-attach editor listeners on every repaint).
+    // Listen to `layoutUpdated` only: `paginationUpdate` is emitted
+    // back-to-back with the same payload for the same paint
+    // (PresentationEditor.ts:6491-6492), so subscribing to both would
+    // double-count one repaint — a zoom would coalesce to 'mixed' instead of
+    // 'zoom'. `layoutUpdated` alone covers every repaint.
+    next.on?.('layoutUpdated', onGeometryLayout);
     currentPresentationTeardown = () => {
       PRESENTATION_EVENTS.forEach((name) => next.off?.(name, onPresentationChange));
+      next.off?.('layoutUpdated', onGeometryLayout);
     };
   };
 
@@ -1690,7 +2026,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // retrying / scroll-and-retry loops for a target shape we don't
       // handle. Keep this list aligned with the supported branches in
       // `PresentationEditor.getEntityRects`.
-      if (entity.entityType !== 'comment' && entity.entityType !== 'trackedChange') {
+      if (
+        entity.entityType !== 'comment' &&
+        entity.entityType !== 'trackedChange' &&
+        entity.entityType !== 'contentControl'
+      ) {
         return { success: false, reason: 'invalid-target' };
       }
 
@@ -1709,6 +2049,21 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         rect: rects[0],
         rects,
         pageIndex: rects[0].pageIndex,
+      };
+    },
+
+    observe(listener: (event: ViewportGeometryEvent) => void): () => void {
+      geometryListeners.add(listener);
+      // Attach the DOM scroll/resize listeners only while someone is observing.
+      if (geometryListeners.size === 1) attachDomGeometryListeners();
+      return () => {
+        if (!geometryListeners.delete(listener)) return;
+        if (geometryListeners.size === 0) {
+          detachDomGeometryListeners();
+          cancelGeometryFrame();
+          pendingGeometryReasons.clear();
+          zoomPending = false;
+        }
       };
     },
 
@@ -1960,8 +2315,10 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       const emit = editor.emit;
       if (typeof emit === 'function') {
         try {
+          const replacedFile = editor.options?.replacedFile === true ? true : undefined;
           emit.call(editor, 'commentsLoaded', {
             editor,
+            ...(replacedFile ? { replacedFile } : {}),
             comments: editor.converter?.comments ?? [],
           });
         } catch (err) {
@@ -2003,6 +2360,203 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     });
   };
 
+  const contentControls: ContentControlsHandle = {
+    getSnapshot: () => computeState().contentControls,
+    observe(listener) {
+      return select((state) => state.contentControls, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener(snapshot);
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    subscribe(listener) {
+      return contentControls.observe((snapshot) => listener({ snapshot }));
+    },
+    get({ id }: { id: string }): ContentControlInfo | null {
+      // Read from the cached slice so the returned record matches what
+      // the most recent subscriber saw on the same snapshot. Avoids a
+      // fresh Document API call (and the risk of a different view of
+      // the world if the cache hasn't refreshed yet on the same tick).
+      const items = contentControlsListCache.items;
+      for (const item of items) {
+        if (item.id === id) return item;
+      }
+      return null;
+    },
+    getRect({ id }: { id: string }) {
+      return viewport.getRect({
+        target: { kind: 'entity', entityType: 'contentControl', entityId: id },
+      });
+    },
+    async scrollIntoView({
+      id,
+      block,
+      behavior,
+    }: {
+      id: string;
+      block?: 'start' | 'center' | 'end' | 'nearest';
+      behavior?: 'auto' | 'smooth';
+    }): Promise<ScrollIntoViewOutput> {
+      if (typeof id !== 'string' || id.length === 0) return { success: false };
+      // Resolve through the host editor — `presentationEditor` lives on the
+      // body/host, not a routed child story editor. Same posture as
+      // `viewport.getRect` / `runScrollIntoView`. The model-aware scroll is
+      // body-only, so a control in a header/footer/note resolves to a no-op
+      // `{ success: false }`. We call the presentation method directly rather
+      // than routing a content-control target through `viewport.scrollIntoView`
+      // — content controls are UI-local and deliberately absent from the
+      // Document API `ScrollIntoViewInput` address union (mirrors `getRect`).
+      const editor = resolveHostEditor(superdoc);
+      const presentation = editor?.presentationEditor as
+        | {
+            scrollContentControlIntoView?: (
+              id: string,
+              opts: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: 'auto' | 'smooth' },
+            ) => Promise<boolean>;
+          }
+        | null
+        | undefined;
+      if (!presentation || typeof presentation.scrollContentControlIntoView !== 'function') {
+        return { success: false };
+      }
+      const ok = await presentation.scrollContentControlIntoView(id, {
+        block: block ?? 'center',
+        behavior: behavior ?? 'smooth',
+      });
+      return { success: Boolean(ok) };
+    },
+    async focus({
+      id,
+      block,
+      behavior,
+    }: {
+      id: string;
+      block?: 'start' | 'center' | 'end' | 'nearest';
+      behavior?: 'auto' | 'smooth';
+    }): Promise<ContentControlFocusResult> {
+      if (typeof id !== 'string' || id.length === 0) return { success: false, reason: 'invalid-id' };
+      // Same host-editor resolution as scrollIntoView. focus places the caret
+      // (selection) and scrolls; locks / viewing mode don't block it.
+      const editor = resolveHostEditor(superdoc);
+      const presentation = editor?.presentationEditor as
+        | {
+            focusContentControl?: (
+              id: string,
+              opts: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: 'auto' | 'smooth' },
+            ) => Promise<ContentControlFocusResult>;
+          }
+        | null
+        | undefined;
+      if (!presentation || typeof presentation.focusContentControl !== 'function') {
+        return { success: false, reason: 'not-ready' };
+      }
+      return presentation.focusContentControl(id, { block: block ?? 'center', behavior: behavior ?? 'smooth' });
+    },
+  };
+
+  // Resolve a metadata id (= the SDT's w:tag) to the SDT's content-
+  // control id, reading from the same cached slice contentControls.get
+  // uses. The match is on `properties.tag`, which is the value passed
+  // to `editor.doc.metadata.attach` (or the auto-generated id when the
+  // caller omits one). Globally unique within a document — attach
+  // rejects duplicate ids — so the first match is the only match.
+  const findContentControlIdByMetadataId = (metadataId: string): string | null => {
+    for (const item of contentControlsListCache.items) {
+      if (item.properties?.tag === metadataId) return item.id;
+    }
+    return null;
+  };
+
+  // Convert a same-block or cross-block SelectionTarget into the
+  // TextTarget shape `ui.viewport.scrollIntoView` accepts. Returns
+  // null when the selection contains a `nodeEdge` endpoint, which has
+  // no clean TextTarget representation — callers map that to a
+  // failure rather than guessing a fallback position.
+  const selectionTargetToTextTarget = (target: SelectionTarget): TextTarget | null => {
+    const { start, end } = target;
+    if (start.kind !== 'text' || end.kind !== 'text') return null;
+    if (start.blockId === end.blockId) {
+      return {
+        kind: 'text',
+        segments: [{ blockId: start.blockId, range: { start: start.offset, end: end.offset } }],
+        ...(target.story ? { story: target.story } : {}),
+      };
+    }
+    // Cross-block: anchored-metadata v1 attaches over same-block text
+    // ranges only, so this branch is defensive. Represent as two
+    // collapsed segments at the start and end points;
+    // `scrollRangeIntoView` walks the segments in document order and
+    // scrolls to the first one, so the effect is "scroll to the start
+    // endpoint" — accepted as the defensive fallback rather than
+    // approximating a bounding box across blocks. If a future metadata
+    // path produces a real cross-block anchor we should revisit this
+    // (likely by returning null and surfacing the failure to the caller).
+    return {
+      kind: 'text',
+      segments: [
+        { blockId: start.blockId, range: { start: start.offset, end: start.offset } },
+        { blockId: end.blockId, range: { start: end.offset, end: end.offset } },
+      ],
+      ...(target.story ? { story: target.story } : {}),
+    };
+  };
+
+  // Confirm `id` actually maps to a stored metadata payload before
+  // we trust the cc.items tag→nodeId map. An imported DOCX can carry
+  // foreign inline content controls whose `w:tag` happens to match a
+  // metadata id; without this gate, a tag-only lookup would return
+  // the foreign control's geometry. The source path
+  // (`editor.doc.metadata.resolve`) was tightened to require both
+  // halves of the anchor (SDT + payload) to agree; this defensive
+  // gate keeps `ui.metadata.*` symmetrical for direct callers that
+  // skip `resolve`.
+  const hasMetadataPayload = (id: string): boolean => {
+    const editor = superdoc.activeEditor as SuperDocEditorLike | undefined;
+    const getFn = editor?.doc?.metadata?.get;
+    if (typeof getFn !== 'function') return false;
+    // `!= null` (not `!== null`) so a stub or adapter returning
+    // `undefined` for an unknown id is treated as absent — production
+    // `metadata.get` returns `null`, but the structural type permits
+    // either and we want both paths to gate the same way.
+    return getFn.call(editor!.doc!.metadata!, { id }) != null;
+  };
+
+  const metadata: MetadataHandle = {
+    getRect({ id }: { id: string }) {
+      if (!id) return { success: false, reason: 'invalid-target' };
+      if (!hasMetadataPayload(id)) return { success: false, reason: 'unresolved' };
+      const ccId = findContentControlIdByMetadataId(id);
+      if (ccId === null) return { success: false, reason: 'unresolved' };
+      return contentControls.getRect({ id: ccId });
+    },
+    async scrollIntoView({
+      id,
+      block,
+      behavior,
+    }: {
+      id: string;
+      block?: ScrollIntoViewInput['block'];
+      behavior?: ScrollIntoViewInput['behavior'];
+    }): Promise<ScrollIntoViewOutput> {
+      if (!id) return { success: false };
+      if (!hasMetadataPayload(id)) return { success: false };
+      const editor = superdoc.activeEditor as SuperDocEditorLike | undefined;
+      const resolveFn = editor?.doc?.metadata?.resolve;
+      if (typeof resolveFn !== 'function') return { success: false };
+      const info = resolveFn.call(editor!.doc!.metadata!, { id }) as AnchoredMetadataResolveInfo | null;
+      if (!info) return { success: false };
+      const textTarget = selectionTargetToTextTarget(info.target);
+      if (!textTarget) return { success: false };
+      return viewport.scrollIntoView({
+        target: textTarget,
+        ...(block !== undefined ? { block } : {}),
+        ...(behavior !== undefined ? { behavior } : {}),
+      });
+    },
+  };
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
@@ -2038,6 +2592,8 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     commands,
     comments,
     trackChanges,
+    contentControls,
+    metadata,
     selection,
     viewport,
     document,

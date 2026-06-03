@@ -172,7 +172,7 @@ for (const tc of ALL_CASES) {
     if (tc.restoredFontFamily) {
       await superdoc.selectAll();
       await superdoc.waitForStable();
-      await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .button-label')).toHaveText(
+      await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText(
         tc.restoredFontFamily,
       );
     }

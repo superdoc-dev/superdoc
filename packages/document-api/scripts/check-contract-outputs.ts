@@ -3,7 +3,16 @@
  * Caller: Main CI/local gate for generated Document API artifacts.
  * Reads: Contract snapshot + generated schemas/agent artifacts/reference docs + overview.
  * Writes: None (exit code + console output only).
- * Fails when: Any generated output is missing/extra/stale or overview block is out of sync.
+ * Fails when: A tracked generated output (reference docs, overview block)
+ *   is missing/extra/stale, or any artifact builder throws.
+ *
+ * Clean-checkout safe: the schemas/ and agent/ outputs live under
+ * `packages/document-api/generated/` which is gitignored. Those
+ * artifacts are built in memory (so any builder error still surfaces)
+ * but their on-disk presence is not required. Reference docs and the
+ * overview block ARE committed and continue to be compared
+ * byte-for-byte against the in-memory build. Run `pnpm generate:docapi`
+ * to materialize the gitignored artifacts locally before publishing.
  */
 import {
   buildStableSchemaArtifacts,
@@ -22,7 +31,12 @@ runScript('contract output artifacts check', async () => {
   const files = [...buildStableSchemaArtifacts(), ...buildAgentArtifacts(), ...buildReferenceDocsArtifacts()];
 
   const issues = await checkGeneratedFiles(files, {
-    roots: [getStableSchemaRoot(), getAgentArtifactRoot(), getReferenceDocsOutputRoot()],
+    // Tracked output: committed reference docs must match the in-memory
+    // build (existence, content, and no extras on disk).
+    roots: [getReferenceDocsOutputRoot()],
+    // Gitignored: validate the builders produce the artifacts in memory,
+    // but don't require the files to exist on a clean checkout.
+    inMemoryRoots: [getStableSchemaRoot(), getAgentArtifactRoot()],
   });
 
   await checkReferenceDocsExtras(files, issues);

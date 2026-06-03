@@ -1,4 +1,6 @@
 import { parseAnnotationMarks } from './handle-annotation-node';
+import { parseStrictStOnOff } from '../../../utils.js';
+import { BLOCK_FIELD_XML_NAMES } from '../../../sd/shared/block-field-xml-names.js';
 
 /**
  * Detect the semantic control type from sdtPr child elements.
@@ -7,10 +9,12 @@ import { parseAnnotationMarks } from './handle-annotation-node';
  * @returns {string|null}
  */
 function detectControlType(sdtPr) {
-  if (!sdtPr?.elements) return null;
+  // ECMA-376 §17.5.2.26: an sdtPr with no type child shall be of type richText.
+  if (!sdtPr?.elements) return 'richText';
   const names = sdtPr.elements.map((el) => el.name);
 
   if (names.includes('w:text')) return 'text';
+  if (names.includes('w:richText')) return 'richText';
   if (names.includes('w:date')) return 'date';
   if (names.includes('w14:checkbox') || names.includes('w:checkbox')) return 'checkbox';
   if (names.includes('w:comboBox')) return 'comboBox';
@@ -19,7 +23,16 @@ function detectControlType(sdtPr) {
   if (names.includes('w15:repeatingSectionItem') || names.includes('w:repeatingSectionItem'))
     return 'repeatingSectionItem';
   if (names.includes('w:group')) return 'group';
-  return null;
+
+  // Type-marker children that we don't (yet) model — equation, picture, citation,
+  // bibliography, docPartList. Fall through so resolveControlType yields 'unknown'.
+  const TYPE_CHILD_NAMES = new Set(['w:equation', 'w:picture', 'w:citation', 'w:bibliography', 'w:docPartList']);
+  if (names.some((n) => TYPE_CHILD_NAMES.has(n))) return null;
+
+  // No recognized type child and no unrecognized type child either — sdtPr has
+  // only property children (alias/tag/id/lock/placeholder/...). Per the spec,
+  // that's a richText SDT.
+  return 'richText';
 }
 
 /**
@@ -43,6 +56,24 @@ function extractPlaceholder(sdtPr) {
   const el = sdtPr?.elements?.find((e) => e.name === 'w:placeholder');
   const docPart = el?.elements?.find((e) => e.name === 'w:docPart');
   return docPart?.attributes?.['w:val'] ?? null;
+}
+
+/**
+ * Extract the `<w:temporary/>` toggle from sdtPr (ECMA-376 §17.5.2.43).
+ *
+ * Delegates to `parseStrictStOnOff` so token recognition matches the
+ * project's shared ST_OnOff convention (`true`/`1`/`on` → true;
+ * `false`/`0`/`off` → false). Returns `undefined` when the element is
+ * absent or carries an invalid token, preserving the "absent vs explicit
+ * false" distinction at the Document API surface.
+ *
+ * @param {Object|null} sdtPr
+ * @returns {boolean|undefined}
+ */
+function extractTemporary(sdtPr) {
+  const el = sdtPr?.elements?.find((e) => e.name === 'w:temporary');
+  if (!el) return undefined;
+  return parseStrictStOnOff(el.attributes?.['w:val'], 'temporary', 'w:temporary');
 }
 
 /**
@@ -73,9 +104,10 @@ export function handleStructuredContentNode(params) {
   // Control type detection from sdtPr children
   const controlType = detectControlType(sdtPr);
 
-  // Appearance and placeholder
+  // Appearance, placeholder, and temporary toggle
   const appearance = extractAppearance(sdtPr);
   const placeholder = extractPlaceholder(sdtPr);
+  const temporary = extractTemporary(sdtPr);
 
   if (!sdtContent) {
     return null;
@@ -83,6 +115,10 @@ export function handleStructuredContentNode(params) {
 
   const paragraph = sdtContent.elements?.find((el) => el.name === 'w:p');
   const table = sdtContent.elements?.find((el) => el.name === 'w:tbl');
+  // SD-3005: a content control wrapping a block field (e.g. BIBLIOGRAPHY) has
+  // no direct w:p after preprocessing — its child is an sd:* block node. It is
+  // block content and must not be emitted as an inline structuredContent.
+  const blockField = sdtContent.elements?.find((el) => BLOCK_FIELD_XML_NAMES.has(el?.name));
   const { marks } = parseAnnotationMarks(sdtContent);
   const translatedContent = nodeListHandler.handler({
     ...params,
@@ -90,7 +126,7 @@ export function handleStructuredContentNode(params) {
     path: [...(params.path || []), sdtContent],
   });
 
-  const isBlockNode = paragraph || table;
+  const isBlockNode = paragraph || table || blockField;
   const sdtContentType = isBlockNode ? 'structuredContentBlock' : 'structuredContent';
 
   let result = {
@@ -106,6 +142,10 @@ export function handleStructuredContentNode(params) {
       type: controlType,
       appearance,
       placeholder,
+      // `temporary` is only set when the XML carries `<w:temporary/>`;
+      // omitted attrs stay undefined so consumers can distinguish
+      // "absent from source" from explicit false.
+      ...(temporary !== undefined ? { temporary } : {}),
       sdtPr,
     },
   };

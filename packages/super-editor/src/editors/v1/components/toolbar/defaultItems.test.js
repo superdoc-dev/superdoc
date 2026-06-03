@@ -20,9 +20,22 @@ function getItemNames(list) {
   return list.map((item) => item.name.value);
 }
 
-function buildItems(availableWidth) {
+function getItem(defaultItems, overflowItems, name) {
+  return [...defaultItems, ...overflowItems].find((item) => item.name.value === name);
+}
+
+function buildItems(availableWidth, superToolbarOverrides = {}) {
+  const toolbar = {
+    ...superToolbar,
+    ...superToolbarOverrides,
+    config: {
+      ...superToolbar.config,
+      ...superToolbarOverrides.config,
+    },
+  };
+
   return makeDefaultItems({
-    superToolbar,
+    superToolbar: toolbar,
     toolbarIcons: stubProxy,
     toolbarTexts: stubProxy,
     toolbarFonts: [],
@@ -30,6 +43,49 @@ function buildItems(availableWidth) {
     availableWidth,
   });
 }
+
+describe('makeDefaultItems table of contents button opt-in', () => {
+  it('does not include tableOfContents in the default toolbar items', () => {
+    const { defaultItems, overflowItems } = buildItems(2000);
+    expect(getItem(defaultItems, overflowItems, 'tableOfContents')).toBeUndefined();
+  });
+
+  it('includes tableOfContents when showTableOfContentsButton is true', () => {
+    const { defaultItems, overflowItems } = buildItems(2000, {
+      config: { showTableOfContentsButton: true },
+    });
+    const tableOfContents = getItem(defaultItems, overflowItems, 'tableOfContents');
+
+    expect(tableOfContents).toBeDefined();
+    expect(tableOfContents.command).toBe('insertTableOfContents');
+  });
+});
+
+describe('makeDefaultItems formatting marks button opt-in', () => {
+  it('does not include formattingMarks in the default toolbar items', () => {
+    const { defaultItems, overflowItems } = buildItems(2000);
+    expect(getItem(defaultItems, overflowItems, 'formattingMarks')).toBeUndefined();
+  });
+
+  it('includes formattingMarks when showFormattingMarksButton is true', () => {
+    const { defaultItems, overflowItems } = buildItems(2000, {
+      config: { showFormattingMarksButton: true },
+    });
+    const formattingMarks = getItem(defaultItems, overflowItems, 'formattingMarks');
+
+    expect(formattingMarks).toBeDefined();
+    expect(formattingMarks.command).toBe('toggleFormattingMarks');
+  });
+
+  it('includes formattingMarks in non-docx mode when showFormattingMarksButton is true', () => {
+    const { defaultItems, overflowItems } = buildItems(2000, {
+      config: { mode: 'html', showFormattingMarksButton: true },
+    });
+    const formattingMarks = getItem(defaultItems, overflowItems, 'formattingMarks');
+
+    expect(formattingMarks).toBeDefined();
+  });
+});
 
 describe('makeDefaultItems XL overflow boundary (SD-2328)', () => {
   const XL_OVERFLOW_SAFETY_BUFFER = 20;
@@ -82,8 +138,8 @@ describe('makeDefaultItems LG compact styles', () => {
     const documentMode = getItem(defaultItems, overflowItems, 'documentMode');
     const linkedStyles = getItem(defaultItems, overflowItems, 'linkedStyles');
 
-    expect(documentMode.attributes.value.className).toContain('toolbar-item--doc-mode-compact');
-    expect(linkedStyles.attributes.value.className).toContain('toolbar-item--linked-styles-compact');
+    expect(documentMode.attributes.value.className).toContain('sd-toolbar-item--doc-mode-compact');
+    expect(linkedStyles.attributes.value.className).toContain('sd-toolbar-item--linked-styles-compact');
   });
 
   it(`does not apply compact classes at ${LG_BREAKPOINT + 1}px (above breakpoint)`, () => {
@@ -91,7 +147,29 @@ describe('makeDefaultItems LG compact styles', () => {
     const documentMode = getItem(defaultItems, overflowItems, 'documentMode');
     const linkedStyles = getItem(defaultItems, overflowItems, 'linkedStyles');
 
-    expect(documentMode.attributes.value.className).not.toContain('toolbar-item--doc-mode-compact');
-    expect(linkedStyles.attributes.value.className).not.toContain('toolbar-item--linked-styles-compact');
+    expect(documentMode.attributes.value.className).not.toContain('sd-toolbar-item--doc-mode-compact');
+    expect(linkedStyles.attributes.value.className).not.toContain('sd-toolbar-item--linked-styles-compact');
+  });
+});
+
+// PR #3226: direction buttons (directionLtr / directionRtl) are intentionally
+// NOT in the default toolbar. The command (`setParagraphDirection`) and the
+// headless toolbar ids (`direction-ltr` / `direction-rtl`) stay available;
+// customers wire them into their own UI via the headless toolbar API or by
+// calling the command directly. Pin "not in default" here so a future
+// re-add in makeDefaultItems fails this test instead of silently shipping.
+describe('makeDefaultItems direction buttons not in default toolbar', () => {
+  function getItem(defaultItems, overflowItems, name) {
+    return [...defaultItems, ...overflowItems].find((item) => item.name.value === name);
+  }
+
+  it('directionLtr is not in the default toolbar items', () => {
+    const { defaultItems, overflowItems } = buildItems(2000);
+    expect(getItem(defaultItems, overflowItems, 'directionLtr')).toBeUndefined();
+  });
+
+  it('directionRtl is not in the default toolbar items', () => {
+    const { defaultItems, overflowItems } = buildItems(2000);
+    expect(getItem(defaultItems, overflowItems, 'directionRtl')).toBeUndefined();
   });
 });

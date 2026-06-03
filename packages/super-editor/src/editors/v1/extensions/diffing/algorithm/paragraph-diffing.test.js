@@ -159,6 +159,35 @@ describe('paragraphComparator', () => {
   it('returns false for paragraphs with different identity signals', () => {
     expect(paragraphComparator({ fullText: 'one' }, { fullText: 'two' })).toBe(false);
   });
+
+  it('rejects paraId match across different depths', () => {
+    // Regression: importers (e.g., Google Docs) renumber paraIds when structure
+    // changes, so a table-cell paragraph (deeper) can collide with a body
+    // paragraph (depth 0). Treat them as different paragraphs.
+    const oldCell = createParagraphInfo({
+      depth: 3,
+      fullText: 'Milestone',
+      node: createParagraphNode({ attrs: { paraId: '00000008' } }),
+    });
+    const newBody = createParagraphInfo({
+      depth: 0,
+      fullText: '',
+      node: createParagraphNode({ attrs: { paraId: '00000008' } }),
+    });
+    expect(paragraphComparator(oldCell, newBody)).toBe(false);
+  });
+
+  it('rejects content-signature match across different depths', () => {
+    const oldCell = createParagraphInfo({ depth: 3, fullText: '' });
+    const newBody = createParagraphInfo({ depth: 0, fullText: '' });
+    expect(paragraphComparator(oldCell, newBody)).toBe(false);
+  });
+
+  it('still matches by content signature at the same depth', () => {
+    const oldParagraph = createParagraphInfo({ depth: 0, fullText: 'shared content' });
+    const newParagraph = createParagraphInfo({ depth: 0, fullText: 'shared content' });
+    expect(paragraphComparator(oldParagraph, newParagraph)).toBe(true);
+  });
 });
 
 describe('paragraph diff builders', () => {
@@ -486,6 +515,15 @@ describe('canTreatAsModification', () => {
   it('returns false when paragraphs are dissimilar', () => {
     const a = { node: { attrs: {} }, fullText: 'lorem ipsum' };
     const b = { node: { attrs: {} }, fullText: 'dolor sit' };
+    expect(canTreatAsModification(a, b)).toBe(false);
+  });
+
+  it('rejects similarity-based pairing across different depths', () => {
+    // Even with text similar enough to clear SIMILARITY_THRESHOLD, paragraphs
+    // at different structural depths should not be re-paired as a single
+    // modification - their replay anchor would land in the wrong context.
+    const a = createParagraphInfo({ depth: 3, fullText: 'lorem ipsum dolor' });
+    const b = createParagraphInfo({ depth: 0, fullText: 'lorem ipsum dolor!' });
     expect(canTreatAsModification(a, b)).toBe(false);
   });
 });

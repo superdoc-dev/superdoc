@@ -423,11 +423,62 @@ describe('w:r r-translator (node)', () => {
     expect(runPropertiesChange).toEqual(
       expect.objectContaining({
         attributes: expect.objectContaining({
-          'w:id': 'format-1',
+          'w:id': expect.stringMatching(/^\d+$/),
           'w:author': 'Missy Fox',
         }),
       }),
     );
+  });
+
+  it('unwraps run-level tracked insertions in final-doc export mode', () => {
+    const result = translator.decode({
+      node: {
+        type: 'run',
+        attrs: {},
+        marks: [
+          {
+            type: 'trackInsert',
+            attrs: {
+              id: 'insert-1',
+              author: 'Missy Fox',
+              authorEmail: '',
+              date: '2026-01-07T20:24:39Z',
+            },
+          },
+        ],
+        content: [{ type: 'text', text: 'ABCXYZ', marks: [] }],
+      },
+      editor: { extensionService: { extensions: [] } },
+      isFinalDoc: true,
+    });
+
+    expect(result?.name).toBe('w:r');
+    expect(result?.elements?.some((element) => element?.name === 'w:t')).toBe(true);
+  });
+
+  it('drops run-level tracked deletions in final-doc export mode', () => {
+    const result = translator.decode({
+      node: {
+        type: 'run',
+        attrs: {},
+        marks: [
+          {
+            type: 'trackDelete',
+            attrs: {
+              id: 'delete-1',
+              author: 'Vivienne Salisbury',
+              authorEmail: '',
+              date: '2026-01-07T20:24:39Z',
+            },
+          },
+        ],
+        content: [{ type: 'text', text: 'HELLO', marks: [] }],
+      },
+      editor: { extensionService: { extensions: [] } },
+      isFinalDoc: true,
+    });
+
+    expect(result).toEqual([]);
   });
 });
 
@@ -533,6 +584,41 @@ describe('w:r r-translator decode (export only inline run properties)', () => {
     expect(names).toContain('w:bCs');
     expect(names).toContain('w:i');
     expect(names).toContain('w:iCs');
+  });
+
+  it('exports complex-script companions when newly formatted complex-script text has base bold/italic', () => {
+    const params = runWithContent({
+      runProperties: { bold: true, italic: true },
+      runPropertiesInlineKeys: ['bold', 'italic'],
+      runPropertiesStyleKeys: [],
+    });
+    params.node.content[0].text = 'مرحبا';
+
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    const names = (rPr.elements ?? []).map((e) => e.name);
+    expect(names).toContain('w:b');
+    expect(names).toContain('w:bCs');
+    expect(names).toContain('w:i');
+    expect(names).toContain('w:iCs');
+  });
+
+  it('does not synthesize complex-script companions for latin-only text', () => {
+    const params = runWithContent({
+      runProperties: { bold: true, italic: true },
+      runPropertiesInlineKeys: ['bold', 'italic'],
+      runPropertiesStyleKeys: [],
+    });
+
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    const names = (rPr.elements ?? []).map((e) => e.name);
+    expect(names).toContain('w:b');
+    expect(names).toContain('w:i');
+    expect(names).not.toContain('w:bCs');
+    expect(names).not.toContain('w:iCs');
   });
 
   it('exports w:iCs from legacy runProperties.iCs payloads', () => {

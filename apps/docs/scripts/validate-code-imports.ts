@@ -42,6 +42,7 @@ const EXACT_EXTERNAL_IMPORTS = new Set([
   'react',
   'react-dom',
   'react-dom/client',
+  'solid-js',
   'vue',
   'pdfjs-dist',
   'pdfjs-dist/build/pdf.mjs',

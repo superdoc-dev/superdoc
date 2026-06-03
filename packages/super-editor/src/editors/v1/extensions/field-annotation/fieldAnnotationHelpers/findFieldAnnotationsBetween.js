@@ -1,9 +1,11 @@
 /**
- * Find all field annotations between positions.
- * @param from From position.
- * @param to To position.
- * @param doc Document.
- * @returns The array of field annotations (node and pos).
+ * Find all field annotations between two document positions.
+ *
+ * @param {number} from - Start position (inclusive).
+ * @param {number} to - End position (exclusive).
+ * @param {import('./types.js').PmNode} doc - Document node to scan.
+ * @returns {import('./types.js').FieldAnnotationEntry[]} `{ node, pos }`
+ *   per annotation in range.
  */
 export function findFieldAnnotationsBetween(from, to, doc) {
   let fieldAnnotations = [];

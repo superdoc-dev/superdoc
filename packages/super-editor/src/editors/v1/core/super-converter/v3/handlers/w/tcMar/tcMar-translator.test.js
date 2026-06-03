@@ -72,14 +72,17 @@ describe('w:tcMar translator', () => {
   });
 
   describe('decode', () => {
-    it('decodes a cellMargins object into a <w:tcMar> element', () => {
+    it('decodes a cellMargins object into a <w:tcMar> element in CT_TcMar sequence order', () => {
+      // Insertion order here is intentionally scrambled to prove the decoder
+      // sorts into the ECMA-376 §A.1 CT_TcMar sequence: top, start, left,
+      // bottom, end, right.
       const params = {
         node: {
           attrs: {
             cellMargins: {
-              marginTop: { value: 10, type: 'dxa' },
               marginRight: { value: 20, type: 'dxa' },
               marginStart: { value: 30, type: 'dxa' },
+              marginTop: { value: 10, type: 'dxa' },
             },
           },
         },
@@ -88,13 +91,33 @@ describe('w:tcMar translator', () => {
       const result = translator.decode(params);
 
       expect(result.name).toBe('w:tcMar');
-      const expectedElements = [
+      // Sequence: top (0), start (1), right (5). Note: position-by-position.
+      expect(result.elements).toEqual([
         expect.objectContaining({ name: 'w:top', attributes: { 'w:w': '10', 'w:type': 'dxa' } }),
-        expect.objectContaining({ name: 'w:right', attributes: { 'w:w': '20', 'w:type': 'dxa' } }),
         expect.objectContaining({ name: 'w:start', attributes: { 'w:w': '30', 'w:type': 'dxa' } }),
-      ];
-      expect(result.elements).toEqual(expect.arrayContaining(expectedElements));
-      expect(result.elements.length).toBe(3);
+        expect.objectContaining({ name: 'w:right', attributes: { 'w:w': '20', 'w:type': 'dxa' } }),
+      ]);
+    });
+
+    it('emits all six children in CT_TcMar sequence order when present', () => {
+      const params = {
+        node: {
+          attrs: {
+            cellMargins: {
+              marginEnd: { value: 60, type: 'dxa' },
+              marginRight: { value: 70, type: 'dxa' },
+              marginBottom: { value: 40, type: 'dxa' },
+              marginLeft: { value: 30, type: 'dxa' },
+              marginStart: { value: 20, type: 'dxa' },
+              marginTop: { value: 10, type: 'dxa' },
+            },
+          },
+        },
+      };
+
+      const result = translator.decode(params);
+      const names = result.elements.map((el) => el.name);
+      expect(names).toEqual(['w:top', 'w:start', 'w:left', 'w:bottom', 'w:end', 'w:right']);
     });
 
     it('returns undefined for an empty cellMargins object', () => {

@@ -54,10 +54,15 @@ function resolveTextPoint(
     });
   }
 
-  const resolved = resolveTextRangeInBlock(candidate.node, candidate.pos, {
-    start: point.offset,
-    end: point.offset,
-  });
+  const resolved = resolveTextRangeInBlock(
+    candidate.node,
+    candidate.pos,
+    {
+      start: point.offset,
+      end: point.offset,
+    },
+    { textModel: 'visible' },
+  );
   if (!resolved) {
     throw new DocumentApiAdapterError(
       'INVALID_TARGET',

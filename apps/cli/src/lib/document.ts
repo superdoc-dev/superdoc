@@ -50,9 +50,16 @@ interface ContentOverrideOptions {
   plainText?: string;
 }
 
+type TrackChangesReplacementMode = 'paired' | 'independent';
+
 /** Options passed through to Editor.open() alongside content overrides. */
 export interface EditorPassThroughOptions {
   password?: string;
+  modules?: {
+    trackChanges?: {
+      replacements?: TrackChangesReplacementMode;
+    };
+  };
 }
 
 interface OpenDocumentOptions {
@@ -221,6 +228,11 @@ export async function openDocument(
   // Parts/runtime registration is idempotent. Re-run it here so adapter-side
   // afterCommit hooks are always wired, including in headless CLI sessions.
   initPartsRuntime(editor as never);
+
+  // SD-3214: bridge observes ydoc.getArray('comments') and feeds remote
+  // (browser-authored) metadata into the editor's CommentEntityStore so the
+  // headless SDK can read text/creatorName/createdTime via doc.comments.list().
+  commentBridge?.attachEditor(editor as never);
 
   // Apply content override post-init.
   //   - markdown: DOM-free AST pipeline
@@ -482,7 +494,12 @@ export async function exportOptionalSessionOutput(
   }
 }
 
-export async function exportToPath(editor: Editor, outputPath: string, force = false): Promise<FileOutputMeta> {
+export async function exportToPath(
+  editor: Editor,
+  outputPath: string,
+  force = false,
+  options: { isFinalDoc?: boolean } = {},
+): Promise<FileOutputMeta> {
   const exists = await pathExists(outputPath);
   if (exists && !force) {
     throw new CliError('OUTPUT_EXISTS', `Output path already exists: ${outputPath}`, {
@@ -493,7 +510,7 @@ export async function exportToPath(editor: Editor, outputPath: string, force = f
 
   let exported: unknown;
   try {
-    exported = await editor.exportDocument();
+    exported = await editor.exportDocument({ isFinalDoc: options.isFinalDoc });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new CliError('DOCUMENT_EXPORT_FAILED', 'Failed to export document.', {

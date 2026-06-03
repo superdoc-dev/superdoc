@@ -1,5 +1,7 @@
 // @ts-nocheck
 import { Extension } from '@core/Extension.js';
+import { mapDisplayAlignmentToStoredJustification } from '../../core/helpers/paragraph-alignment.js';
+import { calculateResolvedParagraphProperties } from '../paragraph/resolvedPropertiesCache.js';
 
 /**
  * Configuration options for TextAlign
@@ -39,11 +41,61 @@ export const TextAlign = Extension.create({
        */
       setTextAlign:
         (alignment) =>
-        ({ commands }) => {
+        ({ commands, state, tr, dispatch }) => {
           const containsAlignment = this.options.alignments.includes(alignment);
           if (!containsAlignment) return false;
 
-          return commands.updateAttributes('paragraph', { 'paragraphProperties.justification': alignment });
+          if (!state?.doc || !state?.selection || !tr) {
+            const paragraphProperties = getSelectionParagraphProperties(this.editor, state);
+            const storedAlignment = mapDisplayAlignmentToStoredJustification(
+              alignment,
+              paragraphProperties?.rightToLeft,
+            );
+            return commands.updateAttributes('paragraph', { 'paragraphProperties.justification': storedAlignment });
+          }
+
+          const visitedPositions = new Set();
+          let touched = false;
+
+          const updateParagraph = (node, pos) => {
+            if (node.type.name !== 'paragraph') return true;
+            if (visitedPositions.has(pos)) return false;
+            visitedPositions.add(pos);
+
+            const paragraphProperties = this.editor
+              ? calculateResolvedParagraphProperties(this.editor, node, state.doc.resolve(pos))
+              : (node.attrs?.paragraphProperties ?? {});
+            const storedAlignment = mapDisplayAlignmentToStoredJustification(
+              alignment,
+              paragraphProperties?.rightToLeft,
+            );
+            const existingParagraphProperties = node.attrs?.paragraphProperties ?? {};
+
+            if (existingParagraphProperties.justification === storedAlignment) return false;
+
+            tr.setNodeMarkup(pos, undefined, {
+              ...node.attrs,
+              paragraphProperties: {
+                ...existingParagraphProperties,
+                justification: storedAlignment,
+              },
+            });
+            touched = true;
+            return false;
+          };
+
+          state.selection.ranges.forEach((range) => {
+            if (range.$from.pos === range.$to.pos) {
+              const paragraph = getParagraphAtSelection(range.$from);
+              if (paragraph) updateParagraph(paragraph.node, paragraph.pos);
+              return;
+            }
+
+            state.doc.nodesBetween(range.$from.pos, range.$to.pos, updateParagraph);
+          });
+
+          if (touched && dispatch) dispatch(tr);
+          return true;
         },
 
       /**
@@ -69,3 +121,21 @@ export const TextAlign = Extension.create({
     };
   },
 });
+
+function getSelectionParagraphProperties(editor, state) {
+  const paragraph = getParagraphAtSelection(state?.selection?.$from);
+  if (!paragraph) return {};
+  if (!editor || !state?.doc) return paragraph.node?.attrs?.paragraphProperties ?? {};
+  return calculateResolvedParagraphProperties(editor, paragraph.node, state.doc.resolve(paragraph.pos));
+}
+
+function getParagraphAtSelection($pos) {
+  if (!$pos) return null;
+  for (let depth = $pos.depth; depth >= 0; depth--) {
+    const node = $pos.node(depth);
+    if (node?.type?.name === 'paragraph') {
+      return { node, pos: depth > 0 ? $pos.before(depth) : 0 };
+    }
+  }
+  return null;
+}

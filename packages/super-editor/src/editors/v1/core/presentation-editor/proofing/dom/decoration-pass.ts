@@ -3,6 +3,13 @@
  *
  * This is a post-paint compatibility layer that walks rendered PM-mapped spans
  * and applies proofing classes without involving the painter package.
+ *
+ * AIDEV-NOTE: compat-fallback - proofing decoration still keys off
+ * `data-pm-*` (prep-002). The painter additionally stamps the editor-neutral
+ * identity dataset (prep-001); editor-side consumers that need it should go
+ * through `LayoutHitV1Compat`. Annotations are emitted with PM ranges today,
+ * so this DOM walk stays PM-coupled until a future v2 consumer brings
+ * neutral range mapping end-to-end.
  */
 
 import { PROOFING_CSS, cssClassForKind, type ProofingAnnotation } from '../types.js';

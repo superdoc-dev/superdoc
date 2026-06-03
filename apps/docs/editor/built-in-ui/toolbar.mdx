@@ -72,6 +72,10 @@ const superdoc = new SuperDoc({
   Custom button definitions. See [Custom Buttons](#custom-buttons).
 </ParamField>
 
+<ParamField path="modules.toolbar.showFormattingMarksButton" type="boolean" default="false">
+  Show the formatting marks (pilcrow) button in the toolbar. Off by default. Distinct from `layoutEngineOptions.showFormattingMarks`, which controls whether the marks render in the document.
+</ParamField>
+
 ## Available buttons
 
 Use button names with `excludeItems`, `groups`, and `icons` configuration.
@@ -188,6 +192,10 @@ Use button names with `excludeItems`, `groups`, and `icons` configuration.
 
 <ResponseField name="ruler" type="button">
   Toggle document ruler
+</ResponseField>
+
+<ResponseField name="formattingMarks" type="button">
+  Toggle formatting marks (pilcrow) display. Hidden by default; enable with `modules.toolbar.showFormattingMarksButton: true`.
 </ResponseField>
 
 <ResponseField name="documentMode" type="dropdown">

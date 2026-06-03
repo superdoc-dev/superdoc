@@ -286,6 +286,42 @@ describe('DocxZipper - updateZip compression', () => {
 });
 
 describe('DocxZipper - updateContentTypes', () => {
+  it('prunes a tombstoned customXml props Override with a foreign filename', async () => {
+    // Foreign producer convention: the Properties Part is named
+    // something other than itemPropsN.xml, but linked via the OPC rels
+    // file. When the part is removed (tombstoned via updatedDocs[path]
+    // = null), the [Content_Types].xml Override must be pruned too —
+    // otherwise the exported package has an Override pointing at a
+    // missing file, which is spec-malformed.
+    const zipper = new DocxZipper();
+    const zip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+        <Override PartName="/customXml/itemPropsFOREIGN.xml" ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file(
+      'word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+
+    const updatedDocs = {
+      // Tombstone the foreign-named props part.
+      'customXml/itemPropsFOREIGN.xml': null,
+    };
+
+    await zipper.updateContentTypes(zip, {}, false, updatedDocs);
+
+    const updatedContentTypes = await zip.file('[Content_Types].xml').async('string');
+    expect(updatedContentTypes, 'foreign-named props Override should be pruned').not.toContain(
+      '/customXml/itemPropsFOREIGN.xml',
+    );
+  });
+
   it('adds header/footer overrides for newly added parts', async () => {
     const zipper = new DocxZipper();
     const zip = new JSZip();

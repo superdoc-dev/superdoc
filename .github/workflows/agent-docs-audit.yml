@@ -1,0 +1,168 @@
+name: Agent docs audit
+
+# Audit agent-context docs (CLAUDE.md, AGENTS.md, .claude/rules/) against
+# agent-docs-policy.md.
+#
+# Two layers:
+#   L1 (deterministic): line budgets, symlink/pair integrity, broken @imports,
+#                       broken path refs, unresolved commands. No API calls.
+#   L2 + L3 (semantic): Haiku triage filters L1's flagged set; Sonnet verifies
+#                       concrete claims via Read/Glob/Grep and produces
+#                       KEEP/TRIM/MOVE/UPDATE/INVESTIGATE findings.
+#
+# PR runs post a diff-scoped sticky comment with L1 findings, then enforce a
+# delta-only high-confidence gate: the workflow fails when the PR introduces
+# new broken @imports, broken symlink targets, or unexpected pair drift
+# (linked-inverted, unexpected-duplicate). Existing baseline debt on touched
+# files does not fail CI. Heuristic classes (broken path refs, budget warnings,
+# unresolved commands) remain advisory.
+#
+# AI layers are skipped automatically if ANTHROPIC_API_KEY is unavailable
+# (fork PRs, secret not set). In that case the L1 report still uploads.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily 06:00 UTC — L1 structural check only, free. Catches new broken
+    # refs/symlink drift within a day without burning API budget.
+    - cron: '0 6 * * *'
+    # Weekly Monday 14:00 UTC — full L1+L2+L3 with semantic audit. Slower
+    # cadence is fine for semantic drift; the API cost (~$1-2/run) only
+    # makes sense weekly.
+    - cron: '0 14 * * 1'
+  pull_request:
+    paths:
+      - '**/AGENTS.md'
+      - '**/CLAUDE.md'
+      - '**/CLAUDE.local.md'
+      - '.claude/rules/**'
+      - 'agent-docs-policy.md'
+      - '.github/scripts/agent-docs-audit*'
+      - '.github/scripts/agent-docs-l1*'
+      - '.github/scripts/agent-docs-pr-comment*'
+      - '.github/workflows/agent-docs-audit.yml'
+
+permissions:
+  contents: read
+  # Needed for the pull_request sticky comment. This matches existing
+  # PR-comment workflows such as visual-test.yml.
+  pull-requests: write
+
+concurrency:
+  group: agent-docs-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Detect whether AI layers can run.
+      #
+      # SECURITY: PR-triggered runs always fall back to L1-only.
+      # The audited input is markdown (CLAUDE.md, AGENTS.md) which is
+      # itself prompt text and can be modified in the PR. Running a
+      # tool-using model (Read/Glob/Grep/Bash) over PR-authored prompt
+      # files while ANTHROPIC_API_KEY is in env would be a prompt-
+      # injection pathway. risk-assess.yml is safer because its input
+      # is a code diff and it only allows Read/Glob/Grep. Until our
+      # threat model matches that, L2/L3 only run on scheduled and
+      # workflow_dispatch events (input is main, trusted by review).
+      - name: Detect AI eligibility
+        id: ai
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping AI layers on pull_request - running L1 (deterministic drift) only"
+          elif [ "${{ github.event.schedule }}" = "0 6 * * *" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Daily schedule - running L1 only (structural drift). Full L1+L2+L3 runs Mondays."
+          elif [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping AI layers - no ANTHROPIC_API_KEY in repo secrets"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install script deps
+        if: steps.ai.outputs.skip != 'true'
+        run: npm install --prefix .github/scripts @anthropic-ai/claude-agent-sdk @anthropic-ai/sdk
+
+      - name: Run audit (L1 + L2 + L3)
+        if: steps.ai.outputs.skip != 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          REPO_ROOT: ${{ github.workspace }}
+        run: |
+          node .github/scripts/agent-docs-audit.mjs > /tmp/agent-docs-audit-summary.md
+          cat /tmp/agent-docs-audit-summary.md
+
+      - name: Run audit (L1 only)
+        if: steps.ai.outputs.skip == 'true'
+        env:
+          REPO_ROOT: ${{ github.workspace }}
+        run: |
+          node .github/scripts/agent-docs-audit.mjs --skip-ai > /tmp/agent-docs-audit-summary.md
+          cat /tmp/agent-docs-audit-summary.md
+
+      - name: Write step summary
+        if: always()
+        run: |
+          if [ -f /tmp/agent-docs-audit-summary.md ]; then
+            cat /tmp/agent-docs-audit-summary.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-docs-audit
+          path: |
+            /tmp/agent-docs-audit-summary.md
+            /tmp/agent-docs-audit.json
+            /tmp/agent-docs-audit-l1.md
+          if-no-files-found: warn
+          retention-days: 30
+
+      # Delta-only high-confidence gate. Runs before the comment step so the
+      # sticky can surface "Blocking" state inline. Never fails the comment
+      # step itself (set as a separate step further down with always()).
+      - name: Delta gate (PR only, scan-and-write)
+        if: github.event_name == 'pull_request'
+        id: gate
+        continue-on-error: true
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          REPO_ROOT: ${{ github.workspace }}
+          BASE_REF: ${{ github.base_ref }}
+          GATE_RESULT_PATH: /tmp/agent-docs-gate.json
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/agent-docs-pr-gate.mjs
+
+      # Diff-scoped sticky PR comment. Pull_request runs are L1-only; this
+      # surfaces deterministic findings only for agent-doc files touched by the
+      # PR. Reads the gate result file if present to add a "Blocking" header.
+      # always() so the comment posts even when the gate step exits non-zero.
+      - name: Post sticky PR comment with L1 findings
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          REPO_ROOT: ${{ github.workspace }}
+          GATE_RESULT_PATH: /tmp/agent-docs-gate.json
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/agent-docs-pr-comment.mjs
+
+      # Enforce the gate result. Separate step so the comment posts first; this
+      # step is the one that turns the job red when blocking findings exist.
+      - name: Enforce delta gate
+        if: ${{ always() && github.event_name == 'pull_request' && steps.gate.outcome == 'failure' }}
+        run: |
+          echo "::error::Agent docs audit gate failed — PR introduces new high-confidence findings. See sticky comment."
+          exit 1

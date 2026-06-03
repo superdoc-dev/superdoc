@@ -87,4 +87,12 @@ describe('ensureEditorMovableObjectInteractionStyles', () => {
     expect(css).toContain('cursor: grab');
     expect(css).toContain('user-select: none');
   });
+
+  it('keeps header and footer images targetable for resize hover', () => {
+    ensureEditorMovableObjectInteractionStyles(document);
+    const css = document.querySelector('[data-superdoc-editor-movable-object-interaction-styles]')?.textContent ?? '';
+    expect(css).toContain('.superdoc-page-header .superdoc-image-fragment');
+    expect(css).toContain('.superdoc-page-footer .superdoc-inline-image');
+    expect(css).toContain('pointer-events: auto');
+  });
 });

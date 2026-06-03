@@ -116,6 +116,225 @@ describe('translate-table-cell helpers', () => {
     expect(byName['w:tcW']).toBeTruthy();
   });
 
+  // SD-3152: round-trip preservation of CT_TcMar logical vs physical pairs.
+  // Importer keeps the source key family on tableCellProperties.cellMargins
+  // (logical marginStart/marginEnd or physical marginLeft/marginRight) while
+  // attrs.cellMargins is the LTR-default physical-only painter view (SD-3134).
+  // Export must write the user-visible value back into the imported pair and
+  // must not gain the opposite pair on round-trip.
+  describe('SD-3152: w:tcMar key-family preservation on export', () => {
+    const marByName = (tcPr) => {
+      const mar = tcPr.elements.find((e) => e.name === 'w:tcMar');
+      return Object.fromEntries((mar?.elements ?? []).map((e) => [e.name, e.attributes['w:w']]));
+    };
+
+    it('logical-only source: unchanged values export only <w:start>/<w:end>', () => {
+      const node = {
+        attrs: {
+          colwidth: [50],
+          widthUnit: 'px',
+          tableCellProperties: {
+            cellMargins: {
+              marginTop: { value: 120, type: 'dxa' },
+              marginBottom: { value: 120, type: 'dxa' },
+              marginStart: { value: 480, type: 'dxa' },
+              marginEnd: { value: 60, type: 'dxa' },
+            },
+          },
+          tableCellPropertiesInlineKeys: ['cellMargins'],
+          cellMargins: {
+            top: twipsToPixels(120),
+            bottom: twipsToPixels(120),
+            left: twipsToPixels(480),
+            right: twipsToPixels(60),
+          },
+        },
+      };
+      const tcPr = generateTableCellProperties(node);
+      const m = marByName(tcPr);
+      expect(m['w:start']).toBe('480');
+      expect(m['w:end']).toBe('60');
+      expect(m['w:left']).toBeUndefined();
+      expect(m['w:right']).toBeUndefined();
+    });
+
+    it('logical-only source: edited left edits <w:start>, still no <w:left>', () => {
+      const node = {
+        attrs: {
+          colwidth: [50],
+          widthUnit: 'px',
+          tableCellProperties: {
+            cellMargins: {
+              marginStart: { value: 480, type: 'dxa' },
+              marginEnd: { value: 60, type: 'dxa' },
+            },
+          },
+          tableCellPropertiesInlineKeys: ['cellMargins'],
+          // user-visible left was edited from twipsToPixels(480) to 100 px
+          cellMargins: { top: 0, bottom: 0, left: 100, right: twipsToPixels(60) },
+        },
+      };
+      const tcPr = generateTableCellProperties(node);
+      const m = marByName(tcPr);
+      expect(m['w:start']).toBe(String(pixelsToTwips(100)));
+      expect(m['w:end']).toBe('60');
+      expect(m['w:left']).toBeUndefined();
+      expect(m['w:right']).toBeUndefined();
+    });
+
+    it('physical-only source: exports only <w:left>/<w:right>', () => {
+      const node = {
+        attrs: {
+          colwidth: [50],
+          widthUnit: 'px',
+          tableCellProperties: {
+            cellMargins: {
+              marginLeft: { value: 120, type: 'dxa' },
+              marginRight: { value: 60, type: 'dxa' },
+            },
+          },
+          tableCellPropertiesInlineKeys: ['cellMargins'],
+          cellMargins: { top: 0, bottom: 0, left: twipsToPixels(120), right: twipsToPixels(60) },
+        },
+      };
+      const tcPr = generateTableCellProperties(node);
+      const m = marByName(tcPr);
+      expect(m['w:left']).toBe('120');
+      expect(m['w:right']).toBe('60');
+      expect(m['w:start']).toBeUndefined();
+      expect(m['w:end']).toBeUndefined();
+    });
+
+    it('mixed source unchanged: preserves both pairs', () => {
+      // Synthetic. Real Word output never produces this; the path exists for
+      // resilience and to keep import precedence (physical wins) self-consistent.
+      const node = {
+        attrs: {
+          colwidth: [50],
+          widthUnit: 'px',
+          tableCellProperties: {
+            cellMargins: {
+              marginLeft: { value: 120, type: 'dxa' },
+              marginRight: { value: 60, type: 'dxa' },
+              marginStart: { value: 480, type: 'dxa' },
+              marginEnd: { value: 90, type: 'dxa' },
+            },
+          },
+          tableCellPropertiesInlineKeys: ['cellMargins'],
+          // Unchanged: mirrors getTableCellMargins precedence (physical wins).
+          cellMargins: { top: 0, bottom: 0, left: twipsToPixels(120), right: twipsToPixels(60) },
+        },
+      };
+      const tcPr = generateTableCellProperties(node);
+      const m = marByName(tcPr);
+      expect(m['w:left']).toBe('120');
+      expect(m['w:right']).toBe('60');
+      expect(m['w:start']).toBe('480');
+      expect(m['w:end']).toBe('90');
+    });
+
+    it('mixed source, only left edited: normalizes left to physical, leaves right pair intact', () => {
+      // Per-side policy: each horizontal side decides logical-vs-physical
+      // independently. An edit to one side does not retroactively rewrite the
+      // other side's preserved shape.
+      const node = {
+        attrs: {
+          colwidth: [50],
+          widthUnit: 'px',
+          tableCellProperties: {
+            cellMargins: {
+              marginLeft: { value: 120, type: 'dxa' },
+              marginRight: { value: 60, type: 'dxa' },
+              marginStart: { value: 480, type: 'dxa' },
+              marginEnd: { value: 90, type: 'dxa' },
+            },
+          },
+          tableCellPropertiesInlineKeys: ['cellMargins'],
+          // Left edited (100 px). Right unchanged (still mirrors import physical).
+          cellMargins: { top: 0, bottom: 0, left: 100, right: twipsToPixels(60) },
+        },
+      };
+      const tcPr = generateTableCellProperties(node);
+      const m = marByName(tcPr);
+      expect(m['w:left']).toBe(String(pixelsToTwips(100)));
+      expect(m['w:start']).toBeUndefined();
+      // Right side untouched: both pairs preserved.
+      expect(m['w:right']).toBe('60');
+      expect(m['w:end']).toBe('90');
+    });
+
+    it('mixed source edited: normalizes to physical, drops logical', () => {
+      const node = {
+        attrs: {
+          colwidth: [50],
+          widthUnit: 'px',
+          tableCellProperties: {
+            cellMargins: {
+              marginLeft: { value: 120, type: 'dxa' },
+              marginRight: { value: 60, type: 'dxa' },
+              marginStart: { value: 480, type: 'dxa' },
+              marginEnd: { value: 90, type: 'dxa' },
+            },
+          },
+          tableCellPropertiesInlineKeys: ['cellMargins'],
+          // Edited: left differs from imported physical (120 twips -> 8 px).
+          cellMargins: { top: 0, bottom: 0, left: 100, right: 50 },
+        },
+      };
+      const tcPr = generateTableCellProperties(node);
+      const m = marByName(tcPr);
+      expect(m['w:left']).toBe(String(pixelsToTwips(100)));
+      expect(m['w:right']).toBe(String(pixelsToTwips(50)));
+      expect(m['w:start']).toBeUndefined();
+      expect(m['w:end']).toBeUndefined();
+    });
+
+    it('new cell (no imported tableCellProperties.cellMargins): defaults to physical', () => {
+      const node = {
+        attrs: {
+          colwidth: [50],
+          widthUnit: 'px',
+          cellMargins: { top: 8, right: 4, bottom: 8, left: 4 },
+        },
+      };
+      const tcPr = generateTableCellProperties(node);
+      const m = marByName(tcPr);
+      expect(m['w:left']).toBe(String(pixelsToTwips(4)));
+      expect(m['w:right']).toBe(String(pixelsToTwips(4)));
+      expect(m['w:start']).toBeUndefined();
+      expect(m['w:end']).toBeUndefined();
+    });
+
+    it('emits w:tcMar children in CT_TcMar sequence order', () => {
+      const node = {
+        attrs: {
+          colwidth: [50],
+          widthUnit: 'px',
+          tableCellProperties: {
+            cellMargins: {
+              marginStart: { value: 480, type: 'dxa' },
+              marginEnd: { value: 60, type: 'dxa' },
+              marginTop: { value: 120, type: 'dxa' },
+              marginBottom: { value: 90, type: 'dxa' },
+            },
+          },
+          tableCellPropertiesInlineKeys: ['cellMargins'],
+          cellMargins: {
+            top: twipsToPixels(120),
+            bottom: twipsToPixels(90),
+            left: twipsToPixels(480),
+            right: twipsToPixels(60),
+          },
+        },
+      };
+      const tcPr = generateTableCellProperties(node);
+      const mar = tcPr.elements.find((e) => e.name === 'w:tcMar');
+      const names = mar.elements.map((e) => e.name);
+      // CT_TcMar sequence subset: top, start, bottom, end.
+      expect(names).toEqual(['w:top', 'w:start', 'w:bottom', 'w:end']);
+    });
+  });
+
   it('translateTableCell wraps children with tcPr as the first element', async () => {
     const params = {
       node: { attrs: { colwidth: [60], widthUnit: 'px' } },

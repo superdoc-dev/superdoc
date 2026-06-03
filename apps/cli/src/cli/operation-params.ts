@@ -56,6 +56,13 @@ const FORCE_PARAM: CliOperationParamSpec = {
   type: 'boolean',
   description: 'Bypass confirmation checks.',
 };
+const SAVE_MODE_PARAM: CliOperationParamSpec = {
+  name: 'mode',
+  kind: 'flag',
+  type: 'string',
+  schema: { type: 'string', enum: ['review-preserving', 'final'] } as CliTypeSpec,
+  description: 'Save mode: review-preserving keeps revision markup; final exports accepted content.',
+};
 const DRY_RUN_PARAM: CliOperationParamSpec = {
   name: 'dryRun',
   kind: 'flag',
@@ -68,7 +75,7 @@ const CHANGE_MODE_PARAM: CliOperationParamSpec = {
   kind: 'flag',
   flag: 'change-mode',
   type: 'string',
-  schema: { enum: ['direct', 'tracked'] } as CliTypeSpec,
+  schema: { type: 'string', enum: ['direct', 'tracked'] } as CliTypeSpec,
   description: 'Edit mode: "direct" applies changes immediately, "tracked" records as suggestions.',
 };
 const EXPECTED_REVISION_PARAM: CliOperationParamSpec = {
@@ -1059,6 +1066,23 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
       { name: 'overrideType', kind: 'flag', flag: 'override-type', type: 'string' },
       { name: 'onMissing', kind: 'flag', flag: 'on-missing', type: 'string' },
       { name: 'bootstrapSettlingMs', kind: 'flag', flag: 'bootstrap-settling-ms', type: 'number' },
+      {
+        name: 'trackChanges',
+        kind: 'jsonFlag',
+        flag: 'track-changes-json',
+        type: 'json',
+        description: 'Track-changes open configuration.',
+        schema: {
+          type: 'object',
+          properties: {
+            replacements: {
+              type: 'string',
+              enum: ['paired', 'independent'],
+              description: 'Tracked replacement grouping mode.',
+            },
+          },
+        } as CliTypeSpec,
+      },
       USER_NAME_PARAM,
       USER_EMAIL_PARAM,
       PASSWORD_PARAM,
@@ -1071,6 +1095,7 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
     docRequirement: 'none',
     params: [
       SESSION_PARAM,
+      SAVE_MODE_PARAM,
       OUT_PARAM,
       FORCE_PARAM,
       { name: 'inPlace', kind: 'flag', flag: 'in-place', type: 'boolean' },

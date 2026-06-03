@@ -13,6 +13,7 @@ import {
 } from './markImporter.js';
 import { SuperConverter } from '../../SuperConverter.js';
 import { TrackFormatMarkName } from '@extensions/track-changes/constants.js';
+import { createImportTrackingContext } from '@extensions/track-changes/review-model/import-context.js';
 
 const themeDoc = {
   elements: [
@@ -187,6 +188,73 @@ describe('handleStyleChangeMarksV2', () => {
     expect(result[0].type).toBe(TrackFormatMarkName);
     expect(result[0].attrs.before).toEqual([]);
     expect(result[0].attrs.after).toEqual([]);
+  });
+
+  it('restores paragraphSplit snapshots from matching paragraph mark insertion metadata', () => {
+    const currentMarks = [{ type: 'bold', attrs: { value: true } }];
+    const rPrChange = {
+      name: 'w:rPrChange',
+      attributes: {
+        'w:id': '7',
+        'w:date': '2026-06-01T17:00:00Z',
+        'w:author': 'Reviewer',
+      },
+      elements: [{ name: 'w:rPr', elements: [] }],
+    };
+
+    const result = handleStyleChangeMarksV2(rPrChange, currentMarks, {
+      docx: {},
+      extraParams: {
+        inlineParagraphProperties: {
+          runProperties: {
+            trackInsert: {
+              id: '7',
+              author: 'Reviewer',
+              date: '2026-06-01T17:00:00Z',
+            },
+          },
+        },
+      },
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe(TrackFormatMarkName);
+    expect(result[0].attrs.before).toEqual([{ type: 'paragraphSplit', attrs: { anchor: 'source' } }]);
+    expect(result[0].attrs.after).toEqual([{ type: 'paragraphSplit', attrs: { anchor: 'source' } }]);
+  });
+
+  it('remaps format change ids and stamps overlapParentId through import tracking context', () => {
+    const context = createImportTrackingContext({});
+    context.pushParent({
+      logicalId: 'parent-insert',
+      side: 'insertion',
+      sourceId: '4',
+      author: 'Parent',
+      date: '2026-05-21T00:00:00Z',
+    });
+    const rPrChange = {
+      name: 'w:rPrChange',
+      attributes: {
+        'w:id': '2',
+        'w:date': '2024-09-04T09:29:00Z',
+        'w:author': 'author@example.com',
+      },
+      elements: [{ name: 'w:rPr', elements: [] }],
+    };
+
+    const result = handleStyleChangeMarksV2(rPrChange, [], {
+      docx: {},
+      importTrackingContext: context,
+      converter: {
+        trackedChangeIdMap: new Map([['2', 'format-logical-id']]),
+      },
+    });
+
+    expect(result[0].attrs).toMatchObject({
+      id: 'format-logical-id',
+      sourceId: '2',
+      overlapParentId: 'parent-insert',
+    });
   });
 });
 

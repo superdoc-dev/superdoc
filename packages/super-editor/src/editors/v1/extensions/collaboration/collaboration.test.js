@@ -25,6 +25,7 @@ vi.mock('y-prosemirror', () => {
 
 vi.mock('yjs', () => ({
   encodeStateAsUpdate: vi.fn(() => new Uint8Array([1, 2, 3])),
+  XmlElement: class XmlElement {},
 }));
 
 import * as YProsemirror from 'y-prosemirror';
@@ -820,6 +821,33 @@ describe('collaboration extension', () => {
   });
 
   describe('initSyncListener cleanup (rollback safety)', () => {
+    it('unregisters the Yjs fragment normalizer observer on cleanup', () => {
+      const fragment = {
+        observeDeep: vi.fn(),
+        unobserveDeep: vi.fn(),
+        toArray: vi.fn(() => []),
+      };
+      const ydoc = createYDocStub();
+      ydoc.getXmlFragment.mockReturnValue(fragment);
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const editor = {
+        options: { isHeadless: false, ydoc, collaborationProvider: provider },
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        view: { state: { doc: {} }, dispatch: vi.fn() },
+      };
+
+      const context = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context);
+
+      expect(fragment.observeDeep).toHaveBeenCalledWith(expect.any(Function));
+      const observer = fragment.observeDeep.mock.calls[0][0];
+
+      cleanupCollaborationSideEffects(editor);
+
+      expect(fragment.unobserveDeep).toHaveBeenCalledWith(observer);
+    });
+
     it('cancels the pending 250ms timer when cleanup runs before it fires', () => {
       vi.useFakeTimers();
       try {

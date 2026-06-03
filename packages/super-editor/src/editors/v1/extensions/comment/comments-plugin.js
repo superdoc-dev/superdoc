@@ -35,6 +35,7 @@ export const CommentsPlugin = Extension.create({
        * @param {string} [contentOrOptions.content] - The comment content (text or HTML)
        * @param {string} [contentOrOptions.commentId] - Explicit comment ID (defaults to a new UUID)
        * @param {string} [contentOrOptions.author] - Author name (defaults to user from editor config)
+       * @param {string} [contentOrOptions.authorId] - Stable actor id (defaults to user from editor config)
        * @param {string} [contentOrOptions.authorEmail] - Author email (defaults to user from editor config)
        * @param {string} [contentOrOptions.authorImage] - Author image URL (defaults to user from editor config)
        * @param {boolean} [contentOrOptions.isInternal=false] - Whether the comment is internal/private
@@ -70,7 +71,7 @@ export const CommentsPlugin = Extension.create({
           }
 
           // Handle string or options object
-          let content, explicitCommentId, author, authorEmail, authorImage, isInternal;
+          let content, explicitCommentId, author, authorId, authorEmail, authorImage, isInternal;
 
           if (typeof contentOrOptions === 'string') {
             content = contentOrOptions;
@@ -78,6 +79,7 @@ export const CommentsPlugin = Extension.create({
             content = contentOrOptions.content;
             explicitCommentId = contentOrOptions.commentId;
             author = contentOrOptions.author;
+            authorId = contentOrOptions.authorId;
             authorEmail = contentOrOptions.authorEmail;
             authorImage = contentOrOptions.authorImage;
             isInternal = contentOrOptions.isInternal;
@@ -110,6 +112,7 @@ export const CommentsPlugin = Extension.create({
               isInternal: resolvedInternal,
               commentText: content,
               creatorName: author ?? configUser.name,
+              creatorId: authorId ?? configUser.id,
               creatorEmail: authorEmail ?? configUser.email,
               creatorImage: authorImage ?? configUser.image,
               createdTime: Date.now(),
@@ -135,6 +138,7 @@ export const CommentsPlugin = Extension.create({
        * @param {string} options.parentId - The ID of the parent comment or tracked change
        * @param {string} [options.content] - The reply content (text or HTML)
        * @param {string} [options.author] - Author name (defaults to user from editor config)
+       * @param {string} [options.authorId] - Stable actor id (defaults to user from editor config)
        * @param {string} [options.authorEmail] - Author email (defaults to user from editor config)
        * @param {string} [options.authorImage] - Author image URL (defaults to user from editor config)
        * @returns {boolean} True if the reply was added successfully, false otherwise
@@ -147,7 +151,15 @@ export const CommentsPlugin = Extension.create({
       addCommentReply:
         (options = {}) =>
         ({ editor }) => {
-          const { parentId, content, author, authorEmail, authorImage, commentId: explicitCommentId } = options;
+          const {
+            parentId,
+            content,
+            author,
+            authorId,
+            authorEmail,
+            authorImage,
+            commentId: explicitCommentId,
+          } = options;
 
           if (!parentId) {
             console.warn('addCommentReply requires a parentId');
@@ -163,6 +175,7 @@ export const CommentsPlugin = Extension.create({
               parentCommentId: parentId,
               commentText: content,
               creatorName: author ?? configUser.name,
+              creatorId: authorId ?? configUser.id,
               creatorEmail: authorEmail ?? configUser.email,
               creatorImage: authorImage ?? configUser.image,
               createdTime: Date.now(),
@@ -918,6 +931,15 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
     return true;
   };
 
+  const trackedChangesForIdCache = new Map();
+  const getTrackedChangesForId = (changeId) => {
+    if (!changeId) return [];
+    if (!trackedChangesForIdCache.has(changeId)) {
+      trackedChangesForIdCache.set(changeId, getTrackChanges(newEditorState, changeId));
+    }
+    return trackedChangesForIdCache.get(changeId);
+  };
+
   const buildTrackedChangePayload = ({ event, marks, nodes, deletionNodes = [] }) => {
     if (!marks.insertedMark && !marks.deletionMark && !marks.formatMark) {
       return null;
@@ -936,7 +958,7 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
       deletionNodes,
       nodes,
       newEditorState,
-      trackedChangesForId: getTrackChanges(newEditorState, trackedMarkId),
+      trackedChangesForId: getTrackedChangesForId(trackedMarkId),
     });
   };
 
@@ -954,15 +976,18 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
     });
   }
 
-  const hasCandidateNodes = nodes.length > 0 || Boolean(deletionNodes?.length);
+  const hasLiveTrackedChange = (changeId) => getTrackedChangesForId(changeId).length > 0;
+  const hasCandidateNodes = nodes.length > 0 || Boolean(deletionNodes?.length) || hasLiveTrackedChange(primaryId);
   const hasIndependentReplacementIds =
     Boolean(insertedMark && deletionMark) && Boolean(insertedId) && Boolean(deletionId) && insertedId !== deletionId;
 
   if (hasIndependentReplacementIds) {
     const isNewInsertion = registerTrackedChangeId(insertedId, { insertion: insertedId });
     const isNewDeletion = registerTrackedChangeId(deletionId, { deletion: deletionId });
+    const hasInsertionCandidateNodes = nodes.length > 0 || hasLiveTrackedChange(insertedId);
+    const hasDeletionCandidateNodes = Boolean(deletionNodes?.length) || hasLiveTrackedChange(deletionId);
 
-    const insertionPayload = hasCandidateNodes
+    const insertionPayload = hasInsertionCandidateNodes
       ? buildTrackedChangePayload({
           event: isNewInsertion ? 'add' : 'update',
           marks: {
@@ -976,7 +1001,7 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
       : null;
 
     const deletionPayload =
-      deletionMark && (hasCandidateNodes || getTrackChanges(newEditorState, deletionId).length > 0)
+      deletionMark && hasDeletionCandidateNodes
         ? buildTrackedChangePayload({
             event: isNewDeletion ? 'add' : 'update',
             marks: {
@@ -1151,7 +1176,7 @@ const createOrUpdateTrackedChangeComment = ({
   const { type, attrs } = trackedMark;
 
   const { name: trackedChangeType } = type;
-  const { author, authorEmail, authorImage, date, importedAuthor } = attrs;
+  const { author, authorId, authorEmail, authorImage, date, importedAuthor } = attrs;
   const id = attrs.id;
 
   const insertedMarkId = marks.insertedMark?.attrs?.id ?? null;
@@ -1233,6 +1258,7 @@ const createOrUpdateTrackedChangeComment = ({
     trackedChangeDisplayType,
     deletedText: isReplacement || marks.deletionMark ? deletionText : null,
     author,
+    ...(authorId && { authorId }),
     authorEmail,
     ...(authorImage && { authorImage }),
     date,

@@ -19,6 +19,7 @@ import {
 } from './border-utils.js';
 import { getTableCellGridBounds, type TableCellGridPosition } from './grid-geometry.js';
 import type { FragmentRenderContext } from '../renderer.js';
+import type { SdtAncestorOptions } from '../sdt/container.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];
 type TableRow = TableBlock['rows'][number];
@@ -173,8 +174,16 @@ type TableRowRenderDependencies = {
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  /** Table-level SDT metadata for suppressing duplicate container styling in cells */
-  tableSdt?: SdtMetadata | null;
+  /** Ancestor SDT container key for suppressing duplicate container styling in cells */
+  ancestorContainerKey?: string | null;
+  /** Ancestor SDT metadata for suppressing duplicate id-less container styling in cells */
+  ancestorContainerSdt?: SdtMetadata | null;
+  /** Ancestor SDT keys for suppressing duplicate container styling in cells */
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  /** Ancestor SDT metadata chain for suppressing duplicate id-less container styling in cells */
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
+  /** Receives notification when cells render SDT container chrome */
+  onSdtContainerChrome?: () => void;
   /**
    * If true, this row is the first body row of a continuation fragment.
    * MS Word draws borders at split points to visually close the table on each page,
@@ -199,6 +208,8 @@ type TableRowRenderDependencies = {
    * Applied to cell x positions and row y advancement.
    */
   cellSpacingPx?: number;
+  /** Built-in SDT chrome rendering mode. */
+  chrome?: 'default' | 'none';
 };
 
 /**
@@ -254,11 +265,16 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     captureLineSnapshot,
     renderDrawingContent,
     applySdtDataset,
-    tableSdt,
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
+    onSdtContainerChrome,
     continuesFromPrev,
     continuesOnNext,
     partialRow,
     cellSpacingPx = 0,
+    chrome,
   } = deps;
 
   const totalCols = columnWidths.length;
@@ -426,12 +442,17 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       renderDrawingContent,
       context,
       applySdtDataset,
-      tableSdt,
+      ancestorContainerKey,
+      ancestorContainerSdt,
+      ancestorContainerKeys,
+      ancestorContainerSdts,
+      onSdtContainerChrome,
       fromLine,
       toLine,
       tableIndent,
       isRtl,
       cellWidth: computedCellWidth > 0 ? computedCellWidth : undefined,
+      chrome,
     });
 
     container.appendChild(cellElement);

@@ -2,6 +2,7 @@
 import { formatDate } from './helpers';
 import { superdocIcons } from '@superdoc/icons.js';
 import { computed, getCurrentInstance } from 'vue';
+import { actorIdentitiesMatch, getActorIdentity, normalizeActorName } from '@superdoc/common';
 import { isAllowed, PERMISSIONS } from '@superdoc/core/collaboration/permissions.js';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import Avatar from '@superdoc/components/general/Avatar.vue';
@@ -37,7 +38,25 @@ const props = defineProps({
 const { proxy } = getCurrentInstance();
 const role = proxy.$superdoc.config.role;
 const isInternal = proxy.$superdoc.config.isInternal;
-const isOwnComment = props.comment.creatorEmail === proxy.$superdoc.config.user.email;
+const isCommentOwnedByCurrentUser = (comment) => {
+  const currentUser = proxy.$superdoc.config.user;
+  const otherUser = { id: comment?.creatorId, email: comment?.creatorEmail };
+  if (actorIdentitiesMatch({ current: currentUser, other: otherUser })) return true;
+
+  const currentIdentity = getActorIdentity(currentUser);
+  const otherIdentity = getActorIdentity(otherUser);
+  if (currentIdentity.hasId || currentIdentity.hasEmail || otherIdentity.hasId || otherIdentity.hasEmail) {
+    return false;
+  }
+
+  const hasImportOrigin = comment?.origin != null || Boolean(comment?.importedAuthor?.name);
+  if (hasImportOrigin) return false;
+
+  const currentName = normalizeActorName(currentUser?.name);
+  const commentName = normalizeActorName(comment?.creatorName);
+  return Boolean(currentName && commentName && currentName === commentName);
+};
+const isOwnComment = computed(() => isCommentOwnedByCurrentUser(props.comment));
 
 const { uiFontFamily } = useUiFontFamily();
 
@@ -57,8 +76,12 @@ const generallyAllowed = computed(() => {
 const allowResolve = computed(() => {
   if (!generallyAllowed.value) return false;
 
-  // Do not allow child comments to resolve
+  // Do not allow child comments to resolve. A reply anchored to a tracked
+  // change keeps the linkage via trackedChangeParentId (no parentCommentId),
+  // so treat it as a child too — otherwise re-imported TC replies render an
+  // extra resolve affordance that the live pre-export state doesn't (SD-2528).
   if (props.comment.parentCommentId) return false;
+  if (props.comment.trackedChangeParentId) return false;
 
   const context = {
     comment: props.comment,
@@ -66,7 +89,7 @@ const allowResolve = computed(() => {
     superdoc: proxy.$superdoc,
   };
 
-  if (isOwnComment || props.comment.trackedChange) {
+  if (isOwnComment.value || props.comment.trackedChange) {
     return isAllowed(PERMISSIONS.RESOLVE_OWN, role, isInternal, context);
   } else {
     return isAllowed(PERMISSIONS.RESOLVE_OTHER, role, isInternal, context);
@@ -83,7 +106,7 @@ const allowReject = computed(() => {
     superdoc: proxy.$superdoc,
   };
 
-  if (isOwnComment || props.comment.trackedChange) {
+  if (isOwnComment.value || props.comment.trackedChange) {
     return isAllowed(PERMISSIONS.REJECT_OWN, role, isInternal, context);
   } else {
     return isAllowed(PERMISSIONS.REJECT_OTHER, role, isInternal, context);
@@ -106,11 +129,11 @@ const getOverflowOptions = computed(() => {
   const options = new Set();
 
   // Only the comment creator can edit, and only when comments aren't read-only
-  if (!props.config.readOnly && props.comment.creatorEmail === proxy.$superdoc.config.user.email) {
+  if (!props.config.readOnly && isCommentOwnedByCurrentUser(props.comment)) {
     options.add('edit');
   }
 
-  const isOwnComment = props.comment.creatorEmail === proxy.$superdoc.config.user.email;
+  const isOwnComment = isCommentOwnedByCurrentUser(props.comment);
 
   const context = {
     comment: props.comment,
@@ -134,8 +157,14 @@ const handleSelect = (value) => emit('overflow-select', value);
 
 // Imported comments have `origin` set (e.g. 'word'); imported tracked changes
 // don't carry `origin` but do carry `importedAuthor` from the mark attributes.
+// SD-2528: suppress the IMPORTED tag when the current user is the author —
+// re-opening your own exported file shouldn't relabel your own comments as
+// "imported"; that visual churn is what made round-tripping look broken.
 const isImported = computed(() => {
-  return props.comment.origin != null || !!props.comment.importedAuthor?.name;
+  const hasImportOrigin = props.comment.origin != null || !!props.comment.importedAuthor?.name;
+  if (!hasImportOrigin) return false;
+  if (isCommentOwnedByCurrentUser(props.comment)) return false;
+  return true;
 });
 
 const getCurrentUser = computed(() => {

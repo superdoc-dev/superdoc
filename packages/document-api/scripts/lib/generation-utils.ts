@@ -87,18 +87,45 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * Compare expected generated files against the on-disk state.
+ *
+ * - `roots`: tracked directories whose committed contents must match the
+ *   in-memory build. Files under these roots are checked for existence,
+ *   content equality, and "extras on disk that should not be there."
+ *   Use for outputs that live in the repo (e.g. `apps/docs/.../reference/`).
+ * - `inMemoryRoots`: directories whose contents are gitignored. Files
+ *   under these roots are NOT checked for existence or extras on disk,
+ *   because a clean checkout has none. The in-memory build is still
+ *   exercised (any error thrown by the builder still propagates),
+ *   confirming the artifacts CAN be produced. Use for outputs that the
+ *   developer regenerates locally with the matching `generate:*` command.
+ *
+ * The "content matches when the file is present" check still runs for
+ * `inMemoryRoots` files — if a developer has a previously-generated
+ * stale copy on disk, surface it; but a missing file is not an issue.
+ */
 export async function checkGeneratedFiles(
   expectedFiles: GeneratedFile[],
   options: {
     roots?: string[];
+    inMemoryRoots?: string[];
   } = {},
 ): Promise<GeneratedCheckIssue[]> {
   const issues: GeneratedCheckIssue[] = [];
   const expected = new Map<string, GeneratedFile>(expectedFiles.map((file) => [file.path, file]));
+  const inMemoryRoots = options.inMemoryRoots ?? [];
+
+  const isUnderInMemoryRoot = (path: string): boolean =>
+    inMemoryRoots.some((root) => path === root || path.startsWith(`${root}/`));
 
   for (const [path, file] of expected.entries()) {
+    const onDiskOptional = isUnderInMemoryRoot(path);
     if (!(await pathExists(path))) {
-      issues.push({ kind: 'missing', path });
+      // Missing is only an issue when the file is expected to be tracked
+      // on disk. For in-memory roots, the build succeeded (it produced
+      // the GeneratedFile entry), which is what we needed to verify.
+      if (!onDiskOptional) issues.push({ kind: 'missing', path });
       continue;
     }
 

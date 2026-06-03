@@ -5,6 +5,7 @@ import path from 'node:path';
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../../../');
 const CONTRACT_PATH = path.join(REPO_ROOT, 'apps/cli/generated/sdk-contract.json');
 const CATALOG_PATH = path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json');
+const NODE_CLIENT_PATH = path.join(REPO_ROOT, 'packages/sdk/langs/node/src/generated/client.ts');
 const CLI_ONLY_OPERATIONS = new Set([
   'doc.open',
   'doc.save',
@@ -22,6 +23,16 @@ const CLI_ONLY_OPERATIONS = new Set([
 
 async function loadJson<T>(filePath: string): Promise<T> {
   return JSON.parse(await readFile(filePath, 'utf8')) as T;
+}
+
+async function loadBoundNodeClientSource(): Promise<string> {
+  const source = await readFile(NODE_CLIENT_PATH, 'utf8');
+  const marker = 'export function createBoundDocApi(runtime: RuntimeInvoker) {';
+  const start = source.indexOf(marker);
+  if (start === -1) {
+    throw new Error('Unable to locate createBoundDocApi in generated Node client.');
+  }
+  return source.slice(start);
 }
 
 type Contract = {
@@ -177,6 +188,16 @@ describe('Contract integrity', () => {
           expect(param.flag ?? param.name).toBeTruthy();
         }
       }
+    }
+  });
+
+  test('all document-surface operations are projected onto the bound Node client', async () => {
+    contract = await loadJson<Contract>(CONTRACT_PATH);
+    const boundSource = await loadBoundNodeClientSource();
+
+    for (const [id, op] of Object.entries(contract.operations)) {
+      if (op.sdkSurface !== 'document') continue;
+      expect(boundSource.includes(`CONTRACT.operations["${id}"]`)).toBe(true);
     }
   });
 });

@@ -15,6 +15,7 @@ import { cssColorToHex } from '@core/utilities/cssColorToHex.js';
  * @typedef {Object} HighlightAttributes
  * @category Attributes
  * @property {string} [color] - Background color (CSS color value)
+ * @property {boolean} [ooxmlHighlightClear] - Imported explicit OOXML highlight clear marker
  */
 
 /**
@@ -46,6 +47,11 @@ export const Highlight = Mark.create({
             style: `background-color: ${attributes.color}; color: inherit`,
           };
         },
+      },
+      ooxmlHighlightClear: {
+        default: null,
+        parseDOM: () => null,
+        renderDOM: () => ({}),
       },
     };
   },

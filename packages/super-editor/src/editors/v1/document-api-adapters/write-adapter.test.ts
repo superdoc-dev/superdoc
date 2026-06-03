@@ -862,6 +862,38 @@ describe('writeAdapter', () => {
     });
   });
 
+  it('preserves overlap compiler failure receipts when tracked write command does not apply', () => {
+    const { editor } = makeEditor('Hello');
+    (editor as unknown as { options: Record<string, unknown>; storage: Record<string, unknown> }).options = {
+      user: { name: 'Test User' },
+      trackedChanges: {},
+    };
+    (editor as unknown as { storage: Record<string, unknown> }).storage = {
+      trackChanges: {
+        lastCompilerFailure: {
+          code: 'PRECONDITION_FAILED',
+          message: 'Tracked review graph has invariant errors before edit.',
+        },
+      },
+    };
+    (editor.commands as { insertTrackedChange?: ReturnType<typeof vi.fn> }).insertTrackedChange = vi.fn(() => false);
+
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'replace',
+        target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+        text: 'World',
+      },
+      { changeMode: 'tracked' },
+    );
+
+    expect(receipt.success).toBe(false);
+    expect(receipt.failure).toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+  });
+
   it('supports direct dry-run without mutating editor state', () => {
     const { editor, dispatch, tr } = makeEditor('Hello');
 

@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import type { SuperDoc, Editor } from 'superdoc';
+import type { SuperDoc, Editor, Transaction } from 'superdoc';
 
 /**
  * Types for @superdoc-dev/react
@@ -73,8 +73,8 @@ export interface SuperDocTransactionEvent {
   editor: Editor;
   /** The editor instance that emitted the transaction. For body edits, this matches `editor`. */
   sourceEditor: Editor;
-  /** The ProseMirror transaction or transaction-like payload emitted by the source editor. */
-  transaction: any;
+  /** The ProseMirror transaction emitted by the source editor. */
+  transaction: Transaction;
   /** Time spent applying the transaction, in milliseconds. */
   duration?: number;
   /** The surface where the transaction originated. */
@@ -85,20 +85,24 @@ export interface SuperDocTransactionEvent {
   sectionType?: string | null;
 }
 
-/** Event passed to onContentError callback */
-export interface SuperDocContentErrorEvent {
-  error: Error;
-  editor: Editor;
-  documentId: string;
-  file: File;
-}
+/**
+ * Event passed to onContentError callback. Re-derived from the core
+ * `SuperDocConfig['onContentError']` parameter so the React wrapper
+ * cannot drift from the core contract: any widening or tightening
+ * upstream surfaces here automatically. See the core
+ * `Config.onContentError` JSDoc for the field semantics
+ * (`error: unknown`, `file: File | Blob | null | undefined`).
+ */
+export type SuperDocContentErrorEvent = Parameters<NonNullable<SuperDocConfig['onContentError']>>[0];
 
-/** Event passed to onException callback */
-export interface SuperDocExceptionEvent {
-  error: Error;
-  editor?: Editor | null;
-  code?: string;
-}
+/**
+ * Event passed to onException callback. Re-exports the core union so
+ * the React wrapper matches what consumers receive when SuperDoc emits
+ * an `exception` event. The union has three runtime shapes (store init,
+ * restore failure, editor lifecycle); narrow with `'stage' in event`
+ * or `'code' in event` to access shape-specific fields.
+ */
+export type SuperDocExceptionEvent = import('superdoc').SuperDocExceptionPayload;
 
 // =============================================================================
 // React Component Types

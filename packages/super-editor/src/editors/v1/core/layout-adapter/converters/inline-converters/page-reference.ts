@@ -61,7 +61,9 @@ export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun
       };
       fallbackText = node.content.map(extractText).join('').trim() || '??';
     }
-    if (Object.keys(runProperties).length === 0 && fieldRunProperties) {
+    if (fieldResultFormat === 'charformat' && fieldRunProperties) {
+      runProperties = fieldRunProperties;
+    } else if (Object.keys(runProperties).length === 0 && fieldRunProperties) {
       runProperties = fieldRunProperties;
     }
 

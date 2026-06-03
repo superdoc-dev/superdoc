@@ -25,6 +25,7 @@ vi.mock('@superdoc/style-engine/ooxml', () => ({
 }));
 
 import { pageReferenceNodeToBlock } from './page-reference.js';
+import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 
 function makeParams(
   attrs: Record<string, unknown>,
@@ -107,5 +108,38 @@ describe('pageReferenceNodeToBlock', () => {
 
     expect(run!.link?.anchor).toBe('_Toc123');
     expect(run!.pageRefMetadata?.relativePosition).toBe(true);
+  });
+
+  it('uses captured instruction run properties for CHARFORMAT fields', () => {
+    const fieldRunProperties = { bold: true, color: 'FF0000' };
+    vi.mocked(resolveRunProperties).mockClear();
+    pageReferenceNodeToBlock(
+      makeParams(
+        {
+          instruction: 'PAGEREF _Toc123 \\* CHARFORMAT',
+          fieldResultFormat: 'charformat',
+          fieldRunProperties,
+        },
+        {
+          node: {
+            type: 'pageReference',
+            attrs: {
+              instruction: 'PAGEREF _Toc123 \\* CHARFORMAT',
+              fieldResultFormat: 'charformat',
+              fieldRunProperties,
+            },
+            content: [
+              {
+                type: 'run',
+                attrs: { runProperties: { italic: true } },
+                content: [{ type: 'text', text: '15' } as PMNode],
+              } as PMNode,
+            ],
+          },
+        },
+      ),
+    );
+
+    expect(vi.mocked(resolveRunProperties).mock.calls.at(-1)?.[1]).toBe(fieldRunProperties);
   });
 });

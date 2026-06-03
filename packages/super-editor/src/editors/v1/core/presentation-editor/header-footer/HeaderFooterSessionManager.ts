@@ -1742,7 +1742,8 @@ export class HeaderFooterSessionManager {
       return 'first';
     }
     if (hasAlternateHeaders) {
-      return page.number % 2 === 0 ? 'even' : 'odd';
+      const parityPageNumber = page.displayNumber ?? page.number;
+      return parityPageNumber % 2 === 0 ? 'even' : 'odd';
     }
     return 'default';
   }
@@ -2237,6 +2238,7 @@ export class HeaderFooterSessionManager {
       pageSize: { w: pageWidth, h: pageHeight },
       pages: activeLayoutResult.layout.pages.map((page: Page) => ({
         number: page.number,
+        displayNumber: page.displayNumber,
         numberText: page.numberText,
         fragments: page.fragments,
       })),
@@ -2375,9 +2377,14 @@ export class HeaderFooterSessionManager {
       const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
       const sectionPageNumber =
         typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
+      const parityPageNumber = page?.displayNumber ?? pageNumber;
       const headerFooterType = multiSectionId
-        ? getHeaderFooterTypeForSection(pageNumber, sectionIndex, multiSectionId, { kind, sectionPageNumber })
-        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind });
+        ? getHeaderFooterTypeForSection(pageNumber, sectionIndex, multiSectionId, {
+            kind,
+            sectionPageNumber,
+            parityPageNumber,
+          })
+        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind, parityPageNumber });
 
       // Resolve section-specific rId using Word's OOXML inheritance model
       let sectionRId: string | undefined;

@@ -330,6 +330,7 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
     ),
     margins: page.margins,
     footnoteReserved: page.footnoteReserved,
+    displayNumber: page.displayNumber,
     numberText: page.numberText,
     vAlign: page.vAlign,
     baseMargins: page.baseMargins,

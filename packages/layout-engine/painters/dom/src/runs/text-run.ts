@@ -1,5 +1,6 @@
 import type { FlowRunLink, Run, TextRun } from '@superdoc/contracts';
 import { normalizeBaselineShift, resolveBaseFontSizeForVerticalText } from '@superdoc/contracts';
+import { resolvePhysicalFamily } from '@superdoc/font-system';
 import { assertPmPositions } from '../pm-position-validation.js';
 import type { FragmentRenderContext } from '../renderer.js';
 import { BROWSER_DEFAULT_FONT_SIZE } from '../styles.js';
@@ -72,7 +73,9 @@ export const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false):
     return;
   }
 
-  element.style.fontFamily = run.fontFamily;
+  // Paint the physical render family (e.g. Carlito for Calibri) - the same family the
+  // text was measured in, so glyph advances match the laid-out positions.
+  element.style.fontFamily = resolvePhysicalFamily(run.fontFamily);
   element.style.fontSize = `${run.fontSize}px`;
   if (run.bold) element.style.fontWeight = 'bold';
   if (run.italic) element.style.fontStyle = 'italic';

@@ -22,6 +22,7 @@ import {
   type TextRun,
   type VectorShapeDrawing,
 } from '@superdoc/contracts';
+import { getFontConfigVersion } from '@superdoc/font-system';
 import { hashParagraphBorders } from './paragraphBorderHash.js';
 import {
   hashCellBorders,
@@ -343,6 +344,9 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         return [
           textRun.text ?? '',
           textRun.fontFamily,
+          // Font epoch: busts paint reuse when a font loads/changes (the resolved physical
+          // family is the same, only its availability changed - logical family alone can't see it).
+          getFontConfigVersion(),
           textRun.fontSize,
           textRun.bold ? 1 : 0,
           textRun.italic ? 1 : 0,

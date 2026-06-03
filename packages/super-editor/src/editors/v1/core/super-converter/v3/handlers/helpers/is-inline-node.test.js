@@ -8,6 +8,7 @@ describe('isInlineNode', () => {
     expect(isInlineNode({ type: 'bookmarkStart', attrs: { id: '1' } })).toBe(true);
     expect(isInlineNode({ type: 'bookmarkEnd', attrs: { id: '1' } })).toBe(true);
     expect(isInlineNode({ type: 'tab' })).toBe(true);
+    expect(isInlineNode({ type: 'image', attrs: { src: 'media/image1.png' } })).toBe(true);
     expect(isInlineNode({ type: 'footnoteReference', attrs: { id: '1' } })).toBe(true);
   });
 

@@ -23,6 +23,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { measureCache } from '@superdoc/layout-bridge';
 import { isContentLockedMode } from '../extensions/structured-content/lockModes.js';
+import { nodeAllowsSdBlockRevAttr } from '../extensions/block-node/block-node.js';
 
 // Configuration constants
 const OVERLAY_EXPANSION_PX = 2000;
@@ -622,18 +623,31 @@ function dispatchResizeTransaction(blockId, newWidth, newHeight) {
       return;
     }
 
-    // Store pixel dimensions directly (converted to EMU only during DOCX export)
-    const newAttrs = {
-      ...imageNode.attrs,
-      size: {
-        width: Math.round(newWidth),
-        height: Math.round(newHeight),
-      },
-    };
+    // Store pixel dimensions directly (converted to EMU only during DOCX export).
+    // Use setNodeAttribute (AttrStep) instead of setNodeMarkup (ReplaceStep):
+    // Word does not track image resizes as revisions, and AttrSteps pass through
+    // the track-changes machinery untracked, so the resize applies in place in
+    // suggesting mode — even when the image is itself a pending tracked
+    // insertion. A ReplaceStep would be split into a tracked insert + delete,
+    // rendering as a duplicate image (SD-2974).
+    tr.setNodeAttribute(imagePos, 'size', {
+      width: Math.round(newWidth),
+      height: Math.round(newHeight),
+    });
 
-    tr.setNodeMarkup(imagePos, null, newAttrs);
+    // AttrSteps have no changed range, so blockNodePlugin won't bump the
+    // containing blocks' sdBlockRev and the layout engine would reuse the
+    // cached FlowBlock (stale paint). Bump the revs here, same pattern as
+    // numberingPlugin's bumpBlockRev.
+    const $imagePos = state.doc.resolve(imagePos);
+    for (let depth = $imagePos.depth; depth > 0; depth--) {
+      const ancestor = $imagePos.node(depth);
+      if (!nodeAllowsSdBlockRevAttr(ancestor)) continue;
+      const currentRev = Number.parseInt(ancestor.attrs?.sdBlockRev, 10);
+      if (!Number.isFinite(currentRev)) continue;
+      tr.setNodeAttribute($imagePos.before(depth), 'sdBlockRev', currentRev + 1);
+    }
 
-    // Dispatch transaction
     dispatch(tr);
 
     // Invalidate the measure cache for this image to force re-measurement with new size

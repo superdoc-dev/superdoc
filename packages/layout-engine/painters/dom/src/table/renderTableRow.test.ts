@@ -126,6 +126,67 @@ describe('renderTableRow', () => {
     expect(call.borders?.right).toBeDefined();
   });
 
+  // SD-3028: a tblPrEx override on the row BELOW that suppresses the shared horizontal edge
+  // (insideH none/nil) means the lower cell — which owns that interior edge in the single-owner
+  // model — won't draw it. When the upper row's border comes from the table/style (no cell
+  // tcBorder for the neighbor path to pick up), the grid bottom would be dropped. §17.4.66
+  // (present beats none) requires the upper row to close the grid by drawing its own insideH.
+  const collapsedStyleRow = (overrides: Record<string, unknown> = {}) =>
+    createDeps({
+      rowIndex: 0,
+      totalRows: 6,
+      cellSpacingPx: 0,
+      ...overrides,
+    });
+  const noneBorder = { none: true };
+  const allNoneOverride = {
+    id: 'row-next',
+    attrs: {
+      borders: {
+        top: noneBorder,
+        bottom: noneBorder,
+        left: noneBorder,
+        right: noneBorder,
+        insideH: noneBorder,
+        insideV: noneBorder,
+      },
+    },
+    cells: [{ id: 'cell-next', blocks: [{ kind: 'paragraph', id: 'pn', runs: [] }] }],
+  };
+
+  it('closes the grid by drawing its own bottom when the next row suppresses the shared edge (tblPrEx none)', () => {
+    renderTableRow(collapsedStyleRow({ nextRow: allNoneOverride }) as never);
+
+    expect(renderTableCellMock).toHaveBeenCalledTimes(1);
+    const call = getRenderedCellCall();
+    expect(call.borders?.bottom).toBeDefined();
+    expect((call.borders?.bottom as { style?: string })?.style).toBe('single');
+  });
+
+  it('does not draw an interior bottom when the next row has no override (lower cell owns it, no doubling)', () => {
+    renderTableRow(collapsedStyleRow() as never);
+
+    expect(renderTableCellMock).toHaveBeenCalledTimes(1);
+    const call = getRenderedCellCall();
+    expect(call.borders?.bottom).toBeUndefined();
+  });
+
+  it('does not draw an interior bottom when the next row override keeps a present shared edge', () => {
+    renderTableRow(
+      collapsedStyleRow({
+        nextRow: {
+          id: 'row-next',
+          attrs: { borders: { insideH: { style: 'single', width: 1, color: '#D9D9D9' } } },
+          cells: [{ id: 'cell-next', blocks: [{ kind: 'paragraph', id: 'pn', runs: [] }] }],
+        },
+      }) as never,
+    );
+
+    expect(renderTableCellMock).toHaveBeenCalledTimes(1);
+    const call = getRenderedCellCall();
+    expect(call.borders?.bottom).toBeUndefined();
+  });
+
   it('draws its own interior right border when the right neighbor is borderless (asymmetric, no doubling)', () => {
     renderTableRow(
       createDeps({
@@ -173,6 +234,55 @@ describe('renderTableRow', () => {
     expect(firstCall.borders?.right).toBeDefined();
     expect(firstCall.borders?.left).toBeDefined();
     expect(secondCall.borders?.left).toBeUndefined();
+  });
+
+  // SD-3028: "some borders" tables set a cell's shared vertical edge to w:val="nil" on BOTH
+  // sides to remove a divider, while the table style (TableGrid) defines insideV. The explicit
+  // nil on both cells must suppress the divider (§17.4.66); it must NOT fall back to insideV.
+  const twoCellRow = (cell0Borders: unknown, cell1Borders: unknown) =>
+    createDeps({
+      rowIndex: 0,
+      totalRows: 1,
+      cellSpacingPx: 0,
+      columnWidths: [100, 100],
+      rowMeasure: {
+        height: 20,
+        cells: [
+          { width: 100, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 1 },
+          { width: 100, height: 20, gridColumnStart: 1, colSpan: 1, rowSpan: 1 },
+        ],
+      },
+      row: {
+        id: 'row-1',
+        cells: [
+          { id: 'cell-1', attrs: { borders: cell0Borders }, blocks: [{ kind: 'paragraph', id: 'p1', runs: [] }] },
+          { id: 'cell-2', attrs: { borders: cell1Borders }, blocks: [{ kind: 'paragraph', id: 'p2', runs: [] }] },
+        ],
+      },
+    });
+  const noneSpec = { style: 'none' as const, width: 0 };
+  const bottomOnly = {
+    top: noneSpec,
+    right: noneSpec,
+    bottom: { style: 'single' as const, width: 1, color: '#000000' },
+    left: noneSpec,
+  };
+
+  it('suppresses an interior vertical divider when BOTH adjacent cells set the shared edge to nil', () => {
+    renderTableRow(twoCellRow(bottomOnly, bottomOnly) as never);
+
+    expect(renderTableCellMock).toHaveBeenCalledTimes(2);
+    const secondCall = renderTableCellMock.mock.calls[1][0] as { borders?: { left?: unknown } };
+    expect(secondCall.borders?.left).toBeUndefined();
+  });
+
+  it('still inherits the table insideV divider when only ONE side is explicitly nil (the other is unset)', () => {
+    // cell-2 left = nil, cell-1 right = unset (inherits insideV, present) -> §17.4.66 present wins.
+    renderTableRow(twoCellRow({ bottom: { style: 'single', width: 1, color: '#000000' } }, bottomOnly) as never);
+
+    expect(renderTableCellMock).toHaveBeenCalledTimes(2);
+    const secondCall = renderTableCellMock.mock.calls[1][0] as { borders?: { left?: unknown } };
+    expect(secondCall.borders?.left).toBeDefined();
   });
 
   it('does not paint interior bottom border for explicit cell borders in collapsed mode on non-final row', () => {

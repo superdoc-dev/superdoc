@@ -213,6 +213,19 @@ const BORDER_STYLE_LINES: Partial<Record<BorderStyle, number>> = {
 export const isPresentBorder = (b?: BorderSpec): b is BorderSpec =>
   !!b && b.style !== undefined && b.style !== 'none' && (b.width === undefined || b.width > 0);
 
+/**
+ * True when a border is EXPLICITLY set to none/nil (`w:val="nil"`/`"none"`), as opposed to
+ * simply unset/absent. The distinction matters for shared interior edges (§17.4.66): an
+ * explicit none on BOTH adjacent cells suppresses the divider, while an unset side inherits
+ * the table's insideH/insideV. Accepts either a CellBorders BorderSpec (`{style:'none'}`) or
+ * a TableBorderValue (`{none:true}`).
+ */
+export const isExplicitNoneBorder = (b?: unknown): boolean => {
+  if (!b || typeof b !== 'object') return false;
+  const r = b as Record<string, unknown>;
+  return r.style === 'none' || r.none === true;
+};
+
 const borderWeight = (b: BorderSpec): number =>
   (BORDER_STYLE_LINES[b.style as BorderStyle] ?? 1) * (BORDER_STYLE_NUMBER[b.style as BorderStyle] ?? 1);
 

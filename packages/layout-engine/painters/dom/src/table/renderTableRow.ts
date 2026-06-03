@@ -17,6 +17,7 @@ import {
   resolveBorderConflict,
   hasExplicitCellBorders,
   isPresentBorder,
+  isExplicitNoneBorder,
   swapCellBordersLR,
 } from './border-utils.js';
 import { getTableCellGridBounds, type TableCellGridPosition } from './grid-geometry.js';
@@ -53,6 +54,13 @@ type CellBorderResolutionArgs = {
    * must suppress its top border to avoid a doubled line. (SD-3345)
    */
   deferTopToAboveCell?: boolean;
+  /**
+   * True when the row BELOW has a tblPrEx border override that suppresses its shared horizontal
+   * edge (insideH none/nil). The lower cell owns that edge but won't draw it, so a present
+   * table/style border on THIS row must be drawn here to close the grid (§17.4.61/§17.4.66).
+   * (SD-3028)
+   */
+  nextRowSuppressesSharedTop?: boolean;
 };
 
 const hasAnyResolvedBorder = (borders: CellBorders): boolean =>
@@ -78,6 +86,7 @@ const resolveRenderedCellBorders = ({
   rightCellBorders,
   nextRowLeavesRightGap,
   deferTopToAboveCell,
+  nextRowSuppressesSharedTop,
 }: CellBorderResolutionArgs): CellBorders | undefined => {
   const hasExplicitBorders = hasExplicitCellBorders(cellBorders);
 
@@ -116,7 +125,13 @@ const resolveRenderedCellBorders = ({
         ? resolveTableBorderValue(cb.top, tableBorders?.top)
         : deferTopToAboveCell
           ? undefined
-          : (resolveBorderConflict(cb.top, aboveCellBorders?.bottom) ?? borderValueToSpec(tableBorders?.insideH)),
+          : (resolveBorderConflict(cb.top, aboveCellBorders?.bottom) ??
+            // Both sides not present: an explicit nil on BOTH adjacent cells suppresses the
+            // shared horizontal edge (§17.4.66); only inherit the table insideH when at least
+            // one side is merely unset. (SD-3028)
+            (isExplicitNoneBorder(cb.top) && isExplicitNoneBorder(aboveCellBorders?.bottom)
+              ? undefined
+              : borderValueToSpec(tableBorders?.insideH))),
       // Vertical interior edges: when BOTH adjacent cells declare a border, the right cell
       // owns it (draws its left as the §17.4.66 winner) so the edge is painted once (no
       // doubling). When only ONE side declares a border (asymmetric, no doubling risk) that
@@ -128,7 +143,12 @@ const resolveRenderedCellBorders = ({
           ? (resolveBorderConflict(cb.left, leftCellBorders?.right) ?? borderValueToSpec(tableBorders?.insideV))
           : isPresentBorder(leftCellBorders?.right)
             ? undefined
-            : borderValueToSpec(tableBorders?.insideV),
+            : // Both sides not present: an explicit nil on BOTH adjacent cells suppresses the
+              // divider (§17.4.66); only fall back to the table insideV when at least one side
+              // is merely unset (and would inherit it). (SD-3028)
+              isExplicitNoneBorder(cb.left) && isExplicitNoneBorder(leftCellBorders?.right)
+              ? undefined
+              : borderValueToSpec(tableBorders?.insideV),
       right: cellBounds.touchesRightEdge
         ? resolveTableBorderValue(cb.right, tableBorders?.right)
         : isPresentBorder(cb.right) && !isPresentBorder(rightCellBorders?.left)
@@ -181,10 +201,16 @@ const resolveRenderedCellBorders = ({
 
   const baseBorders = resolveTableCellBorders(tableBorders, cellPosition);
 
+  // The row below owns this interior bottom edge, but if its tblPrEx override suppresses it
+  // (insideH none), draw this row's own present interior horizontal border so the grid still
+  // closes. (SD-3028)
+  const insideHSpec = borderValueToSpec(tableBorders.insideH);
+  const interiorBottom = nextRowSuppressesSharedTop && isPresentBorder(insideHSpec) ? insideHSpec : baseBorders.bottom;
+
   return {
     top: touchesTopBoundary ? borderValueToSpec(tableBorders.top) : baseBorders.top,
     right: baseBorders.right,
-    bottom: touchesBottomBoundary ? borderValueToSpec(tableBorders.bottom) : baseBorders.bottom,
+    bottom: touchesBottomBoundary ? borderValueToSpec(tableBorders.bottom) : interiorBottom,
     left: baseBorders.left,
   };
 };
@@ -211,6 +237,9 @@ type TableRowRenderDependencies = {
   /** Previous (above) row data + measure, for collapsed-border conflict resolution (§17.4.66). */
   prevRow?: TableRow;
   prevRowMeasure?: TableRowMeasure;
+  /** Next (below) row data, to detect a row-level border override that suppresses the shared
+   * horizontal edge so the current row closes the grid itself (§17.4.61/§17.4.66). */
+  nextRow?: TableRow;
   /** Next (below) row measure, to detect a gridAfter gap under a spanning cell (SD-3345). */
   nextRowMeasure?: TableRowMeasure;
   /** Total number of rows in the table (for border resolution) */
@@ -327,6 +356,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     row,
     prevRow,
     prevRowMeasure,
+    nextRow,
     nextRowMeasure,
     totalRows,
     tableBorders,
@@ -372,6 +402,20 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
   const effectiveTableBorders: TableBorders | undefined = rowBorderOverride
     ? { ...(tableBorders ?? {}), ...rowBorderOverride }
     : tableBorders;
+
+  // When the NEXT row carries a tblPrEx override that suppresses its shared horizontal edge
+  // (insideH = none/nil), the lower cell — which owns that edge in the single-owner model —
+  // won't draw it, and a table/style-derived border above (no cell tcBorder for the SD-2969
+  // neighbor path to pick up) would be dropped. Per §17.4.66 a present border beats the
+  // none, so THIS row must close the grid by drawing its own interior bottom. Gated on the
+  // next row actually having an override, so unoverridden tables are unchanged (no doubling).
+  // (SD-3028)
+  const nextRowBorderOverride = nextRow?.attrs?.borders;
+  const nextRowEffectiveInsideH = nextRowBorderOverride
+    ? ({ ...(tableBorders ?? {}), ...nextRowBorderOverride } as TableBorders).insideH
+    : undefined;
+  const nextRowSuppressesSharedTop =
+    nextRowBorderOverride !== undefined && !isPresentBorder(borderValueToSpec(nextRowEffectiveInsideH));
 
   /**
    * Calculates the horizontal position (x-coordinate) for a cell based on its grid column index.
@@ -551,6 +595,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       rightCellBorders,
       nextRowLeavesRightGap,
       deferTopToAboveCell,
+      nextRowSuppressesSharedTop,
     });
     // RTL: swap resolved left↔right so CSS properties match visual edges
     const finalBorders = isRtl && resolvedBorders ? swapCellBordersLR(resolvedBorders) : resolvedBorders;

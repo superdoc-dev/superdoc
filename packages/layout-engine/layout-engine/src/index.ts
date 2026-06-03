@@ -28,13 +28,14 @@ import type {
   SectionNumbering,
   FlowMode,
   NormalizedColumnLayout,
-  HeaderFooterRefIdentifier,
+  HeaderFooterResolutionSection,
 } from '@superdoc/contracts';
 import {
   buildLayoutSourceIdentityForFragment,
-  getFragmentZIndex,
   normalizeColumnLayout,
-  resolveInheritedHeaderFooterRefWithType,
+  getFragmentZIndex,
+  resolveEffectiveHeaderFooterRef,
+  selectHeaderFooterVariantForPage,
 } from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
@@ -724,36 +725,6 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const footerContentHeightsBySectionRef = options.footerContentHeightsBySectionRef;
 
   /**
-   * Determines the header/footer variant type for a given page based on section settings.
-   *
-   * Takes a params object because the two page-number fields have very similar
-   * names and types — a positional call site is easy to get wrong.
-   *
-   * @param sectionPageNumber - The page number within the current section (1-indexed), used for titlePg
-   * @param parityPageNumber - The section-aware page number used for even/odd
-   * @param titlePgEnabled - Whether the section has "different first page" enabled
-   * @param alternateHeaders - Whether the document has odd/even differentiation enabled
-   * @returns The variant type: 'first', 'even', 'odd', or 'default'
-   */
-  const getVariantTypeForPage = (args: {
-    sectionPageNumber: number;
-    parityPageNumber: number;
-    titlePgEnabled: boolean;
-    alternateHeaders: boolean;
-  }): 'default' | 'first' | 'even' | 'odd' => {
-    // First page of section with titlePg enabled uses 'first' variant
-    if (args.sectionPageNumber === 1 && args.titlePgEnabled) {
-      return 'first';
-    }
-    // Alternate headers: even/odd based on the section-aware page number,
-    // matching ECMA-376 section 17.10.1.
-    if (args.alternateHeaders) {
-      return args.parityPageNumber % 2 === 0 ? 'even' : 'odd';
-    }
-    return 'default';
-  };
-
-  /**
    * Gets the header content height for a specific page, considering:
    * 1. Per-rId heights (highest priority for multi-section documents)
    * 2. Per-variant heights (fallback)
@@ -905,11 +876,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Initial effective margins use default variant (will be adjusted per-page)
   const headerDistance = margins.header ?? margins.top;
   const footerDistance = margins.footer ?? margins.bottom;
-  const defaultHeaderHeight = getHeaderHeightForPage('default', undefined, 0);
-  const defaultFooterHeight = getFooterHeightForPage('default', undefined, 0);
+  const initialHeaderHeight = 0;
+  const initialFooterHeight = 0;
   const effectiveMargins = clampHeaderFooterInflatedMargins(
-    calculateEffectiveTopMargin(defaultHeaderHeight, headerDistance, margins.top),
-    calculateEffectiveBottomMargin(defaultFooterHeight, footerDistance, margins.bottom),
+    calculateEffectiveTopMargin(initialHeaderHeight, headerDistance, margins.top),
+    calculateEffectiveBottomMargin(initialFooterHeight, footerDistance, margins.bottom),
     margins.top,
     margins.bottom,
     pageSize.h,
@@ -1066,7 +1037,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
       // Set numbering for first section from metadata
       const firstSectionMetadata = Number.isFinite(firstMetadataIndex)
-        ? sectionMetadataList[firstMetadataIndex]
+        ? getSectionMetadata(firstMetadataIndex)
         : undefined;
       if (firstSectionMetadata?.numbering) {
         if (firstSectionMetadata.numbering.format) activeNumberFormat = firstSectionMetadata.numbering.format;
@@ -1138,7 +1109,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       pendingSectionIndex = metadataIndex;
     }
     // Get section metadata for numbering if available
-    const sectionMetadata = Number.isFinite(metadataIndex) ? sectionMetadataList[metadataIndex] : undefined;
+    const sectionMetadata = Number.isFinite(metadataIndex) ? getSectionMetadata(metadataIndex) : undefined;
     // Schedule numbering change for next page - prefer metadata over block
     if (sectionMetadata?.numbering) {
       pendingNumbering = { ...sectionMetadata.numbering };
@@ -1464,19 +1435,32 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     };
   };
   const sectionMetadataList = options.sectionMetadata ?? [];
-  const headerFooterRefIdentifier: HeaderFooterRefIdentifier = {
-    sectionCount: sectionMetadataList.length,
-    sectionHeaderIds: new Map(),
-    sectionFooterIds: new Map(),
+  const getSectionMetadata = (sectionIndex: number) =>
+    sectionMetadataList.find((section, fallbackIndex) => (section.sectionIndex ?? fallbackIndex) === sectionIndex);
+  const runtimeSectionRefsByIndex = new Map<number, SectionRefs>();
+  const buildHeaderFooterResolutionSections = (): HeaderFooterResolutionSection[] => {
+    const sectionIndexes = new Set<number>();
+    sectionMetadataList.forEach((section, fallbackIndex) => sectionIndexes.add(section.sectionIndex ?? fallbackIndex));
+    runtimeSectionRefsByIndex.forEach((_refs, sectionIndex) => sectionIndexes.add(sectionIndex));
+    if (sectionIndexes.size === 0) sectionIndexes.add(0);
+
+    return Array.from(sectionIndexes)
+      .sort((a, b) => a - b)
+      .map((sectionIndex) => {
+        const metadata = getSectionMetadata(sectionIndex);
+        const runtimeRefs = runtimeSectionRefsByIndex.get(sectionIndex);
+        return {
+          sectionIndex,
+          titlePg: metadata?.titlePg === true,
+          headerRefs: runtimeRefs?.headerRefs ?? metadata?.headerRefs,
+          footerRefs: runtimeRefs?.footerRefs ?? metadata?.footerRefs,
+        };
+      });
   };
-  for (const metadata of sectionMetadataList) {
-    if (metadata.headerRefs) {
-      headerFooterRefIdentifier.sectionHeaderIds?.set(metadata.sectionIndex, metadata.headerRefs);
-    }
-    if (metadata.footerRefs) {
-      headerFooterRefIdentifier.sectionFooterIds?.set(metadata.sectionIndex, metadata.footerRefs);
-    }
-  }
+  const hasAnyHeaderFooterRefs = (sections: HeaderFooterResolutionSection[], kind: 'header' | 'footer'): boolean => {
+    const refKey = kind === 'header' ? 'headerRefs' : 'footerRefs';
+    return sections.some((section) => Object.values(section[refKey] ?? {}).some(Boolean));
+  };
   const initialSectionMetadata = sectionMetadataList[0];
   if (initialSectionMetadata?.numbering?.format) {
     activeNumberFormat = initialSectionMetadata.numbering.format;
@@ -1492,6 +1476,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       ...(initialSectionMetadata.headerRefs && { headerRefs: initialSectionMetadata.headerRefs }),
       ...(initialSectionMetadata.footerRefs && { footerRefs: initialSectionMetadata.footerRefs }),
     };
+    runtimeSectionRefsByIndex.set(initialSectionMetadata.sectionIndex ?? 0, activeSectionRefs);
   }
   // Initialize vertical alignment from first section metadata (for page 1)
   if (initialSectionMetadata?.vAlign) {
@@ -1617,6 +1602,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           activeSectionIndex = pendingSectionIndex;
           pendingSectionIndex = null;
         }
+        if (activeSectionRefs) {
+          runtimeSectionRefsByIndex.set(activeSectionIndex, activeSectionRefs);
+        }
         // Apply pending vertical alignment (undefined = no change, null = reset to default)
         if (pendingVAlign !== undefined) {
           activeVAlign = pendingVAlign;
@@ -1649,46 +1637,48 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const sectionPageNumber = newPageNumber - firstPageInSection + 1;
 
         // Get section metadata for titlePg setting
-        const sectionMetadata = sectionMetadataList[activeSectionIndex];
+        const sectionMetadata = getSectionMetadata(activeSectionIndex);
         const titlePgEnabled = sectionMetadata?.titlePg ?? false;
         const alternateHeaders = options.alternateHeaders ?? false;
 
-        // Determine which header/footer variant applies to this page
-        const variantType = getVariantTypeForPage({
+        // Determine which header/footer variant applies to this page.
+        const variantType = selectHeaderFooterVariantForPage({
           sectionPageNumber,
-          parityPageNumber: activePageCounter,
-          titlePgEnabled,
+          documentPageNumber: activePageCounter,
+          titlePg: titlePgEnabled,
           alternateHeaders,
         });
 
-        const headerResolution = resolveInheritedHeaderFooterRefWithType({
-          identifier: headerFooterRefIdentifier,
-          sectionIndex: activeSectionIndex,
-          kind: 'header',
-          variantType,
-          pageRefs: activeSectionRefs?.headerRefs,
-        });
-        const footerResolution = resolveInheritedHeaderFooterRefWithType({
-          identifier: headerFooterRefIdentifier,
-          sectionIndex: activeSectionIndex,
-          kind: 'footer',
-          variantType,
-          pageRefs: activeSectionRefs?.footerRefs,
-        });
-        const headerRef = headerResolution?.ref;
-        const footerRef = footerResolution?.ref;
+        const resolutionSections = buildHeaderFooterResolutionSections();
+        const headerResolved =
+          variantType &&
+          resolveEffectiveHeaderFooterRef({
+            sections: resolutionSections,
+            sectionIndex: activeSectionIndex,
+            kind: 'header',
+            variant: variantType,
+          });
+        const footerResolved =
+          variantType &&
+          resolveEffectiveHeaderFooterRef({
+            sections: resolutionSections,
+            sectionIndex: activeSectionIndex,
+            kind: 'footer',
+            variant: variantType,
+          });
 
-        // Calculate the actual header/footer heights for this page's variant
-        const headerHeight = getHeaderHeightForPage(
-          headerResolution?.variantType ?? variantType,
-          headerRef,
-          activeSectionIndex,
-        );
-        const footerHeight = getFooterHeightForPage(
-          footerResolution?.variantType ?? variantType,
-          footerRef,
-          activeSectionIndex,
-        );
+        const hasHeaderRefs = hasAnyHeaderFooterRefs(resolutionSections, 'header');
+        const hasFooterRefs = hasAnyHeaderFooterRefs(resolutionSections, 'footer');
+        const headerHeight = headerResolved
+          ? getHeaderHeightForPage(headerResolved.matchedVariant, headerResolved.refId, activeSectionIndex)
+          : variantType && !hasHeaderRefs
+            ? getHeaderHeightForPage(variantType, undefined, activeSectionIndex)
+            : 0;
+        const footerHeight = footerResolved
+          ? getFooterHeightForPage(footerResolved.matchedVariant, footerResolved.refId, activeSectionIndex)
+          : variantType && !hasFooterRefs
+            ? getFooterHeightForPage(variantType, undefined, activeSectionIndex)
+            : 0;
 
         // Adjust margins based on the actual header/footer for this page.
         // Always recalculate to ensure pages without headers reset to base margin
@@ -1705,7 +1695,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         activeBottomMargin = adjustedMargins.bottom;
 
         layoutLog(
-          `[Layout] Page ${newPageNumber}: Using variant '${variantType}' - headerHeight: ${headerHeight}, footerHeight: ${footerHeight}`,
+          `[Layout] Page ${newPageNumber}: Using variant '${variantType ?? 'none'}' - headerHeight: ${headerHeight}, footerHeight: ${footerHeight}`,
         );
         layoutLog(
           `[Layout] Page ${newPageNumber}: Adjusted margins - top: ${activeTopMargin}, bottom: ${activeBottomMargin} (base: ${activeSectionBaseTopMargin}, ${activeSectionBaseBottomMargin})`,
@@ -1718,6 +1708,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (state?.page) {
         state.page.displayNumber = activePageCounter;
         state.page.numberText = formatPageNumber(activePageCounter, activeNumberFormat);
+        state.page.effectivePageNumber = activePageCounter;
         // Stamp section index on the page for section-aware page numbering and header/footer selection
         state.page.sectionIndex = activeSectionIndex;
         layoutLog(`[Layout] Page ${state.page.number}: Stamped sectionIndex:`, activeSectionIndex);
@@ -2240,7 +2231,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
       // Get section metadata for numbering if available
-      const sectionMetadata = Number.isFinite(metadataIndex) ? sectionMetadataList[metadataIndex] : undefined;
+      const sectionMetadata = Number.isFinite(metadataIndex) ? getSectionMetadata(metadataIndex) : undefined;
       if (sectionMetadata?.numbering) {
         if (isFirstSection) {
           // First section: apply immediately

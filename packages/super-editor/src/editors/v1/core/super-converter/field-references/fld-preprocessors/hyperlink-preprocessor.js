@@ -14,7 +14,7 @@ import { generateDocxRandomId } from '@helpers/generateDocxRandomId.js';
  *   when the instruction has no recognisable target.
  */
 export function resolveHyperlinkAttributes(instruction, docx) {
-  const urlMatch = instruction.match(/HYPERLINK\s+"([^"]+)"/);
+  const urlMatch = instruction.match(/^\s*HYPERLINK\s+"([^"]+)"/i);
   if (urlMatch && urlMatch.length >= 2) {
     const url = urlMatch[1];
     const rels = docx?.['word/_rels/document.xml.rels'];

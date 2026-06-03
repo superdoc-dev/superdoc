@@ -24,7 +24,7 @@ import type {
   ResolvedPage,
   LayoutStoryLocator,
 } from '@superdoc/contracts';
-import { namedStoryLocator, resolveInheritedHeaderFooterRef } from '@superdoc/contracts';
+import { namedStoryLocator } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
 import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
 import type { HeaderFooterPartStoryLocator } from '@superdoc/document-api';
@@ -51,6 +51,7 @@ import {
   extractIdentifierFromConverter,
   getHeaderFooterType,
   getHeaderFooterTypeForSection,
+  resolveEffectiveHeaderFooterRef,
   getBucketForPageNumber,
   getBucketRepresentative,
   buildSectionAwareHeaderFooterLayoutKey,
@@ -75,6 +76,14 @@ type SurfacePmEntry = {
   pmEnd: number;
   el: HTMLElement;
 };
+
+function hasSectionRefsForKind(
+  identifier: MultiSectionHeaderFooterIdentifier | null | undefined,
+  kind: 'header' | 'footer',
+): identifier is MultiSectionHeaderFooterIdentifier {
+  const refKey = kind === 'header' ? 'headerRefs' : 'footerRefs';
+  return Boolean(identifier?.sections?.some((section) => section[refKey] !== undefined));
+}
 
 // AIDEV-NOTE: compat-fallback - header/footer session interaction still keys
 // off `data-pm-*` (prep-002). DomPainter also stamps the parallel neutral
@@ -372,6 +381,15 @@ function buildHeaderFooterStory(kind: 'header' | 'footer', id: string | null | u
 
 function storyIdFromHeaderFooterLayoutKey(key: string): string {
   return key.replace(/::s\d+$/, '');
+}
+
+function refForVariant(
+  refs: Partial<Record<'default' | 'first' | 'even' | 'odd', string | null | undefined>> | undefined,
+  variant: 'default' | 'first' | 'even' | 'odd',
+): { refId: string; matchedVariant: 'default' | 'first' | 'even' | 'odd' } | undefined {
+  const ref = refs?.[variant];
+  if (ref) return { refId: ref, matchedVariant: variant };
+  return variant === 'odd' && refs?.default ? { refId: refs.default, matchedVariant: 'default' } : undefined;
 }
 
 function resolveResult(result: HeaderFooterLayoutResult, storyId?: string | null): ResolvedHeaderFooterLayout {
@@ -1746,6 +1764,7 @@ export class HeaderFooterSessionManager {
     sectionFirstPageNumbers: Map<number, number>,
   ): string {
     const pageNumber = page.number;
+    const effectivePageNumber = page.effectivePageNumber ?? page.displayNumber ?? pageNumber;
     const sectionIndex = page.sectionIndex ?? 0;
     const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
     const isFirstPageOfSection = firstPageInSection === pageNumber;
@@ -1768,8 +1787,7 @@ export class HeaderFooterSessionManager {
       return 'first';
     }
     if (hasAlternateHeaders) {
-      const parityPageNumber = page.displayNumber ?? page.number;
-      return parityPageNumber % 2 === 0 ? 'even' : 'odd';
+      return effectivePageNumber % 2 === 0 ? 'even' : 'odd';
     }
     return 'default';
   }
@@ -2397,34 +2415,42 @@ export class HeaderFooterSessionManager {
         sectionFirstPageNumbers.set(idx, p.number);
       }
     }
+    const hasSectionResolution = hasSectionRefsForKind(multiSectionId, kind);
 
     return (pageNumber, pageMargins, page) => {
       const sectionIndex = page?.sectionIndex ?? 0;
+      const effectivePageNumber = page?.effectivePageNumber ?? page?.displayNumber ?? pageNumber;
       const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
       const sectionPageNumber =
         typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
-      const parityPageNumber = page?.displayNumber ?? pageNumber;
-      const headerFooterType = multiSectionId
-        ? getHeaderFooterTypeForSection(pageNumber, sectionIndex, multiSectionId, {
+      const headerFooterType = hasSectionResolution
+        ? getHeaderFooterTypeForSection(effectivePageNumber, sectionIndex, multiSectionId, {
             kind,
             sectionPageNumber,
-            parityPageNumber,
+            parityPageNumber: effectivePageNumber,
           })
-        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind, parityPageNumber });
+        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind, parityPageNumber: effectivePageNumber });
 
       if (!headerFooterType) {
         return null;
       }
 
-      const pageRefs = kind === 'header' ? page?.sectionRefs?.headerRefs : page?.sectionRefs?.footerRefs;
-      const sectionRId =
-        resolveInheritedHeaderFooterRef({
-          identifier: multiSectionId ?? legacyIdentifier,
-          sectionIndex,
-          kind,
-          variantType: headerFooterType,
-          pageRefs,
-        }) ?? undefined;
+      const pageSectionRefs = kind === 'header' ? page?.sectionRefs?.headerRefs : page?.sectionRefs?.footerRefs;
+      const sectionResolvedRef = hasSectionResolution
+        ? resolveEffectiveHeaderFooterRef({
+            sections: multiSectionId.sections,
+            sectionIndex,
+            kind,
+            variant: headerFooterType,
+          })
+        : null;
+      const legacyRefs = kind === 'header' ? legacyIdentifier.headerIds : legacyIdentifier.footerIds;
+      const resolvedRef =
+        refForVariant(pageSectionRefs, headerFooterType) ??
+        sectionResolvedRef ??
+        (!hasSectionResolution ? refForVariant(legacyRefs, headerFooterType) : undefined);
+      const sectionRId = resolvedRef?.refId;
+      const layoutVariantType = resolvedRef?.matchedVariant ?? headerFooterType;
 
       // PRIORITY 1: Try per-rId layout (composite key first for per-section margins, then plain rId)
       const compositeKey = sectionRId ? `${sectionRId}::s${sectionIndex}` : undefined;
@@ -2498,7 +2524,7 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
-      const variantIndex = results.findIndex((entry) => entry.type === headerFooterType);
+      const variantIndex = results.findIndex((entry) => entry.type === layoutVariantType);
       const variant = variantIndex >= 0 ? results[variantIndex] : undefined;
       if (!variant || !variant.layout?.pages?.length) {
         return null;
@@ -2518,7 +2544,7 @@ export class HeaderFooterSessionManager {
         slotPage.number,
         variant,
         resolvedVariant,
-        `variant '${headerFooterType}' page ${pageNumber}`,
+        `variant '${layoutVariantType}' page ${pageNumber}`,
         finalHeaderId ?? headerFooterType,
       );
       if (!alignedVariantItems) {

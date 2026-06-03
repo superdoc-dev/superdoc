@@ -4,18 +4,22 @@ import { parsePageNumberFieldSwitches } from '../shared/page-number-field-switch
  * Processes a PAGE instruction and creates a `sd:autoPageNumber` node.
  *
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine The nodes between separate and end.
- * @param {string} [_instrText] The instruction text (unused for PAGE).
+ * @param {string} [instrText] The PAGE instruction text.
  * @param {{ docx?: import('../../v2/docxHelper').ParsedDocx, instructionTokens?: Array<{type: string, text?: string}> | null, fieldRunRPr?: import('../../v2/types/index.js').OpenXmlNode | null }} [options]
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  * @see {@link https://ecma-international.org/publications-and-standards/standards/ecma-376/} "Fundamentals And Markup Language Reference", page 1234
  */
 export function preProcessPageInstruction(nodesToCombine, instrText = 'PAGE', options = {}) {
   const fieldRunRPr = options.fieldRunRPr ?? null;
-  const fieldAttrs = parsePageNumberFieldSwitches(instrText, 'PAGE');
+  const normalizedInstruction = typeof instrText === 'string' && instrText.trim() ? instrText.trim().replace(/\s+/g, ' ') : 'PAGE';
+  const fieldAttrs = {
+    instruction: normalizedInstruction,
+    ...parsePageNumberFieldSwitches(normalizedInstruction, 'PAGE'),
+  };
   const pageNumNode = {
     name: 'sd:autoPageNumber',
     type: 'element',
-    ...(Object.keys(fieldAttrs).length > 0 ? { attributes: fieldAttrs } : {}),
+    attributes: fieldAttrs,
   };
 
   // First, try to get rPr from content nodes (between separate and end)

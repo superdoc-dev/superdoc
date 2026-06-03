@@ -7,14 +7,19 @@ describe('page number formatting', () => {
     expect(formatPageNumber(5, 'upperRoman')).toBe('V');
     expect(formatPageNumber(5, 'lowerRoman')).toBe('v');
     expect(formatPageNumber(27, 'upperLetter')).toBe('AA');
-    expect(formatPageNumber(703, 'lowerLetter')).toBe('aaa');
-    expect(formatPageNumber(12, 'numberInDash')).toBe('-12-');
+    expect(formatPageNumber(28, 'upperLetter')).toBe('BB');
+    expect(formatPageNumber(703, 'lowerLetter')).toBe('a'.repeat(28));
+    expect(formatPageNumber(12, 'numberInDash')).toBe('- 12 -');
   });
 
   it('normalizes page numbers before formatting', () => {
     expect(formatPageNumber(4.9, 'decimal')).toBe('4');
     expect(formatPageNumber(0, 'upperLetter')).toBe('A');
     expect(formatPageNumber(Number.NaN, 'decimal')).toBe('1');
+  });
+
+  it('falls back to decimal for unsupported runtime formats', () => {
+    expect(formatPageNumber(5, 'chicago' as never)).toBe('5');
   });
 
   it('falls back to decimal for roman numerals beyond 3999', () => {

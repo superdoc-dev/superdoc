@@ -24,16 +24,10 @@ function toUpperRoman(value: number): string {
 }
 
 function toUpperLetter(value: number): string {
-  let n = Math.max(1, value);
-  let result = '';
-
-  while (n > 0) {
-    const remainder = (n - 1) % 26;
-    result = String.fromCharCode(65 + remainder) + result;
-    n = Math.floor((n - 1) / 26);
-  }
-
-  return result;
+  const normalized = Math.max(1, value);
+  const index = (normalized - 1) % 26;
+  const repeatCount = Math.floor((normalized - 1) / 26) + 1;
+  return String.fromCharCode(65 + index).repeat(repeatCount);
 }
 
 export function formatPageNumber(pageNumber: number, format: PageNumberFormat): string {
@@ -49,7 +43,7 @@ export function formatPageNumber(pageNumber: number, format: PageNumberFormat): 
     case 'lowerLetter':
       return toUpperLetter(value).toLowerCase();
     case 'numberInDash':
-      return `-${value}-`;
+      return `- ${value} -`;
     case 'decimal':
     default:
       return String(value);

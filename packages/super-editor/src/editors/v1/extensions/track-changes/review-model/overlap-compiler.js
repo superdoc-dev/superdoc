@@ -282,14 +282,21 @@ const findAdjacentInsertedSegment = (ctx, pos) => {
  * (right-adjacent); forward Delete extends the other way (left-adjacent).
  *
  * Adjacency is checked exactly first (contiguous within a single run), then
- * across an empty structural gap. Multi-run paragraphs — e.g. Google Docs
- * exports that split "Open comment " and "from Google Docs." into separate
- * runs — separate the prior deletion from this range by run open/close tokens
- * with no intervening text; without the gap-tolerant pass, deleting the space
- * at the run seam would mint a new change. The gap is bounded and gated on
- * `isEmptyStructuralGap`, so a live character between two deletions still
- * splits them. Mirrors the insertion refinement in `compileTextInsert`
- * (`findAdjacentInsertedSegment` + `findSegmentAcrossEmptyStructuralGap`).
+ * across a gap gated by `isCoalescibleDeletionGap`. Multi-run paragraphs —
+ * e.g. Google Docs exports that split "Open comment " and "from Google Docs."
+ * into separate runs — separate the prior deletion from this range by run
+ * open/close tokens, and Google Docs additionally anchors comments with
+ * zero-width marker nodes at those seams; without the gap-tolerant pass,
+ * deleting the space at the seam would mint a new change. `isCoalescibleDeletionGap`
+ * tolerates run boundaries AND zero-width review/anchor markers but still
+ * requires no live text in the gap, so a live character between two deletions
+ * splits them.
+ *
+ * This is analogous to the same-user insertion refinement in `compileTextInsert`
+ * but intentionally MORE permissive: that path's `findSegmentAcrossEmptyStructuralGap`
+ * rejects any inline leaf, so the insertion side still splits at comment-anchor
+ * seams. TC-EDIT-018 covers "deleted or inserted", so the insertion side is a
+ * known conformance gap to close in a follow-up — not a mirror of this logic.
  *
  * @param {*} ctx
  * @param {number} from

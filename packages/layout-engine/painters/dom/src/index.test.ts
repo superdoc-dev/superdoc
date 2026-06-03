@@ -5763,7 +5763,7 @@ describe('DomPainter', () => {
 
       const footerEl = mount.querySelector('.superdoc-page-footer');
       expect(footerEl).toBeTruthy();
-      expect(footerEl?.textContent).toBe('-4-');
+      expect(footerEl?.textContent).toBe('- 4 -');
     });
 
     it('bottom-aligns footer content within the footer box', () => {
@@ -6470,6 +6470,62 @@ describe('DomPainter', () => {
     expect(drawingInner?.style.transform).toContain('rotate(320deg)');
     expect(shapeEl?.textContent).toContain('AUTE');
     expect(svgEl?.style.transform).toBe('');
+  });
+
+  it('rebuilds drawing text with PAGE fields when page context changes during patch rendering', () => {
+    const vectorShapeBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-page-field',
+      drawingKind: 'vectorShape',
+      geometry: { width: 100, height: 50, rotation: 0, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      textContent: {
+        parts: [
+          { text: 'Page ', formatting: { fontFamily: 'Arial', fontSize: 18 } },
+          { text: '', fieldType: 'PAGE', formatting: { fontFamily: 'Arial', fontSize: 18 } },
+        ],
+      },
+      textAlign: 'center',
+    };
+
+    const vectorShapeMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 100,
+      height: 50,
+      scale: 1,
+      naturalWidth: 100,
+      naturalHeight: 50,
+      geometry: { width: 100, height: 50, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const drawingFragment = {
+      kind: 'drawing' as const,
+      drawingKind: 'vectorShape' as const,
+      blockId: 'drawing-page-field',
+      x: 30,
+      y: 40,
+      width: 100,
+      height: 50,
+      geometry: { width: 100, height: 50, rotation: 0, flipH: false, flipV: false },
+      scale: 1,
+    };
+
+    const painter = createTestPainter({ blocks: [vectorShapeBlock], measures: [vectorShapeMeasure] });
+    const firstLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [{ number: 1, numberText: '1', fragments: [drawingFragment] }],
+    };
+    const secondLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [{ number: 2, numberText: '2', fragments: [drawingFragment] }],
+    };
+
+    painter.paint(firstLayout, mount);
+    expect(mount.querySelector('.superdoc-vector-shape')?.textContent).toContain('Page 1');
+
+    painter.paint(secondLayout, mount);
+    expect(mount.querySelector('.superdoc-vector-shape')?.textContent).toContain('Page 2');
   });
 
   describe('resolved paragraph rendering', () => {

@@ -1,4 +1,11 @@
-import type { FlowBlock, HeaderFooterLayout, Measure, ParagraphBlock, TableBlock } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  HeaderFooterLayout,
+  ListBlock,
+  Measure,
+  ParagraphBlock,
+  TableBlock,
+} from '@superdoc/contracts';
 import { layoutHeaderFooter, type HeaderFooterConstraints } from '@superdoc/layout-engine';
 import { MeasureCache } from './cache';
 import { resolveHeaderFooterTokens, cloneHeaderFooterBlocks } from './resolveHeaderFooterTokens';
@@ -143,6 +150,11 @@ function hasPageTokens(blocks: FlowBlock[]): boolean {
   for (const block of blocks) {
     if (block.kind === 'paragraph') {
       if (paragraphHasPageToken(block as ParagraphBlock)) return true;
+    } else if (block.kind === 'list') {
+      const list = block as ListBlock;
+      for (const item of list.items ?? []) {
+        if (paragraphHasPageToken(item.paragraph)) return true;
+      }
     } else if (block.kind === 'table') {
       // SD-1332: PAGE fields can live inside table cells in headers/footers
       // (Word's typical layout). Skipping tables here would take the
@@ -168,6 +180,11 @@ function hasPageNumberTokensRequiringPerPageLayout(blocks: FlowBlock[]): boolean
   for (const block of blocks) {
     if (block.kind === 'paragraph') {
       if (paragraphRequiresPerPageLayout(block as ParagraphBlock)) return true;
+    } else if (block.kind === 'list') {
+      const list = block as ListBlock;
+      for (const item of list.items ?? []) {
+        if (paragraphRequiresPerPageLayout(item.paragraph)) return true;
+      }
     } else if (block.kind === 'table') {
       const table = block as TableBlock;
       for (const row of table.rows ?? []) {
@@ -332,6 +349,7 @@ export async function layoutHeaderFooterWithCache(
       blocks: FlowBlock[];
       measures: Measure[];
       fragments: HeaderFooterLayout['pages'][0]['fragments'];
+      numberText?: string;
     }> = [];
 
     for (const pageNum of pagesToLayout) {
@@ -372,6 +390,7 @@ export async function layoutHeaderFooterWithCache(
         blocks: clonedBlocks,
         measures,
         fragments: fragmentsWithLines,
+        numberText: displayText,
       });
     }
 
@@ -390,6 +409,7 @@ export async function layoutHeaderFooterWithCache(
         number: p.number,
         displayNumber: p.displayNumber,
         fragments: p.fragments,
+        numberText: p.numberText,
         blocks: p.blocks,
         measures: p.measures,
       })),

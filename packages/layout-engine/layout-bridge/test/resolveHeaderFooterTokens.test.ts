@@ -81,7 +81,7 @@ describe('resolveHeaderFooterTokens', () => {
     resolveHeaderFooterTokens(blocks, 3, 10, 'iii', 7);
 
     const block = blocks[0] as ParagraphBlock;
-    expect(block.runs[0].text).toBe('-7-');
+    expect(block.runs[0].text).toBe('- 7 -');
     expect((block.runs[0] as TextRun).token).toBe('pageNumber');
   });
 

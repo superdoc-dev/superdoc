@@ -38,6 +38,7 @@ import type {
   ResolvedDrawingItem,
   LayoutSourceIdentity,
   LayoutStoryLocator,
+  ListBlock,
 } from '@superdoc/contracts';
 import {
   LAYOUT_BOUNDARY_SCHEMA,
@@ -257,6 +258,83 @@ type PageDomState = {
   element: HTMLElement;
   fragments: FragmentDomState[];
 };
+
+function pageContextSignature(context: FragmentRenderContext): string {
+  return [context.pageNumber, context.totalPages, context.pageNumberText ?? '', context.displayPageNumber ?? ''].join(
+    '|',
+  );
+}
+
+function hasPageContextTokenInShapeText(textContent: ShapeTextContent | undefined): boolean {
+  return (
+    Array.isArray(textContent?.parts) &&
+    textContent.parts.some((part) => part.fieldType === 'PAGE' || part.fieldType === 'NUMPAGES')
+  );
+}
+
+function hasPageContextTokenInShapeGroup(shapes: readonly ShapeGroupChild[] | undefined): boolean {
+  return (
+    Array.isArray(shapes) &&
+    shapes.some((shape) => {
+      if (shape.shapeType !== 'vectorShape') {
+        return false;
+      }
+      return hasPageContextTokenInShapeText(shape.attrs.textContent);
+    })
+  );
+}
+
+function hasPageContextTokenInBlock(block: FlowBlock | undefined): boolean {
+  if (!block) return false;
+  if (block.kind === 'paragraph') {
+    for (const run of (block as ParagraphBlock).runs) {
+      if ('token' in run && (run.token === 'pageNumber' || run.token === 'totalPageCount')) {
+        return true;
+      }
+    }
+  } else if (block.kind === 'list') {
+    const list = block as ListBlock;
+    for (const item of list.items ?? []) {
+      if (hasPageContextTokenInBlock(item.paragraph)) {
+        return true;
+      }
+    }
+  } else if (block.kind === 'table') {
+    const table = block as TableBlock;
+    for (const row of table.rows ?? []) {
+      for (const cell of row.cells ?? []) {
+        const cellBlocks: FlowBlock[] = cell.blocks
+          ? (cell.blocks as FlowBlock[])
+          : cell.paragraph
+            ? [cell.paragraph]
+            : [];
+        if (cellBlocks.some(hasPageContextTokenInBlock)) {
+          return true;
+        }
+      }
+    }
+  } else if (block.kind === 'drawing') {
+    const drawing = block as DrawingBlock;
+    if (drawing.drawingKind === 'vectorShape') {
+      return hasPageContextTokenInShapeText(drawing.textContent);
+    }
+    if (drawing.drawingKind === 'shapeGroup') {
+      return hasPageContextTokenInShapeGroup(drawing.shapes);
+    }
+  }
+  return false;
+}
+
+function needsRebuildForPageContext(
+  currentContext: FragmentRenderContext,
+  nextContext: FragmentRenderContext,
+  resolvedItem: ResolvedPaintItem | undefined,
+): boolean {
+  const block = resolvedItem?.kind === 'fragment' && 'block' in resolvedItem ? resolvedItem.block : undefined;
+  return (
+    pageContextSignature(currentContext) !== pageContextSignature(nextContext) && hasPageContextTokenInBlock(block)
+  );
+}
 
 /**
  * Rendering context passed to fragment renderers containing page metadata.
@@ -2297,6 +2375,7 @@ export class DomPainter {
           (current.element.dataset.betweenBorder === 'true') !== (betweenInfo?.showBetweenBorder ?? false) ||
           (current.element.dataset.suppressTopBorder === 'true') !== (betweenInfo?.suppressTopBorder ?? false) ||
           (current.element.dataset.gapBelow ?? '') !== (betweenInfo?.gapBelow ? String(betweenInfo.gapBelow) : '');
+        const pageContextChanged = needsRebuildForPageContext(current.context, contextBase, resolvedItem);
         // Verify the position mapping is reliable: if mapping the old pmStart doesn't produce
         // the expected new pmStart, the mapping is degenerate (e.g. full-document paste) and
         // we must rebuild to get correct span position attributes.
@@ -2312,6 +2391,7 @@ export class DomPainter {
           current.signature !== resolvedSig ||
           sdtBoundaryMismatch ||
           betweenBorderMismatch ||
+          pageContextChanged ||
           mappingUnreliable;
 
         if (needsRebuild) {

@@ -160,6 +160,7 @@ export const textRunMergeSignature = (run: TextRun): string =>
     highlight: run.highlight ?? null,
     textTransform: run.textTransform ?? null,
     token: run.token ?? null,
+    pageNumberFieldFormat: run.pageNumberFieldFormat ?? null,
     pageRefMetadata: run.pageRefMetadata ?? null,
     trackedChange: run.trackedChange ?? null,
     trackedChanges: run.trackedChanges ?? null,

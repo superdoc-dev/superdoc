@@ -13,8 +13,24 @@ describe('preProcessPageInstruction', () => {
       {
         name: 'sd:autoPageNumber',
         type: 'element',
+        attributes: { instruction: 'PAGE' },
       },
     ]);
+  });
+
+  it.each([
+    ['PAGE', undefined],
+    ['PAGE \\* roman', 'lowerRoman'],
+    ['PAGE \\* Roman \\* MERGEFORMAT', 'upperRoman'],
+    ['PAGE \\* ROMAN', 'upperRoman'],
+    ['page \\* Arabic', 'decimal'],
+    ['PAGE \\* Unsupported \\* MERGEFORMAT', undefined],
+  ])('preserves PAGE instruction and parses supported value format: %s', (instruction, pageNumberFormat) => {
+    const result = preProcessPageInstruction([], instruction, mockDocx);
+    expect(result[0].attributes).toEqual({
+      instruction,
+      ...(pageNumberFormat ? { pageNumberFormat } : {}),
+    });
   });
 
   it('should extract rPr from nodes', () => {
@@ -33,6 +49,7 @@ describe('preProcessPageInstruction', () => {
       {
         name: 'sd:autoPageNumber',
         type: 'element',
+        attributes: { instruction: 'PAGE' },
         elements: [{ name: 'w:rPr', elements: [{ name: 'w:b' }] }],
       },
     ]);
@@ -56,6 +73,7 @@ describe('preProcessPageInstruction', () => {
       {
         name: 'sd:autoPageNumber',
         type: 'element',
+        attributes: { instruction: 'PAGE' },
         elements: [fieldRunRPr],
       },
     ]);
@@ -120,6 +138,7 @@ describe('preProcessPageInstruction', () => {
       {
         name: 'sd:autoPageNumber',
         type: 'element',
+        attributes: { instruction: 'PAGE' },
         elements: [contentRPr],
       },
     ]);
@@ -135,6 +154,7 @@ describe('preProcessPageInstruction', () => {
       {
         name: 'sd:autoPageNumber',
         type: 'element',
+        attributes: { instruction: 'PAGE' },
       },
     ]);
   });

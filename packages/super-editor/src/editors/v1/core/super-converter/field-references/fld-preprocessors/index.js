@@ -15,6 +15,7 @@ import { preProcessBibliographyInstruction } from './bibliography-preprocessor.j
 import { preProcessTaInstruction } from './ta-preprocessor.js';
 import { preProcessToaInstruction } from './toa-preprocessor.js';
 import { preProcessDocumentStatInstruction } from './document-stat-preprocessor.js';
+import { extractFieldKeyword } from '../field-keyword.js';
 
 /**
  * @typedef {object} FieldPreprocessorOptions
@@ -37,7 +38,10 @@ import { preProcessDocumentStatInstruction } from './document-stat-preprocessor.
  * @returns {InstructionPreProcessor | null} The pre-processor function or null if not found.
  */
 export const getInstructionPreProcessor = (instruction) => {
-  const instructionType = instruction.trim().split(/\s+/)[0];
+  const rawInstructionType = String(instruction ?? '')
+    .trim()
+    .split(/\s+/)[0];
+  const instructionType = extractFieldKeyword(instruction);
   switch (instructionType) {
     case 'PAGE':
       return preProcessPageInstruction;
@@ -65,6 +69,7 @@ export const getInstructionPreProcessor = (instruction) => {
     case 'STYLEREF':
       return preProcessStylerefInstruction;
     case 'SEQ':
+      if (rawInstructionType !== 'SEQ') return null;
       return preProcessSeqInstruction;
     case 'CITATION':
       return preProcessCitationInstruction;

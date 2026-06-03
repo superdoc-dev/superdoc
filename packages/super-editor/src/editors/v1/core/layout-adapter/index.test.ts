@@ -678,6 +678,31 @@ describe('toFlowBlocks', () => {
       });
     });
 
+    it('preserves PAGE field-local page number format on token runs', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'page-number',
+                attrs: { pageNumberFormat: 'upperRoman' },
+              },
+            ],
+          },
+        ],
+      };
+
+      const {
+        blocks: [block],
+      } = toFlowBlocks(pmDoc);
+      expect(block.runs[0]).toMatchObject({
+        token: 'pageNumber',
+        pageNumberFieldFormat: { format: 'upperRoman' },
+      });
+    });
+
     it('preserves bold formatting on page number token', () => {
       const pmDoc = {
         type: 'doc',

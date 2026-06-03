@@ -55,6 +55,7 @@ import { enumerateStructuralRowChanges } from '../trackChangesHelpers/structural
  * @property {string} parentId
  * @property {string} parentSide
  * @property {'parent'|'child'|'standalone'} overlapRole
+ * @property {boolean} [structural] True for a whole-table structural segment (no inline mark).
  * @property {Array<number>} [nodePath] optional diagnostics nodePath.
  */
 

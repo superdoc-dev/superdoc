@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deriveBlockVersion, sourceAnchorSignature } from './versionSignature.js';
-import type { FlowBlock, ImageBlock, ImageRun, SourceAnchor, TableBlock, TextRun } from '@superdoc/contracts';
+import type { FlowBlock, ImageBlock, ImageRun, SourceAnchor, TableBlock, TabRun, TextRun } from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
   it('is stable for equivalent source anchors with different object key order', () => {
@@ -63,6 +63,36 @@ describe('deriveBlockVersion - bidi', () => {
   it('is stable when bidi is identical', () => {
     const a = deriveBlockVersion(makeParagraph({ rtl: true }));
     const b = deriveBlockVersion(makeParagraph({ rtl: true }));
+    expect(a).toBe(b);
+  });
+});
+
+describe('deriveBlockVersion - tab underline', () => {
+  const makeTabParagraph = (underline?: { style?: string; color?: string }): FlowBlock => ({
+    kind: 'paragraph',
+    id: 'p1',
+    attrs: {},
+    runs: [{ kind: 'tab', text: '\t', pmStart: 1, pmEnd: 2, ...(underline ? { underline } : {}) } as TabRun],
+  });
+
+  // SD-3330: toggling underline on a tab must change the block version, otherwise the
+  // DomPainter reuses the cached (non-underlined) fragment and the underline does not
+  // appear until an unrelated edit forces a rebuild.
+  it('produces a different version when a tab gains an underline', () => {
+    const plain = deriveBlockVersion(makeTabParagraph());
+    const underlined = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
+    expect(underlined).not.toBe(plain);
+  });
+
+  it('produces a different version when the tab underline color changes', () => {
+    const black = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
+    const red = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#FF0000' }));
+    expect(red).not.toBe(black);
+  });
+
+  it('is stable when the tab underline is identical', () => {
+    const a = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
+    const b = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
     expect(a).toBe(b);
   });
 });

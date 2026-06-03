@@ -5,7 +5,9 @@ import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { compileTrackedEdit } from '../review-model/overlap-compiler.js';
 import { makeTextInsertIntent, makeTextDeleteIntent, makeTextReplaceIntent } from '../review-model/edit-intent.js';
 import { stampInsertedTableRows } from './stampInsertedTableRows.js';
+import { stampDeletedTableRows } from './stampDeletedTableRows.js';
 import { markInsertion } from './markInsertion.js';
+import { markDeletion } from './markDeletion.js';
 
 /**
  * Whether a slice's top-level content contains a `table` node (directly, or
@@ -22,6 +24,35 @@ const sliceContainsTable = (slice) => {
   content.forEach((node) => {
     if (found) return;
     if (node?.type?.name === 'table') found = true;
+  });
+  return found;
+};
+
+/**
+ * Whether the range `[from, to)` in `doc` fully contains at least one WHOLE
+ * `table` node (the table node starts at or after `from` and ends at or before
+ * `to`). This is the deletion analog of `sliceContainsTable`: a whole-table
+ * delete is a `tr.delete(tableStart, tableEnd)` (the shape `deleteTable` emits),
+ * so the deleted range exactly brackets the table node.
+ *
+ * @param {{ doc: import('prosemirror-model').Node, from: number, to: number }} options
+ * @returns {boolean}
+ */
+const rangeContainsWholeTable = ({ doc, from, to }) => {
+  if (to <= from) return false;
+  const boundedFrom = Math.max(0, from);
+  const boundedTo = Math.min(doc.content.size, to);
+  if (boundedTo <= boundedFrom) return false;
+
+  let found = false;
+  doc.nodesBetween(boundedFrom, boundedTo, (node, pos) => {
+    if (found) return false;
+    if (node.type?.name !== 'table') return true;
+    if (pos >= boundedFrom && pos + node.nodeSize <= boundedTo) {
+      found = true;
+      return false;
+    }
+    return true;
   });
   return found;
 };
@@ -341,6 +372,127 @@ const tryStructuralTableInsert = ({ newTr, step, map, user, date }) => {
 };
 
 /**
+ * Apply a tracked STRUCTURAL delete for a ReplaceStep whose deleted range fully
+ * brackets one or more whole `table` nodes (the shape `deleteTable` /
+ * `deleteTableWhenSelected` / select-table-then-Delete emit:
+ * `tr.delete(tableStart, tableEnd)` with an EMPTY slice).
+ *
+ * A tracked deletion keeps the content VISIBLE (struck-through / red) rather
+ * than removing it, so this path is the inverse of `tryStructuralTableInsert`:
+ * it does NOT apply the removal step. Instead it leaves the table(s) in place
+ * and makes them tracked-deleted:
+ *
+ *   1. Do NOT apply the original ReplaceStep — the table must stay so the
+ *      reviewer can accept (remove) or reject (restore) it later.
+ *   2. Mark every INLINE text run in the deleted range with a `trackDelete`
+ *      mark via `markDeletion` (so cell text and any non-table text in the
+ *      range renders struck-through). `markDeletion` skips table rows/cells
+ *      structure nodes by design and only marks leaf inline text, so the table
+ *      nodes themselves are preserved. An EMPTY table contributes no cell text,
+ *      which is fine — step 3 alone makes it a tracked deletion.
+ *   3. Stamp each WHOLE table in the range with a structural `rowDelete`
+ *      revision on every row (one shared `revisionGroupId` per table) via
+ *      `stampDeletedTableRows`, matching the shape the importer lands from
+ *      `<w:del>` in `<w:trPr>`.
+ *   4. Set the tracked-changes / comments meta and report `handled: true` so
+ *      `replaceStep` does NOT fall through to applying the untracked removal.
+ *
+ * Content safety for partial selections: because we never apply the removal and
+ * `markDeletion` marks ALL inline text in `[from, to)` (table cell text AND any
+ * text outside a table that the selection happened to include), no live content
+ * is dropped untracked even when the range is a mix of whole table(s) and
+ * surrounding text. Only WHOLE tables fully contained in the range receive the
+ * `rowDelete` stamp; a partially-overlapping table is left to the structural
+ * enumerator's fail-closed handling (it never becomes a decidable whole-table
+ * change and is therefore never removed). Partial row/column/cell deletes are
+ * out of scope (this branch is only taken when at least one WHOLE table is
+ * fully bracketed).
+ *
+ * `markDeletion` (addMark) and `stampDeletedTableRows` (setNodeMarkup) do not
+ * change node sizes and we apply no removal step, so the outer `map` stays the
+ * identity for this step and subsequent original steps remap correctly.
+ *
+ * @param {{ newTr: import('prosemirror-state').Transaction, step: import('prosemirror-transform').ReplaceStep, user: object, date: string }} options
+ * @returns {{ handled: boolean }}
+ */
+const tryStructuralTableDelete = ({ newTr, step, map, originalStep, originalStepIndex, tr, user, date }) => {
+  const from = step.from;
+  const to = step.to;
+
+  // Collect the whole tables fully bracketed by the range.
+  /** @type {Array<{ from: number, to: number }>} */
+  const tableRanges = [];
+  newTr.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.type?.name !== 'table') return true;
+    if (pos >= from && pos + node.nodeSize <= to) {
+      tableRanges.push({ from: pos, to: pos + node.nodeSize });
+      return false; // don't descend into a captured table
+    }
+    return true;
+  });
+
+  // Only handle a CLEAN whole-table delete: the range must not include inline
+  // text OUTSIDE the table(s). A mixed selection (surrounding text + table)
+  // would share one deletion id across inside/outside text via `markDeletion`,
+  // breaking structural reject cleanup and the bubble subsumption. Decline so
+  // such ranges fall through to the normal inline-deletion path instead.
+  let hasOutsideText = false;
+  newTr.doc.nodesBetween(from, to, (node, pos) => {
+    if (hasOutsideText) return false;
+    if (node.isText && node.text && !tableRanges.some((r) => pos >= r.from && pos < r.to)) {
+      hasOutsideText = true;
+      return false;
+    }
+    return undefined;
+  });
+  if (hasOutsideText) return { handled: false };
+
+  // Tracked-delete the cell text inside the table(s) (all inside-table now).
+  // markDeletion marks only leaf inline text and keeps table structure nodes.
+  let hasInlineText = false;
+  newTr.doc.nodesBetween(from, to, (node) => {
+    if (node.isText && node.text) {
+      hasInlineText = true;
+      return false;
+    }
+    return undefined;
+  });
+  if (hasInlineText) {
+    markDeletion({ tr: newTr, from, to, user, date });
+  }
+
+  // Stamp each whole table's rows with a structural rowDelete revision (shared
+  // revisionGroupId per table). Required for an empty table (no cell text) and
+  // for the structural "Deleted table" change/bubble in all cases.
+  const stamped = stampDeletedTableRows({ tr: newTr, from, to, user, date });
+
+  // Nothing trackable — decline so the caller can fall through.
+  if (!stamped && !hasInlineText) {
+    return { handled: false };
+  }
+
+  // We applied NO removal (the table stays). Cancel the original step's
+  // positional effect on the outer `map` so any LATER original step in the same
+  // transaction lands in the kept-table document instead of drifting backward by
+  // the un-removed table's size. Mirrors the inline-deletion map dance; a no-op
+  // for a single-step deleteTable (no later steps to remap).
+  if (map && originalStep && tr) {
+    try {
+      const invertStep = originalStep.invert(tr.docs[originalStepIndex]).map(map);
+      if (invertStep) map.appendMap(invertStep.getMap());
+    } catch {
+      // Best effort: leave the map unchanged.
+    }
+  }
+
+  // Surface meta so the bubble/comments pipeline sees the tracked deletion.
+  newTr.setMeta(TrackChangesBasePluginKey, {});
+  newTr.setMeta(CommentsPluginKey, { type: 'force' });
+
+  return { handled: true };
+};
+
+/**
  * Try to route a text-shaped ReplaceStep through the overlap-aware compiler.
  *
  * Returns one of:
@@ -377,6 +529,34 @@ const tryCompileStep = ({
     if (structural.handled) return structural;
     // If the structural insert could not apply (e.g. PM rejected the step),
     // fall through to the normal compiler path rather than dropping the edit.
+  }
+
+  // Structural delete: an empty-slice deletion whose range fully brackets one
+  // or more WHOLE `table` nodes (the shape `deleteTable` /
+  // `deleteTableWhenSelected` / select-table-then-Delete emit). A tracked
+  // deletion must keep the table VISIBLE (struck-through), so route it through
+  // the dedicated structural path that stamps `rowDelete` + marks cell text
+  // WITHOUT removing the table. This must run before the empty-deletion
+  // fall-through below, which would otherwise let the structural fallback
+  // remove an empty table untracked (data loss of the tracked intent). SD-3360.
+  if (
+    step.from !== step.to &&
+    step.slice.content.size === 0 &&
+    rangeContainsWholeTable({ doc: newTr.doc, from: step.from, to: step.to })
+  ) {
+    const structural = tryStructuralTableDelete({
+      newTr,
+      step,
+      map,
+      originalStep,
+      originalStepIndex,
+      tr,
+      user,
+      date,
+    });
+    if (structural.handled) return structural;
+    // If the structural delete declined (e.g. nothing trackable), fall through
+    // to the normal paths rather than dropping the edit.
   }
 
   // Empty structural deletion handled by the structural branch above.

@@ -236,7 +236,22 @@ const resolveTargetToSelections = ({ graph, normalized }) => {
     return { ok: true, selections: sel };
   }
   if (normalized.kind === 'id') {
-    const change = graph.changes.get(normalized.id);
+    // Prefer a STRUCTURAL whole-table change for a shared id. Cell text typed in
+    // a tracked-inserted row inherits the row's revision id, so the same id can
+    // map to BOTH the inline text change and the structural table change. The
+    // structural change registers its public-id alias only when the key is free
+    // (review-graph), so `changes.get(id)` can return the inline child instead of
+    // the table. Deciding the "Inserted table" bubble must resolve the structural
+    // change, which then cascades to the contained cell text in ONE action —
+    // otherwise the user has to accept once for the text and again for the table.
+    let change = null;
+    for (const candidate of graph.changes.values()) {
+      if (candidate?.type === CanonicalChangeType.Structural && String(candidate.id) === String(normalized.id)) {
+        change = candidate;
+        break;
+      }
+    }
+    if (!change) change = graph.changes.get(normalized.id);
     if (!change)
       return { ok: false, failure: failure('TARGET_NOT_FOUND', `no tracked change with id "${normalized.id}".`) };
     return {
@@ -638,11 +653,19 @@ const buildMutationPlan = ({ state, graph, selections, decision, replacements })
   // these in the main loop; `cascadedInsideStayingTable` dedups so they are not
   // planned twice. Done after the main loop so positions are consistent.
   if (structuralTableStays.length > 0) {
+    // Skip by OBJECT identity, not by `change.id`. Cell text typed in a
+    // tracked-inserted row inherits the row's revision id, so the inline text
+    // change and the structural table change SHARE an id. An id-based skip
+    // (`touched.has(change.id)`) would treat the just-decided table as if it
+    // also covered the inline child and wrongly exclude it from the cascade —
+    // leaving the cell text tracked after the table is accepted. The decided
+    // (selected) changes and already-cascaded children are distinct objects.
+    const decidedObjects = new Set(selections.map((selection) => selection.change));
     const seenStaying = new Set();
     for (const change of graph.changes.values()) {
       if (seenStaying.has(change)) continue;
       seenStaying.add(change);
-      if (touched.has(change.id)) continue;
+      if (decidedObjects.has(change) || cascadedInsideStayingTable.has(change.id)) continue;
       if (!isInsideStayingTable(change)) continue;
       const failureResult = planContainedInlineChild(change);
       if (failureResult) return { ok: false, failure: failureResult };

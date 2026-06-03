@@ -4,6 +4,27 @@ import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { compileTrackedEdit } from '../review-model/overlap-compiler.js';
 import { makeTextInsertIntent, makeTextDeleteIntent, makeTextReplaceIntent } from '../review-model/edit-intent.js';
+import { stampInsertedTableRows } from './stampInsertedTableRows.js';
+import { markInsertion } from './markInsertion.js';
+
+/**
+ * Whether a slice's top-level content contains a `table` node (directly, or
+ * wrapped — the toolbar's `insertTable` emits `[paragraph, table, paragraph]`
+ * when the new table would otherwise sit adjacent to a document boundary).
+ *
+ * @param {import('prosemirror-model').Slice | null | undefined} slice
+ * @returns {boolean}
+ */
+const sliceContainsTable = (slice) => {
+  const content = slice?.content;
+  if (!content) return false;
+  let found = false;
+  content.forEach((node) => {
+    if (found) return;
+    if (node?.type?.name === 'table') found = true;
+  });
+  return found;
+};
 
 /**
  * Given a range (from..to) and a count of characters ("the Nth character in that range"),
@@ -222,6 +243,104 @@ export const replaceStep = ({
 };
 
 /**
+ * Apply a tracked STRUCTURAL insert for a ReplaceStep whose inserted slice
+ * contains a whole `table` node.
+ *
+ * The inline overlap-compiler is text-centric: it produces an insertion mark
+ * over inline text. An empty (freshly authored) table has no inline text, so
+ * the compiler fails closed and the table would otherwise land untracked. This
+ * path instead applies the original step verbatim (preserving any separator
+ * paragraphs the `insertTable` command wrapped around the table) and then makes
+ * the insertion tracked:
+ *
+ *   1. Apply the original ReplaceStep to `newTr`. For a replace
+ *      (`from !== to`) this also removes the replaced range. The common toolbar
+ *      shape replaces an empty paragraph (`from=0, to=2` in an empty doc), so
+ *      there is no live content to preserve; the inserted slice simply takes
+ *      its place. We do NOT tracked-delete the replaced empty paragraph — it
+ *      carries no inline content and Word treats a table inserted over the
+ *      caret's empty paragraph as a pure structural insert.
+ *   2. Mark every inserted INLINE text run (e.g. text the slice's wrapping
+ *      separator paragraphs may carry, or pre-filled cell text) with a tracked
+ *      insertion mark via `markInsertion`. An empty new table contributes none,
+ *      which is fine — `markInsertion` skips table internals by design.
+ *   3. Stamp each inserted table's rows with a structural `rowInsert` revision
+ *      (one shared `revisionGroupId` per table) via `stampInsertedTableRows`,
+ *      matching the shape the importer lands from `<w:ins>` in `<w:trPr>`.
+ *   4. Keep the outer `map` consistent (append the step's map) so subsequent
+ *      original steps in the same transaction remap correctly, and report
+ *      `insertedTo` so `trackedTransaction` places the caret after the table.
+ *
+ * `setNodeMarkup` (step 3) and `addMark` (step 2) do not change node sizes, so
+ * the mapping established in step 1 stays valid.
+ *
+ * @param {{ newTr: import('prosemirror-state').Transaction, step: import('prosemirror-transform').ReplaceStep, map: import('prosemirror-transform').Mapping, user: object, date: string }} options
+ * @returns {{ handled: boolean }}
+ */
+const tryStructuralTableInsert = ({ newTr, step, map, user, date }) => {
+  const beforeSteps = newTr.steps.length;
+  const beforeSize = newTr.doc.content.size;
+  const insertAt = step.from;
+  const replacedLength = step.to - step.from;
+
+  // Only the no-real-content insert/replace is safe to fast-path here — e.g.
+  // inserting a table at the caret in an empty paragraph (the common toolbar
+  // shape: ReplaceStep from=0 to=2 replacing the empty leading paragraph). If
+  // the replaced range holds real text, applying the step directly would delete
+  // that content WITHOUT a tracked deletion (data loss). Bail so it is handled
+  // by the normal tracked path instead of silently dropping live content.
+  if (step.from !== step.to && newTr.doc.textBetween(step.from, step.to).length > 0) {
+    return { handled: false };
+  }
+
+  // 1. Apply the original step (insert slice, replacing [from, to)).
+  if (newTr.maybeStep(step).failed) {
+    return { handled: false };
+  }
+
+  // Keep the outer mapping consistent with the other replaceStep branches so
+  // later original steps in this transaction land where the user expects.
+  const stepMap = newTr.steps[beforeSteps].getMap();
+  map.appendMap(stepMap);
+
+  // Inserted range in newTr.doc space. The step deletes `[from, to)` and
+  // inserts the slice at `from`, so the new content starts exactly at `from`.
+  // Its span is the net document growth plus the replaced length (this is
+  // exact regardless of the slice's open depth). Mapping `from` through the
+  // step map collapses both biases onto the deletion point and cannot bracket
+  // the freshly inserted nodes, so derive the range from the doc delta instead.
+  const insertedFrom = insertAt;
+  const insertedTo = insertAt + (newTr.doc.content.size - beforeSize) + replacedLength;
+
+  // 2. Mark inserted inline text (separator-paragraph text, pre-filled cell
+  //    text). markInsertion skips table rows/cells internals by design, so an
+  //    empty table contributes nothing here.
+  if (insertedTo > insertedFrom) {
+    let hasInlineText = false;
+    newTr.doc.nodesBetween(insertedFrom, insertedTo, (node) => {
+      if (node.isText && node.text) {
+        hasInlineText = true;
+        return false;
+      }
+    });
+    if (hasInlineText) {
+      markInsertion({ tr: newTr, from: insertedFrom, to: insertedTo, user, date });
+    }
+  }
+
+  // 3. Stamp each whole inserted table's rows with a structural rowInsert
+  //    revision (shared revisionGroupId per table).
+  stampInsertedTableRows({ tr: newTr, from: insertedFrom, to: insertedTo, user, date });
+
+  // 4. Surface insertion meta so the caret lands after the table and the
+  //    bubble/comments pipeline sees a tracked insert.
+  newTr.setMeta(TrackChangesBasePluginKey, { insertedTo });
+  newTr.setMeta(CommentsPluginKey, { type: 'force' });
+
+  return { handled: true };
+};
+
+/**
  * Try to route a text-shaped ReplaceStep through the overlap-aware compiler.
  *
  * Returns one of:
@@ -247,6 +366,19 @@ const tryCompileStep = ({
   date,
   replacements,
 }) => {
+  // Structural insert: the inserted slice introduces a whole `table` node
+  // (possibly wrapped by the separator paragraphs `insertTable` emits at a
+  // document boundary). The inline-text-centric compiler cannot represent an
+  // empty table — it has no inline text to mark — so it fails closed and the
+  // table would land untracked. Route such inserts through the dedicated
+  // structural path instead (SD-3360).
+  if (step.slice.content.size > 0 && sliceContainsTable(step.slice)) {
+    const structural = tryStructuralTableInsert({ newTr, step, map, user, date });
+    if (structural.handled) return structural;
+    // If the structural insert could not apply (e.g. PM rejected the step),
+    // fall through to the normal compiler path rather than dropping the edit.
+  }
+
   // Empty structural deletion handled by the structural branch above.
   if (step.from !== step.to && step.slice.content.size === 0) {
     let hasInlineContent = false;
@@ -385,6 +517,22 @@ const tryCompileStep = ({
   }
   newTr.setMeta(TrackChangesBasePluginKey, meta);
   newTr.setMeta(CommentsPluginKey, { type: 'force' });
+
+  // Structural authoring: the compiler/markInsertion only mark inline content
+  // and deliberately skip table internals. If this insertion introduced a
+  // whole table, stamp a `rowInsert` revision on each of its rows so the table
+  // is tracked as ONE whole-table insert (matching imported tracked tables).
+  // The inserted range is [step.from, insertedTo); setNodeMarkup keeps sizes
+  // stable so it does not disturb the mapping established above.
+  if (typeof result.insertedTo === 'number' && result.insertedTo > step.from) {
+    stampInsertedTableRows({
+      tr: newTr,
+      from: step.from,
+      to: result.insertedTo,
+      user,
+      date,
+    });
+  }
 
   return { handled: true, sizeDelta: newTr.doc.content.size - beforeSize };
 };

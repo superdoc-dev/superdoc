@@ -115,6 +115,47 @@ describe('structural decide semantics', () => {
     expect(rowTrackChangeOf(next)).toBeNull();
   });
 
+  it('accepting the table also clears cell text that SHARES the structural revision id (one action)', () => {
+    // Text typed in a tracked-inserted row inherits the row's revision id, so the
+    // inline trackInsert mark and the structural change SHARE an id. Regression for
+    // the id-collision: the cascade must still reach the inline child (object
+    // identity, not change.id) so accepting the table leaves zero tracked marks.
+    const schema = createReviewGraphTestSchema();
+    const id = '1';
+    const tc = insertTrackChange(id);
+    const insMark = schema.marks[TrackInsertMarkName].create({
+      id,
+      author: ALICE.name,
+      authorEmail: ALICE.email,
+      date: tc.date,
+    });
+    const cellParagraph = schema.nodes.paragraph.create({}, [schema.text('q', [insMark])]);
+    const cell = schema.nodes.tableCell.create({}, [cellParagraph]);
+    const row = schema.nodes.tableRow.create({ trackChange: tc }, [cell]);
+    const table = schema.nodes.table.create({}, [row]);
+    const before = schema.nodes.paragraph.create({}, [schema.text('Before.')]);
+    const after = schema.nodes.paragraph.create({}, [schema.text('After.')]);
+    const doc = schema.nodes.doc.create({}, [before, table, after]);
+    const state = EditorState.create({ schema, doc });
+
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'accept',
+      target: { kind: 'id', id },
+    });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+
+    // Table stays, row revision cleared.
+    expect(next.doc.child(1).type.name).toBe('table');
+    expect(next.doc.child(1).child(0).attrs.trackChange).toBeNull();
+    // The shared-id cell text keeps its content but loses the trackInsert mark.
+    const cellText = next.doc.child(1).child(0).child(0).child(0).child(0);
+    expect(cellText.text).toBe('q');
+    expect((cellText.marks || []).some((m) => m.type.name === TrackInsertMarkName)).toBe(false);
+  });
+
   it('reject insertion removes the whole table node', () => {
     const schema = createReviewGraphTestSchema();
     const { state } = stateWithTrackedTable({ schema, trackChange: insertTrackChange('1') });

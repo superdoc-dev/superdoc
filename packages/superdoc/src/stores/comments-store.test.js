@@ -1540,6 +1540,279 @@ describe('comments-store', () => {
     });
   });
 
+  // SD-3360b: an inline tracked change whose document range is INSIDE a
+  // decidable whole-table structural change must NOT become a separate review
+  // item. Suppression happens at the SOURCE (createCommentForTrackChanges): no
+  // comment object is created/kept, so there is no floating bubble AND no
+  // active-on-click dialog (the active-comment path looks the comment up by id;
+  // with no comment object there is nothing to activate). The underlying
+  // trackInsert/trackDelete mark is left untouched. Accept/reject of the single
+  // structural bubble cascades to the cell text via the decision engine
+  // (range-containment in [tableFrom, tableTo]) — proven in super-editor's
+  // structural-decisions.test.js for both imported and authored tables.
+  describe('suppresses inline tracked-change review items inside a tracked whole-table change (SD-3360b)', () => {
+    const makeEditor = () => {
+      const editorDispatch = vi.fn();
+      const tr = { setMeta: vi.fn() };
+      const state = { doc: {} };
+      const editor = {
+        state,
+        view: { state: { tr }, dispatch: editorDispatch },
+        options: { documentId: 'doc-1' },
+      };
+      // Wire the mock document so the floating filter resolves the same state.
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editor }];
+      return editor;
+    };
+
+    // Shape an inline tracked-change mark + its grouped projection.
+    const inlineInsert = ({ id, from, to }) => {
+      const mark = { type: { name: 'trackInsert' }, attrs: { id } };
+      const raw = { mark, node: {}, from, to };
+      return { raw, grouped: { from, to, insertedMark: raw } };
+    };
+
+    it('creates ONLY the structural bubble — no separate item for cell text inside a tracked inserted table', () => {
+      const editor = makeEditor();
+      const superdoc = { emit: vi.fn(), config: { isInternal: true } };
+
+      // Authored (native) table: NO sourceId → publicId falls back to table:pos:side.
+      const structural = {
+        id: 'table:10:insertion',
+        side: 'insertion',
+        subtype: 'table-insert',
+        tableFrom: 10,
+        tableTo: 40,
+        tablePos: 10,
+        wholeTable: true,
+        decidable: true,
+        rows: [{ from: 11, to: 38, pos: 11, node: {} }],
+        author: 'Alice',
+        authorEmail: 'alice@example.com',
+        date: '2024-01-01',
+        sourceId: '',
+      };
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([structural]);
+
+      // Inline typed char inside a cell, range [20, 21] ⊂ [10, 40].
+      const cellChar = inlineInsert({ id: 'inline-cell-1', from: 20, to: 21 });
+      trackChangesHelpersMock.getTrackChanges.mockReturnValue([cellChar.raw]);
+      groupChangesMock.mockReturnValue([cellChar.grouped]);
+
+      store.commentsList = [];
+      store.syncTrackedChangeComments({ superdoc, editor });
+
+      const trackedItems = store.commentsList.filter((c) => c.trackedChange);
+      // Exactly ONE tracked-change review item: the structural table bubble.
+      expect(trackedItems.map((c) => c.commentId)).toEqual(['table:10:insertion']);
+      expect(trackedItems[0].trackedChangeDisplayType).toBe('tableInsert');
+      // No separate item for the inline cell char (suppressed at the source).
+      expect(store.commentsList.find((c) => c.commentId === 'inline-cell-1')).toBeUndefined();
+
+      // The floating list (belt-and-suspenders) also shows only the structural one.
+      store.editorCommentPositions = {
+        'table:10:insertion': { start: 10, end: 40, bounds: { top: 0, left: 0 } },
+      };
+      expect(store.getFloatingComments.map((c) => c.commentId)).toEqual(['table:10:insertion']);
+    });
+
+    it('prunes an inline comment created on a prior sync once its table becomes/stays tracked (idempotent)', () => {
+      const editor = makeEditor();
+      const superdoc = { emit: vi.fn(), config: { isInternal: true } };
+
+      // Seed an inline tracked-change comment as if a prior sync (before the
+      // whole-table change existed) had created it.
+      store.commentsList = [
+        {
+          commentId: 'inline-cell-1',
+          fileId: 'doc-1',
+          documentId: 'doc-1',
+          trackedChange: true,
+          trackedChangeStory: { kind: 'story', storyType: 'body' },
+          trackedChangeAnchorKey: 'tc::body::inline-cell-1',
+          resolvedTime: null,
+          createdTime: 1,
+          selection: { source: 'super-editor' },
+        },
+      ];
+
+      const structural = {
+        id: 'table:10:insertion',
+        side: 'insertion',
+        subtype: 'table-insert',
+        tableFrom: 10,
+        tableTo: 40,
+        tablePos: 10,
+        wholeTable: true,
+        decidable: true,
+        rows: [{ from: 11, to: 38, pos: 11, node: {} }],
+        author: 'Alice',
+        authorEmail: 'alice@example.com',
+        date: '2024-01-01',
+        sourceId: '',
+      };
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([structural]);
+      const cellChar = inlineInsert({ id: 'inline-cell-1', from: 20, to: 21 });
+      trackChangesHelpersMock.getTrackChanges.mockReturnValue([cellChar.raw]);
+      groupChangesMock.mockReturnValue([cellChar.grouped]);
+
+      store.syncTrackedChangeComments({ superdoc, editor });
+
+      // Inline comment pruned; only the structural bubble remains.
+      expect(store.commentsList.find((c) => c.commentId === 'inline-cell-1')).toBeUndefined();
+      expect(store.commentsList.filter((c) => c.trackedChange).map((c) => c.commentId)).toEqual(['table:10:insertion']);
+
+      // Re-running the sync is a no-op (idempotent) — still exactly one item.
+      store.syncTrackedChangeComments({ superdoc, editor });
+      expect(store.commentsList.filter((c) => c.trackedChange).map((c) => c.commentId)).toEqual(['table:10:insertion']);
+    });
+
+    it('clears the active comment if it pointed at a now-suppressed inline change', () => {
+      const editor = makeEditor();
+      const superdoc = { emit: vi.fn(), config: { isInternal: true } };
+
+      store.commentsList = [
+        {
+          commentId: 'inline-cell-1',
+          fileId: 'doc-1',
+          documentId: 'doc-1',
+          trackedChange: true,
+          trackedChangeStory: { kind: 'story', storyType: 'body' },
+          trackedChangeAnchorKey: 'tc::body::inline-cell-1',
+          resolvedTime: null,
+          createdTime: 1,
+          selection: { source: 'super-editor' },
+        },
+      ];
+      store.activeComment = 'inline-cell-1';
+
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([
+        {
+          id: 'table:10:insertion',
+          side: 'insertion',
+          subtype: 'table-insert',
+          tableFrom: 10,
+          tableTo: 40,
+          tablePos: 10,
+          wholeTable: true,
+          decidable: true,
+          rows: [{ from: 11, to: 38, pos: 11, node: {} }],
+          author: 'Alice',
+          authorEmail: 'alice@example.com',
+          date: '2024-01-01',
+          sourceId: '',
+        },
+      ]);
+      const cellChar = inlineInsert({ id: 'inline-cell-1', from: 20, to: 21 });
+      trackChangesHelpersMock.getTrackChanges.mockReturnValue([cellChar.raw]);
+      groupChangesMock.mockReturnValue([cellChar.grouped]);
+
+      store.syncTrackedChangeComments({ superdoc, editor });
+
+      expect(store.activeComment).toBeNull();
+    });
+
+    it('NEGATIVE: inline tracked change OUTSIDE any table still gets its own review item', () => {
+      const editor = makeEditor();
+      const superdoc = { emit: vi.fn(), config: { isInternal: true } };
+
+      // A tracked inserted table at [10,40]; the inline change is at [50,55] (outside).
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([
+        {
+          id: 'table:10:insertion',
+          side: 'insertion',
+          subtype: 'table-insert',
+          tableFrom: 10,
+          tableTo: 40,
+          tablePos: 10,
+          wholeTable: true,
+          decidable: true,
+          rows: [{ from: 11, to: 38, pos: 11, node: {} }],
+          author: 'Alice',
+          authorEmail: 'alice@example.com',
+          date: '2024-01-01',
+          sourceId: '',
+        },
+      ]);
+      const outside = inlineInsert({ id: 'inline-outside', from: 50, to: 55 });
+      trackChangesHelpersMock.getTrackChanges.mockReturnValue([outside.raw]);
+      groupChangesMock.mockReturnValue([outside.grouped]);
+
+      store.commentsList = [];
+      store.syncTrackedChangeComments({ superdoc, editor });
+
+      expect(store.commentsList.find((c) => c.commentId === 'inline-outside')).toBeTruthy();
+    });
+
+    it('NEGATIVE: a tracked text edit inside a NON-tracked table still gets its own review item', () => {
+      const editor = makeEditor();
+      const superdoc = { emit: vi.fn(), config: { isInternal: true } };
+
+      // The table is NOT tracked → no decidable whole-table change → no suppression.
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([]);
+      const inCell = inlineInsert({ id: 'inline-plain-table', from: 20, to: 25 });
+      trackChangesHelpersMock.getTrackChanges.mockReturnValue([inCell.raw]);
+      groupChangesMock.mockReturnValue([inCell.grouped]);
+
+      store.commentsList = [];
+      store.syncTrackedChangeComments({ superdoc, editor });
+
+      expect(store.commentsList.find((c) => c.commentId === 'inline-plain-table')).toBeTruthy();
+    });
+
+    it('NEGATIVE: a real user comment inside a tracked table is NOT suppressed', () => {
+      const editor = makeEditor();
+      const superdoc = { emit: vi.fn(), config: { isInternal: true } };
+
+      // Seed a real user comment whose range falls inside the tracked table.
+      store.commentsList = [
+        {
+          commentId: 'user-comment-1',
+          fileId: 'doc-1',
+          documentId: 'doc-1',
+          trackedChange: false,
+          resolvedTime: null,
+          createdTime: 1,
+          selection: { source: 'super-editor' },
+        },
+      ];
+
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([
+        {
+          id: 'table:10:insertion',
+          side: 'insertion',
+          subtype: 'table-insert',
+          tableFrom: 10,
+          tableTo: 40,
+          tablePos: 10,
+          wholeTable: true,
+          decidable: true,
+          rows: [{ from: 11, to: 38, pos: 11, node: {} }],
+          author: 'Alice',
+          authorEmail: 'alice@example.com',
+          date: '2024-01-01',
+          sourceId: '',
+        },
+      ]);
+      // No inline tracked changes.
+      trackChangesHelpersMock.getTrackChanges.mockReturnValue([]);
+      groupChangesMock.mockReturnValue([]);
+
+      store.syncTrackedChangeComments({ superdoc, editor });
+
+      expect(store.commentsList.find((c) => c.commentId === 'user-comment-1')).toBeTruthy();
+      store.editorCommentPositions = {
+        'user-comment-1': { start: 20, end: 22, bounds: { top: 0, left: 0 } },
+        'table:10:insertion': { start: 10, end: 40, bounds: { top: 0, left: 0 } },
+      };
+      // Real user comment still floats (only inline TRACKED changes are coalesced).
+      expect(store.getFloatingComments.map((c) => c.commentId).sort()).toEqual([
+        'table:10:insertion',
+        'user-comment-1',
+      ]);
+    });
+  });
+
   it('emits deleted events when replay sync prunes stale tracked-change comments', () => {
     const editorDispatch = vi.fn();
     const tr = { setMeta: vi.fn() };

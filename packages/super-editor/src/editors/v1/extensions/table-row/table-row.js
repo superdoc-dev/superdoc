@@ -80,7 +80,9 @@ import { parseRowHeight } from './helpers/parseRowHeight.js';
  * @property {string} id - Stable SuperDoc-internal revision id (normalized from Word `w:id`).
  * @property {string} [sourceId] - Original Word `w:id`, preserved for round-trip export.
  * @property {string} [author] - Revision author (`w:author`).
+ * @property {string} [authorId] - Acting user id for natively authored revisions (no OOXML counterpart).
  * @property {string} [authorEmail] - Revision author email (`w:authorEmail`).
+ * @property {string} [authorImage] - Acting user avatar for natively authored revisions (no OOXML counterpart).
  * @property {string} [date] - Revision timestamp (`w:date`, ISO-8601).
  * @property {string} [importedAuthor] - Display author for imported revisions.
  * @property {string} [revisionGroupId] - Groups rows belonging to the same logical structural change.

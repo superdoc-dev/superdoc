@@ -628,6 +628,57 @@ export const useCommentsStore = defineStore('comments', () => {
     } = params;
     const normalizedChangeId = changeId != null ? String(changeId) : null;
     const normalizedDocumentId = documentId != null ? String(documentId) : null;
+
+    // Subsume inline tracked changes inside a tracked whole-table change: the
+    // change is owned by the structural "Inserted/Deleted table" bubble and must
+    // not become its own review item (no floating bubble, no active-on-click
+    // dialog, no separate accept). This is the central chokepoint EVERY creation
+    // path funnels through — full resync, targeted resync, AND the live
+    // comments-plugin transaction handler — so suppressing here covers them all.
+    // The structural bubble itself (display tableInsert/tableDelete) is exempt.
+    const isStructuralTableBubble =
+      trackedChangeDisplayType === 'tableInsert' || trackedChangeDisplayType === 'tableDelete';
+    if (!isStructuralTableBubble && normalizedChangeId) {
+      // Resolve the document editor: prefer the event's documentId, fall back to
+      // the active editor so the guard still fires if a path omits documentId.
+      const effectiveDocumentId =
+        normalizedDocumentId ??
+        (superdoc?.activeEditor?.options?.documentId != null ? String(superdoc.activeEditor.options.documentId) : null);
+      const docEditor = effectiveDocumentId ? superdocStore.getDocument(effectiveDocumentId)?.getEditor?.() : null;
+      const docState = docEditor?.state ?? superdoc?.activeEditor?.state ?? null;
+      if (docState) {
+        // (a) The changeId IS a structural whole-table change id (or one of its
+        // row ids) — text typed inside a tracked-inserted row inherits the row's
+        // revision id (the cell text and the row share one OOXML w:id). Owned by
+        // the structural bubble; no separate item.
+        // (a) A distinct-id inline change whose marks are wholly INSIDE a tracked
+        // whole-table range is subsumed. (b) Or the changeId is a structural row
+        // id echoed with NO inline marks (e.g. the comments-plugin re-emitting the
+        // structural change as a generic tracked change) — subsumed too.
+        // The id-set match is gated on "no inline range" so an inline change that
+        // merely SHARES a row/source id but lives OUTSIDE the table is never
+        // wrongly suppressed (its real range fails the table containment check).
+        const tableRanges = computeTrackedTableRangesForState(docState);
+        const ranges = trackChangesHelpers.getTrackChanges(docState, normalizedChangeId);
+        const inRange =
+          tableRanges.length > 0 && ranges.length > 0 && isInlineRangeInsideTrackedTable(ranges, tableRanges);
+        const isStructuralRowIdEcho =
+          ranges.length === 0 && computeStructuralChangeIdsForState(docState).has(normalizedChangeId);
+        const subsumed = inRange || isStructuralRowIdEcho;
+        if (subsumed) {
+          // Block creation AND remove any stale duplicate created earlier (e.g.
+          // on a prior keystroke or via an import/replay bypass). Pruning never
+          // touches the structural bubble (it excludes table-insert/delete).
+          pruneSuppressedInlineTableComments({
+            suppressedIds: new Set([normalizedChangeId]),
+            activeDocumentId: effectiveDocumentId,
+            superdoc,
+            broadcastChanges,
+          });
+          return;
+        }
+      }
+    }
     const hasStoryMetadata =
       trackedChangeStory !== undefined ||
       trackedChangeStoryKind !== undefined ||
@@ -820,9 +871,22 @@ export const useCommentsStore = defineStore('comments', () => {
     const documentId = editor?.options?.documentId != null ? String(editor.options.documentId) : null;
     if (!documentId) return;
 
+    // Same subsumption as the full resync (createCommentForTrackChanges): an inline
+    // tracked change wholly inside a decidable whole-table change is owned by the
+    // structural "Inserted/Deleted table" bubble and must not become its own review
+    // item. This targeted path runs on per-edit resync (e.g. typing in a tracked
+    // table cell), so without this check the cell text would get its own bubble.
+    const trackedTableRanges = computeTrackedTableRangesForState(editor.state);
+    const suppressedInlineTableChangeIds = new Set();
+
     for (const changeId of new Set(changeIds.map((id) => (id != null ? String(id) : null)).filter(Boolean))) {
       const trackedChangesForId = trackChangesHelpers.getTrackChanges(editor.state, changeId);
       if (!trackedChangesForId.length) continue;
+
+      if (trackedTableRanges.length && isInlineRangeInsideTrackedTable(trackedChangesForId, trackedTableRanges)) {
+        suppressedInlineTableChangeIds.add(changeId);
+        continue;
+      }
 
       const marks = collectTrackedChangeMarksByType(trackedChangesForId);
       const params = createOrUpdateTrackedChangeComment({
@@ -840,6 +904,16 @@ export const useCommentsStore = defineStore('comments', () => {
       params.trackedChangeStoryLabel = '';
       params.trackedChangeAnchorKey = buildBodyTrackedChangeAnchorKey(params.changeId ?? changeId);
       handleTrackedChangeUpdate({ superdoc, params, broadcastChanges });
+    }
+
+    // Drop any comment created for a now-subsumed inline change on a prior sync.
+    if (suppressedInlineTableChangeIds.size) {
+      pruneSuppressedInlineTableComments({
+        suppressedIds: suppressedInlineTableChangeIds,
+        activeDocumentId: documentId,
+        superdoc,
+        broadcastChanges,
+      });
     }
   };
 
@@ -1403,6 +1477,14 @@ export const useCommentsStore = defineStore('comments', () => {
 
     const documentId = activeDocumentId;
 
+    // Decidable whole-table tracked-change ranges in the live state. An inline
+    // tracked change wholly inside one of these is subsumed by the structural
+    // "Inserted/Deleted table" review item, so it must NOT become its own review
+    // item (suppress at the source: no comment object → no floating bubble and
+    // no active-on-click dialog). Its trackInsert/trackDelete mark is untouched.
+    const trackedTableRanges = computeTrackedTableRangesForState(editor.state);
+    const suppressedInlineTableChangeIds = new Set();
+
     // Build comment params directly from grouped changes — no PM dispatch needed
     const processedIds = new Set();
     groupedChanges.forEach(({ insertedMark, deletionMark, formatMark }) => {
@@ -1411,6 +1493,19 @@ export const useCommentsStore = defineStore('comments', () => {
       const normalizedId = String(id);
       if (processedIds.has(normalizedId)) return;
       processedIds.add(normalizedId);
+
+      // Suppress inline tracked changes inside a tracked whole-table change.
+      // changesByIdMap holds every {from,to} segment for this id; if all are
+      // contained in a tracked table, this change is the structural bubble's
+      // child and gets no separate review item. Record the id so any comment
+      // created on a prior sync is pruned below (idempotent on resync).
+      if (
+        trackedTableRanges.length &&
+        isInlineRangeInsideTrackedTable(changesByIdMap.get(id) || [], trackedTableRanges)
+      ) {
+        suppressedInlineTableChangeIds.add(normalizedId);
+        return;
+      }
 
       if (!refreshExisting && skipIds.has(normalizedId)) return;
       const existingTrackedChange = existingTrackedChangeById.get(normalizedId);
@@ -1447,10 +1542,83 @@ export const useCommentsStore = defineStore('comments', () => {
       }
     });
 
+    // Prune any inline tracked-change comment that became (or stayed) subsumed
+    // by a tracked whole-table change since a prior sync. Such a comment is now
+    // suppressed at creation, so an already-created one must be removed (it
+    // disappears the moment the containing table is/stays tracked). The
+    // underlying mark is left in place; only the review-item comment is dropped.
+    // Idempotent: re-running with the same suppressed set is a no-op once gone.
+    if (suppressedInlineTableChangeIds.size) {
+      pruneSuppressedInlineTableComments({
+        suppressedIds: suppressedInlineTableChangeIds,
+        activeDocumentId,
+        superdoc,
+        broadcastChanges,
+      });
+    }
+
     // Single force-update to refresh decorations
     const { tr } = editor.view.state;
     tr.setMeta(CommentsPluginKey, { type: 'force' });
     editor.view.dispatch(tr);
+  };
+
+  /**
+   * Remove inline tracked-change comments whose change id is subsumed by a
+   * tracked whole-table change. Mirrors the deletion-event emission of
+   * `pruneStaleTrackedChangeComments` but is keyed on an explicit suppressed-id
+   * set rather than mark liveness (the mark is still live; only the review item
+   * is unwanted). Also clears the active-comment selection if it pointed at a
+   * now-suppressed change, so no stale active-on-click dialog can reference it.
+   *
+   * @param {{ suppressedIds: Set<string>, activeDocumentId: string, superdoc: any, broadcastChanges?: boolean }} input
+   */
+  const pruneSuppressedInlineTableComments = ({
+    suppressedIds,
+    activeDocumentId,
+    superdoc = null,
+    broadcastChanges = true,
+  }) => {
+    if (!(suppressedIds instanceof Set) || !suppressedIds.size || !activeDocumentId) return;
+
+    const removedComments = [];
+    commentsList.value = commentsList.value.filter((comment) => {
+      if (!comment?.trackedChange) return true;
+      if (!isBodyTrackedChangeComment(comment)) return true;
+      if (isStructuralTableBubble(comment)) return true;
+      if (!belongsToTrackedChangeSyncDocument(comment, activeDocumentId)) return true;
+
+      const commentId = comment.commentId != null ? String(comment.commentId) : null;
+      const importedId = comment.importedId != null ? String(comment.importedId) : null;
+      const isSuppressed = (commentId && suppressedIds.has(commentId)) || (importedId && suppressedIds.has(importedId));
+      if (!isSuppressed) return true;
+
+      removedComments.push(comment);
+      return false;
+    });
+
+    if (!removedComments.length) return;
+
+    const removedIds = new Set();
+    removedComments.forEach((comment) => {
+      if (comment.commentId != null) removedIds.add(String(comment.commentId));
+      if (comment.importedId != null) removedIds.add(String(comment.importedId));
+      const payload = getCommentEventPayload(comment);
+      const event = {
+        type: COMMENT_EVENTS.DELETED,
+        comment: payload,
+        changes: [{ key: 'deleted', commentId: payload.commentId, fileId: payload.fileId }],
+      };
+      if (broadcastChanges) {
+        syncCommentsToClients(superdoc, event);
+        superdoc?.emit?.('comments-update', event);
+      }
+    });
+
+    const activeCommentId = activeComment.value != null ? String(activeComment.value) : null;
+    if (activeCommentId && removedIds.has(activeCommentId)) {
+      clearActiveCommentSelection();
+    }
   };
 
   const getCommentDocumentId = (comment) => {
@@ -2005,10 +2173,18 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {Array<{ from: number, to: number }>}
    */
   const trackedTableRangesCache = new WeakMap();
-  const getTrackedTableRangesForDocument = (fileId) => {
-    const doc = superdocStore.getDocument(fileId);
-    const editor = doc?.getEditor?.();
-    const state = editor?.state;
+
+  /**
+   * Compute decidable whole-table tracked-change ranges for a PM editor state,
+   * memoized per state. Used both by the floating-list filter (via comment
+   * fileId) and at comment-creation time (where the live editor state is in
+   * hand) so an inline tracked change inside a tracked whole-table change is
+   * never turned into a separate review item.
+   *
+   * @param {import('prosemirror-state').EditorState | null | undefined} state
+   * @returns {Array<{ from: number, to: number }>}
+   */
+  const computeTrackedTableRangesForState = (state) => {
     if (!state) return [];
 
     const cached = trackedTableRangesCache.get(state);
@@ -2030,6 +2206,82 @@ export const useCommentsStore = defineStore('comments', () => {
     }
     trackedTableRangesCache.set(state, ranges);
     return ranges;
+  };
+
+  const structuralChangeIdsCache = new WeakMap();
+
+  /**
+   * All change ids associated with decidable whole-table structural changes in a
+   * PM state: the change's public id/revisionGroupId plus every row's
+   * trackChange id/sourceId. Text typed inside a tracked-inserted row inherits
+   * that row's revision id, so such an inline change reports a changeId that is
+   * one of these — it must be subsumed by the structural bubble, not get its own
+   * review item. Memoized per state.
+   *
+   * @param {import('prosemirror-state').EditorState | null | undefined} state
+   * @returns {Set<string>}
+   */
+  const computeStructuralChangeIdsForState = (state) => {
+    if (!state) return new Set();
+    const cached = structuralChangeIdsCache.get(state);
+    if (cached) return cached;
+
+    const ids = new Set();
+    const add = (value) => {
+      if (value != null && value !== '') ids.add(String(value));
+    };
+    const enumerate = trackChangesHelpers?.enumerateStructuralRowChanges;
+    if (typeof enumerate === 'function') {
+      let structuralChanges = [];
+      try {
+        structuralChanges = enumerate(state) ?? [];
+      } catch {
+        structuralChanges = [];
+      }
+      for (const change of structuralChanges) {
+        if (!change?.decidable || !change?.wholeTable) continue;
+        add(change.id);
+        add(change.revisionId);
+        add(change.revisionGroupId);
+        add(change.sourceId);
+        for (const row of change.rows || []) {
+          const tc = row?.node?.attrs?.trackChange;
+          add(tc?.id);
+          add(tc?.sourceId);
+        }
+      }
+    }
+    structuralChangeIdsCache.set(state, ids);
+    return ids;
+  };
+
+  const getTrackedTableRangesForDocument = (fileId) => {
+    const doc = superdocStore.getDocument(fileId);
+    const editor = doc?.getEditor?.();
+    return computeTrackedTableRangesForState(editor?.state);
+  };
+
+  /**
+   * True when every `{ from, to }` range of an inline tracked change is wholly
+   * contained within some decidable whole-table tracked-change range. Such an
+   * inline change is subsumed by the structural "Inserted/Deleted table" review
+   * item and must NOT become an independent review item (no comment object →
+   * no floating bubble and no active-on-click dialog). The underlying
+   * trackInsert/trackDelete mark (the green highlight) is untouched — only the
+   * review-item comment is suppressed.
+   *
+   * @param {Array<{ from?: number, to?: number }>} changeRanges
+   * @param {Array<{ from: number, to: number }>} tableRanges
+   * @returns {boolean}
+   */
+  const isInlineRangeInsideTrackedTable = (changeRanges, tableRanges) => {
+    if (!tableRanges?.length || !changeRanges?.length) return false;
+    return changeRanges.every((seg) => {
+      const start = Number(seg?.from);
+      const end = Number(seg?.to);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
+      return tableRanges.some((table) => start >= table.from && end <= table.to);
+    });
   };
 
   /**
@@ -2076,7 +2328,7 @@ export const useCommentsStore = defineStore('comments', () => {
   });
 
   const getFloatingCommentInstances = computed(() => {
-    return getFloatingComments.value.flatMap((comment) => {
+    const instances = getFloatingComments.value.flatMap((comment) => {
       const { key, entry } = resolveCommentPositionEntry(comment);
       const fallbackId = getCommentAliasIds(comment)[0] ?? normalizeCommentId(comment?.commentId) ?? null;
 
@@ -2087,6 +2339,7 @@ export const useCommentsStore = defineStore('comments', () => {
         fallbackId,
       });
     });
+    return instances;
   });
 
   const normalizeFloatingCommentInstanceId = (instanceId) => {

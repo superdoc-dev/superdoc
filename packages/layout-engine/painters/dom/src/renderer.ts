@@ -3117,7 +3117,7 @@ export class DomPainter {
   private resolveShapeTextPartText(part: ShapeTextContent['parts'][number], context?: FragmentRenderContext): string {
     if (part.fieldType === 'PAGE') {
       if (part.pageNumberFormat) {
-        return formatPageNumber(context?.pageNumberDisplayNumber ?? context?.pageNumber ?? 1, part.pageNumberFormat);
+        return formatPageNumber(context?.displayPageNumber ?? context?.pageNumber ?? 1, part.pageNumberFormat);
       }
       return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
     }

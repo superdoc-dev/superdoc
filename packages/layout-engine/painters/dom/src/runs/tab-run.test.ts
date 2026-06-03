@@ -31,24 +31,23 @@ const underlinedTab = (fontSize?: number): TabRun =>
 const plainTab = (): TabRun => ({ kind: 'tab', text: '\t', width: 48 });
 
 describe('tab underline alignment (SD-3330)', () => {
-  it('draws the inline tab underline with baseline-aligned text-decoration (matches text)', () => {
+  it('anchors the inline tab underline to the baseline region, not the line-box bottom', () => {
     const el = renderInlineTabRun(underlinedTab(), LINE, document, 0);
 
-    // Same mechanism as adjacent text: text-decoration on a baseline-aligned box, so the
-    // browser places the underline on the same baseline and at the same weight (not a
-    // separate border guessing the position).
-    expect(el.style.textDecorationLine).toBe('underline');
-    expect(el.style.borderBottom).toBe('');
-    expect(el.style.verticalAlign).toBe('baseline');
-    // Filler whitespace overfills the tab so the (horizontally clipped) underline spans it.
-    expect(el.textContent.length).toBeGreaterThan(0);
-    expect(el.textContent.trim()).toBe('');
+    // Border-bottom (not a selectable text-decoration filler) at the box bottom; the box
+    // top is pinned to the line-box top and ends at the underline offset, so the border
+    // lands near the baseline rather than the line-box bottom.
+    expect(el.style.borderBottom).toContain('solid');
+    expect(el.style.verticalAlign).toBe('top');
+    const offset = parseFloat(el.style.height);
+    expect(offset).toBeGreaterThanOrEqual(LINE.ascent);
+    expect(offset).toBeLessThan(LINE.lineHeight);
   });
 
   it('matches the tab underline weight to the text underline (shared font-scaled thickness)', () => {
     const el = renderInlineTabRun(underlinedTab(48), LINE, document, 0);
     // 48 / 14 rounds to 3px — the same value applyRunStyles sets on text-decoration-thickness.
-    expect(el.style.textDecorationThickness).toBe('3px');
+    expect(parseFloat(el.style.borderBottomWidth)).toBe(3);
   });
 
   it('anchors the positioned tab underline to the baseline region, not the line-box bottom', () => {
@@ -61,9 +60,8 @@ describe('tab underline alignment (SD-3330)', () => {
     expect(offset).toBeLessThan(LINE.lineHeight);
   });
 
-  it('does not underline a plain (non-underlined) inline tab', () => {
+  it('does not draw a border on a plain (non-underlined) inline tab', () => {
     const el = renderInlineTabRun(plainTab(), LINE, document, 0);
-    expect(el.style.textDecorationLine).toBe('');
     expect(el.style.borderBottom).toBe('');
   });
 

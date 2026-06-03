@@ -17,6 +17,8 @@ import type {
 } from './index.js';
 import { computeFragmentPmRange } from './pm-range.js';
 
+const MAX_BOOKMARK_MARKER_LEAD_DISTANCE = 3;
+
 export function buildPageRefAnchorMap(
   bookmarks: Map<string, number>,
   layout: Layout,
@@ -91,7 +93,7 @@ function findPageRefLocation(
       const fragmentStart = fragmentRange?.start ?? null;
       if (fragmentStart != null && fragmentStart > pmPosition) {
         const distance = fragmentStart - pmPosition;
-        if (!hasPriorVisibleRange && distance < nextDistance) {
+        if ((!hasPriorVisibleRange || distance <= MAX_BOOKMARK_MARKER_LEAD_DISTANCE) && distance < nextDistance) {
           nextDistance = distance;
           nextLocation = pageRefLocationFromPage(page, pmPosition);
         }

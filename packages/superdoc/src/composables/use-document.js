@@ -1,7 +1,10 @@
 import { ref, shallowRef } from 'vue';
 import { useField } from './use-field';
 import { documentTypes } from '@superdoc/common';
+import { createLogger } from '@superdoc/common/logger';
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
+
+const log = createLogger('superdoc');
 
 export default function useDocument(params, superdocConfig) {
   const id = params.id;
@@ -73,7 +76,7 @@ export default function useDocument(params, superdocConfig) {
 
   const restoreComments = () => {
     conversations.value = conversationsBackup.value;
-    console.debug('[superdoc] Restored comments:', conversations.value);
+    log.debug('Restored comments:', conversations.value);
   };
 
   // Modules

@@ -825,7 +825,10 @@ describe('SuperConverter Document GUID', () => {
         };
         const value = SuperConverter.getStoredCustomProperty([docx], 'MalformedProp');
         expect(value).toBeNull();
-        expect(consoleWarnSpy).toHaveBeenCalledWith('Malformed property structure for "MalformedProp"');
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          '[super-converter]',
+          'Malformed property structure for "MalformedProp"',
+        );
 
         consoleWarnSpy.mockRestore();
       });
@@ -844,7 +847,10 @@ describe('SuperConverter Document GUID', () => {
         };
         const value = SuperConverter.getStoredCustomProperty([docx], 'EmptyProp');
         expect(value).toBeNull();
-        expect(consoleWarnSpy).toHaveBeenCalledWith('Malformed property structure for "EmptyProp"');
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          '[super-converter]',
+          'Malformed property structure for "EmptyProp"',
+        );
 
         consoleWarnSpy.mockRestore();
       });
@@ -874,7 +880,10 @@ describe('SuperConverter Document GUID', () => {
 
         const value = SuperConverter.setStoredCustomProperty(docx, 'MalformedProp', 'NewValue', true);
         expect(value).toBeNull();
-        expect(consoleWarnSpy).toHaveBeenCalledWith('Malformed existing property structure for "MalformedProp"');
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          '[super-converter]',
+          'Malformed existing property structure for "MalformedProp"',
+        );
 
         consoleWarnSpy.mockRestore();
       });
@@ -905,6 +914,7 @@ describe('SuperConverter Document GUID', () => {
         const value = SuperConverter.setStoredCustomProperty(docx, 'MalformedProp', 'NewValue');
         expect(value).toBe('NewValue');
         expect(consoleWarnSpy).toHaveBeenCalledWith(
+          '[super-converter]',
           'Malformed property structure for "MalformedProp", recreating structure',
         );
 
@@ -1005,6 +1015,7 @@ describe('SuperConverter Document GUID', () => {
 
       SuperConverter.updateDocumentVersion(mockDocx, '1.0.0');
       expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[super-converter]',
         'updateDocumentVersion is deprecated, use setStoredSuperdocVersion instead',
       );
 

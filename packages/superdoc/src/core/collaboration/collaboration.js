@@ -1,7 +1,10 @@
 import { WebsocketProvider } from 'y-websocket';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { awarenessStatesToArray } from '@superdoc/common/collaboration/awareness';
+import { createLogger } from '@superdoc/common/logger';
 import { Doc as YDoc } from 'yjs';
+
+const log = createLogger('collaboration');
 
 /**
  * Translate awareness states to an array of users. This will cause superdoc (context) to
@@ -44,7 +47,7 @@ function awarenessHandler(context, { changes = {}, states }) {
  * @returns {Object} The provider and socket
  */
 function createProvider({ config, user, documentId, socket, superdocInstance }) {
-  console.warn(
+  log.warn(
     '[superdoc] Internal provider creation is deprecated. Pass { ydoc, provider } to modules.collaboration instead.',
   );
   if (!config.providerType) config.providerType = 'superdoc';
@@ -119,19 +122,19 @@ function createHocuspocusProvider({ config, user, documentId, socket, superdocIn
 }
 
 const onAuthenticationFailed = (data, documentId) => {
-  console.warn('🔒 [superdoc] Authentication failed', data, 'document', documentId);
+  log.warn('🔒 [superdoc] Authentication failed', data, 'document', documentId);
 };
 
 const onConnect = (superdocInstance, documentId) => {
-  console.warn('🔌 [superdoc] Connected -- ', documentId);
+  log.warn('🔌 [superdoc] Connected -- ', documentId);
 };
 
 const onDisconnect = (superdocInstance, documentId) => {
-  console.warn('🔌 [superdoc] Disconnected', documentId);
+  log.warn('🔌 [superdoc] Disconnected', documentId);
 };
 
 const onDestroy = (superdocInstance, documentId) => {
-  console.warn('🔌 [superdoc] Destroyed', documentId);
+  log.warn('🔌 [superdoc] Destroyed', documentId);
 };
 
 /**
@@ -146,7 +149,7 @@ const onDestroy = (superdocInstance, documentId) => {
 function setupAwarenessHandler(provider, superdocInstance, user) {
   const awareness = provider.awareness;
   if (!awareness) {
-    console.warn('[superdoc] External provider missing awareness property');
+    log.warn('[superdoc] External provider missing awareness property');
     return () => {};
   }
 

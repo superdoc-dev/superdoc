@@ -1,6 +1,9 @@
 import { parseSizeUnit } from '../utilities/index.js';
 import { xml2js } from 'xml-js';
 import { getDataUriMetadata, tryDecodeDataUriText } from './helpers/mediaHelpers.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-converter');
 
 // --- Browser-compatible CRC32 (replaces buffer-crc32 to avoid Node.js Buffer dependency) ---
 const CRC32_TABLE = new Uint32Array(256);
@@ -389,7 +392,7 @@ const getContentTypesFromXml = (contentTypesXml) => {
       .map((el) => el.attributes?.Extension)
       .filter(Boolean);
   } catch (err) {
-    console.warn('[super-editor] Failed to parse [Content_Types].xml', err);
+    log.warn('[super-editor] Failed to parse [Content_Types].xml', err);
     return [];
   }
 };
@@ -583,7 +586,7 @@ const deobfuscateFont = (arrayBuffer, guidHex) => {
 
   const guidStr = guidHex.replace(/[-{}]/g, '');
   if (guidStr.length !== 32) {
-    console.error('Invalid GUID');
+    log.error('Invalid GUID');
     return;
   }
 

@@ -903,7 +903,7 @@ describe('renderTableFragment', () => {
       expect(element.textContent).toContain('Document not available');
 
       // Verify error was logged
-      expect(consoleErrorSpy).toHaveBeenCalledWith('DomPainter: document is not available');
+      expect(consoleErrorSpy).toHaveBeenCalledWith('[painter-dom:table]', 'DomPainter: document is not available');
 
       consoleErrorSpy.mockRestore();
     });

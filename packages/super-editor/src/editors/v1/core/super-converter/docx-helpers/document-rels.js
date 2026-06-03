@@ -1,5 +1,8 @@
 // @ts-check
 import { RELATIONSHIP_TYPES } from './docx-constants.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-converter:export');
 
 /** @typedef {import('../types.js').Editor} Editor */
 /** @typedef {import('../types.js').XmlRelationshipElement} XmlRelationshipElement */
@@ -83,35 +86,33 @@ export const insertNewRelationship = (target, type, editor) => {
   // Check if relationship type is supported
   const mappedType = RELATIONSHIP_TYPES[type];
   if (!mappedType) {
-    console.warn(
-      `Unsupported relationship type: ${type}. Available types: ${Object.keys(RELATIONSHIP_TYPES).join(', ')}`,
-    );
+    log.warn(`Unsupported relationship type: ${type}. Available types: ${Object.keys(RELATIONSHIP_TYPES).join(', ')}`);
     return null;
   }
 
   // Check for existing relationship
   const existingRelId = findRelationshipIdFromTarget(target, editor);
   if (existingRelId) {
-    console.info(`Reusing existing relationship for target: ${target} (ID: ${existingRelId})`);
+    log.info(`Reusing existing relationship for target: ${target} (ID: ${existingRelId})`);
     return existingRelId;
   }
 
   // Validate document structure
   const docx = editor.converter?.convertedXml;
   if (!docx) {
-    console.error('No converted XML found in editor');
+    log.error('No converted XML found in editor');
     return null;
   }
 
   const documentRels = docx['word/_rels/document.xml.rels'];
   if (!documentRels) {
-    console.error('No document relationships found in the docx');
+    log.error('No document relationships found in the docx');
     return null;
   }
 
   const relationshipsTag = documentRels.elements?.find((el) => el.name === 'Relationships');
   if (!relationshipsTag) {
-    console.error('No Relationships tag found in document relationships');
+    log.error('No Relationships tag found in document relationships');
     return null;
   }
 
@@ -123,7 +124,7 @@ export const insertNewRelationship = (target, type, editor) => {
   // Generate new relationship ID
   const newId = getNewRelationshipId(editor);
   if (!newId) {
-    console.error('Failed to generate new relationship ID');
+    log.error('Failed to generate new relationship ID');
     return null;
   }
 

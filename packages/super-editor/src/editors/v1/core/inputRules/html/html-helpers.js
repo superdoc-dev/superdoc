@@ -1,4 +1,7 @@
 import { ListHelpers, createListIdAllocator } from '@helpers/list-numbering-helpers.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('html-helpers');
 
 const removeWhitespaces = (node) => {
   const children = node.childNodes;
@@ -30,7 +33,7 @@ export function flattenListsInHtml(html, editor, domDocument) {
   const win = resolvedDocument?.defaultView ?? (typeof window !== 'undefined' ? window : null);
   const DOMParserConstructor = win?.DOMParser ?? (typeof DOMParser !== 'undefined' ? DOMParser : null);
   if (!DOMParserConstructor) {
-    console.warn(
+    log.warn(
       '[super-editor] HTML list processing requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment. Skipping list flattening.',
     );
     return html;
@@ -282,7 +285,7 @@ export function unflattenListsInHtml(html, domDocument) {
   const win = domDocument?.defaultView ?? (typeof window !== 'undefined' ? window : null);
   const DOMParserConstructor = win?.DOMParser ?? (typeof DOMParser !== 'undefined' ? DOMParser : null);
   if (!DOMParserConstructor) {
-    console.warn(
+    log.warn(
       '[super-editor] HTML list processing requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment. Skipping list unflattening.',
     );
     return html;

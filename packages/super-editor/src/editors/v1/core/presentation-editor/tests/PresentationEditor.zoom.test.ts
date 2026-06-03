@@ -446,7 +446,10 @@ describe('PresentationEditor - Zoom Functionality', () => {
       // MAX_ZOOM_WARNING_THRESHOLD is 10, so we need > 10 to trigger warning
       editor.setZoom(10.1);
 
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Zoom level 10.1 exceeds recommended maximum'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[presentation-editor]',
+        expect.stringContaining('Zoom level 10.1 exceeds recommended maximum'),
+      );
 
       warnSpy.mockRestore();
     });

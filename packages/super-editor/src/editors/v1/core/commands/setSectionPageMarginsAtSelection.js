@@ -1,4 +1,7 @@
 import { updateSectionMargins, getSectPrMargins } from '@converter/section-properties.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('setSectionPageMarginsAtSelection');
 
 /**
  * Find the governing section break (paragraph with sectPr) for the current selection.
@@ -35,7 +38,7 @@ export const setSectionPageMarginsAtSelection =
   ({ topInches, rightInches, bottomInches, leftInches } = {}) =>
   ({ tr, state, editor }) => {
     if (!state || !editor) {
-      console.warn('[setSectionPageMarginsAtSelection] Missing state or editor');
+      log.warn('Missing state or editor');
       return false;
     }
 
@@ -44,7 +47,7 @@ export const setSectionPageMarginsAtSelection =
     const hasBottom = typeof bottomInches === 'number';
     const hasLeft = typeof leftInches === 'number';
     if (!hasTop && !hasRight && !hasBottom && !hasLeft) {
-      console.warn('[setSectionPageMarginsAtSelection] No margin values provided');
+      log.warn('No margin values provided');
       return false;
     }
     if (
@@ -53,7 +56,7 @@ export const setSectionPageMarginsAtSelection =
       (hasBottom && bottomInches < 0) ||
       (hasLeft && leftInches < 0)
     ) {
-      console.warn('[setSectionPageMarginsAtSelection] Margin values must be >= 0');
+      log.warn('Margin values must be >= 0');
       return false;
     }
 
@@ -71,7 +74,7 @@ export const setSectionPageMarginsAtSelection =
       const paraProps = node.attrs?.paragraphProperties || null;
       const existingSectPr = paraProps?.sectPr || null;
       if (!existingSectPr) {
-        console.warn('[setSectionPageMarginsAtSelection] Paragraph found but has no sectPr');
+        log.warn('Paragraph found but has no sectPr');
         return false;
       }
 
@@ -79,7 +82,7 @@ export const setSectionPageMarginsAtSelection =
       try {
         updateSectionMargins({ type: 'sectPr', sectPr }, updates);
       } catch (err) {
-        console.error('[setSectionPageMarginsAtSelection] Failed to update sectPr:', err);
+        log.error('Failed to update sectPr:', err);
         return false;
       }
 
@@ -117,7 +120,7 @@ export const setSectionPageMarginsAtSelection =
     try {
       updateSectionMargins({ type: 'sectPr', sectPr }, updates);
     } catch (err) {
-      console.error('[setSectionPageMarginsAtSelection] Failed to update sectPr:', err);
+      log.error('Failed to update sectPr:', err);
       return false;
     }
 

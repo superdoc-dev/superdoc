@@ -4,6 +4,9 @@ import { TextSelection } from 'prosemirror-state';
 import { getEditorSurfaceElement } from '../../core/helpers/editorSurface.js';
 import { moveCursorToMouseEvent, selectionHasNodeOrMark } from '../cursor-helpers.js';
 import LinkInput from '../toolbar/LinkInput.vue';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('link-click');
 
 const props = defineProps({
   editor: {
@@ -384,7 +387,7 @@ const handleLinkClick = (event) => {
       const tr = state.tr.setSelection(TextSelection.create(doc, pos));
       props.editor.dispatch(tr);
     } else {
-      console.warn(`Invalid PM position from data-pm-start: ${pmStart}, falling back to coordinate-based positioning`);
+      log.warn(`Invalid PM position from data-pm-start: ${pmStart}, falling back to coordinate-based positioning`);
       moveCursorToMouseEvent(detail, props.editor);
     }
   } else {

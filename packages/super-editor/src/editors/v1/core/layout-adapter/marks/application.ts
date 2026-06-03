@@ -22,6 +22,9 @@ import { normalizeColor, isFiniteNumber, ptToPx } from '../utilities.js';
 import { buildFlowRunLink, migrateLegacyLink } from './links.js';
 import { sanitizeHref } from '@superdoc/url-validation';
 import { resolveThemeColorValue } from './theme-color.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('pm-adapter');
 
 /**
  * Track change mark type constants from ProseMirror schema.
@@ -319,7 +322,7 @@ export const extractDataAttributes = (
     // Enforce maximum number of data attributes
     if (attrCount >= MAX_DATA_ATTR_COUNT) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`[PM-Adapter] Rejecting data attributes exceeding ${MAX_DATA_ATTR_COUNT} limit`);
+        log.warn(`[PM-Adapter] Rejecting data attributes exceeding ${MAX_DATA_ATTR_COUNT} limit`);
       }
       break;
     }
@@ -327,7 +330,7 @@ export const extractDataAttributes = (
     // Enforce maximum attribute name length
     if (key.length > MAX_DATA_ATTR_NAME_LENGTH) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn(
+        log.warn(
           `[PM-Adapter] Rejecting data attribute name exceeding ${MAX_DATA_ATTR_NAME_LENGTH} chars: ${key.substring(0, 50)}...`,
         );
       }
@@ -344,7 +347,7 @@ export const extractDataAttributes = (
       // Enforce maximum value length
       if (stringValue.length > MAX_DATA_ATTR_VALUE_LENGTH) {
         if (process.env.NODE_ENV === 'development') {
-          console.warn(
+          log.warn(
             `[PM-Adapter] Rejecting data attribute value exceeding ${MAX_DATA_ATTR_VALUE_LENGTH} chars for key: ${key}`,
           );
         }
@@ -373,7 +376,7 @@ export const normalizeRunMarkList = (value: unknown): RunMark[] | undefined => {
     // Prevent DoS attacks from extremely large JSON payloads
     if (value.length > MAX_RUN_MARK_JSON_LENGTH) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`[PM-Adapter] Rejecting run mark JSON payload exceeding ${MAX_RUN_MARK_JSON_LENGTH} chars`);
+        log.warn(`[PM-Adapter] Rejecting run mark JSON payload exceeding ${MAX_RUN_MARK_JSON_LENGTH} chars`);
       }
       return undefined;
     }
@@ -381,7 +384,7 @@ export const normalizeRunMarkList = (value: unknown): RunMark[] | undefined => {
       entries = JSON.parse(value);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PM-Adapter] Failed to parse run mark JSON:', error);
+        log.warn('[PM-Adapter] Failed to parse run mark JSON:', error);
       }
       return undefined;
     }
@@ -391,13 +394,13 @@ export const normalizeRunMarkList = (value: unknown): RunMark[] | undefined => {
   }
   if (entries.length > MAX_RUN_MARK_ARRAY_LENGTH) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn(`[PM-Adapter] Rejecting run mark array exceeding ${MAX_RUN_MARK_ARRAY_LENGTH} entries`);
+      log.warn(`[PM-Adapter] Rejecting run mark array exceeding ${MAX_RUN_MARK_ARRAY_LENGTH} entries`);
     }
     return undefined;
   }
   if (!validateDepth(entries)) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn(`[PM-Adapter] Rejecting run mark array exceeding depth ${MAX_RUN_MARK_DEPTH}`);
+      log.warn(`[PM-Adapter] Rejecting run mark array exceeding depth ${MAX_RUN_MARK_DEPTH}`);
     }
     return undefined;
   }
@@ -777,7 +780,7 @@ const sanitizeFontFamily = (fontFamily: string): string | undefined => {
   // Enforce maximum length to prevent DoS
   if (sanitized.length > MAX_FONT_FAMILY_LENGTH) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn(`[PM-Adapter] Font family name exceeds ${MAX_FONT_FAMILY_LENGTH} character limit`);
+      log.warn(`[PM-Adapter] Font family name exceeds ${MAX_FONT_FAMILY_LENGTH} character limit`);
     }
     return undefined;
   }
@@ -787,7 +790,7 @@ const sanitizeFontFamily = (fontFamily: string): string | undefined => {
   const dangerousSchemes = ['javascript:', 'data:', 'vbscript:'];
   if (dangerousSchemes.some((scheme) => lowerCased.includes(scheme))) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[PM-Adapter] Rejected font family containing dangerous URI scheme');
+      log.warn('[PM-Adapter] Rejected font family containing dangerous URI scheme');
     }
     return undefined;
   }
@@ -800,7 +803,7 @@ const sanitizeFontFamily = (fontFamily: string): string | undefined => {
   const cssInjectionPattern = /[;{}()@<>]/;
   if (cssInjectionPattern.test(sanitized)) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[PM-Adapter] Rejected font family containing CSS injection characters');
+      log.warn('[PM-Adapter] Rejected font family containing CSS injection characters');
     }
     return undefined;
   }
@@ -1059,7 +1062,7 @@ export const applyMarksToRun = (
                 }
               } catch (error) {
                 if (process.env.NODE_ENV === 'development') {
-                  console.warn('[PM-Adapter] Failed to build rich hyperlink:', error);
+                  log.warn('[PM-Adapter] Failed to build rich hyperlink:', error);
                 }
                 // Fall through to legacy link handling or skip
               }
@@ -1075,7 +1078,7 @@ export const applyMarksToRun = (
                 }
               } catch (error) {
                 if (process.env.NODE_ENV === 'development') {
-                  console.warn('[PM-Adapter] Failed to sanitize link href:', error);
+                  log.warn('[PM-Adapter] Failed to sanitize link href:', error);
                 }
                 // Skip this link if sanitization fails
               }
@@ -1088,7 +1091,7 @@ export const applyMarksToRun = (
       }
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`[PM-Adapter] Failed to apply mark ${mark.type}:`, error);
+        log.warn(`[PM-Adapter] Failed to apply mark ${mark.type}:`, error);
       }
       // Continue processing other marks
     }

@@ -1,5 +1,8 @@
 // @ts-check
 import { shallowRef, markRaw } from 'vue';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('superdoc');
 
 /** @typedef {import('../core/types').PasswordPromptConfig} PasswordPromptConfig */
 /** @typedef {import('../core/types').ResolvedPasswordPromptTexts} ResolvedPasswordPromptTexts */
@@ -143,7 +146,7 @@ export function usePasswordPrompt({ getSurfaceManager, getPasswordPromptConfig, 
       // Surface errors (e.g. from a consumer's resolver or invalid config)
       // as console errors rather than letting them become unhandled rejections.
       activePrompt.value = null;
-      console.error('[SuperDoc] Password prompt error:', err);
+      log.error('Password prompt error:', err);
       // The error was initially claimed by handleEncryptionError (returned true),
       // suppressing the public exception event. Now that we can't show a prompt,
       // hand control back to the app so it can handle the encryption error.

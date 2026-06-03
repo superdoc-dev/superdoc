@@ -1032,7 +1032,8 @@ describe('ContextMenu.vue', () => {
       // Should not throw, error should be caught
       expect(() => captureHandler(event)).not.toThrow();
       expect(warnSpy).toHaveBeenCalledWith(
-        '[ContextMenu] Error in capture phase context menu handler:',
+        '[context-menu]',
+        'Error in capture phase context menu handler:',
         expect.any(Error),
       );
 

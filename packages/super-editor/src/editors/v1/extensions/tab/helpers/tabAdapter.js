@@ -13,6 +13,9 @@ import {
   extractParagraphContext,
 } from './tabDecorations.js';
 import { getParagraphContext } from './paragraphContextCache.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('tab');
 
 const leaderStyles = {
   dot: 'border-bottom: 1px dotted black;',
@@ -257,19 +260,19 @@ export function applyLayoutResult(result, paragraph, paragraphPos) {
   const walk = (node, pos, depth = 0) => {
     // Guard against excessive recursion depth
     if (depth > MAX_WALK_DEPTH) {
-      console.error(`applyLayoutResult: Maximum recursion depth (${MAX_WALK_DEPTH}) exceeded`);
+      log.error(`applyLayoutResult: Maximum recursion depth (${MAX_WALK_DEPTH}) exceeded`);
       return;
     }
 
     // Guard against missing node.type or node.type.name
     if (!node?.type?.name) {
-      console.error('applyLayoutResult: Node missing type.name', { node, pos, depth });
+      log.error('applyLayoutResult: Node missing type.name', { node, pos, depth });
       return;
     }
 
     // Guard against invalid nodeSize
     if (typeof node.nodeSize !== 'number' || node.nodeSize < 0 || !Number.isFinite(node.nodeSize)) {
-      console.error('applyLayoutResult: Invalid nodeSize', { nodeSize: node.nodeSize, nodeName: node.type.name, pos });
+      log.error('applyLayoutResult: Invalid nodeSize', { nodeSize: node.nodeSize, nodeName: node.type.name, pos });
       return;
     }
 
@@ -297,7 +300,7 @@ export function applyLayoutResult(result, paragraph, paragraphPos) {
         offset += child.nodeSize;
       });
     } catch (error) {
-      console.error('applyLayoutResult: Error during recursion', {
+      log.error('applyLayoutResult: Error during recursion', {
         error,
         nodeName: node.type.name,
         pos,

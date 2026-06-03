@@ -2,6 +2,9 @@ import { selectionToRects, type PageGeometryHelper } from '@superdoc/layout-brid
 import type { FlowBlock, Layout, Measure } from '@superdoc/contracts';
 import type { Editor } from '../../Editor.js';
 import { getPageElementByIndex } from '../../../dom-observer/PageDom.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('anchor-navigation');
 
 /**
  * Build an anchor map (bookmark name -> page index) using fragment PM ranges.
@@ -204,7 +207,7 @@ export async function goToAnchor({
   if (activeEditor?.commands?.setTextSelection) {
     activeEditor.commands.setTextSelection({ from: pmPos, to: pmPos });
   } else {
-    console.warn(
+    log.warn(
       '[PresentationEditor] goToAnchor: Navigation succeeded but could not move caret (editor commands unavailable)',
     );
   }

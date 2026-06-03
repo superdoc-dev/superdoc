@@ -16,6 +16,10 @@
  * ```
  */
 
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('ai');
+
 // Default API endpoint if none is provided in config
 // Default is the SuperDoc gateway (passthrough to Harbour API)
 const DEFAULT_API_ENDPOINT = 'https://sd-dev-express-gateway-i6xtm.ondigitalocean.app/insights';
@@ -58,7 +62,7 @@ async function baseInsightsFetch(payload, options = {}) {
 
     return response;
   } catch (error) {
-    console.error('Error calling Harbour API:', error);
+    log.error('Error calling Harbour API:', error);
     throw error;
   }
 }
@@ -102,7 +106,7 @@ async function processStream(stream, onChunk, onDone) {
 
     return result || '';
   } catch (error) {
-    console.error('Error reading stream:', error);
+    log.error('Error reading stream:', error);
     throw error;
   } finally {
     reader.releaseLock();
@@ -465,11 +469,11 @@ export function formatDocument(editor) {
             }
           }
         } catch (error) {
-          console.error('Error processing match:', error);
+          log.error('Error processing match:', error);
         }
       }
     });
   } catch (error) {
-    console.error('Error formatting document:', error);
+    log.error('Error formatting document:', error);
   }
 }

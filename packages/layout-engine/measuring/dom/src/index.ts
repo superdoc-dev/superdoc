@@ -76,6 +76,7 @@ import {
   DEFAULT_LIST_HANGING_PX as DEFAULT_LIST_HANGING,
 } from '@superdoc/common/layout-constants';
 import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
+import { createLogger } from '@superdoc/common/logger';
 import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
 import { toCssFontFamily } from '@superdoc/font-utils';
 export { installNodeCanvasPolyfill } from './setup.js';
@@ -167,6 +168,8 @@ const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
 // Canonical implementation moved to @superdoc/contracts; re-imported for local use and re-exported.
 export { getCellSpacingPx } from '@superdoc/contracts';
 import { getCellSpacingPx } from '@superdoc/contracts';
+
+const log = createLogger('measuring-dom');
 
 /**
  * Returns the border width in pixels for a table border value (matches painter border-utils logic).
@@ -1021,7 +1024,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   if (dropCapDescriptor) {
     // Validate required fields before measuring
     if (!dropCapDescriptor.run || !dropCapDescriptor.run.text || !dropCapDescriptor.lines) {
-      console.warn('Invalid drop cap descriptor - missing required fields:', dropCapDescriptor);
+      log.warn('Invalid drop cap descriptor - missing required fields:', dropCapDescriptor);
     } else {
       const dropCapMeasured = measureDropCap(ctx, dropCapDescriptor, spacing);
       dropCapMeasure = dropCapMeasured;

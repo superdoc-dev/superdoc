@@ -8,6 +8,9 @@ import {
   type SocketRequest,
 } from '@superdoc-dev/superdoc-yjs-collaboration';
 import { Doc as YDoc, encodeStateAsUpdate } from 'yjs';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('collab');
 
 const PORT = 8081;
 const BASE_PATH = '/v1/collaboration';
@@ -93,7 +96,7 @@ export function createCollabServer(): ReturnType<typeof createServer> {
       const collaborationSocket: CollaborationWebSocket = ws;
       const upgradeRequest = createUpgradeRequest(requestUrl, validation.documentId, request.headers);
       collaboration.welcome(collaborationSocket, upgradeRequest).catch((error: unknown) => {
-        console.error('[collab] welcome failed:', error);
+        log.error('welcome failed:', error);
         try {
           ws.close(1011, 'collaboration init failed');
         } catch {
@@ -115,7 +118,7 @@ function isDirectExecution(): boolean {
 if (isDirectExecution()) {
   const server = createCollabServer();
   server.listen(PORT, '127.0.0.1', () => {
-    console.log(`[collab] SuperDoc Yjs server running on ws://localhost:${PORT}${BASE_PATH}/:documentId`);
-    console.log('[collab] Example room: superdoc-dev-room');
+    log.info(`SuperDoc Yjs server running on ws://localhost:${PORT}${BASE_PATH}/:documentId`);
+    log.info('Example room: superdoc-dev-room');
   });
 }

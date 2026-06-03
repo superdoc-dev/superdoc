@@ -362,11 +362,11 @@ describe('callback handler', () => {
     });
 
     req.trigger('timeout');
-    expect(consoleWarn).toHaveBeenCalledWith('Callback request timed out.');
+    expect(consoleWarn).toHaveBeenCalledWith('[callback]', 'Callback request timed out.');
     expect(req.abort).toHaveBeenCalledTimes(1);
 
     req.trigger('error', new Error('failed\nreason'));
-    expect(consoleError).toHaveBeenCalledWith('Callback request error:', 'Error: failedreason');
+    expect(consoleError).toHaveBeenCalledWith('[callback]', 'Callback request error:', 'Error: failedreason');
     expect(req.abort).toHaveBeenCalledTimes(2);
 
     consoleWarn.mockRestore();
@@ -545,7 +545,7 @@ describe('SharedSuperDoc', () => {
     }
     messageHandler(new Uint8Array([99]));
 
-    expect(consoleWarn).toHaveBeenCalledWith('Unknown message type:', 99);
+    expect(consoleWarn).toHaveBeenCalledWith('[shared-doc]', 'Unknown message type:', 99);
     consoleWarn.mockRestore();
   });
 
@@ -569,7 +569,7 @@ describe('SharedSuperDoc', () => {
     readSyncBehavior = 'throw';
     messageHandler(new Uint8Array([0]));
 
-    expect(consoleError).toHaveBeenCalledWith('Error in messageListener:', expect.any(Error));
+    expect(consoleError).toHaveBeenCalledWith('[shared-doc]', 'Error in messageListener:', expect.any(Error));
     expect(errorListener).toHaveBeenCalledWith(expect.any(Error));
     consoleError.mockRestore();
   });

@@ -8,10 +8,13 @@ import type {
 } from '@superdoc/contracts';
 import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
+import { createLogger } from '@superdoc/common/logger';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { shouldRenderSdtContainerChrome, type SdtBoundaryOptions } from '../sdt/container.js';
 import type { BetweenBorderInfo } from './borders/index.js';
 import { renderParagraphContent, type ParagraphRenderLineInput } from './renderParagraphContent.js';
+
+const log = createLogger('painter-dom:paragraph');
 
 type ApplyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => void;
 
@@ -139,7 +142,7 @@ export const renderParagraphFragment = (params: RenderParagraphFragmentParams): 
 
     return fragmentEl;
   } catch (error) {
-    console.error('[DomPainter] Fragment rendering failed:', { fragment, error });
+    log.error('[DomPainter] Fragment rendering failed:', { fragment, error });
     return createErrorPlaceholder(fragment.blockId, error);
   }
 };

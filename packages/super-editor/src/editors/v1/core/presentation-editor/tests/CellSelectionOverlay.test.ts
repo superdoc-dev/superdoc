@@ -586,7 +586,10 @@ describe('renderCellSelectionOverlay', () => {
 
     renderCellSelectionOverlay(deps);
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith('[renderCellSelectionOverlay] No anchor cell in selection');
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[cell-selection-overlay]',
+      '[renderCellSelectionOverlay] No anchor cell in selection',
+    );
 
     consoleWarnSpy.mockRestore();
   });

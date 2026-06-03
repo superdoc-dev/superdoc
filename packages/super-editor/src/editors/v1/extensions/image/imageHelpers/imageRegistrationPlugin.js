@@ -7,6 +7,9 @@ import { checkAndProcessImage, MAX_IMAGE_FILE_BYTES, uploadAndInsertImage } from
 import { buildMediaPath, ensureUniqueFileName } from './fileNameUtils.js';
 import { addImageRelationship } from '@extensions/image/imageHelpers/startImageUpload.js';
 import { getDataUriMetadata, isRelativeUrl, isValidImageDataUrl, tryDecodeDataUriText } from '@superdoc/url-validation';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('image');
 const key = new PluginKey('ImageRegistration');
 
 /**
@@ -495,7 +498,7 @@ const registerRelativeImages = async (images, editor, view) => {
         }
       }
     } catch (error) {
-      console.error(`Error registering relative image ${src}:`, error);
+      log.error(`Error registering relative image ${src}:`, error);
     } finally {
       pendingRelativeRegistrations.delete(src);
     }
@@ -516,7 +519,7 @@ const registerImages = async (foundImages, editor, view) => {
         // Download image first, create fileobject, then proceed with registration.
         file = await urlToFile(src);
       } else {
-        console.warn(`Image URL ${src} is not accessible due to CORS or other restrictions. Using original URL.`);
+        log.warn(`Image URL ${src} is not accessible due to CORS or other restrictions. Using original URL.`);
         // Fallback: Remove the placeholder.
         const tr = view.state.tr;
         removeImagePlaceholder(view.state, tr, id);
@@ -526,7 +529,7 @@ const registerImages = async (foundImages, editor, view) => {
     } else if (src.startsWith('data:')) {
       file = base64ToFile(src);
     } else {
-      console.error(`Unsupported image source: ${src}`);
+      log.error(`Unsupported image source: ${src}`);
     }
 
     if (!file) {
@@ -557,7 +560,7 @@ const registerImages = async (foundImages, editor, view) => {
         await uploadAndInsertImage({ editor, view, file: process.file, size: process.size, id });
       }
     } catch (error) {
-      console.error(`Error processing image from ${src}:`, error);
+      log.error(`Error processing image from ${src}:`, error);
       // Ensure placeholder is removed even on error
       const tr = view.state.tr;
       removeImagePlaceholder(view.state, tr, id);

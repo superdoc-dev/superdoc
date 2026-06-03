@@ -3,10 +3,13 @@ import { createEncoder, writeVarUint, writeVarUint8Array, toUint8Array, length a
 import { readVarUint8Array, createDecoder, readVarUint } from 'lib0/decoding';
 import { Awareness, encodeAwarenessUpdate, removeAwarenessStates, applyAwarenessUpdate } from 'y-protocols/awareness';
 import { Doc as YDoc } from 'yjs';
+import { createLogger } from '@superdoc/common/logger';
 import { callbackHandler, isCallbackSet } from './callback.js';
 import { debouncer } from './utils.js';
 import { messageSync, messageAwareness, wsReadyStateConnecting, wsReadyStateOpen } from './constants.js';
 import type { CollaborationWebSocket } from '../types/service-types.js';
+
+const log = createLogger('shared-doc');
 
 type AwarenessChange = { added: number[]; updated: number[]; removed: number[] };
 
@@ -153,10 +156,10 @@ const messageListener = (conn: CollaborationWebSocket, doc: SharedSuperDoc, mess
       }
 
       default:
-        console.warn('Unknown message type:', messageType);
+        log.warn('Unknown message type:', messageType);
     }
   } catch (err) {
-    console.error('Error in messageListener:', err);
+    log.error('Error in messageListener:', err);
     (doc as YDocWithEmit).emit('error', [err]);
   }
 };

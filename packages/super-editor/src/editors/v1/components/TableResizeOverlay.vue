@@ -55,6 +55,9 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { pixelsToTwips, twipsToPixels } from '@core/super-converter/helpers.js';
 import { measureCache } from '@superdoc/layout-bridge';
 import { buildWidthAuthoringTableAttrs } from '../document-api-adapters/helpers/table-attr-sync.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('table-resize-overlay');
 
 /**
  * Props for the TableResizeOverlay component
@@ -152,7 +155,7 @@ const getZoom = () => {
     return editor.presentationEditor.zoom;
   }
   // Fallback to default zoom when editor instance doesn't have zoom configured
-  console.warn(
+  log.warn(
     '[TableResizeOverlay] getZoom: Unable to retrieve zoom from editor instance, using fallback value of 1. ' +
       'This may indicate the editor is not fully initialized or is not a PresentationEditor instance. ' +
       'Table resize handles may be misaligned.',

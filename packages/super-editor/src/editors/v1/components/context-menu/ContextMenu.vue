@@ -11,6 +11,9 @@ import { getItems } from './menuItems.js';
 import { getEditorContext } from './utils.js';
 import { CONTEXT_MENU_HANDLED_FLAG } from './event-flags.js';
 import { isMacOS } from '../../core/utilities/isMacOS.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('context-menu');
 
 const props = defineProps({
   editor: {
@@ -203,7 +206,7 @@ const renderCustomItem = async (itemId) => {
       element.hasCustomContent = true;
     }
   } catch (error) {
-    console.warn(`[ContextMenu] Error rendering custom item ${itemId}:`, error);
+    log.warn(`Error rendering custom item ${itemId}:`, error);
     // Fallback to default rendering
     const fallbackElement = defaultRender({ ...(currentContext.value || {}), currentItem: item });
     element.innerHTML = '';
@@ -380,7 +383,7 @@ const handleRightClickCapture = (event) => {
   } catch (error) {
     // Prevent handler crashes from breaking the event flow
     // Log warning but don't throw to allow other handlers to run
-    console.warn('[ContextMenu] Error in capture phase context menu handler:', error);
+    log.warn('Error in capture phase context menu handler:', error);
   }
 };
 
@@ -451,7 +454,7 @@ const handleRightClick = async (event) => {
       }),
     );
   } catch (error) {
-    console.error('[ContextMenu] Error opening context menu:', error);
+    log.error('Error opening context menu:', error);
   }
 };
 
@@ -615,7 +618,7 @@ onBeforeUnmount(() => {
       }
       props.editor.off('update', handleEditorUpdate);
     } catch (error) {
-      console.warn('[ContextMenu] Error during cleanup:', error);
+      log.warn('Error during cleanup:', error);
     }
   }
 });

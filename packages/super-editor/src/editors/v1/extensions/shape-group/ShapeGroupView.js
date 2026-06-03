@@ -2,6 +2,9 @@
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { createGradient, createTextElement } from '../shared/svg-utils.js';
 import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('shape-group');
 
 export class ShapeGroupView {
   node;
@@ -72,7 +75,7 @@ export class ShapeGroupView {
         } catch (error) {
           // Silently handle DOM manipulation errors (e.g., detached node, read-only style)
           // These are edge cases that should not break rendering
-          console.warn('Failed to position parent element for shape group:', error);
+          log.warn('Failed to position parent element for shape group:', error);
         }
       });
     }
@@ -469,7 +472,7 @@ export class ShapeGroupView {
         }
       }
     } catch (error) {
-      console.warn('Failed to generate shape SVG:', error);
+      log.warn('Failed to generate shape SVG:', error);
       // Fallback to a simple rectangle
       const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       rect.setAttribute('width', width.toString());

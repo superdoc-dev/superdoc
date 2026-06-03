@@ -10,6 +10,9 @@ import {
 } from '@superdoc/layout-bridge';
 import type { HeaderFooterLayoutResult, HeaderFooterConstraints } from '@superdoc/layout-bridge';
 import { measureBlock } from '@superdoc/measuring-dom';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('header-footer-per-rid-layout');
 
 export type HeaderFooterPerRidLayoutInput = {
   headerBlocks?: unknown;
@@ -138,7 +141,7 @@ async function layoutBlocksByRId(
         });
       }
     } catch (error) {
-      console.warn(`[PresentationEditor] Failed to layout ${kind} rId=${rId}:`, error);
+      log.warn(`[PresentationEditor] Failed to layout ${kind} rId=${rId}:`, error);
     }
   }
 }
@@ -268,7 +271,7 @@ async function layoutWithPerSectionConstraints(
         }
       }
     } catch (error) {
-      console.warn(`[PresentationEditor] Failed to layout ${kind} rId=${group.rId}:`, error);
+      log.warn(`[PresentationEditor] Failed to layout ${kind} rId=${group.rId}:`, error);
     }
   }
 }

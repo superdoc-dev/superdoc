@@ -13,6 +13,9 @@ import { isCellSelection } from '@extensions/table/tableHelpers/isCellSelection.
 import { hasExpandedSelection } from '@utils/selectionUtils.js';
 import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { selectedRect } from 'prosemirror-tables';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('context-menu');
 
 export const resolveContextMenuCommandEditor = (editor) => {
   return typeof editor?.getActiveEditor === 'function' ? editor.getActiveEditor() : editor;
@@ -305,7 +308,7 @@ function computeCanUndo(editor, state) {
         return !!can.undo();
       }
     } catch (error) {
-      console.warn('[ContextMenu] Unable to determine undo availability via editor.can():', error);
+      log.warn('Unable to determine undo availability via editor.can():', error);
     }
   }
 
@@ -314,14 +317,14 @@ function computeCanUndo(editor, state) {
       const undoManager = yUndoPluginKey.getState(state)?.undoManager;
       return !!undoManager && undoManager.undoStack.length > 0;
     } catch (error) {
-      console.warn('[ContextMenu] Unable to determine undo availability via y-prosemirror:', error);
+      log.warn('Unable to determine undo availability via y-prosemirror:', error);
     }
   }
 
   try {
     return undoDepth(state) > 0;
   } catch (error) {
-    console.warn('[ContextMenu] Unable to determine undo availability via history plugin:', error);
+    log.warn('Unable to determine undo availability via history plugin:', error);
     return false;
   }
 }
@@ -334,7 +337,7 @@ function computeCanRedo(editor, state) {
         return !!can.redo();
       }
     } catch (error) {
-      console.warn('[ContextMenu] Unable to determine redo availability via editor.can():', error);
+      log.warn('Unable to determine redo availability via editor.can():', error);
     }
   }
 
@@ -343,14 +346,14 @@ function computeCanRedo(editor, state) {
       const undoManager = yUndoPluginKey.getState(state)?.undoManager;
       return !!undoManager && undoManager.redoStack.length > 0;
     } catch (error) {
-      console.warn('[ContextMenu] Unable to determine redo availability via y-prosemirror:', error);
+      log.warn('Unable to determine redo availability via y-prosemirror:', error);
     }
   }
 
   try {
     return redoDepth(state) > 0;
   } catch (error) {
-    console.warn('[ContextMenu] Unable to determine redo availability via history plugin:', error);
+    log.warn('Unable to determine redo availability via history plugin:', error);
     return false;
   }
 }
@@ -411,7 +414,7 @@ function getCellSelectionInfo(state) {
       tableSelectionKind = 'column';
     }
   } catch (error) {
-    console.warn('[ContextMenu] Unable to resolve cell selection rectangle:', error);
+    log.warn('Unable to resolve cell selection rectangle:', error);
   }
 
   return { isCellSelection: true, tableSelectionKind };
@@ -451,7 +454,7 @@ function getStructureFromResolvedPos(state, pos) {
       isInSectionNode,
     };
   } catch (error) {
-    console.warn('[ContextMenu] Unable to resolve position for structural context:', error);
+    log.warn('Unable to resolve position for structural context:', error);
     return null;
   }
 }

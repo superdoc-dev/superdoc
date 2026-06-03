@@ -4131,7 +4131,10 @@ describe('PresentationEditor', () => {
         });
 
         expect(() => editor.setZoom(15)).not.toThrow();
-        expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('exceeds recommended maximum'));
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          '[presentation-editor]',
+          expect.stringContaining('exceeds recommended maximum'),
+        );
 
         consoleWarnSpy.mockRestore();
       });

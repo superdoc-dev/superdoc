@@ -4,6 +4,9 @@ import * as Y from 'yjs';
 
 import { getFallbackCursorColor } from './RemoteCursorColors.js';
 import type { RemoteCursorState } from '../types.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('remote-cursor-awareness');
 
 /**
  * Minimal interface for Yjs awareness object.
@@ -124,7 +127,7 @@ export function normalizeAwarenessStates(options: {
         updatedAt: positionChanged ? Date.now() : (previousState?.updatedAt ?? Date.now()),
       });
     } catch (error) {
-      console.warn(`Failed to normalize cursor for client ${clientId}:`, error);
+      log.warn(`Failed to normalize cursor for client ${clientId}:`, error);
     }
   });
 

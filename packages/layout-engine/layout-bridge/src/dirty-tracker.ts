@@ -14,6 +14,10 @@
  * @module dirty-tracker
  */
 
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-bridge:dirty-tracker');
+
 /**
  * Represents a range of dirty content with reason for tracking.
  */
@@ -50,7 +54,7 @@ export class DirtyTracker {
    */
   markPageDirty(pageIndex: number, reason: DirtyRange['reason']): void {
     if (pageIndex < 0) {
-      console.warn(`[DirtyTracker] Invalid page index: ${pageIndex}. Must be non-negative. Ignoring.`);
+      log.warn(`[DirtyTracker] Invalid page index: ${pageIndex}. Must be non-negative. Ignoring.`);
       return; // Ignore invalid page indices
     }
 
@@ -76,7 +80,7 @@ export class DirtyTracker {
    */
   markBlocksDirty(startBlock: number, endBlock: number, reason: DirtyRange['reason']): void {
     if (startBlock < 0 || endBlock < startBlock) {
-      console.warn(
+      log.warn(
         `[DirtyTracker] Invalid block range: [${startBlock}, ${endBlock}]. Start must be non-negative and end must be >= start. Ignoring.`,
       );
       return; // Ignore invalid ranges
@@ -105,7 +109,7 @@ export class DirtyTracker {
    */
   markDirtyFrom(startPage: number, reason: DirtyRange['reason']): void {
     if (startPage < 0) {
-      console.warn(`[DirtyTracker] Invalid start page: ${startPage}. Must be non-negative. Ignoring.`);
+      log.warn(`[DirtyTracker] Invalid start page: ${startPage}. Must be non-negative. Ignoring.`);
       return; // Ignore invalid page indices
     }
 

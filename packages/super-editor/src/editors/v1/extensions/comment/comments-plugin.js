@@ -18,6 +18,9 @@ import { TrackDeleteMarkName, TrackFormatMarkName, TrackInsertMarkName } from '.
 import { TrackChangesBasePluginKey } from '../track-changes/plugins/index.js';
 import { getTrackChanges } from '../track-changes/trackChangesHelpers/getTrackChanges.js';
 import { normalizeCommentEventPayload, updatePosition } from './helpers/index.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('comments');
 
 const TRACK_CHANGE_MARKS = [TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName];
 
@@ -66,7 +69,7 @@ export const CommentsPlugin = Extension.create({
           const { $from, $to } = selection;
 
           if ($from.pos === $to.pos) {
-            console.warn('addComment requires a text selection. Please select text before adding a comment.');
+            log.warn('addComment requires a text selection. Please select text before adding a comment.');
             return false;
           }
 
@@ -162,7 +165,7 @@ export const CommentsPlugin = Extension.create({
           } = options;
 
           if (!parentId) {
-            console.warn('addCommentReply requires a parentId');
+            log.warn('addCommentReply requires a parentId');
             return false;
           }
 

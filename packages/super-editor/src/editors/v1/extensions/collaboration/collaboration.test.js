@@ -686,7 +686,10 @@ describe('collaboration extension', () => {
       Collaboration.config.addPmPlugins.call(context);
       expect(() => Collaboration.config.onCreate.call(context)).not.toThrow();
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('no sync state or binding found'));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[collaboration]',
+        expect.stringContaining('no sync state or binding found'),
+      );
       consoleSpy.mockRestore();
     });
 

@@ -8,6 +8,9 @@ import { Selection } from 'prosemirror-state';
 import { DOMParser as PMDOMParser } from 'prosemirror-model';
 import { findParentNode } from '@helpers/index.js';
 import { SectionHelpers } from './document-section/helpers.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('structured-content');
 
 /**
  * Document section creation options
@@ -224,7 +227,7 @@ export const DocumentSection = Node.create({
                   editor.view.dispatch(newTr);
                 }
               } catch (e) {
-                console.warn('Could not set delayed selection:', e);
+                log.warn('Could not set delayed selection:', e);
               }
             }, 0);
           }

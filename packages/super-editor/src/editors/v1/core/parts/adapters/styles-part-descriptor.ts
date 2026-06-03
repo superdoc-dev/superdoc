@@ -10,6 +10,9 @@
 
 import type { PartDescriptor, CommitContext } from '../types.js';
 import { translateStyleDefinitions } from '../../super-converter/v2/importer/docxImporter.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('parts');
 
 const STYLES_PART_ID = 'word/styles.xml' as const;
 
@@ -45,7 +48,7 @@ export const stylesPartDescriptor: PartDescriptor = {
         try {
           converter.translatedLinkedStyles = translateStyleDefinitions(converter.convertedXml);
         } catch (err) {
-          console.warn('[parts] Failed to rebuild translatedLinkedStyles:', err);
+          log.warn('Failed to rebuild translatedLinkedStyles:', err);
         }
       }
     }

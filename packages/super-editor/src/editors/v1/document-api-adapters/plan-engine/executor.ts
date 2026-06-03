@@ -65,6 +65,9 @@ import {
   TrackFormatMarkName,
   TrackInsertMarkName,
 } from '../../extensions/track-changes/constants.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('text-rewrite');
 
 // ---------------------------------------------------------------------------
 // Character-offset → document-position mapping
@@ -165,7 +168,7 @@ const DEBUG_TEXT_REWRITE =
 
 function debugTextRewrite(message: string, details?: Record<string, unknown>): void {
   if (!DEBUG_TEXT_REWRITE) return;
-  console.error('[text-rewrite]', message, details ?? {});
+  log.error(message, details ?? {});
 }
 
 type StructuredTextPayload = {

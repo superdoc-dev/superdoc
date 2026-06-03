@@ -212,7 +212,10 @@ describe('createRulerElement', () => {
 
       const ruler = createRulerElement({ definition: invalidDefinition, doc });
 
-      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('[createRulerElement] Invalid ruler width'));
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[painter-dom:ruler]',
+        expect.stringContaining('[createRulerElement] Invalid ruler width'),
+      );
       expect(ruler.style.width).toBe('1px'); // Fallback to 1px
 
       consoleWarnSpy.mockRestore();
@@ -224,7 +227,10 @@ describe('createRulerElement', () => {
 
       const ruler = createRulerElement({ definition: invalidDefinition, doc });
 
-      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('[createRulerElement] Invalid ruler width'));
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[painter-dom:ruler]',
+        expect.stringContaining('[createRulerElement] Invalid ruler width'),
+      );
       expect(ruler.style.width).toBe('1px');
 
       consoleWarnSpy.mockRestore();
@@ -237,6 +243,7 @@ describe('createRulerElement', () => {
       createRulerElement({ definition: emptyTicksDefinition, doc });
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[painter-dom:ruler]',
         expect.stringContaining('[createRulerElement] Ruler definition has no ticks'),
       );
 

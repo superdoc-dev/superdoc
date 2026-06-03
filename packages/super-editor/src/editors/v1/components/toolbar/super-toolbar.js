@@ -22,6 +22,9 @@ import { parseSizeUnit } from '@core/utilities';
 import { findElementBySelector, getParagraphFontFamilyFromProperties } from './helpers/general.js';
 import { markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
 import { insertTableOfContentsAtSelection } from '@extensions/table-of-contents/table-of-contents-insertion.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-toolbar');
 
 /**
  * @typedef {function(CommandItem): void} CommandCallback
@@ -964,7 +967,7 @@ export class SuperToolbar extends EventEmitter {
         } catch (error) {
           const err = new Error(`[super-toolbar 🎨] Failed to execute pending command: ${command}`);
           this.emit('exception', { error: err, editor: this.activeEditor, originalError: error });
-          console.error(err, error);
+          log.error(err, error);
         }
       });
 

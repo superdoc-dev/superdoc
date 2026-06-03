@@ -1,5 +1,8 @@
 //@ts-check
 import { chainableEditorState } from './helpers/chainableEditorState.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('command-service');
 
 /**
  * @typedef {import('prosemirror-state').Transaction} Transaction
@@ -243,7 +246,7 @@ export class CommandService {
    */
   #dispatchWithFallback(tr, { editor, view }) {
     if (editor?.isDestroyed) {
-      console.warn('[CommandService] Cannot dispatch: editor is destroyed');
+      log.warn('[CommandService] Cannot dispatch: editor is destroyed');
       return false;
     }
 
@@ -253,7 +256,7 @@ export class CommandService {
       } else if (typeof editor?.dispatch === 'function') {
         editor.dispatch(tr);
       } else {
-        console.warn('[CommandService] No dispatch method available (editor may not be initialized)');
+        log.warn('[CommandService] No dispatch method available (editor may not be initialized)');
         return false;
       }
       return true;

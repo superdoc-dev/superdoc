@@ -6,6 +6,9 @@ import { getFileObject, DOCX, PDF } from '@superdoc/common';
 import { normalizeDocumentEntry } from '@superdoc/core/helpers/file.js';
 import useDocument from '@superdoc/composables/use-document';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('superdoc');
 
 export const useSuperdocStore = defineStore('superdoc', () => {
   const currentConfig = ref(null);
@@ -112,7 +115,7 @@ export const useSuperdocStore = defineStore('superdoc', () => {
           stage: 'document-init',
           document: doc,
         });
-        console.warn('[superdoc] Skipping empty document entry.');
+        log.warn('Skipping empty document entry.');
         continue;
       }
 
@@ -126,7 +129,7 @@ export const useSuperdocStore = defineStore('superdoc', () => {
             stage: 'document-init',
             document: doc,
           });
-          console.warn('[superdoc] Skipping document due to invalid configuration:', doc);
+          log.warn('Skipping document due to invalid configuration:', doc);
           continue;
         }
 
@@ -135,7 +138,7 @@ export const useSuperdocStore = defineStore('superdoc', () => {
         documents.value.push(smartDoc);
       } catch (e) {
         emitException({ error: e, stage: 'document-init', document: doc });
-        console.warn('[superdoc] Error initializing document:', doc, 'with error:', e, 'Skipping document.');
+        log.warn('Error initializing document:', doc, 'with error:', e, 'Skipping document.');
       }
     }
   };
@@ -210,7 +213,7 @@ export const useSuperdocStore = defineStore('superdoc', () => {
         return { ...doc, data: fileObject };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.debug('[SuperDoc] Failed to fetch document from URL:', message);
+        log.debug('Failed to fetch document from URL:', message);
         throw err;
       }
     }

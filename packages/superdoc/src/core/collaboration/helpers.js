@@ -1,8 +1,11 @@
 import { createProvider } from '../collaboration/collaboration';
 import useComment from '../../components/CommentsLayer/use-comment';
 import { actorIdentitiesMatch } from '@superdoc/common';
+import { createLogger } from '@superdoc/common/logger';
 
 import { addYComment, updateYComment, deleteYComment } from './collaboration-comments';
+
+const log = createLogger('collaboration');
 
 /**
  * Load comments from the ydoc into the comments store.
@@ -24,7 +27,7 @@ export const loadCommentsFromYdoc = (superdoc) => {
       const currentCommentId = c?.commentId;
 
       if (existingCommentId && currentCommentId && existingCommentId !== currentCommentId) {
-        console.warn(
+        log.warn(
           `[SuperDoc] Duplicate collaboration comment key "${key}" detected with conflicting commentId values. Keeping first entry and dropping duplicate.`,
           {
             key,

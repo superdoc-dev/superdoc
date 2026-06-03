@@ -6,6 +6,9 @@ import {
   resolveDocumentStatFieldValue,
   resolveMainBodyEditor,
 } from '../../document-api-adapters/helpers/word-statistics.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('field-update');
 
 /** Stat-field types refreshed by F9 when the doc has no TOCs. */
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES']);
@@ -72,7 +75,7 @@ export const FieldUpdate = Extension.create({
                     mode: 'all',
                   });
                 } catch (error) {
-                  console.warn('[FieldUpdate] toc.update failed for', sdBlockId, error);
+                  log.warn('[FieldUpdate] toc.update failed for', sdBlockId, error);
                 }
               }
 

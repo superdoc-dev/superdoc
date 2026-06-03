@@ -1,4 +1,7 @@
 import { isEqual, isMatch } from 'lodash';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('track-changes');
 
 /**
  * @param {import('./types.js').Attrs} [attrs]
@@ -334,6 +337,6 @@ export const findMarkInRangeBySnapshot = ({ doc, from, to, snapshot }) => {
   });
 
   const liveMark = exactMatch || subsetMatch || overlapMatch || (shouldFallbackToTypeOnly ? typeOnlyMatch : null);
-  if (!liveMark) console.debug('[track-changes] could not find live mark for snapshot', snapshot);
+  if (!liveMark) log.debug('could not find live mark for snapshot', snapshot);
   return liveMark;
 };

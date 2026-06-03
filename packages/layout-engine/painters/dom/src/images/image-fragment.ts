@@ -5,6 +5,9 @@ import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { applyStyles } from '../utils/apply-styles.js';
 import { createBlockImageContent } from './image-block.js';
 import type { BuildImageHyperlinkAnchor } from './types.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('painter-dom:image');
 
 type RenderImageFragmentOptions = {
   doc: Document | null;
@@ -144,7 +147,7 @@ export const renderImageFragment = ({
 
     return fragmentEl;
   } catch (error) {
-    console.error('[DomPainter] Image fragment rendering failed:', { fragment, error });
+    log.error('[DomPainter] Image fragment rendering failed:', { fragment, error });
     return createErrorPlaceholder(fragment.blockId, error);
   }
 };

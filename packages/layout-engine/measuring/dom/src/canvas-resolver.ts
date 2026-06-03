@@ -1,6 +1,9 @@
 import { createRequire } from 'node:module';
+import { createLogger } from '@superdoc/common/logger';
 
 const require = createRequire(import.meta.url);
+
+const log = createLogger('measuring-dom');
 
 type CanvasCtor = new (
   width?: number,
@@ -17,7 +20,7 @@ export function resolveCanvas(): { Canvas: CanvasCtor; usingStub: boolean } {
     return { Canvas, usingStub: false };
   } catch {
     if (!warned) {
-      console.warn(
+      log.warn(
         '[superdoc] Using mock canvas fallback; text metrics may be approximate. Install native deps (pkg-config + cairo/pixman) or use Node 20 for precise measurements.',
       );
       warned = true;

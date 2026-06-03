@@ -9,6 +9,9 @@ import { getStructuredContentTagsById } from './structuredContentHelpers/getStru
 import { getStructuredContentByGroup } from './structuredContentHelpers/getStructuredContentByGroup.js';
 import { createTagObject } from './structuredContentHelpers/tagUtils.js';
 import * as structuredContentHelpers from './structuredContentHelpers/index.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('structured-content');
 
 const STRUCTURED_CONTENT_NAMES = ['structuredContent', 'structuredContentBlock'];
 
@@ -379,7 +382,7 @@ export const StructuredContentCommands = Extension.create({
               const nodeForValidation = editor.validateJSON(updatedNode.toJSON());
               nodeForValidation.check();
             } catch (error) {
-              console.error('Invalid content.', 'Passed value:', content, 'Error:', error);
+              log.error('Invalid content.', 'Passed value:', content, 'Error:', error);
               return false;
             }
 
@@ -548,7 +551,7 @@ export const StructuredContentCommands = Extension.create({
                 const nodeForValidation = editor.validateJSON(updatedNode.toJSON());
                 nodeForValidation.check();
               } catch (error) {
-                console.error('Invalid content.', 'Passed value:', content, 'Error:', error);
+                log.error('Invalid content.', 'Passed value:', content, 'Error:', error);
                 return false;
               }
 

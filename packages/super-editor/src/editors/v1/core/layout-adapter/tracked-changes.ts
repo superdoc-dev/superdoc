@@ -38,6 +38,9 @@ import {
   MAX_RUN_MARK_DEPTH,
   DEFAULT_HYPERLINK_CONFIG,
 } from './constants.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('pm-adapter');
 
 /**
  * Type guard to validate that a value is a valid TrackedChangesMode.
@@ -122,7 +125,7 @@ export const normalizeRunMarkList = (value: unknown): RunMark[] | undefined => {
     // Prevent DoS attacks from extremely large JSON payloads
     if (value.length > MAX_RUN_MARK_JSON_LENGTH) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`[PM-Adapter] Rejecting run mark JSON payload exceeding ${MAX_RUN_MARK_JSON_LENGTH} chars`);
+        log.warn(`[PM-Adapter] Rejecting run mark JSON payload exceeding ${MAX_RUN_MARK_JSON_LENGTH} chars`);
       }
       return undefined;
     }
@@ -130,7 +133,7 @@ export const normalizeRunMarkList = (value: unknown): RunMark[] | undefined => {
       entries = JSON.parse(value);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PM-Adapter] Failed to parse run mark JSON:', error);
+        log.warn('[PM-Adapter] Failed to parse run mark JSON:', error);
       }
       return undefined;
     }
@@ -140,13 +143,13 @@ export const normalizeRunMarkList = (value: unknown): RunMark[] | undefined => {
   }
   if (entries.length > MAX_RUN_MARK_ARRAY_LENGTH) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn(`[PM-Adapter] Rejecting run mark array exceeding ${MAX_RUN_MARK_ARRAY_LENGTH} entries`);
+      log.warn(`[PM-Adapter] Rejecting run mark array exceeding ${MAX_RUN_MARK_ARRAY_LENGTH} entries`);
     }
     return undefined;
   }
   if (!validateDepth(entries)) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn(`[PM-Adapter] Rejecting run mark array exceeding depth ${MAX_RUN_MARK_DEPTH}`);
+      log.warn(`[PM-Adapter] Rejecting run mark array exceeding depth ${MAX_RUN_MARK_DEPTH}`);
     }
     return undefined;
   }
@@ -441,7 +444,7 @@ export const applyFormatChangeMarks = (
 
   if (!isValidMarkArray) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[PM-Adapter] Invalid before marks in tracked change, resetting formatting');
+      log.warn('[PM-Adapter] Invalid before marks in tracked change, resetting formatting');
     }
     resetRunFormatting(run);
     return;
@@ -454,7 +457,7 @@ export const applyFormatChangeMarks = (
     applyMarksToRun(run, beforeMarks as PMMark[], hyperlinkConfig, themeColors, undefined, enableComments, storyKey);
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[PM-Adapter] Error applying format change marks, resetting formatting:', error);
+      log.warn('[PM-Adapter] Error applying format change marks, resetting formatting:', error);
     }
     // On error, ensure run is in clean state with no formatting
     resetRunFormatting(run);

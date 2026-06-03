@@ -394,6 +394,9 @@ export type SelectionCommandContext = {
 // Mark name constants
 import { CommentMarkName } from '@extensions/comment/comments-constants.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '@extensions/track-changes/constants.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('presentation-editor');
 
 const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter @ 72dpi
 const DEFAULT_MARGINS: PageMargins = { top: 72, right: 72, bottom: 72, left: 72 };
@@ -415,7 +418,7 @@ const layoutDebugEnabled =
 /** Log performance metrics when debug is enabled */
 const perfLog = (...args: unknown[]): void => {
   if (!layoutDebugEnabled) return;
-  console.log(...args);
+  log.debug(...args);
 };
 /** Budget for header/footer initialization before warning (milliseconds) */
 const HEADER_FOOTER_INIT_BUDGET_MS = 200;
@@ -1016,7 +1019,7 @@ export class PresentationEditor extends EventEmitter {
   #warnUnsupportedNumberingRestart(kind: 'footnote' | 'endnote'): void {
     if (this.#warnedUnsupportedRestart[kind]) return;
     this.#warnedUnsupportedRestart[kind] = true;
-    console.warn(
+    log.warn(
       `[PresentationEditor] ${kind} numRestart="eachPage" is not yet supported (requires a two-pass pagination handshake). Falling back to "continuous". Tracked for follow-up.`,
     );
   }
@@ -2147,7 +2150,7 @@ export class PresentationEditor extends EventEmitter {
       } catch (error) {
         // DOM operations can throw exceptions - fall back to geometry-only positioning
         if (process.env.NODE_ENV === 'development') {
-          console.warn('[PresentationEditor] DOM caret computation failed in getRectsForRange:', error);
+          log.warn('[PresentationEditor] DOM caret computation failed in getRectsForRange:', error);
         }
       }
       const layoutCaretStart = this.#computeCaretLayoutRectGeometry(start, false);
@@ -3420,7 +3423,7 @@ export class PresentationEditor extends EventEmitter {
     pos: number,
   ): { top: number; bottom: number; left: number; right: number; width: number; height: number } | null {
     if (!Number.isFinite(pos)) {
-      console.warn('[PresentationEditor] coordsAtPos called with invalid position:', pos);
+      log.warn('[PresentationEditor] coordsAtPos called with invalid position:', pos);
       return null;
     }
 
@@ -3429,7 +3432,7 @@ export class PresentationEditor extends EventEmitter {
     if (sessionMode !== 'body') {
       const context = this.#getHeaderFooterContext();
       if (!context) {
-        console.warn('[PresentationEditor] Header/footer context not available for coordsAtPos');
+        log.warn('[PresentationEditor] Header/footer context not available for coordsAtPos');
         return null;
       }
 
@@ -3942,7 +3945,7 @@ export class PresentationEditor extends EventEmitter {
       timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS,
     });
     if (!mounted) {
-      console.warn(`[PresentationEditor] scrollToPositionAsync: Page ${pageIndex} failed to mount within timeout`);
+      log.warn(`[PresentationEditor] scrollToPositionAsync: Page ${pageIndex} failed to mount within timeout`);
       return false;
     }
 
@@ -4174,7 +4177,7 @@ export class PresentationEditor extends EventEmitter {
     const clientY = coords?.clientY ?? coords?.top ?? null;
 
     if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
-      console.warn('[PresentationEditor] posAtCoords called with invalid coordinates:', coords);
+      log.warn('[PresentationEditor] posAtCoords called with invalid coordinates:', coords);
       return null;
     }
 
@@ -4245,7 +4248,7 @@ export class PresentationEditor extends EventEmitter {
       throw new RangeError('[PresentationEditor] setZoom expects a positive number greater than 0');
     }
     if (zoom > MAX_ZOOM_WARNING_THRESHOLD) {
-      console.warn(
+      log.warn(
         `[PresentationEditor] Zoom level ${zoom} exceeds recommended maximum of ${MAX_ZOOM_WARNING_THRESHOLD}. Performance may degrade.`,
       );
     }
@@ -4587,7 +4590,7 @@ export class PresentationEditor extends EventEmitter {
     try {
       this.#postPaintPipeline.syncInlineStyleLayers(state, this.#domPositionIndex);
     } catch (error) {
-      console.warn('[PresentationEditor] Inline style layer sync failed:', error);
+      log.warn('[PresentationEditor] Inline style layer sync failed:', error);
     }
   }
 
@@ -4609,7 +4612,7 @@ export class PresentationEditor extends EventEmitter {
     } catch (error) {
       // Sync can call findRangeByText and other doc-dependent logic; if it throws
       // (e.g. edge-case doc state), avoid breaking the RAF or observer sync loop.
-      console.warn('[PresentationEditor] Decoration sync failed:', error);
+      log.warn('[PresentationEditor] Decoration sync failed:', error);
     }
   }
 
@@ -5808,11 +5811,11 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (detail && Object.keys(detail).length > 0) {
-      console.debug('[PresentationEditor][UnifiedHistory]', message, detail);
+      log.debug('[PresentationEditor][UnifiedHistory]', message, detail);
       return;
     }
 
-    console.debug('[PresentationEditor][UnifiedHistory]', message);
+    log.debug('[PresentationEditor][UnifiedHistory]', message);
   }
 
   #recordNoteHitDebug(entry: Record<string, unknown>): void {
@@ -5944,7 +5947,7 @@ export class PresentationEditor extends EventEmitter {
       try {
         commitHook(this.#editor, noteEditor);
       } catch (error) {
-        console.warn('[PresentationEditor] Note commit after replay failed:', error);
+        log.warn('[PresentationEditor] Note commit after replay failed:', error);
       }
     }
     this.#pendingDocChange = true;
@@ -6107,7 +6110,7 @@ export class PresentationEditor extends EventEmitter {
       try {
         cleanup();
       } catch (error) {
-        console.warn('[PresentationEditor] Unified history cleanup failed:', error);
+        log.warn('[PresentationEditor] Unified history cleanup failed:', error);
       }
     });
     this.#historyCoordinatorCleanup.length = 0;
@@ -6177,7 +6180,7 @@ export class PresentationEditor extends EventEmitter {
       return true;
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PresentationEditor] Failed to select word:', error);
+        log.warn('[PresentationEditor] Failed to select word:', error);
       }
       return false;
     }
@@ -6214,7 +6217,7 @@ export class PresentationEditor extends EventEmitter {
       return true;
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PresentationEditor] Failed to select paragraph:', error);
+        log.warn('[PresentationEditor] Failed to select paragraph:', error);
       }
       return false;
     }
@@ -7314,7 +7317,7 @@ export class PresentationEditor extends EventEmitter {
         // DOM manipulation can fail if element is detached or in invalid state
         // Log but don't throw to prevent breaking editor
         if (process.env.NODE_ENV === 'development') {
-          console.warn('[PresentationEditor] Failed to clear selection layer in viewing mode:', error);
+          log.warn('[PresentationEditor] Failed to clear selection layer in viewing mode:', error);
         }
       }
       return;
@@ -7354,7 +7357,7 @@ export class PresentationEditor extends EventEmitter {
         this.#localSelectionLayer.innerHTML = '';
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
-          console.warn('[PresentationEditor] Failed to clear selection layer (no selection):', error);
+          log.warn('[PresentationEditor] Failed to clear selection layer (no selection):', error);
         }
       }
       return;
@@ -7387,7 +7390,7 @@ export class PresentationEditor extends EventEmitter {
         this.#localSelectionLayer.innerHTML = '';
         this.#renderCellSelectionOverlay(selection, layout);
       } catch (error) {
-        console.warn('[PresentationEditor] Failed to render cell selection overlay:', error);
+        log.warn('[PresentationEditor] Failed to render cell selection overlay:', error);
       }
       return;
     }
@@ -7410,7 +7413,7 @@ export class PresentationEditor extends EventEmitter {
       } catch (error) {
         // DOM manipulation can fail if element is detached or in invalid state
         if (process.env.NODE_ENV === 'development') {
-          console.warn('[PresentationEditor] Failed to render caret overlay:', error);
+          log.warn('[PresentationEditor] Failed to render caret overlay:', error);
         }
       }
       if (shouldScrollIntoView && !isDragDropIndicatorActive) {
@@ -7455,7 +7458,7 @@ export class PresentationEditor extends EventEmitter {
     } catch (error) {
       // DOM manipulation can fail if element is detached or in invalid state
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PresentationEditor] Failed to render selection rects:', error);
+        log.warn('[PresentationEditor] Failed to render selection rects:', error);
       }
     }
 
@@ -7821,13 +7824,13 @@ export class PresentationEditor extends EventEmitter {
 
     // Validate that margins are finite numbers and don't exceed page height
     if (!Number.isFinite(marginTop) || !Number.isFinite(marginBottom)) {
-      console.warn('[PresentationEditor] Invalid top or bottom margin: not a finite number');
+      log.warn('[PresentationEditor] Invalid top or bottom margin: not a finite number');
       return null;
     }
 
     const totalVerticalMargins = marginTop + marginBottom;
     if (totalVerticalMargins >= pageSize.h) {
-      console.warn(
+      log.warn(
         `[PresentationEditor] Invalid margins: top (${marginTop}) + bottom (${marginBottom}) = ${totalVerticalMargins} >= page height (${pageSize.h})`,
       );
       return null;
@@ -8783,7 +8786,7 @@ export class PresentationEditor extends EventEmitter {
 
       return false;
     } catch (error) {
-      console.error('[PresentationEditor] navigateTo failed:', error);
+      log.error('[PresentationEditor] navigateTo failed:', error);
       this.emit('error', { error, context: 'navigateTo' });
       return false;
     }
@@ -9443,7 +9446,7 @@ export class PresentationEditor extends EventEmitter {
         timeoutMs: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS,
       });
     } catch (error) {
-      console.error('[PresentationEditor] goToAnchor failed:', error);
+      log.error('[PresentationEditor] goToAnchor failed:', error);
       this.emit('error', {
         error,
         context: 'goToAnchor',
@@ -9628,7 +9631,7 @@ export class PresentationEditor extends EventEmitter {
       return measureVisibleTextOffsetFromHelper(root, domPoint.node, domPoint.offset);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PresentationEditor] Failed to measure active editor visible text offset:', error);
+        log.warn('[PresentationEditor] Failed to measure active editor visible text offset:', error);
       }
       return null;
     }
@@ -9810,7 +9813,7 @@ export class PresentationEditor extends EventEmitter {
     } catch (error) {
       // Plugin may not be loaded or state may be invalid
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PresentationEditor] Failed to get track changes plugin state:', error);
+        log.warn('[PresentationEditor] Failed to get track changes plugin state:', error);
       }
       return null;
     }
@@ -10236,7 +10239,7 @@ export class PresentationEditor extends EventEmitter {
     } catch (error) {
       // DOM operations can throw exceptions - fall back to geometry-only positioning
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PresentationEditor] DOM caret computation failed in #computeCaretLayoutRect:', error);
+        log.warn('[PresentationEditor] DOM caret computation failed in #computeCaretLayoutRect:', error);
       }
     }
     if (dom && geometry) {
@@ -10318,7 +10321,7 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #handleLayoutError(phase: LayoutError['phase'], error: Error) {
-    console.error('[PresentationEditor] Layout error', error);
+    log.error('[PresentationEditor] Layout error', error);
     this.#layoutError = { phase, error, timestamp: Date.now() };
 
     // Update error state based on phase
@@ -10442,7 +10445,7 @@ export class PresentationEditor extends EventEmitter {
         });
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
-          console.warn('[PresentationEditor] Failed to render header/footer caret:', error);
+          log.warn('[PresentationEditor] Failed to render header/footer caret:', error);
         }
       }
       if (shouldScrollIntoView) {
@@ -10474,7 +10477,7 @@ export class PresentationEditor extends EventEmitter {
       });
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PresentationEditor] Failed to render header/footer selection rects:', error);
+        log.warn('[PresentationEditor] Failed to render header/footer selection rects:', error);
       }
     }
 
@@ -10528,7 +10531,7 @@ export class PresentationEditor extends EventEmitter {
         });
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
-          console.warn('[PresentationEditor] Failed to render note caret:', error);
+          log.warn('[PresentationEditor] Failed to render note caret:', error);
         }
       }
       if (shouldScrollIntoView) {
@@ -10553,7 +10556,7 @@ export class PresentationEditor extends EventEmitter {
       });
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PresentationEditor] Failed to render note selection rects:', error);
+        log.warn('[PresentationEditor] Failed to render note selection rects:', error);
       }
     }
 

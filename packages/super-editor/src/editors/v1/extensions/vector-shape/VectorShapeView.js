@@ -9,6 +9,9 @@ import {
   applyAlphaToSVG,
   generateTransforms,
 } from '../shared/svg-utils.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('vector-shape');
 
 export class VectorShapeView {
   node;
@@ -79,7 +82,7 @@ export class VectorShapeView {
         } catch (error) {
           // Silently handle DOM manipulation errors (e.g., detached node, read-only style)
           // These are edge cases that should not break rendering
-          console.warn('Failed to position parent element for vector shape:', error);
+          log.warn('Failed to position parent element for vector shape:', error);
         }
       });
     }
@@ -407,7 +410,7 @@ export class VectorShapeView {
             }
           }
         } catch (error) {
-          console.warn('Failed to generate SVG for shape:', kind, error);
+          log.warn('Failed to generate SVG for shape:', kind, error);
           return null;
         }
         return null;

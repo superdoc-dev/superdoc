@@ -1,4 +1,7 @@
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-converter:import');
 
 /**
  * Handles VML shape elements with v:imagedata (image watermarks).
@@ -27,7 +30,7 @@ export function handleShapeImageWatermarkImport({ params, pict }) {
   // Extract relationship ID
   const rId = imagedataAttrs['r:id'];
   if (!rId) {
-    console.warn('v:imagedata missing r:id attribute');
+    log.warn('v:imagedata missing r:id attribute');
     return null;
   }
 
@@ -41,7 +44,7 @@ export function handleShapeImageWatermarkImport({ params, pict }) {
   const rel = elements?.find((el) => el.attributes['Id'] === rId);
 
   if (!rel) {
-    console.warn(`Relationship not found for r:id="${rId}"`);
+    log.warn(`Relationship not found for r:id="${rId}"`);
     return null;
   }
 

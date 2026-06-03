@@ -1,6 +1,9 @@
 import http from 'node:http';
 import * as number from 'lib0/number';
+import { createLogger } from '@superdoc/common/logger';
 import type { SharedSuperDoc } from './shared-doc.js';
+
+const log = createLogger('callback');
 
 type CallbackObjects = Record<string, string>;
 type CallbackPayload = {
@@ -54,12 +57,12 @@ const callbackRequest = (url: URL, timeout: number, data: CallbackPayload) => {
   };
   const req = http.request(options);
   req.on('timeout', () => {
-    console.warn('Callback request timed out.');
+    log.warn('Callback request timed out.');
     req.abort();
   });
   req.on('error', (e) => {
     const sanitizedError = String(e).replace(/\n|\r/g, '');
-    console.error('Callback request error:', sanitizedError);
+    log.error('Callback request error:', sanitizedError);
     req.abort();
   });
   req.write(serialized);

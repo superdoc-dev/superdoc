@@ -31,6 +31,9 @@ import {
 } from '@superdoc/contracts';
 import { charOffsetToPm, findCharacterAtX } from './text-measurement.js';
 import type { PageGeometryHelper } from './page-geometry-helper.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-bridge:position-hit');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -828,7 +831,7 @@ export function clickToPositionGeometry(
       let availableWidth = Math.max(0, fragment.width - totalIndent);
 
       if (totalIndent > fragment.width) {
-        console.warn(
+        log.warn(
           `[clickToPosition] Paragraph indents (${totalIndent}px) exceed fragment width (${fragment.width}px) ` +
             `for block ${fragment.blockId}. This may indicate a layout miscalculation. ` +
             `Available width clamped to 0.`,
@@ -905,7 +908,7 @@ export function clickToPositionGeometry(
       let availableWidth = Math.max(0, tableHit.fragment.width - totalIndent);
 
       if (totalIndent > tableHit.fragment.width) {
-        console.warn(
+        log.warn(
           `[clickToPosition:table] Paragraph indents (${totalIndent}px) exceed fragment width (${tableHit.fragment.width}px) ` +
             `for block ${tableHit.fragment.blockId}. This may indicate a layout miscalculation. ` +
             `Available width clamped to 0.`,

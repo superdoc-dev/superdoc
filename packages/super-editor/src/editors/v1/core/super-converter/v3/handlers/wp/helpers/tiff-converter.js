@@ -10,6 +10,9 @@
 
 import * as UTIF from 'utif2';
 import { dataUriToArrayBuffer } from '../../../../helpers.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-converter:image');
 
 // Optional DOM environment provided by callers (e.g., JSDOM in Node)
 let domEnvironment = null;
@@ -94,7 +97,7 @@ export function convertTiffToPng(data) {
     // Render to canvas and export as PNG
     const canvas = createCanvas();
     if (!canvas) {
-      console.warn('TIFF conversion requires a DOM environment with canvas support');
+      log.warn('TIFF conversion requires a DOM environment with canvas support');
       return null;
     }
 
@@ -113,7 +116,7 @@ export function convertTiffToPng(data) {
 
     return { dataUri, format: 'png' };
   } catch (error) {
-    console.warn('Failed to convert TIFF to PNG:', error.message);
+    log.warn('Failed to convert TIFF to PNG:', error.message);
     return null;
   }
 }

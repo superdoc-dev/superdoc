@@ -58,7 +58,7 @@ describe('getFieldHighlightJson (non-throwing)', () => {
     const out = getFieldHighlightJson('   ');
     expect(out).toBeNull();
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][0]).toMatch(/Invalid HEX color/i);
+    expect(warnSpy.mock.calls[0][1]).toMatch(/Invalid HEX color/i);
   });
 
   it('returns null and warns for invalid HEX formats', () => {
@@ -84,7 +84,7 @@ describe('getFieldHighlightJson (non-throwing)', () => {
     }
     expect(warnSpy).toHaveBeenCalledTimes(invalid.length);
     for (let i = 0; i < invalid.length; i++) {
-      expect(warnSpy.mock.calls[i][0]).toMatch(/Invalid HEX color/i);
+      expect(warnSpy.mock.calls[i][1]).toMatch(/Invalid HEX color/i);
     }
   });
 

@@ -5,6 +5,9 @@ import { readFileAsArrayBuffer } from '../../core/pdf/helpers/read-file';
 import { OUTPUT_SCALE } from '../../core/pdf/helpers/constants';
 import { PDFAdapterFactory, createPDFConfig } from '../../core/pdf/pdf-adapter';
 import PdfViewerDocument from './PdfViewerDocument.vue';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('pdf-viewer');
 
 const emit = defineEmits([
   'page-rendered',
@@ -107,7 +110,7 @@ async function getDocument(file) {
     emit('document-loaded', file);
   } catch (e) {
     emit('document-error', e);
-    console.error(e);
+    log.error(e);
   }
 }
 
@@ -136,7 +139,7 @@ async function getPages() {
     emit('pages-loaded', pages);
   } catch (e) {
     emit('document-error', e);
-    console.error(e);
+    log.error(e);
   }
 }
 

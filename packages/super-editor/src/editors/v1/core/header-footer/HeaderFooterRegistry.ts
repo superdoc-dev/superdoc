@@ -7,6 +7,9 @@ import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
 import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
 import { buildStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('header-footer-registry');
 
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'] as const;
 const DEFAULT_HEADER_FOOTER_HEIGHT = 100;
@@ -284,7 +287,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
     if (options) {
       // Validate editorHost type
       if (options.editorHost !== undefined && !(options.editorHost instanceof HTMLElement)) {
-        console.error('[HeaderFooterEditorManager] editorHost must be an HTMLElement');
+        log.error('[HeaderFooterEditorManager] editorHost must be an HTMLElement');
         this.emit('error', {
           descriptor,
           error: new TypeError('editorHost must be an HTMLElement'),
@@ -299,7 +302,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
           !Number.isFinite(options.availableWidth) ||
           options.availableWidth <= 0
         ) {
-          console.error('[HeaderFooterEditorManager] availableWidth must be a positive number');
+          log.error('[HeaderFooterEditorManager] availableWidth must be a positive number');
           this.emit('error', {
             descriptor,
             error: new TypeError('availableWidth must be a positive number'),
@@ -314,7 +317,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
           !Number.isFinite(options.availableHeight) ||
           options.availableHeight <= 0
         ) {
-          console.error('[HeaderFooterEditorManager] availableHeight must be a positive number');
+          log.error('[HeaderFooterEditorManager] availableHeight must be a positive number');
           this.emit('error', {
             descriptor,
             error: new TypeError('availableHeight must be a positive number'),
@@ -329,7 +332,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
           !Number.isInteger(options.currentPageNumber) ||
           options.currentPageNumber < 1
         ) {
-          console.error('[HeaderFooterEditorManager] currentPageNumber must be a positive integer');
+          log.error('[HeaderFooterEditorManager] currentPageNumber must be a positive integer');
           this.emit('error', {
             descriptor,
             error: new TypeError('currentPageNumber must be a positive integer'),
@@ -344,7 +347,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
           !Number.isInteger(options.totalPageCount) ||
           options.totalPageCount < 1
         ) {
-          console.error('[HeaderFooterEditorManager] totalPageCount must be a positive integer');
+          log.error('[HeaderFooterEditorManager] totalPageCount must be a positive integer');
           this.emit('error', {
             descriptor,
             error: new TypeError('totalPageCount must be a positive integer'),
@@ -363,7 +366,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       this.#updateAccessOrder(descriptor.id);
 
       await existing.ready.catch((error) => {
-        console.error('[HeaderFooterEditorManager] Editor initialization failed:', error);
+        log.error('[HeaderFooterEditorManager] Editor initialization failed:', error);
         this.emit('error', { descriptor, error });
       });
       this.#mountAndUpdateEntry(existing, options);
@@ -396,7 +399,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
         this.#enforceCacheSizeLimit();
 
         await entry.ready.catch((error) => {
-          console.error('[HeaderFooterEditorManager] Editor initialization failed:', error);
+          log.error('[HeaderFooterEditorManager] Editor initialization failed:', error);
           this.emit('error', { descriptor, error });
         });
         return entry.editor;
@@ -694,7 +697,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
         try {
           entry.disposer();
         } catch (error) {
-          console.warn('[HeaderFooterEditorManager] Cleanup failed for editor:', key, error);
+          log.warn('[HeaderFooterEditorManager] Cleanup failed for editor:', key, error);
         }
         toRemove.push({ key, descriptor: entry.descriptor });
       }
@@ -713,7 +716,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       try {
         entry.disposer();
       } catch (error) {
-        console.warn('[HeaderFooterEditorManager] Cleanup failed:', error);
+        log.warn('[HeaderFooterEditorManager] Cleanup failed:', error);
       }
     });
     this.#editorEntries.clear();
@@ -753,7 +756,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
         totalPageCount: options?.totalPageCount ?? 1,
       }) as Editor;
     } catch (error) {
-      console.error('[HeaderFooterEditorManager] Editor creation failed:', error);
+      log.error('[HeaderFooterEditorManager] Editor creation failed:', error);
       return null;
     }
 
@@ -765,7 +768,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
         // and the parts publisher propagates to Yjs automatically.
         onHeaderFooterDataUpdate({ editor, transaction }, this.#editor, descriptor.id, descriptor.kind);
       } catch (error) {
-        console.error('[HeaderFooterEditorManager] Failed to sync header/footer update', { descriptor, error });
+        log.error('[HeaderFooterEditorManager] Failed to sync header/footer update', { descriptor, error });
         // Emit error event so consumers can handle sync failures
         // This prevents silent failures and allows for retry logic or user notification
         this.emit('syncError', { descriptor, error });
@@ -782,14 +785,14 @@ export class HeaderFooterEditorManager extends EventEmitter {
         // Remove event listener to prevent memory leaks from accumulating handlers
         editor.off?.('update', handleUpdate);
       } catch (error) {
-        console.warn('[HeaderFooterEditorManager] Failed to remove update listener:', error);
+        log.warn('[HeaderFooterEditorManager] Failed to remove update listener:', error);
       }
 
       try {
         // Destroy the editor instance to free up resources
         editor.destroy?.();
       } catch (error) {
-        console.warn('[HeaderFooterEditorManager] Failed to destroy editor:', error);
+        log.warn('[HeaderFooterEditorManager] Failed to destroy editor:', error);
       }
 
       try {
@@ -798,14 +801,14 @@ export class HeaderFooterEditorManager extends EventEmitter {
           container.parentNode.removeChild(container);
         }
       } catch (error) {
-        console.warn('[HeaderFooterEditorManager] Failed to remove container from DOM:', error);
+        log.warn('[HeaderFooterEditorManager] Failed to remove container from DOM:', error);
       }
 
       try {
         // Unregister from converter to maintain consistency
         this.#unregisterConverterEditor(descriptor);
       } catch (error) {
-        console.warn('[HeaderFooterEditorManager] Failed to unregister converter editor:', error);
+        log.warn('[HeaderFooterEditorManager] Failed to unregister converter editor:', error);
       }
     };
 
@@ -1024,7 +1027,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       oldEntry.disposer();
       this.#evictions += 1;
     } catch (error) {
-      console.warn('[HeaderFooterEditorManager] LRU eviction cleanup failed:', error);
+      log.warn('[HeaderFooterEditorManager] LRU eviction cleanup failed:', error);
     }
     this.#editorEntries.delete(id);
     this.emit('editorDisposed', { descriptor: oldEntry.descriptor } as EditorDisposedPayload);

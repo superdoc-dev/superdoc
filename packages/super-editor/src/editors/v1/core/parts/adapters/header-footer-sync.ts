@@ -17,6 +17,9 @@ import {
 } from './header-footer-part-descriptor.js';
 import { getRelationshipsRoot } from '../../helpers/rels-part-helpers.js';
 import { getWordPartRelsPath, normalizeWordPartPath } from '../../helpers/word-part-path.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('header-footer-sync');
 
 // ---------------------------------------------------------------------------
 // Converter shape
@@ -217,7 +220,7 @@ export function exportSubEditorToPart(
     });
     bodyContent = result?.elements?.[0]?.elements ?? [];
   } catch (err) {
-    console.warn(`[header-footer-sync] Export failed for ${partId}:`, err);
+    log.warn(`Export failed for ${partId}:`, err);
     return false;
   }
 
@@ -263,7 +266,7 @@ export function exportSubEditorToPart(
 
     return true;
   } catch (err) {
-    console.warn(`[header-footer-sync] mutatePart failed for ${partId}:`, err);
+    log.warn(`mutatePart failed for ${partId}:`, err);
     return false;
   }
 }

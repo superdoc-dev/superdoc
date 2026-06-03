@@ -100,6 +100,9 @@ import { getViewModeSelectionWithoutStructuredContent } from './helpers/getViewM
 import { resolveMainBodyEditor } from '../document-api-adapters/helpers/word-statistics.js';
 import { commitLiveStorySessionRuntimes } from '../document-api-adapters/story-runtime/live-story-session-runtime-registry.js';
 import { buildFilteredMetadataXml } from '../document-api-adapters/plan-engine/anchored-metadata-wrappers.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('editor');
 
 type TrackChangesRuntimeConfig = NonNullable<EditorOptions['trackedChanges']>;
 
@@ -878,7 +881,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         text: () => this.#initRichText(),
         html: () => this.#initRichText(),
         default: () => {
-          console.log('Not implemented.');
+          log.debug('Not implemented.');
         },
       };
 
@@ -955,7 +958,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         licenseKey: resolvedLicenseKey,
         metadata: telemetryConfig.metadata,
       });
-      console.debug('[super-editor] Telemetry: enabled');
+      log.debug('[super-editor] Telemetry: enabled');
     } catch {
       // Fail silently - telemetry should never break the app
     }
@@ -1198,7 +1201,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           // Browser: fetch the file
           const response = await fetch(source);
           if (!response.ok) {
-            console.debug('[SuperDoc] Fetch failed:', response.status, response.statusText);
+            log.debug('[SuperDoc] Fetch failed:', response.status, response.statusText);
             throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
           }
           const blob = await response.blob();
@@ -1361,11 +1364,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // Encryption errors are structured and recoverable — surface them directly
       // so consumers can inspect error.code (PASSWORD_REQUIRED, PASSWORD_INVALID, etc.)
       if (error instanceof DocxEncryptionError) {
-        console.debug('[SuperDoc] Document load error:', error.message);
+        log.debug('[SuperDoc] Document load error:', error.message);
         throw error;
       }
       const err = error instanceof Error ? error : new Error(String(error));
-      console.debug('[SuperDoc] Document load error:', err.message);
+      log.debug('[SuperDoc] Document load error:', err.message);
       throw new DocumentLoadError(`Failed to load document: ${err.message}`, err);
     }
   }
@@ -1672,7 +1675,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // Deprecation warnings for legacy mock options
     if (options.mockDocument) {
-      console.warn(
+      log.warn(
         '[super-editor] `mockDocument` is deprecated and will be removed in a future version. ' +
           'Use `document` instead (e.g., `new Editor({ document: jsdomDocument })`). ' +
           'See https://docs.superdoc.dev/guide/headless for migration guidance.',
@@ -1680,7 +1683,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       (global as typeof globalThis).document = options.mockDocument;
     }
     if (options.mockWindow) {
-      console.warn(
+      log.warn(
         '[super-editor] `mockWindow` is deprecated and will be removed in a future version. ' +
           'Prefer passing `document` only. Global window assignment is no longer required for headless mode.',
       );
@@ -2618,7 +2621,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       this.emit('fonts-resolved', payload);
     } catch {
-      console.warn('[SuperDoc] Could not determine document fonts and unsupported fonts');
+      log.warn('[SuperDoc] Could not determine document fonts and unsupported fonts');
     }
   }
 
@@ -2718,7 +2721,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * @deprecated use setDocumentVersion instead
    */
   static updateDocumentVersion(doc: DocxFileEntry[], version: string): string {
-    console.warn('updateDocumentVersion is deprecated, use setDocumentVersion instead');
+    log.warn('updateDocumentVersion is deprecated, use setDocumentVersion instead');
     return Editor.setDocumentVersion(doc, version);
   }
 
@@ -2845,7 +2848,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         else doc = this.schema.topNodeType.createAndFill()!;
       }
     } catch (err) {
-      console.error(err);
+      log.error(err);
       const error = err instanceof Error ? err : new Error(String(err));
       this.emit('contentError', { editor: this, error });
     }
@@ -3035,7 +3038,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // nothing valid to initialize.
     if (this.isDestroyed || !this.converter || !this.state) return;
 
-    console.debug('🔗 [super-editor] Collaboration ready');
+    log.debug('🔗 [super-editor] Collaboration ready');
 
     this.#validateDocumentInit();
 
@@ -3154,7 +3157,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (forceTrackChanges) throw error;
       // just in case
       nextState = prevState.apply(transactionToApply);
-      console.log(error);
+      log.debug(error);
     }
 
     const selectionHasChanged = !prevState.selection.eq(nextState.selection);
@@ -3208,7 +3211,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (transaction.docChanged && this.converter) {
         if (!this.converter.documentGuid) {
           this.converter.promoteToGuid();
-          console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+          log.debug('Document modified - assigned GUID:', this.converter.documentGuid);
         }
         this.converter.documentModified = true;
       }
@@ -3366,7 +3369,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * @deprecated use getDocumentGuid instead
    */
   getDocumentId(): string | null {
-    console.warn('getDocumentId is deprecated, use getDocumentGuid instead');
+    log.warn('getDocumentId is deprecated, use getDocumentGuid instead');
     return this.getDocumentGuid();
   }
 
@@ -4049,7 +4052,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('exception', { error: err, editor: this });
-      console.error(err);
+      log.error(err);
     }
   }
 
@@ -4059,13 +4062,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #endCollaboration(): void {
     if (!this.options.ydoc) return;
     try {
-      console.debug('🔗 [super-editor] Ending collaboration');
+      log.debug('🔗 [super-editor] Ending collaboration');
       this.options.collaborationProvider?.disconnect?.();
       (this.options.ydoc as { destroy: () => void }).destroy();
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('exception', { error: err, editor: this });
-      console.error(err);
+      log.error(err);
     }
   }
 
@@ -4434,7 +4437,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('exception', { error: err, editor: this });
-      console.error(err);
+      log.error(err);
     }
   }
 
@@ -4444,7 +4447,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   static checkIfMigrationsNeeded(): boolean {
     const dataVersion = version ?? 'initial';
     const migrations = getNecessaryMigrations(dataVersion) || [];
-    console.debug('[checkVersionMigrations] Migrations needed:', dataVersion, migrations.length);
+    log.debug('[checkVersionMigrations] Migrations needed:', dataVersion, migrations.length);
     return migrations.length > 0;
   }
 
@@ -4452,13 +4455,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Process collaboration migrations
    */
   processCollaborationMigrations(): unknown | void {
-    console.debug('[checkVersionMigrations] Current editor version', CURRENT_APP_VERSION);
+    log.debug('[checkVersionMigrations] Current editor version', CURRENT_APP_VERSION);
     if (!this.options.ydoc) return;
 
     const metaMap = (this.options.ydoc as { getMap: (name: string) => Map<string, unknown> }).getMap('meta');
     let docVersion = metaMap.get('version');
     if (!docVersion) docVersion = 'initial';
-    console.debug('[checkVersionMigrations] Document version', docVersion);
+    log.debug('[checkVersionMigrations] Document version', docVersion);
     const migrations = getNecessaryMigrations(docVersion) || [];
 
     const plugins = this.state.plugins;
@@ -4467,7 +4470,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     let hasRunMigrations = false;
     for (const migration of migrations) {
-      console.debug('🏃‍♂️ Running migration', migration.name);
+      log.debug('🏃‍♂️ Running migration', migration.name);
       const result = migration(this);
       if (!result) throw new Error('Migration failed at ' + migration.name);
       else hasRunMigrations = true;
@@ -4580,7 +4583,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   getInternalXmlFile(name: string, type: 'json' | 'string' = 'json'): unknown | string | null {
     if (!this.converter.convertedXml[name]) {
-      console.warn('Cannot find file in docx');
+      log.warn('Cannot find file in docx');
       return null;
     }
 

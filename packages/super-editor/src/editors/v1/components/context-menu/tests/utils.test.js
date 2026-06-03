@@ -713,7 +713,8 @@ describe('utils.js', () => {
 
       expect(result).toEqual({ isCellSelection: true, tableSelectionKind: 'cells' });
       expect(warnSpy).toHaveBeenCalledWith(
-        '[ContextMenu] Unable to resolve cell selection rectangle:',
+        '[context-menu]',
+        'Unable to resolve cell selection rectangle:',
         expect.any(Error),
       );
       warnSpy.mockRestore();

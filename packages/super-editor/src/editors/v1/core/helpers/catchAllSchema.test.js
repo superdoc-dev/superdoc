@@ -172,7 +172,7 @@ describe('createDocFromHTML — unsupported content detection', () => {
     });
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][0]).toContain('Unsupported HTML content');
+    expect(warnSpy.mock.calls[0][1]).toContain('Unsupported HTML content');
   });
 
   it('does NOT emit console.warn when callback is provided', () => {

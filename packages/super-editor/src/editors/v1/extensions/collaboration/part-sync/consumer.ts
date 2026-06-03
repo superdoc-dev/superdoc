@@ -18,6 +18,9 @@ import {
   ensureHeaderFooterDescriptor,
 } from '../../../core/parts/adapters/header-footer-part-descriptor.js';
 import { resolveHeaderFooterRId } from '../../../core/parts/adapters/header-footer-sync.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('part-sync');
 
 // ---------------------------------------------------------------------------
 // Consumer State
@@ -85,7 +88,7 @@ export function createPartConsumer(editor: Editor, ydoc: Y.Doc): PartConsumer {
 
         const envelope = decodeYjsToEnvelope(yValue);
         if (!envelope || envelope.data === undefined || envelope.data === null) {
-          console.warn(`[part-sync] Skipping invalid envelope for "${key}"`);
+          log.warn(`Skipping invalid envelope for "${key}"`);
           return;
         }
 
@@ -122,7 +125,7 @@ export function createPartConsumer(editor: Editor, ydoc: Y.Doc): PartConsumer {
         // Clear from failed on successful build
         failedParts.delete(key);
       } catch (err) {
-        console.error(`[part-sync] Error processing remote part "${key}":`, err);
+        log.error(`Error processing remote part "${key}":`, err);
         trackFailure(failedParts, key, partsMap);
       }
     });
@@ -133,7 +136,7 @@ export function createPartConsumer(editor: Editor, ydoc: Y.Doc): PartConsumer {
     try {
       mutateParts({ editor, source: SOURCE_COLLAB_REMOTE_PARTS, operations });
     } catch (err) {
-      console.error('[part-sync] Failed to apply remote part changes:', err);
+      log.error('Failed to apply remote part changes:', err);
     } finally {
       isApplyingRemoteParts = false;
     }

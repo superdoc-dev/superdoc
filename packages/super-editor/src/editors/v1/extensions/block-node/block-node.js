@@ -6,6 +6,9 @@ import { Plugin, PluginKey } from 'prosemirror-state';
 import { ReplaceStep, ReplaceAroundStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 import { v4 as uuidv4 } from 'uuid';
 import { ySyncPluginKey } from 'y-prosemirror';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('block-node');
 
 const { findChildren } = helpers;
 const SD_BLOCK_ID_ATTRIBUTE_NAME = 'sdBlockId';
@@ -409,7 +412,7 @@ export const BlockNode = Extension.create({
                   updateNodeAt(node, pos);
                 });
               } catch (error) {
-                console.warn('Block node plugin: nodesBetween failed, falling back to full traversal', error);
+                log.warn('Block node plugin: nodesBetween failed, falling back to full traversal', error);
                 shouldFallbackToFullTraversal = true;
                 break;
               }

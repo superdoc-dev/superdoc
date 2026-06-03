@@ -16,6 +16,9 @@ import { mutatePart } from '../mutation/mutate-part.js';
 import { hasPart } from '../store/part-store.js';
 import { RELATIONSHIP_TYPES } from '../../super-converter/docx-helpers/docx-constants.js';
 import { createRelationshipsPart, getRelationshipsRoot } from '../../helpers/rels-part-helpers.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('parts');
 
 const RELS_PART_ID = 'word/_rels/document.xml.rels' as const;
 
@@ -108,7 +111,7 @@ export function findOrCreateRelationship(editor: Editor, source: string, options
 
   const mappedType = RELATIONSHIP_TYPES[type];
   if (!mappedType) {
-    console.warn(`findOrCreateRelationship: unsupported type "${type}"`);
+    log.warn(`findOrCreateRelationship: unsupported type "${type}"`);
     return null;
   }
 

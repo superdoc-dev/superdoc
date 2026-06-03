@@ -66,7 +66,7 @@ describe('useAi', () => {
       const ai = useAi({ activeEditorRef: ref(null) });
       ai.showAiWriterAtCursor();
       expect(ai.showAiWriter.value).toBe(false);
-      expect(errSpy).toHaveBeenCalledWith('[useAi] Editor not available');
+      expect(errSpy).toHaveBeenCalledWith('[use-ai]', '[useAi] Editor not available');
     });
 
     it('logs an error and returns early when the editor is destroyed', () => {
@@ -138,7 +138,7 @@ describe('useAi', () => {
     it('logs an error when there is no editor', () => {
       const ai = useAi({ activeEditorRef: ref(null) });
       ai.handleAiToolClick();
-      expect(errSpy).toHaveBeenCalledWith('[useAi] Editor not available');
+      expect(errSpy).toHaveBeenCalledWith('[use-ai]', '[useAi] Editor not available');
     });
 
     it('inserts the AI mark and shows the writer at the cursor', () => {

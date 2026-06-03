@@ -24,7 +24,10 @@ import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js
 import { removePart, hasPart } from '../../core/parts/store/part-store.js';
 import { removeInvalidationHandler } from '../../core/parts/invalidation/part-invalidation-registry.js';
 import type { PartId } from '../../core/parts/types.js';
+import { createLogger } from '@superdoc/common/logger';
 export { normalizeVariant } from '../../core/presentation-editor/header-footer/header-footer-variant.js';
+
+const log = createLogger('header-footer-slot-materialization');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,7 +101,7 @@ export function ensureExplicitHeaderFooterSlot(
   const sections = resolveSectionProjections(editor);
   const projection = sections.find((s) => s.sectionId === sectionId);
   if (!projection) {
-    console.warn(`[header-footer-slot-materialization] Section "${sectionId}" not found.`);
+    log.warn(`Section "${sectionId}" not found.`);
     return null;
   }
 
@@ -177,7 +180,7 @@ export function ensureExplicitHeaderFooterSlot(
   });
 
   if (!mutationResult.success) {
-    console.warn('[header-footer-slot-materialization] Materialization failed, state rolled back.');
+    log.warn('Materialization failed, state rolled back.');
     return null;
   }
 

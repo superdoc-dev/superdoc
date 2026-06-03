@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { configureLogging } from '@superdoc/common/logger';
 import {
   getNewRelationshipId,
   getDocumentRelationshipElements,
@@ -220,9 +221,15 @@ describe('insertNewRelationship', () => {
       },
     };
 
+    configureLogging({ level: 'debug' });
+
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'info').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    configureLogging({ level: 'warn' });
   });
 
   it('throws if target is not a non-empty string', () => {
@@ -244,7 +251,10 @@ describe('insertNewRelationship', () => {
   it('returns null and warns on unsupported type', () => {
     const result = insertNewRelationship('foo', 'unsupportedType', mockEditor);
     expect(result).toBeNull();
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Unsupported relationship type'));
+    expect(console.warn).toHaveBeenCalledWith(
+      '[super-converter:export]',
+      expect.stringContaining('Unsupported relationship type'),
+    );
   });
 
   it('returns existing relationship if already present', () => {
@@ -252,14 +262,17 @@ describe('insertNewRelationship', () => {
 
     const result = insertNewRelationship('foo', 'hyperlink', mockEditor);
     expect(result).toBe('rId42');
-    expect(console.info).toHaveBeenCalledWith(expect.stringContaining('Reusing existing relationship for target'));
+    expect(console.info).toHaveBeenCalledWith(
+      '[super-converter:export]',
+      expect.stringContaining('Reusing existing relationship for target'),
+    );
   });
 
   it('returns null if editor.converter.convertedXml is missing', () => {
     const badEditor = { converter: {} };
     const result = insertNewRelationship('foo', 'hyperlink', badEditor);
     expect(result).toBeNull();
-    expect(console.error).toHaveBeenCalledWith('No converted XML found in editor');
+    expect(console.error).toHaveBeenCalledWith('[super-converter:export]', 'No converted XML found in editor');
   });
 
   it('returns null if documentRels is missing', () => {
@@ -270,7 +283,10 @@ describe('insertNewRelationship', () => {
     };
     const result = insertNewRelationship('foo', 'hyperlink', badEditor);
     expect(result).toBeNull();
-    expect(console.error).toHaveBeenCalledWith('No document relationships found in the docx');
+    expect(console.error).toHaveBeenCalledWith(
+      '[super-converter:export]',
+      'No document relationships found in the docx',
+    );
   });
 
   it('returns null if Relationships tag is missing', () => {
@@ -286,7 +302,10 @@ describe('insertNewRelationship', () => {
 
     const result = insertNewRelationship('foo', 'hyperlink', editor);
     expect(result).toBeNull();
-    expect(console.error).toHaveBeenCalledWith('No Relationships tag found in document relationships');
+    expect(console.error).toHaveBeenCalledWith(
+      '[super-converter:export]',
+      'No Relationships tag found in document relationships',
+    );
   });
 
   it('returns null if getNewRelationshipId fails', () => {

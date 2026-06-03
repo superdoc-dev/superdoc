@@ -14,6 +14,9 @@ import type { Editor } from '../../Editor.js';
 import type { PartDescriptor, CommitContext, DeleteContext, PartId } from '../types.js';
 import { registerPartDescriptor, hasPartDescriptor } from '../registry/part-registry.js';
 import { registerInvalidationHandler } from '../invalidation/part-invalidation-registry.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('parts');
 
 // ---------------------------------------------------------------------------
 // Converter shape
@@ -153,7 +156,7 @@ export function ensureHeaderFooterDescriptor(partId: PartId, sectionId: string):
             collection[resolvedSectionId] = pmJson;
           }
         } catch (err) {
-          console.warn(`[parts] Failed to re-import ${ctx.partId}:`, err);
+          log.warn(`Failed to re-import ${ctx.partId}:`, err);
         }
       }
 
@@ -207,7 +210,7 @@ function refreshActiveSubEditors(
       try {
         entry.editor.replaceContent(pmJson);
       } catch (err) {
-        console.warn(`[parts] Failed to refresh sub-editor for ${type}:${sectionId}:`, err);
+        log.warn(`Failed to refresh sub-editor for ${type}:${sectionId}:`, err);
       }
     }
   }

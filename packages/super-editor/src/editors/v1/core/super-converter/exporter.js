@@ -42,6 +42,9 @@ import { translator as wTextTranslator } from '@converter/v3/handlers/w/t';
 import { translator as wFootnoteReferenceTranslator } from './v3/handlers/w/footnoteReference/footnoteReference-translator.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { DEFAULT_XML_DECLARATION } from './constants.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-converter:export');
 
 const DEFAULT_SECTION_PROPS_TWIPS = Object.freeze({
   pageSize: Object.freeze({ width: '12240', height: '15840' }),
@@ -262,7 +265,7 @@ export function exportSchemaToJson(params) {
   const entry = router[type];
 
   if (!entry) {
-    console.error('No translation function found for node type:', type);
+    log.error('No translation function found for node type:', type);
     return null;
   }
 
@@ -741,10 +744,10 @@ export class DocxExporter {
         // Validate that the first child element has valid text content
         if (elements.length === 0) {
           // Empty elements array - will be handled as self-closing tag, which is an error state
-          console.error(`${name} element has no child elements. Expected text node. Element will be self-closing.`);
+          log.error(`${name} element has no child elements. Expected text node. Element will be self-closing.`);
         } else if (elements[0] == null || typeof elements[0].text !== 'string') {
           // Invalid or missing text content - push empty string to maintain XML structure
-          console.error(
+          log.error(
             `${name} element's first child is missing or does not have a valid text property. ` +
               `Received: ${JSON.stringify(elements[0])}. Pushing empty string to maintain XML structure.`,
           );

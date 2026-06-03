@@ -2,6 +2,9 @@
 // clipboardUtils.js
 
 import { DOMParser } from 'prosemirror-model';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('clipboard-utils');
 
 /**
  * @typedef {import('prosemirror-state').EditorState} EditorState
@@ -112,7 +115,7 @@ export async function readFromClipboard(state) {
         new window.DOMParser().parseFromString(`<body>${html}</body>`, 'text/html').body,
       ).content;
     } catch (e) {
-      console.error('error parsing html', e);
+      log.error('error parsing html', e);
       // fallback to text
       content = state.schema.text(text);
     }

@@ -1,4 +1,7 @@
 import { encodeUtf8Base64 } from '../../../../../../helpers/base64.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-converter:import');
 
 /**
  * Handles VML shape elements with v:textpath (text watermarks).
@@ -39,7 +42,7 @@ export function handleShapeTextWatermarkImport({ pict }) {
   // Extract the watermark text
   const watermarkText = textpathAttrs['string'] || '';
   if (!watermarkText) {
-    console.warn('v:textpath missing string attribute');
+    log.warn('v:textpath missing string attribute');
     return null;
   }
 

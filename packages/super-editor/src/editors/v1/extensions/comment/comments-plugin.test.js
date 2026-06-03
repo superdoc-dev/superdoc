@@ -500,7 +500,7 @@ describe('CommentsPlugin commands', () => {
       const result = command({ editor });
 
       expect(result).toBe(false);
-      expect(warnSpy).toHaveBeenCalledWith('addCommentReply requires a parentId');
+      expect(warnSpy).toHaveBeenCalledWith('[comments]', 'addCommentReply requires a parentId');
       expect(editor.emit).not.toHaveBeenCalled();
 
       warnSpy.mockRestore();

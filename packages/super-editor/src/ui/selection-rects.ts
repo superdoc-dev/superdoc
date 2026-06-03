@@ -6,10 +6,13 @@
  * DOM that `window.getSelection()` reports against.
  */
 
+import { createLogger } from '@superdoc/common/logger';
 import type { Editor } from '../editors/v1/core/Editor.js';
 import { DocumentApiAdapterError } from '../editors/v1/document-api-adapters/errors.js';
 import { resolveTextTarget } from '../editors/v1/document-api-adapters/helpers/adapter-utils.js';
 import type { SelectionCapture, SelectionAnchorRectOptions, ViewportRect } from './types.js';
+
+const log = createLogger('superdoc/ui');
 
 interface RawRangeRect {
   pageIndex: number;
@@ -121,7 +124,7 @@ function getCapturedSelectionRects(
     // swallowing silently — bare `return []` would hide a real document
     // problem (two blocks sharing an id) behind "no rects".
     if (err instanceof DocumentApiAdapterError) {
-      console.warn(`[superdoc/ui] ui.selection.getRects: ${err.code}: ${err.message}`);
+      log.warn(`[superdoc/ui] ui.selection.getRects: ${err.code}: ${err.message}`);
     }
     return [];
   }

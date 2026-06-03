@@ -18,6 +18,10 @@
  * @module safety-net
  */
 
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-bridge:safety-net');
+
 /**
  * Reason for triggering fallback to legacy behavior.
  */
@@ -149,7 +153,7 @@ export class SafetyNet {
 
     // Log error for debugging
     if (this.config.maxConsecutiveErrors > 0) {
-      console.error(`SafetyNet: Error ${this.errorCount}/${this.config.maxConsecutiveErrors}:`, error.message);
+      log.error(`SafetyNet: Error ${this.errorCount}/${this.config.maxConsecutiveErrors}:`, error.message);
     }
 
     // Trigger fallback if threshold exceeded
@@ -177,12 +181,10 @@ export class SafetyNet {
 
     if (metric === 'layout' && value > this.config.maxLayoutDuration) {
       exceeded = true;
-      console.warn(
-        `SafetyNet: Layout duration ${value.toFixed(2)}ms exceeds budget ${this.config.maxLayoutDuration}ms`,
-      );
+      log.warn(`SafetyNet: Layout duration ${value.toFixed(2)}ms exceeds budget ${this.config.maxLayoutDuration}ms`);
     } else if (metric === 'cursor' && value > this.config.maxCursorLatency) {
       exceeded = true;
-      console.warn(`SafetyNet: Cursor latency ${value.toFixed(2)}ms exceeds budget ${this.config.maxCursorLatency}ms`);
+      log.warn(`SafetyNet: Cursor latency ${value.toFixed(2)}ms exceeds budget ${this.config.maxCursorLatency}ms`);
     }
 
     if (exceeded) {
@@ -246,7 +248,7 @@ export class SafetyNet {
     this.fallbackActive = true;
     this.fallbackReason = reason;
 
-    console.warn(`SafetyNet: Triggering fallback (reason: ${reason})`);
+    log.warn(`SafetyNet: Triggering fallback (reason: ${reason})`);
 
     // Notify handler
     if (this.onFallback) {
@@ -280,7 +282,7 @@ export class SafetyNet {
       return false; // Still in cooldown
     }
 
-    console.log('SafetyNet: Attempting recovery from fallback');
+    log.debug('SafetyNet: Attempting recovery from fallback');
 
     this.fallbackActive = false;
     this.fallbackReason = null;

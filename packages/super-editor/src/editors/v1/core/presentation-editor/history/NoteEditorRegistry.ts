@@ -19,6 +19,9 @@
 import type { FootnoteStoryLocator, EndnoteStoryLocator } from '@superdoc/document-api';
 import type { Editor } from '../../Editor.js';
 import { EventEmitter } from '../../EventEmitter.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('note-editor-registry');
 
 type NoteLocator = FootnoteStoryLocator | EndnoteStoryLocator;
 
@@ -288,13 +291,13 @@ export class NoteEditorRegistry extends EventEmitter<NoteRegistryEvents> {
       try {
         disposer();
       } catch (error) {
-        console.warn('[NoteEditorRegistry] disposer threw:', error);
+        log.warn('[NoteEditorRegistry] disposer threw:', error);
       }
     });
     try {
       entry.editor.destroy?.();
     } catch (error) {
-      console.warn('[NoteEditorRegistry] editor.destroy threw:', error);
+      log.warn('[NoteEditorRegistry] editor.destroy threw:', error);
     }
     this.emit('editorDisposed', { storyKey: entry.storyKey, reason });
   }

@@ -1,5 +1,8 @@
 <script setup>
 import { ref } from 'vue';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('superdoc-dev');
 
 const query = ref('');
 const results = ref([]);
@@ -19,7 +22,7 @@ const runSearch = () => {
   const matches = editor?.commands?.search?.(query.value);
   results.value = Array.isArray(matches) ? matches : [];
   hasSearched.value = true;
-  console.log('[superdoc-dev] Search results', results.value);
+  log.debug('Search results', results.value);
 };
 
 const closeSidebar = () => {

@@ -1,6 +1,9 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { OUTPUT_SCALE, PDF_TO_CSS_UNITS } from '../../core/pdf/helpers/constants';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('pdf-viewer');
 
 const emit = defineEmits([
   'page-rendered',
@@ -222,7 +225,7 @@ async function renderTextLayer() {
     emit('text-layer-rendered', props.page);
   } catch (e) {
     emit('text-layer-error', props.page);
-    console.error(e);
+    log.error(e);
   }
 }
 

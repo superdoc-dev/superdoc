@@ -17,6 +17,9 @@ import {
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { groupChanges } from '../helpers/group-changes.js';
 import { buildFloatingCommentInstances } from './helpers/floating-comment-instances.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('comments');
 
 export const useCommentsStore = defineStore('comments', () => {
   const BODY_TRACKED_CHANGE_STORY = { kind: 'story', storyType: 'body' };
@@ -2026,7 +2029,7 @@ export const useCommentsStore = defineStore('comments', () => {
       });
       return editor.getHTML();
     } catch (error) {
-      console.warn('Failed to convert comment', error);
+      log.warn('Failed to convert comment', error);
       return;
     }
   };

@@ -324,7 +324,7 @@ describe('ui.document', () => {
 
     expect(() => ui.document.setMode('viewing')).not.toThrow();
     expect(errorSpy).toHaveBeenCalled();
-    expect(String(errorSpy.mock.calls[0][0])).toContain('ui.document.setMode failed');
+    expect(String(errorSpy.mock.calls[0][1])).toContain('ui.document.setMode failed');
 
     ui.destroy();
   });

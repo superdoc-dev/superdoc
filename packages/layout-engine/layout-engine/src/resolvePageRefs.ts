@@ -7,6 +7,9 @@
  */
 
 import type { Layout, FlowBlock, ParagraphBlock } from '@superdoc/contracts';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-engine:page-refs');
 
 /**
  * Build an anchor map from bookmarks and layout fragments.
@@ -38,7 +41,7 @@ export function buildAnchorMap(bookmarks: Map<string, number>, layout: Layout): 
     }
 
     // Bookmark not found in any fragment - log warning but continue
-    console.warn(`[resolvePageRefs] Bookmark "${bookmarkName}" at PM position ${pmPosition} not found in layout`);
+    log.warn(`[resolvePageRefs] Bookmark "${bookmarkName}" at PM position ${pmPosition} not found in layout`);
   });
 
   return anchorMap;
@@ -77,7 +80,7 @@ export function resolvePageRefTokens(blocks: FlowBlock[], anchorMap: Map<string,
           blockModified = true;
         } else {
           // Bookmark not found in anchor map - keep placeholder
-          console.warn(`[resolvePageRefs] Cannot resolve PAGEREF to "${bookmarkId}" - bookmark not found`);
+          log.warn(`[resolvePageRefs] Cannot resolve PAGEREF to "${bookmarkId}" - bookmark not found`);
           // Keep the fallback text (already set during PM adapter processing)
         }
       }

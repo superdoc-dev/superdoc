@@ -65,6 +65,9 @@ import { resolveSectionProjections } from '../../../document-api-adapters/helper
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from '../selection/CaretGeometry.js';
 import { ensureExplicitHeaderFooterSlot } from '../../../document-api-adapters/helpers/header-footer-slot-materialization.js';
 import { normalizeVariant } from './header-footer-variant.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('header-footer-session-manager');
 
 // =============================================================================
 // Types
@@ -831,10 +834,10 @@ export class HeaderFooterSessionManager {
     // Debug-mode assertion: every region must have concrete section identity
     if (this.#options.isDebug) {
       for (const [, region] of this.#headerRegions) {
-        if (!region.sectionId) console.error('[HeaderFooterSessionManager] Header region missing sectionId', region);
+        if (!region.sectionId) log.error('[HeaderFooterSessionManager] Header region missing sectionId', region);
       }
       for (const [, region] of this.#footerRegions) {
-        if (!region.sectionId) console.error('[HeaderFooterSessionManager] Footer region missing sectionId', region);
+        if (!region.sectionId) log.error('[HeaderFooterSessionManager] Footer region missing sectionId', region);
       }
     }
 
@@ -1098,15 +1101,12 @@ export class HeaderFooterSessionManager {
       }
 
       if (!descriptor) {
-        console.warn(
-          '[HeaderFooterSessionManager] No descriptor found for region after materialization attempt:',
-          region,
-        );
+        log.warn('[HeaderFooterSessionManager] No descriptor found for region after materialization attempt:', region);
         this.clearHover();
         return null;
       }
       if (!descriptor.id) {
-        console.warn('[HeaderFooterSessionManager] Descriptor missing id:', descriptor);
+        log.warn('[HeaderFooterSessionManager] Descriptor missing id:', descriptor);
         this.clearHover();
         return null;
       }
@@ -1118,7 +1118,7 @@ export class HeaderFooterSessionManager {
           this.#deps?.scrollPageIntoView(region.pageIndex);
           const mounted = await this.#deps?.waitForPageMount(region.pageIndex, { timeout: 2000 });
           if (!mounted) {
-            console.error('[HeaderFooterSessionManager] Failed to mount page for header/footer editing');
+            log.error('[HeaderFooterSessionManager] Failed to mount page for header/footer editing');
             this.clearHover();
             this.#callbacks.onError?.({
               error: new Error('Failed to mount page for editing'),
@@ -1128,7 +1128,7 @@ export class HeaderFooterSessionManager {
           }
           pageElement = this.#deps?.getPageElement(region.pageIndex) ?? null;
         } catch (scrollError) {
-          console.error('[HeaderFooterSessionManager] Error mounting page:', scrollError);
+          log.error('[HeaderFooterSessionManager] Error mounting page:', scrollError);
           this.clearHover();
           this.#callbacks.onError?.({
             error: scrollError,
@@ -1139,7 +1139,7 @@ export class HeaderFooterSessionManager {
       }
 
       if (!pageElement) {
-        console.error('[HeaderFooterSessionManager] Page element not found after mount attempt');
+        log.error('[HeaderFooterSessionManager] Page element not found after mount attempt');
         this.clearHover();
         this.#callbacks.onError?.({
           error: new Error('Page element not found after mount'),
@@ -1162,7 +1162,7 @@ export class HeaderFooterSessionManager {
       try {
         editor = this.#activateStorySessionForRegion(region, descriptor);
       } catch (editorError) {
-        console.error('[HeaderFooterSessionManager] Error creating story session:', editorError);
+        log.error('[HeaderFooterSessionManager] Error creating story session:', editorError);
         this.clearHover();
         this.#callbacks.onError?.({
           error: editorError,
@@ -1172,7 +1172,7 @@ export class HeaderFooterSessionManager {
       }
 
       if (!editor) {
-        console.warn('[HeaderFooterSessionManager] Failed to ensure editor for descriptor:', descriptor);
+        log.warn('[HeaderFooterSessionManager] Failed to ensure editor for descriptor:', descriptor);
         this.clearHover();
         this.#callbacks.onError?.({
           error: new Error('Failed to create editor instance'),
@@ -1190,7 +1190,7 @@ export class HeaderFooterSessionManager {
           this.#applyDefaultSelectionAtStoryEnd(editor, 'Could not set cursor to end');
         }
       } catch (editableError) {
-        console.error('[HeaderFooterSessionManager] Error setting editor editable:', editableError);
+        log.error('[HeaderFooterSessionManager] Error setting editor editable:', editableError);
         this.clearHover();
         this.#callbacks.onError?.({
           error: editableError,
@@ -1215,7 +1215,7 @@ export class HeaderFooterSessionManager {
       try {
         editor.view?.focus();
       } catch (focusError) {
-        console.warn('[HeaderFooterSessionManager] Could not focus editor:', focusError);
+        log.warn('[HeaderFooterSessionManager] Could not focus editor:', focusError);
       }
 
       if (shouldRestoreInitialSelection) {
@@ -1226,7 +1226,7 @@ export class HeaderFooterSessionManager {
         try {
           editor.view?.focus();
         } catch (focusError) {
-          console.warn('[HeaderFooterSessionManager] Could not refocus editor after restoring selection:', focusError);
+          log.warn('[HeaderFooterSessionManager] Could not refocus editor after restoring selection:', focusError);
         }
         this.#scheduleSelectionRestoreAfterFocus(editor);
       }
@@ -1238,7 +1238,7 @@ export class HeaderFooterSessionManager {
       this.#deps?.scheduleRerender();
       return editor;
     } catch (error) {
-      console.error('[HeaderFooterSessionManager] Unexpected error in enterMode:', error);
+      log.error('[HeaderFooterSessionManager] Unexpected error in enterMode:', error);
 
       // Attempt cleanup
       try {
@@ -1248,7 +1248,7 @@ export class HeaderFooterSessionManager {
         this.#activeEditor = null;
         this.#session = { mode: 'body' };
       } catch (cleanupError) {
-        console.error('[HeaderFooterSessionManager] Error during cleanup:', cleanupError);
+        log.error('[HeaderFooterSessionManager] Error during cleanup:', cleanupError);
       }
 
       this.#callbacks.onError?.({
@@ -1298,7 +1298,7 @@ export class HeaderFooterSessionManager {
     try {
       editor.commands?.setTextSelection?.(selection);
     } catch (error) {
-      console.warn(`[HeaderFooterSessionManager] ${warningMessage}:`, error);
+      log.warn(`[HeaderFooterSessionManager] ${warningMessage}:`, error);
     }
   }
 
@@ -1321,7 +1321,7 @@ export class HeaderFooterSessionManager {
       try {
         editor.view?.focus();
       } catch (focusError) {
-        console.warn('[HeaderFooterSessionManager] Could not refocus editor on the next frame:', focusError);
+        log.warn('[HeaderFooterSessionManager] Could not refocus editor on the next frame:', focusError);
       }
     });
   }
@@ -1430,7 +1430,7 @@ export class HeaderFooterSessionManager {
     try {
       this.#activeEditorEventCleanup?.();
     } catch (error) {
-      console.warn('[HeaderFooterSessionManager] Failed to clean up active editor bridge:', error);
+      log.warn('[HeaderFooterSessionManager] Failed to clean up active editor bridge:', error);
     } finally {
       this.#activeEditorEventCleanup = null;
     }
@@ -1612,13 +1612,13 @@ export class HeaderFooterSessionManager {
     const marginBottom = margins.bottom ?? this.#options.defaultMargins.bottom ?? 0;
 
     if (!Number.isFinite(marginTop) || !Number.isFinite(marginBottom)) {
-      console.warn('[HeaderFooterSessionManager] Invalid top or bottom margin: not a finite number');
+      log.warn('[HeaderFooterSessionManager] Invalid top or bottom margin: not a finite number');
       return null;
     }
 
     const totalVerticalMargins = marginTop + marginBottom;
     if (totalVerticalMargins >= pageSize.h) {
-      console.warn(
+      log.warn(
         `[HeaderFooterSessionManager] Invalid margins: top (${marginTop}) + bottom (${marginBottom}) = ${totalVerticalMargins} >= page height (${pageSize.h})`,
       );
       return null;
@@ -1788,7 +1788,7 @@ export class HeaderFooterSessionManager {
     // Resolve layout context for the active header/footer region.
     const context = this.getContext();
     if (!context) {
-      console.warn('[HeaderFooterSessionManager] Header/footer context unavailable for selection rects', {
+      log.warn('[HeaderFooterSessionManager] Header/footer context unavailable for selection rects', {
         mode: this.#session.mode,
         pageIndex: this.#session.pageIndex,
       });
@@ -2220,13 +2220,13 @@ export class HeaderFooterSessionManager {
     const regionMap = this.#session.mode === 'header' ? this.#headerRegions : this.#footerRegions;
     const region = regionMap.get(pageIndex);
     if (!region) {
-      console.warn('[HeaderFooterSessionManager] Header/footer region not found for pageIndex:', pageIndex);
+      log.warn('[HeaderFooterSessionManager] Header/footer region not found for pageIndex:', pageIndex);
       return null;
     }
 
     const activeLayoutResult = this.#resolveActiveLayoutResult(region);
     if (!activeLayoutResult) {
-      console.warn('[HeaderFooterSessionManager] Header/footer layout results not available');
+      log.warn('[HeaderFooterSessionManager] Header/footer layout results not available');
       return null;
     }
 
@@ -2276,7 +2276,7 @@ export class HeaderFooterSessionManager {
   getPageHeight(): number {
     const context = this.getContext();
     if (!context) {
-      console.warn('[HeaderFooterSessionManager] Header/footer context missing when computing page height');
+      log.warn('[HeaderFooterSessionManager] Header/footer context missing when computing page height');
       return 1;
     }
     return context.layout.pageSize?.h ?? context.region.height ?? 1;
@@ -2317,7 +2317,7 @@ export class HeaderFooterSessionManager {
       return cachedItems;
     }
     if (cachedItems) {
-      console.warn(
+      log.warn(
         `[HeaderFooterSessionManager] Resolved items length (${cachedItems.length}) does not match fragments length (${fragments.length}) for ${contextLabel}. Recomputing items.`,
       );
     }
@@ -2329,7 +2329,7 @@ export class HeaderFooterSessionManager {
       return freshItems;
     }
     if (freshItems) {
-      console.warn(
+      log.warn(
         `[HeaderFooterSessionManager] Fresh resolved items length (${freshItems.length}) does not match fragments length (${fragments.length}) for ${contextLabel}. Dropping items.`,
       );
     }
@@ -2422,7 +2422,7 @@ export class HeaderFooterSessionManager {
       if (rIdLayoutKey) {
         const rIdLayout = layoutsByRId.get(rIdLayoutKey);
         if (!rIdLayout) {
-          console.warn(
+          log.warn(
             `[HeaderFooterSessionManager] Inconsistent state: layoutsByRId.has('${sectionRId}') returned true but get() returned undefined`,
           );
         } else {
@@ -2588,7 +2588,7 @@ export class HeaderFooterSessionManager {
       try {
         fn();
       } catch (e) {
-        console.error('[HeaderFooterSessionManager] Cleanup error:', e);
+        log.error('[HeaderFooterSessionManager] Cleanup error:', e);
       }
     });
     this.#managerCleanups = [];

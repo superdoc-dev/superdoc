@@ -6,6 +6,9 @@ import {
   HeaderFooterLayoutAdapter,
   type HeaderFooterDescriptor,
 } from './HeaderFooterRegistry.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('header-footer-registry-init');
 
 export type InitHeaderFooterRegistryDeps = {
   editor: Editor;
@@ -45,7 +48,7 @@ export function initHeaderFooterRegistry({
     try {
       fn();
     } catch (error) {
-      console.warn('[PresentationEditor] Header/footer cleanup failed:', error);
+      log.warn('[PresentationEditor] Header/footer cleanup failed:', error);
     }
   });
   previousAdapter?.clear();
@@ -73,7 +76,7 @@ export function initHeaderFooterRegistry({
 
   const duration = performance.now() - startTime;
   if (isDebug && duration > initBudgetMs) {
-    console.warn(
+    log.warn(
       `[PresentationEditor] Header/footer initialization took ${duration.toFixed(2)}ms (budget: ${initBudgetMs}ms)`,
     );
     // TODO: Consider showing loading spinner if bootstrap exceeds budget in production

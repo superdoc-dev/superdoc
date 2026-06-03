@@ -1,4 +1,7 @@
 import { updateSectionMargins, getSectPrMargins } from '@converter/section-properties.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('setSectionHeaderFooterAtSelection');
 
 /**
  * Find the nearest paragraph at or before a given document position that carries a sectPr.
@@ -36,7 +39,7 @@ export const setSectionHeaderFooterAtSelection =
   ({ headerInches, footerInches } = {}) =>
   ({ tr, state, editor }) => {
     if (!state || !editor) {
-      console.warn('[setSectionHeaderFooterAtSelection] Missing state or editor');
+      log.warn('Missing state or editor');
       return false;
     }
 
@@ -44,17 +47,17 @@ export const setSectionHeaderFooterAtSelection =
     const hasFooter = typeof footerInches === 'number';
 
     if (!hasHeader && !hasFooter) {
-      console.warn('[setSectionHeaderFooterAtSelection] No margin values provided');
+      log.warn('No margin values provided');
       return false;
     }
 
     // Validate positive values
     if (hasHeader && headerInches < 0) {
-      console.warn('[setSectionHeaderFooterAtSelection] headerInches must be >= 0, got:', headerInches);
+      log.warn('headerInches must be >= 0, got:', headerInches);
       return false;
     }
     if (hasFooter && footerInches < 0) {
-      console.warn('[setSectionHeaderFooterAtSelection] footerInches must be >= 0, got:', footerInches);
+      log.warn('footerInches must be >= 0, got:', footerInches);
       return false;
     }
 
@@ -62,7 +65,7 @@ export const setSectionHeaderFooterAtSelection =
     const found = findNearestParagraphWithSectPr(state.doc, from);
 
     if (!found) {
-      console.warn('[setSectionHeaderFooterAtSelection] No section break found at or before selection');
+      log.warn('No section break found at or before selection');
       return false;
     }
 
@@ -71,7 +74,7 @@ export const setSectionHeaderFooterAtSelection =
     const existingSectPr = paraProps?.sectPr || null;
 
     if (!existingSectPr) {
-      console.warn('[setSectionHeaderFooterAtSelection] Paragraph found but has no sectPr');
+      log.warn('Paragraph found but has no sectPr');
       return false;
     }
 
@@ -85,7 +88,7 @@ export const setSectionHeaderFooterAtSelection =
     try {
       updateSectionMargins({ type: 'sectPr', sectPr }, updates);
     } catch (err) {
-      console.error('[setSectionHeaderFooterAtSelection] Failed to update sectPr:', err);
+      log.error('Failed to update sectPr:', err);
       return false;
     }
 

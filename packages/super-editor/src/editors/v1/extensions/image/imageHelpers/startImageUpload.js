@@ -5,6 +5,9 @@ import { buildMediaPath, ensureUniqueFileName } from './fileNameUtils.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
 import { findOrCreateRelationship } from '@core/parts/adapters/relationships-mutation.js';
 import { resolveHeaderFooterRelsPartIdFromRefId } from '@core/parts/adapters/header-footer-sync.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('image');
 
 export const MAX_IMAGE_FILE_BYTES = 5 * 1024 * 1024;
 
@@ -27,7 +30,7 @@ export const checkAndProcessImage = async ({ getMaxContentSize, file }) => {
     const process = processedImageResult;
     return { file: process.file, size: { width: process.width, height: process.height } };
   } catch (err) {
-    console.warn('Error processing image:', err);
+    log.warn('Error processing image:', err);
     return { file: null, size: { width: 0, height: 0 } };
   }
 };

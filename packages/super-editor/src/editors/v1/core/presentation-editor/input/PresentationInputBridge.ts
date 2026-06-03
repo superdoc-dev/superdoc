@@ -1,5 +1,8 @@
 import { isInRegisteredSurface } from '../utils/uiSurfaceRegistry.js';
 import { CONTEXT_MENU_HANDLED_FLAG } from '../../../components/context-menu/event-flags.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('presentation-input-bridge');
 
 const BRIDGE_FORWARDED_FLAG = Symbol('presentation-input-bridge-forwarded');
 
@@ -138,7 +141,7 @@ export class PresentationInputBridge {
       } catch (error) {
         // Ignore dispatch failures - can happen if target was removed from DOM
         if (process.env.NODE_ENV === 'development') {
-          console.warn('[PresentationEditor] Failed to dispatch composition event:', error);
+          log.warn('[PresentationEditor] Failed to dispatch composition event:', error);
         }
       }
     }
@@ -184,7 +187,7 @@ export class PresentationInputBridge {
       }
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PresentationEditor] Failed to dispatch event to target:', error);
+        log.warn('[PresentationEditor] Failed to dispatch event to target:', error);
       }
     }
   }

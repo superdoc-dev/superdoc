@@ -50,6 +50,9 @@ import { baseNumbering } from '@converter/v2/exporter/helpers/base-list.definiti
 import { patchNumberingDefinitions } from './patchNumberingDefinitions.js';
 import { startCollection, drainDiagnostics } from '@converter/v3/handlers/import-diagnostics.js';
 import { TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY } from '@extensions/track-changes/review-model/word-id-allocator.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-converter:import');
 
 /**
  * @typedef {import()} XmlNode
@@ -488,14 +491,14 @@ const createNodeListHandler = (nodeHandlers) => {
             });
           }
         } catch (error) {
-          console.debug('Import error', error);
+          log.debug('Import error', error);
           editor?.emit('exception', { error, editor });
         }
       }
 
       return processedElements;
     } catch (error) {
-      console.debug('Error during import', error);
+      log.debug('Error during import', error);
       editor?.emit('exception', { error, editor });
 
       throw error;

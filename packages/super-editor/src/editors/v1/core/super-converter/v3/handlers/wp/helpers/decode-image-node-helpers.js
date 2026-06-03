@@ -10,6 +10,9 @@ import { generateDocxRandomId } from '@core/helpers/index.js';
 import { readImageDimensionsFromDataUri } from '@converter/image-dimensions.js';
 import { simpleStringHash } from '@core/utilities/hash.js';
 import { isValidImageDataUrl } from '@superdoc/url-validation';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('super-converter:image');
 
 const DECORATIVE_EXT_URI = '{C183D7F6-B498-43B3-948B-1728B52AA6E4}';
 const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/decorative';
@@ -58,7 +61,7 @@ function getMediaTargetForImageSrc(params, src) {
 function fallbackForMissingMediaTarget(params) {
   if (params.node.type === 'fieldAnnotation') return prepareTextAnnotation(params);
 
-  console.warn('Skipping image export because media target could not be resolved.', {
+  log.warn('Skipping image export because media target could not be resolved.', {
     nodeType: params.node.type,
     src: params.node.attrs?.src,
   });

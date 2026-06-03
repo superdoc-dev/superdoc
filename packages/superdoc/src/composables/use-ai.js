@@ -1,4 +1,7 @@
 import { ref, reactive } from 'vue';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('use-ai');
 
 /**
  * Composable to manage AI layer and AI writer functionality
@@ -20,7 +23,7 @@ export function useAi({ activeEditorRef }) {
   const showAiWriterAtCursor = () => {
     const editor = activeEditorRef.value;
     if (!editor || editor.isDestroyed) {
-      console.error('[useAi] Editor not available');
+      log.error('[useAi] Editor not available');
       return;
     }
 
@@ -61,7 +64,7 @@ export function useAi({ activeEditorRef }) {
       // Show the AIWriter
       showAiWriter.value = true;
     } catch (error) {
-      console.error('[useAi] Error displaying AIWriter:', error);
+      log.error('[useAi] Error displaying AIWriter:', error);
       // Fallback position in center of editor
       try {
         const editorDom = activeEditorRef.value.view.dom;
@@ -70,7 +73,7 @@ export function useAi({ activeEditorRef }) {
         aiWriterPosition.left = rect.left + 100 + 'px';
         showAiWriter.value = true;
       } catch (e) {
-        console.error('[useAi] Failed to get fallback position:', e);
+        log.error('[useAi] Failed to get fallback position:', e);
       }
     }
   };
@@ -98,7 +101,7 @@ export function useAi({ activeEditorRef }) {
     // Add the ai mark to the document
     const editor = activeEditorRef.value;
     if (!editor || editor.isDestroyed) {
-      console.error('[useAi] Editor not available');
+      log.error('[useAi] Editor not available');
       return;
     }
     editor.commands.insertAiMark();

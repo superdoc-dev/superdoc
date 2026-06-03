@@ -13,6 +13,9 @@ import { SuperToolbar } from '@components/toolbar/super-toolbar';
 import { PaginationPluginKey } from '@extensions/pagination/pagination-helpers.js';
 import BasicUpload from './BasicUpload.vue';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('dev');
 
 // Import the component the same you would in your app
 let activeEditor;
@@ -34,9 +37,9 @@ const handleNewFile = async (file) => {
 };
 
 const onCreate = ({ editor }) => {
-  console.debug('[Dev] Editor created', editor);
-  console.debug('[Dev] Page styles (pixels)', editor.getPageStyles());
-  console.debug('[Dev] document styles', editor.converter?.getDocumentDefaultStyles());
+  log.debug('Editor created', editor);
+  log.debug('Page styles (pixels)', editor.getPageStyles());
+  log.debug('document styles', editor.converter?.getDocumentDefaultStyles());
 
   pageStyles.value = editor.converter?.pageStyles;
   activeEditor = editor;
@@ -60,7 +63,7 @@ const onCreate = ({ editor }) => {
 };
 
 const onCommentClicked = ({ conversation }) => {
-  console.debug('💬 [Dev] Comment active', conversation);
+  log.debug('💬 [Dev] Comment active', conversation);
 };
 
 const user = {
@@ -85,7 +88,7 @@ const editorOptions = computed(() => {
 });
 
 const onCommentsLoaded = ({ comments }) => {
-  console.debug('💬 [Dev] Comments loaded', comments);
+  log.debug('💬 [Dev] Comments loaded', comments);
 };
 
 const exportDocx = async () => {
@@ -100,15 +103,15 @@ const exportDocx = async () => {
 
 const attachAnnotationEventHandlers = () => {
   activeEditor?.on('fieldAnnotationClicked', (params) => {
-    console.log('fieldAnnotationClicked', { params });
+    log.debug('fieldAnnotationClicked', { params });
   });
 
   activeEditor?.on('fieldAnnotationSelected', (params) => {
-    console.log('fieldAnnotationSelected', { params });
+    log.debug('fieldAnnotationSelected', { params });
   });
 
   activeEditor?.on('fieldAnnotationDeleted', (params) => {
-    console.log('fieldAnnotationDeleted', { params });
+    log.debug('fieldAnnotationDeleted', { params });
   });
 };
 
@@ -125,7 +128,7 @@ const debugPageStyle = computed(() => {
 
 const injectContent = () => {
   if (!activeEditor || !contentInput.value.trim()) {
-    console.warn('[Dev] No editor instance or empty content');
+    log.warn('No editor instance or empty content');
     return;
   }
 
@@ -137,10 +140,10 @@ const injectContent = () => {
       contentType: contentType.value, // 'html', 'markdown', or 'text'
     });
 
-    console.debug(`[Dev] ${contentType.value} content injected successfully`);
+    log.debug(`${contentType.value} content injected successfully`);
     contentInput.value = '';
   } catch (error) {
-    console.error('[Dev] Failed to inject content:', error);
+    log.error('Failed to inject content:', error);
   } finally {
     isInjectingContent.value = false;
   }

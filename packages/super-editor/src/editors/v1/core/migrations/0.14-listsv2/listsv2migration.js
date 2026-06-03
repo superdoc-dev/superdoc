@@ -1,9 +1,12 @@
 import { getAllFieldAnnotations } from '@extensions/field-annotation/fieldAnnotationHelpers/index.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const logger = createLogger('lists-v2-migration');
 
 const isDebugging = false;
 const log = (...args) => {
-  if (isDebugging) console.debug('[lists v2 migration]', ...args);
+  if (isDebugging) logger.debug('[lists v2 migration]', ...args);
 };
 
 /**

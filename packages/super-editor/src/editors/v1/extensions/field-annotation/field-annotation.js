@@ -13,6 +13,9 @@ import { NodeSelection, Selection } from 'prosemirror-state';
 import { generateDocxRandomId } from '../../core/helpers/index.js';
 import { commands as cleanupCommands } from './cleanup-commands/index.js';
 import { isHeadless } from '@utils/headless-helpers.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('field-annotation');
 
 export const fieldAnnotationName = 'fieldAnnotation';
 export const annotationClass = 'annotation';
@@ -102,7 +105,7 @@ export const FieldAnnotation = Node.create({
             if (!isHtmlType) return null;
             return JSON.parse(elem.getAttribute('data-raw-html'));
           } catch (e) {
-            console.warn('Paste parse error', e);
+            log.warn('Paste parse error', e);
           }
           return null;
         },

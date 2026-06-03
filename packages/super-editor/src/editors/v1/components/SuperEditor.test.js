@@ -520,7 +520,10 @@ describe('SuperEditor.vue', () => {
     await flushPromises();
 
     expect(onException).toHaveBeenCalledWith({ error, editor: null });
-    expect(consoleWarnSpy).toHaveBeenCalledWith('Unable to load the file. Please verify the .docx is valid.');
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[SuperDoc]',
+      'Unable to load the file. Please verify the .docx is valid.',
+    );
     expect(getFileObjectMock).toHaveBeenCalledWith('blank-docx-url', 'blank.docx', DOCX_MIME);
     expect(EditorConstructor.loadXmlData).toHaveBeenCalledTimes(2);
     expect(EditorConstructor).toHaveBeenCalledTimes(1);

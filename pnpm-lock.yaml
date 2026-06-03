@@ -2403,6 +2403,9 @@ importers:
 
   packages/collaboration-yjs:
     dependencies:
+      '@superdoc/common':
+        specifier: workspace:*
+        version: link:../../shared/common
       lib0:
         specifier: 'catalog:'
         version: 0.2.117
@@ -6516,6 +6519,7 @@ packages:
   '@microsoft/teamsapp-cli@3.0.2':
     resolution: {integrity: sha512-AowuJwrrUxeF9Bq/frxuy9YZjK/ECk3pi0UBXl3CQLZ4XNWfgWatiFi/UWpyHDLccFs+0Za3nNYATFvgsxEFwQ==}
     engines: {node: '>=12'}
+    deprecated: This package is deprecated and supported Node.js version is 18-22. Please use @microsoft/m365agentstoolkit-cli instead.
     hasBin: true
 
   '@microsoft/teamsfx-api@0.23.1':
@@ -19976,6 +19980,7 @@ packages:
   recharts@2.15.0:
     resolution: {integrity: sha512-cIvMxDfpAmqAmVgc4yb7pgm/O1tmmkl/CjrvXuW+62/+7jj/iF9Ykm+hb/UJt42TREHMyd3gb+pkgoa2MxgDIw==}
     engines: {node: '>=14'}
+    deprecated: 1.x and 2.x branches are no longer active. Bump to Recharts v3 to receive latest features and bugfixes. See https://github.com/recharts/recharts/wiki/3.0-migration-guide
     peerDependencies:
       react: ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0

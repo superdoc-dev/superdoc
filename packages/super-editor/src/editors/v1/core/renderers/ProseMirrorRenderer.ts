@@ -18,6 +18,9 @@ import { canUseDOM } from '../../utils/canUseDOM.js';
 import type { EditorRenderer, EditorRendererAttachParams } from './EditorRenderer.js';
 import type { Editor } from '../Editor.js';
 import type { EditorOptions } from '../types/EditorConfig.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('prosemirror-renderer');
 
 /** Heading[1-9] styleId regex — paste/copy must keep these paragraph wrappers intact. */
 const HEADING_STYLE_RE = /^Heading[1-9]$/i;
@@ -609,7 +612,7 @@ export class ProseMirrorRenderer implements EditorRenderer {
         editor.fontsImported = results.fontsImported;
       } catch (error) {
         // Log error but don't crash - fonts are a progressive enhancement
-        console.warn('Failed to inject fonts into DOM:', error);
+        log.warn('Failed to inject fonts into DOM:', error);
       }
     }
   }
@@ -936,7 +939,7 @@ export class ProseMirrorRenderer implements EditorRenderer {
         clipboardData.setData('text/html', embedSliceInHtml(html, sliceJson, bodySectPrJson, mediaJson));
         clipboardData.setData('text/plain', this.view.state.doc.textBetween(from, to, '\n'));
       } catch (error) {
-        console.warn('Failed to transform copied content:', error);
+        log.warn('Failed to transform copied content:', error);
       }
     };
 
@@ -971,7 +974,7 @@ export class ProseMirrorRenderer implements EditorRenderer {
         };
       } catch (error) {
         // Log but don't crash - dev tools are not critical
-        console.warn('Failed to initialize developer tools:', error);
+        log.warn('Failed to initialize developer tools:', error);
       }
     }
   }

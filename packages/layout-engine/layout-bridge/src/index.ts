@@ -22,6 +22,7 @@ import {
 import { describeCellRenderBlocks, computeCellSliceContentHeight, getEmbeddedRowLines } from '@superdoc/layout-engine';
 import { measureCharacterX } from './text-measurement.js';
 import { clickToPositionDom, findPageElement } from './dom-mapping.js';
+import { createLogger } from '@superdoc/common/logger';
 import {
   isListItem,
   getWordLayoutConfig,
@@ -244,6 +245,8 @@ import {
   clickToPositionGeometry,
 } from './position-hit.js';
 
+const log = createLogger('layout-bridge');
+
 export type Rect = { x: number; y: number; width: number; height: number; pageIndex: number };
 
 type AtomicFragment = DrawingFragment | ImageFragment;
@@ -256,9 +259,9 @@ const SELECTION_DEBUG_ENABLED = false;
 const logSelectionDebug = (payload: Record<string, unknown>): void => {
   if (!SELECTION_DEBUG_ENABLED) return;
   try {
-    console.log('[SELECTION-DEBUG]', JSON.stringify(payload));
+    log.debug('[SELECTION-DEBUG]', JSON.stringify(payload));
   } catch {
-    console.log('[SELECTION-DEBUG]', payload);
+    log.debug('[SELECTION-DEBUG]', payload);
   }
 };
 
@@ -276,9 +279,9 @@ const DEBUG_POSITION_MAPPING = false;
 const logPositionDebug = (payload: Record<string, unknown>): void => {
   if (!DEBUG_POSITION_MAPPING) return;
   try {
-    console.log('[CLICK-POS]', JSON.stringify(payload));
+    log.debug('[CLICK-POS]', JSON.stringify(payload));
   } catch {
-    console.log('[CLICK-POS]', payload);
+    log.debug('[CLICK-POS]', payload);
   }
 };
 
@@ -289,9 +292,9 @@ const logPositionDebug = (payload: Record<string, unknown>): void => {
 const logSelectionMapDebug = (payload: Record<string, unknown>): void => {
   if (!DEBUG_POSITION_MAPPING) return;
   try {
-    console.log('[SELECTION-MAP]', JSON.stringify(payload));
+    log.debug('[SELECTION-MAP]', JSON.stringify(payload));
   } catch {
-    console.log('[SELECTION-MAP]', payload);
+    log.debug('[SELECTION-MAP]', payload);
   }
 };
 
@@ -1547,7 +1550,7 @@ const mapPmToX = (
 
   // Validation: Warn when indents exceed fragment width (potential layout issue)
   if (totalIndent > fragmentWidth) {
-    console.warn(
+    log.warn(
       `[mapPmToX] Paragraph indents (${totalIndent}px) exceed fragment width (${fragmentWidth}px) ` +
         `for block ${block.id}. This may indicate a layout miscalculation. ` +
         `Available width clamped to 0.`,

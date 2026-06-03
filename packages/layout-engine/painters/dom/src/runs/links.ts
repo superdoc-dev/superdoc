@@ -1,6 +1,9 @@
 import type { FlowRunLink } from '@superdoc/contracts';
 import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
 import type { LinkRenderData, RunRenderContext } from './types.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('painter-dom:runs');
 
 const LINK_DATASET_KEYS = {
   blocked: 'linkBlocked',
@@ -268,7 +271,7 @@ export const buildLinkRenderData = (link: FlowRunLink): LinkRenderData | null =>
 
   // Defense-in-depth: Enforce maximum URL length even if sanitization was bypassed
   if (sanitized && sanitized.href.length > MAX_HREF_LENGTH) {
-    console.warn(`[DomPainter] Rejecting URL exceeding ${MAX_HREF_LENGTH} characters`);
+    log.warn(`[DomPainter] Rejecting URL exceeding ${MAX_HREF_LENGTH} characters`);
     linkMetrics.blocked++;
     return { blocked: true, dataset: { [LINK_DATASET_KEYS.blocked]: 'true' } };
   }
@@ -276,7 +279,7 @@ export const buildLinkRenderData = (link: FlowRunLink): LinkRenderData | null =>
   if (!href) {
     if (typeof link.href === 'string' && link.href.trim()) {
       dataset[LINK_DATASET_KEYS.blocked] = 'true';
-      console.warn(`[DomPainter] Blocked potentially unsafe URL: ${link.href.slice(0, 50)}`);
+      log.warn(`[DomPainter] Blocked potentially unsafe URL: ${link.href.slice(0, 50)}`);
       linkMetrics.blocked++;
       // Track invalid protocol if sanitized was null
       if (!sanitized) {
@@ -353,7 +356,7 @@ export const applyTooltipAccessibility = (
   } else {
     // Element not yet in DOM - accessibility feature will degrade gracefully
     // The title attribute will still provide tooltip functionality
-    console.warn('[DomPainter] Unable to add aria-describedby for tooltip (element not in DOM)');
+    log.warn('[DomPainter] Unable to add aria-describedby for tooltip (element not in DOM)');
   }
 
   return linkId;

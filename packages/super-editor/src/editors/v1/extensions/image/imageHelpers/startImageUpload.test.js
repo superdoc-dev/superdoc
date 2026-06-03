@@ -71,7 +71,7 @@ describe('checkAndProcessImage', () => {
       file,
     });
 
-    expect(consoleSpy).toHaveBeenCalledWith('Error processing image:', expect.any(Error));
+    expect(consoleSpy).toHaveBeenCalledWith('[image]', 'Error processing image:', expect.any(Error));
     expect(result).toEqual({ file: null, size: { width: 0, height: 0 } });
 
     consoleSpy.mockRestore();

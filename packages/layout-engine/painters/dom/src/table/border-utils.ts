@@ -7,6 +7,9 @@ import type {
   TableFragment,
 } from '@superdoc/contracts';
 import { getTableCellGridBounds, type TableCellGridPosition } from './grid-geometry.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('painter-dom:table');
 
 const ALLOWED_BORDER_STYLES = new Set<BorderStyle>([
   'none',
@@ -27,7 +30,7 @@ const borderStyleToCSS = (style?: BorderStyle): string => {
 
   // SECURITY: Validate style is in allowed set
   if (!ALLOWED_BORDER_STYLES.has(style)) {
-    console.warn(`Invalid border style: ${style}, using 'solid' fallback`);
+    log.warn(`Invalid border style: ${style}, using 'solid' fallback`);
     return 'solid';
   }
 

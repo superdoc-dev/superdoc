@@ -25,7 +25,7 @@ describe('setupAwarenessHandler', () => {
   it('warns and returns a no-op cleanup when provider has no awareness', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const cleanup = setupAwarenessHandler({}, { emit: vi.fn() }, { name: 'A' });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('missing awareness'));
+    expect(warn).toHaveBeenCalledWith('[collaboration]', expect.stringContaining('missing awareness'));
     expect(typeof cleanup).toBe('function');
     expect(() => cleanup()).not.toThrow();
     warn.mockRestore();

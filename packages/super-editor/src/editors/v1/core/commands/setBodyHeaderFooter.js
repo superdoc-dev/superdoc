@@ -1,3 +1,7 @@
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('setBodyHeaderFooter');
+
 /**
  * Update document default header/footer distances (inches) via editor.updatePageStyle.
  * Triggers pagination update.
@@ -11,7 +15,7 @@ export const setBodyHeaderFooter =
   ({ headerInches, footerInches } = {}) =>
   ({ editor }) => {
     if (!editor) {
-      console.warn('[setBodyHeaderFooter] No editor instance provided');
+      log.warn('No editor instance provided');
       return false;
     }
 
@@ -19,22 +23,22 @@ export const setBodyHeaderFooter =
     const hasFooter = typeof footerInches === 'number';
 
     if (!hasHeader && !hasFooter) {
-      console.warn('[setBodyHeaderFooter] No margin values provided');
+      log.warn('No margin values provided');
       return false;
     }
 
     // Validate positive values
     if (hasHeader && headerInches < 0) {
-      console.warn('[setBodyHeaderFooter] headerInches must be >= 0, got:', headerInches);
+      log.warn('headerInches must be >= 0, got:', headerInches);
       return false;
     }
     if (hasFooter && footerInches < 0) {
-      console.warn('[setBodyHeaderFooter] footerInches must be >= 0, got:', footerInches);
+      log.warn('footerInches must be >= 0, got:', footerInches);
       return false;
     }
 
     if (!editor.updatePageStyle) {
-      console.warn('[setBodyHeaderFooter] editor.updatePageStyle is not available');
+      log.warn('editor.updatePageStyle is not available');
       return false;
     }
 

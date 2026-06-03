@@ -23,6 +23,9 @@ import {
 } from '../sdt/container.js';
 import { applyBorder, borderValueToSpec, hasExplicitCellBorders } from './border-utils.js';
 import { getTableCellGridBounds } from './grid-geometry.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('painter-dom:table');
 
 type ApplyStylesFn = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => void;
 /**
@@ -179,7 +182,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   // Check document first before using it in error handlers
   if (!doc) {
-    console.error('DomPainter: document is not available');
+    log.error('DomPainter: document is not available');
 
     // Use global document as fallback for error placeholder when available
     if (typeof document !== 'undefined') {

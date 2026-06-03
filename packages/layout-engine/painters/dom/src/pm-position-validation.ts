@@ -12,6 +12,10 @@
  * 4. Provides fallback guidance when positions are missing
  */
 
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('painter-dom:pm-position-validation');
+
 /**
  * Environment check for dev-mode warnings.
  * Only emit warnings when explicitly in development to keep test output clean.
@@ -92,7 +96,7 @@ class ValidationStatsCollector {
     const s = this.stats;
 
     if (coverage < 100) {
-      console.warn('[PmPositionValidation] PM position coverage:', {
+      log.warn('[PmPositionValidation] PM position coverage:', {
         coverage: `${coverage.toFixed(1)}%`,
         totalSpans: s.totalSpans,
         validSpans: s.validSpans,
@@ -143,7 +147,7 @@ export function assertPmPositions(
   if (!hasPmStart || !hasPmEnd) {
     const textPreview = run.text ? run.text.substring(0, 20) + (run.text.length > 20 ? '...' : '') : '(no text)';
 
-    console.warn(`[PmPositionValidation] Missing PM positions in ${context}:`, {
+    log.warn(`[PmPositionValidation] Missing PM positions in ${context}:`, {
       hasPmStart,
       hasPmEnd,
       textPreview,
@@ -200,7 +204,7 @@ export function validateRenderedElement(element: HTMLElement, context: string): 
   if (!isDevelopment()) return;
 
   if (!hasPmStart || !hasPmEnd) {
-    console.warn(`[PmPositionValidation] Rendered element missing PM attributes in ${context}:`, {
+    log.warn(`[PmPositionValidation] Rendered element missing PM attributes in ${context}:`, {
       element: element.tagName,
       className: element.className,
       hasPmStart,

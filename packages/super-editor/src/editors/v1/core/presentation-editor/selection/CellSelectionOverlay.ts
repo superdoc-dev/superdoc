@@ -1,6 +1,9 @@
 import { TableMap } from 'prosemirror-tables';
 import type { CellSelection } from 'prosemirror-tables';
 import type { FlowBlock, Layout, Measure, TableBlock, TableFragment, TableMeasure } from '@superdoc/contracts';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('cell-selection-overlay');
 
 /**
  * Coordinate pair in overlay space (absolute positioning within the selection overlay container).
@@ -87,14 +90,14 @@ export function renderCellSelectionOverlay({
 }: RenderCellSelectionOverlayDeps): void {
   // Validate input parameters
   if (!selection || !layout || !layout.pages) {
-    console.warn('[renderCellSelectionOverlay] Invalid input parameters');
+    log.warn('[renderCellSelectionOverlay] Invalid input parameters');
     return;
   }
 
   // Find the table node by walking up from the anchor cell
   const $anchorCell = selection.$anchorCell;
   if (!$anchorCell) {
-    console.warn('[renderCellSelectionOverlay] No anchor cell in selection');
+    log.warn('[renderCellSelectionOverlay] No anchor cell in selection');
     return;
   }
 
@@ -105,7 +108,7 @@ export function renderCellSelectionOverlay({
 
   // Validate we found a table node
   if (tableDepth === 0 && $anchorCell.node(0).type.name !== 'table') {
-    console.warn('[renderCellSelectionOverlay] Could not find table node in selection hierarchy');
+    log.warn('[renderCellSelectionOverlay] Could not find table node in selection hierarchy');
     return;
   }
 
@@ -154,7 +157,7 @@ export function renderCellSelectionOverlay({
   try {
     tableMap = TableMap.get(tableNode);
   } catch (error: unknown) {
-    console.error('[renderCellSelectionOverlay] TableMap.get failed:', error);
+    log.error('[renderCellSelectionOverlay] TableMap.get failed:', error);
     return;
   }
 

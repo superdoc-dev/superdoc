@@ -4,6 +4,9 @@ import { stripHtmlStyles } from './htmlSanitizer.js';
 import { htmlHandler } from '../InputRule.js';
 import { wrapTextsInRuns } from '../inputRules/docx-paste/docx-paste.js';
 import { detectUnsupportedContent } from './catchAllSchema.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('import-html');
 
 /**
  * @typedef {import('./catchAllSchema.js').UnsupportedContentItem} UnsupportedContentItem
@@ -59,7 +62,7 @@ export function createDocFromHTML(content, editor, options = {}) {
       if (options.onUnsupportedContent) {
         options.onUnsupportedContent(unsupported);
       } else {
-        console.warn('[super-editor] Unsupported HTML content dropped during import:', unsupported);
+        log.warn('[super-editor] Unsupported HTML content dropped during import:', unsupported);
       }
     }
   }

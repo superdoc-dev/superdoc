@@ -68,7 +68,7 @@ describe('insertContent', () => {
     const result = command({ tr: mockTr, state: mockState, commands: mockCommands, editor: mockEditor });
 
     expect(result).toBe(false);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid contentType'));
+    expect(consoleSpy).toHaveBeenCalledWith('[insertContent]', expect.stringContaining('Invalid contentType'));
     expect(mockCommands.insertContentAt).not.toHaveBeenCalled();
 
     consoleSpy.mockRestore();
@@ -85,7 +85,11 @@ describe('insertContent', () => {
     const result = command({ tr: mockTr, state: mockState, commands: mockCommands, editor: mockEditor });
 
     expect(result).toBe(false);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to process html'), expect.any(Error));
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[insertContent]',
+      expect.stringContaining('Failed to process html'),
+      expect.any(Error),
+    );
 
     consoleSpy.mockRestore();
   });

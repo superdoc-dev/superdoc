@@ -17,6 +17,9 @@
  */
 
 import { DOM_CLASS_NAMES, STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES } from '@superdoc/dom-contract';
+import { createLogger } from '@superdoc/common/logger';
+
+const logger = createLogger('DOM-MAP');
 
 // ---------------------------------------------------------------------------
 // Debug logging (disabled by default — flip to true for click-mapping traces)
@@ -24,7 +27,7 @@ import { DOM_CLASS_NAMES, STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES } from '@s
 
 const DEBUG = false;
 const log = (...args: unknown[]) => {
-  if (DEBUG) console.log('[DOM-MAP]', ...args);
+  if (DEBUG) logger.debug(...args);
 };
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,9 @@ import {
 import { bootstrapPartSync } from './part-sync/index.js';
 import { seedPartsFromEditor } from './part-sync/seed-parts.js';
 import { normalizeYjsFragmentEventsForSchema, normalizeYjsFragmentForSchema } from './normalize-yjs-fragment.js';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('collaboration');
 
 export const CollaborationPluginKey = new PluginKey('collaboration');
 const headlessBindingStateByEditor = new WeakMap();
@@ -431,7 +434,7 @@ const initHeadlessBinding = (editor) => {
     const syncState = ySyncPluginKey.getState(editor.state);
     if (!syncState?.binding) {
       if (!state.warnedMissingBinding) {
-        console.warn('[Collaboration] Headless binding init: no sync state or binding found');
+        log.warn('Headless binding init: no sync state or binding found');
         state.warnedMissingBinding = true;
       }
       return null;

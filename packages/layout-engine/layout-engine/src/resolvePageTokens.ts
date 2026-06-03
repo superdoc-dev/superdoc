@@ -16,6 +16,9 @@
 
 import type { Layout, FlowBlock, ParagraphBlock, Measure } from '@superdoc/contracts';
 import type { DisplayPageInfo } from './pageNumbering';
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-engine:page-tokens');
 
 /**
  * Numbering context for page token resolution.
@@ -83,7 +86,7 @@ export function resolvePageNumberTokens(
   }
 
   if (!numberingCtx || !numberingCtx.displayPages || numberingCtx.totalPages < 1) {
-    console.warn('[resolvePageTokens] Invalid numbering context - skipping resolution');
+    log.warn('[resolvePageTokens] Invalid numbering context - skipping resolution');
     return { affectedBlockIds, updatedBlocks };
   }
 
@@ -114,7 +117,7 @@ export function resolvePageNumberTokens(
     const displayPageInfo = numberingCtx.displayPages[pageIndex];
 
     if (!displayPageInfo) {
-      console.warn(`[resolvePageTokens] No display page info for page ${page.number} - skipping`);
+      log.warn(`[resolvePageTokens] No display page info for page ${page.number} - skipping`);
       continue;
     }
 
@@ -257,12 +260,12 @@ export function resolveTokensInBlock(block: ParagraphBlock, pageNumber: number, 
 
   // Validate inputs
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    console.warn('[resolvePageTokens] Invalid pageNumber:', pageNumber, '- using 1 as fallback');
+    log.warn('[resolvePageTokens] Invalid pageNumber:', pageNumber, '- using 1 as fallback');
     pageNumber = 1;
   }
 
   if (!Number.isFinite(totalPages) || totalPages < 1) {
-    console.warn('[resolvePageTokens] Invalid totalPages:', totalPages, '- using 1 as fallback');
+    log.warn('[resolvePageTokens] Invalid totalPages:', totalPages, '- using 1 as fallback');
     totalPages = 1;
   }
 

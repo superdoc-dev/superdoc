@@ -16,6 +16,10 @@
  * @module focus-watchdog
  */
 
+import { createLogger } from '@superdoc/common/logger';
+
+const log = createLogger('layout-bridge:focus-watchdog');
+
 /**
  * Configuration for focus watchdog.
  */
@@ -115,7 +119,7 @@ export class FocusWatchdog {
     }
 
     if (!this.expectedFocusElement) {
-      console.warn('FocusWatchdog: Cannot start without expected focus element');
+      log.warn('FocusWatchdog: Cannot start without expected focus element');
       return;
     }
 
@@ -124,7 +128,7 @@ export class FocusWatchdog {
       this.check();
     }, this.config.checkInterval);
 
-    console.log('FocusWatchdog: Started monitoring');
+    log.debug('FocusWatchdog: Started monitoring');
   }
 
   /**
@@ -148,7 +152,7 @@ export class FocusWatchdog {
     }
 
     this.running = false;
-    console.log('FocusWatchdog: Stopped monitoring');
+    log.debug('FocusWatchdog: Stopped monitoring');
   }
 
   /**
@@ -234,15 +238,15 @@ export class FocusWatchdog {
       const restored = document.activeElement === this.expectedFocusElement;
 
       if (restored) {
-        console.log('FocusWatchdog: Focus restored successfully');
+        log.debug('FocusWatchdog: Focus restored successfully');
         this.config.onRecovery();
         return true;
       } else {
-        console.warn('FocusWatchdog: Failed to restore focus');
+        log.warn('FocusWatchdog: Failed to restore focus');
         return false;
       }
     } catch (err) {
-      console.error('FocusWatchdog: Error restoring focus:', err);
+      log.error('FocusWatchdog: Error restoring focus:', err);
       return false;
     }
   }
@@ -255,7 +259,7 @@ export class FocusWatchdog {
   private handleDrift(target: Element | null): void {
     this.driftCount++;
 
-    console.warn(
+    log.warn(
       `FocusWatchdog: Focus drift detected (${this.driftCount}/${this.config.maxDriftCount})`,
       'Target:',
       target,
@@ -266,7 +270,7 @@ export class FocusWatchdog {
 
     // Attempt recovery if threshold reached
     if (this.driftCount >= this.config.maxDriftCount) {
-      console.warn('FocusWatchdog: Drift threshold reached, attempting recovery');
+      log.warn('FocusWatchdog: Drift threshold reached, attempting recovery');
       this.restoreFocus();
       this.driftCount = 0; // Reset after recovery attempt
     }

@@ -19,6 +19,9 @@ export type {
 // Identity helpers
 export * from './identity';
 
+// Logging
+export * from './logger';
+
 // List numbering helpers
 export * from './list-numbering';
 export * from './list-rendering';

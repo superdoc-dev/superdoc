@@ -92,6 +92,15 @@ export {
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
 
+export {
+  resolveAnchoredGraphicY,
+  resolveAnchoredGraphicX,
+  computeParagraphContentStartY,
+  computeParagraphLayoutStartY,
+  type ColumnLayoutForAnchor,
+  type ResolveAnchoredGraphicYInput,
+} from './graphic-placement.js';
+
 // Editor-neutral layout identity primitives (prep-001).
 // Additive only — `pmStart`/`pmEnd` and PM-shaped fields remain available
 // alongside these on every fragment/run.

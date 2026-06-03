@@ -643,10 +643,9 @@ describe('layoutDocument', () => {
     expect(paraFragment.kind).toBe('para');
 
     // The image is positioned at left margin (50px)
-    // Exclusion boundary: imageX + imageWidth + distLeft + distRight
-    // = 50 + 200 + 5 + 10 = 265px
+    // Exclusion boundary: imageX + imageWidth + distRight = 50 + 200 + 10 = 260px
     const imageX = DEFAULT_OPTIONS.margins!.left;
-    const exclusionBoundary = imageX + 200 + 5 + 10;
+    const exclusionBoundary = imageX + 200 + 10;
 
     // Paragraph should start after the exclusion boundary
     expect(paraFragment.x).toBe(exclusionBoundary);

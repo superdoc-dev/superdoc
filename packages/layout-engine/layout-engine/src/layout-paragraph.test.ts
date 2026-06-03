@@ -553,6 +553,46 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
 
       expect(remeasureParagraph).toHaveBeenCalledWith(block, 120, 24);
     });
+
+    it('does not expand fragment width past column when negative indents meet float wrap', () => {
+      const remeasureParagraph = mock((_block, maxWidth) => makeMeasure([{ width: 100, lineHeight: 20, maxWidth }]));
+
+      const floatManager = makeFloatManager();
+      floatManager.computeAvailableWidth = mock(() => ({
+        width: 400,
+        offsetX: 80,
+      }));
+
+      const block: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'negative-indent-float',
+        runs: [{ text: 'Wrapped text', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          indent: { left: -8, right: -2 },
+        },
+      };
+
+      const measure = makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 500 }]);
+      const pageState = makePageState();
+
+      layoutParagraphBlock({
+        block,
+        measure,
+        columnWidth: 500,
+        ensurePage: mock(() => pageState),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
+        floatManager,
+        remeasureParagraph,
+      });
+
+      const fragment = pageState.page.fragments[0];
+      expect(fragment?.kind).toBe('para');
+      if (fragment?.kind !== 'para') return;
+      expect(fragment.x).toBe(130);
+      expect(fragment.width).toBe(400);
+      expect(fragment.x + fragment.width).toBe(530);
+    });
   });
 });
 

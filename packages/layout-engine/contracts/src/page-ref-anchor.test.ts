@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Layout, ParagraphBlock, TableBlock } from './index.js';
+import type { Layout, ListBlock, ParagraphBlock, TableBlock } from './index.js';
 import { buildPageRefAnchorMap } from './page-ref-anchor.js';
 
 describe('buildPageRefAnchorMap', () => {
@@ -147,6 +147,50 @@ describe('buildPageRefAnchorMap', () => {
 
     expect(buildPageRefAnchorMap(new Map([['cellTarget', 202]]), layout, [table]).get('cellTarget')?.physicalPage).toBe(
       5,
+    );
+  });
+
+  it('falls back to list item paragraph ranges when fragment PM data is missing', () => {
+    const list: ListBlock = {
+      kind: 'list',
+      id: 'list1',
+      listType: 'number',
+      items: [
+        {
+          id: 'li1',
+          marker: { kind: 'number', text: '1.', level: 0 },
+          paragraph: {
+            kind: 'paragraph',
+            id: 'p1',
+            runs: [{ text: 'Heading', fontFamily: 'Arial', fontSize: 12, pmStart: 300, pmEnd: 307 }],
+          },
+        },
+      ],
+    };
+    const layout: Layout = {
+      pageSize: { w: 800, h: 1000 },
+      pages: [
+        {
+          number: 6,
+          fragments: [
+            {
+              kind: 'list-item',
+              blockId: 'list1',
+              itemId: 'li1',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 0,
+              width: 100,
+              markerWidth: 20,
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(buildPageRefAnchorMap(new Map([['listTarget', 303]]), layout, [list]).get('listTarget')?.physicalPage).toBe(
+      6,
     );
   });
 

@@ -1,4 +1,14 @@
-import type { FlowBlock, Fragment, Layout, Page, PageRefLocation, ParagraphBlock, Run, TableBlock } from './index.js';
+import type {
+  FlowBlock,
+  Fragment,
+  Layout,
+  ListBlock,
+  Page,
+  PageRefLocation,
+  ParagraphBlock,
+  Run,
+  TableBlock,
+} from './index.js';
 
 export function buildPageRefAnchorMap(
   bookmarks: Map<string, number>,
@@ -42,6 +52,13 @@ function findPageRefLocation(
         return pageRefLocationFromPage(page, pmPosition);
       }
       if (fragment.kind === 'table' && block?.kind === 'table' && tableContainsPosition(block, pmPosition)) {
+        return pageRefLocationFromPage(page, pmPosition);
+      }
+      if (
+        fragment.kind === 'list-item' &&
+        block?.kind === 'list' &&
+        listItemContainsPosition(block, fragment.itemId, pmPosition)
+      ) {
         return pageRefLocationFromPage(page, pmPosition);
       }
 
@@ -101,7 +118,20 @@ function fragmentStartPosition(fragment: Fragment, block: FlowBlock | undefined)
   if (range.pmStart != null) return range.pmStart;
   if (block?.kind === 'paragraph') return runRange(block.runs)?.start ?? null;
   if (block?.kind === 'table') return tableRunRange(block)?.start ?? null;
+  if (fragment.kind === 'list-item' && block?.kind === 'list') {
+    return listItemRunRange(block, fragment.itemId)?.start ?? null;
+  }
   return null;
+}
+
+function listItemContainsPosition(block: ListBlock, itemId: string, pmPosition: number): boolean {
+  const range = listItemRunRange(block, itemId);
+  return range != null && pmPosition >= range.start && pmPosition < range.end;
+}
+
+function listItemRunRange(block: ListBlock, itemId: string): { start: number; end: number } | null {
+  const item = block.items.find((candidate) => candidate.id === itemId);
+  return item ? runRange(item.paragraph.runs) : null;
 }
 
 function tableRunRange(block: TableBlock): { start: number; end: number } | null {

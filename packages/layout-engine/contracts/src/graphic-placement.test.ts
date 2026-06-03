@@ -52,6 +52,24 @@ describe('resolveAnchoredGraphicY', () => {
     ).toBe(92);
   });
 
+  it('ignores paragraph alignV when pre-registered fallback has no paragraph context', () => {
+    expect(
+      resolveAnchoredGraphicY({
+        ...base,
+        anchor: { vRelativeFrom: 'paragraph', alignV: 'center', offsetV: 0 },
+        preRegisteredFallbackToContentTop: true,
+      }),
+    ).toBe(72);
+    expect(
+      resolveAnchoredGraphicY({
+        ...base,
+        objectHeight: 50,
+        anchor: { vRelativeFrom: 'paragraph', alignV: 'bottom', offsetV: 10 },
+        preRegisteredFallbackToContentTop: true,
+      }),
+    ).toBe(82);
+  });
+
   it('legacy undefined vRelativeFrom uses anchor paragraph Y', () => {
     expect(
       resolveAnchoredGraphicY({

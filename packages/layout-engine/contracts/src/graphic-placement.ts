@@ -33,8 +33,9 @@ export type ResolveAnchoredGraphicYInput = {
   /** First line height of the anchor paragraph (paragraph-relative alignV). */
   firstLineHeight?: number;
   /**
-   * When true and vRelativeFrom is not margin/page, fall back to contentTop + offsetV
-   * (page/margin pre-registered anchors that lack paragraph context).
+   * When true, anchor has no host paragraph (pre-registered / paragraphless layout).
+   * For `vRelativeFrom: 'paragraph'`, use `contentTop + offsetV` instead of alignV on a
+   * synthetic paragraph (defaults would wrongly center/bottom against contentTop).
    */
   preRegisteredFallbackToContentTop?: boolean;
 };
@@ -81,6 +82,9 @@ export function resolveAnchoredGraphicY(input: ResolveAnchoredGraphicYInput): nu
   }
 
   if (vRelativeFrom === 'paragraph') {
+    if (preRegisteredFallbackToContentTop) {
+      return contentTop + offsetV;
+    }
     const baseAnchorY = anchorParagraphY;
     if (alignV === 'bottom') {
       return baseAnchorY + firstLineHeight - objectHeight + offsetV;

@@ -389,7 +389,7 @@ export function getHeaderFooterTypeForSection(
   identifier: MultiSectionHeaderFooterIdentifier,
   options?: { kind?: 'header' | 'footer'; sectionPageNumber?: number; parityPageNumber?: number },
 ): HeaderFooterType | null {
-  if (pageNumber <= 0) return null;
+  if (!Number.isFinite(pageNumber)) return null;
 
   const kind = options?.kind ?? 'header';
   const sectionPageNumber = options?.sectionPageNumber ?? pageNumber;

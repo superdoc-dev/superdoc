@@ -3,10 +3,12 @@ import type {
   HeaderFooterLayout,
   ListBlock,
   Measure,
+  PageNumberFieldFormat,
   ParagraphBlock,
   TableBlock,
+  TextRun,
 } from '@superdoc/contracts';
-import { layoutHeaderFooter, type HeaderFooterConstraints } from '@superdoc/layout-engine';
+import { formatPageNumberFieldValue, layoutHeaderFooter, type HeaderFooterConstraints } from '@superdoc/layout-engine';
 import { MeasureCache } from './cache';
 import { resolveHeaderFooterTokens, cloneHeaderFooterBlocks } from './resolveHeaderFooterTokens';
 import { FeatureFlags } from './featureFlags';
@@ -108,6 +110,138 @@ export function getBucketRepresentative(bucket: DigitBucket): number {
     case 'd4':
       return 5000;
   }
+}
+
+function getBucketForDigitCount(digitCount: number): DigitBucket {
+  if (digitCount <= 1) return 'd1';
+  if (digitCount === 2) return 'd2';
+  if (digitCount === 3) return 'd3';
+  return 'd4';
+}
+
+function getBucketForRenderedPageNumberText(text: string): DigitBucket | null {
+  const digitCount = (text.match(/\d/g) ?? []).length;
+  if (digitCount <= 0) return null;
+  return getBucketForDigitCount(digitCount);
+}
+
+type PageNumberBucketingStrategy =
+  | { kind: 'displayText' }
+  | { kind: 'fieldFormat'; fieldFormat: PageNumberFieldFormat };
+
+function forEachPageNumberRun(blocks: FlowBlock[], visit: (run: TextRun) => void): void {
+  for (const block of blocks) {
+    if (block.kind === 'paragraph') {
+      const paraBlock = block as ParagraphBlock;
+      for (const run of paraBlock.runs) {
+        if ('token' in run && run.token === 'pageNumber') {
+          visit(run as TextRun);
+        }
+      }
+    } else if (block.kind === 'list') {
+      const list = block as ListBlock;
+      for (const item of list.items ?? []) {
+        for (const run of item.paragraph.runs) {
+          if ('token' in run && run.token === 'pageNumber') {
+            visit(run as TextRun);
+          }
+        }
+      }
+    } else if (block.kind === 'table') {
+      const table = block as TableBlock;
+      for (const row of table.rows ?? []) {
+        for (const cell of row.cells ?? []) {
+          const cellBlocks: FlowBlock[] = cell.blocks
+            ? (cell.blocks as FlowBlock[])
+            : cell.paragraph
+              ? [cell.paragraph]
+              : [];
+          forEachPageNumberRun(cellBlocks, visit);
+        }
+      }
+    }
+  }
+}
+
+function buildCompatibleFieldFormatKey(fieldFormat: PageNumberFieldFormat): string {
+  return `${fieldFormat.format ?? 'decimal'}:${fieldFormat.zeroPadding ?? ''}`;
+}
+
+function getPageNumberBucketingStrategy(blocks: FlowBlock[]): PageNumberBucketingStrategy | null {
+  let sawImplicitPageNumber = false;
+  const explicitFieldFormats = new Map<string, PageNumberFieldFormat>();
+
+  forEachPageNumberRun(blocks, (run) => {
+    const fieldFormat = run.pageNumberFieldFormat;
+    if (!fieldFormat) {
+      sawImplicitPageNumber = true;
+      return;
+    }
+
+    if (!isDigitBucketCompatiblePageNumberFormat(fieldFormat.format)) {
+      explicitFieldFormats.clear();
+      sawImplicitPageNumber = true;
+      return;
+    }
+
+    explicitFieldFormats.set(buildCompatibleFieldFormatKey(fieldFormat), fieldFormat);
+  });
+
+  if (explicitFieldFormats.size === 0) {
+    return sawImplicitPageNumber ? { kind: 'displayText' } : null;
+  }
+
+  if (sawImplicitPageNumber || explicitFieldFormats.size > 1) {
+    return null;
+  }
+
+  return { kind: 'fieldFormat', fieldFormat: explicitFieldFormats.values().next().value! };
+}
+
+function canUseDigitBucketingForVariant(
+  blocks: FlowBlock[],
+  docTotalPages: number,
+  pageResolver: PageResolver,
+): boolean {
+  const strategy = getPageNumberBucketingStrategy(blocks);
+  if (!strategy) return false;
+
+  const renderedBucketForPage = (pageNumber: number): DigitBucket | null => {
+    const pageInfo = pageResolver(pageNumber);
+    const renderedText =
+      strategy.kind === 'fieldFormat'
+        ? Number.isFinite(pageInfo.displayNumber)
+          ? formatPageNumberFieldValue(pageInfo.displayNumber ?? pageNumber, strategy.fieldFormat)
+          : null
+        : pageInfo.displayText;
+    return renderedText ? getBucketForRenderedPageNumberText(renderedText) : null;
+  };
+
+  const expectedRenderedBuckets = new Map<DigitBucket, DigitBucket>();
+  for (let pageNumber = 1; pageNumber <= docTotalPages; pageNumber += 1) {
+    const physicalBucket = getBucketForPageNumber(pageNumber);
+    const renderedBucket = renderedBucketForPage(pageNumber);
+    if (!renderedBucket) {
+      return false;
+    }
+    const expectedBucket = expectedRenderedBuckets.get(physicalBucket);
+    if (!expectedBucket) {
+      expectedRenderedBuckets.set(physicalBucket, renderedBucket);
+      continue;
+    }
+    if (expectedBucket !== renderedBucket) {
+      return false;
+    }
+  }
+
+  for (const [physicalBucket, expectedRenderedBucket] of expectedRenderedBuckets) {
+    const representativeBucket = renderedBucketForPage(getBucketRepresentative(physicalBucket));
+    if (representativeBucket !== expectedRenderedBucket) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -323,7 +457,10 @@ export async function layoutHeaderFooterWithCache(
     // Determine which pages to create layouts for
     let pagesToLayout: number[];
 
-    const useBucketingForVariant = useBucketing && !hasPageNumberTokensRequiringPerPageLayout(blocks);
+    const useBucketingForVariant =
+      useBucketing &&
+      !hasPageNumberTokensRequiringPerPageLayout(blocks) &&
+      canUseDigitBucketingForVariant(blocks, docTotalPages, pageResolver);
 
     if (!useBucketingForVariant) {
       // Per-page layout: small docs, disabled bucketing, or non-digit-bucket-compatible PAGE formats.

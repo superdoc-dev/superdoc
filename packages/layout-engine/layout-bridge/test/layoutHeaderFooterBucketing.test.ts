@@ -550,6 +550,36 @@ describe('layoutHeaderFooterWithCache - Section-Aware Token Resolution', () => {
     expect(result.default).toBeDefined();
     expect(result.default?.layout.pages).toHaveLength(26);
   });
+
+  it('falls back to per-page layouts when section-aware display text escapes the physical digit bucket', async () => {
+    const sections = {
+      default: [makePageTokenBlock('header-section-restart')],
+    };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: pageNum <= 150 ? (pageNum < 100 ? String(pageNum) : String(900 + pageNum)) : String(pageNum),
+      displayNumber: pageNum <= 150 ? (pageNum < 100 ? pageNum : 900 + pageNum) : pageNum,
+      totalPages: 150,
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(150);
+    expect(measureBlock).toHaveBeenCalledTimes(150);
+    expect(result.default?.layout.pages[99]).toMatchObject({
+      number: 100,
+      displayNumber: 1000,
+      numberText: '1000',
+    });
+  });
 });
 
 describe('layoutHeaderFooterWithCache - Cache Behavior', () => {

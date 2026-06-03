@@ -190,6 +190,25 @@ function resolveTablePageRefs(
   return changed ? { block: { ...block, rows }, changed: true } : { block, changed: false };
 }
 
+function resolveListItemPageRefs(
+  block: ListBlock,
+  itemId: string,
+  context?: PageRefResolutionContext,
+): { block: ListBlock; changed: boolean } {
+  if (!context?.anchorMap?.size) return { block, changed: false };
+
+  let changed = false;
+  const items = block.items.map((item) => {
+    if (item.id !== itemId) return item;
+    const resolved = resolveParagraphPageRefBlock(item.paragraph, context);
+    if (!resolved.changed) return item;
+    changed = true;
+    return { ...item, paragraph: resolved.block };
+  });
+
+  return changed ? { block: { ...block, items }, changed: true } : { block, changed: false };
+}
+
 function isTextRun(run: Run): run is TextRun {
   return (run.kind === 'text' || run.kind === undefined) && 'text' in run;
 }
@@ -378,10 +397,14 @@ function computeBlockVersion(
   // Prepend the document's font-mapping signature so a `fonts.map` change busts paint reuse the
   // same way a font load (getFontConfigVersion, folded inside deriveBlockVersion) does. The cache
   // is per resolveLayout pass, so the signature is constant here; '' leaves the version unchanged.
-  const version = deriveBlockVersion(entry.block);
-  const versioned = fontSignature ? `${fontSignature}|${version}` : version;
+  const versioned = deriveFontAwareBlockVersion(entry.block, fontSignature);
   cache.set(blockId, versioned);
   return versioned;
+}
+
+function deriveFontAwareBlockVersion(block: FlowBlock, fontSignature = ''): string {
+  const version = deriveBlockVersion(block);
+  return fontSignature ? `${fontSignature}|${version}` : version;
 }
 
 function applyPaintVersions(item: Extract<ResolvedPaintItem, { kind: 'fragment' }>, visualVersion: string): void {
@@ -423,7 +446,9 @@ export function resolveFragmentItem(
       item.layoutSourceIdentity = layoutSourceIdentity;
       applyPaintVersions(
         item,
-        tablePageRefs.changed ? fragmentSignature(fragment, deriveBlockVersion(tablePageRefs.block)) : version,
+        tablePageRefs.changed
+          ? fragmentSignature(fragment, deriveFontAwareBlockVersion(tablePageRefs.block, fontSignature))
+          : version,
       );
       return item;
     }
@@ -454,15 +479,15 @@ export function resolveFragmentItem(
               pageRefContext,
             )
           : null;
-      const pageRefBlockVer =
-        paragraphPageRefs?.changed && fontSignature
-          ? `${fontSignature}|${deriveBlockVersion(paragraphPageRefs.block)}`
-          : paragraphPageRefs?.changed
-            ? deriveBlockVersion(paragraphPageRefs.block)
-            : '';
+      const listPageRefs =
+        fragment.kind === 'list-item' && entry?.block.kind === 'list'
+          ? resolveListItemPageRefs(entry.block as ListBlock, (fragment as ListItemFragment).itemId, pageRefContext)
+          : null;
       const itemVersion = paragraphPageRefs?.changed
-        ? fragmentSignature(paragraphPageRefs.fragment, pageRefBlockVer)
-        : version;
+        ? fragmentSignature(paragraphPageRefs.fragment, deriveFontAwareBlockVersion(paragraphPageRefs.block, fontSignature))
+        : listPageRefs?.changed
+          ? fragmentSignature(fragment, deriveFontAwareBlockVersion(listPageRefs.block, fontSignature))
+          : version;
       // para, list-item — existing generic resolution
       const item: ResolvedFragmentItem = {
         kind: 'fragment',
@@ -497,7 +522,7 @@ export function resolveFragmentItem(
           item.measure = entry.measure as ParagraphMeasure;
           if (item.sourceAnchor == null) item.sourceAnchor = (entry.block as ParagraphBlock).sourceAnchor;
         } else if (fragment.kind === 'list-item' && entry.block.kind === 'list' && entry.measure.kind === 'list') {
-          const listBlock = entry.block as ListBlock;
+          const listBlock = listPageRefs?.block ?? (entry.block as ListBlock);
           const listItem = listBlock.items.find((candidate) => candidate.id === (fragment as ListItemFragment).itemId);
           item.block = listBlock;
           item.measure = entry.measure as ListMeasure;

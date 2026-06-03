@@ -381,6 +381,105 @@ describe('resolveLayout', () => {
       expect(item.block.rows[0].cells[0].paragraph?.runs[0].text).toBe('12');
       expect((tableBlock as any).rows[0].cells[0].paragraph.runs[0].text).toBe('5');
     });
+
+    it('resolves PAGEREF text inside list items', () => {
+      const listBlock: FlowBlock = {
+        kind: 'list',
+        id: 'source-list',
+        listType: 'number',
+        items: [
+          {
+            id: 'li1',
+            marker: { kind: 'number', text: '1.', level: 0 },
+            paragraph: {
+              kind: 'paragraph',
+              id: 'list-para',
+              runs: [pageRefRun()],
+            },
+          },
+        ],
+      } as any;
+      const targetBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'target-block',
+        runs: [{ text: 'Target', fontFamily: 'Arial', fontSize: 12, pmStart: 100, pmEnd: 106 }],
+      } as any;
+      const measures: Measure[] = [
+        {
+          kind: 'list',
+          items: [
+            {
+              itemId: 'li1',
+              markerWidth: 20,
+              markerTextWidth: 8,
+              indentLeft: 0,
+              paragraph: {
+                lines: [
+                  { fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 },
+                ],
+                totalHeight: 12,
+              },
+            },
+          ],
+          totalHeight: 12,
+        } as any,
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 6, width: 40, ascent: 8, descent: 2, lineHeight: 12 }],
+        } as any,
+      ];
+      const layout: Layout = {
+        pageSize: { w: 800, h: 1000 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'list-item',
+                blockId: 'source-list',
+                itemId: 'li1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                markerWidth: 20,
+              },
+            ],
+          },
+          {
+            number: 2,
+            displayNumber: 12,
+            numberText: '12',
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'target-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                pmStart: 100,
+                pmEnd: 106,
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [listBlock, targetBlock],
+        measures,
+        bookmarks: new Map([['target', 100]]),
+      });
+      const item = result.pages[0].items[0] as any;
+
+      expect(item.block.items[0].paragraph.runs[0].text).toBe('12');
+      expect((listBlock as any).items[0].paragraph.runs[0].text).toBe('5');
+    });
   });
 
   it('derives neutral layout identity for resolved fragments even when input fragments do not precompute it', () => {

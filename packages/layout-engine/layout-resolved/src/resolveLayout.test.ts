@@ -297,6 +297,90 @@ describe('resolveLayout', () => {
 
       expect((input.blocks[0] as any).runs[0].text).toBe('5');
     });
+
+    it('resolves PAGEREF text inside table cells', () => {
+      const tableBlock: FlowBlock = {
+        kind: 'table',
+        id: 'source-table',
+        rows: [
+          {
+            id: 'row1',
+            cells: [
+              {
+                id: 'cell1',
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'cell-para',
+                  runs: [pageRefRun()],
+                },
+              },
+            ],
+          },
+        ],
+      } as any;
+      const targetBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'target-block',
+        runs: [{ text: 'Target', fontFamily: 'Arial', fontSize: 12, pmStart: 100, pmEnd: 106 }],
+      } as any;
+      const measures: Measure[] = [
+        { kind: 'table', rows: [{ height: 20, cells: [{ width: 100 }] }], columnWidths: [100] } as any,
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 6, width: 40, ascent: 8, descent: 2, lineHeight: 12 }],
+        } as any,
+      ];
+      const layout: Layout = {
+        pageSize: { w: 800, h: 1000 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'table',
+                blockId: 'source-table',
+                fromRow: 0,
+                toRow: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 20,
+              },
+            ],
+          },
+          {
+            number: 2,
+            displayNumber: 12,
+            numberText: '12',
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'target-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                pmStart: 100,
+                pmEnd: 106,
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [tableBlock, targetBlock],
+        measures,
+        bookmarks: new Map([['target', 100]]),
+      });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedTableItem;
+
+      expect(item.block.rows[0].cells[0].paragraph?.runs[0].text).toBe('12');
+      expect((tableBlock as any).rows[0].cells[0].paragraph.runs[0].text).toBe('5');
+    });
   });
 
   it('derives neutral layout identity for resolved fragments even when input fragments do not precompute it', () => {

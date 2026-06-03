@@ -24,6 +24,7 @@ import type {
   LineSegment,
   PageRefLocation,
   Run,
+  TableBlock,
   TextRun,
 } from '@superdoc/contracts';
 import { buildPageRefAnchorMap, getSdtContainerKey } from '@superdoc/contracts';
@@ -80,11 +81,39 @@ function resolveParagraphPageRefs(
   measure: ParagraphMeasure,
   context?: PageRefResolutionContext,
 ): ParagraphPageRefResolution {
-  if (!context?.anchorMap?.size) {
+  const runTexts = collectResolvedPageRefRunTexts(block, context);
+
+  if (runTexts.size === 0) {
     return { block, fragment, changed: false };
   }
 
+  const nextRuns = resolvePageRefRuns(block, runTexts);
+  const sourceLines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
+  const nextLines = sourceLines.map((line) => adjustLineForResolvedPageRefs(line, runTexts));
+
+  return {
+    block: { ...block, runs: nextRuns },
+    fragment: { ...fragment, lines: nextLines },
+    changed: true,
+  };
+}
+
+function resolveParagraphPageRefBlock(
+  block: ParagraphBlock,
+  context?: PageRefResolutionContext,
+): { block: ParagraphBlock; changed: boolean } {
+  const runTexts = collectResolvedPageRefRunTexts(block, context);
+  if (runTexts.size === 0) return { block, changed: false };
+  return { block: { ...block, runs: resolvePageRefRuns(block, runTexts) }, changed: true };
+}
+
+function collectResolvedPageRefRunTexts(
+  block: ParagraphBlock,
+  context?: PageRefResolutionContext,
+): Map<number, string> {
   const runTexts = new Map<number, string>();
+  if (!context?.anchorMap?.size) return runTexts;
+
   block.runs.forEach((run, index) => {
     if (!isPageReferenceTextRun(run)) return;
     const target = context.anchorMap?.get(run.pageRefMetadata.bookmarkId);
@@ -100,21 +129,65 @@ function resolveParagraphPageRefs(
     }
   });
 
-  if (runTexts.size === 0) {
-    return { block, fragment, changed: false };
-  }
+  return runTexts;
+}
 
-  const nextRuns = block.runs.map((run, index) =>
+function resolvePageRefRuns(block: ParagraphBlock, runTexts: Map<number, string>): ParagraphBlock['runs'] {
+  return block.runs.map((run, index) =>
     runTexts.has(index) && isTextRun(run) ? { ...run, text: runTexts.get(index)! } : run,
   );
-  const sourceLines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
-  const nextLines = sourceLines.map((line) => adjustLineForResolvedPageRefs(line, runTexts));
+}
 
-  return {
-    block: { ...block, runs: nextRuns },
-    fragment: { ...fragment, lines: nextLines },
-    changed: true,
-  };
+function resolveTablePageRefs(
+  block: TableBlock,
+  context?: PageRefResolutionContext,
+): { block: TableBlock; changed: boolean } {
+  if (!context?.anchorMap?.size) return { block, changed: false };
+
+  let changed = false;
+  const rows = block.rows.map((row) => {
+    let rowChanged = false;
+    const cells = row.cells.map((cell) => {
+      let cellChanged = false;
+      let nextParagraph = cell.paragraph;
+      if (cell.paragraph) {
+        const resolved = resolveParagraphPageRefBlock(cell.paragraph, context);
+        nextParagraph = resolved.block;
+        cellChanged ||= resolved.changed;
+      }
+
+      let nextBlocks = cell.blocks;
+      if (cell.blocks) {
+        nextBlocks = cell.blocks.map((childBlock) => {
+          if (childBlock.kind === 'paragraph') {
+            const resolved = resolveParagraphPageRefBlock(childBlock, context);
+            cellChanged ||= resolved.changed;
+            return resolved.block;
+          }
+          if (childBlock.kind === 'table') {
+            const resolved = resolveTablePageRefs(childBlock, context);
+            cellChanged ||= resolved.changed;
+            return resolved.block;
+          }
+          return childBlock;
+        });
+      }
+
+      if (!cellChanged) return cell;
+      rowChanged = true;
+      return {
+        ...cell,
+        ...(nextParagraph ? { paragraph: nextParagraph } : {}),
+        ...(nextBlocks ? { blocks: nextBlocks } : {}),
+      };
+    });
+
+    if (!rowChanged) return row;
+    changed = true;
+    return { ...row, cells };
+  });
+
+  return changed ? { block: { ...block, rows }, changed: true } : { block, changed: false };
 }
 
 function isTextRun(run: Run): run is TextRun {
@@ -341,10 +414,17 @@ export function resolveFragmentItem(
   switch (fragment.kind) {
     case 'table': {
       const item = resolveTableItem(fragment as TableFragment, fragmentIndex, pageIndex, blockMap);
+      const tablePageRefs = resolveTablePageRefs(item.block, pageRefContext);
+      if (tablePageRefs.changed) {
+        item.block = tablePageRefs.block;
+      }
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
       if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
       item.layoutSourceIdentity = layoutSourceIdentity;
-      applyPaintVersions(item, version);
+      applyPaintVersions(
+        item,
+        tablePageRefs.changed ? fragmentSignature(fragment, deriveBlockVersion(tablePageRefs.block)) : version,
+      );
       return item;
     }
     case 'image': {

@@ -5,28 +5,37 @@ import { syncCommentsToClients } from '@superdoc/core/collaboration/helpers.js';
 import { comments_module_events } from '@superdoc/common';
 import useSelection from '@superdoc/helpers/use-selection';
 
-/**
- * Collect the direct replies of a thread root from the comments store.
- *
- * Used to cascade thread-level operations (resolve) to every comment in the
- * thread. Returns the reactive comment objects (each exposing `resolveComment`
- * + `resolvedTime`).
- *
- * @param {Object} superdoc The SuperDoc instance
- * @param {String} rootCommentId The thread root's comment id
- * @returns {Object[]} Direct reply comment objects
- */
-function getDirectThreadReplies(superdoc, rootCommentId) {
+const getCommentIds = (comment) =>
+  [comment?.commentId, comment?.importedId].filter((id) => id != null).map((id) => String(id));
+
+function getThreadDescendants(superdoc, rootComment) {
   const store = superdoc?.commentsStore;
-  if (!store || rootCommentId == null) return [];
+  if (!store) return [];
   const raw = store.commentsList;
   const list = Array.isArray(raw) ? raw : (raw?.value ?? []);
-  return list.filter(
-    (c) =>
-      c &&
-      c.commentId !== rootCommentId &&
-      (c.parentCommentId === rootCommentId || c.threadingParentCommentId === rootCommentId),
-  );
+  const threadIds = new Set(getCommentIds(rootComment));
+  const descendants = [];
+  let expanded = true;
+
+  while (expanded) {
+    expanded = false;
+    for (const comment of list) {
+      if (!comment) continue;
+      const ids = getCommentIds(comment);
+      if (ids.some((id) => threadIds.has(id))) continue;
+
+      const parentIds = [comment.parentCommentId, comment.threadingParentCommentId]
+        .filter((id) => id != null)
+        .map((id) => String(id));
+      if (!parentIds.some((id) => threadIds.has(id))) continue;
+
+      descendants.push(comment);
+      ids.forEach((id) => threadIds.add(id));
+      expanded = true;
+    }
+  }
+
+  return descendants;
 }
 
 /**
@@ -120,23 +129,19 @@ export default function useComment(params) {
       return;
     }
 
-    // SD-3355 / EUI-CMTS-035 — resolving a thread resolves the WHOLE thread.
-    // A reply can carry its own reconstructed anchor mark (e.g. Google-Docs
-    // nested ranges), so resolving only the root leaves the reply's commentMark
-    // in place and the anchored text stays highlighted after resolve. Convert
-    // the root + every reply mark to range nodes in ONE transaction so the
-    // highlight clears for the whole thread AND a single undo restores it
-    // (overlay + bubble); the anchor markers are preserved for round-trip per
-    // CMTS-LIFE-002. The replies' resolvedTime is intentionally left unset —
-    // the thread's resolved state is carried by the root (sidebar bubble),
-    // replies inherit it on export, and re-marking on undo re-derives the open
-    // state via the host `onEditorTransaction` resync.
-    const replies = getDirectThreadReplies(superdoc, commentId);
+    // Replies can carry their own reconstructed anchor marks. Convert the
+    // whole thread in one editor transaction so resolved text stops rendering
+    // as open while the root remains the thread-level resolved state.
+    const replies = getThreadDescendants(superdoc, { commentId, importedId });
     if (replies.length && typeof commands?.resolveCommentThread === 'function') {
       commands.resolveCommentThread({
         comments: [
-          { commentId, importedId },
-          ...replies.map((reply) => ({ commentId: reply.commentId, importedId: reply.importedId })),
+          { commentId, importedId, preserveAnchor: true },
+          ...replies.map((reply) => ({
+            commentId: reply.commentId,
+            importedId: reply.importedId,
+            preserveAnchor: false,
+          })),
         ],
       });
     } else {

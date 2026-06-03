@@ -18,6 +18,25 @@ export const prepareCommentParaIds = (comment) => {
   return newComment;
 };
 
+const getCommentIds = (comment) => {
+  if (!comment) return [];
+  return [comment.commentId, comment.importedId, comment.internalId].filter((id) => id != null).map((id) => String(id));
+};
+
+const buildCommentLookup = (comments = []) => {
+  const byId = new Map();
+  for (const comment of comments) {
+    getCommentIds(comment).forEach((id) => byId.set(id, comment));
+  }
+  return byId;
+};
+
+const findCommentById = (comments = [], id) => {
+  if (id == null) return null;
+  const lookup = buildCommentLookup(comments);
+  return lookup.get(String(id)) || null;
+};
+
 /**
  * Resolve the thread-wide "done" state for a comment.
  *
@@ -37,17 +56,15 @@ export const prepareCommentParaIds = (comment) => {
 export const isCommentResolvedInThread = (comment, allComments = []) => {
   const isDone = (c) => Boolean(c?.resolvedTime || c?.isDone);
   if (isDone(comment)) return true;
-  const byId = new Map();
-  for (const c of allComments) {
-    if (c?.commentId != null) byId.set(c.commentId, c);
-  }
+  const byId = buildCommentLookup(allComments);
   const seen = new Set();
   let current = comment;
   while (current) {
     const parentId = current.threadingParentCommentId || current.parentCommentId;
-    if (parentId == null || seen.has(parentId)) break;
-    seen.add(parentId);
-    const parent = byId.get(parentId);
+    const parentKey = parentId != null ? String(parentId) : null;
+    if (parentKey == null || seen.has(parentKey)) break;
+    seen.add(parentKey);
+    const parent = byId.get(parentKey);
     if (!parent) break;
     if (isDone(parent)) return true;
     current = parent;
@@ -91,7 +108,7 @@ export const getCommentDefinition = (comment, commentId, allComments, editor) =>
   // Note: If the parent is a tracked change (not a real Word comment), we don't set this attribute
   // because Word doesn't recognize tracked changes as comment parents
   if (comment?.parentCommentId) {
-    const parentComment = allComments.find((c) => c.commentId === comment.parentCommentId);
+    const parentComment = findCommentById(allComments, comment.parentCommentId);
     if (parentComment && !parentComment.trackedChange) {
       attributes['w15:paraIdParent'] = parentComment.commentParaId;
     }
@@ -266,7 +283,7 @@ export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, th
     const parentId = comment.threadingParentCommentId || comment.parentCommentId;
     const threadingStyle = resolveThreadingStyle(comment, profile);
     if (parentId && (threadingStyle === 'commentsExtended' || shouldIncludeForThreads)) {
-      const parentComment = comments.find((c) => c.commentId === parentId);
+      const parentComment = findCommentById(comments, parentId);
       const allowTrackedParent = profile?.defaultStyle === 'commentsExtended';
       if (parentComment && (allowTrackedParent || !parentComment.trackedChange)) {
         attributes['w15:paraIdParent'] = parentComment.commentParaId;

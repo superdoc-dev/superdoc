@@ -1,5 +1,9 @@
 import type { FlowRunLink, Run, TextRun } from '@superdoc/contracts';
-import { normalizeBaselineShift, resolveBaseFontSizeForVerticalText } from '@superdoc/contracts';
+import {
+  formatPageNumberFieldValue,
+  normalizeBaselineShift,
+  resolveBaseFontSizeForVerticalText,
+} from '@superdoc/contracts';
 import { resolvePhysicalFamily } from '@superdoc/font-system';
 import { assertPmPositions } from '../pm-position-validation.js';
 import type { FragmentRenderContext } from '../renderer.js';
@@ -159,9 +163,15 @@ export const resolveRunText = (run: Run, context: FragmentRenderContext): string
     return run.text ?? '';
   }
   if (runToken === 'pageNumber') {
+    if (run.pageNumberFieldFormat) {
+      return formatPageNumberFieldValue(context.displayPageNumber ?? context.pageNumber, run.pageNumberFieldFormat);
+    }
     return context.pageNumberText ?? String(context.pageNumber);
   }
   if (runToken === 'totalPageCount') {
+    if (run.pageNumberFieldFormat) {
+      return formatPageNumberFieldValue(context.totalPages || 1, run.pageNumberFieldFormat);
+    }
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
   }
   return run.text ?? '';

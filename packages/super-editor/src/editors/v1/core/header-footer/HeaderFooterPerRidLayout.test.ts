@@ -139,6 +139,57 @@ describe('layoutPerRIdHeaderFooters', () => {
     expect(deps.headerLayoutsByRId.has('rId-header-orphan')).toBe(false);
   });
 
+  it('passes section-aware display numbers into rId header/footer page resolution', async () => {
+    mockComputeDisplayPageNumber.mockReturnValue(
+      Array.from({ length: 10 }, (_, index) => ({
+        physicalPage: index + 1,
+        displayNumber: index === 9 ? 1 : index + 1,
+        displayText: index === 9 ? 'i' : String(index + 1),
+        sectionIndex: index === 9 ? 1 : 0,
+      })),
+    );
+
+    const headerFooterInput = {
+      headerBlocksByRId: new Map<string, FlowBlock[]>([['rId-header-default', [makeBlock('block-default')]]]),
+      footerBlocksByRId: undefined,
+      headerBlocks: undefined,
+      footerBlocks: undefined,
+      constraints: {
+        width: 400,
+        height: 80,
+      },
+    };
+
+    const layout = {
+      pages: Array.from({ length: 10 }, (_, index) => ({
+        number: index + 1,
+        fragments: [],
+        sectionIndex: index === 9 ? 1 : 0,
+      })),
+    } as unknown as Layout;
+
+    const sectionMetadata: SectionMetadata[] = [
+      {
+        sectionIndex: 0,
+        headerRefs: { default: 'rId-header-default' },
+      },
+    ];
+
+    const deps = {
+      headerLayoutsByRId: new Map(),
+      footerLayoutsByRId: new Map(),
+    };
+
+    await layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata, deps);
+
+    const pageResolver = mockLayoutHeaderFooterWithCache.mock.calls[0][5];
+    expect(pageResolver(10)).toEqual({
+      displayText: 'i',
+      displayNumber: 1,
+      totalPages: 10,
+    });
+  });
+
   it('lays out first-page header refs in multi-section documents with per-section constraints', async () => {
     const headerBlocksByRId = new Map<string, FlowBlock[]>([
       ['rId-header-default', [makeBlock('block-default')]],

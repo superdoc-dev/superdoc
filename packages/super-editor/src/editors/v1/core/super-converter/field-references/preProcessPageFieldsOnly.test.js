@@ -3,6 +3,31 @@ import { describe, it, expect } from 'vitest';
 import { preProcessPageFieldsOnly } from './preProcessPageFieldsOnly.js';
 
 describe('preProcessPageFieldsOnly', () => {
+  function complexFieldNodes(instruction, cachedText = '1') {
+    return [
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }],
+      },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: instruction }] }],
+      },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }],
+      },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:t', elements: [{ type: 'text', text: cachedText }] }],
+      },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }],
+      },
+    ];
+  }
+
   describe('complex field syntax (w:fldChar)', () => {
     it('should process PAGE field with fldChar syntax', () => {
       const nodes = [
@@ -34,6 +59,16 @@ describe('preProcessPageFieldsOnly', () => {
       expect(result.processedNodes[0].name).toBe('sd:autoPageNumber');
     });
 
+    it.each([' page \\* arabic ', ' Page ', ' PAGE '])(
+      'should process PAGE field case-insensitively with fldChar syntax: %s',
+      (instruction) => {
+        const result = preProcessPageFieldsOnly(complexFieldNodes(instruction));
+
+        expect(result.processedNodes).toHaveLength(1);
+        expect(result.processedNodes[0].name).toBe('sd:autoPageNumber');
+      },
+    );
+
     it('should process NUMPAGES field with fldChar syntax', () => {
       const nodes = [
         {
@@ -63,6 +98,54 @@ describe('preProcessPageFieldsOnly', () => {
       expect(result.processedNodes).toHaveLength(1);
       expect(result.processedNodes[0].name).toBe('sd:totalPageNumber');
     });
+
+    it('should process NUMPAGES switches when field instruction uses newline whitespace', () => {
+      const nodes = [
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'NUMPAGES\n\\# "00"' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:t', elements: [{ type: 'text', text: '05' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }],
+        },
+      ];
+
+      const result = preProcessPageFieldsOnly(nodes);
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0]).toMatchObject({
+        name: 'sd:totalPageNumber',
+        attributes: {
+          instruction: 'NUMPAGES \\# "00"',
+          pageNumberFormat: 'decimal',
+          pageNumberZeroPadding: 2,
+          importedCachedText: '05',
+        },
+      });
+    });
+
+    it.each([' numpages ', ' NumPages ', ' NUMPAGES '])(
+      'should process NUMPAGES field case-insensitively with fldChar syntax: %s',
+      (instruction) => {
+        const result = preProcessPageFieldsOnly(complexFieldNodes(instruction, '5'));
+
+        expect(result.processedNodes).toHaveLength(1);
+        expect(result.processedNodes[0].name).toBe('sd:totalPageNumber');
+      },
+    );
   });
 
   describe('simple field syntax (w:fldSimple)', () => {
@@ -86,6 +169,29 @@ describe('preProcessPageFieldsOnly', () => {
       expect(result.processedNodes[0].name).toBe('sd:autoPageNumber');
     });
 
+    it.each(['page \\* arabic', 'Page', 'PAGE'])(
+      'should process PAGE field case-insensitively with fldSimple syntax: %s',
+      (instruction) => {
+        const nodes = [
+          {
+            name: 'w:fldSimple',
+            attributes: { 'w:instr': instruction },
+            elements: [
+              {
+                name: 'w:r',
+                elements: [{ name: 'w:t', elements: [{ type: 'text', text: '1' }] }],
+              },
+            ],
+          },
+        ];
+
+        const result = preProcessPageFieldsOnly(nodes);
+
+        expect(result.processedNodes).toHaveLength(1);
+        expect(result.processedNodes[0].name).toBe('sd:autoPageNumber');
+      },
+    );
+
     it('should process NUMPAGES field with fldSimple syntax', () => {
       const nodes = [
         {
@@ -108,6 +214,29 @@ describe('preProcessPageFieldsOnly', () => {
       expect(result.processedNodes).toHaveLength(1);
       expect(result.processedNodes[0].name).toBe('sd:totalPageNumber');
     });
+
+    it.each(['numpages', 'NumPages', 'NUMPAGES'])(
+      'should process NUMPAGES field case-insensitively with fldSimple syntax: %s',
+      (instruction) => {
+        const nodes = [
+          {
+            name: 'w:fldSimple',
+            attributes: { 'w:instr': instruction },
+            elements: [
+              {
+                name: 'w:r',
+                elements: [{ name: 'w:t', elements: [{ type: 'text', text: '5' }] }],
+              },
+            ],
+          },
+        ];
+
+        const result = preProcessPageFieldsOnly(nodes);
+
+        expect(result.processedNodes).toHaveLength(1);
+        expect(result.processedNodes[0].name).toBe('sd:totalPageNumber');
+      },
+    );
 
     it('should preserve rPr styling from fldSimple content', () => {
       const nodes = [

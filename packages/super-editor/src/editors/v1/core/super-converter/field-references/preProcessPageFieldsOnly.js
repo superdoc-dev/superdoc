@@ -4,6 +4,7 @@
 import { preProcessPageInstruction } from './fld-preprocessors/page-preprocessor.js';
 import { preProcessNumPagesInstruction } from './fld-preprocessors/num-pages-preprocessor.js';
 import { preProcessDocumentStatInstruction } from './fld-preprocessors/document-stat-preprocessor.js';
+import { extractFieldKeyword } from './field-keyword.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -47,7 +48,7 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
     // fldSimple has the instruction in an attribute, not nested elements
     if (node.name === 'w:fldSimple') {
       const instrAttr = node.attributes?.['w:instr'] || '';
-      const fieldType = instrAttr.trim().split(/\s+/)[0];
+      const fieldType = extractFieldKeyword(instrAttr);
 
       const fldSimplePreprocessor = getHeaderFooterFieldPreprocessor(fieldType);
       if (fldSimplePreprocessor) {
@@ -62,7 +63,7 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
           }
         }
 
-        const processedField = fldSimplePreprocessor(contentNodes, instrAttr.trim(), fieldRunRPr);
+        const processedField = fldSimplePreprocessor(contentNodes, instrAttr.trim(), { fieldRunRPr });
         processedNodes.push(...processedField);
         i++;
         continue;
@@ -98,7 +99,9 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
         // Also pass the captured rPr from field sequence nodes (begin, instrText, separate)
         // which is where Word stores the styling for page number fields
         const contentNodes = fieldInfo.contentNodes;
-        const processedField = preprocessor(contentNodes, fieldInfo.instrText, fieldInfo.fieldRunRPr);
+        const processedField = preprocessor(contentNodes, fieldInfo.instrText, {
+          fieldRunRPr: fieldInfo.fieldRunRPr,
+        });
         processedNodes.push(...processedField);
 
         // Skip past the entire field sequence
@@ -127,7 +130,7 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
     // to a PAGE field by emitting sd:autoPageNumber.
     if (node.name === 'w:r' && node.elements?.some((el) => el.name === 'w:pgNum')) {
       const rPr = node.elements.find((el) => el.name === 'w:rPr') || null;
-      const processedField = preProcessPageInstruction([], '', rPr);
+      const processedField = preProcessPageInstruction([], '', { fieldRunRPr: rPr });
       processedNodes.push(...processedField);
       i++;
       continue;
@@ -204,7 +207,7 @@ function scanFieldSequence(nodes, beginIndex) {
     return null; // Incomplete field
   }
 
-  const fieldType = instrText.trim().split(' ')[0];
+  const fieldType = extractFieldKeyword(instrText);
 
   return {
     fieldType,

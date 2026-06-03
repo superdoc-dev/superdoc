@@ -87,7 +87,6 @@ export function installBundledSubstitutes(registry: FontRegistry, options: Insta
   const installed = installedRegistries.get(registry);
   if (installed !== undefined) {
     if (installed !== signature) {
-       
       console.warn(
         `[superdoc] bundled fonts are already registered for this document from "${installed}"; ` +
           `a later fonts config resolving to "${signature}" is ignored. ` +

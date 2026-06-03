@@ -61,6 +61,30 @@ describe('resolveHeaderFooterTokens', () => {
     expect((block.runs[0] as TextRun).token).toBe('pageNumber');
   });
 
+  it('should prefer explicit PAGE field format metadata over pageNumberText', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'header-format',
+        runs: [
+          {
+            text: '0',
+            token: 'pageNumber',
+            pageNumberFieldFormat: { format: 'numberInDash' },
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 3, 10, 'iii', 7);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[0].text).toBe('- 7 -');
+    expect((block.runs[0] as TextRun).token).toBe('pageNumber');
+  });
+
   it('should resolve totalPageCount token in footer blocks', () => {
     const blocks: FlowBlock[] = [
       {
@@ -88,6 +112,30 @@ describe('resolveHeaderFooterTokens', () => {
     expect(block.runs[1].text).toBe('99');
     // Token is preserved so painter can re-resolve at render time
     expect((block.runs[1] as TextRun).token).toBe('totalPageCount');
+  });
+
+  it('should zero-pad explicit NUMPAGES field metadata', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'footer-format',
+        runs: [
+          {
+            text: '0',
+            token: 'totalPageCount',
+            pageNumberFieldFormat: { format: 'decimal', zeroPadding: 2 },
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 5, 7);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[0].text).toBe('07');
+    expect((block.runs[0] as TextRun).token).toBe('totalPageCount');
   });
 
   it('should resolve both tokens in the same block', () => {

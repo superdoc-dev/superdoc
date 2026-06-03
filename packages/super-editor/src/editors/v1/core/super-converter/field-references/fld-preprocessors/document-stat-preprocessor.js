@@ -6,22 +6,11 @@
  *
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine The nodes between separate and end.
  * @param {string} instrText The full instruction string (e.g. "NUMWORDS" or "NUMCHARS \* MERGEFORMAT").
- * @param {import('../../v2/docxHelper').ParsedDocx | import('../../v2/types/index.js').OpenXmlNode | null} [_docxOrFieldRunRPr=null] In the generic body pipeline this position still carries `docx`; in header/footer standalone processing it carries the captured w:rPr.
- * @param {Array<{type: string, text?: string}> | import('../../v2/types/index.js').OpenXmlNode | null} [instructionTokensOrFieldRunRPr=null] Raw instruction tokens in the generic body pipeline, or a legacy w:rPr position in alternate callers.
- * @param {import('../../v2/types/index.js').OpenXmlNode | null} [fieldRunRPr=null] The w:rPr node captured from field sequence nodes for complex body fields.
+ * @param {{ docx?: import('../../v2/docxHelper').ParsedDocx, instructionTokens?: Array<{type: string, text?: string}> | null, fieldRunRPr?: import('../../v2/types/index.js').OpenXmlNode | null }} [options]
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  */
-export function preProcessDocumentStatInstruction(
-  nodesToCombine,
-  instrText,
-  _docxOrFieldRunRPr = null,
-  instructionTokensOrFieldRunRPr = null,
-  fieldRunRPr = null,
-) {
-  const effectiveFieldRunRPr =
-    fieldRunRPr ??
-    (instructionTokensOrFieldRunRPr?.name === 'w:rPr' ? instructionTokensOrFieldRunRPr : null) ??
-    (_docxOrFieldRunRPr?.name === 'w:rPr' ? _docxOrFieldRunRPr : null);
+export function preProcessDocumentStatInstruction(nodesToCombine, instrText, options = {}) {
+  const fieldRunRPr = options.fieldRunRPr ?? null;
   const statFieldNode = {
     name: 'sd:documentStatField',
     type: 'element',
@@ -44,8 +33,8 @@ export function preProcessDocumentStatInstruction(
   });
 
   // Priority 2: Use rPr from field sequence if content has none
-  if (!foundContentRPr && effectiveFieldRunRPr && effectiveFieldRunRPr.name === 'w:rPr') {
-    statFieldNode.elements = [effectiveFieldRunRPr, ...nodesToCombine];
+  if (!foundContentRPr && fieldRunRPr && fieldRunRPr.name === 'w:rPr') {
+    statFieldNode.elements = [fieldRunRPr, ...nodesToCombine];
   }
 
   return [statFieldNode];

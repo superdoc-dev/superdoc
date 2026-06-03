@@ -51,6 +51,7 @@ import {
   extractIdentifierFromConverter,
   getHeaderFooterType,
   getHeaderFooterTypeForSection,
+  resolveEffectiveHeaderFooterRef,
   getBucketForPageNumber,
   getBucketRepresentative,
   buildSectionAwareHeaderFooterLayoutKey,
@@ -75,6 +76,14 @@ type SurfacePmEntry = {
   pmEnd: number;
   el: HTMLElement;
 };
+
+function hasSectionRefsForKind(
+  identifier: MultiSectionHeaderFooterIdentifier | null | undefined,
+  kind: 'header' | 'footer',
+): identifier is MultiSectionHeaderFooterIdentifier {
+  const refKey = kind === 'header' ? 'headerRefs' : 'footerRefs';
+  return Boolean(identifier?.sections?.some((section) => section[refKey] !== undefined));
+}
 
 // AIDEV-NOTE: compat-fallback - header/footer session interaction still keys
 // off `data-pm-*` (prep-002). DomPainter also stamps the parallel neutral
@@ -374,6 +383,15 @@ function storyIdFromHeaderFooterLayoutKey(key: string): string {
   return key.replace(/::s\d+$/, '');
 }
 
+function refForVariant(
+  refs: Partial<Record<'default' | 'first' | 'even' | 'odd', string | null | undefined>> | undefined,
+  variant: 'default' | 'first' | 'even' | 'odd',
+): { refId: string; matchedVariant: 'default' | 'first' | 'even' | 'odd' } | undefined {
+  const ref = refs?.[variant];
+  if (ref) return { refId: ref, matchedVariant: variant };
+  return variant === 'odd' && refs?.default ? { refId: refs.default, matchedVariant: 'default' } : undefined;
+}
+
 function resolveResult(result: HeaderFooterLayoutResult, storyId?: string | null): ResolvedHeaderFooterLayout {
   const story = buildHeaderFooterStory(result.kind, storyId ?? String(result.type));
   return resolveHeaderFooterLayout(result.layout, result.blocks, result.measures, story);
@@ -394,21 +412,43 @@ function shiftResolvedPaintItemY(item: ResolvedPaintItem, yOffset: number): Reso
   };
 }
 
-function normalizeDecorationFragments(fragments: Fragment[], layoutMinY: number): Fragment[] {
-  if (layoutMinY >= 0) {
+function isExplicitBehindDocMediaFragment(fragment: Fragment): boolean {
+  return (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.behindDoc === true;
+}
+
+function getDecorationNormalizationMinY(fragments: Fragment[], layoutMinY: number): number {
+  if (!Number.isFinite(layoutMinY) || layoutMinY >= 0) {
+    return 0;
+  }
+
+  let minY = Infinity;
+  for (const fragment of fragments) {
+    if (isExplicitBehindDocMediaFragment(fragment)) {
+      continue;
+    }
+    if (Number.isFinite(fragment.y)) {
+      minY = Math.min(minY, fragment.y);
+    }
+  }
+
+  return minY < 0 ? minY : 0;
+}
+
+function normalizeDecorationFragments(fragments: Fragment[], normalizationMinY: number): Fragment[] {
+  if (normalizationMinY >= 0) {
     return fragments;
   }
 
-  const yOffset = -layoutMinY;
+  const yOffset = -normalizationMinY;
   return fragments.map((fragment) => ({ ...fragment, y: fragment.y + yOffset }));
 }
 
-function normalizeDecorationItems(items: ResolvedPaintItem[], layoutMinY: number): ResolvedPaintItem[] {
-  if (layoutMinY >= 0) {
+function normalizeDecorationItems(items: ResolvedPaintItem[], normalizationMinY: number): ResolvedPaintItem[] {
+  if (normalizationMinY >= 0) {
     return items;
   }
 
-  const yOffset = -layoutMinY;
+  const yOffset = -normalizationMinY;
   return items.map((item) => shiftResolvedPaintItemY(item, yOffset));
 }
 
@@ -1724,26 +1764,30 @@ export class HeaderFooterSessionManager {
     sectionFirstPageNumbers: Map<number, number>,
   ): string {
     const pageNumber = page.number;
+    const effectivePageNumber = page.effectivePageNumber ?? page.displayNumber ?? pageNumber;
     const sectionIndex = page.sectionIndex ?? 0;
     const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
     const isFirstPageOfSection = firstPageInSection === pageNumber;
 
-    // Check for alternateHeaders in converter
+    // Check for alternateHeaders in converter or the multi-section identifier.
     const converter = (this.#options.editor as EditorWithConverter).converter;
-    const hasAlternateHeaders = converter?.pageStyles?.alternateHeaders === true;
+    const hasAlternateHeaders =
+      this.#multiSectionIdentifier?.alternateHeaders === true || converter?.pageStyles?.alternateHeaders === true;
 
     // Only use 'first' variant when titlePg is enabled (w:titlePg element in OOXML).
     // Without titlePg, even the first page of a section uses 'default'.
     const headerIds = converter?.headerIds as { titlePg?: boolean } | undefined;
     const footerIds = converter?.footerIds as { titlePg?: boolean } | undefined;
-    const titlePgEnabled = headerIds?.titlePg === true || footerIds?.titlePg === true;
+    let titlePgEnabled = headerIds?.titlePg === true || footerIds?.titlePg === true;
+    if (this.#multiSectionIdentifier?.sectionTitlePg?.has(sectionIndex)) {
+      titlePgEnabled = this.#multiSectionIdentifier.sectionTitlePg.get(sectionIndex) === true;
+    }
 
     if (isFirstPageOfSection && titlePgEnabled) {
       return 'first';
     }
     if (hasAlternateHeaders) {
-      const parityPageNumber = page.displayNumber ?? page.number;
-      return parityPageNumber % 2 === 0 ? 'even' : 'odd';
+      return effectivePageNumber % 2 === 0 ? 'even' : 'odd';
     }
     return 'default';
   }
@@ -2371,54 +2415,42 @@ export class HeaderFooterSessionManager {
         sectionFirstPageNumbers.set(idx, p.number);
       }
     }
+    const hasSectionResolution = hasSectionRefsForKind(multiSectionId, kind);
 
     return (pageNumber, pageMargins, page) => {
       const sectionIndex = page?.sectionIndex ?? 0;
+      const effectivePageNumber = page?.effectivePageNumber ?? page?.displayNumber ?? pageNumber;
       const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
       const sectionPageNumber =
         typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
-      const parityPageNumber = page?.displayNumber ?? pageNumber;
-      const headerFooterType = multiSectionId
-        ? getHeaderFooterTypeForSection(pageNumber, sectionIndex, multiSectionId, {
+      const headerFooterType = hasSectionResolution
+        ? getHeaderFooterTypeForSection(effectivePageNumber, sectionIndex, multiSectionId, {
             kind,
             sectionPageNumber,
-            parityPageNumber,
+            parityPageNumber: effectivePageNumber,
           })
-        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind, parityPageNumber });
-
-      // Resolve section-specific rId using Word's OOXML inheritance model
-      let sectionRId: string | undefined;
-      if (page?.sectionRefs && kind === 'header') {
-        sectionRId = page.sectionRefs.headerRefs?.[headerFooterType as keyof typeof page.sectionRefs.headerRefs];
-        if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
-          const prevSectionIds = multiSectionId.sectionHeaderIds.get(sectionIndex - 1);
-          sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
-        }
-        const shouldUseDefaultHeaderRef =
-          headerFooterType !== 'default' &&
-          page.sectionRefs.headerRefs?.default &&
-          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
-        if (!sectionRId && shouldUseDefaultHeaderRef) {
-          sectionRId = page.sectionRefs.headerRefs?.default;
-        }
-      } else if (page?.sectionRefs && kind === 'footer') {
-        sectionRId = page.sectionRefs.footerRefs?.[headerFooterType as keyof typeof page.sectionRefs.footerRefs];
-        if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
-          const prevSectionIds = multiSectionId.sectionFooterIds.get(sectionIndex - 1);
-          sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
-        }
-        const shouldUseDefaultFooterRef =
-          headerFooterType !== 'default' &&
-          page.sectionRefs.footerRefs?.default &&
-          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
-        if (!sectionRId && shouldUseDefaultFooterRef) {
-          sectionRId = page.sectionRefs.footerRefs?.default;
-        }
-      }
+        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind, parityPageNumber: effectivePageNumber });
 
       if (!headerFooterType) {
         return null;
       }
+
+      const pageSectionRefs = kind === 'header' ? page?.sectionRefs?.headerRefs : page?.sectionRefs?.footerRefs;
+      const sectionResolvedRef = hasSectionResolution
+        ? resolveEffectiveHeaderFooterRef({
+            sections: multiSectionId.sections,
+            sectionIndex,
+            kind,
+            variant: headerFooterType,
+          })
+        : null;
+      const legacyRefs = kind === 'header' ? legacyIdentifier.headerIds : legacyIdentifier.footerIds;
+      const resolvedRef =
+        refForVariant(pageSectionRefs, headerFooterType) ??
+        sectionResolvedRef ??
+        (!hasSectionResolution ? refForVariant(legacyRefs, headerFooterType) : undefined);
+      const sectionRId = resolvedRef?.refId;
+      const layoutVariantType = resolvedRef?.matchedVariant ?? headerFooterType;
 
       // PRIORITY 1: Try per-rId layout (composite key first for per-section margins, then plain rId)
       const compositeKey = sectionRId ? `${sectionRId}::s${sectionIndex}` : undefined;
@@ -2463,8 +2495,9 @@ export class HeaderFooterSessionManager {
             const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
 
             const layoutMinY = rIdLayout.layout.minY ?? 0;
-            const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
-            const normalizedItems = normalizeDecorationItems(alignedItems, layoutMinY);
+            const normalizationMinY = getDecorationNormalizationMinY(fragments, layoutMinY);
+            const normalizedFragments = normalizeDecorationFragments(fragments, normalizationMinY);
+            const normalizedItems = normalizeDecorationItems(alignedItems, normalizationMinY);
             const isActiveHeaderFooter = this.#isActiveDecoration(kind, sectionRId, pageNumber);
 
             return {
@@ -2491,7 +2524,7 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
-      const variantIndex = results.findIndex((entry) => entry.type === headerFooterType);
+      const variantIndex = results.findIndex((entry) => entry.type === layoutVariantType);
       const variant = variantIndex >= 0 ? results[variantIndex] : undefined;
       if (!variant || !variant.layout?.pages?.length) {
         return null;
@@ -2511,7 +2544,7 @@ export class HeaderFooterSessionManager {
         slotPage.number,
         variant,
         resolvedVariant,
-        `variant '${headerFooterType}' page ${pageNumber}`,
+        `variant '${layoutVariantType}' page ${pageNumber}`,
         finalHeaderId ?? headerFooterType,
       );
       if (!alignedVariantItems) {
@@ -2529,8 +2562,9 @@ export class HeaderFooterSessionManager {
       const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
 
       const layoutMinY = variant.layout.minY ?? 0;
-      const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
-      const normalizedItems = normalizeDecorationItems(alignedVariantItems, layoutMinY);
+      const normalizationMinY = getDecorationNormalizationMinY(fragments, layoutMinY);
+      const normalizedFragments = normalizeDecorationFragments(fragments, normalizationMinY);
+      const normalizedItems = normalizeDecorationItems(alignedVariantItems, normalizationMinY);
       const isActiveHeaderFooter = this.#isActiveDecoration(kind, finalHeaderId, pageNumber);
 
       return {

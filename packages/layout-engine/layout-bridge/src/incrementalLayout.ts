@@ -2700,11 +2700,12 @@ export async function incrementalLayout(
     // Create page resolver for section-aware header/footer numbering
     // Only use page resolver if feature flag is enabled
     const pageResolver = FeatureFlags.HEADER_FOOTER_PAGE_TOKENS
-      ? (pageNumber: number): { displayText: string; totalPages: number } => {
+      ? (pageNumber: number): { displayText: string; displayNumber: number; totalPages: number } => {
           const pageIndex = pageNumber - 1;
           const displayInfo = numberingCtx.displayPages[pageIndex];
           return {
             displayText: displayInfo?.displayText ?? String(pageNumber),
+            displayNumber: displayInfo?.displayNumber ?? pageNumber,
             totalPages: numberingCtx.totalPages,
           };
         }

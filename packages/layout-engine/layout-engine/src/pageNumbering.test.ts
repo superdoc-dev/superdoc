@@ -27,16 +27,24 @@ describe('formatPageNumber', () => {
       expect(formatPageNumber(-1, 'decimal')).toBe('1');
       expect(formatPageNumber(-100, 'decimal')).toBe('1');
     });
+
+    it('should truncate fractional numbers before formatting', () => {
+      expect(formatPageNumber(4.9, 'decimal')).toBe('4');
+    });
+
+    it('should fall back to decimal for unsupported runtime formats', () => {
+      expect(formatPageNumber(5, 'chicago' as never)).toBe('5');
+    });
   });
 
   describe('numberInDash format', () => {
     it('should wrap numbers in dashes', () => {
-      expect(formatPageNumber(1, 'numberInDash')).toBe('-1-');
-      expect(formatPageNumber(12, 'numberInDash')).toBe('-12-');
+      expect(formatPageNumber(1, 'numberInDash')).toBe('- 1 -');
+      expect(formatPageNumber(12, 'numberInDash')).toBe('- 12 -');
     });
 
     it('should clamp zero to 1', () => {
-      expect(formatPageNumber(0, 'numberInDash')).toBe('-1-');
+      expect(formatPageNumber(0, 'numberInDash')).toBe('- 1 -');
     });
   });
 
@@ -124,19 +132,19 @@ describe('formatPageNumber', () => {
       expect(formatPageNumber(26, 'upperLetter')).toBe('Z');
     });
 
-    it('should format numbers > 26 as AA, AB, etc.', () => {
+    it('should format numbers > 26 as repeated letters', () => {
       expect(formatPageNumber(27, 'upperLetter')).toBe('AA');
-      expect(formatPageNumber(28, 'upperLetter')).toBe('AB');
-      expect(formatPageNumber(52, 'upperLetter')).toBe('AZ');
-      expect(formatPageNumber(53, 'upperLetter')).toBe('BA');
-      expect(formatPageNumber(78, 'upperLetter')).toBe('BZ');
-      expect(formatPageNumber(79, 'upperLetter')).toBe('CA');
+      expect(formatPageNumber(28, 'upperLetter')).toBe('BB');
+      expect(formatPageNumber(52, 'upperLetter')).toBe('ZZ');
+      expect(formatPageNumber(53, 'upperLetter')).toBe('AAA');
+      expect(formatPageNumber(78, 'upperLetter')).toBe('ZZZ');
+      expect(formatPageNumber(79, 'upperLetter')).toBe('AAAA');
     });
 
     it('should format large numbers correctly', () => {
-      expect(formatPageNumber(702, 'upperLetter')).toBe('ZZ');
-      expect(formatPageNumber(703, 'upperLetter')).toBe('AAA');
-      expect(formatPageNumber(704, 'upperLetter')).toBe('AAB');
+      expect(formatPageNumber(702, 'upperLetter')).toBe('Z'.repeat(27));
+      expect(formatPageNumber(703, 'upperLetter')).toBe('A'.repeat(28));
+      expect(formatPageNumber(704, 'upperLetter')).toBe('B'.repeat(28));
     });
 
     it('should clamp zero and negative to A', () => {
@@ -154,16 +162,16 @@ describe('formatPageNumber', () => {
       expect(formatPageNumber(26, 'lowerLetter')).toBe('z');
     });
 
-    it('should format numbers > 26 as aa, ab, etc.', () => {
+    it('should format numbers > 26 as repeated letters', () => {
       expect(formatPageNumber(27, 'lowerLetter')).toBe('aa');
-      expect(formatPageNumber(28, 'lowerLetter')).toBe('ab');
-      expect(formatPageNumber(52, 'lowerLetter')).toBe('az');
-      expect(formatPageNumber(53, 'lowerLetter')).toBe('ba');
+      expect(formatPageNumber(28, 'lowerLetter')).toBe('bb');
+      expect(formatPageNumber(52, 'lowerLetter')).toBe('zz');
+      expect(formatPageNumber(53, 'lowerLetter')).toBe('aaa');
     });
 
     it('should format large numbers correctly', () => {
-      expect(formatPageNumber(702, 'lowerLetter')).toBe('zz');
-      expect(formatPageNumber(703, 'lowerLetter')).toBe('aaa');
+      expect(formatPageNumber(702, 'lowerLetter')).toBe('z'.repeat(27));
+      expect(formatPageNumber(703, 'lowerLetter')).toBe('a'.repeat(28));
     });
 
     it('should clamp zero and negative to a', () => {
@@ -430,7 +438,7 @@ describe('computeDisplayPageNumber', () => {
       expect(result[24].displayText).toBe('Y');
       expect(result[25].displayText).toBe('Z');
       expect(result[26].displayText).toBe('AA');
-      expect(result[27].displayText).toBe('AB');
+      expect(result[27].displayText).toBe('BB');
     });
 
     it('should handle large page numbers in roman numerals', () => {

@@ -1,4 +1,5 @@
 import type { TabStop } from './engines/tabs.js';
+import type { PageNumberFieldFormat } from './page-number-formatting.js';
 export { computeTabStops, layoutWithTabs, calculateTabWidth } from './engines/tabs.js';
 
 // Re-export TabStop for external consumers
@@ -33,6 +34,18 @@ export {
 } from './engines/tables.js';
 
 export { effectiveTableCellSpacing } from './table-cell-spacing.js';
+
+export {
+  selectHeaderFooterVariantForPage,
+  resolveEffectiveHeaderFooterRef,
+  type HeaderFooterKind,
+  type HeaderFooterVariant,
+  type HeaderFooterSectionRefs,
+  type HeaderFooterResolutionSection,
+  type HeaderFooterVariantSelectionInput,
+  type HeaderFooterEffectiveRefInput,
+  type HeaderFooterEffectiveRefResult,
+} from './header-footer-resolution.js';
 
 // Table column rescaling (moved from layout-engine for cross-stage use)
 export { rescaleColumnWidths } from './table-column-rescale.js';
@@ -102,10 +115,10 @@ import type { LayoutSourceIdentity } from './layout-identity.js';
 export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
 export type { NormalizedColumnLayout } from './column-layout.js';
 export {
+  authorFromTrackedChangeMeta,
+  authorIdentityKey,
   composeAuthorColorResolver,
   fallbackAuthorColor,
-  authorIdentityKey,
-  authorFromTrackedChangeMeta,
   stampTrackedChangeColors,
 } from './author-colors.js';
 export type { AuthorColorsConfig, TrackChangeAuthorColorResolver } from './author-colors.js';
@@ -116,6 +129,20 @@ export {
   hasExplicitSdtContainerKey,
   isSdtContainerMetadata,
 } from './sdt-container.js';
+export {
+  resolveInheritedHeaderFooterRef,
+  resolveInheritedHeaderFooterRefWithType,
+  type HeaderFooterRefIdentifier,
+  type HeaderFooterRefMap,
+  type ResolvedInheritedHeaderFooterRef,
+  type ResolveInheritedHeaderFooterRefInput,
+} from './header-footer-inheritance.js';
+export {
+  formatPageNumber,
+  formatPageNumberFieldValue,
+  type PageNumberFieldFormat,
+  type PageNumberFormat,
+} from './page-number-formatting.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -333,7 +360,6 @@ export type FlowRunLink = {
 export const EMPTY_SDT_PLACEHOLDER_TEXT = 'Click or tap here to enter text';
 
 export type SdtVisualPlaceholder = 'emptyInlineSdt' | 'emptyBlockSdt';
-
 /**
  * Common formatting marks that can be applied to any run type.
  * Used by TextRun, TabRun, and other run types that support inline formatting.
@@ -391,6 +417,8 @@ export type TextRun = RunMarks & {
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
   token?: 'pageNumber' | 'totalPageCount' | 'pageReference';
+  /** Explicit formatting requested by PAGE/NUMPAGES field switches. */
+  pageNumberFieldFormat?: PageNumberFieldFormat;
   /** Absolute ProseMirror position (inclusive) of first character in this run. */
   pmStart?: number;
   /** Absolute ProseMirror position (exclusive) after the last character. */
@@ -2016,6 +2044,8 @@ export type Page = {
   /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
   displayNumber?: number;
   numberText?: string;
+  /** Numeric page number after section page numbering settings are applied. */
+  effectivePageNumber?: number;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';
   sectionRefs?: {
@@ -2242,8 +2272,9 @@ export type HeaderFooterType = 'default' | 'first' | 'even' | 'odd';
 export type HeaderFooterPage = {
   number: number;
   fragments: Fragment[];
-  displayNumber?: number;
   numberText?: string;
+  /** Section-aware numeric page value before formatting. */
+  displayNumber?: number;
   /**
    * Optional page-local block clones backing this page's resolved fragments.
    * Present when header/footer tokens were laid out per page or per bucket.

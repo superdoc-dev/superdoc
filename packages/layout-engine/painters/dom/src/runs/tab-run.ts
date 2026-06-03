@@ -122,6 +122,6 @@ const applyTabUnderlineBorder = (tabEl: HTMLElement, run: Extract<Run, { kind: '
   const underlineStyle = run.underline.style ?? 'single';
   const underlineColor = run.underline.color ?? '#000000';
   const borderStyle = underlineStyle === 'double' ? 'double' : 'solid';
-  const fontSize = (run as { fontSize?: number }).fontSize ?? 16;
+  const fontSize = run.fontSize ?? 16;
   tabEl.style.borderBottom = `${underlineThicknessPx(fontSize)}px ${borderStyle} ${underlineColor}`;
 };

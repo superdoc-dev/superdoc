@@ -820,10 +820,19 @@ export function paragraphToFlowBlocks({
           } else {
             const run = inlineConverter(inlineConverterParams);
             if (run) {
-              currentRuns.push(run);
               if (node.type === 'tab') {
+                // A bare tab carries no font of its own, so a tab-only line would be
+                // measured at the 12px measuring fallback and render shorter than a
+                // text or empty line in the same paragraph. Give the tab the paragraph's
+                // resolved default font (mirroring the empty-paragraph run) so its line
+                // height matches (SD-3330). Explicit run properties from the DOCX still
+                // win — only fill when absent.
+                const tabRun = run as { fontSize?: number; fontFamily?: string };
+                if (tabRun.fontSize == null) tabRun.fontSize = defaultSize;
+                if (tabRun.fontFamily == null) tabRun.fontFamily = defaultFont;
                 tabOrdinal += 1;
               }
+              currentRuns.push(run);
             }
           }
         } catch (error) {

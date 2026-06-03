@@ -1477,7 +1477,7 @@ describe('comments-store', () => {
       });
     });
 
-    // SD-3360: the "Inserted table" structural bubble must appear on initial
+    // The "Inserted table" structural bubble must appear on initial
     // import, not only after a later transaction triggers the full
     // syncTrackedChangeComments path. The bootstrap that runs after import
     // (bootstrapImportedTrackedChangeComments, fired via setTimeout(0)) must
@@ -1540,7 +1540,7 @@ describe('comments-store', () => {
     });
   });
 
-  // SD-3360b: an inline tracked change whose document range is INSIDE a
+  // An inline tracked change whose document range is INSIDE a
   // decidable whole-table structural change must NOT become a separate review
   // item. Suppression happens at the SOURCE (createCommentForTrackChanges): no
   // comment object is created/kept, so there is no floating bubble AND no
@@ -1550,7 +1550,7 @@ describe('comments-store', () => {
   // structural bubble cascades to the cell text via the decision engine
   // (range-containment in [tableFrom, tableTo]) — proven in super-editor's
   // structural-decisions.test.js for both imported and authored tables.
-  describe('suppresses inline tracked-change review items inside a tracked whole-table change (SD-3360b)', () => {
+  describe('suppresses inline tracked-change review items inside a tracked whole-table change', () => {
     const makeEditor = () => {
       const editorDispatch = vi.fn();
       const tr = { setMeta: vi.fn() };
@@ -3980,7 +3980,7 @@ describe('comments-store', () => {
     });
   });
 
-  describe('getFloatingComments coalesces a tracked whole-table change (SD-3360)', () => {
+  describe('getFloatingComments coalesces a tracked whole-table change', () => {
     // Wire the mock document to expose an editor state so the store can
     // enumerate tracked-table ranges for its comments.
     const wireEditorWithTable = () => {

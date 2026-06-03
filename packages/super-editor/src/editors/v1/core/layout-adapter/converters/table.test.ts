@@ -2691,7 +2691,7 @@ describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => 
     });
   });
 
-  describe('structural row tracked changes (SD-3360)', () => {
+  describe('structural row tracked changes', () => {
     const ROW_TRACK_CONFIG: TrackedChangesConfig = { enabled: true, mode: 'review' };
 
     const buildTrackedRowTable = (trackChange: Record<string, unknown> | null): PMNode => ({

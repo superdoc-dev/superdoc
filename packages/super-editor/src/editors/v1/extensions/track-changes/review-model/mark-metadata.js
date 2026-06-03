@@ -35,7 +35,7 @@ export const CanonicalChangeType = Object.freeze({
   Replacement: 'replacement',
   Formatting: 'formatting',
   // Structural revisions (whole-object insert/delete) live on node attrs, not
-  // marks. SD-3360 introduces this for whole-table insert/delete. The public
+  // marks. This is used for whole-table insert/delete. The public
   // document-api projection maps `structural` straight through to the `kind`
   // shape demanded by the §14 structural conformance contract.
   Structural: 'structural',

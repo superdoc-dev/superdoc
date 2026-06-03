@@ -16,14 +16,14 @@
  * at the TABLE level by SIDE (NOT by id, because ids legitimately differ per
  * row).
  *
- * Whole-table rule (spec TC-OPS-003, SD-3360 phases 3-5):
+ * Whole-table rule (spec TC-OPS-003):
  *   A table is a WHOLE-TABLE insert/delete iff EVERY row of the table carries a
  *   `trackChange` AND every tracked row shares the SAME side (all `rowInsert`
  *   or all `rowDelete`). Ids MAY differ. Only then do we emit ONE decidable
  *   structural change (`table-insert`/`table-delete`) covering the table.
  *
  *   If only SOME rows are tracked, OR the sides are mixed within one table, it
- *   is NOT a whole-table change (row-level structural is out of SD-3360 scope).
+ *   is NOT a whole-table change (row-level structural is out of scope).
  *   We still SURFACE such a shape (so it is never silently dropped) but flag it
  *   `wholeTable: false` / `decidable: false`. The decision engine fails such a
  *   shape closed (CAPABILITY_UNAVAILABLE) and NEVER routes it through the

@@ -6,7 +6,7 @@ export type TrackChangeType = 'insert' | 'delete' | 'replacement' | 'format' | '
 /**
  * Finer classification for structural (`type === 'structural'`) tracked
  * changes. `table-insert` / `table-delete` describe a whole-table insert or
- * delete revision (SD-3360).
+ * delete revision.
  */
 export type TrackChangeSubtype = 'table-insert' | 'table-delete';
 export type TrackChangeOverlapRelationship = 'parent' | 'child' | 'standalone';

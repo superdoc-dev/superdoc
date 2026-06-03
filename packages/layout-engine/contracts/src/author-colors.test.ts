@@ -95,7 +95,7 @@ describe('stampTrackedChangeColors', () => {
     expect((run as TextRun).color).toBeUndefined();
   });
 
-  it('stamps color on a structural row-level tracked change (SD-3360)', () => {
+  it('stamps color on a structural row-level tracked change', () => {
     const table: TableBlock = {
       kind: 'table',
       id: 't1',

@@ -290,7 +290,7 @@ const decode = (params, decodedAttrs) => {
   }
 
   // Structural tracked-change revision: reconstruct <w:ins>/<w:del> inside
-  // <w:trPr> from the row's trackChange attr (SD-3360 whole-table insert/delete).
+  // <w:trPr> from the row's trackChange attr (whole-table insert/delete).
   // The marker is the first child of w:trPr; create the trPr if no other row
   // properties produced one.
   applyRowTrackChangeOnDecode({ node, elements, params });

@@ -813,7 +813,7 @@ const planDeletionDecision = ({ ops, change, selection, decision, removedRanges,
 };
 
 /**
- * Plan a whole-object structural decision (SD-3360 whole-table insert/delete).
+ * Plan a whole-object structural decision (whole-table insert/delete).
  *
  * Semantics (spec §8 / §14):
  *   - accept insertion  → clear the rows' trackChange attrs (table becomes normal content).
@@ -831,7 +831,7 @@ const planStructuralDecision = ({ ops, change, decision, removedRanges, retired 
   }
 
   // Fail closed on any structural shape that is NOT a whole-table insert/delete
-  // (spec TC-OPS-003 / SD-3360). A partial row subset or mixed sides within one
+  // (spec TC-OPS-003). A partial row subset or mixed sides within one
   // table is NOT a decidable whole-table change; row-level structural is out of
   // scope. We must NEVER route such a shape through the table-removal path. The
   // engine returns CAPABILITY_UNAVAILABLE and the document stays unmutated.

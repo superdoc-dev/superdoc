@@ -523,7 +523,7 @@ const tryCompileStep = ({
   // document boundary). The inline-text-centric compiler cannot represent an
   // empty table — it has no inline text to mark — so it fails closed and the
   // table would land untracked. Route such inserts through the dedicated
-  // structural path instead (SD-3360).
+  // structural path instead.
   if (step.slice.content.size > 0 && sliceContainsTable(step.slice)) {
     const structural = tryStructuralTableInsert({ newTr, step, map, user, date });
     if (structural.handled) return structural;
@@ -538,7 +538,7 @@ const tryCompileStep = ({
   // the dedicated structural path that stamps `rowDelete` + marks cell text
   // WITHOUT removing the table. This must run before the empty-deletion
   // fall-through below, which would otherwise let the structural fallback
-  // remove an empty table untracked (data loss of the tracked intent). SD-3360.
+  // remove an empty table untracked (data loss of the tracked intent).
   if (
     step.from !== step.to &&
     step.slice.content.size === 0 &&

@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Structural (whole-table) tracked-change tests (SD-3360 phases 3-4).
+ * Structural (whole-table) tracked-change tests.
  *
  * Covers:
  *   - enumeration + grouping of structural row revisions into one logical change

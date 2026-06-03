@@ -353,7 +353,7 @@ describe('renderTableRow', () => {
     });
   });
 
-  describe('structural row tracked changes (SD-3360)', () => {
+  describe('structural row tracked changes', () => {
     const trackedRowDeps = (
       kind: 'insert' | 'delete',
       mode: string,

@@ -358,17 +358,27 @@ const isEmptyStructuralGap = (ctx, from, to) => {
 };
 
 /**
- * Zero-width review/anchor marker node types. They occupy a document position
- * but render no visible content, so a contiguous visible-text deletion spans
- * them. They must not block deletion coalescing — e.g. Google Docs anchors
- * comments with inline marker nodes that sit between runs.
+ * Zero-width review/anchor marker node types: inline ATOM nodes that occupy a
+ * document position but render no visible content (comment range start/end,
+ * comment reference, bookmark end, permission range start/end). A contiguous
+ * visible-text deletion spans them, so they must not block deletion coalescing
+ * — e.g. Google Docs anchors comments with inline marker nodes between runs.
+ *
+ * Membership rule: list an inline leaf here only if it is genuinely zero-width.
+ * Deliberate non-members:
+ *   - `bookmarkStart` is a content node (`content: 'inline*'`), not a leaf, so
+ *     it never reaches the leaf check in `isCoalescibleDeletionGap`; any text it
+ *     wraps is caught by the live-text guard. Listing it would be inert.
+ *   - `fieldAnnotation` is an inline atom but renders real content (a field /
+ *     form widget), so a deletion spanning one MUST split — it stays out.
  */
 const ZERO_WIDTH_ANCHOR_NODE_NAMES = new Set([
   'commentRangeStart',
   'commentRangeEnd',
   'commentReference',
-  'bookmarkStart',
   'bookmarkEnd',
+  'permStart',
+  'permEnd',
 ]);
 
 /**

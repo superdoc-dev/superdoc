@@ -255,9 +255,15 @@ function extractColumns(elements: SectionElement[]): ColumnLayout | undefined {
         ? true
         : undefined;
   const columnChildren = Array.isArray(cols.elements) ? cols.elements.filter((child) => child?.name === 'w:col') : [];
-  const gapTwips =
-    cols.attributes['w:space'] ??
-    columnChildren.find((child) => child?.attributes?.['w:space'] != null)?.attributes?.['w:space'];
+  // Per ECMA-376 §17.6.4, when columns are NOT equal width (`w:equalWidth="0"`), the
+  // section-level `w:cols/@w:space` is IGNORED — inter-column spacing comes from each
+  // `<w:col>`'s own `w:space`. Only equal-width columns use the section space. Using the
+  // section space for explicit columns over-spaces them (forcing the widths to scale
+  // down to fit) and diverges from Word. (SD-2324; per-column-distinct spacing is SD-2629.)
+  const firstChildSpace = columnChildren.find((child) => child?.attributes?.['w:space'] != null)?.attributes?.[
+    'w:space'
+  ];
+  const gapTwips = equalWidth === false ? (firstChildSpace ?? 0) : (cols.attributes['w:space'] ?? firstChildSpace);
   const gapInches = parseColumnGap(gapTwips as string | number | undefined);
   const widths = columnChildren
     .map((child) => Number(child.attributes?.['w:w']))

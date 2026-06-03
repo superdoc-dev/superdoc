@@ -288,6 +288,46 @@ describe('extraction', () => {
       });
     });
 
+    it('uses per-column w:space and ignores section w:space for unequal columns (ECMA-376 §17.6.4)', () => {
+      // SD-2324: the reported ISDA sections are <w:cols w:num="4" w:equalWidth="0" w:space="720">
+      // with explicit <w:col w:space="0"> children. Per §17.6.4, when columns are NOT equal width
+      // the section-level w:space is ignored — the inter-column gap is each column's own w:space.
+      // So the gap must be 0 (from the children), not 48px (from the 720-twip section space).
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [
+                {
+                  name: 'w:cols',
+                  attributes: { 'w:num': '4', 'w:equalWidth': '0', 'w:space': '720' },
+                  elements: [
+                    { name: 'w:col', attributes: { 'w:w': '2340', 'w:space': '0' } },
+                    { name: 'w:col', attributes: { 'w:w': '2340', 'w:space': '0' } },
+                    { name: 'w:col', attributes: { 'w:w': '2340', 'w:space': '0' } },
+                    { name: 'w:col', attributes: { 'w:w': '2340', 'w:space': '0' } },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      };
+
+      const result = extractSectionData(para);
+
+      expect(result?.columnsPx).toEqual({
+        count: 4,
+        gap: 0,
+        withSeparator: false,
+        widths: [156, 156, 156, 156],
+        equalWidth: false,
+      });
+    });
+
     it('should handle section with only normalized margins and no sectPr elements', () => {
       const para: PMNode = {
         type: 'paragraph',

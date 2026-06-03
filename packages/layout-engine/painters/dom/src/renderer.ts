@@ -260,12 +260,9 @@ type PageDomState = {
 };
 
 function pageContextSignature(context: FragmentRenderContext): string {
-  return [
-    context.pageNumber,
-    context.totalPages,
-    context.pageNumberText ?? '',
-    context.pageNumberDisplayNumber ?? '',
-  ].join('|');
+  return [context.pageNumber, context.totalPages, context.pageNumberText ?? '', context.displayPageNumber ?? ''].join(
+    '|',
+  );
 }
 
 function hasPageContextTokenInShapeText(textContent: ShapeTextContent | undefined): boolean {

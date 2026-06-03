@@ -350,7 +350,6 @@ export async function layoutHeaderFooterWithCache(
       measures: Measure[];
       fragments: HeaderFooterLayout['pages'][0]['fragments'];
       numberText?: string;
-      displayNumber?: number;
     }> = [];
 
     for (const pageNum of pagesToLayout) {
@@ -392,7 +391,6 @@ export async function layoutHeaderFooterWithCache(
         measures,
         fragments: fragmentsWithLines,
         numberText: displayText,
-        displayNumber,
       });
     }
 
@@ -412,7 +410,6 @@ export async function layoutHeaderFooterWithCache(
         displayNumber: p.displayNumber,
         fragments: p.fragments,
         numberText: p.numberText,
-        displayNumber: p.displayNumber,
         blocks: p.blocks,
         measures: p.measures,
       })),

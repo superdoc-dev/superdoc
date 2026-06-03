@@ -271,6 +271,43 @@ describe('overlap-compiler: same-user own-insertion refinement (SD-486-adjacent 
   });
 });
 
+describe('overlap-compiler: keystroke deletion coalescing excludes structured changes (PR #3610)', () => {
+  it('a plain deletion adjacent to a same-user replacement does NOT fold into the replacement id', () => {
+    // "ab": replace "b" -> "X" (paired), then Backspace-delete the adjacent
+    // live "a". The deletion must be its own logical change, not merged into
+    // the replacement's id (which would corrupt the replacement's accept/reject).
+    const { state } = stateFromTrackedSpans({ schema, spans: [{ text: 'ab' }] });
+
+    const afterReplace = runCompile({
+      state,
+      intent: makeTextReplaceIntent({
+        from: 2,
+        to: 3,
+        content: sliceFromText(schema, 'X'),
+        replacements: 'paired',
+        user: ALICE,
+        date: FIXED_DATE,
+        source: 'native',
+      }),
+    });
+    expect(afterReplace.ok).toBe(true);
+
+    const afterDelete = runCompile({
+      state: state.apply(afterReplace.tr),
+      intent: makeTextDeleteIntent({ from: 1, to: 2, user: ALICE, date: FIXED_DATE, source: 'native' }),
+    });
+    expect(afterDelete.ok).toBe(true);
+
+    const graph = buildReviewGraph({ state: { doc: afterDelete.tr.doc } });
+    const changes = Array.from(graph.changes.values());
+    // Two distinct logical changes: the replacement and the standalone deletion.
+    // The pre-fix coalescing folded the deletion into the replacement id (size 1).
+    expect(graph.changes.size).toBe(2);
+    expect(changes.some((c) => c.type === CanonicalChangeType.Replacement)).toBe(true);
+    expect(changes.some((c) => c.type === CanonicalChangeType.Deletion)).toBe(true);
+  });
+});
+
 describe('overlap-compiler: different-user child insertion inside other-user insertion', () => {
   it('mints a child id with overlapParentId set to the parent insertion id', () => {
     const parentId = 'ins-bob';

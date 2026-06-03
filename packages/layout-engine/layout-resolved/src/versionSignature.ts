@@ -307,7 +307,11 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         }
 
         if (run.kind === 'tab') {
-          return [run.text ?? '', 'tab'].join(',');
+          // Include the underline (the only mark a tab paints, as a border) so toggling
+          // underline on a tab changes the block version and the painter repaints it.
+          // Without this, an underline applied to an already-rendered tab is not shown
+          // until an unrelated edit forces a rebuild (SD-3330).
+          return [run.text ?? '', 'tab', run.underline?.style ?? '', run.underline?.color ?? ''].join(',');
         }
 
         if (run.kind === 'fieldAnnotation') {

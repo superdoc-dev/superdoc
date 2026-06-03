@@ -31,12 +31,12 @@ import {
   resolveParagraphProperties,
   resolveRunProperties,
   resolveDocxFontFamily,
-  getNumberingProperties,
   type ParagraphFrameProperties,
   type ParagraphProperties,
   type RunProperties,
 } from '@superdoc/style-engine/ooxml';
 import { resolveSectionDirection, resolveParagraphDirection } from '../direction/index.js';
+import { numberingDefinesMarkerFontFamily } from '../numbering-marker-font.js';
 
 const DEFAULT_DECIMAL_SEPARATOR = '.';
 const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5 inch
@@ -421,20 +421,14 @@ export const computeParagraphAttrs = (
     // fully defines marker font.
     let markerFontFallback: Partial<ParagraphFont> | undefined;
     if (!hasExplicitParagraphRunProperties(paragraphProperties) && previousParagraphFont) {
-      // Detect whether numbering explicitly overrides the marker font family
-      // (e.g. Symbol/Wingdings). If it does, we must NOT overwrite it.
-      const numProps = paragraphProperties.numberingProperties;
-      const numId = numProps?.numId;
-      const ilvl = numProps?.ilvl ?? 0;
-      const numberingRunProps =
-        numId != null && numId !== 0
-          ? getNumberingProperties<RunProperties>('runProperties', converterContext!, ilvl, numId)
-          : ({} as RunProperties);
-      const numberingDefinesMarkerFontFamily = numberingRunProps.fontFamily != null;
+      const pinsMarkerFontFamily = numberingDefinesMarkerFontFamily(
+        paragraphProperties.numberingProperties,
+        converterContext,
+      );
 
       markerFontFallback = {
         // When numbering explicitly sets a marker font (Symbol/Wingdings), keep it.
-        fontFamily: numberingDefinesMarkerFontFamily ? undefined : previousParagraphFont.fontFamily,
+        fontFamily: pinsMarkerFontFamily ? undefined : previousParagraphFont.fontFamily,
         // Preserve existing behavior: if the paragraph has no explicit run props,
         // marker font size inherits from the previous paragraph.
         fontSize: previousParagraphFont.fontSize,

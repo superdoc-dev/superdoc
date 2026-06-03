@@ -37,6 +37,7 @@ import { applyTrackedChangesModeToRuns } from '../tracked-changes.js';
 import { textNodeToRun } from './inline-converters/text-run.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { computeRunAttrs, hasExplicitParagraphRunProperties } from '../attributes/paragraph.js';
+import { syncListMarkerFontFromParagraphRuns } from '../list-marker-font.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
 import { endnoteReferenceToBlock } from './inline-converters/endnote-reference.js';
@@ -604,6 +605,19 @@ export function paragraphToFlowBlocks({
   const defaultSize =
     usePreviousFont && previousParagraphFont.fontSize ? previousParagraphFont.fontSize : extracted.defaultSize;
 
+  const finalizeParagraphBlocks = (outputBlocks: FlowBlock[]): FlowBlock[] => {
+    outputBlocks.forEach((block) => {
+      if (block.kind === 'paragraph') {
+        syncListMarkerFontFromParagraphRuns({
+          block,
+          converterContext,
+          para,
+        });
+      }
+    });
+    return outputBlocks;
+  };
+
   if (paragraphAttrs.pageBreakBefore) {
     blocks.push({
       kind: 'pageBreak',
@@ -615,7 +629,7 @@ export function paragraphToFlowBlocks({
 
   if (!para.content || para.content.length === 0) {
     if (paragraphProps.runProperties?.vanish) {
-      return blocks;
+      return finalizeParagraphBlocks(blocks);
     }
     const paragraphMarkTrackedChange = getParagraphMarkTrackedChange(paragraphProps, storyKey);
     // Get the PM position of the empty paragraph for caret rendering
@@ -650,12 +664,12 @@ export function paragraphToFlowBlocks({
       sourceAnchor,
     });
     if (!trackedChangesConfig) {
-      return blocks;
+      return finalizeParagraphBlocks(blocks);
     }
 
     const paragraphBlock = blocks[blocks.length - 1];
     if (paragraphBlock?.kind !== 'paragraph') {
-      return blocks;
+      return finalizeParagraphBlocks(blocks);
     }
 
     const filteredRuns = applyTrackedChangesModeToRuns(
@@ -682,7 +696,7 @@ export function paragraphToFlowBlocks({
 
     if (trackedChangesConfig.enabled && (filteredRuns.length === 0 || isGhostTrackedListArtifact)) {
       blocks.pop();
-      return blocks;
+      return finalizeParagraphBlocks(blocks);
     }
 
     paragraphBlock.runs = filteredRuns;
@@ -691,7 +705,7 @@ export function paragraphToFlowBlocks({
       trackedChangesMode: trackedChangesConfig.mode,
       trackedChangesEnabled: trackedChangesConfig.enabled,
     };
-    return blocks;
+    return finalizeParagraphBlocks(blocks);
   }
 
   let currentRuns: Run[] = [];
@@ -820,10 +834,19 @@ export function paragraphToFlowBlocks({
           } else {
             const run = inlineConverter(inlineConverterParams);
             if (run) {
-              currentRuns.push(run);
               if (node.type === 'tab') {
+                // A bare tab carries no font of its own, so a tab-only line would be
+                // measured at the 12px measuring fallback and render shorter than a
+                // text or empty line in the same paragraph. Give the tab the paragraph's
+                // resolved default font (mirroring the empty-paragraph run) so its line
+                // height matches (SD-3330). Explicit run properties from the DOCX still
+                // win — only fill when absent.
+                const tabRun = run as { fontSize?: number; fontFamily?: string };
+                if (tabRun.fontSize == null) tabRun.fontSize = defaultSize;
+                if (tabRun.fontFamily == null) tabRun.fontFamily = defaultFont;
                 tabOrdinal += 1;
               }
+              currentRuns.push(run);
             }
           }
         } catch (error) {
@@ -914,7 +937,7 @@ export function paragraphToFlowBlocks({
   });
 
   if (!trackedChangesConfig) {
-    return blocks;
+    return finalizeParagraphBlocks(blocks);
   }
 
   const processedBlocks: FlowBlock[] = [];
@@ -944,7 +967,7 @@ export function paragraphToFlowBlocks({
     processedBlocks.push(block);
   });
 
-  return processedBlocks;
+  return finalizeParagraphBlocks(processedBlocks);
 }
 
 type InlineConverterSpec = {
@@ -1063,7 +1086,10 @@ export function getLastParagraphFont(blocks: FlowBlock[]): ParagraphFont | undef
       const para = block as ParagraphBlock;
       const firstRun = para.runs?.[0];
       if (!firstRun) continue;
-      const run = firstRun as { fontFamily?: string; fontSize?: number };
+      const run = firstRun as { text?: string; fontFamily?: string; fontSize?: number };
+      if (typeof run.text === 'string' && run.text.length === 0) {
+        continue;
+      }
       const fontFamily = typeof run.fontFamily === 'string' ? run.fontFamily.trim() : '';
       const fontSize = typeof run.fontSize === 'number' && Number.isFinite(run.fontSize) ? run.fontSize : NaN;
       if (fontFamily.length > 0 && fontSize > 0) {
@@ -1133,15 +1159,26 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     // get() returns both the entry (if hit) and pre-computed nodeJson to avoid double serialization
     const { entry: cached, nodeJson, nodeRev } = flowBlockCache.get(prefixedStableId, node);
     if (cached) {
-      // Cache hit: reuse blocks with position adjustment
-      // Cache hit reuses previously-converted blocks as-is. That means we don't
-      // recompute previousParagraphFont (used for empty list items without
-      // explicit run properties). If the user changes the font on the prior
-      // paragraph (e.g. paragraph A), an empty list item (paragraph B) can keep
-      // the old font until the cache entry is invalidated. Narrow case, but
-      // avoids confusing incremental-edit behavior.
+      // Cache hit: reuse blocks with position adjustment, then re-sync marker font
+      // from live PM state. Empty list items have no textStyle marks, so pass
+      // previousParagraphFont instead of falling back to stale cached runs.
       const delta = pmStart - cached.pmStart;
       const reusedBlocks = shiftCachedBlocks(cached.blocks, delta);
+      const paragraphProps = node.attrs?.paragraphProperties as ParagraphProperties | undefined;
+      const previousParagraphFont = !hasExplicitParagraphRunProperties(paragraphProps)
+        ? getLastParagraphFont(blocks)
+        : undefined;
+      reusedBlocks.forEach((block) => {
+        if (block.kind === 'paragraph') {
+          syncListMarkerFontFromParagraphRuns({
+            block,
+            converterContext,
+            para: node,
+            contentFontSource: 'paragraph',
+            previousParagraphFont,
+          });
+        }
+      });
       applyTrackedGhostListAdjustments(node, reusedBlocks, context);
 
       reusedBlocks.forEach((block) => {

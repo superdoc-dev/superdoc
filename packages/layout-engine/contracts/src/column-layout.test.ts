@@ -95,6 +95,38 @@ describe('normalizeColumnLayout', () => {
     });
   });
 
+  it('ignores widths when equalWidth is omitted and divides evenly (SD-2324: omitted = equal mode)', () => {
+    // Omitted equalWidth is equal mode in Word; any widths present are not authoritative.
+    expect(normalizeColumnLayout({ count: 2, gap: 24, widths: [100, 200] }, 624)).toEqual({
+      count: 2,
+      gap: 24,
+      widths: [300, 300],
+      width: 300,
+    });
+  });
+
+  it('ignores widths when equalWidth is true and divides evenly (SD-2324)', () => {
+    expect(normalizeColumnLayout({ count: 2, gap: 24, widths: [100, 200], equalWidth: true }, 624)).toEqual({
+      count: 2,
+      gap: 24,
+      widths: [300, 300],
+      equalWidth: true,
+      width: 300,
+    });
+  });
+
+  it('clamps count to the explicit-widths length when w:num exceeds it (SD-2324 F8)', () => {
+    // w:num="4" with only two explicit widths: the surplus columns have no width and must not
+    // be synthesized as ~0px slivers (the F8 phantom-column bug). Clamp to the two real columns.
+    expect(normalizeColumnLayout({ count: 4, gap: 48, widths: [192, 384], equalWidth: false }, 624)).toEqual({
+      count: 2,
+      gap: 48,
+      widths: [192, 384],
+      equalWidth: false,
+      width: 384,
+    });
+  });
+
   it('falls back to a single column when there is no usable content width', () => {
     expect(normalizeColumnLayout({ count: 3, gap: 24 }, 0, 0.01)).toEqual({
       count: 1,

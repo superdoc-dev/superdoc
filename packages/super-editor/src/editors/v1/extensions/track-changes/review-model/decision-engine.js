@@ -21,7 +21,7 @@
  */
 
 import { Slice } from 'prosemirror-model';
-import { AddMarkStep, RemoveMarkStep, ReplaceStep, Mapping, canJoin } from 'prosemirror-transform';
+import { AddMarkStep, RemoveMarkStep, ReplaceStep, canJoin } from 'prosemirror-transform';
 
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
@@ -136,7 +136,7 @@ export const decideTrackedChanges = ({ state, editor, decision, target, replacem
   if (!permissionResult.ok) return permissionResult.failure;
 
   // Compute the PM mutation plan + comment effects.
-  const planResult = buildMutationPlan({ state, graph, selections, decision, replacements });
+  const planResult = buildMutationPlan({ state, graph, selections, decision });
   if (!planResult.ok) return planResult.failure;
   const { plan } = planResult;
 
@@ -418,7 +418,7 @@ const runPermissionPreflight = ({ editor, decision, selections }) => {
  * @property {DecisionDiagnostic[]} diagnostics
  */
 
-const buildMutationPlan = ({ state, graph, selections, decision, replacements }) => {
+const buildMutationPlan = ({ state, graph, selections, decision }) => {
   /** @type {MutationOp[]} */
   const ops = [];
   /** @type {Array<{ from: number, to: number, cause: string }>} */

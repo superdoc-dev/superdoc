@@ -70,9 +70,32 @@ export function ActivitySidebar({ composeOpen, onCloseComposer, decided }: Props
   // (separate ticket), we'll be able to interleave by document
   // position; until then this stable two-bucket ordering matches what
   // the controller used to do internally.
+  //
+  // SuperDoc models tracked changes as comment-linked entities, so
+  // `ui.comments.items` mirrors each tracked change as a synthetic
+  // comment whose id is the tracked-change id. Without de-duping, every
+  // suggestion shows twice (one comment card + one change card).
+  //
+  // We dedupe by id, NOT by the `trackedChange` flag: a real comment
+  // thread also gets `trackedChange: true` when its anchor overlaps a
+  // suggestion (`comments.list()` links it via `assignTrackedChangeLink`),
+  // so a flag filter would wrongly hide those discussions. Only the
+  // synthetic rows reuse a tracked-change id; real comments have their
+  // own. Note: this demo runs `replacements: 'independent'`, so both
+  // sides of a replacement surface as separate change rows and both
+  // synthetic comment ids land in the dedupe set. Under the default
+  // `'paired'` mode the collapsed row drops the delete-side id, which
+  // `trackChanges.list()` does not currently expose — the delete-side
+  // synthetic comment would leak as a duplicate. Engine follow-up needed
+  // before this pattern is safe in paired mode.
   const feed = useMemo<ActivityItem[]>(() => {
+    const changeIds = new Set<string>();
+    for (const tc of trackChanges.items) changeIds.add(tc.id);
     const items: ActivityItem[] = [];
-    for (const c of comments.items) items.push({ kind: 'comment', id: c.id, comment: c });
+    for (const c of comments.items) {
+      if (changeIds.has(c.id)) continue;
+      items.push({ kind: 'comment', id: c.id, comment: c });
+    }
     for (const tc of trackChanges.items) items.push({ kind: 'change', id: tc.id, change: tc.change });
     return items;
   }, [comments.items, trackChanges.items]);

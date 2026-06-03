@@ -16,6 +16,20 @@ import {
 const DEFAULT_SUPERSCRIPT_RAISE_RATIO = 0.33;
 const DEFAULT_SUBSCRIPT_LOWER_RATIO = 0.14;
 
+/**
+ * Underline thickness in px, scaled to font size. Shared by text runs
+ * (`text-decoration-thickness`) and tab underlines (border width) so a run's
+ * underline renders as a single uniform weight across text and tab characters,
+ * matching Word, on any display density (SD-3330). The divisor approximates the
+ * font's natural underline weight (≈ what `text-decoration-thickness: auto`
+ * produces) while staying deterministic across platforms.
+ *
+ * Rounded to an integer px because CSS borders snap to integer device pixels
+ * while `text-decoration-thickness` keeps fractional values; using an integer
+ * makes the tab border and the text underline rasterize to the same line weight.
+ */
+export const underlineThicknessPx = (fontSize: number): number => Math.max(1, Math.round(fontSize / 14));
+
 const hasVerticalPositioning = (run: TextRun): boolean =>
   normalizeBaselineShift(run.baselineShift) != null || run.vertAlign === 'superscript' || run.vertAlign === 'subscript';
 
@@ -100,6 +114,11 @@ export const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false):
     decorations.push('underline');
     const u = run.underline;
     element.style.textDecorationStyle = u.style && u.style !== 'single' ? u.style : 'solid';
+    // Pin the thickness to an explicit, font-scaled value (instead of `auto`, which
+    // browsers render at the font's underline weight). Tab underlines reuse the same
+    // value for their border width, so a run's underline is one uniform weight across
+    // text and tab characters (SD-3330). See underlineThicknessPx.
+    element.style.textDecorationThickness = `${underlineThicknessPx(run.fontSize)}px`;
     if (u.color) {
       element.style.textDecorationColor = u.color;
     }

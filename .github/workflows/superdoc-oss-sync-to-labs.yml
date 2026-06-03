@@ -3,7 +3,7 @@ name: Notify Labs of OSS changes
 on:
   push:
     branches:
-      - nick/sync
+      - main
 
 permissions:
   contents: read

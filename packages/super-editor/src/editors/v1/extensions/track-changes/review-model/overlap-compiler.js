@@ -298,6 +298,15 @@ const findAdjacentInsertedSegment = (ctx, pos) => {
  * seams. TC-EDIT-018 covers "deleted or inserted", so the insertion side is a
  * known conformance gap to close in a follow-up — not a mirror of this logic.
  *
+ * Known limitation (bridge case): when a single live character sits between two
+ * of the user's own deletions, deleting it matches `exactLeft` first and reuses
+ * the LEFT deletion's id; the right deletion is never consulted. Because span
+ * merging joins only same-id spans, the result is two touching logical
+ * deletions where Word shows one. This is strictly better than the
+ * pre-coalescing behavior (which minted a third id) but short of TC-EDIT-018's
+ * "one logical change"; bridging both sides under a single id (reassigning the
+ * right deletion to the left id) is left as a future refinement.
+ *
  * @param {*} ctx
  * @param {number} from
  * @param {number} to

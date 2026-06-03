@@ -142,4 +142,34 @@ describe('pageReferenceNodeToBlock', () => {
 
     expect(vi.mocked(resolveRunProperties).mock.calls.at(-1)?.[1]).toBe(fieldRunProperties);
   });
+
+  it('preserves PM source positions from the pageReference node', () => {
+    const node: PMNode = {
+      type: 'pageReference',
+      attrs: { instruction: 'PAGEREF _Toc123' },
+      content: [{ type: 'text', text: '15' } as PMNode],
+    };
+    const positions = new WeakMap<PMNode, { start: number; end: number }>();
+    positions.set(node, { start: 42, end: 48 });
+
+    const run = pageReferenceNodeToBlock(makeParams({}, { node, positions })) as TextRun | undefined;
+
+    expect(run?.pmStart).toBe(42);
+    expect(run?.pmEnd).toBe(48);
+  });
+
+  it('sets PAGEREF formatting metadata from typed attrs', () => {
+    const pageNumberFieldFormat = { format: 'upperRoman' as const };
+    const numericPictureFormat = { picture: '00' };
+    const run = pageReferenceNodeToBlock(
+      makeParams({
+        instruction: 'PAGEREF _Toc123',
+        pageNumberFieldFormat,
+        numericPictureFormat,
+      }),
+    ) as TextRun | undefined;
+
+    expect(run?.pageRefMetadata?.pageNumberFieldFormat).toBe(pageNumberFieldFormat);
+    expect(run?.pageRefMetadata?.numericPictureFormat).toBe(numericPictureFormat);
+  });
 });

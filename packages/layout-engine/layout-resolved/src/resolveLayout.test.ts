@@ -335,6 +335,68 @@ describe('resolveLayout', () => {
       expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('above');
     });
 
+    it('resolves same-page relative PAGEREF text to below when the source precedes the target', () => {
+      const input = makePageRefInput(
+        pageRefRun({
+          pmStart: 50,
+          pageRefMetadata: { bookmarkId: 'target', instruction: 'PAGEREF target \\p', relativePosition: true },
+        }),
+      );
+      input.layout.pages = [
+        {
+          number: 1,
+          displayNumber: 1,
+          numberText: '1',
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'source',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 0,
+              width: 100,
+              pmStart: 40,
+              pmEnd: 60,
+            },
+            {
+              kind: 'para',
+              blockId: 'target-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 20,
+              width: 100,
+              pmStart: 100,
+              pmEnd: 106,
+            },
+          ],
+        },
+      ];
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('below');
+    });
+
+    it('applies Roman PAGEREF formatting while preserving the target chapter prefix', () => {
+      const input = makePageRefInput(
+        pageRefRun({
+          pageRefMetadata: {
+            bookmarkId: 'target',
+            instruction: 'PAGEREF target \\* Roman',
+            pageNumberFieldFormat: { format: 'upperRoman' },
+          },
+        }),
+      );
+      input.layout.pages[1].displayNumber = 4;
+      input.layout.pages[1].numberText = 'A:4';
+      input.layout.pages[1].pageNumberChapterText = 'A';
+      input.layout.pages[1].pageNumberChapterSeparator = 'colon';
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('A:IV');
+    });
+
     it('applies PAGEREF numeric formatting against the target display number', () => {
       const input = makePageRefInput(
         pageRefRun({
@@ -350,6 +412,79 @@ describe('resolveLayout', () => {
       const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
 
       expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('03');
+    });
+
+    it('resolves multiple PAGEREF tokens in one paragraph independently', () => {
+      const input = makePageRefInput();
+      input.blocks[0] = {
+        kind: 'paragraph',
+        id: 'source',
+        runs: [
+          pageRefRun({ text: '5', pmStart: 5, pmEnd: 6 }),
+          { text: ' and ', fontFamily: 'Arial', fontSize: 12, pmStart: 6, pmEnd: 11 },
+          pageRefRun({
+            text: '6',
+            pmStart: 11,
+            pmEnd: 12,
+            pageRefMetadata: { bookmarkId: 'other', instruction: 'PAGEREF other' },
+          }),
+        ],
+      } as any;
+      input.blocks.push({
+        kind: 'paragraph',
+        id: 'other-block',
+        runs: [{ text: 'Other', fontFamily: 'Arial', fontSize: 12, pmStart: 200, pmEnd: 205 }],
+      } as any);
+      input.measures[0] = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 2,
+            toChar: 1,
+            width: 60,
+            ascent: 8,
+            descent: 2,
+            lineHeight: 12,
+          },
+        ],
+      } as any;
+      input.measures.push({
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 40, ascent: 8, descent: 2, lineHeight: 12 }],
+      } as any);
+      input.layout.pages.push({
+        number: 3,
+        displayNumber: 23,
+        numberText: '23',
+        fragments: [
+          {
+            kind: 'para',
+            blockId: 'other-block',
+            fromLine: 0,
+            toLine: 1,
+            x: 0,
+            y: 0,
+            width: 100,
+            pmStart: 200,
+            pmEnd: 205,
+          },
+        ],
+      });
+
+      const result = resolveLayout({
+        ...input,
+        flowMode: 'paginated',
+        bookmarks: new Map([
+          ['target', 100],
+          ['other', 200],
+        ]),
+      });
+      const item = result.pages[0].items[0] as any;
+
+      expect(item.block.runs.map((run: any) => run.text).join('')).toBe('12 and 23');
+      expect(item.content.lines[0].line.toChar).toBe(2);
     });
 
     it('does not mutate input blocks', () => {

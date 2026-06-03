@@ -54,4 +54,27 @@ describe('preProcessPageRefInstruction', () => {
     });
     expect(result[0].elements).toBe(mockNodesToCombine);
   });
+
+  it('stores converted CHARFORMAT run properties from the first instruction run', () => {
+    const firstInstrTextRunRPr = {
+      name: 'w:rPr',
+      elements: [
+        { name: 'w:b', attributes: { 'w:val': '1' } },
+        { name: 'w:color', attributes: { 'w:val': 'FF0000' } },
+      ],
+    };
+    const result = preProcessPageRefInstruction(mockNodesToCombine, 'PAGEREF _Toc123 \\* CHARFORMAT', {
+      firstInstrTextRunRPr,
+    });
+
+    expect(result[0].attributes).toMatchObject({
+      fieldResultFormat: 'charformat',
+      fieldRunProperties: {
+        bold: true,
+        color: { val: 'FF0000' },
+      },
+    });
+    expect(result[0].attributes.fieldRunProperties).not.toHaveProperty('name');
+    expect(result[0].attributes.fieldRunProperties).not.toHaveProperty('elements');
+  });
 });

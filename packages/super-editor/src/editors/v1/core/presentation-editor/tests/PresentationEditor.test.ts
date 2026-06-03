@@ -332,6 +332,8 @@ vi.mock('@superdoc/layout-bridge', () => ({
     extractFooterId: vi.fn(() => 'rId-footer-default'),
   })),
   buildMultiSectionIdentifier: vi.fn(() => ({ sections: [] })),
+  buildEffectiveHeaderFooterRefsBySection: vi.fn(() => new Map()),
+  collectReferencedHeaderFooterRIds: vi.fn(() => new Set()),
   getHeaderFooterTypeForSection: vi.fn(() => 'default'),
   getHeaderFooterType: vi.fn((_pageNumber, _identifier, _options) => {
     // Returns the type of header/footer for a given page
@@ -443,6 +445,8 @@ describe('PresentationEditor', () => {
 
     // Clear all mocks
     vi.clearAllMocks();
+    mockToFlowBlocks.mockReset();
+    mockToFlowBlocks.mockReturnValue({ blocks: [], bookmarks: new Map() });
     // Reset mockIncrementalLayout to default implementation (clearAllMocks doesn't reset mockResolvedValue)
     mockIncrementalLayout.mockReset();
     mockIncrementalLayout.mockResolvedValue({ layout: { pages: [] }, measures: [] });
@@ -574,6 +578,48 @@ describe('PresentationEditor', () => {
         if (originalFontFace) Object.defineProperty(window, 'FontFace', originalFontFace);
         else Reflect.deleteProperty(window, 'FontFace');
       }
+    });
+  });
+
+  describe('formatting marks repaint', () => {
+    it('preserves body bookmarks when repainting the current layout', async () => {
+      const bookmarks = new Map([['target', 100]]);
+      const blocks = [
+        {
+          kind: 'paragraph',
+          id: 'source',
+          runs: [{ text: '5', fontFamily: 'Arial', fontSize: 12 }],
+        },
+      ];
+      const measures = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 }],
+        },
+      ];
+      mockToFlowBlocks.mockReturnValue({ blocks, bookmarks });
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 800, h: 1000 },
+          pages: [{ number: 1, fragments: [{ kind: 'para', blockId: 'source', fromLine: 0, toLine: 1 }] }],
+        },
+        measures,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'formatting-marks-pageref-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      mockResolveLayout.mockClear();
+
+      editor.setShowFormattingMarks(true);
+
+      expect(mockResolveLayout).toHaveBeenCalledTimes(1);
+      expect(mockResolveLayout.mock.calls[0]?.[0]).toMatchObject({ bookmarks });
     });
   });
 

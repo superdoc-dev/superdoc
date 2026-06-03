@@ -3442,6 +3442,7 @@ export class PresentationEditor extends EventEmitter {
       blocks,
       measures,
       fontSignature: this.#layoutFontSignature,
+      bookmarks: isBodyPageTokensEnabled() ? this.#layoutState.bookmarks : undefined,
     });
 
     const isSemanticFlow = this.#layoutOptions.flowMode === 'semantic';

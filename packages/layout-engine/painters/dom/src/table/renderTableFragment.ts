@@ -313,6 +313,28 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       // Track which column boundaries exist in this row
       const boundariesInRow = new Set<number>();
 
+      // Columns occupied by a cell in this row. Used to detect a trailing
+      // w:gridAfter spacer column this row leaves empty.
+      const occupiedCols = new Set<number>();
+      for (const cellMeasure of rowMeasure.cells) {
+        const s = cellMeasure.gridColumnStart ?? 0;
+        const sp = cellMeasure.colSpan ?? 1;
+        for (let c = s; c < s + sp; c++) occupiedCols.add(c);
+      }
+      // A degenerate trailing gridAfter spacer (last column, unoccupied this row,
+      // narrower than its own min width) sits a few px from the table edge. Emitting
+      // a resize boundary at its left edge crowds the table-edge handle and reads as a
+      // doubled border on hover, so skip that boundary for this row (SD-3345).
+      const lastColIndex = columnCount - 1;
+      const lastColMeta = fragment.metadata.columnBoundaries[lastColIndex];
+      const skipTrailingSpacerBoundary =
+        lastColIndex > 0 &&
+        !occupiedCols.has(lastColIndex) &&
+        !!lastColMeta &&
+        typeof lastColMeta.width === 'number' &&
+        typeof lastColMeta.minWidth === 'number' &&
+        lastColMeta.width < lastColMeta.minWidth;
+
       for (const cellMeasure of rowMeasure.cells) {
         const startCol = cellMeasure.gridColumnStart ?? 0;
         const colSpan = cellMeasure.colSpan ?? 1;
@@ -323,8 +345,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         if (startCol > 0) {
           boundariesInRow.add(startCol);
         }
-        // End boundary (right edge of cell)
-        if (endCol < columnCount) {
+        // End boundary (right edge of cell), unless it lands on a degenerate
+        // trailing gridAfter spacer (its left edge is the table edge for practical
+        // purposes, handled by the table-edge handle).
+        if (endCol < columnCount && !(skipTrailingSpacerBoundary && endCol === lastColIndex)) {
           boundariesInRow.add(endCol);
         }
       }
@@ -428,6 +452,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         y,
         rowMeasure,
         row: block.rows[r],
+        prevRow: r > 0 ? block.rows[r - 1] : undefined,
+        prevRowMeasure: r > 0 ? measure.rows[r - 1] : undefined,
+        nextRowMeasure: r < block.rows.length - 1 ? measure.rows[r + 1] : undefined,
         totalRows: block.rows.length,
         tableBorders,
         columnWidths: effectiveColumnWidths,
@@ -595,6 +622,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       y,
       rowMeasure,
       row: block.rows[r],
+      prevRow: r > 0 ? block.rows[r - 1] : undefined,
+      prevRowMeasure: r > 0 ? measure.rows[r - 1] : undefined,
+      nextRowMeasure: r < block.rows.length - 1 ? measure.rows[r + 1] : undefined,
       totalRows: block.rows.length,
       tableBorders,
       columnWidths: effectiveColumnWidths,

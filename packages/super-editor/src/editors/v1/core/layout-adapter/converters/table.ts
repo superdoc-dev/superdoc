@@ -720,11 +720,23 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
 
   const rowProps = rowNode.attrs?.tableRowProperties;
   const rowHeight = normalizeRowHeight(rowProps as Record<string, unknown> | undefined);
+
+  // Row-level border override from w:tblPrEx/w:tblBorders (ECMA-376 §17.4.61).
+  // The converter stores these raw (eighth-points) under tableRowProperties.tblPrExBorders.
+  // tblPrEx overrides the table's borders for this row only; rows without it fall
+  // through to the table borders (callout rows in FWC forms stay borderless this way).
+  const tblPrExBordersRaw = (rowProps as Record<string, unknown> | undefined)?.tblPrExBorders;
+  const rowBorders =
+    tblPrExBordersRaw && typeof tblPrExBordersRaw === 'object'
+      ? extractTableBorders(tblPrExBordersRaw as Record<string, unknown>, { unit: 'eighthPoints' })
+      : undefined;
+
   const attrs: TableRowAttrs | undefined =
     rowProps && typeof rowProps === 'object'
       ? {
           tableRowProperties: rowProps as Record<string, unknown>,
           ...(rowHeight ? { rowHeight } : {}),
+          ...(rowBorders ? { borders: rowBorders } : {}),
         }
       : rowHeight
         ? { rowHeight }

@@ -95,6 +95,16 @@ describe('resolveHeaderFooterLayout', () => {
     expect(result.pages[1].numberText).toBe('ii');
   });
 
+  it('preserves displayNumber on pages', () => {
+    const layout: HeaderFooterLayout = {
+      height: 50,
+      pages: [{ number: 1, displayNumber: 2, fragments: [] }],
+    };
+
+    const result = resolveHeaderFooterLayout(layout, [], []);
+    expect(result.pages[0].displayNumber).toBe(2);
+  });
+
   it('returns empty items array for empty fragments array', () => {
     const layout: HeaderFooterLayout = {
       height: 50,

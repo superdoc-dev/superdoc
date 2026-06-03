@@ -72,6 +72,24 @@ describe('headerFooterUtils', () => {
     expect(getHeaderFooterType(3, identifier)).toBe('odd');
   });
 
+  it('uses display page number parity when provided', () => {
+    const identifier = extractIdentifierFromConverter({
+      headerIds: { default: 'rId1', even: 'rIdEven', odd: 'rIdOdd' },
+      pageStyles: { alternateHeaders: true },
+    });
+
+    expect(getHeaderFooterType(1, identifier, { parityPageNumber: 2 })).toBe('even');
+  });
+
+  it('treats negative odd display page numbers as odd', () => {
+    const identifier = extractIdentifierFromConverter({
+      headerIds: { default: 'rId1', even: 'rIdEven', odd: 'rIdOdd' },
+      pageStyles: { alternateHeaders: true },
+    });
+
+    expect(getHeaderFooterType(1, identifier, { parityPageNumber: -1 })).toBe('odd');
+  });
+
   it('uses default only for odd pages when alternating slots are missing', () => {
     const identifier = extractIdentifierFromConverter({
       headerIds: { default: 'rId1' },
@@ -685,6 +703,76 @@ describe('headerFooterUtils', () => {
       const oddPageHeader = resolveHeaderFooterForPageAndSection(layout, 0, identifier, { kind: 'header' });
       expect(oddPageHeader?.type).toBe('odd');
       expect(oddPageHeader?.contentId).toBe('h0-default');
+    });
+
+    it('uses section-aware display page number for odd/even parity', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-odd', even: 'h0-even' },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, { alternateHeaders: true });
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          {
+            number: 1,
+            displayNumber: 2,
+            fragments: [],
+            sectionIndex: 0,
+            sectionRefs: { headerRefs: { default: 'h0-odd', even: 'h0-even' } },
+          },
+        ],
+        headerFooter: {
+          even: { pages: [{ number: 1, fragments: [] }] },
+        },
+      };
+
+      const type = getHeaderFooterTypeForSection(1, 0, identifier, {
+        kind: 'header',
+        sectionPageNumber: 1,
+        parityPageNumber: 2,
+      });
+      const evenPageHeader = resolveHeaderFooterForPageAndSection(layout, 0, identifier, { kind: 'header' });
+
+      expect(type).toBe('even');
+      expect(evenPageHeader?.type).toBe('even');
+      expect(evenPageHeader?.contentId).toBe('h0-even');
+    });
+
+    it('allows callers to override section-aware odd/even parity', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-odd', even: 'h0-even' },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, { alternateHeaders: true });
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          {
+            number: 1,
+            fragments: [],
+            sectionIndex: 0,
+            sectionRefs: { headerRefs: { default: 'h0-odd', even: 'h0-even' } },
+          },
+        ],
+        headerFooter: {
+          even: { pages: [{ number: 1, fragments: [] }] },
+        },
+      };
+
+      const evenPageHeader = resolveHeaderFooterForPageAndSection(layout, 0, identifier, {
+        kind: 'header',
+        parityPageNumber: 2,
+      });
+
+      expect(evenPageHeader?.type).toBe('even');
+      expect(evenPageHeader?.contentId).toBe('h0-even');
     });
 
     it('does not use section default content id for even pages when alternate header even ref is missing', () => {

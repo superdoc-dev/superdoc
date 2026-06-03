@@ -2001,6 +2001,8 @@ export type Page = {
    * (in later phases) by body pagination itself.
    */
   footnoteLedger?: FootnotePageLedger;
+  /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
+  displayNumber?: number;
   numberText?: string;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';
@@ -2228,6 +2230,7 @@ export type HeaderFooterType = 'default' | 'first' | 'even' | 'odd';
 export type HeaderFooterPage = {
   number: number;
   fragments: Fragment[];
+  displayNumber?: number;
   numberText?: string;
   /**
    * Optional page-local block clones backing this page's resolved fragments.

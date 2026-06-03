@@ -9,12 +9,29 @@ vi.mock('@superdoc/layout-bridge', () => ({
 }));
 
 function createMockEditor(overrides = {}) {
+  // Block ancestor carrying sdBlockRev, as resolved when bumping the
+  // containing block's revision after the AttrStep resize.
+  const paragraphNode = {
+    isBlock: true,
+    type: { name: 'paragraph', spec: { attrs: { sdBlockId: {}, sdBlockRev: {} } } },
+    attrs: { sdBlockRev: 3 },
+  };
   return {
     options: { documentMode: 'editing' },
     isEditable: true,
     view: {
       dom: document.createElement('div'),
-      state: { doc: { nodeAt: vi.fn() }, tr: { setNodeMarkup: vi.fn().mockReturnThis() } },
+      state: {
+        doc: {
+          nodeAt: vi.fn(),
+          resolve: vi.fn(() => ({
+            depth: 1,
+            node: () => paragraphNode,
+            before: () => 0,
+          })),
+        },
+        tr: { setNodeAttribute: vi.fn().mockReturnThis() },
+      },
       dispatch: vi.fn(),
     },
     ...overrides,
@@ -153,7 +170,7 @@ describe('ImageResizeOverlay', () => {
       expect(wrapper.vm.dragState).toBe(null);
       expect(wrapper.find('.resize-guideline').exists()).toBe(false);
       expect(editor.view.dispatch).not.toHaveBeenCalled();
-      expect(editor.view.state.tr.setNodeMarkup).not.toHaveBeenCalled();
+      expect(editor.view.state.tr.setNodeAttribute).not.toHaveBeenCalled();
 
       wrapper.unmount();
       remove();
@@ -207,11 +224,10 @@ describe('ImageResizeOverlay', () => {
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: 90 }));
     document.dispatchEvent(new MouseEvent('mouseup', { clientX: 150, clientY: 90 }));
 
-    expect(editor.view.state.tr.setNodeMarkup).toHaveBeenCalledWith(
-      0,
-      null,
-      expect.objectContaining({ size: { width: 140, height: 70 } }),
-    );
+    expect(editor.view.state.tr.setNodeAttribute).toHaveBeenCalledWith(0, 'size', { width: 140, height: 70 });
+    // AttrSteps have no changed range, so the containing block's sdBlockRev
+    // must be bumped explicitly for the layout engine to repaint.
+    expect(editor.view.state.tr.setNodeAttribute).toHaveBeenCalledWith(0, 'sdBlockRev', 4);
     expect(editor.view.dispatch).toHaveBeenCalledWith(editor.view.state.tr);
 
     wrapper.unmount();
@@ -274,11 +290,10 @@ describe('ImageResizeOverlay', () => {
 
     expect(headerFooterEditor.view.state.doc.nodeAt).toHaveBeenCalledWith(0);
     expect(bodyEditor.view.state.doc.nodeAt).not.toHaveBeenCalled();
-    expect(headerFooterEditor.view.state.tr.setNodeMarkup).toHaveBeenCalledWith(
-      0,
-      null,
-      expect.objectContaining({ size: { width: 140, height: 70 } }),
-    );
+    expect(headerFooterEditor.view.state.tr.setNodeAttribute).toHaveBeenCalledWith(0, 'size', {
+      width: 140,
+      height: 70,
+    });
     expect(headerFooterEditor.view.dispatch).toHaveBeenCalledWith(headerFooterEditor.view.state.tr);
     expect(bodyEditor.view.dispatch).not.toHaveBeenCalled();
 

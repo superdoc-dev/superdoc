@@ -3,16 +3,46 @@ import type { Editor } from '../Editor.js';
 import type { DefaultEventMap } from '../EventEmitter.js';
 import type { PartChangedEvent } from '../parts/types.js';
 import type { DocumentProtectionState, StoryLocator } from '@superdoc/document-api';
+import type { FontResolutionRecord, FontLoadSummary } from '@superdoc/font-system';
 
 /** Source of a protection state change. */
 export type ProtectionChangeSource = 'init' | 'local-mutation' | 'remote-part-sync';
 
 /**
- * Payload for fonts-resolved events
+ * Payload for `fonts-resolved` events.
+ *
+ * LEGACY / EARLY signal: emitted once at editor init, before any font has loaded, from
+ * `converter.getDocumentFonts()` + a browser `canRenderFont()` probe. It answers "which
+ * font names did the document declare, and which can't this browser render natively" - it
+ * is NOT substitution- or load-aware. `unsupportedFonts` will list families (Calibri,
+ * Arial, ...) that in fact render faithfully through a bundled substitute. For the
+ * authoritative, load-settled picture listen to `fonts-changed` instead. Kept unchanged
+ * for backward compatibility.
  */
 export interface FontsResolvedPayload {
   documentFonts: string[];
   unsupportedFonts: string[];
+}
+
+/**
+ * Payload for `fonts-changed` events: the authoritative, substitution- and load-aware
+ * font report for the current document. Emitted after the load-before-measure gate
+ * settles (`source: 'initial'`), again when a face arrives after a timed-out first paint
+ * (`'late-load'`). `version` is the document's font-config epoch; it increases on every change.
+ *
+ * `documentFonts` are the document's DECLARED logical families (font table + theme +
+ * defaults), deduped - not only the fonts visible on screen. (A separate rendered-fonts
+ * view may follow.) `resolutions` maps each to its physical render family, the reason,
+ * and its load status; `missingFonts` are the declared families with no faithful render
+ * font loaded (the substitution-aware replacement for the legacy `unsupportedFonts`).
+ */
+export interface FontsChangedPayload {
+  documentFonts: string[];
+  resolutions: FontResolutionRecord[];
+  missingFonts: string[];
+  loadSummary: FontLoadSummary;
+  source: 'initial' | 'late-load';
+  version: number;
 }
 
 /**
@@ -232,8 +262,11 @@ export interface EditorEventMap extends DefaultEventMap {
   /** Called when list definitions change */
   'list-definitions-change': [ListDefinitionsPayload];
 
-  /** Called when all fonts used in the document are determined */
+  /** Called once at init with declared font names + a native-render probe (legacy/early). */
   'fonts-resolved': [FontsResolvedPayload];
+
+  /** Called with the authoritative substitution + load-aware font report once it settles and on change. */
+  'fonts-changed': [FontsChangedPayload];
 
   /** Called when active content control changes to a new control (or A -> B). */
   contentControlFocus: [ContentControlFocusPayload];

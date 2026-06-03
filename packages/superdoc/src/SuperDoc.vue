@@ -911,6 +911,7 @@ const editorOptions = (doc) => {
     onCommentLocationsUpdate: (payload) => onEditorCommentLocationsUpdate(doc, payload),
     onListDefinitionsChange: onEditorListdefinitionsChange,
     onFontsResolved: onFontsResolvedFn,
+    fontAssets: proxy.$superdoc.config.fonts,
     onTransaction: onEditorTransaction,
     ydoc: doc.ydoc,
     collaborationProvider: doc.provider || null,

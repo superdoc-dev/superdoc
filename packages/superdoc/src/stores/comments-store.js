@@ -33,6 +33,26 @@ export const useCommentsStore = defineStore('comments', () => {
     return makeTrackedChangeAnchorKey({ storyKey: 'body', rawId: String(rawId) });
   };
 
+  /**
+   * Compute the stable public id for a structural (whole-table) tracked change.
+   *
+   * This MUST match the public id the document-api projects for the same change
+   * (`tracked-change-resolver.groupTrackedChanges`), otherwise the right-rail
+   * accept/reject would route `trackChanges.decide` to a change that does not
+   * exist. The doc-api derives the public id as `word:structural:<sourceId>`
+   * for imported Word revisions, falling back to the per-import logical id.
+   * Reuse the exact rule here so the bubble id is the decide id.
+   *
+   * @param {{ sourceId?: string, id?: string }} structural
+   * @returns {string | null}
+   */
+  const buildStructuralTrackedChangeId = (structural) => {
+    if (!structural) return null;
+    const sourceId = structural.sourceId ? String(structural.sourceId) : '';
+    if (sourceId) return `word:structural:${sourceId}`;
+    return structural.id ? String(structural.id) : null;
+  };
+
   const superdocStore = useSuperdocStore();
   const commentsConfig = reactive({
     name: 'comments',
@@ -1205,6 +1225,15 @@ export const useCommentsStore = defineStore('comments', () => {
 
     createCommentForTrackChanges(editor, superdoc);
     syncStoryTrackedChangeComments({ superdoc, editor });
+    // Whole-table structural tracked changes live on node attrs (not inline
+    // marks), so `createCommentForTrackChanges` never sees them. Without this
+    // pass the "Inserted table" right-rail bubble is not created on import and
+    // only appears after a later transaction triggers the full
+    // `syncTrackedChangeComments` path. Mirror the inline/story bootstrap here.
+    // Idempotent: `syncStructuralTrackedChangeComments` upserts (event 'update'
+    // when a matching bubble already exists), so re-running it later does not
+    // duplicate bubbles.
+    syncStructuralTrackedChangeComments({ superdoc, editor });
   };
 
   /**
@@ -1668,6 +1697,91 @@ export const useCommentsStore = defineStore('comments', () => {
     });
 
     syncStoryTrackedChangeComments({ superdoc, editor, broadcastChanges, snapshots: storySnapshots });
+    syncStructuralTrackedChangeComments({ superdoc, editor, broadcastChanges });
+  };
+
+  /**
+   * Surface decidable whole-table structural tracked changes (table insert /
+   * table delete) as right-rail bubbles, mirroring the inline tracked-change
+   * path. Structural row revisions live on node attrs (not inline marks), so
+   * the inline `getTrackChanges` enumerator never sees them — they are
+   * enumerated separately here.
+   *
+   * Only `decidable` whole-table changes are surfaced; partial/mixed shapes are
+   * not actionable (the decision engine fails them closed) so they get no
+   * bubble. The bubble id is the document-api public id so accept/reject in the
+   * sidebar routes `trackChanges.decide` to the same change.
+   *
+   * Positioning: the bubble carries a body-story anchorKey (matching the
+   * tracked-change index snapshot) and a body PM range (table start/end). The
+   * PresentationEditor position pass emits a body-story position entry for that
+   * anchorKey, whose bounds resolve through the same `getRangeRects` path inline
+   * body comments/TC use — so it lines up with the table in layout-engine
+   * viewing mode.
+   */
+  const syncStructuralTrackedChangeComments = ({ superdoc, editor, broadcastChanges = true }) => {
+    const activeDocumentId = editor?.options?.documentId != null ? String(editor.options.documentId) : null;
+    if (!activeDocumentId) return;
+
+    const enumerate = trackChangesHelpers?.enumerateStructuralRowChanges;
+    if (typeof enumerate !== 'function') return;
+
+    let structuralChanges = [];
+    try {
+      structuralChanges = enumerate(editor.state) ?? [];
+    } catch {
+      structuralChanges = [];
+    }
+
+    for (const structural of structuralChanges) {
+      // Only decidable whole-table changes are actionable from the sidebar.
+      if (!structural?.decidable || !structural?.wholeTable) continue;
+
+      const publicId = buildStructuralTrackedChangeId(structural);
+      if (!publicId) continue;
+
+      const anchorKey = buildBodyTrackedChangeAnchorKey(publicId);
+      const displayType = structural.subtype === 'table-insert' ? 'tableInsert' : 'tableDelete';
+      const trackedChangeType = structural.side === 'insertion' ? 'trackInsert' : 'trackDelete';
+
+      // Mirror the story path: 'add' creates a bubble when none exists yet and
+      // refreshes an existing one; 'update' alone would no-op on first import
+      // (handleTrackedChangeUpdate returns early when no comment is found).
+      const normalizedPublicId = String(publicId);
+      const normalizedAnchorKey = anchorKey != null ? String(anchorKey) : null;
+      const existingComment = commentsList.value.find((comment) => {
+        if (!comment?.trackedChange) return false;
+        if (!belongsToTrackedChangeSyncDocument(comment, activeDocumentId)) return false;
+        const commentAnchorKey = comment.trackedChangeAnchorKey != null ? String(comment.trackedChangeAnchorKey) : null;
+        if (normalizedAnchorKey && commentAnchorKey) return commentAnchorKey === normalizedAnchorKey;
+        const commentId = comment.commentId != null ? String(comment.commentId) : null;
+        const importedId = comment.importedId != null ? String(comment.importedId) : null;
+        return commentId === normalizedPublicId || importedId === normalizedPublicId;
+      });
+
+      const params = {
+        event: existingComment ? 'update' : 'add',
+        changeId: publicId,
+        trackedChangeText: '',
+        trackedChangeType,
+        trackedChangeDisplayType: displayType,
+        deletedText: null,
+        authorId: null,
+        authorEmail: structural.authorEmail || null,
+        authorImage: structural.authorImage || null,
+        date: structural.date || null,
+        author: structural.author || null,
+        importedAuthor: structural.importedAuthor || null,
+        documentId: activeDocumentId,
+        coords: null,
+        trackedChangeStory: BODY_TRACKED_CHANGE_STORY,
+        trackedChangeStoryKind: 'body',
+        trackedChangeStoryLabel: '',
+        trackedChangeAnchorKey: anchorKey,
+      };
+
+      handleTrackedChangeUpdate({ superdoc, params, broadcastChanges });
+    }
   };
 
   const syncStoryTrackedChangeComments = ({ superdoc, editor, broadcastChanges = true, snapshots = null }) => {
@@ -1860,6 +1974,90 @@ export const useCommentsStore = defineStore('comments', () => {
     editorCommentPositions.value = {};
   };
 
+  /**
+   * Identify the single structural (whole-table) bubble for a tracked table so
+   * it is NEVER suppressed by the table-subsume filter below. The structural
+   * bubble is the parent "Inserted table" / "Deleted table" change; its public
+   * id is `word:structural:<id>` (or a bare structural fallback) and its display
+   * type is `tableInsert` / `tableDelete`.
+   *
+   * @param {Object} comment
+   * @returns {boolean}
+   */
+  const isStructuralTableBubble = (comment) => {
+    if (!comment?.trackedChange) return false;
+    const displayType = comment?.trackedChangeDisplayType;
+    if (displayType === 'tableInsert' || displayType === 'tableDelete') return true;
+    const ids = [comment?.commentId, comment?.importedId, comment?.trackedChangeAnchorKey]
+      .map((id) => (id != null ? String(id) : ''))
+      .filter(Boolean);
+    return ids.some((id) => id.includes('word:structural:'));
+  };
+
+  /**
+   * Compute the decidable whole-table tracked-change ranges for a comment's
+   * document, memoized per editor state so the filter does not re-enumerate the
+   * document once per comment. Returns `[]` when the document has no tracked
+   * whole-table change (the common case), so non-tracked tables and inline-only
+   * tracked changes are never affected.
+   *
+   * @param {string | null | undefined} fileId
+   * @returns {Array<{ from: number, to: number }>}
+   */
+  const trackedTableRangesCache = new WeakMap();
+  const getTrackedTableRangesForDocument = (fileId) => {
+    const doc = superdocStore.getDocument(fileId);
+    const editor = doc?.getEditor?.();
+    const state = editor?.state;
+    if (!state) return [];
+
+    const cached = trackedTableRangesCache.get(state);
+    if (cached) return cached;
+
+    const enumerate = trackChangesHelpers?.enumerateStructuralRowChanges;
+    let ranges = [];
+    if (typeof enumerate === 'function') {
+      let structuralChanges = [];
+      try {
+        structuralChanges = enumerate(state) ?? [];
+      } catch {
+        structuralChanges = [];
+      }
+      ranges = structuralChanges
+        .filter((s) => s?.decidable && s?.wholeTable)
+        .map((s) => ({ from: Number(s.tableFrom), to: Number(s.tableTo) }))
+        .filter((r) => Number.isFinite(r.from) && Number.isFinite(r.to));
+    }
+    trackedTableRangesCache.set(state, ranges);
+    return ranges;
+  };
+
+  /**
+   * Suppress an inline tracked-change bubble whose document range falls within a
+   * tracked whole-table change's range, so only the structural "Inserted table"
+   * / "Deleted table" bubble shows for that table (matching Word / Google Docs).
+   * The structural bubble itself, real user comments, and inline tracked changes
+   * inside a NON-tracked table are never suppressed.
+   *
+   * @param {Object} comment
+   * @returns {boolean} True when the bubble must NOT render.
+   */
+  const isInlineTrackedChangeInsideTrackedTable = (comment) => {
+    // Only inline TRACKED-CHANGE bubbles are candidates. Real user comments and
+    // the structural table bubble are always kept.
+    if (!comment?.trackedChange) return false;
+    if (isStructuralTableBubble(comment)) return false;
+
+    const ranges = getTrackedTableRangesForDocument(comment?.fileId);
+    if (!ranges.length) return false;
+
+    const entry = resolveCommentPositionEntry(comment).entry;
+    const range = getCommentPositionRange(entry);
+    if (!range) return false;
+
+    return ranges.some((table) => range.start >= table.from && range.end <= table.to);
+  };
+
   const getFloatingComments = computed(() => {
     const comments = getGroupedComments.value?.parentComments
       .filter((c) => !c.resolvedTime)
@@ -1869,7 +2067,11 @@ export const useCommentsStore = defineStore('comments', () => {
         // selection.source) must have a live position in the document.
         if (!isEditorBackedComment(c)) return true;
         return Boolean(resolveCommentPositionEntry(c).entry);
-      });
+      })
+      // Coalesce a tracked whole-table change into ONE bubble: an inline
+      // tracked-change bubble inside a tracked inserted/deleted table is
+      // subsumed by the structural bubble and must not render.
+      .filter((c) => !isInlineTrackedChangeInsideTrackedTable(c));
     return comments;
   });
 

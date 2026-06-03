@@ -339,6 +339,45 @@ const TRACK_CHANGE_STYLES = `
 .superdoc-layout .track-format-dec.highlighted.track-change-focused {
   background-color: var(--sd-tracked-changes-format-background-focused, #ffd70033);
 }
+
+/*
+ * Structural row-level tracked changes (inserted/deleted whole rows).
+ *
+ * The painter renders a row as absolutely-positioned cell <div>s (no <tr>), so
+ * each cell of a tracked row carries the same base class (track-insert-dec /
+ * track-delete-dec) + modifier (highlighted / hidden) as inline runs, plus the
+ * block-context marker class track-row-cell-dec. These rules reuse the same
+ * --sd-tracked-changes-insert-* / --sd-tracked-changes-delete-* CSS variables so
+ * the per-author color flows through identically to the inline path.
+ *
+ * 'hidden' mode collapses the cell (and therefore the row) via the existing
+ * .track-insert-dec.hidden / .track-delete-dec.hidden { display: none } rule
+ * above: an inserted row in 'original' mode and a deleted row in 'final' mode
+ * disappear, matching inline behavior.
+ */
+.superdoc-layout .track-row-cell-dec.track-insert-dec.highlighted {
+  background-color: var(--sd-tracked-changes-insert-background, #399c7222);
+  border-top: var(--sd-tracked-changes-insert-border-width, 2px) solid
+    var(--sd-tracked-changes-insert-border, #00853d);
+  border-bottom: var(--sd-tracked-changes-insert-border-width, 2px) solid
+    var(--sd-tracked-changes-insert-border, #00853d);
+}
+
+.superdoc-layout .track-row-cell-dec.track-delete-dec.highlighted {
+  background-color: var(--sd-tracked-changes-delete-background, #cb0e4722);
+  border-top: var(--sd-tracked-changes-delete-border-width, 2px) solid
+    var(--sd-tracked-changes-delete-border, #cb0e47);
+  border-bottom: var(--sd-tracked-changes-delete-border-width, 2px) solid
+    var(--sd-tracked-changes-delete-border, #cb0e47);
+}
+
+.superdoc-layout .track-row-cell-dec.track-delete-dec.highlighted .superdoc-line {
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, #cb0e47)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px);
+}
 `;
 
 const FORMATTING_MARKS_STYLES = `

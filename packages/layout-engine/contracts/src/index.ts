@@ -760,6 +760,15 @@ export type TableRowAttrs = {
     value: number;
     rule?: 'auto' | 'atLeast' | 'exact' | string;
   };
+  /**
+   * Structural tracked change on the whole row (inserted/deleted row), imported
+   * from `<w:ins>`/`<w:del>` inside `<w:trPr>`. Reuses the same shared
+   * {@link TrackedChangeMeta} shape that inline runs carry, so one painter +
+   * color-stamping system handles both inline and structural tracked changes.
+   * `kind` is `'insert'` for an inserted row and `'delete'` for a deleted row.
+   * `color` is stamped downstream by {@link stampTrackedChangeColors}.
+   */
+  trackedChange?: TrackedChangeMeta;
 };
 
 export type TableRow = {

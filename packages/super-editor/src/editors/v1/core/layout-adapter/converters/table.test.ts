@@ -2690,4 +2690,108 @@ describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => 
       expect(result?.attrs?.tableDirectionContext?.parentSection).toBe(customSectionContext);
     });
   });
+
+  describe('structural row tracked changes (SD-3360)', () => {
+    const ROW_TRACK_CONFIG: TrackedChangesConfig = { enabled: true, mode: 'review' };
+
+    const buildTrackedRowTable = (trackChange: Record<string, unknown> | null): PMNode => ({
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          attrs: trackChange ? { trackChange } : {},
+          content: [
+            {
+              type: 'tableCell',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+            },
+          ],
+        },
+      ],
+    });
+
+    it('produces attrs.trackedChange with kind "insert" for a rowInsert row', () => {
+      const result = tableNodeToBlock(
+        buildTrackedRowTable({
+          type: 'rowInsert',
+          id: 'rev-1',
+          author: 'Alice',
+          authorEmail: 'alice@example.com',
+          date: '2024-01-01T00:00:00Z',
+        }),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        ROW_TRACK_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      const meta = result.rows[0].attrs?.trackedChange;
+      expect(meta).toBeDefined();
+      expect(meta?.kind).toBe('insert');
+      expect(meta?.id).toBe('rev-1');
+      expect(meta?.author).toBe('Alice');
+      expect(meta?.authorEmail).toBe('alice@example.com');
+      expect(meta?.date).toBe('2024-01-01T00:00:00Z');
+      // Color is stamped downstream, never by the adapter.
+      expect(meta?.color).toBeUndefined();
+    });
+
+    it('produces attrs.trackedChange with kind "delete" for a rowDelete row', () => {
+      const result = tableNodeToBlock(
+        buildTrackedRowTable({ type: 'rowDelete', id: 'rev-2', author: 'Bob' }),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        ROW_TRACK_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      const meta = result.rows[0].attrs?.trackedChange;
+      expect(meta?.kind).toBe('delete');
+      expect(meta?.id).toBe('rev-2');
+    });
+
+    it('omits attrs.trackedChange for an untracked row', () => {
+      const result = tableNodeToBlock(
+        buildTrackedRowTable(null),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        ROW_TRACK_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.rows[0].attrs?.trackedChange).toBeUndefined();
+    });
+
+    it('omits attrs.trackedChange when tracked changes are disabled', () => {
+      const result = tableNodeToBlock(
+        buildTrackedRowTable({ type: 'rowInsert', id: 'rev-3' }),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        { enabled: false, mode: 'review' },
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.rows[0].attrs?.trackedChange).toBeUndefined();
+    });
+  });
 });

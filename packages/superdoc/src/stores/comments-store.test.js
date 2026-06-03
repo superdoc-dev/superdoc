@@ -87,6 +87,7 @@ vi.mock('@superdoc/super-editor', async () => {
     },
     trackChangesHelpers: {
       getTrackChanges: vi.fn(() => []),
+      enumerateStructuralRowChanges: vi.fn(() => []),
     },
     createOrUpdateTrackedChangeComment: vi.fn(({ event, marks, documentId }) => {
       const changeId = marks?.insertedMark?.attrs?.id ?? marks?.deletionMark?.attrs?.id ?? marks?.formatMark?.attrs?.id;
@@ -150,6 +151,7 @@ describe('comments-store', () => {
     __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx' }];
     groupChangesMock.mockReturnValue([]);
     trackChangesHelpersMock.getTrackChanges.mockReturnValue([]);
+    trackChangesHelpersMock.enumerateStructuralRowChanges?.mockReturnValue([]);
     createOrUpdateTrackedChangeCommentMock.mockImplementation(({ event, marks, documentId }) => {
       const changeId = marks?.insertedMark?.attrs?.id ?? marks?.deletionMark?.attrs?.id ?? marks?.formatMark?.attrs?.id;
       if (changeId == null) return;
@@ -1339,6 +1341,203 @@ describe('comments-store', () => {
     expect(store.activeComment).toBeNull();
     expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
     expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  describe('structural (whole-table) tracked-change bubbles', () => {
+    const makeEditor = () => {
+      const editorDispatch = vi.fn();
+      const tr = { setMeta: vi.fn() };
+      return {
+        state: {},
+        view: { state: { tr }, dispatch: editorDispatch },
+        options: { documentId: 'doc-1' },
+      };
+    };
+
+    it('creates a structural bubble entry with the public id and display type for a decidable whole-table insert', () => {
+      const editor = makeEditor();
+      const superdoc = { emit: vi.fn(), config: { isInternal: true } };
+
+      trackChangesHelpersMock.getTrackChanges.mockReturnValue([]);
+      groupChangesMock.mockReturnValue([]);
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([
+        {
+          id: 'logical-uuid-1',
+          revisionId: 'rev-1',
+          side: 'insertion',
+          subtype: 'table-insert',
+          tableFrom: 10,
+          tableTo: 40,
+          tablePos: 10,
+          wholeTable: true,
+          decidable: true,
+          rows: [{ from: 11, to: 20, pos: 11, node: {} }],
+          author: 'Alice',
+          authorEmail: 'alice@example.com',
+          authorImage: '',
+          date: '2024-01-01',
+          importedAuthor: '',
+          sourceId: '7',
+          revisionGroupId: 'rg-1',
+        },
+      ]);
+
+      store.commentsList = [];
+      store.syncTrackedChangeComments({ superdoc, editor });
+
+      const bubble = store.commentsList.find((c) => c.trackedChange && c.commentId === 'word:structural:7');
+      expect(bubble).toBeTruthy();
+      expect(bubble.commentId).toBe('word:structural:7');
+      expect(bubble.trackedChangeDisplayType).toBe('tableInsert');
+      expect(bubble.trackedChangeType).toBe('trackInsert');
+      expect(bubble.trackedChangeAnchorKey).toBe('tc::body::word:structural:7');
+      expect(bubble.trackedChangeStory).toEqual({ kind: 'story', storyType: 'body' });
+    });
+
+    it('uses table-delete display type and falls back to the logical id when there is no source id', () => {
+      const editor = makeEditor();
+      const superdoc = { emit: vi.fn(), config: { isInternal: true } };
+
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([
+        {
+          id: 'logical-uuid-2',
+          side: 'deletion',
+          subtype: 'table-delete',
+          tableFrom: 5,
+          tableTo: 30,
+          tablePos: 5,
+          wholeTable: true,
+          decidable: true,
+          rows: [{ from: 6, to: 15, pos: 6, node: {} }],
+          author: 'Bob',
+          authorEmail: 'bob@example.com',
+          date: '2024-02-02',
+          sourceId: '',
+        },
+      ]);
+
+      store.commentsList = [];
+      store.syncTrackedChangeComments({ superdoc, editor });
+
+      const bubble = store.commentsList.find((c) => c.trackedChange && c.commentId === 'logical-uuid-2');
+      expect(bubble).toBeTruthy();
+      expect(bubble.trackedChangeDisplayType).toBe('tableDelete');
+      expect(bubble.trackedChangeType).toBe('trackDelete');
+    });
+
+    it('does not create a bubble for non-decidable (partial/mixed) structural changes', () => {
+      const editor = makeEditor();
+      const superdoc = { emit: vi.fn(), config: { isInternal: true } };
+
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([
+        {
+          id: 'logical-uuid-3',
+          side: 'insertion',
+          subtype: 'table-insert',
+          tableFrom: 1,
+          tableTo: 20,
+          tablePos: 1,
+          wholeTable: false,
+          decidable: false,
+          undecidableReason: 'partial-rows',
+          rows: [{ from: 2, to: 10, pos: 2, node: {} }],
+          author: 'Carol',
+          authorEmail: 'carol@example.com',
+          date: '2024-03-03',
+          sourceId: '9',
+        },
+      ]);
+
+      store.commentsList = [];
+      store.syncTrackedChangeComments({ superdoc, editor });
+
+      expect(store.commentsList.find((c) => c.trackedChange)).toBeUndefined();
+    });
+
+    it('routes accept/reject through trackChanges.decide with the structural public id', () => {
+      const decide = vi.fn(() => ({ success: true }));
+      const superdoc = {
+        activeEditor: {
+          doc: { trackChanges: { decide } },
+        },
+      };
+      const comment = {
+        trackedChange: true,
+        commentId: 'word:structural:7',
+        trackedChangeStory: { kind: 'story', storyType: 'body' },
+        trackedChangeAnchorKey: 'tc::body::word:structural:7',
+      };
+
+      const result = store.decideTrackedChangeFromSidebar({ superdoc, comment, decision: 'accept' });
+
+      expect(result.ok).toBe(true);
+      expect(decide).toHaveBeenCalledWith({
+        decision: 'accept',
+        target: { id: 'word:structural:7', story: { kind: 'story', storyType: 'body' } },
+      });
+    });
+
+    // SD-3360: the "Inserted table" structural bubble must appear on initial
+    // import, not only after a later transaction triggers the full
+    // syncTrackedChangeComments path. The bootstrap that runs after import
+    // (bootstrapImportedTrackedChangeComments, fired via setTimeout(0)) must
+    // create structural bubbles alongside the inline/story ones.
+    it('creates the structural bubble during the initial import bootstrap so it shows on first render', async () => {
+      const editorDispatch = vi.fn();
+      const tr = { setMeta: vi.fn() };
+      const editor = {
+        state: {},
+        view: { state: { tr }, dispatch: editorDispatch },
+        options: { documentId: 'doc-1' },
+      };
+
+      // No inline tracked changes; only a decidable whole-table insert.
+      trackChangesHelpersMock.getTrackChanges.mockReturnValue([]);
+      groupChangesMock.mockReturnValue([]);
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([
+        {
+          id: 'logical-uuid-init',
+          side: 'insertion',
+          subtype: 'table-insert',
+          tableFrom: 10,
+          tableTo: 40,
+          tablePos: 10,
+          wholeTable: true,
+          decidable: true,
+          rows: [{ from: 11, to: 20, pos: 11, node: {} }],
+          author: 'Alice',
+          authorEmail: 'alice@example.com',
+          date: '2024-01-01',
+          sourceId: '7',
+        },
+      ]);
+
+      // Initial layout emits the structural anchor position before/independent
+      // of comment creation; the store stores it keyed by anchorKey.
+      store.editorCommentPositions = {
+        'word:structural:7': { start: 10, end: 40, bounds: { top: 0, left: 0 } },
+      };
+
+      store.processLoadedDocxComments({
+        superdoc: __mockSuperdoc,
+        editor,
+        comments: [],
+        documentId: 'doc-1',
+      });
+
+      // Flush the setTimeout(0) bootstrap that runs after import.
+      vi.runAllTimers();
+      await nextTick();
+
+      const bubble = store.commentsList.find((c) => c.trackedChange && c.commentId === 'word:structural:7');
+      expect(bubble, 'structural bubble created during initial import bootstrap').toBeTruthy();
+      expect(bubble.trackedChangeDisplayType).toBe('tableInsert');
+
+      // It must also survive the getFloatingComments filter (has a resolved
+      // position) — i.e., it would actually render on first paint.
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toContain('word:structural:7');
+    });
   });
 
   it('emits deleted events when replay sync prunes stale tracked-change comments', () => {
@@ -3505,6 +3704,107 @@ describe('comments-store', () => {
 
       const floating = store.getFloatingComments;
       expect(floating.map((c) => c.commentId)).toEqual(['pdf-1']);
+    });
+  });
+
+  describe('getFloatingComments coalesces a tracked whole-table change (SD-3360)', () => {
+    // Wire the mock document to expose an editor state so the store can
+    // enumerate tracked-table ranges for its comments.
+    const wireEditorWithTable = () => {
+      const state = { doc: {} };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => ({ state }) }];
+      return state;
+    };
+
+    it('suppresses an inline tracked-change bubble inside a tracked inserted table (only the structural bubble remains)', () => {
+      wireEditorWithTable();
+      // Tracked whole-table insert covering [10, 30].
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([
+        { decidable: true, wholeTable: true, tableFrom: 10, tableTo: 30, subtype: 'table-insert', side: 'insertion' },
+      ]);
+
+      store.commentsList = [
+        // Structural "Inserted table" bubble — must stay.
+        {
+          commentId: 'word:structural:2',
+          fileId: 'doc-1',
+          trackedChange: true,
+          trackedChangeDisplayType: 'tableInsert',
+          resolvedTime: null,
+          createdTime: 1,
+        },
+        // Inline TC bubble inside the table [15, 20] — must be suppressed.
+        {
+          commentId: 'inline-ins-1',
+          fileId: 'doc-1',
+          trackedChange: true,
+          resolvedTime: null,
+          createdTime: 2,
+        },
+      ];
+      store.editorCommentPositions = {
+        'word:structural:2': { start: 10, end: 30, bounds: { top: 0, left: 0 } },
+        'inline-ins-1': { start: 15, end: 20, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['word:structural:2']);
+    });
+
+    it('keeps an inline tracked-change bubble inside a NON-tracked table (table itself not tracked)', () => {
+      wireEditorWithTable();
+      // No decidable whole-table change → no suppression ranges.
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([]);
+
+      store.commentsList = [
+        {
+          commentId: 'inline-in-plain-table',
+          fileId: 'doc-1',
+          trackedChange: true,
+          resolvedTime: null,
+          createdTime: 1,
+        },
+      ];
+      store.editorCommentPositions = {
+        'inline-in-plain-table': { start: 15, end: 20, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['inline-in-plain-table']);
+    });
+
+    it('does not suppress real user comments inside a tracked table, nor inline TC outside it', () => {
+      wireEditorWithTable();
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockReturnValue([
+        { decidable: true, wholeTable: true, tableFrom: 10, tableTo: 30, subtype: 'table-insert', side: 'insertion' },
+      ]);
+
+      store.commentsList = [
+        // Real user comment inside the table range — must stay (not a TC).
+        {
+          commentId: 'user-comment',
+          fileId: 'doc-1',
+          trackedChange: false,
+          resolvedTime: null,
+          createdTime: 1,
+          selection: { source: 'super-editor' },
+        },
+        // Inline TC OUTSIDE the table [40, 45] — must stay.
+        {
+          commentId: 'inline-outside',
+          fileId: 'doc-1',
+          trackedChange: true,
+          resolvedTime: null,
+          createdTime: 2,
+        },
+      ];
+      store.editorCommentPositions = {
+        'user-comment': { start: 16, end: 18, bounds: { top: 0, left: 0 } },
+        'inline-outside': { start: 40, end: 45, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId).sort()).toEqual(['inline-outside', 'user-comment']);
     });
   });
 });

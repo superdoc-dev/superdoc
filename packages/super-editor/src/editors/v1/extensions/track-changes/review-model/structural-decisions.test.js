@@ -22,7 +22,7 @@ import {
 } from './test-fixtures.js';
 import { enumerateStructuralRowChanges } from '../trackChangesHelpers/structuralRowChanges.js';
 import { EditorState } from 'prosemirror-state';
-import { TrackInsertMarkName } from '../constants.js';
+import { TrackInsertMarkName, TrackDeleteMarkName } from '../constants.js';
 
 const ALICE = { name: 'Alice Reviewer', email: 'alice@example.com' };
 
@@ -379,6 +379,178 @@ describe('co-decide: inline tracked change inside a removed table', () => {
       .map((entry) => entry.id)
       .concat(result.receipt.affectedChildren.map((c) => c.changeId));
     expect(retiredIds).toContain('inline-1');
+  });
+});
+
+describe('co-decide: inline tracked change inside a STAYING table (Word/GDocs subsume)', () => {
+  const insertRow = (id) => ({
+    type: 'rowInsert',
+    id,
+    sourceId: id,
+    author: ALICE.name,
+    authorEmail: ALICE.email,
+    date: '2026-05-20T16:00:00Z',
+    importedAuthor: `${ALICE.name} (imported)`,
+  });
+  const deleteRow = (id) => ({ ...insertRow(id), type: 'rowDelete' });
+
+  /** Table (one row) whose cell text carries an inline trackInsert mark. */
+  const buildInsertedTableWithInlineInsertion = (schema) => {
+    const insMark = schema.marks[TrackInsertMarkName].create({
+      id: 'inline-ins-1',
+      author: ALICE.name,
+      authorEmail: ALICE.email,
+      date: '2026-05-20T16:00:00Z',
+    });
+    const cellParagraph = schema.nodes.paragraph.create({}, [schema.text('NewCell', [insMark])]);
+    const cell = schema.nodes.tableCell.create({}, [cellParagraph]);
+    const row = schema.nodes.tableRow.create({ trackChange: insertRow('2') }, [cell]);
+    const table = schema.nodes.table.create({}, [row]);
+    const before = schema.nodes.paragraph.create({}, [schema.text('Before.')]);
+    const after = schema.nodes.paragraph.create({}, [schema.text('After.')]);
+    const doc = schema.nodes.doc.create({}, [before, table, after]);
+    return EditorState.create({ schema, doc });
+  };
+
+  /** Deleted table (one row) whose cell text carries an inline trackDelete mark. */
+  const buildDeletedTableWithInlineDeletion = (schema) => {
+    const delMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'inline-del-1',
+      author: ALICE.name,
+      authorEmail: ALICE.email,
+      date: '2026-05-20T16:00:00Z',
+    });
+    const cellParagraph = schema.nodes.paragraph.create({}, [schema.text('OldCell', [delMark])]);
+    const cell = schema.nodes.tableCell.create({}, [cellParagraph]);
+    const row = schema.nodes.tableRow.create({ trackChange: deleteRow('4') }, [cell]);
+    const table = schema.nodes.table.create({}, [row]);
+    const before = schema.nodes.paragraph.create({}, [schema.text('Before.')]);
+    const after = schema.nodes.paragraph.create({}, [schema.text('After.')]);
+    const doc = schema.nodes.doc.create({}, [before, table, after]);
+    return EditorState.create({ schema, doc });
+  };
+
+  const cellTextOf = (state) => state.doc.child(1).child(0).child(0).textContent;
+  const tableSurvives = (state) => state.doc.child(1).type.name === 'table';
+
+  it('accept an inserted table: rows cleared AND contained inline insertions accepted (zero marks, text stays)', () => {
+    const schema = createReviewGraphTestSchema();
+    const state = buildInsertedTableWithInlineInsertion(schema);
+
+    // Sanity: graph sees both the structural and the inline insertion.
+    const graph = buildReviewGraph({ state });
+    const types = [...graph.changes.values()].map((c) => c.type);
+    expect(types).toContain(CanonicalChangeType.Structural);
+    expect(types).toContain(CanonicalChangeType.Insertion);
+
+    const structural = enumerateStructuralRowChanges(state)[0];
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'accept',
+      target: { kind: 'id', id: structural.id },
+    });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+
+    // Table stays, text present.
+    expect(tableSurvives(next)).toBe(true);
+    expect(cellTextOf(next)).toBe('NewCell');
+    // ZERO tracked changes remain: rows cleared AND inline marks gone.
+    expect(enumerateStructuralRowChanges(next)).toEqual([]);
+    const nextGraph = buildReviewGraph({ state: next });
+    expect(nextGraph.changes.size).toBe(0);
+
+    // The inline insertion was resolved as an affected child of the parent.
+    const retiredIds = result.receipt.removedChangeIds
+      .map((entry) => entry.id)
+      .concat(result.receipt.affectedChildren.map((c) => c.changeId));
+    expect(retiredIds).toContain('inline-ins-1');
+    expect(result.receipt.affectedChildren.map((c) => c.changeId)).toContain('inline-ins-1');
+  });
+
+  it('reject an inserted table: whole table (and its inline insertion) removed', () => {
+    const schema = createReviewGraphTestSchema();
+    const state = buildInsertedTableWithInlineInsertion(schema);
+    const structural = enumerateStructuralRowChanges(state)[0];
+
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'reject',
+      target: { kind: 'id', id: structural.id },
+    });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+    // Table + its text gone.
+    expect(next.doc.childCount).toBe(2);
+    expect(next.doc.child(0).textContent).toBe('Before.');
+    expect(next.doc.child(1).textContent).toBe('After.');
+    expect(buildReviewGraph({ state: next }).changes.size).toBe(0);
+  });
+
+  it('reject a deleted table: rows restored AND contained inline deletions rejected (content stays, no marks)', () => {
+    const schema = createReviewGraphTestSchema();
+    const state = buildDeletedTableWithInlineDeletion(schema);
+    const structural = enumerateStructuralRowChanges(state)[0];
+
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'reject',
+      target: { kind: 'id', id: structural.id },
+    });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+
+    expect(tableSurvives(next)).toBe(true);
+    // Content stays (deletion rejected) and no marks remain.
+    expect(cellTextOf(next)).toBe('OldCell');
+    expect(enumerateStructuralRowChanges(next)).toEqual([]);
+    expect(buildReviewGraph({ state: next }).changes.size).toBe(0);
+    const retiredIds = result.receipt.removedChangeIds
+      .map((entry) => entry.id)
+      .concat(result.receipt.affectedChildren.map((c) => c.changeId));
+    expect(retiredIds).toContain('inline-del-1');
+  });
+
+  it('scope:all accept of an inserted table + contained inline insertion → ONE coherent result, no double-plan', () => {
+    const schema = createReviewGraphTestSchema();
+    const state = buildInsertedTableWithInlineInsertion(schema);
+
+    const result = decideTrackedChanges({ state, editor: editorFor(), decision: 'accept', target: { kind: 'all' } });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+
+    expect(tableSurvives(next)).toBe(true);
+    expect(cellTextOf(next)).toBe('NewCell');
+    expect(enumerateStructuralRowChanges(next)).toEqual([]);
+    expect(buildReviewGraph({ state: next }).changes.size).toBe(0);
+    // The inline insertion id appears exactly once across removed/children
+    // (dedup avoided double-planning under scope:'all').
+    const occurrences = result.receipt.removedChangeIds
+      .map((e) => e.id)
+      .concat(result.receipt.affectedChildren.map((c) => c.changeId))
+      .filter((id) => id === 'inline-ins-1').length;
+    expect(occurrences).toBeGreaterThanOrEqual(1);
+  });
+
+  it('partial-range on the structural change still fails closed (cascade only on a FULL decision)', () => {
+    const schema = createReviewGraphTestSchema();
+    const state = buildInsertedTableWithInlineInsertion(schema);
+    const structural = enumerateStructuralRowChanges(state)[0];
+
+    // A range strictly inside the table, not covering the whole table.
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(),
+      decision: 'accept',
+      target: { kind: 'range', from: structural.tableFrom + 2, to: structural.tableFrom + 4 },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('INVALID_INPUT');
+    // Document unmutated.
+    expect(state.doc.child(1).type.name).toBe('table');
   });
 });
 

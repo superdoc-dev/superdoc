@@ -450,6 +450,78 @@ const buildMutationPlan = ({ state, graph, selections, decision, replacements })
       structuralTableRemovals.some((range) => range.from <= seg.from && range.to >= seg.to),
     );
 
+  // Pre-compute the table ranges that a selected whole-table structural change
+  // KEEPS (accept-insert / reject-delete → the table stays as normal content).
+  // Word / Google Docs treat an inserted/deleted table as ONE change: approving
+  // it approves the text inside. We therefore cascade the SAME decision onto
+  // every inline tracked change whose segments are wholly inside [tableFrom,
+  // tableTo] — accepting an inserted table accepts the contained insertions
+  // (their trackInsert marks are removed, text stays); rejecting a deleted table
+  // rejects the contained changes (e.g. contained deletions are rejected so
+  // their content stays). The inline change is the CHILD of the structural
+  // parent here, decided together so the bubble pipeline retires it as a child.
+  /** @type {Array<{ from: number, to: number, structuralId: string }>} */
+  const structuralTableStays = [];
+  for (const selection of selections) {
+    const change = selection.change;
+    if (change.type !== CanonicalChangeType.Structural) continue;
+    const structural = change.structural;
+    if (!structural || structural.wholeTable !== true || structural.decidable === false) continue;
+    const tableStays =
+      (structural.side === 'insertion' && decision === 'accept') ||
+      (structural.side === 'deletion' && decision === 'reject');
+    if (!tableStays) continue;
+    structuralTableStays.push({
+      from: structural.tableFrom,
+      to: structural.tableTo,
+      structuralId: change.id,
+    });
+  }
+  const isInsideStayingTable = (change) =>
+    structuralTableStays.length > 0 &&
+    change.type !== CanonicalChangeType.Structural &&
+    change.segments.length > 0 &&
+    change.segments.every((seg) => structuralTableStays.some((range) => range.from <= seg.from && range.to >= seg.to));
+
+  /** @type {Set<string>} Inline ids resolved as children of a staying table. */
+  const cascadedInsideStayingTable = new Set();
+  // Plan a single inline tracked change as a CHILD of a staying-table structural
+  // decision, reusing the existing inline plan functions with FULL coverage and
+  // the SAME decision. Marks it touched + retired and records it as an affected
+  // child. Returns a failure to bubble up, or null on success.
+  const planContainedInlineChild = (change) => {
+    if (cascadedInsideStayingTable.has(change.id)) return null;
+    cascadedInsideStayingTable.add(change.id);
+    touched.add(change.id);
+    const fullSelection = {
+      change,
+      coverage: 'full',
+      ranges: change.segments.map((s) => ({ from: s.from, to: s.to })),
+    };
+    if (change.type === CanonicalChangeType.Insertion) {
+      planInsertionDecision({ ops, change, selection: fullSelection, decision, removedRanges, retired });
+      return null;
+    }
+    if (change.type === CanonicalChangeType.Deletion) {
+      planDeletionDecision({ ops, change, selection: fullSelection, decision, removedRanges, retired });
+      return null;
+    }
+    if (change.type === CanonicalChangeType.Replacement) {
+      const repResult = planReplacementDecision({ ops, graph, change, decision, removedRanges, retired });
+      if (!repResult.ok) return repResult.failure;
+      return null;
+    }
+    if (change.type === CanonicalChangeType.Formatting) {
+      planFormattingDecision({ ops, change, decision, retired });
+      return null;
+    }
+    // Nested structural (a tracked table inside a tracked table cell) is out of
+    // scope for the cascade; leave it for its own decide.
+    cascadedInsideStayingTable.delete(change.id);
+    touched.delete(change.id);
+    return null;
+  };
+
   for (const selection of selections) {
     const { change } = selection;
     // Inline tracked change fully contained in a table the decision removes:
@@ -460,6 +532,17 @@ const buildMutationPlan = ({ state, graph, selections, decision, replacements })
       retired.add(change.id);
       touched.add(change.id);
       suppressedInsideTable.add(change.id);
+      continue;
+    }
+    // Inline tracked change fully contained in a table the decision KEEPS:
+    // cascade the SAME decision onto it as a child (accept-insert → its
+    // trackInsert marks are removed; reject-delete → it is rejected). Routing it
+    // through the dedicated child planner here (instead of the normal path
+    // below) keeps `scope:'all'` from double-planning the same change. Recorded
+    // as an affected child in the side-effect pass below.
+    if (isInsideStayingTable(change)) {
+      const failureResult = planContainedInlineChild(change);
+      if (failureResult) return { ok: false, failure: failureResult };
       continue;
     }
     const isFull = selection.coverage === 'full';
@@ -546,6 +629,26 @@ const buildMutationPlan = ({ state, graph, selections, decision, replacements })
     }
   }
 
+  // Cascade onto contained inline children of a STAYING table that were NOT in
+  // the selection set (e.g. a `{kind:'id'}` decide that targets only the
+  // structural change). The whole-table change is the parent; every inline
+  // tracked change wholly inside [tableFrom, tableTo] is decided with the SAME
+  // decision so the table ends up clean (accept-insert) / restored with content
+  // (reject-delete) and zero inline marks remain. Scope:'all' already cascaded
+  // these in the main loop; `cascadedInsideStayingTable` dedups so they are not
+  // planned twice. Done after the main loop so positions are consistent.
+  if (structuralTableStays.length > 0) {
+    const seenStaying = new Set();
+    for (const change of graph.changes.values()) {
+      if (seenStaying.has(change)) continue;
+      seenStaying.add(change);
+      if (touched.has(change.id)) continue;
+      if (!isInsideStayingTable(change)) continue;
+      const failureResult = planContainedInlineChild(change);
+      if (failureResult) return { ok: false, failure: failureResult };
+    }
+  }
+
   if (!ops.length) {
     return {
       ok: false,
@@ -567,6 +670,11 @@ const buildMutationPlan = ({ state, graph, selections, decision, replacements })
   // are already retired/touched above; surface them as affected side effects so
   // the bubble lifecycle resolves their threads.
   for (const id of suppressedInsideTable) {
+    affectedChildren.push({ changeId: id });
+  }
+  // Inline children cascaded as part of a STAYING whole-table decision: surface
+  // them so the bubble lifecycle resolves their threads alongside the parent.
+  for (const id of cascadedInsideStayingTable) {
     affectedChildren.push({ changeId: id });
   }
   const seenChange = new Set();

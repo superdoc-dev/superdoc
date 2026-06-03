@@ -57,6 +57,7 @@ function findPageRefLocation(
 ): PageRefLocation | null {
   let nextLocation: PageRefLocation | null = null;
   let nextDistance = Number.POSITIVE_INFINITY;
+  let hasPriorVisibleRange = false;
 
   for (const page of layout.pages) {
     for (const fragment of page.fragments) {
@@ -83,10 +84,14 @@ function findPageRefLocation(
         return pageRefLocationFromPage(page, pmPosition);
       }
 
-      const fragmentStart = fragmentStartPosition(fragment, block);
+      const fragmentRange = fragmentPositionRange(fragment, block);
+      if (fragmentRange?.end != null && fragmentRange.end <= pmPosition) {
+        hasPriorVisibleRange = true;
+      }
+      const fragmentStart = fragmentRange?.start ?? null;
       if (fragmentStart != null && fragmentStart > pmPosition) {
         const distance = fragmentStart - pmPosition;
-        if (distance < nextDistance) {
+        if (!hasPriorVisibleRange && distance < nextDistance) {
           nextDistance = distance;
           nextLocation = pageRefLocationFromPage(page, pmPosition);
         }
@@ -238,13 +243,16 @@ function tableBlockContainsPosition(block: TableBlock, pmPosition: number): bool
   return false;
 }
 
-function fragmentStartPosition(fragment: Fragment, block: FlowBlock | undefined): number | null {
-  const range = fragment as { pmStart?: number };
-  if (range.pmStart != null) return range.pmStart;
-  if (block?.kind === 'paragraph') return runRange(block.runs)?.start ?? null;
-  if (block?.kind === 'table') return tableRunRange(block)?.start ?? null;
+function fragmentPositionRange(
+  fragment: Fragment,
+  block: FlowBlock | undefined,
+): { start: number; end: number } | null {
+  const fullRange = fragment as { pmStart?: number; pmEnd?: number };
+  if (fullRange.pmStart != null && fullRange.pmEnd != null) return { start: fullRange.pmStart, end: fullRange.pmEnd };
+  if (block?.kind === 'paragraph') return runRange(block.runs);
+  if (block?.kind === 'table') return tableRunRange(block);
   if (fragment.kind === 'list-item' && block?.kind === 'list') {
-    return listItemRunRange(block, fragment.itemId)?.start ?? null;
+    return listItemRunRange(block, fragment.itemId);
   }
   return null;
 }

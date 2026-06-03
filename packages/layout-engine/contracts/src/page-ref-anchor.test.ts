@@ -115,6 +115,28 @@ describe('buildPageRefAnchorMap', () => {
     });
   });
 
+  it('omits bookmarks in gaps between visible fragments', () => {
+    const layout: Layout = {
+      pageSize: { w: 800, h: 1000 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            { kind: 'para', blockId: 'before', fromLine: 0, toLine: 1, x: 0, y: 0, width: 100, pmStart: 10, pmEnd: 20 },
+          ],
+        },
+        {
+          number: 2,
+          fragments: [
+            { kind: 'para', blockId: 'after', fromLine: 0, toLine: 1, x: 0, y: 0, width: 100, pmStart: 30, pmEnd: 40 },
+          ],
+        },
+      ],
+    };
+
+    expect(buildPageRefAnchorMap(new Map([['gap', 25]]), layout).has('gap')).toBe(false);
+  });
+
   it('falls back to visible paragraph ranges inside table blocks', () => {
     const table: TableBlock = {
       kind: 'table',

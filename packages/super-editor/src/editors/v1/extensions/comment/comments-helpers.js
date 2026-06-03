@@ -243,6 +243,61 @@ export const resolveCommentById = ({ commentId, importedId, state, tr, dispatch 
 };
 
 /**
+ * Resolve several comments (a whole thread) inside a SINGLE transaction so the
+ * resulting mark→node conversions form ONE undo step.
+ *
+ * Mirrors {@link resolveCommentById} but batches multiple comment ids and maps
+ * every insert position through `tr.mapping`, so overlapping/shared anchors
+ * (e.g. a reply that shares the thread root's range, as in Google-Docs-style
+ * nested comments) stay correct. The caller dispatches `tr`.
+ *
+ * @param {{ commentId: string, importedId?: string }[]} items Comments to resolve
+ * @param {import('prosemirror-state').EditorState} state
+ * @param {import('prosemirror-state').Transaction} tr
+ * @returns {boolean} Whether any comment mark was converted
+ */
+export const resolveCommentsInTr = ({ items = [], state, tr }) => {
+  const { schema } = state;
+  const markType = schema.marks?.[CommentMarkName];
+  if (!markType) return false;
+  const startType = schema.nodes?.commentRangeStart;
+  const endType = schema.nodes?.commentRangeEnd;
+
+  const insertions = [];
+  let converted = false;
+
+  // First pass: remove every comment's mark. `removeMark` does not change doc
+  // size, so the ranges read from `state.doc` stay valid across all items.
+  for (const item of items) {
+    if (!item) continue;
+    const { commentId, importedId } = item;
+    const { segments, ranges } = getCommentMarkRangesById(commentId, state.doc, importedId);
+    if (!segments.length) continue;
+    converted = true;
+    segments.forEach(({ from, to, attrs }) => {
+      tr.removeMark(from, to, markType.create(attrs));
+    });
+    if (startType && endType) {
+      ranges.forEach(({ from, to, internal }) => insertions.push({ from, to, internal, commentId }));
+    }
+  }
+
+  // Second pass: insert the anchor nodes. Process highest position first and
+  // map through `tr.mapping` so prior inserts (including at a shared range) are
+  // accounted for.
+  if (startType && endType && insertions.length) {
+    insertions
+      .sort((a, b) => b.from - a.from || b.to - a.to)
+      .forEach(({ from, to, internal, commentId }) => {
+        tr.insert(tr.mapping.map(to), endType.create({ 'w:id': commentId }));
+        tr.insert(tr.mapping.map(from), startType.create({ 'w:id': commentId, internal }));
+      });
+  }
+
+  return converted;
+};
+
+/**
  * Collect all `commentRangeStart` / `commentRangeEnd` anchor nodes for a
  * given comment id and pair them up into ranges in document order.
  *

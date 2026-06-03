@@ -6,6 +6,30 @@ import { comments_module_events } from '@superdoc/common';
 import useSelection from '@superdoc/helpers/use-selection';
 
 /**
+ * Collect the direct replies of a thread root from the comments store.
+ *
+ * Used to cascade thread-level operations (resolve) to every comment in the
+ * thread. Returns the reactive comment objects (each exposing `resolveComment`
+ * + `resolvedTime`).
+ *
+ * @param {Object} superdoc The SuperDoc instance
+ * @param {String} rootCommentId The thread root's comment id
+ * @returns {Object[]} Direct reply comment objects
+ */
+function getDirectThreadReplies(superdoc, rootCommentId) {
+  const store = superdoc?.commentsStore;
+  if (!store || rootCommentId == null) return [];
+  const raw = store.commentsList;
+  const list = Array.isArray(raw) ? raw : (raw?.value ?? []);
+  return list.filter(
+    (c) =>
+      c &&
+      c.commentId !== rootCommentId &&
+      (c.parentCommentId === rootCommentId || c.threadingParentCommentId === rootCommentId),
+  );
+}
+
+/**
  * Comment composable
  *
  * @param {Object} params The initial values of the comment
@@ -85,16 +109,39 @@ export default function useComment(params) {
     resolvedByEmail.value = email;
     resolvedByName.value = name;
 
+    const emitData = { type: comments_module_events.RESOLVED, comment: getValues() };
+    propagateUpdate(superdoc, emitData);
+
+    const commands = superdoc.activeEditor?.commands;
+
+    // Tracked-change comments are standalone — resolve only this comment.
     if (trackedChange.value) {
-      const emitData = { type: comments_module_events.RESOLVED, comment: getValues() };
-      propagateUpdate(superdoc, emitData);
-      superdoc.activeEditor?.commands?.resolveComment({ commentId, importedId });
+      commands?.resolveComment({ commentId, importedId });
       return;
     }
 
-    const emitData = { type: comments_module_events.RESOLVED, comment: getValues() };
-    propagateUpdate(superdoc, emitData);
-    superdoc.activeEditor?.commands?.resolveComment({ commentId, importedId });
+    // SD-3355 / EUI-CMTS-035 — resolving a thread resolves the WHOLE thread.
+    // A reply can carry its own reconstructed anchor mark (e.g. Google-Docs
+    // nested ranges), so resolving only the root leaves the reply's commentMark
+    // in place and the anchored text stays highlighted after resolve. Convert
+    // the root + every reply mark to range nodes in ONE transaction so the
+    // highlight clears for the whole thread AND a single undo restores it
+    // (overlay + bubble); the anchor markers are preserved for round-trip per
+    // CMTS-LIFE-002. The replies' resolvedTime is intentionally left unset —
+    // the thread's resolved state is carried by the root (sidebar bubble),
+    // replies inherit it on export, and re-marking on undo re-derives the open
+    // state via the host `onEditorTransaction` resync.
+    const replies = getDirectThreadReplies(superdoc, commentId);
+    if (replies.length && typeof commands?.resolveCommentThread === 'function') {
+      commands.resolveCommentThread({
+        comments: [
+          { commentId, importedId },
+          ...replies.map((reply) => ({ commentId: reply.commentId, importedId: reply.importedId })),
+        ],
+      });
+    } else {
+      commands?.resolveComment({ commentId, importedId });
+    }
   };
 
   /**

@@ -1261,9 +1261,45 @@ const collectTouchedChangeIds = (transaction) => {
   return collectTouchedTrackedChangeIds(transaction, { trackChangesPluginKey: TrackChangesBasePluginKey });
 };
 
+// SD-3355 / EUI-CMTS-035 — when a comment mark is (re-)added to the document
+// (a reopen, including the undo of a resolve), clear that comment's store
+// resolvedTime so the sidebar bubble returns in the SAME undo step as the
+// document overlay. A resolved comment's anchor is range nodes (no mark), so
+// the appearance of a commentMark means the comment is open again; clearing
+// resolvedTime on a comment that isn't resolved is a no-op (e.g. create/import
+// of open comments), so this is safe.
+const COMMENT_MARK_STEP_TYPE = 'addMark';
+const COMMENT_MARK_NAME = 'commentMark';
+const resyncResolvedStateFromReMarkedComments = (transaction) => {
+  const steps = transaction?.steps;
+  if (!Array.isArray(steps) || !steps.length) return;
+  const reMarkedIds = new Set();
+  for (const step of steps) {
+    const json = typeof step?.toJSON === 'function' ? step.toJSON() : null;
+    if (!json || json.stepType !== COMMENT_MARK_STEP_TYPE) continue;
+    if (json.mark?.type !== COMMENT_MARK_NAME) continue;
+    const attrs = json.mark?.attrs ?? {};
+    if (attrs.commentId != null) reMarkedIds.add(String(attrs.commentId));
+    if (attrs.importedId != null) reMarkedIds.add(String(attrs.importedId));
+  }
+  if (!reMarkedIds.size) return;
+  commentsList.value.forEach((comment) => {
+    if (!comment?.resolvedTime) return;
+    const cid = comment.commentId != null ? String(comment.commentId) : null;
+    const iid = comment.importedId != null ? String(comment.importedId) : null;
+    if ((cid && reMarkedIds.has(cid)) || (iid && reMarkedIds.has(iid))) {
+      comment.resolvedTime = null;
+      comment.resolvedById = null;
+      comment.resolvedByEmail = null;
+      comment.resolvedByName = null;
+    }
+  });
+};
+
 const onEditorTransaction = (payload = {}) => {
   const { editor, transaction } = payload;
   const ySyncMeta = transaction?.getMeta?.(ySyncPluginKey);
+  resyncResolvedStateFromReMarkedComments(transaction);
 
   // Call sync on editor transaction for undo/redo in both local history
   // and collaboration replay modes.

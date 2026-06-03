@@ -1,3 +1,4 @@
+// @ts-check
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
@@ -74,7 +75,10 @@ export const TrackChangesBasePlugin = () => {
           let mightAffectTrackChanges = false;
 
           tr.steps.forEach((step) => {
-            if (step.slice || step.from !== step.to) {
+            // Only Replace(Around)Step carry slice/from/to; the base Step type
+            // does not expose them, so narrow before reading.
+            const replaceStep = /** @type {{ slice?: unknown, from?: number, to?: number }} */ (step);
+            if (replaceStep.slice || replaceStep.from !== replaceStep.to) {
               mightAffectTrackChanges = true;
             }
           });

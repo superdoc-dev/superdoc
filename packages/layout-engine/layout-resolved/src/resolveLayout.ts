@@ -20,6 +20,7 @@ import type {
   ListBlock,
   ParagraphBlock,
   ParagraphMeasure,
+  TableMeasure,
   LayoutStoryLocator,
   LineSegment,
   PageRefLocation,
@@ -100,11 +101,18 @@ function resolveParagraphPageRefs(
 
 function resolveParagraphPageRefBlock(
   block: ParagraphBlock,
+  measure?: ParagraphMeasure,
   context?: PageRefResolutionContext,
-): { block: ParagraphBlock; changed: boolean } {
+): { block: ParagraphBlock; measure?: ParagraphMeasure; changed: boolean } {
   const runTexts = collectResolvedPageRefRunTexts(block, context);
   if (runTexts.size === 0) return { block, changed: false };
-  return { block: { ...block, runs: resolvePageRefRuns(block, runTexts) }, changed: true };
+  return {
+    block: { ...block, runs: resolvePageRefRuns(block, runTexts) },
+    measure: measure
+      ? { ...measure, lines: measure.lines.map((line) => adjustLineForResolvedPageRefs(line, runTexts)) }
+      : undefined,
+    changed: true,
+  };
 }
 
 function collectResolvedPageRefRunTexts(
@@ -140,32 +148,59 @@ function resolvePageRefRuns(block: ParagraphBlock, runTexts: Map<number, string>
 
 function resolveTablePageRefs(
   block: TableBlock,
+  measure?: TableMeasure,
   context?: PageRefResolutionContext,
-): { block: TableBlock; changed: boolean } {
+): { block: TableBlock; measure?: TableMeasure; changed: boolean } {
   if (!context?.anchorMap?.size) return { block, changed: false };
 
   let changed = false;
-  const rows = block.rows.map((row) => {
+  let measureChanged = false;
+  const measureRows = measure?.rows.slice();
+  const rows = block.rows.map((row, rowIndex) => {
     let rowChanged = false;
-    const cells = row.cells.map((cell) => {
+    const measureRow = measureRows?.[rowIndex];
+    const measureCells = measureRow?.cells.slice();
+    const cells = row.cells.map((cell, cellIndex) => {
       let cellChanged = false;
       let nextParagraph = cell.paragraph;
+      let nextCellMeasure = measureCells?.[cellIndex];
       if (cell.paragraph) {
-        const resolved = resolveParagraphPageRefBlock(cell.paragraph, context);
+        const resolved = resolveParagraphPageRefBlock(cell.paragraph, nextCellMeasure?.paragraph, context);
         nextParagraph = resolved.block;
+        if (resolved.measure && nextCellMeasure) {
+          nextCellMeasure = { ...nextCellMeasure, paragraph: resolved.measure };
+        }
         cellChanged ||= resolved.changed;
       }
 
       let nextBlocks = cell.blocks;
+      let nextBlockMeasures = nextCellMeasure?.blocks;
       if (cell.blocks) {
-        nextBlocks = cell.blocks.map((childBlock) => {
+        nextBlocks = cell.blocks.map((childBlock, childIndex) => {
+          const childMeasure = nextBlockMeasures?.[childIndex];
           if (childBlock.kind === 'paragraph') {
-            const resolved = resolveParagraphPageRefBlock(childBlock, context);
+            const resolved = resolveParagraphPageRefBlock(
+              childBlock,
+              childMeasure?.kind === 'paragraph' ? (childMeasure as ParagraphMeasure) : undefined,
+              context,
+            );
+            if (resolved.measure && nextBlockMeasures) {
+              nextBlockMeasures = nextBlockMeasures.slice();
+              nextBlockMeasures[childIndex] = resolved.measure;
+            }
             cellChanged ||= resolved.changed;
             return resolved.block;
           }
           if (childBlock.kind === 'table') {
-            const resolved = resolveTablePageRefs(childBlock, context);
+            const resolved = resolveTablePageRefs(
+              childBlock,
+              childMeasure?.kind === 'table' ? (childMeasure as TableMeasure) : undefined,
+              context,
+            );
+            if (resolved.measure && nextBlockMeasures) {
+              nextBlockMeasures = nextBlockMeasures.slice();
+              nextBlockMeasures[childIndex] = resolved.measure;
+            }
             cellChanged ||= resolved.changed;
             return resolved.block;
           }
@@ -175,6 +210,13 @@ function resolveTablePageRefs(
 
       if (!cellChanged) return cell;
       rowChanged = true;
+      if (nextCellMeasure && measureCells) {
+        if (nextBlockMeasures && nextBlockMeasures !== nextCellMeasure.blocks) {
+          nextCellMeasure = { ...nextCellMeasure, blocks: nextBlockMeasures };
+        }
+        measureCells[cellIndex] = nextCellMeasure;
+        measureChanged = true;
+      }
       return {
         ...cell,
         ...(nextParagraph ? { paragraph: nextParagraph } : {}),
@@ -184,29 +226,53 @@ function resolveTablePageRefs(
 
     if (!rowChanged) return row;
     changed = true;
+    if (measureRow && measureCells && measureCells !== measureRow.cells) {
+      measureRows![rowIndex] = { ...measureRow, cells: measureCells };
+    }
     return { ...row, cells };
   });
 
-  return changed ? { block: { ...block, rows }, changed: true } : { block, changed: false };
+  return changed
+    ? {
+        block: { ...block, rows },
+        measure: measure && measureChanged && measureRows ? { ...measure, rows: measureRows } : measure,
+        changed: true,
+      }
+    : { block, changed: false };
 }
 
 function resolveListItemPageRefs(
   block: ListBlock,
   itemId: string,
+  measure?: ListMeasure,
   context?: PageRefResolutionContext,
-): { block: ListBlock; changed: boolean } {
+): { block: ListBlock; measure?: ListMeasure; changed: boolean } {
   if (!context?.anchorMap?.size) return { block, changed: false };
 
   let changed = false;
+  let measureChanged = false;
+  const measureItems = measure?.items.slice();
   const items = block.items.map((item) => {
     if (item.id !== itemId) return item;
-    const resolved = resolveParagraphPageRefBlock(item.paragraph, context);
+    const itemMeasureIndex = measureItems?.findIndex((candidate) => candidate.itemId === itemId) ?? -1;
+    const itemMeasure = itemMeasureIndex >= 0 ? measureItems?.[itemMeasureIndex] : undefined;
+    const resolved = resolveParagraphPageRefBlock(item.paragraph, itemMeasure?.paragraph, context);
     if (!resolved.changed) return item;
+    if (resolved.measure && itemMeasure && measureItems) {
+      measureItems[itemMeasureIndex] = { ...itemMeasure, paragraph: resolved.measure };
+      measureChanged = true;
+    }
     changed = true;
     return { ...item, paragraph: resolved.block };
   });
 
-  return changed ? { block: { ...block, items }, changed: true } : { block, changed: false };
+  return changed
+    ? {
+        block: { ...block, items },
+        measure: measure && measureChanged && measureItems ? { ...measure, items: measureItems } : measure,
+        changed: true,
+      }
+    : { block, changed: false };
 }
 
 function isTextRun(run: Run): run is TextRun {
@@ -437,9 +503,10 @@ export function resolveFragmentItem(
   switch (fragment.kind) {
     case 'table': {
       const item = resolveTableItem(fragment as TableFragment, fragmentIndex, pageIndex, blockMap);
-      const tablePageRefs = resolveTablePageRefs(item.block, pageRefContext);
+      const tablePageRefs = resolveTablePageRefs(item.block, item.measure, pageRefContext);
       if (tablePageRefs.changed) {
         item.block = tablePageRefs.block;
+        if (tablePageRefs.measure) item.measure = tablePageRefs.measure;
       }
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
       if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
@@ -481,7 +548,12 @@ export function resolveFragmentItem(
           : null;
       const listPageRefs =
         fragment.kind === 'list-item' && entry?.block.kind === 'list'
-          ? resolveListItemPageRefs(entry.block as ListBlock, (fragment as ListItemFragment).itemId, pageRefContext)
+          ? resolveListItemPageRefs(
+              entry.block as ListBlock,
+              (fragment as ListItemFragment).itemId,
+              entry.measure.kind === 'list' ? (entry.measure as ListMeasure) : undefined,
+              pageRefContext,
+            )
           : null;
       const itemVersion = paragraphPageRefs?.changed
         ? fragmentSignature(paragraphPageRefs.fragment, deriveFontAwareBlockVersion(paragraphPageRefs.block, fontSignature))
@@ -525,7 +597,7 @@ export function resolveFragmentItem(
           const listBlock = listPageRefs?.block ?? (entry.block as ListBlock);
           const listItem = listBlock.items.find((candidate) => candidate.id === (fragment as ListItemFragment).itemId);
           item.block = listBlock;
-          item.measure = entry.measure as ListMeasure;
+          item.measure = listPageRefs?.measure ?? (entry.measure as ListMeasure);
           if (item.sourceAnchor == null) {
             item.sourceAnchor = listItem?.sourceAnchor ?? listItem?.paragraph.sourceAnchor ?? listBlock.sourceAnchor;
           }

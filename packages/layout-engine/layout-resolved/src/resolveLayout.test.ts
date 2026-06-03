@@ -324,7 +324,26 @@ describe('resolveLayout', () => {
         runs: [{ text: 'Target', fontFamily: 'Arial', fontSize: 12, pmStart: 100, pmEnd: 106 }],
       } as any;
       const measures: Measure[] = [
-        { kind: 'table', rows: [{ height: 20, cells: [{ width: 100 }] }], columnWidths: [100] } as any,
+        {
+          kind: 'table',
+          rows: [
+            {
+              height: 20,
+              cells: [
+                {
+                  width: 100,
+                  paragraph: {
+                    lines: [
+                      { fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 },
+                    ],
+                    totalHeight: 12,
+                  },
+                },
+              ],
+            },
+          ],
+          columnWidths: [100],
+        } as any,
         {
           kind: 'paragraph',
           lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 6, width: 40, ascent: 8, descent: 2, lineHeight: 12 }],
@@ -379,6 +398,7 @@ describe('resolveLayout', () => {
       const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedTableItem;
 
       expect(item.block.rows[0].cells[0].paragraph?.runs[0].text).toBe('12');
+      expect(item.measure.rows[0].cells[0].paragraph?.lines[0].toChar).toBe(2);
       expect((tableBlock as any).rows[0].cells[0].paragraph.runs[0].text).toBe('5');
     });
 
@@ -478,6 +498,7 @@ describe('resolveLayout', () => {
       const item = result.pages[0].items[0] as any;
 
       expect(item.block.items[0].paragraph.runs[0].text).toBe('12');
+      expect(item.measure.items[0].paragraph.lines[0].toChar).toBe(2);
       expect((listBlock as any).items[0].paragraph.runs[0].text).toBe('5');
     });
   });

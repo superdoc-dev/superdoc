@@ -20,6 +20,8 @@ export type {
   RegisteredFace,
   FontLoadResult,
   FontLoadSummary,
+  FontFaceRequest,
+  FontFaceLoadResult,
   FontAssetUrlContext,
   FontAssetUrlResolver,
   RequiredFace,

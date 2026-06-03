@@ -180,6 +180,7 @@ import { measureBlock } from '@superdoc/measuring-dom';
 import { resolvePhysicalFamilies, type FontResolutionRecord, type FontLoadSummary } from '@superdoc/font-system';
 import { installBundledSubstitutes } from '@superdoc/font-system/bundled';
 import { FontReadinessGate } from './fonts/FontReadinessGate';
+import { planRequiredFontFaces } from './fonts/font-load-planner';
 import type { FontsChangedPayload } from '../types/EditorEvents';
 import type {
   ColumnLayout,
@@ -530,6 +531,8 @@ export class PresentationEditor extends EventEmitter {
   #selectionSync = new SelectionSyncCoordinator();
   /** Load-before-measure gate: awaits required fonts before measurement, reflows on late load. */
   #fontGate: FontReadinessGate | null = null;
+  /** Layout blocks for the current render, stashed so the gate's planner reads the live set. */
+  #fontPlanBlocks: FlowBlock[] | null = null;
   /** Dedup key for `fonts-changed`: epoch + per-face load status. Null until the first emit. */
   #lastFontsChangedKey: string | null = null;
   /** Last emitted `fonts-changed` payload, so a late relay subscriber can replay it. */
@@ -959,8 +962,13 @@ export class PresentationEditor extends EventEmitter {
           this.#pendingDocChange = true;
           this.#scheduleRerender();
         },
-        // Wait on the resolved PHYSICAL families (Calibri -> Carlito), so the gate holds
-        // measurement until the substitute that measure + paint will use has loaded.
+        // Face-aware required set: the exact physical faces (family + weight + style) the
+        // rendered document uses, from the planner walking the current layout blocks. The
+        // gate awaits these - so bold/italic load before measure and declared-but-unused
+        // fonts are not fetched. Reads the blocks stashed just before each gate await.
+        getRequiredFaces: () => planRequiredFontFaces(this.#fontPlanBlocks),
+        // Fallback family path (used only if getRequiredFaces is unavailable): wait on the
+        // resolved PHYSICAL families (Calibri -> Carlito).
         resolveFamilies: resolvePhysicalFamilies,
         // Register the bundled substitute pack (Carlito) into the document's registry the
         // first time it resolves, so the substitute is available with no manual setup.
@@ -5022,6 +5030,10 @@ export class PresentationEditor extends EventEmitter {
     // header/footer descriptors against the new converter and rerender so the
     // importer tab matches the collaborator tab without waiting for an edit.
     const handleDocumentReplaced = () => {
+      // A new document reuses this gate, so drop the old document's pending late-load reflow
+      // and required-face state - otherwise a flush armed under the old document fires a
+      // spurious full reflow against the new one.
+      this.#fontGate?.resetForDocumentChange();
       this.#refreshHeaderFooterStructureThenRerender({ purgeCachedEditors: true });
     };
     this.#editor.on('documentReplaced', handleDocumentReplaced);
@@ -6702,11 +6714,28 @@ export class PresentationEditor extends EventEmitter {
       let extraMeasures: Measure[] | undefined;
       let resolveBlocks: FlowBlock[] = blocksForLayout;
       let resolveMeasures: Measure[] = previousMeasures;
+      // Build the header/footer layout input BEFORE the gate so its faces are planned too:
+      // a font used only in a header/footer is still measured (via incrementalLayout below),
+      // so it must load before measure or it reflows on late load. Reused unchanged for the
+      // incrementalLayout call and the per-rId header/footer pass.
+      const headerFooterInput = this.#buildHeaderFooterInput();
       // Load-before-measure gate (T3): wait for the fonts this document needs so the first
       // measurement pass uses real metrics instead of a fallback that would reflow on load.
       // Bounded by a per-font timeout; resolves to the cached summary once fonts are stable;
       // never throws, so font readiness can never block layout.
       try {
+        // Stash every text source this render measures so the gate's planner awaits the exact
+        // used faces: body + notes (blocksForLayout), header/footer blocks, and - in paginated
+        // mode - footnote blocks (measured via layoutOptions.footnotes, NOT in blocksForLayout;
+        // semantic mode already folds footnotes into blocksForLayout). One planner input;
+        // planRequiredFontFaces dedups, so any overlap is harmless.
+        this.#fontPlanBlocks = [
+          ...blocksForLayout,
+          ...(headerFooterInput ? this.#collectHeaderFooterFaceBlocks(headerFooterInput) : []),
+          ...(!isSemanticFlow && footnotesLayoutInput?.blocksById
+            ? [...footnotesLayoutInput.blocksById.values()].flat()
+            : []),
+        ];
         const fontSummary = (await this.#fontGate?.ensureReadyForMeasure()) ?? null;
         // Now that the gate has settled, the font report reflects real load status. Emit
         // the authoritative `fonts-changed` once the picture first resolves and whenever it
@@ -6716,7 +6745,6 @@ export class PresentationEditor extends EventEmitter {
         /* font readiness must never break layout */
       }
 
-      const headerFooterInput = this.#buildHeaderFooterInput();
       try {
         const incrementalLayoutStart = perfNow();
         const result = await incrementalLayout(
@@ -7887,6 +7915,27 @@ export class PresentationEditor extends EventEmitter {
       sectionMetadata,
       alternateHeaders,
     };
+  }
+
+  /**
+   * Flatten a header/footer layout input into the FlowBlocks it will measure, so the font
+   * planner can include header/footer faces. getBatch variants and getBlocksByRId can cover
+   * the same content; planRequiredFontFaces dedups by face, so the overlap is harmless.
+   */
+  #collectHeaderFooterFaceBlocks(input: {
+    headerBlocks?: Partial<Record<string, FlowBlock[]>>;
+    footerBlocks?: Partial<Record<string, FlowBlock[]>>;
+    headerBlocksByRId?: Map<string, FlowBlock[]>;
+    footerBlocksByRId?: Map<string, FlowBlock[]>;
+  }): FlowBlock[] {
+    const out: FlowBlock[] = [];
+    for (const batch of [input.headerBlocks, input.footerBlocks]) {
+      if (batch) for (const blocks of Object.values(batch)) if (blocks) out.push(...blocks);
+    }
+    for (const byRId of [input.headerBlocksByRId, input.footerBlocksByRId]) {
+      if (byRId) for (const blocks of byRId.values()) out.push(...blocks);
+    }
+    return out;
   }
 
   #buildHeaderFooterInput() {

@@ -68,6 +68,30 @@ export interface FontLoadResult {
 }
 
 /**
+ * A specific physical font FACE the layout actually uses: family + weight + style.
+ *
+ * The gate must await faces, not families: `document.fonts.load('16px "Carlito"')` loads
+ * ONLY the regular (400/normal) face, so bold/italic text would otherwise measure against
+ * the regular face's advances (or a synthesized faux-bold) and reflow once the real face
+ * arrives. `weight`/`style` are normalized tokens (the bundled pack ships 400/700 ×
+ * normal/italic; the run model is binary bold/italic, so these four cover it - numeric
+ * weights are a follow-up). The planner builds these from layout runs; the registry awaits
+ * each one with a weight/style-specific probe.
+ */
+export interface FontFaceRequest {
+  /** Physical (resolved) family, e.g. "Carlito". */
+  family: string;
+  weight: '400' | '700';
+  style: 'normal' | 'italic';
+}
+
+/** Result of awaiting one required face. */
+export interface FontFaceLoadResult {
+  request: FontFaceRequest;
+  status: FontLoadStatus;
+}
+
+/**
  * Aggregate outcome of one readiness pass: the per-family results plus their counts.
  * `loaded + fallbackUsed + failed + timedOut` equals the number of distinct required
  * (physical) families. Carried on the public `fonts-changed` payload.

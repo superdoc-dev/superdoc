@@ -352,6 +352,44 @@ describe('getLastParagraphFont', () => {
     const result = getLastParagraphFont(blocks);
     expect(result).toBeUndefined();
   });
+
+  it('skips empty first runs even when they carry stale font values', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: 'Valid',
+            fontFamily: 'ValidFont',
+            fontSize: 11,
+            pmStart: 0,
+            pmEnd: 5,
+          },
+        ],
+        attrs: {},
+      },
+      {
+        kind: 'paragraph',
+        id: '1-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: '',
+            fontFamily: 'StaleFont',
+            fontSize: 42,
+            pmStart: 5,
+            pmEnd: 5,
+          },
+        ],
+        attrs: {},
+      },
+    ];
+
+    const result = getLastParagraphFont(blocks);
+    expect(result).toEqual({ fontFamily: 'ValidFont', fontSize: 11 });
+  });
 });
 
 describe('paragraph converters', () => {

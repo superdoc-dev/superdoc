@@ -342,13 +342,15 @@ export default defineConfig(({ mode, command }) => {
       },
     },
     resolve: {
-      // Under Vitest, alias @superdoc/font-system to its source so cdn-entry.test.js can
-      // resolve the import cdn-entry.js makes. The production CDN build aliases it in
-      // vite.config.cdn.js; the ES build never imports cdn-entry. Kept OUT of getAliases so
-      // the vite-plugin-dts build (which reads resolve.alias) is unaffected - an alias there
-      // makes it emit unresolvable source paths. The /bundled subpath precedes the bare one.
+      // Under Vitest and the dev server (command 'serve'), alias @superdoc/font-system to its
+      // source: cdn-entry.test.js needs it for the import cdn-entry.js makes, and the dev
+      // playground imports it transitively via layout-engine/super-editor source. font-system
+      // lives under shared/, so it is NOT covered by vite.sourceResolve's packages/** aliases.
+      // The production CDN build aliases it in vite.config.cdn.js; the ES build never imports
+      // cdn-entry. Kept OUT of getAliases so the vite-plugin-dts build (command 'build') is
+      // unaffected - an alias there makes it emit unresolvable source paths. /bundled precedes the bare one.
       alias: [
-        ...(process.env.VITEST
+        ...(process.env.VITEST || isDev
           ? [
               { find: '@superdoc/font-system/bundled', replacement: path.resolve(__dirname, '../../shared/font-system/src/bundled.ts') },
               { find: '@superdoc/font-system', replacement: path.resolve(__dirname, '../../shared/font-system/src/index.ts') },

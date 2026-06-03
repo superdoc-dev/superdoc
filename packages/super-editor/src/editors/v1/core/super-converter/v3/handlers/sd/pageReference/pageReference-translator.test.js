@@ -61,4 +61,31 @@ describe('pageReference translator', () => {
     expect(JSON.stringify(exported)).not.toContain('bookmarkId');
     expect(JSON.stringify(exported)).not.toContain('pageNumberFieldFormat');
   });
+
+  it('serializes CHARFORMAT fieldRunProperties on the instruction run', () => {
+    const exported = exportSchemaToJson({
+      node: {
+        type: 'pageReference',
+        attrs: {
+          instruction: 'PAGEREF target \\* CHARFORMAT',
+          fieldResultFormat: 'charformat',
+          fieldRunProperties: { bold: true, color: { val: '00FF00' } },
+          marksAsAttrs: [{ type: 'italic', attrs: {} }],
+        },
+        content: [{ type: 'text', text: '7' }],
+      },
+    });
+
+    const instructionRun = exported.find((node) => node?.elements?.some((element) => element?.name === 'w:instrText'));
+    const instructionRunProperties = instructionRun?.elements?.find((element) => element?.name === 'w:rPr');
+    expect(instructionRunProperties?.elements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'w:b' }),
+        expect.objectContaining({ name: 'w:color', attributes: { 'w:val': '00FF00' } }),
+      ]),
+    );
+    expect(instructionRunProperties?.elements).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'w:i' })]),
+    );
+  });
 });

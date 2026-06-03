@@ -2,6 +2,7 @@
 import { NodeTranslator } from '@translator';
 import { exportSchemaToJson, processOutputMarks } from '../../../../exporter.js';
 import { buildInstructionElements } from '../shared/index.js';
+import { translator as wRPrTranslator } from '../../w/rpr/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'sd:pageReference';
@@ -57,6 +58,7 @@ const decode = (params) => {
   const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
   const contentNodes = (node.content ?? []).flatMap((n) => exportSchemaToJson({ ...params, node: n }));
   const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens);
+  const instructionRunProperties = resolveInstructionRunProperties(params, outputMarks);
   const translated = [
     {
       name: 'w:r',
@@ -75,7 +77,7 @@ const decode = (params) => {
     },
     {
       name: 'w:r',
-      elements: [{ name: 'w:rPr', elements: outputMarks }, ...instructionElements],
+      elements: [{ name: 'w:rPr', elements: instructionRunProperties }, ...instructionElements],
     },
     {
       name: 'w:r',
@@ -111,6 +113,27 @@ const decode = (params) => {
   ];
 
   return translated;
+};
+
+const resolveInstructionRunProperties = (params, outputMarks) => {
+  const { node } = params;
+  const fieldRunProperties = node.attrs?.fieldRunProperties;
+  const shouldUseFieldRunProperties =
+    node.attrs?.fieldResultFormat === 'charformat' &&
+    fieldRunProperties &&
+    typeof fieldRunProperties === 'object' &&
+    !Array.isArray(fieldRunProperties) &&
+    Object.keys(fieldRunProperties).length > 0;
+
+  if (!shouldUseFieldRunProperties) {
+    return outputMarks;
+  }
+
+  const fieldRunPropertiesNode = wRPrTranslator.decode({
+    ...params,
+    node: { attrs: { runProperties: fieldRunProperties } },
+  });
+  return Array.isArray(fieldRunPropertiesNode?.elements) ? fieldRunPropertiesNode.elements : outputMarks;
 };
 
 /** @type {import('@translator').NodeTranslatorConfig} */

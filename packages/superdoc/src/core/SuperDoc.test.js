@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DOCX, PDF } from '@superdoc/common';
+import { createFakeV1Runtime } from './editor-runtime/conformance/fake-v1-runtime.js';
+import { createFakeV2Runtime } from './editor-runtime/conformance/fake-v2-runtime.js';
+import { createV1EditorRuntimeAdapter } from './editor-runtime/v1/v1-editor-runtime-adapter.js';
+import { markRuntimeRoot } from './editor-runtime/root-marker.js';
 
 // Mock must be defined before imports that use it
 vi.mock('@superdoc/common/collaboration/awareness', () => ({
@@ -24,6 +28,7 @@ class MockToolbar {
     this.activeEditor = null;
     this.updateToolbarState = toolbarUpdateSpy;
     this.destroy = vi.fn();
+    this._boundTransaction = null;
   }
 
   on(event, handler) {
@@ -35,8 +40,16 @@ class MockToolbar {
   }
 
   setActiveEditor(editor) {
+    if (this.activeEditor && this._boundTransaction && typeof this.activeEditor.off === 'function') {
+      this.activeEditor.off('transaction', this._boundTransaction);
+      this._boundTransaction = null;
+    }
     this.activeEditor = editor;
     toolbarSetActiveSpy(editor);
+    if (editor && typeof editor.on === 'function') {
+      this._boundTransaction = () => this.updateToolbarState();
+      editor.on('transaction', this._boundTransaction);
+    }
   }
 }
 
@@ -2885,6 +2898,522 @@ describe('SuperDoc core', () => {
         /SuperDoc: setDocumentMode requires the instance to be ready/,
       );
       expect(instance.config.documentMode).toBe(before);
+    });
+  });
+
+  describe('editor runtime registry integration', () => {
+    const makeFakeEditor = (documentId = 'doc-1', selectionText = '') => {
+      const handlers = new Map();
+      return {
+        options: { documentId },
+        editorVersion: 1,
+        state: {
+          doc: { textBetween: () => selectionText },
+          selection: { from: 0, to: selectionText.length, empty: selectionText.length === 0 },
+        },
+        commands: {
+          insertContent: vi.fn(() => true),
+          search: vi.fn(() => [{ documentId }]),
+          goToSearchResult: vi.fn(() => true),
+        },
+        view: { focus: vi.fn() },
+        focus: vi.fn(),
+        on(event, handler) {
+          if (!handlers.has(event)) handlers.set(event, new Set());
+          handlers.get(event).add(handler);
+        },
+        off(event, handler) {
+          handlers.get(event)?.delete(handler);
+        },
+        emit(event, ...args) {
+          for (const handler of Array.from(handlers.get(event) ?? [])) handler(...args);
+        },
+        async exportDocx() {
+          return new ArrayBuffer(0);
+        },
+      };
+    };
+
+    it('projects activeEditor from a v1 runtime and rebinds the toolbar on activation', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      toolbarSetActiveSpy.mockClear();
+      const runtime = createFakeV1Runtime({ id: 'v1-a', documentId: 'doc-1', root: document.createElement('div') });
+
+      instance.registerEditorRuntime(runtime);
+      instance.setActiveRuntime('v1-a', 'focus');
+
+      expect(instance.activeEditor).toMatchObject({ legacy: 'v1-editor' });
+      expect(toolbarSetActiveSpy).toHaveBeenCalledWith(instance.activeEditor);
+      expect(instance.activeEditor.toolbar).toBe(instance.toolbar);
+      expect(instance.getActiveRuntime()).toBe(runtime);
+    });
+
+    it('unregistering the active runtime clears activeEditor without promoting another runtime', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const a = createFakeV1Runtime({ id: 'v1-a', documentId: 'doc-a', root: document.createElement('div') });
+      const b = createFakeV1Runtime({ id: 'v1-b', documentId: 'doc-b', root: document.createElement('div') });
+      instance.registerEditorRuntime(a);
+      instance.registerEditorRuntime(b);
+      instance.setActiveRuntime('v1-a', 'focus');
+
+      instance.unregisterEditorRuntime('v1-a');
+
+      expect(instance.getActiveRuntime()).toBeNull();
+      expect(instance.activeEditor).toBeNull();
+      expect(instance.toolbar.activeEditor).toBeNull();
+    });
+
+    it('focus routes through the active v1 runtime adapter when one is active', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({ selector: '#host', document: 'https://example.com/doc.docx' });
+      await flushMicrotasks();
+
+      const editor = makeFakeEditor();
+      const { runtime, attachPresentationEditor } = createV1EditorRuntimeAdapter({
+        id: 'v1-focus',
+        documentId: 'doc-1',
+        root: document.createElement('div'),
+        editor,
+      });
+      const presentationFocus = vi.fn();
+      attachPresentationEditor({ focus: presentationFocus, setZoom: vi.fn(), on: vi.fn(), off: vi.fn() });
+
+      instance.registerEditorRuntime(runtime);
+      instance.setActiveRuntime('v1-focus', 'v1-editor-create');
+      instance.focus();
+
+      expect(presentationFocus).toHaveBeenCalledTimes(1);
+      expect(editor.focus).not.toHaveBeenCalled();
+    });
+
+    it('focus falls back to the active legacy editor when no focusable runtime is active', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({ selector: '#host', document: 'https://example.com/doc.docx' });
+      await flushMicrotasks();
+
+      const focus = vi.fn();
+      instance.activeEditor = { focus };
+
+      instance.focus();
+
+      expect(focus).toHaveBeenCalledTimes(1);
+    });
+
+    it('focus warns when the active runtime rejects focus', async () => {
+      createAppHarness();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const instance = new SuperDoc({ selector: '#host', document: 'https://example.com/doc.docx' });
+      await flushMicrotasks();
+
+      const focusError = new Error('focus failed');
+      const runtime = createFakeV1Runtime({
+        id: 'v1-focus-fail',
+        documentId: 'doc-1',
+        root: document.createElement('div'),
+      });
+      vi.spyOn(runtime, 'focus').mockRejectedValue(focusError);
+
+      try {
+        instance.registerEditorRuntime(runtime);
+        instance.setActiveRuntime('v1-focus-fail', 'focus');
+
+        instance.focus();
+        await flushMicrotasks();
+
+        expect(warnSpy).toHaveBeenCalledWith('[SuperDoc] active editor runtime focus failed', focusError);
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('focus falls back to the first document editor when no runtime or active editor is available', async () => {
+      const { superdocStore } = createAppHarness();
+      const instance = new SuperDoc({ selector: '#host', document: 'https://example.com/doc.docx' });
+      await flushMicrotasks();
+
+      const firstFocus = vi.fn();
+      const secondFocus = vi.fn();
+      superdocStore.documents = [
+        { id: 'doc-a', getEditor: vi.fn(() => null) },
+        { id: 'doc-b', getEditor: vi.fn(() => ({ focus: firstFocus })) },
+        { id: 'doc-c', getEditor: vi.fn(() => ({ focus: secondFocus })) },
+      ];
+
+      instance.focus();
+
+      expect(firstFocus).toHaveBeenCalledTimes(1);
+      expect(secondFocus).not.toHaveBeenCalled();
+    });
+
+    it('event-target activation routes shell commands to the selected v1 root', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const rootA = document.createElement('div');
+      const rootB = document.createElement('div');
+      const innerA = document.createElement('span');
+      const innerB = document.createElement('span');
+      rootA.appendChild(innerA);
+      rootB.appendChild(innerB);
+      document.body.append(rootA, rootB);
+
+      const editorA = makeFakeEditor('doc-a', 'alpha selection');
+      const editorB = makeFakeEditor('doc-b', 'beta selection');
+      const a = createV1EditorRuntimeAdapter({
+        id: 'v1:doc-a',
+        documentId: 'doc-a',
+        root: rootA,
+        editor: editorA,
+        onUnregister: (id) => instance.unregisterEditorRuntime(id),
+      });
+      const b = createV1EditorRuntimeAdapter({
+        id: 'v1:doc-b',
+        documentId: 'doc-b',
+        root: rootB,
+        editor: editorB,
+        onUnregister: (id) => instance.unregisterEditorRuntime(id),
+      });
+
+      try {
+        markRuntimeRoot(rootA, a.runtime.id);
+        markRuntimeRoot(rootB, b.runtime.id);
+        instance.registerEditorRuntime(a.runtime);
+        instance.registerEditorRuntime(b.runtime);
+
+        instance.activateRuntimeFromEventTarget(innerA, 'focusin');
+        expect(instance.getActiveRuntime()).toBe(a.runtime);
+        expect(instance.activeEditor).toBe(editorA);
+        instance.search('alpha');
+        expect(editorA.commands.search).toHaveBeenCalledWith('alpha', { searchModel: 'visible' });
+        expect(editorB.commands.search).not.toHaveBeenCalled();
+
+        instance.activateRuntimeFromEventTarget(innerB, 'pointerdown');
+        expect(instance.getActiveRuntime()).toBe(b.runtime);
+        expect(instance.activeEditor).toBe(editorB);
+        instance.search('beta');
+        expect(editorB.commands.search).toHaveBeenCalledWith('beta', { searchModel: 'visible' });
+        expect(editorA.commands.search).toHaveBeenCalledTimes(1);
+
+        expect(instance.getActiveRuntime().getSelectedText()).toBe('beta selection');
+      } finally {
+        rootA.remove();
+        rootB.remove();
+        instance.destroy();
+      }
+    });
+
+    // The invariant SuperDoc owns: `activeEditor` is the active runtime's
+    // SUPPORTED v1 projection, or null when the active runtime has no supported
+    // legacy projection (cleared, or v2-shaped / command-incapable).
+    const expectActiveEditorInvariant = (instance) => {
+      const runtime = instance.getActiveRuntime();
+      const projection = runtime?.getLegacyEditorProjection?.() ?? null;
+      const supported =
+        runtime?.kind === 'v1' &&
+        !!projection &&
+        typeof projection === 'object' &&
+        projection.editorVersion !== 2 &&
+        !!projection.commands &&
+        typeof projection.commands === 'object';
+      expect(instance.activeEditor).toBe(supported ? projection : null);
+    };
+
+    const makeV1Adapter = (instance, id, documentId, selectionText = '') => {
+      const editor = makeFakeEditor(documentId, selectionText);
+      const adapter = createV1EditorRuntimeAdapter({
+        id,
+        documentId,
+        root: document.createElement('div'),
+        editor,
+        onUnregister: (rid) => instance.unregisterEditorRuntime(rid),
+      });
+      instance.registerEditorRuntime(adapter.runtime);
+      return { editor, adapter };
+    };
+
+    it('holds the activeEditor/active-runtime invariant across activation, switch, setActiveEditor, and unregister', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const { editor: editorA } = makeV1Adapter(instance, 'v1-a', 'doc-a', 'alpha');
+      const { editor: editorB, adapter: bAdapter } = makeV1Adapter(instance, 'v1-b', 'doc-b', 'beta');
+
+      // Activation by runtime id.
+      instance.setActiveRuntime('v1-a', 'focus');
+      expect(instance.activeEditor).toBe(editorA);
+      expectActiveEditorInvariant(instance);
+
+      // Switching via the LEGACY entry point routes through the registry so the
+      // active runtime follows activeEditor (no drift).
+      instance.setActiveEditor(editorB);
+      expect(instance.getActiveRuntime()).toBe(bAdapter.runtime);
+      expect(instance.activeEditor).toBe(editorB);
+      expectActiveEditorInvariant(instance);
+
+      // Unregistering the active runtime clears activeEditor without promoting.
+      instance.unregisterEditorRuntime('v1-b');
+      expect(instance.getActiveRuntime()).toBeNull();
+      expect(instance.activeEditor).toBeNull();
+      expectActiveEditorInvariant(instance);
+    });
+
+    it('document-id fallback activates the runtime but keeps activeEditor on its canonical projection', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const { editor: bodyEditor, adapter } = makeV1Adapter(instance, 'v1-a', 'doc-1');
+      const sameDocumentEditor = makeFakeEditor('doc-1', 'header');
+
+      instance.setActiveEditor(sameDocumentEditor);
+      expect(instance.getActiveRuntime()).toBe(adapter.runtime);
+      expect(instance.activeEditor).toBe(bodyEditor);
+      expectActiveEditorInvariant(instance);
+
+      // Repeat while already active to cover the idempotent registry path.
+      instance.setActiveEditor(sameDocumentEditor);
+      expect(instance.activeEditor).toBe(bodyEditor);
+      expectActiveEditorInvariant(instance);
+    });
+
+    it('rebinds the v1 toolbar to the active runtime and detaches the previous editor', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const { editor: editorA } = makeV1Adapter(instance, 'v1-a', 'doc-a');
+      const { editor: editorB } = makeV1Adapter(instance, 'v1-b', 'doc-b');
+
+      instance.setActiveRuntime('v1-a', 'focus');
+      expect(instance.toolbar.activeEditor).toBe(editorA);
+
+      toolbarUpdateSpy.mockClear();
+      instance.setActiveRuntime('v1-b', 'focus');
+      expect(instance.toolbar.activeEditor).toBe(editorB);
+
+      // The previous editor no longer drives the toolbar; only the new one does.
+      editorA.emit('transaction');
+      expect(toolbarUpdateSpy).not.toHaveBeenCalled();
+      editorB.emit('transaction');
+      expect(toolbarUpdateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('activates the chosen runtime on editing/suggesting mode changes (no drift)', async () => {
+      const { superdocStore } = createAppHarness();
+      const editorA = makeFakeEditor('doc-1');
+      editorA.setDocumentMode = vi.fn();
+      superdocStore.documents = [
+        {
+          getEditor: vi.fn(() => editorA),
+          getPresentationEditor: vi.fn(() => null),
+          restoreComments: vi.fn(),
+          removeComments: vi.fn(),
+        },
+      ];
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+        role: 'editor',
+      });
+      await flushMicrotasks();
+
+      const adapter = createV1EditorRuntimeAdapter({
+        id: 'v1-a',
+        documentId: 'doc-1',
+        root: document.createElement('div'),
+        editor: editorA,
+      });
+      instance.registerEditorRuntime(adapter.runtime);
+
+      instance.setDocumentMode('editing');
+      expect(instance.getActiveRuntime()).toBe(adapter.runtime);
+      expect(instance.activeEditor).toBe(editorA);
+      expectActiveEditorInvariant(instance);
+
+      instance.setDocumentMode('suggesting');
+      expect(instance.getActiveRuntime()).toBe(adapter.runtime);
+      expect(instance.activeEditor).toBe(editorA);
+      expectActiveEditorInvariant(instance);
+    });
+
+    it('viewing-mode policy: keeps the active runtime + activeEditor, detaches only the toolbar', async () => {
+      // Policy decision (documented + tested): viewing mode is read-only for the
+      // toolbar, but search/navigation/read APIs must still resolve, so the
+      // active runtime and `activeEditor` persist while the toolbar detaches.
+      const { superdocStore } = createAppHarness();
+      const editorA = makeFakeEditor('doc-1');
+      editorA.setDocumentMode = vi.fn();
+      superdocStore.documents = [
+        {
+          getEditor: vi.fn(() => editorA),
+          getPresentationEditor: vi.fn(() => null),
+          restoreComments: vi.fn(),
+          removeComments: vi.fn(),
+        },
+      ];
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+        role: 'editor',
+      });
+      await flushMicrotasks();
+
+      const adapter = createV1EditorRuntimeAdapter({
+        id: 'v1-a',
+        documentId: 'doc-1',
+        root: document.createElement('div'),
+        editor: editorA,
+      });
+      instance.registerEditorRuntime(adapter.runtime);
+
+      instance.setDocumentMode('editing');
+      expect(instance.activeEditor).toBe(editorA);
+
+      instance.setDocumentMode('viewing');
+      expect(instance.toolbar.activeEditor).toBeNull();
+      expect(instance.getActiveRuntime()).toBe(adapter.runtime);
+      expect(instance.activeEditor).toBe(editorA);
+
+      toolbarUpdateSpy.mockClear();
+      editorA.emit('transaction');
+      expect(toolbarUpdateSpy).not.toHaveBeenCalled();
+
+      instance.setDocumentMode('editing');
+      expect(instance.toolbar.activeEditor).toBe(editorA);
+      editorA.emit('transaction');
+      expect(toolbarUpdateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails closed when activating a v2-shaped runtime (commands: null projection)', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      // Start with a working v1 runtime so we can prove stale v1 surfaces clear.
+      const v1 = createFakeV1Runtime({ id: 'v1-a', documentId: 'doc-1', root: document.createElement('div') });
+      instance.registerEditorRuntime(v1);
+      instance.setActiveRuntime('v1-a', 'focus');
+      expect(instance.activeEditor).toMatchObject({ legacy: 'v1-editor' });
+
+      const v2 = createFakeV2Runtime({
+        id: 'v2-a',
+        documentId: 'doc-2',
+        root: document.createElement('div'),
+        initialState: 'editing-ready',
+      });
+      instance.registerEditorRuntime(v2);
+      toolbarSetActiveSpy.mockClear();
+      instance.setActiveRuntime('v2-a', 'focus');
+
+      // The v2 runtime IS active, but the v1 legacy surfaces are cleared.
+      expect(instance.getActiveRuntime()).toBe(v2);
+      expect(instance.activeEditor).toBeNull();
+      expect(instance.toolbar.activeEditor).toBeNull();
+      expect(toolbarSetActiveSpy).toHaveBeenLastCalledWith(null);
+      // Search/navigation must not throw on a command-null projection.
+      expect(instance.search('x')).toBeUndefined();
+      expect(instance.goToSearchResult({})).toBeUndefined();
+      expectActiveEditorInvariant(instance);
+    });
+
+    it('fails closed when a v2-shaped runtime exposes an object-like commands facade', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const v1 = createFakeV1Runtime({ id: 'v1-a', documentId: 'doc-1', root: document.createElement('div') });
+      instance.registerEditorRuntime(v1);
+      instance.setActiveRuntime('v1-a', 'focus');
+      expect(instance.activeEditor).toMatchObject({ legacy: 'v1-editor' });
+
+      const v2Facade = { commands: { search: vi.fn(() => ['should-not-run']) }, state: {}, view: {} };
+      const v2 = {
+        ...createFakeV2Runtime({
+          id: 'v2-commands',
+          documentId: 'doc-2',
+          root: document.createElement('div'),
+          initialState: 'editing-ready',
+        }),
+        getLegacyEditorProjection: () => v2Facade,
+      };
+      instance.registerEditorRuntime(v2);
+      instance.setActiveRuntime('v2-commands', 'focus');
+
+      expect(instance.getActiveRuntime()).toBe(v2);
+      expect(instance.activeEditor).toBeNull();
+      expect(instance.toolbar.activeEditor).toBeNull();
+      expect(instance.search('x')).toBeUndefined();
+      expect(v2Facade.commands.search).not.toHaveBeenCalled();
+      expectActiveEditorInvariant(instance);
+    });
+
+    it('fails closed when activating a v2-shaped runtime with a null legacy projection', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const v2 = createFakeV2Runtime({
+        id: 'v2-null',
+        documentId: 'doc-2',
+        root: document.createElement('div'),
+        initialState: 'editing-ready',
+        nullLegacyProjection: true,
+      });
+      instance.registerEditorRuntime(v2);
+      instance.setActiveRuntime('v2-null', 'focus');
+
+      expect(instance.getActiveRuntime()).toBe(v2);
+      expect(instance.activeEditor).toBeNull();
+      expect(instance.toolbar.activeEditor).toBeNull();
+      expect(instance.search('x')).toBeUndefined();
+      expect(instance.goToSearchResult({})).toBeUndefined();
+      expectActiveEditorInvariant(instance);
     });
   });
 

@@ -905,6 +905,9 @@ watch(editingCommentId, (commentId) => {
                 >"</span
               >
             </div>
+            <div v-else-if="comment.trackedChangeDisplayType === 'paragraphSplit'">
+              <span class="change-type">Added new line</span>
+            </div>
             <div v-else-if="comment.trackedChangeType === 'trackFormat'">
               <span class="change-type">Format: </span>
               <span class="tracked-change-text"

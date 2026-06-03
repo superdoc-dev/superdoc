@@ -22,6 +22,7 @@ import { SurfaceManager } from './surface-manager.js';
 import { createDeprecatedEditorProxy } from '../helpers/deprecation.js';
 import { normalizeTrackChangesConfig } from './helpers/normalize-track-changes-config.js';
 import { normalizeCommentsUiPolicy } from '../helpers/comment-small-screen.js';
+import { EditorRuntimeRegistry } from './editor-runtime/editor-runtime-registry.js';
 
 const DEFAULT_USER = Object.freeze({
   id: null,
@@ -93,10 +94,16 @@ import type {
   User,
 } from './types/index.js';
 import type { Comment, FontsResolvedPayload, ListDefinitionsPayload, PresentationEditor } from '@superdoc/super-editor';
+import type { EditorRuntime, EditorRuntimeId } from './editor-runtime/index.js';
+import type { EditorRuntimeRegistryUnsubscribe } from './editor-runtime/editor-runtime-registry.js';
 import type * as Y from 'yjs';
 // `Whiteboard` is already imported as a value above (line 19); reuse it
 // as a type here without a separate `import type` declaration.
 import type { WhiteboardData } from './whiteboard/Whiteboard.js';
+
+type ActiveEditor = Editor & {
+  editorVersion?: 1 | 2;
+};
 
 // Internal-only event payload shapes (consumer-facing payloads are
 // exported from `core/types/index.ts` and imported above).
@@ -172,6 +179,22 @@ interface SuperDocEventMap {
 // editor's `onFontsResolved` option. Cleanup of this transport (relay
 // through SuperDoc instead) is a follow-up; typing it here matches the
 // current consumer-visible contract.
+
+/**
+ * Whether a runtime's legacy editor projection is a v1, command-capable surface
+ * the legacy shell (toolbar, `search`, `goToSearchResult`, `activeEditor`) can
+ * drive. v2-shaped scaffolding (`editorVersion === 2`), null projections, and
+ * projections whose `commands` are not object-like are UNSUPPORTED and must
+ * fail closed so stale v1 surfaces never stay bound to the wrong editor.
+ *
+ * @param projection The runtime's `getLegacyEditorProjection()` result.
+ */
+function isCommandCapableV1LegacyProjection(projection: unknown): projection is ActiveEditor {
+  if (!projection || typeof projection !== 'object') return false;
+  const candidate = projection as { editorVersion?: number; commands?: unknown };
+  if (candidate.editorVersion === 2) return false;
+  return Boolean(candidate.commands) && typeof candidate.commands === 'object';
+}
 
 /**
  * SuperDoc class
@@ -332,7 +355,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   // runtime own-property initializer. Each is assigned during `#init`
   // (called synchronously from the constructor), so by the time any
   // external callsite reads them they exist.
-  declare activeEditor: Editor | null;
+  declare activeEditor: ActiveEditor | null;
   declare toolbar: SuperToolbar | null;
   declare toolbarElement: string | HTMLElement | undefined;
   declare userColorMap: Map<string, string>;
@@ -347,6 +370,24 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   declare user: AwarenessUser;
   declare _cleanupAwareness: (() => void) | null;
   declare _commentsCollabInitialized: boolean;
+
+  /**
+   * SuperDoc-owned editor runtime registry. This is the internal place to ask
+   * which mounted editor runtime is active and which runtime owns a DOM event
+   * target. It stays private so it never widens the public SDK type surface.
+   */
+  readonly #editorRuntimeRegistry = new EditorRuntimeRegistry();
+
+  /** Unsubscribe handle for the registry active-change bridge. */
+  #editorRuntimeRegistryUnsub: EditorRuntimeRegistryUnsubscribe | null = null;
+
+  /**
+   * Re-entrancy guard. True while the registry active-change bridge is applying
+   * a projection through `setActiveEditor(...)`, so that call applies the
+   * projection directly instead of routing back into runtime activation (which
+   * would recurse). The sole writer of `activeEditor` stays `setActiveEditor`.
+   */
+  #applyingRuntimeActiveChange = false;
 
   /**
    * The active configuration. Typed as `InternalConfig` because `#init` runs
@@ -587,6 +628,16 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
     this.activeEditor = null;
     this.comments = [];
+
+    // Bridge active runtime changes onto the legacy `activeEditor` projection.
+    // The registry never writes `activeEditor` directly; it surfaces the next
+    // runtime's compatibility projection and SuperDoc routes that through
+    // `setActiveEditor(...)` so existing toolbar side effects stay centralized.
+    if (!this.#editorRuntimeRegistryUnsub) {
+      this.#editorRuntimeRegistryUnsub = this.#editorRuntimeRegistry.subscribe((change) => {
+        this.#applyActiveRuntimeChange(change.nextRuntimeId, change.legacyEditorProjection);
+      });
+    }
 
     this.isLocked = this.config.isLocked || false;
     this.lockedBy = this.config.lockedBy || null;
@@ -1511,15 +1562,197 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   }
 
   /**
-   * Set the active editor
-   * @param editor The editor to set as active
+   * Clear the legacy `activeEditor` projection and detach the v1 toolbar. Used
+   * when active state clears and when an active runtime is unsupported for the
+   * v1 shell path (v2-shaped, null, or command-incapable projection).
    */
-  setActiveEditor(editor: Editor) {
+  #clearActiveEditorProjection() {
+    this.activeEditor = null;
+    if (this.toolbar?.setActiveEditor) {
+      this.toolbar.setActiveEditor(null as unknown as Editor);
+    } else if (this.toolbar) {
+      this.toolbar.activeEditor = null;
+    }
+  }
+
+  /**
+   * Apply a v1 legacy projection to `activeEditor` and rebind the v1 toolbar.
+   * This is the legacy assignment side effect, kept separate from the registry
+   * routing in `setActiveEditor(...)` so the registry bridge can apply a
+   * projection without re-entering activation.
+   *
+   * @param editor The v1 legacy editor projection.
+   */
+  #applyActiveEditorProjection(editor: ActiveEditor) {
     this.activeEditor = editor;
+    if (editor?.editorVersion === 2) return;
     if (this.toolbar) {
       this.activeEditor.toolbar = this.toolbar;
       this.toolbar.setActiveEditor(editor);
     }
+  }
+
+  /**
+   * Reconcile the legacy `activeEditor` projection with a registry active-runtime
+   * change. SuperDoc owns the invariant that `activeEditor` is either the active
+   * runtime's supported v1 projection, or `null` when the active runtime has no
+   * supported legacy projection.
+   *
+   * @param nextRuntimeId The newly active runtime id, or `null` when cleared.
+   * @param projection The next runtime's legacy projection, if any.
+   */
+  #applyActiveRuntimeChange(nextRuntimeId: EditorRuntimeId | null, projection: unknown) {
+    this.#applyingRuntimeActiveChange = true;
+    try {
+      if (nextRuntimeId === null) {
+        this.#clearActiveEditorProjection();
+        return;
+      }
+      const runtime = this.#editorRuntimeRegistry.get(nextRuntimeId);
+      if (runtime?.kind === 'v1' && isCommandCapableV1LegacyProjection(projection)) {
+        this.setActiveEditor(projection);
+      } else {
+        // Fail closed: a non-v1 runtime, or a runtime with a v2-shaped / null /
+        // command-incapable projection, must not leave a stale v1 editor or
+        // toolbar bound.
+        this.#clearActiveEditorProjection();
+      }
+    } finally {
+      this.#applyingRuntimeActiveChange = false;
+    }
+  }
+
+  /**
+   * Resolve the registered v1 runtime id that owns a legacy editor, preferring
+   * projection identity and falling back to document id only when it maps to
+   * exactly one v1 runtime (never guess when more than one runtime shares a doc).
+   *
+   * @param editor The legacy editor to resolve a runtime for.
+   * @returns The owning runtime id, or `null` when none can be resolved.
+   */
+  #resolveRuntimeIdForEditor(editor: ActiveEditor | null): EditorRuntimeId | null {
+    if (!editor) return null;
+    for (const runtime of this.#editorRuntimeRegistry.getAll()) {
+      if (runtime.kind !== 'v1') continue;
+      if (runtime.getLegacyEditorProjection?.() === editor) return runtime.id;
+    }
+    const documentId = editor.options?.documentId;
+    if (typeof documentId === 'string' && documentId.length > 0) {
+      const matches = this.#editorRuntimeRegistry
+        .getAllByDocumentId(documentId)
+        .filter((runtime) => runtime.kind === 'v1');
+      if (matches.length === 1) return matches[0].id;
+    }
+    return null;
+  }
+
+  /**
+   * Set the active editor (legacy entry point). When the editor maps to a
+   * registered runtime this routes through the registry so the active runtime
+   * and `activeEditor` cannot drift apart; the registry bridge then applies the
+   * projection. Direct legacy assignment is used only before runtime
+   * registration (startup) or when no owning runtime can be resolved.
+   *
+   * @param editor The editor to set as active
+   */
+  setActiveEditor(editor: ActiveEditor | null) {
+    if (!isCommandCapableV1LegacyProjection(editor)) {
+      this.#clearActiveEditorProjection();
+      return;
+    }
+    if (!this.#applyingRuntimeActiveChange) {
+      const runtimeId = this.#resolveRuntimeIdForEditor(editor);
+      if (runtimeId !== null) {
+        const wasAlreadyActive = this.#editorRuntimeRegistry.getActive()?.id === runtimeId;
+        // Activate the owning runtime; the registry bridge applies the
+        // projection (and rebinds the toolbar) for us.
+        this.#editorRuntimeRegistry.setActive(runtimeId, 'set-active-editor');
+        if (wasAlreadyActive) {
+          // `setActive` is idempotent and emits no bridge event when the runtime
+          // is already active. Re-apply the projection so legacy callers can
+          // rebind surfaces that were intentionally detached (for example,
+          // viewing mode keeps the active runtime but disables the toolbar).
+          // Always use the runtime's canonical projection; document-id fallback
+          // may have resolved from a same-document editor that is not the active
+          // runtime's legacy projection.
+          const projection = this.#editorRuntimeRegistry.get(runtimeId)?.getLegacyEditorProjection?.() ?? null;
+          if (isCommandCapableV1LegacyProjection(projection)) {
+            this.#applyActiveEditorProjection(projection);
+          } else {
+            this.#clearActiveEditorProjection();
+          }
+        }
+        return;
+      }
+    }
+    this.#applyActiveEditorProjection(editor);
+  }
+
+  /**
+   * Register a mounted editor runtime with the shell-owned registry.
+   *
+   * @param runtime
+   * @internal
+   */
+  private registerEditorRuntime(runtime: EditorRuntime): void {
+    this.#editorRuntimeRegistry.register(runtime);
+  }
+
+  /**
+   * Unregister a mounted editor runtime by id. If it was active, active state
+   * clears and the registry does not auto-promote a different runtime.
+   *
+   * @param runtimeId
+   * @returns Whether a runtime was removed.
+   * @internal
+   */
+  private unregisterEditorRuntime(runtimeId: EditorRuntimeId): boolean {
+    return this.#editorRuntimeRegistry.unregister(runtimeId);
+  }
+
+  /**
+   * Return the active editor runtime, or null.
+   *
+   * @internal
+   */
+  private getActiveRuntime(): EditorRuntime | null {
+    return this.#editorRuntimeRegistry.getActive();
+  }
+
+  /**
+   * Select the active editor runtime, or clear it with null.
+   *
+   * @param runtimeId
+   * @param reason
+   * @internal
+   */
+  private setActiveRuntime(runtimeId: EditorRuntimeId | null, reason: string): void {
+    this.#editorRuntimeRegistry.setActive(runtimeId, reason);
+  }
+
+  /**
+   * Resolve which mounted runtime owns a DOM event target.
+   *
+   * @param target
+   * @internal
+   */
+  private resolveRuntimeFromEventTarget(target: EventTarget | null): EditorRuntime | null {
+    return this.#editorRuntimeRegistry.resolveFromEventTarget(target);
+  }
+
+  /**
+   * Resolve and activate the runtime that owns a DOM event target.
+   *
+   * @param target
+   * @param reason
+   * @returns Whether a runtime was resolved and activated.
+   * @internal
+   */
+  private activateRuntimeFromEventTarget(target: EventTarget | null, reason: string): boolean {
+    const runtime = this.#editorRuntimeRegistry.resolveFromEventTarget(target);
+    if (!runtime) return false;
+    this.#editorRuntimeRegistry.setActive(runtime.id, reason);
+    return true;
   }
 
   /**
@@ -1907,7 +2140,11 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     // mode changes are reachable the toolbar is non-null. The guard
     // keeps TS satisfied and stays a no-op if a future destroy/teardown
     // ever clears the field.
-    if (this.toolbar) this.toolbar.activeEditor = null;
+    if (this.toolbar?.setActiveEditor) {
+      this.toolbar.setActiveEditor(null as unknown as Editor);
+    } else if (this.toolbar) {
+      this.toolbar.activeEditor = null;
+    }
 
     const commentsVisible = this.config.comments?.visible === true;
     const trackChangesVisible = this.config.trackChanges?.visible === true;
@@ -1965,10 +2202,15 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * (possibly empty).
    *
    * @param text The text or regex to search for
-   * @returns The search results
+   * @returns The search results, or `undefined` when there is no active editor
+   *   or the active legacy projection exposes no `search` command (e.g. a
+   *   v2-shaped runtime with `commands: null`).
    */
   search(text: string | RegExp): SearchMatch[] | undefined {
-    return this.activeEditor?.commands.search(text, { searchModel: 'visible' });
+    const commands = this.activeEditor?.commands;
+    const search = commands?.search;
+    if (typeof search !== 'function') return undefined;
+    return search.call(commands, text, { searchModel: 'visible' });
   }
 
   /**
@@ -1979,10 +2221,16 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * tracker ids.
    *
    * @param match The match object returned by `superdoc.search()`.
-   * @returns Whether the command dispatched, or `undefined` if no active editor.
+   * @returns Whether the command dispatched, or `undefined` when there is no
+   *   active editor or the active legacy projection exposes no
+   *   `goToSearchResult` command (e.g. a v2-shaped runtime with `commands:
+   *   null`).
    */
   goToSearchResult(match: SearchMatch) {
-    return this.activeEditor?.commands.goToSearchResult(match);
+    const commands = this.activeEditor?.commands;
+    const goToSearchResult = commands?.goToSearchResult;
+    if (typeof goToSearchResult !== 'function') return undefined;
+    return goToSearchResult.call(commands, match);
   }
 
   /**
@@ -2342,6 +2590,10 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
     this.#cleanupCollaboration();
 
+    this.#editorRuntimeRegistryUnsub?.();
+    this.#editorRuntimeRegistryUnsub = null;
+    this.#editorRuntimeRegistry.clear();
+
     // Remove the internal wrapper element from the user's container
     if (this.#mountWrapper) {
       this.#mountWrapper.remove();
@@ -2353,14 +2605,21 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * Focus the active editor or the first editor in the superdoc
    */
   focus() {
+    const runtime = this.getActiveRuntime();
+    if (runtime?.getCapabilities().lifecycle.canFocus) {
+      void runtime.focus().catch((err) => {
+        console.warn('[SuperDoc] active editor runtime focus failed', err);
+      });
+      return;
+    }
     if (this.activeEditor) {
-      this.activeEditor.focus();
+      this.activeEditor.focus?.();
     } else {
       this.#requireSuperdocStore('focus').documents.find((doc: RuntimeDocument) => {
         const editor = doc.getEditor?.();
-        if (editor) {
-          editor.focus();
-        }
+        if (!editor) return false;
+        editor.focus?.();
+        return true;
       });
     }
   }

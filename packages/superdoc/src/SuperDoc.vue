@@ -54,6 +54,8 @@ import { getVisibleThreadAnchorClientY } from './helpers/comment-focus.js';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
 import { usePasswordPrompt } from './composables/use-password-prompt.js';
 import { useFindReplace } from './composables/use-find-replace.js';
+import { createV1EditorRuntimeAdapter } from './core/editor-runtime/v1/v1-editor-runtime-adapter.js';
+import { markRuntimeRoot, unmarkRuntimeRoot } from './core/editor-runtime/root-marker.js';
 import { collectTouchedTrackedChangeIds } from './helpers/collect-touched-tracked-change-ids.js';
 import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 import {
@@ -246,8 +248,11 @@ const findReplace = useFindReplace({
   getFindReplaceConfig: () => proxy.$superdoc?.config?.modules?.surfaces?.findReplace,
 });
 
-// Use the composable to get the selected text
-const { selectedText } = useSelectedText(activeEditorRef);
+// Use the active runtime for selected text when available; fall back to the
+// legacy active editor during startup and in tests.
+const { selectedText } = useSelectedText(activeEditorRef, {
+  getActiveRuntime: () => proxy.$superdoc?.getActiveRuntime?.(),
+});
 
 // Use the AI composable
 const {
@@ -413,10 +418,66 @@ const onEditorContentControlClick = (payload) => {
   proxy.$superdoc.emit('content-control:click', payload);
 };
 
+// Shell-owned per-document state for the v1 runtime adapter.
+const subDocumentRoots = new Map();
+const v1Runtimes = new Map();
+let v1RuntimeSeq = 0;
+
+/**
+ * Store the shell-owned wrapper for a document editor. This wrapper is outside
+ * painter DOM and is the only element stamped with the runtime marker.
+ * @param {Object} doc - the document model
+ * @param {HTMLElement|null} el - the wrapper element, or null on unmount
+ */
+const setSubDocumentRoot = (doc, el) => {
+  if (!doc?.id) return;
+  if (el) subDocumentRoots.set(doc.id, el);
+  else subDocumentRoots.delete(doc.id);
+};
+
+/**
+ * Register a pending v1 runtime at editor creation. The visible
+ * PresentationEditor is attached later from onEditorReady.
+ * @param {string} documentId
+ * @param {Object} editor - the live v1 Editor instance
+ */
+const registerV1Runtime = (documentId, editor) => {
+  const root = subDocumentRoots.get(documentId);
+  if (!root) {
+    console.warn('[SuperDoc] v1 runtime host root unavailable; skipping runtime registration for', documentId);
+    return;
+  }
+
+  const existing = v1Runtimes.get(documentId);
+  if (existing) existing.adapter.runtime.dispose();
+
+  const runtimeId = `v1:${documentId}:${++v1RuntimeSeq}`;
+  const adapter = createV1EditorRuntimeAdapter({
+    id: runtimeId,
+    documentId,
+    root,
+    editor,
+    setGlobalZoom: (factor) => PresentationEditor.setGlobalZoom(factor),
+    onUnregister: (id) => {
+      proxy.$superdoc.unregisterEditorRuntime(id);
+      const current = v1Runtimes.get(documentId);
+      if (current && current.runtimeId === id) v1Runtimes.delete(documentId);
+      const hostRoot = subDocumentRoots.get(documentId);
+      if (hostRoot) unmarkRuntimeRoot(hostRoot);
+    },
+  });
+
+  markRuntimeRoot(root, runtimeId);
+  proxy.$superdoc.registerEditorRuntime(adapter.runtime);
+  v1Runtimes.set(documentId, { runtimeId, adapter });
+  proxy.$superdoc.setActiveRuntime(runtimeId, 'v1-editor-create');
+};
+
 const onEditorCreate = ({ editor }) => {
   const { documentId } = editor.options;
   const doc = getDocument(documentId);
   doc.setEditor(editor);
+  registerV1Runtime(documentId, editor);
   proxy.$superdoc.setActiveEditor(editor);
   editor.on?.('contentControlFocus', onEditorContentControlFocus);
   editor.on?.('contentControlBlur', onEditorContentControlBlur);
@@ -448,6 +509,9 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     // not linger on the reactive document model.
     if (doc.password) doc.password = undefined;
   }
+
+  const v1Runtime = v1Runtimes.get(documentId);
+  if (v1Runtime) v1Runtime.adapter.attachPresentationEditor(presentationEditor);
   presentationEditor.setContextMenuDisabled?.(proxy.$superdoc.config.disableContextMenu);
   getTrackedChangeIndex(editor);
 
@@ -503,8 +567,26 @@ const onEditorDestroy = () => {
 };
 
 const onEditorFocus = ({ editor }) => {
+  const documentId = editor?.options?.documentId;
+  const entry = documentId ? v1Runtimes.get(documentId) : null;
+  if (entry) proxy.$superdoc.setActiveRuntime(entry.runtimeId, 'v1-editor-focus');
   proxy.$superdoc.setActiveEditor(editor);
 };
+
+// Shell-owned product DOM hit capture. Real focus/pointer hits inside a marked
+// runtime root activate the owning runtime through the registry. This handler
+// stays deliberately minimal: it resolves a runtime from the event target and
+// does nothing editor-semantic — no painter DOM inspection, no coordinate
+// mapping, no command dispatch, no selection semantics. Activation outside any
+// marked root is a no-op (the registry returns no owner).
+const activateRuntimeFromEvent = (event, reason) => {
+  proxy.$superdoc?.activateRuntimeFromEventTarget?.(event.target, reason);
+};
+const handleRuntimeFocusIn = (event) => activateRuntimeFromEvent(event, 'focusin');
+const handleRuntimePointerDown = (event) => activateRuntimeFromEvent(event, 'pointerdown');
+// `mousedown` is a fallback for environments that do not dispatch pointer
+// events consistently; it routes through the same idempotent activation path.
+const handleRuntimeMouseDown = (event) => activateRuntimeFromEvent(event, 'mousedown');
 
 const onEditorDocumentLocked = ({ editor, isLocked, lockedBy }) => {
   proxy.$superdoc.lockSuperdoc(isLocked, lockedBy);
@@ -1358,6 +1440,14 @@ onMounted(() => {
   document.addEventListener('contextmenu', handleDocumentContextMenu, true);
   document.addEventListener('keydown', handleDocumentShortcut, true);
 
+  // Capture-phase product hit routing: activate the owning runtime from real
+  // focus/pointer hits. Capture so a marked root nested under shells that stop
+  // propagation still resolves; the handler is idempotent and a no-op outside
+  // any marked runtime root.
+  document.addEventListener('focusin', handleRuntimeFocusIn, true);
+  document.addEventListener('pointerdown', handleRuntimePointerDown, true);
+  document.addEventListener('mousedown', handleRuntimeMouseDown, true);
+
   recalculateCompactCommentsMode();
   ensureCompactMeasurementObserver();
 });
@@ -1434,9 +1524,17 @@ function handleContainerKeydown(e) {
 onBeforeUnmount(() => {
   passwordPrompt.destroy();
   findReplace.destroy();
+  for (const entry of Array.from(v1Runtimes.values())) {
+    entry.adapter.runtime.dispose();
+  }
+  v1Runtimes.clear();
+  subDocumentRoots.clear();
   document.removeEventListener('mousedown', handleDocumentMouseDown);
   document.removeEventListener('contextmenu', handleDocumentContextMenu, true);
   document.removeEventListener('keydown', handleDocumentShortcut, true);
+  document.removeEventListener('focusin', handleRuntimeFocusIn, true);
+  document.removeEventListener('pointerdown', handleRuntimePointerDown, true);
+  document.removeEventListener('mousedown', handleRuntimeMouseDown, true);
   if (selectionUpdateRafId != null) {
     cancelAnimationFrame(selectionUpdateRafId);
     selectionUpdateRafId = null;
@@ -1812,6 +1910,7 @@ const getPDFViewer = () => {
           class="superdoc__sub-document sub-document"
           v-for="doc in documents"
           :key="`${doc.id}:${doc.editorMountNonce}`"
+          :ref="(el) => setSubDocumentRoot(doc, el)"
         >
           <!-- PDF renderer -->
           <PdfViewer

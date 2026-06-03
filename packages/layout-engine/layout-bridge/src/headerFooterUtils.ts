@@ -1,4 +1,10 @@
-import type { HeaderFooterType, Layout, SectionMetadata, Page } from '@superdoc/contracts';
+import {
+  resolveInheritedHeaderFooterRef,
+  type HeaderFooterType,
+  type Layout,
+  type SectionMetadata,
+  type Page,
+} from '@superdoc/contracts';
 
 export type HeaderFooterIdentifier = {
   headerIds: Record<'default' | 'first' | 'even' | 'odd', string | null>;
@@ -382,13 +388,30 @@ export function getHeaderFooterTypeForSection(
   }
 
   if (identifier.alternateHeaders) {
-    // Keep parity-based variant selection even when this section doesn't
-    // explicitly define that variant. Resolution/inheritance happens later.
     if (!hasAny) return null;
-    return parityPageNumber % 2 === 0 ? 'even' : 'odd';
+    const parityVariant = parityPageNumber % 2 === 0 ? 'even' : 'odd';
+    return resolveInheritedHeaderFooterRef({
+      identifier,
+      sectionIndex,
+      kind,
+      variantType: parityVariant,
+    })
+      ? parityVariant
+      : null;
   }
 
   if (hasDefault) {
+    return 'default';
+  }
+
+  if (
+    resolveInheritedHeaderFooterRef({
+      identifier,
+      sectionIndex,
+      kind,
+      variantType: 'default',
+    })
+  ) {
     return 'default';
   }
 
@@ -432,31 +455,14 @@ export function getHeaderFooterIdForPage(
   });
   if (!variantType) return null;
 
-  const resolveVariantId = (ids: Partial<SectionHeaderFooterIds> | undefined): string | null => {
-    if (!ids) return null;
-    const direct = ids[variantType];
-    if (direct) return direct;
-    // With w:evenAndOddHeaders enabled, OOXML `default` is the primary/odd
-    // page slot. It must not be used as a replacement for a missing even ref.
-    if (variantType === 'odd' && ids.default) return ids.default;
-    return null;
-  };
-
-  // First try to get from page's sectionRefs (most specific, stamped during layout)
   const pageRefs = kind === 'header' ? page.sectionRefs?.headerRefs : page.sectionRefs?.footerRefs;
-  const idFromPage = resolveVariantId(pageRefs);
-  if (idFromPage) return idFromPage;
-
-  // Fall back to identifier's section mappings
-  const sectionIds =
-    kind === 'header' ? identifier.sectionHeaderIds.get(sectionIndex) : identifier.sectionFooterIds.get(sectionIndex);
-
-  const idFromSection = resolveVariantId(sectionIds);
-  if (idFromSection) return idFromSection;
-
-  // Final fallback to legacy identifier fields
-  const legacyIds = kind === 'header' ? identifier.headerIds : identifier.footerIds;
-  return legacyIds[variantType] ?? null;
+  return resolveInheritedHeaderFooterRef({
+    identifier,
+    sectionIndex,
+    kind,
+    variantType,
+    pageRefs,
+  });
 }
 
 /**

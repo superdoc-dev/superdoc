@@ -22,6 +22,8 @@ import type {
   ParaFragment,
   ResolvedLayout,
   ResolvedPage,
+  TableFragment,
+  DrawingFragment,
 } from '@superdoc/contracts';
 import { buildMultiSectionIdentifier, type HeaderFooterLayoutResult } from '@superdoc/layout-bridge';
 import {
@@ -587,11 +589,19 @@ describe('HeaderFooterSessionManager', () => {
   });
 
   describe('createDecorationProvider — resolved items', () => {
-    function buildHeaderResult(options?: { y?: number; minY?: number }): HeaderFooterLayoutResult {
+    function buildHeaderResult(options?: {
+      y?: number;
+      minY?: number;
+      blockId?: string;
+      pageNumber?: number;
+      type?: HeaderFooterLayoutResult['type'];
+    }): HeaderFooterLayoutResult {
       const y = options?.y ?? 10;
+      const blockId = options?.blockId ?? 'p1';
+      const pageNumber = options?.pageNumber ?? 1;
       const paraFragment: ParaFragment = {
         kind: 'para',
-        blockId: 'p1',
+        blockId,
         fromLine: 0,
         toLine: 1,
         x: 72,
@@ -601,9 +611,9 @@ describe('HeaderFooterSessionManager', () => {
       const layout: HeaderFooterLayout = {
         height: 50,
         ...(options?.minY != null ? { minY: options.minY } : {}),
-        pages: [{ number: 1, fragments: [paraFragment] }],
+        pages: [{ number: pageNumber, fragments: [paraFragment] }],
       };
-      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [] }];
+      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: blockId, runs: [] }];
       const measures: Measure[] = [
         {
           kind: 'paragraph',
@@ -611,7 +621,7 @@ describe('HeaderFooterSessionManager', () => {
           totalHeight: 18,
         },
       ];
-      return { kind: 'header', type: 'default', layout, blocks, measures };
+      return { kind: 'header', type: options?.type ?? 'default', layout, blocks, measures };
     }
 
     it('delivers items aligned 1:1 with fragments when variant layout is used', () => {
@@ -769,6 +779,248 @@ describe('HeaderFooterSessionManager', () => {
       expect(payload!.fragments[0]!.y).toBe(0);
       expect(payload!.items).toBeDefined();
       expect(payload!.items![0]).toMatchObject({ blockId: 'p1', x: 72, y: 0 });
+    });
+
+    it('does not shift normal rId footer fragments for negative minY from page-relative behindDoc drawings', () => {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 1),
+      };
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 'footer-table',
+        fromRow: 0,
+        toRow: 1,
+        x: 72,
+        y: 0,
+        width: 468,
+        height: 24,
+      };
+      const behindDocFragment: DrawingFragment = {
+        kind: 'drawing',
+        blockId: 'footer-bg',
+        drawingKind: 'vectorShape',
+        x: 0,
+        y: -36,
+        width: 612,
+        height: 120,
+        isAnchored: true,
+        behindDoc: true,
+        zIndex: 0,
+        geometry: { width: 612, height: 120 },
+        scale: 1,
+        sourceAnchor: { vRelativeFrom: 'page' },
+      } as DrawingFragment;
+      const footerResult: HeaderFooterLayoutResult = {
+        kind: 'footer',
+        type: 'default',
+        layout: {
+          height: 48,
+          minY: -36,
+          pages: [{ number: 1, fragments: [tableFragment, behindDocFragment] }],
+        },
+        blocks: [
+          { kind: 'table', id: 'footer-table', rows: [{ id: 'row-1', cells: [] }] },
+          {
+            kind: 'drawing',
+            id: 'footer-bg',
+            drawingKind: 'vectorShape',
+            anchor: { isAnchored: true, vRelativeFrom: 'page', behindDoc: true },
+            geometry: { width: 612, height: 120 },
+          },
+        ] as FlowBlock[],
+        measures: [
+          { kind: 'table', rowHeights: [24], columnWidths: [468], cells: [], rows: [] },
+          { kind: 'drawing', width: 612, height: 120 },
+        ] as unknown as Measure[],
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: createMainEditorStub(),
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.headerFooterIdentifier = {
+        headerIds: { default: null, first: null, even: null, odd: null },
+        footerIds: { default: 'rId-footer-default', first: null, even: null, odd: null },
+        titlePg: false,
+        alternateHeaders: false,
+      };
+      manager.footerLayoutsByRId.set('rId-footer-default', footerResult);
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 } } as never],
+      } as unknown as Layout;
+      const provider = manager.createDecorationProvider('footer', layout as unknown as ResolvedLayout);
+      const payload = provider!(1, layout.pages[0]!.margins, layout.pages[0] as unknown as ResolvedPage);
+
+      expect(payload).not.toBeNull();
+      expect(payload!.minY).toBe(-36);
+      expect(payload!.fragments).toHaveLength(2);
+      expect(payload!.fragments[0]).toMatchObject({ kind: 'table', blockId: 'footer-table', y: 0 });
+      expect(payload!.fragments[1]).toMatchObject({ kind: 'drawing', blockId: 'footer-bg', y: -36, behindDoc: true });
+      expect(payload!.items).toHaveLength(2);
+      expect(payload!.items![0]).toMatchObject({ fragmentKind: 'table', blockId: 'footer-table', y: 0 });
+      expect(payload!.items![1]).toMatchObject({ fragmentKind: 'drawing', blockId: 'footer-bg', y: -36 });
+    });
+
+    it('uses section titlePg state when selecting decoration-provider variants', () => {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 2),
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: {
+          ...createMainEditorStub(),
+          converter: {
+            headerIds: { titlePg: true },
+          },
+        } as unknown as Editor,
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.setMultiSectionIdentifier(
+        buildMultiSectionIdentifier([
+          {
+            sectionIndex: 0,
+            titlePg: true,
+            headerRefs: { first: 'rId-section0-first', default: 'rId-section0-default' },
+          },
+          {
+            sectionIndex: 1,
+            titlePg: false,
+            headerRefs: { first: 'rId-section1-first', default: 'rId-section1-default' },
+          },
+        ]),
+      );
+      manager.setLayoutResults(
+        [
+          buildHeaderResult({ type: 'first', blockId: 'first-block', pageNumber: 2 }),
+          buildHeaderResult({ type: 'default', blockId: 'default-block', pageNumber: 2 }),
+        ],
+        null,
+      );
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            sectionIndex: 0,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+          },
+          {
+            number: 2,
+            sectionIndex: 1,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: {
+              headerRefs: { first: 'rId-section1-first', default: 'rId-section1-default' },
+              footerRefs: {},
+            },
+          },
+        ] as never,
+      } as unknown as Layout;
+
+      const provider = manager.createDecorationProvider('header', layout as unknown as ResolvedLayout);
+      const payload = provider!(2, layout.pages[1]!.margins, layout.pages[1] as unknown as ResolvedPage);
+
+      expect(payload).not.toBeNull();
+      expect(payload!.sectionType).toBe('default');
+      expect(payload!.items![0]!.blockId).toBe('default-block');
+    });
+
+    it('does not render default headers on even pages when alternate headers are enabled', () => {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 2),
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: createMainEditorStub(),
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.setMultiSectionIdentifier(
+        buildMultiSectionIdentifier([{ sectionIndex: 0, headerRefs: { default: 'rId-header-default' } }], {
+          alternateHeaders: true,
+        }),
+      );
+      manager.setLayoutResults([buildHeaderResult({ type: 'even', blockId: 'even-block', pageNumber: 2 })], null);
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            sectionIndex: 0,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+          },
+          {
+            number: 2,
+            sectionIndex: 0,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: {
+              headerRefs: { default: 'rId-header-default' },
+              footerRefs: {},
+            },
+          },
+        ] as never,
+      } as unknown as Layout;
+
+      const provider = manager.createDecorationProvider('header', layout as unknown as ResolvedLayout);
+      const payload = provider!(2, layout.pages[1]!.margins, layout.pages[1] as unknown as ResolvedPage);
+
+      expect(payload).toBeNull();
     });
 
     it('normalizes resolved items when per-rId layout minY is negative', async () => {
@@ -1036,6 +1288,79 @@ describe('HeaderFooterSessionManager', () => {
       expect(payload!.headerFooterRefId).toBe('rId-even');
       expect(payload!.fragments[0]!.blockId).toBe('even-header');
     });
+
+    it('inherits first-page header refs through intermediate sections that omit first refs', () => {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 3),
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: createMainEditorStub(),
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.setMultiSectionIdentifier(
+        buildMultiSectionIdentifier([
+          { sectionIndex: 0, titlePg: true, headerRefs: { first: 'rId-s0-first', default: 'rId-s0-default' } },
+          { sectionIndex: 1, titlePg: true, headerRefs: { default: 'rId-s1-default' } },
+          { sectionIndex: 2, titlePg: true, headerRefs: { default: 'rId-s2-default' } },
+        ]),
+      );
+      manager.headerLayoutsByRId.set('rId-s0-first', buildHeaderResult({ blockId: 's0-first-header' }));
+      manager.headerLayoutsByRId.set('rId-s2-default', buildHeaderResult({ blockId: 's2-default-header' }));
+
+      const layout: ResolvedLayout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [
+          {
+            number: 1,
+            sectionIndex: 0,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: { headerRefs: { first: 'rId-s0-first', default: 'rId-s0-default' }, footerRefs: {} },
+          } as unknown as ResolvedPage,
+          {
+            number: 2,
+            sectionIndex: 1,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: { headerRefs: { default: 'rId-s1-default' }, footerRefs: {} },
+          } as unknown as ResolvedPage,
+          {
+            number: 3,
+            sectionIndex: 2,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: { headerRefs: { default: 'rId-s2-default' }, footerRefs: {} },
+          } as unknown as ResolvedPage,
+        ],
+      };
+
+      const provider = manager.createDecorationProvider('header', layout);
+      const page = layout.pages[2]!;
+      const payload = provider!(page.number, page.margins, page);
+
+      expect(payload).not.toBeNull();
+      expect(payload!.sectionType).toBe('first');
+      expect(payload!.headerFooterRefId).toBe('rId-s0-first');
+      expect(payload!.fragments[0]!.blockId).toBe('s0-first-header');
+    });
   });
 
   describe('rebuildRegions — ResolvedLayout entry', () => {
@@ -1176,6 +1501,121 @@ describe('HeaderFooterSessionManager', () => {
 
       expect(manager.headerRegions.get(0)!.sectionType).toBe('even');
       expect(manager.footerRegions.get(0)!.sectionType).toBe('even');
+    });
+
+    it('uses multi-section alternateHeaders state when inferring fallback region variants', () => {
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: {
+          ...createMainEditorStub(),
+          converter: { pageStyles: { alternateHeaders: false } },
+        } as unknown as Editor,
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies({
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 1),
+      });
+      manager.setMultiSectionIdentifier(
+        buildMultiSectionIdentifier(
+          [
+            {
+              sectionIndex: 0,
+              titlePg: false,
+              headerRefs: { default: 'rId-default', even: 'rId-even' },
+              footerRefs: { default: 'rId-default-footer', even: 'rId-even-footer' },
+            },
+          ],
+          { alternateHeaders: true },
+        ),
+      );
+
+      manager.rebuildRegions({
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [makePage({ number: 1, displayNumber: 2, height: 792 })],
+      });
+
+      expect(manager.headerRegions.get(0)!.sectionType).toBe('even');
+      expect(manager.footerRegions.get(0)!.sectionType).toBe('even');
+    });
+
+    it('uses section titlePg state when inferring fallback region variants', () => {
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: {
+          ...createMainEditorStub(),
+          converter: {
+            headerIds: { titlePg: true },
+            footerIds: { titlePg: true },
+            pageStyles: { alternateHeaders: false },
+          },
+        } as unknown as Editor,
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies({
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 2),
+      });
+      manager.setMultiSectionIdentifier(
+        buildMultiSectionIdentifier(
+          [
+            {
+              sectionIndex: 0,
+              titlePg: true,
+              headerRefs: { first: 'rId-section0-first', default: 'rId-section0-default' },
+              footerRefs: { first: 'rId-section0-first-footer', default: 'rId-section0-default-footer' },
+            },
+            {
+              sectionIndex: 1,
+              titlePg: false,
+              headerRefs: { first: 'rId-section1-first', default: 'rId-section1-default' },
+              footerRefs: { first: 'rId-section1-first-footer', default: 'rId-section1-default-footer' },
+            },
+          ],
+          { alternateHeaders: false },
+        ),
+      );
+
+      manager.rebuildRegions({
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [
+          makePage({ number: 1, height: 792, sectionIndex: 0 }),
+          makePage({ number: 2, height: 792, sectionIndex: 1 }),
+        ],
+      });
+
+      expect(manager.headerRegions.get(0)!.sectionType).toBe('first');
+      expect(manager.footerRegions.get(0)!.sectionType).toBe('first');
+      expect(manager.headerRegions.get(1)!.sectionType).toBe('default');
+      expect(manager.footerRegions.get(1)!.sectionType).toBe('default');
     });
   });
 });

@@ -62,12 +62,23 @@ export type {
   CommentsPayload,
   CommentLocationsPayload,
   FontsResolvedPayload,
+  FontsChangedPayload,
   PaginationPayload,
   ListDefinitionsPayload,
   TrackedChangesChangedPayload,
   ProtectionChangeSource,
   EditorEventMap,
 } from './editors/v1/core/types/EditorEvents.js';
+
+// Font report types (used to type `fonts-changed` payloads + the fonts read API)
+export type {
+  FontResolutionRecord,
+  FontResolutionReason,
+  FontLoadStatus,
+  FontLoadSummary,
+  FontAssetUrlContext,
+  FontAssetUrlResolver,
+} from '@superdoc/font-system';
 
 // Parts system types (used by partChanged event handler)
 export type { PartChangedEvent, PartId, PartSectionId } from './editors/v1/core/parts/types.js';
@@ -77,6 +88,7 @@ export type {
   EditorOptions,
   User,
   FontConfig,
+  FontsConfig,
   FieldValue,
   DocxFileEntry,
   ViewLayout,

@@ -6077,17 +6077,44 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
 
     expect(layout.pages).toHaveLength(2);
 
-    // Page 1 is odd (documentPageNumber=1) → uses 'odd' header height (80px)
+    // Page 1 has display number 1 (odd) -> uses 'odd' header height (80px)
     // Body should start at max(margin.top, margin.header + headerContentHeight) = max(50, 30+80) = 110
     const p1Fragment = layout.pages[0].fragments.find((f) => f.blockId === 'p1');
     expect(p1Fragment).toBeDefined();
     expect(p1Fragment!.y).toBeCloseTo(110, 0);
 
-    // Page 2 is even (documentPageNumber=2) → uses 'even' header height (40px)
+    // Page 2 has display number 2 (even) -> uses 'even' header height (40px)
     // Body should start at max(margin.top, margin.header + headerContentHeight) = max(50, 30+40) = 70
     const p2Fragment = layout.pages[1].fragments.find((f) => f.blockId === 'p2');
     expect(p2Fragment).toBeDefined();
     expect(p2Fragment!.y).toBeCloseTo(70, 0);
+  });
+
+  it('uses section page-numbering start for odd/even header parity', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0, numbering: { start: 2 } }],
+      headerContentHeights: {
+        odd: 80,
+        even: 40,
+      },
+    };
+
+    const layout = layoutDocument([tallBlock('p1'), tallBlock('p2')], [tallMeasure, tallMeasure], options);
+
+    expect(layout.pages).toHaveLength(2);
+    expect(layout.pages[0].displayNumber).toBe(2);
+    expect(layout.pages[0].numberText).toBe('2');
+    expect(layout.pages[1].displayNumber).toBe(3);
+
+    const p1Fragment = layout.pages[0].fragments.find((f) => f.blockId === 'p1');
+    const p2Fragment = layout.pages[1].fragments.find((f) => f.blockId === 'p2');
+    expect(p1Fragment).toBeDefined();
+    expect(p2Fragment).toBeDefined();
+    expect(p1Fragment!.y).toBeCloseTo(70, 0);
+    expect(p2Fragment!.y).toBeCloseTo(110, 0);
   });
 
   it('uses default header height for all pages when alternateHeaders is false', () => {
@@ -6166,29 +6193,29 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
 
     expect(layout.pages.length).toBeGreaterThanOrEqual(3);
 
-    // Page 1 (first page of section, titlePg=true) → 'first' variant → 100px
+    // Page 1 (first page of section, titlePg=true) -> 'first' variant -> 100px
     // Body start = max(50, 30+100) = 130
     const p1Fragment = layout.pages[0].fragments.find((f) => f.blockId === 'p1');
     expect(p1Fragment).toBeDefined();
     expect(p1Fragment!.y).toBeCloseTo(130, 0);
 
-    // Page 2 (documentPageNumber=2, even) → 'even' variant → 40px
+    // Page 2 has display number 2 (even) -> 'even' variant -> 40px
     // Body start = max(50, 30+40) = 70
     const p2Fragment = layout.pages[1].fragments.find((f) => f.blockId === 'p2');
     expect(p2Fragment).toBeDefined();
     expect(p2Fragment!.y).toBeCloseTo(70, 0);
 
-    // Page 3 (documentPageNumber=3, odd) → 'odd' variant → 80px
+    // Page 3 has display number 3 (odd) -> 'odd' variant -> 80px
     // Body start = max(50, 30+80) = 110
     const p3Fragment = layout.pages[2].fragments.find((f) => f.blockId === 'p3');
     expect(p3Fragment).toBeDefined();
     expect(p3Fragment!.y).toBeCloseTo(110, 0);
   });
 
-  it('multi-section: uses document page number for even/odd, not section-relative', () => {
+  it('multi-section: uses display page number for even/odd, not section-relative', () => {
     // Section 1 has 3 pages (pages 1-3), section 2 starts on page 4.
-    // Page 4 is even by document number, but sectionPageNumber=1 (odd).
-    // The fix ensures document page number is used for even/odd.
+    // Page 4 has display number 4 (even), but sectionPageNumber=1 (odd).
+    // The fix ensures the page-numbering value is used for even/odd.
     const sb1: SectionBreakBlock = {
       kind: 'sectionBreak',
       id: 'sb1',
@@ -6224,7 +6251,7 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
 
     expect(layout.pages.length).toBeGreaterThanOrEqual(4);
 
-    // Page 4 (documentPageNumber=4, even) → should use 'even' header (40px)
+    // Page 4 has display number 4 (even) -> should use 'even' header (40px)
     // NOT 'odd' which would happen if sectionPageNumber (1) were used
     // Body start = max(50, 30+40) = 70
     const p4Fragment = layout.pages[3]?.fragments.find((f) => f.blockId === 'p4');
@@ -6253,8 +6280,8 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
 
     expect(layout.pages).toHaveLength(2);
 
-    // Page 1 is odd → 'odd' footer (80px) → bottom = max(50, 30+80) = 110
-    // Page 2 is even → 'even' footer (40px) → bottom = max(50, 30+40) = 70
+    // Page 1 has display number 1 (odd) -> 'odd' footer (80px) -> bottom = max(50, 30+80) = 110
+    // Page 2 has display number 2 (even) -> 'even' footer (40px) -> bottom = max(50, 30+40) = 70
     // Body-top Y is footer-independent, so assert on the effective bottom margin
     // the paginator stamped on each page.
     expect(layout.pages[0].margins?.bottom).toBeCloseTo(110, 0);
@@ -6308,14 +6335,14 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
   });
 
   it('multi-section + titlePg + alternateHeaders: first page of section 2 lands on an even doc-page', () => {
-    // Most realistic mixed case. Section 1 has 3 pages (docPN 1-3). Section 2
-    // has titlePg=true and starts on docPN=4.
-    //   - Page 4 is sectionPageNumber=1 for section 2 + titlePg=true → 'first'
-    //   - Page 5 is docPN=5 (odd) → 'odd' (regardless of section-relative number)
-    //   - Page 6 is docPN=6 (even) → 'even'
+    // Most realistic mixed case. Section 1 has 3 pages (display numbers 1-3). Section 2
+    // has titlePg=true and starts with display number 4.
+    //   - Page 4 is sectionPageNumber=1 for section 2 + titlePg=true -> 'first'
+    //   - Page 5 has display number 5 (odd) -> 'odd' (regardless of section-relative number)
+    //   - Page 6 has display number 6 (even) -> 'even'
     // If the code used sectionPageNumber for even/odd, pages 5 and 6 would be
     // swapped (section-relative 2 and 3 respectively). This guards both titlePg
-    // and the docPN rule across a section boundary.
+    // and the page-numbering parity rule across a section boundary.
     const sb1: SectionBreakBlock = {
       kind: 'sectionBreak',
       id: 'sb1',
@@ -6361,19 +6388,19 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
 
     expect(layout.pages.length).toBeGreaterThanOrEqual(6);
 
-    // Page 4: section 2 first page + titlePg → 'first' (100px) → y = max(50, 30+100) = 130
+    // Page 4: section 2 first page + titlePg -> 'first' (100px) -> y = max(50, 30+100) = 130
     const p4Fragment = layout.pages[3]?.fragments.find((f) => f.blockId === 'p4');
     expect(p4Fragment).toBeDefined();
     expect(p4Fragment!.y).toBeCloseTo(130, 0);
 
-    // Page 5: docPN=5, odd → 'odd' (80px) → y = max(50, 30+80) = 110
-    // If sectionPageNumber were used: sectionPN=2 → 'even' (40) → y = 70 (wrong)
+    // Page 5: display number 5, odd -> 'odd' (80px) -> y = max(50, 30+80) = 110
+    // If sectionPageNumber were used: sectionPN=2 -> 'even' (40) -> y = 70 (wrong)
     const p5Fragment = layout.pages[4]?.fragments.find((f) => f.blockId === 'p5');
     expect(p5Fragment).toBeDefined();
     expect(p5Fragment!.y).toBeCloseTo(110, 0);
 
-    // Page 6: docPN=6, even → 'even' (40px) → y = max(50, 30+40) = 70
-    // If sectionPageNumber were used: sectionPN=3 → 'odd' (80) → y = 110 (wrong)
+    // Page 6: display number 6, even -> 'even' (40px) -> y = max(50, 30+40) = 70
+    // If sectionPageNumber were used: sectionPN=3 -> 'odd' (80) -> y = 110 (wrong)
     const p6Fragment = layout.pages[5]?.fragments.find((f) => f.blockId === 'p6');
     expect(p6Fragment).toBeDefined();
     expect(p6Fragment!.y).toBeCloseTo(70, 0);

@@ -1,0 +1,58 @@
+/**
+ * Manifest of the bundled metric-compatible substitute pack: pure data, no binary
+ * imports. The provider ({@link ./bundled}) turns each entry into a `url(...)` face
+ * against a runtime base URL, so font bytes are emitted/served as SEPARATE assets and
+ * never inlined into the JS bundle. This is the seam that lets the pack scale from the
+ * five verified clones here to the full (~40-font) rollout by adding rows - the
+ * architecture (resolver -> registry -> gate -> report) does not change.
+ *
+ * The `family` is the physical substitute name (must match the resolver's targets); the
+ * `file` is the asset filename under `../assets/`. Family display names with spaces map
+ * to space-free file prefixes (e.g. "Liberation Sans" -> `LiberationSans-*.woff2`).
+ */
+
+/** SPDX identifier of a bundled font's license, for provenance + diagnostics. */
+export type BundledLicense = 'OFL-1.1' | 'Apache-2.0';
+
+/** One shippable face of a bundled family: its style axis + the asset filename. */
+export interface BundledFaceFile {
+  weight: 'normal' | 'bold';
+  style: 'normal' | 'italic';
+  /** Asset filename under the pack's `assets/` dir, e.g. `Carlito-Regular.woff2`. */
+  file: string;
+}
+
+/** A bundled substitute family modeled as its faces. */
+export interface BundledFamilyManifest {
+  /** Physical family name (the substitute), e.g. "Carlito", "Liberation Sans". */
+  family: string;
+  license: BundledLicense;
+  faces: BundledFaceFile[];
+}
+
+/** The standard four faces (regular/bold/italic/bold-italic) for a file prefix. */
+function fourFaces(filePrefix: string): BundledFaceFile[] {
+  return [
+    { weight: 'normal', style: 'normal', file: `${filePrefix}-Regular.woff2` },
+    { weight: 'bold', style: 'normal', file: `${filePrefix}-Bold.woff2` },
+    { weight: 'normal', style: 'italic', file: `${filePrefix}-Italic.woff2` },
+    { weight: 'bold', style: 'italic', file: `${filePrefix}-BoldItalic.woff2` },
+  ];
+}
+
+function family(name: string, filePrefix: string, license: BundledLicense): BundledFamilyManifest {
+  return { family: name, license, faces: fourFaces(filePrefix) };
+}
+
+/**
+ * The verified clean clones for phase 1 - each proven to match Word's painted line
+ * breaks. Adding a row (family + file prefix + license, with the `.woff2` in `assets/`)
+ * extends the pack without touching the provider, registry, gate, or report.
+ */
+export const BUNDLED_MANIFEST: readonly BundledFamilyManifest[] = Object.freeze([
+  family('Carlito', 'Carlito', 'OFL-1.1'),
+  family('Caladea', 'Caladea', 'Apache-2.0'),
+  family('Liberation Sans', 'LiberationSans', 'OFL-1.1'),
+  family('Liberation Serif', 'LiberationSerif', 'OFL-1.1'),
+  family('Liberation Mono', 'LiberationMono', 'OFL-1.1'),
+]);

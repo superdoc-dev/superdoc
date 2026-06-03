@@ -20,7 +20,8 @@
   },
   "dependencies": {
     "@superdoc/common": "workspace:*",
-    "@superdoc/contracts": "workspace:*"
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/font-system": "workspace:*"
   },
   "devDependencies": {
     "tsup": "catalog:",

@@ -22,6 +22,7 @@ import {
   type TextRun,
   type VectorShapeDrawing,
 } from '@superdoc/contracts';
+import { getFontConfigVersion } from '@superdoc/font-system';
 import { hashParagraphBorders } from './paragraphBorderHash.js';
 import {
   hashCellBorders,
@@ -306,7 +307,11 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         }
 
         if (run.kind === 'tab') {
-          return [run.text ?? '', 'tab'].join(',');
+          // Include the underline (the only mark a tab paints, as a border) so toggling
+          // underline on a tab changes the block version and the painter repaints it.
+          // Without this, an underline applied to an already-rendered tab is not shown
+          // until an unrelated edit forces a rebuild (SD-3330).
+          return [run.text ?? '', 'tab', run.underline?.style ?? '', run.underline?.color ?? ''].join(',');
         }
 
         if (run.kind === 'fieldAnnotation') {
@@ -343,6 +348,9 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         return [
           textRun.text ?? '',
           textRun.fontFamily,
+          // Font epoch: busts paint reuse when a font loads/changes (the resolved physical
+          // family is the same, only its availability changed - logical family alone can't see it).
+          getFontConfigVersion(),
           textRun.fontSize,
           textRun.bold ? 1 : 0,
           textRun.italic ? 1 : 0,

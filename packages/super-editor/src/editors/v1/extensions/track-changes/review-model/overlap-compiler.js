@@ -274,6 +274,81 @@ const findAdjacentInsertedSegment = (ctx, pos) => {
   );
 };
 
+/**
+ * Find the current user's own unresolved tracked deletion adjacent to the
+ * delete range [from, to], so contiguous keystroke deletions coalesce into one
+ * logical change. A Backspace run leaves the caret at the left edge of the
+ * prior deletion, so the next range's `to` meets that deletion's `from`
+ * (right-adjacent); forward Delete extends the other way (left-adjacent).
+ *
+ * Adjacency is checked exactly first (contiguous within a single run), then
+ * across a gap gated by `isCoalescibleDeletionGap`. Multi-run paragraphs —
+ * e.g. Google Docs exports that split "Open comment " and "from Google Docs."
+ * into separate runs — separate the prior deletion from this range by run
+ * open/close tokens, and Google Docs additionally anchors comments with
+ * zero-width marker nodes at those seams; without the gap-tolerant pass,
+ * deleting the space at the seam would mint a new change. `isCoalescibleDeletionGap`
+ * tolerates run boundaries AND zero-width review/anchor markers but still
+ * requires no live text in the gap, so a live character between two deletions
+ * splits them.
+ *
+ * This is analogous to the same-user insertion refinement in `compileTextInsert`
+ * but intentionally MORE permissive: that path's `findSegmentAcrossEmptyStructuralGap`
+ * rejects any inline leaf, so the insertion side still splits at comment-anchor
+ * seams. TC-EDIT-018 covers "deleted or inserted", so the insertion side is a
+ * known conformance gap to close in a follow-up — not a mirror of this logic.
+ *
+ * Known limitation (bridge case): when a single live character sits between two
+ * of the user's own deletions, deleting it matches `exactLeft` first and reuses
+ * the LEFT deletion's id; the right deletion is never consulted. Because span
+ * merging joins only same-id spans, the result is two touching logical
+ * deletions where Word shows one. This is strictly better than the
+ * pre-coalescing behavior (which minted a third id) but short of TC-EDIT-018's
+ * "one logical change"; bridging both sides under a single id (reassigning the
+ * right deletion to the left id) is left as a future refinement.
+ *
+ * @param {*} ctx
+ * @param {number} from
+ * @param {number} to
+ */
+const findAdjacentDeletedSegment = (ctx, from, to) => {
+  // Only coalesce into a PLAIN standalone deletion. A replacement's deleted
+  // side (replacementGroupId set) or an overlap child (overlapParentId set) is
+  // a structured change: reusing its id for an unrelated plain deletion would
+  // write a deletion mark with empty/mismatched replacement metadata under that
+  // id, widening or mis-typing the change and corrupting its accept/reject.
+  const sameUserDeleted = (segment) =>
+    segment.side === SegmentSide.Deleted &&
+    !segment.attrs?.replacementGroupId &&
+    !segment.attrs?.overlapParentId &&
+    isSameUserForRefinement(ctx, segment);
+
+  const exactLeft = ctx.graph.segments.find((segment) => sameUserDeleted(segment) && segment.to === from);
+  if (exactLeft) return exactLeft;
+  const exactRight = ctx.graph.segments.find((segment) => sameUserDeleted(segment) && segment.from === to);
+  if (exactRight) return exactRight;
+
+  let nearest = null;
+  let nearestDistance = Infinity;
+  for (const segment of ctx.graph.segments) {
+    if (!sameUserDeleted(segment)) continue;
+    if (segment.from > to) {
+      const distance = segment.from - to;
+      if (distance < nearestDistance && isCoalescibleDeletionGap(ctx, to, segment.from)) {
+        nearest = segment;
+        nearestDistance = distance;
+      }
+    } else if (segment.to < from) {
+      const distance = from - segment.to;
+      if (distance < nearestDistance && isCoalescibleDeletionGap(ctx, segment.to, from)) {
+        nearest = segment;
+        nearestDistance = distance;
+      }
+    }
+  }
+  return nearest;
+};
+
 const isEmptyStructuralGap = (ctx, from, to) => {
   if (to <= from) return false;
   if (!sharesTextblock(ctx.tr.doc, from, to)) return false;
@@ -289,6 +364,59 @@ const isEmptyStructuralGap = (ctx, from, to) => {
     }
   });
   return !hasInlineLeaf;
+};
+
+/**
+ * Zero-width review/anchor marker node types: inline ATOM nodes that occupy a
+ * document position but render no visible content (comment range start/end,
+ * comment reference, bookmark end, permission range start/end). A contiguous
+ * visible-text deletion spans them, so they must not block deletion coalescing
+ * — e.g. Google Docs anchors comments with inline marker nodes between runs.
+ *
+ * Membership rule: list an inline leaf here only if it is genuinely zero-width.
+ * Deliberate non-members:
+ *   - `bookmarkStart` is a content node (`content: 'inline*'`), not a leaf, so
+ *     it never reaches the leaf check in `isCoalescibleDeletionGap`; any text it
+ *     wraps is caught by the live-text guard. Listing it would be inert.
+ *   - `fieldAnnotation` is an inline atom but renders real content (a field /
+ *     form widget), so a deletion spanning one MUST split — it stays out.
+ */
+const ZERO_WIDTH_ANCHOR_NODE_NAMES = new Set([
+  'commentRangeStart',
+  'commentRangeEnd',
+  'commentReference',
+  'bookmarkEnd',
+  'permStart',
+  'permEnd',
+]);
+
+/**
+ * Whether [from, to] separates two same-author tracked deletions that should
+ * still coalesce: same textblock, no other tracked change in range, no live
+ * text, and any inline-leaf nodes present are zero-width anchors (comment /
+ * bookmark markers) — run-wrapper boundaries carry no inline leaf at all.
+ * Strictly more permissive than `isEmptyStructuralGap`, which rejects any
+ * inline leaf and so would split a deletion at a Google-Docs comment seam.
+ *
+ * @param {*} ctx
+ * @param {number} from
+ * @param {number} to
+ */
+const isCoalescibleDeletionGap = (ctx, from, to) => {
+  if (to <= from) return false;
+  if (!sharesTextblock(ctx.tr.doc, from, to)) return false;
+  if (ctx.graph.segmentsInRange(from, to).length) return false;
+  if (ctx.tr.doc.textBetween(from, to, '', '')) return false;
+
+  let blocked = false;
+  ctx.tr.doc.nodesBetween(from, to, (node, pos) => {
+    if (pos < from || pos >= to) return;
+    if (node.isInline && node.isLeaf && !ZERO_WIDTH_ANCHOR_NODE_NAMES.has(node.type.name)) {
+      blocked = true;
+      return false;
+    }
+  });
+  return !blocked;
 };
 
 const sharesTextblock = (doc, from, to) => {
@@ -543,15 +671,47 @@ const compileTextDelete = (ctx, intent) => {
     return failure('INVALID_TARGET', 'text-delete requires a non-empty range.');
   }
 
+  // Coalesce contiguous same-user keystroke deletions. When this delete range
+  // is immediately adjacent to the current user's own unresolved tracked
+  // deletion, reuse that change's id so a run deleted character-by-character
+  // (e.g. holding Backspace) surfaces as ONE logical tracked deletion rather
+  // than one review object per keystroke — mirroring the same-user insertion
+  // refinement in compileTextInsert (TC-EDIT-018). Replacement-driven deletes
+  // keep their caller-provided pairing id; preserve-review-state edits never
+  // fold into an existing change.
+  //
+  // Date semantics: the new run is marked with this edit's date while the
+  // existing runs keep theirs, so one changeId can span runs with mixed dates
+  // (the same as same-user insertion refinement, and as coalescing into an
+  // imported older-session same-author deletion — both intentional). This does
+  // not create ambiguity: the read model takes the change date from the first
+  // segment (review-graph buildLogicalChange `primary = segments[0]`), and on
+  // export mergeConsecutiveTrackedChanges joins the per-run w:del/w:ins wrappers
+  // by w:id and keeps the first wrapper's attributes — so one logical deletion
+  // exports as a single w:del with the first run's w:date, and the panel shows
+  // that same date.
+  const coalesceTarget =
+    intent.replacementGroupHint || intent.preserveExistingReviewState
+      ? null
+      : findAdjacentDeletedSegment(ctx, intent.from, intent.to);
+  const sharedDeletionId = intent.replacementGroupHint || coalesceTarget?.changeId || null;
+
   const result = applyTrackedDelete(ctx, intent.from, intent.to, {
     replacementGroupId: '',
     replacementSideId: '',
-    sharedDeletionId: intent.replacementGroupHint || null,
+    sharedDeletionId,
     recordSharedDeletionId: Boolean(intent.replacementGroupHint),
     reassignExistingDeletions:
       intent.source !== 'native' && !intent.preserveExistingReviewState ? 'different-user' : false,
   });
   if (result.ok === false) return result;
+
+  // Folding into an existing deletion is an update to that change, not a new
+  // one. applyTrackedDelete suppresses the created-id record when a shared id
+  // is supplied without recordSharedDeletionId, so surface it as updated here.
+  if (coalesceTarget && !ctx.updatedChangeIds.includes(coalesceTarget.changeId)) {
+    ctx.updatedChangeIds.push(coalesceTarget.changeId);
+  }
 
   // Caret at original `from`: matches Word's behavior where the cursor sits
   // at the left edge of a tracked deletion.

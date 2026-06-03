@@ -78,6 +78,7 @@ import {
 import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
 import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
 import { toCssFontFamily } from '@superdoc/font-utils';
+import { resolvePhysicalFamily } from '@superdoc/font-system';
 export { installNodeCanvasPolyfill } from './setup.js';
 import { clearMeasurementCache, getMeasuredTextWidth, setCacheSize } from './measurementCache.js';
 import { getFontMetrics, clearFontMetricsCache, type FontInfo } from './fontMetricsCache.js';
@@ -88,6 +89,7 @@ import type { FixedLayoutResult } from './fixed-table-columns.js';
 import {
   buildAutoFitTableResultCacheKey,
   buildTableCellContentMetricsCacheKey,
+  clearTableAutoFitMeasurementCaches,
   getCachedAutoFitTableResult,
   type TableAutoFitContentMetricsResult,
   measureTableAutoFitContentMetrics,
@@ -95,6 +97,27 @@ import {
 } from './table-autofit-metrics.js';
 
 export { clearFontMetricsCache };
+export { clearTableAutoFitMeasurementCaches };
+
+/**
+ * Clear every font-dependent text-measurement cache owned by `measuring/dom`:
+ * text advance widths, font ascent/descent metrics, and AutoFit cell metrics.
+ *
+ * Call this when the set of available fonts changes (a face finishes loading,
+ * or a substitution/mapping is added) so the next measurement pass re-measures
+ * with the correct font instead of reusing results taken against a fallback.
+ * The caller is also responsible for clearing the layout-bridge block-measure
+ * cache (`measureCache.clear()`), which holds derived block measures.
+ */
+export function clearTextMeasurementCaches(): void {
+  clearMeasurementCache();
+  clearFontMetricsCache();
+  clearTableAutoFitMeasurementCaches();
+  // Drop the persistent measuring canvas. A 2D context caches its font resolution: once it
+  // measured a family while the font was absent (falling back), it keeps using the fallback
+  // even after the font loads. A fresh context re-resolves to the now-available font.
+  canvasContext = null;
+}
 
 const { computeTabStops } = Engines;
 
@@ -301,19 +324,26 @@ function buildFontString(run: { fontFamily: string; fontSize: number; bold?: boo
   if (run.bold) parts.push('bold');
   parts.push(`${run.fontSize}px`);
 
+  // Resolve the logical family (e.g. "Calibri") to the physical render family
+  // (e.g. "Carlito") so text is MEASURED in the same font it is painted with. The
+  // measure cache keys on this font string, so the physical family is in the key.
+  const physicalFamily = resolvePhysicalFamily(run.fontFamily);
+
   if (measurementConfig.mode === 'deterministic') {
+    // Deterministic mode still flattens to one family for reproducible server-side
+    // measurement; per-font resolution here is follow-up T1 work (browser mode first).
     parts.push(
       measurementConfig.fonts.fallbackStack.length > 0
         ? measurementConfig.fonts.fallbackStack.join(', ')
         : measurementConfig.fonts.deterministicFamily,
     );
   } else {
-    parts.push(run.fontFamily);
+    parts.push(physicalFamily);
   }
 
   return {
     font: parts.join(' '),
-    fontFamily: run.fontFamily,
+    fontFamily: physicalFamily,
   };
 }
 
@@ -845,11 +875,28 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   const firstTextRunWithSize = block.runs.find(
     (run): run is TextRun => isTextRun(run) && 'fontSize' in run && run.fontSize != null,
   );
-  const fallbackFontSize = normalizeFontSize(firstTextRunWithSize?.fontSize, DEFAULT_PARAGRAPH_FONT_SIZE);
+  // Prefer a text run's size, but fall back to any run (e.g. a tab) carrying a font
+  // size when the paragraph has no sized text run. Otherwise a tab-only line is
+  // measured at the 12px default and renders shorter than a text or empty line in the
+  // same paragraph (SD-3330).
+  const firstRunWithSize =
+    firstTextRunWithSize ??
+    block.runs.find(
+      (run): run is Run & { fontSize: number } =>
+        typeof (run as { fontSize?: unknown }).fontSize === 'number' && (run as { fontSize: number }).fontSize > 0,
+    );
+  const fallbackFontSize = normalizeFontSize(firstRunWithSize?.fontSize, DEFAULT_PARAGRAPH_FONT_SIZE);
   const firstTextRunWithFont = block.runs.find(
     (run): run is TextRun => isTextRun(run) && typeof run.fontFamily === 'string' && run.fontFamily.trim().length > 0,
   );
-  const fallbackFontFamily = firstTextRunWithFont?.fontFamily ?? DEFAULT_PARAGRAPH_FONT_FAMILY;
+  const firstRunWithFont =
+    firstTextRunWithFont ??
+    block.runs.find(
+      (run): run is Run & { fontFamily: string } =>
+        typeof (run as { fontFamily?: unknown }).fontFamily === 'string' &&
+        (run as { fontFamily: string }).fontFamily.trim().length > 0,
+    );
+  const fallbackFontFamily = firstRunWithFont?.fontFamily ?? DEFAULT_PARAGRAPH_FONT_FAMILY;
   const normalizedRuns = normalizeRunsForMeasurement(block.runs as Run[], fallbackFontSize, fallbackFontFamily);
 
   const markerInfo: ParagraphMeasure['marker'] | undefined = wordLayout?.marker

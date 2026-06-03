@@ -64,11 +64,12 @@ export const extractIdentifierFromConverter = (converter?: ConverterLike | null)
 export const getHeaderFooterType = (
   pageNumber: number,
   identifier: HeaderFooterIdentifier,
-  options?: { kind?: 'header' | 'footer' },
+  options?: { kind?: 'header' | 'footer'; parityPageNumber?: number },
 ): HeaderFooterType | null => {
   if (pageNumber <= 0) return null;
 
   const kind = options?.kind ?? 'header';
+  const parityPageNumber = options?.parityPageNumber ?? pageNumber;
   const ids = kind === 'header' ? identifier.headerIds : identifier.footerIds;
 
   const hasFirst = Boolean(ids.first);
@@ -83,10 +84,10 @@ export const getHeaderFooterType = (
   }
 
   if (identifier.alternateHeaders) {
-    if (pageNumber % 2 === 0 && hasEven) {
+    if (parityPageNumber % 2 === 0 && hasEven) {
       return 'even';
     }
-    if (pageNumber % 2 === 1 && (hasOdd || hasDefault)) {
+    if (parityPageNumber % 2 !== 0 && (hasOdd || hasDefault)) {
       return hasOdd ? 'odd' : 'default';
     }
     return null;
@@ -103,10 +104,12 @@ export const resolveHeaderFooterForPage = (
   layout: Layout,
   pageIndex: number,
   identifier: HeaderFooterIdentifier,
-  options?: { kind?: 'header' | 'footer' },
+  options?: { kind?: 'header' | 'footer'; parityPageNumber?: number },
 ) => {
-  const pageNumber = layout.pages[pageIndex]?.number ?? pageIndex + 1;
-  const type = getHeaderFooterType(pageNumber, identifier, options);
+  const layoutPage = layout.pages[pageIndex];
+  const pageNumber = layoutPage?.number ?? pageIndex + 1;
+  const parityPageNumber = options?.parityPageNumber ?? layoutPage?.displayNumber ?? pageNumber;
+  const type = getHeaderFooterType(pageNumber, identifier, { ...options, parityPageNumber });
   if (!type) {
     return null;
   }
@@ -295,7 +298,7 @@ export function buildMultiSectionIdentifier(
  * This function determines which header/footer variant (default, first, even, odd)
  * should be used for a given page number within a specific section. It respects:
  * - Per-section titlePg (first page of section uses 'first' variant)
- * - Alternate headers (even/odd pages based on physical page number)
+ * - Alternate headers (even/odd pages based on section-aware page numbering)
  * - Fallback to default variant
  *
  * **Important**: When `titlePg` is enabled, this function returns 'first' even if the
@@ -307,7 +310,7 @@ export function buildMultiSectionIdentifier(
  * @param pageNumber - Physical page number (1-indexed)
  * @param sectionIndex - Index of the section this page belongs to
  * @param identifier - Multi-section identifier with per-section mappings
- * @param options - Optional settings (kind: 'header' | 'footer', sectionPageNumber)
+ * @param options - Optional settings (kind, sectionPageNumber, parityPageNumber)
  * @returns HeaderFooterType ('default' | 'first' | 'even' | 'odd') or null if no header/footer content exists
  *
  * @example
@@ -326,12 +329,13 @@ export function getHeaderFooterTypeForSection(
   pageNumber: number,
   sectionIndex: number,
   identifier: MultiSectionHeaderFooterIdentifier,
-  options?: { kind?: 'header' | 'footer'; sectionPageNumber?: number },
+  options?: { kind?: 'header' | 'footer'; sectionPageNumber?: number; parityPageNumber?: number },
 ): HeaderFooterType | null {
   if (pageNumber <= 0) return null;
 
   const kind = options?.kind ?? 'header';
   const sectionPageNumber = options?.sectionPageNumber ?? pageNumber;
+  const parityPageNumber = options?.parityPageNumber ?? pageNumber;
 
   // Get section-specific IDs, falling back to legacy IDs for backward compatibility
   const sectionIds =
@@ -381,7 +385,7 @@ export function getHeaderFooterTypeForSection(
     // Keep parity-based variant selection even when this section doesn't
     // explicitly define that variant. Resolution/inheritance happens later.
     if (!hasAny) return null;
-    return pageNumber % 2 === 0 ? 'even' : 'odd';
+    return parityPageNumber % 2 === 0 ? 'even' : 'odd';
   }
 
   if (hasDefault) {
@@ -400,7 +404,7 @@ export function getHeaderFooterTypeForSection(
  *
  * @param page - The Page object containing sectionIndex and sectionRefs
  * @param identifier - Multi-section identifier (can be used for variant resolution)
- * @param options - Optional settings (kind: 'header' | 'footer')
+ * @param options - Optional settings (kind, sectionPageNumber, parityPageNumber)
  * @returns The content ID string, or null if not available
  *
  * @example
@@ -413,16 +417,18 @@ export function getHeaderFooterTypeForSection(
 export function getHeaderFooterIdForPage(
   page: Page,
   identifier: MultiSectionHeaderFooterIdentifier,
-  options?: { kind?: 'header' | 'footer'; sectionPageNumber?: number },
+  options?: { kind?: 'header' | 'footer'; sectionPageNumber?: number; parityPageNumber?: number },
 ): string | null {
   const kind = options?.kind ?? 'header';
   const sectionIndex = page.sectionIndex ?? 0;
   const sectionPageNumber = options?.sectionPageNumber ?? page.number;
+  const parityPageNumber = options?.parityPageNumber ?? page.displayNumber ?? page.number;
 
   // Determine which variant type to use (default, first, even, odd)
   const variantType = getHeaderFooterTypeForSection(page.number, sectionIndex, identifier, {
     kind,
     sectionPageNumber,
+    parityPageNumber,
   });
   if (!variantType) return null;
 
@@ -463,7 +469,7 @@ export function getHeaderFooterIdForPage(
  * @param layout - The complete Layout object with pages and headerFooter slots
  * @param pageIndex - Index of the page in layout.pages array (0-indexed)
  * @param identifier - Multi-section identifier with per-section mappings
- * @param options - Optional settings (kind: 'header' | 'footer')
+ * @param options - Optional settings (kind, parityPageNumber)
  * @returns Resolution result with type, layout slot, page, and section info, or null
  *
  * @example
@@ -482,7 +488,7 @@ export function resolveHeaderFooterForPageAndSection(
   layout: Layout,
   pageIndex: number,
   identifier: MultiSectionHeaderFooterIdentifier,
-  options?: { kind?: 'header' | 'footer' },
+  options?: { kind?: 'header' | 'footer'; parityPageNumber?: number },
 ): {
   type: HeaderFooterType;
   layout: NonNullable<NonNullable<Layout['headerFooter']>[HeaderFooterType]>;
@@ -505,13 +511,18 @@ export function resolveHeaderFooterForPageAndSection(
   }
   const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
   const sectionPageNumber = typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
+  const parityPageNumber = options?.parityPageNumber ?? page.displayNumber ?? pageNumber;
 
   // Determine variant type for this section
-  const type = getHeaderFooterTypeForSection(pageNumber, sectionIndex, identifier, { kind, sectionPageNumber });
+  const type = getHeaderFooterTypeForSection(pageNumber, sectionIndex, identifier, {
+    kind,
+    sectionPageNumber,
+    parityPageNumber,
+  });
   if (!type) return null;
 
   // Get content ID for this page/section
-  const contentId = getHeaderFooterIdForPage(page, identifier, { kind, sectionPageNumber });
+  const contentId = getHeaderFooterIdForPage(page, identifier, { kind, sectionPageNumber, parityPageNumber });
 
   // Look up the header/footer layout slot
   const slot = layout.headerFooter?.[type];

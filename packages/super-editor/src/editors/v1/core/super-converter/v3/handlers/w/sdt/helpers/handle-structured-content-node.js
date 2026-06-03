@@ -1,6 +1,56 @@
 import { parseAnnotationMarks } from './handle-annotation-node';
 import { parseStrictStOnOff } from '../../../utils.js';
 import { BLOCK_FIELD_XML_NAMES } from '../../../sd/shared/block-field-xml-names.js';
+import { isInlineNode } from '../../../helpers/is-inline-node.js';
+
+const INLINE_CONTEXT_XML_NAMES = new Set(['w:p', 'w:r', 'w:hyperlink', 'w:smartTag']);
+
+function hasDirectBlockSignal(sdtContent) {
+  return Boolean(
+    sdtContent?.elements?.some(
+      (el) => el?.name === 'w:p' || el?.name === 'w:tbl' || BLOCK_FIELD_XML_NAMES.has(el?.name),
+    ),
+  );
+}
+
+function canEmitInlineStructuredContent(path = []) {
+  return path.some((entry) => INLINE_CONTEXT_XML_NAMES.has(entry?.name) || entry?.name === 'w:sdtContent');
+}
+
+function hasTranslatedBlockContent(content = [], schema) {
+  return content.some((node) => node?.type && !isInlineNode(node, schema));
+}
+
+function wrapInlineRunsAsParagraphs(content = [], schema) {
+  const normalized = [];
+  let pendingInline = [];
+
+  const flushInline = () => {
+    if (!pendingInline.length) return;
+    normalized.push({
+      type: 'paragraph',
+      attrs: null,
+      content: pendingInline,
+      marks: [],
+    });
+    pendingInline = [];
+  };
+
+  for (const node of content) {
+    if (!node) continue;
+
+    if (isInlineNode(node, schema)) {
+      pendingInline.push(node);
+      continue;
+    }
+
+    flushInline();
+    normalized.push(node);
+  }
+
+  flushInline();
+  return normalized;
+}
 
 /**
  * Detect the semantic control type from sdtPr child elements.
@@ -113,12 +163,6 @@ export function handleStructuredContentNode(params) {
     return null;
   }
 
-  const paragraph = sdtContent.elements?.find((el) => el.name === 'w:p');
-  const table = sdtContent.elements?.find((el) => el.name === 'w:tbl');
-  // SD-3005: a content control wrapping a block field (e.g. BIBLIOGRAPHY) has
-  // no direct w:p after preprocessing — its child is an sd:* block node. It is
-  // block content and must not be emitted as an inline structuredContent.
-  const blockField = sdtContent.elements?.find((el) => BLOCK_FIELD_XML_NAMES.has(el?.name));
   const { marks } = parseAnnotationMarks(sdtContent);
   const translatedContent = nodeListHandler.handler({
     ...params,
@@ -126,12 +170,18 @@ export function handleStructuredContentNode(params) {
     path: [...(params.path || []), sdtContent],
   });
 
-  const isBlockNode = paragraph || table || blockField;
+  const schema = params.editor?.schema;
+  const content = Array.isArray(translatedContent) ? translatedContent : [];
+  const isBlockNode =
+    hasTranslatedBlockContent(content, schema) ||
+    hasDirectBlockSignal(sdtContent) ||
+    !canEmitInlineStructuredContent(params.path);
   const sdtContentType = isBlockNode ? 'structuredContentBlock' : 'structuredContent';
+  const normalizedContent = isBlockNode ? wrapInlineRunsAsParagraphs(content, schema) : content;
 
   let result = {
     type: sdtContentType,
-    content: translatedContent,
+    content: normalizedContent,
     marks,
     attrs: {
       id: id?.attributes?.['w:val'] || null,

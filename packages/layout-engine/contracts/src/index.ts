@@ -422,6 +422,13 @@ export type TextRun = RunMarks & {
 export type TabRun = RunMarks & {
   kind: 'tab';
   text: '\t';
+  /**
+   * Font of the tab, inherited from the paragraph's resolved run properties. A tab has
+   * no glyphs, but its font drives the line height (so a tab-only line matches a text
+   * line) and the underline weight. Optional: not every producer sets it.
+   */
+  fontFamily?: string;
+  fontSize?: number;
   /** Width in pixels (assigned by measurer/resolver). */
   width?: number;
   tabStops?: TabStop[];
@@ -2010,6 +2017,8 @@ export type Page = {
    * (in later phases) by body pagination itself.
    */
   footnoteLedger?: FootnotePageLedger;
+  /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
+  displayNumber?: number;
   numberText?: string;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';
@@ -2237,6 +2246,7 @@ export type HeaderFooterType = 'default' | 'first' | 'even' | 'odd';
 export type HeaderFooterPage = {
   number: number;
   fragments: Fragment[];
+  displayNumber?: number;
   numberText?: string;
   /**
    * Optional page-local block clones backing this page's resolved fragments.

@@ -1,31 +1,32 @@
 import { test, expect } from '../../fixtures/superdoc.js';
-import { createOrderedList, LIST_MARKER_SELECTOR } from '../../helpers/lists.js';
+import { createOrderedList, createBulletList, LIST_MARKER_SELECTOR } from '../../helpers/lists.js';
 
 test.use({ config: { toolbar: 'full' } });
 
+type MarkerStyle = {
+  fontFamily: string;
+  fontSize: string;
+};
+
 /**
- * Helper: get the computed font-family of a list marker by index.
+ * Helper: get computed font styles of a list marker by index.
  * DomPainter renders markers as .superdoc-paragraph-marker — CSS is the
  * authoritative source for visual font since the layout engine sets it.
  */
-async function getMarkerFontFamily(
+async function getMarkerStyle(
   superdoc: Parameters<Parameters<typeof test>[2]>[0]['superdoc'],
   markerIndex: number,
-): Promise<string> {
+): Promise<MarkerStyle> {
   return superdoc.page.evaluate((idx) => {
     const markers = document.querySelectorAll('.superdoc-paragraph-marker');
     const marker = markers[idx];
     if (!marker) throw new Error(`Marker at index ${idx} not found`);
-    return getComputedStyle(marker).fontFamily;
+    const style = getComputedStyle(marker);
+    return { fontFamily: style.fontFamily, fontSize: style.fontSize };
   }, markerIndex);
 }
 
-test('new empty list item marker inherits font from previous paragraph', async ({ superdoc }) => {
-  // Create a 2-item ordered list and change text font to Georgia.
-  // The toolbar applies a textStyle mark on the text runs — this does NOT
-  // change existing marker fonts (markers resolve from the numbering cascade).
-  // But previousParagraphFont reads the first run's resolved font, so a new
-  // empty list item should inherit Georgia for its marker.
+test('existing list markers restyle when font family changes (SD-3238)', async ({ superdoc }) => {
   await createOrderedList(superdoc, ['first item', 'second item']);
   await superdoc.waitForStable();
 
@@ -35,22 +36,81 @@ test('new empty list item marker inherits font from previous paragraph', async (
   await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Georgia' }).click();
   await superdoc.waitForStable();
 
-  // Verify the text itself is in Georgia
   await superdoc.assertTextMarkAttrs('first item', 'textStyle', { fontFamily: 'Georgia' });
 
-  // Place cursor at end of last item and press Enter to create a new empty item
+  const firstMarker = await getMarkerStyle(superdoc, 0);
+  expect(firstMarker.fontFamily.toLowerCase()).toContain('georgia');
+});
+
+test('existing list markers restyle when font size changes (SD-3238)', async ({ superdoc }) => {
+  await createBulletList(superdoc, ['alpha', 'beta']);
+  await superdoc.waitForStable();
+
+  await superdoc.selectAll();
+  await superdoc.waitForStable();
+  await superdoc.page.locator('[data-item="btn-fontSize"]').click();
+  await superdoc.page.locator('[data-item="btn-fontSize-option"]').filter({ hasText: '30' }).click();
+  await superdoc.waitForStable();
+
+  await superdoc.assertTextMarkAttrs('alpha', 'textStyle', { fontSize: '30pt' });
+
+  const firstMarker = await getMarkerStyle(superdoc, 0);
+  expect(parseFloat(firstMarker.fontSize)).toBeGreaterThanOrEqual(29);
+});
+
+test('new empty list item marker inherits font from previous paragraph', async ({ superdoc }) => {
+  await createOrderedList(superdoc, ['first item', 'second item']);
+  await superdoc.waitForStable();
+
+  await superdoc.selectAll();
+  await superdoc.waitForStable();
+  await superdoc.page.locator('[data-item="btn-fontFamily"]').click();
+  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Georgia' }).click();
+  await superdoc.waitForStable();
+
+  await superdoc.assertTextMarkAttrs('first item', 'textStyle', { fontFamily: 'Georgia' });
+
   const pos = await superdoc.findTextPos('second item');
   await superdoc.setTextSelection(pos + 'second item'.length);
   await superdoc.waitForStable();
   await superdoc.newLine();
   await superdoc.waitForStable();
 
-  // Should now have 3 markers
   const markerCount = await superdoc.page.locator(LIST_MARKER_SELECTOR).count();
   expect(markerCount).toBe(3);
 
-  // The new (third) marker should inherit Georgia from the previous paragraph's
-  // text run, not fall back to the document default (Arial).
-  const newMarkerFont = await getMarkerFontFamily(superdoc, 2);
-  expect(newMarkerFont.toLowerCase()).toContain('georgia');
+  const newMarker = await getMarkerStyle(superdoc, 2);
+  expect(newMarker.fontFamily.toLowerCase()).toContain('georgia');
+});
+
+test('existing list markers restyle after toggle-list flow with pre-typed font (SD-3238)', async ({ superdoc }) => {
+  await superdoc.page.locator('[data-item="btn-fontFamily"]').click();
+  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Georgia' }).click();
+  await superdoc.waitForStable();
+  await superdoc.page.locator('[data-item="btn-fontSize"]').click();
+  await superdoc.page.locator('[data-item="btn-fontSize-option"]').filter({ hasText: '30' }).click();
+  await superdoc.waitForStable();
+
+  await superdoc.type('first line');
+  await superdoc.waitForStable();
+  await superdoc.newLine();
+  await superdoc.waitForStable();
+  await superdoc.type('second line');
+  await superdoc.waitForStable();
+
+  await superdoc.selectAll();
+  await superdoc.waitForStable();
+  await superdoc.executeCommand('toggleOrderedList');
+  await superdoc.waitForStable();
+
+  await superdoc.selectAll();
+  await superdoc.waitForStable();
+  await superdoc.page.locator('[data-item="btn-fontSize"]').click();
+  await superdoc.page.locator('[data-item="btn-fontSize-option"]').filter({ hasText: '18' }).click();
+  await superdoc.waitForStable();
+
+  await superdoc.assertTextMarkAttrs('first line', 'textStyle', { fontSize: '18pt' });
+
+  const firstMarker = await getMarkerStyle(superdoc, 0);
+  expect(parseFloat(firstMarker.fontSize)).toBeGreaterThanOrEqual(17);
 });

@@ -57,14 +57,14 @@ describe('Cache Invalidation', () => {
           {
             kind: 'paragraph',
             id: 'p1',
-            runs: [{ text: '0', token: 'pageNumber', pageNumberFormat: 'decimal' }],
+            runs: [{ text: '0', token: 'pageNumber', pageNumberFieldFormat: { format: 'decimal' } }],
           } as ParagraphBlock,
         ];
         const romanBlocks: FlowBlock[] = [
           {
             kind: 'paragraph',
             id: 'p1',
-            runs: [{ text: '0', token: 'pageNumber', pageNumberFormat: 'upperRoman' }],
+            runs: [{ text: '0', token: 'pageNumber', pageNumberFieldFormat: { format: 'upperRoman' } }],
           } as ParagraphBlock,
         ];
 

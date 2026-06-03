@@ -5,7 +5,7 @@ import { parsePageInstruction } from './page-instruction.js';
  *
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine The nodes between separate and end.
  * @param {string} [instrText] The SECTIONPAGES instruction text.
- * @param {unknown} [_docxOrFieldRunRPr] The parsed docx in the main import path, or w:rPr in header/footer-only preprocessing.
+ * @param {{ docx?: import('../../v2/docxHelper').ParsedDocx, instructionTokens?: Array<{type: string, text?: string}> | null, fieldRunRPr?: import('../../v2/types/index.js').OpenXmlNode | null } | import('../../v2/types/index.js').OpenXmlNode | null} [options] Generic field preprocessing options, or legacy positional w:rPr.
  * @param {Array<{type: string, text?: string}> | null} [_instructionTokens] Raw instruction tokens.
  * @param {import('../../v2/types/index.js').OpenXmlNode | null} [fieldRunRPr=null] The w:rPr node captured from field sequence nodes.
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
@@ -13,11 +13,11 @@ import { parsePageInstruction } from './page-instruction.js';
 export function preProcessSectionPagesInstruction(
   nodesToCombine,
   instrText = '',
-  _docxOrFieldRunRPr = null,
+  options = null,
   _instructionTokens,
   fieldRunRPr = null,
 ) {
-  const effectiveFieldRunRPr = fieldRunRPr ?? (_docxOrFieldRunRPr?.name === 'w:rPr' ? _docxOrFieldRunRPr : null);
+  const effectiveFieldRunRPr = fieldRunRPr ?? options?.fieldRunRPr ?? (options?.name === 'w:rPr' ? options : null);
   const parsedInstruction = parsePageInstruction(instrText, 'SECTIONPAGES');
   const sectionPageCountNode = {
     name: 'sd:sectionPageCount',

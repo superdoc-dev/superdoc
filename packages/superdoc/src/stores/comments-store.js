@@ -658,12 +658,11 @@ export const useCommentsStore = defineStore('comments', () => {
         // The id-set match is gated on "no inline range" so an inline change that
         // merely SHARES a row/source id but lives OUTSIDE the table is never
         // wrongly suppressed (its real range fails the table containment check).
-        const tableRanges = computeTrackedTableRangesForState(docState);
+        const { ranges: tableRanges, ids: structuralIds } = computeTrackedTableSummaryForState(docState);
         const ranges = trackChangesHelpers.getTrackChanges(docState, normalizedChangeId);
         const inRange =
           tableRanges.length > 0 && ranges.length > 0 && isInlineRangeInsideTrackedTable(ranges, tableRanges);
-        const isStructuralRowIdEcho =
-          ranges.length === 0 && computeStructuralChangeIdsForState(docState).has(normalizedChangeId);
+        const isStructuralRowIdEcho = ranges.length === 0 && structuralIds.has(normalizedChangeId);
         const subsumed = inRange || isStructuralRowIdEcho;
         if (subsumed) {
           // Block creation AND remove any stale duplicate created earlier (e.g.
@@ -2123,64 +2122,35 @@ export const useCommentsStore = defineStore('comments', () => {
    * @param {string | null | undefined} fileId
    * @returns {Array<{ from: number, to: number }>}
    */
-  const trackedTableRangesCache = new WeakMap();
+  const trackedTableSummaryCache = new WeakMap();
 
   /**
-   * Compute decidable whole-table tracked-change ranges for a PM editor state,
-   * memoized per state. Used both by the floating-list filter (via comment
-   * fileId) and at comment-creation time (where the live editor state is in
-   * hand) so an inline tracked change inside a tracked whole-table change is
-   * never turned into a separate review item.
+   * Single source of truth for the decidable whole-table tracked changes in a PM
+   * state, enumerated and memoized ONCE per state. Returns:
+   *  - `ranges`: each tracked whole-table's `{ from, to }` document span. Used to
+   *    test whether an inline tracked change falls inside a tracked table.
+   *  - `ids`: every change id associated with those tables (the change's public
+   *    id / revisionId / revisionGroupId / sourceId plus each row's trackChange
+   *    id / sourceId). Text typed inside a tracked-inserted row inherits that
+   *    row's revision id, so such an inline change reports a changeId that is one
+   *    of these — it must be subsumed by the structural bubble, not get its own
+   *    review item.
    *
    * @param {import('prosemirror-state').EditorState | null | undefined} state
-   * @returns {Array<{ from: number, to: number }>}
+   * @returns {{ ranges: Array<{ from: number, to: number }>, ids: Set<string> }}
    */
-  const computeTrackedTableRangesForState = (state) => {
-    if (!state) return [];
+  const computeTrackedTableSummaryForState = (state) => {
+    if (!state) return { ranges: [], ids: new Set() };
 
-    const cached = trackedTableRangesCache.get(state);
+    const cached = trackedTableSummaryCache.get(state);
     if (cached) return cached;
 
-    const enumerate = trackChangesHelpers?.enumerateStructuralRowChanges;
-    let ranges = [];
-    if (typeof enumerate === 'function') {
-      let structuralChanges = [];
-      try {
-        structuralChanges = enumerate(state) ?? [];
-      } catch {
-        structuralChanges = [];
-      }
-      ranges = structuralChanges
-        .filter((s) => s?.decidable && s?.wholeTable)
-        .map((s) => ({ from: Number(s.tableFrom), to: Number(s.tableTo) }))
-        .filter((r) => Number.isFinite(r.from) && Number.isFinite(r.to));
-    }
-    trackedTableRangesCache.set(state, ranges);
-    return ranges;
-  };
-
-  const structuralChangeIdsCache = new WeakMap();
-
-  /**
-   * All change ids associated with decidable whole-table structural changes in a
-   * PM state: the change's public id/revisionGroupId plus every row's
-   * trackChange id/sourceId. Text typed inside a tracked-inserted row inherits
-   * that row's revision id, so such an inline change reports a changeId that is
-   * one of these — it must be subsumed by the structural bubble, not get its own
-   * review item. Memoized per state.
-   *
-   * @param {import('prosemirror-state').EditorState | null | undefined} state
-   * @returns {Set<string>}
-   */
-  const computeStructuralChangeIdsForState = (state) => {
-    if (!state) return new Set();
-    const cached = structuralChangeIdsCache.get(state);
-    if (cached) return cached;
-
+    const ranges = [];
     const ids = new Set();
     const add = (value) => {
       if (value != null && value !== '') ids.add(String(value));
     };
+
     const enumerate = trackChangesHelpers?.enumerateStructuralRowChanges;
     if (typeof enumerate === 'function') {
       let structuralChanges = [];
@@ -2191,6 +2161,9 @@ export const useCommentsStore = defineStore('comments', () => {
       }
       for (const change of structuralChanges) {
         if (!change?.decidable || !change?.wholeTable) continue;
+        const from = Number(change.tableFrom);
+        const to = Number(change.tableTo);
+        if (Number.isFinite(from) && Number.isFinite(to)) ranges.push({ from, to });
         add(change.id);
         add(change.revisionId);
         add(change.revisionGroupId);
@@ -2202,14 +2175,16 @@ export const useCommentsStore = defineStore('comments', () => {
         }
       }
     }
-    structuralChangeIdsCache.set(state, ids);
-    return ids;
+
+    const summary = { ranges, ids };
+    trackedTableSummaryCache.set(state, summary);
+    return summary;
   };
 
   const getTrackedTableRangesForDocument = (fileId) => {
     const doc = superdocStore.getDocument(fileId);
     const editor = doc?.getEditor?.();
-    return computeTrackedTableRangesForState(editor?.state);
+    return computeTrackedTableSummaryForState(editor?.state).ranges;
   };
 
   /**

@@ -4,8 +4,8 @@ import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { compileTrackedEdit } from '../review-model/overlap-compiler.js';
 import { makeTextInsertIntent, makeTextDeleteIntent, makeTextReplaceIntent } from '../review-model/edit-intent.js';
-import { stampInsertedTableRows } from './stampInsertedTableRows.js';
-import { stampDeletedTableRows } from './stampDeletedTableRows.js';
+import { stampTableRows } from './stampTableRows.js';
+import { collectWholeTablesInRange } from './collectWholeTablesInRange.js';
 import { markInsertion } from './markInsertion.js';
 import { markDeletion } from './markDeletion.js';
 
@@ -38,24 +38,7 @@ const sliceContainsTable = (slice) => {
  * @param {{ doc: import('prosemirror-model').Node, from: number, to: number }} options
  * @returns {boolean}
  */
-const rangeContainsWholeTable = ({ doc, from, to }) => {
-  if (to <= from) return false;
-  const boundedFrom = Math.max(0, from);
-  const boundedTo = Math.min(doc.content.size, to);
-  if (boundedTo <= boundedFrom) return false;
-
-  let found = false;
-  doc.nodesBetween(boundedFrom, boundedTo, (node, pos) => {
-    if (found) return false;
-    if (node.type?.name !== 'table') return true;
-    if (pos >= boundedFrom && pos + node.nodeSize <= boundedTo) {
-      found = true;
-      return false;
-    }
-    return true;
-  });
-  return found;
-};
+const rangeContainsWholeTable = ({ doc, from, to }) => collectWholeTablesInRange({ doc, from, to }).length > 0;
 
 /**
  * Given a range (from..to) and a count of characters ("the Nth character in that range"),
@@ -296,7 +279,7 @@ export const replaceStep = ({
  *      insertion mark via `markInsertion`. An empty new table contributes none,
  *      which is fine — `markInsertion` skips table internals by design.
  *   3. Stamp each inserted table's rows with a structural `rowInsert` revision
- *      (one shared `revisionGroupId` per table) via `stampInsertedTableRows`,
+ *      (one shared `revisionGroupId` per table) via `stampTableRows`,
  *      matching the shape the importer lands from `<w:ins>` in `<w:trPr>`.
  *   4. Keep the outer `map` consistent (append the step's map) so subsequent
  *      original steps in the same transaction remap correctly, and report
@@ -361,7 +344,7 @@ const tryStructuralTableInsert = ({ newTr, step, map, user, date }) => {
 
   // 3. Stamp each whole inserted table's rows with a structural rowInsert
   //    revision (shared revisionGroupId per table).
-  stampInsertedTableRows({ tr: newTr, from: insertedFrom, to: insertedTo, user, date });
+  stampTableRows({ type: 'rowInsert', tr: newTr, from: insertedFrom, to: insertedTo, user, date });
 
   // 4. Surface insertion meta so the caret lands after the table and the
   //    bubble/comments pipeline sees a tracked insert.
@@ -392,7 +375,7 @@ const tryStructuralTableInsert = ({ newTr, step, map, user, date }) => {
  *      which is fine — step 3 alone makes it a tracked deletion.
  *   3. Stamp each WHOLE table in the range with a structural `rowDelete`
  *      revision on every row (one shared `revisionGroupId` per table) via
- *      `stampDeletedTableRows`, matching the shape the importer lands from
+ *      `stampTableRows`, matching the shape the importer lands from
  *      `<w:del>` in `<w:trPr>`.
  *   4. Set the tracked-changes / comments meta and report `handled: true` so
  *      `replaceStep` does NOT fall through to applying the untracked removal.
@@ -408,7 +391,7 @@ const tryStructuralTableInsert = ({ newTr, step, map, user, date }) => {
  * out of scope (this branch is only taken when at least one WHOLE table is
  * fully bracketed).
  *
- * `markDeletion` (addMark) and `stampDeletedTableRows` (setNodeMarkup) do not
+ * `markDeletion` (addMark) and `stampTableRows` (setNodeMarkup) do not
  * change node sizes and we apply no removal step, so the outer `map` stays the
  * identity for this step and subsequent original steps remap correctly.
  *
@@ -420,16 +403,7 @@ const tryStructuralTableDelete = ({ newTr, step, map, originalStep, originalStep
   const to = step.to;
 
   // Collect the whole tables fully bracketed by the range.
-  /** @type {Array<{ from: number, to: number }>} */
-  const tableRanges = [];
-  newTr.doc.nodesBetween(from, to, (node, pos) => {
-    if (node.type?.name !== 'table') return true;
-    if (pos >= from && pos + node.nodeSize <= to) {
-      tableRanges.push({ from: pos, to: pos + node.nodeSize });
-      return false; // don't descend into a captured table
-    }
-    return true;
-  });
+  const tableRanges = collectWholeTablesInRange({ doc: newTr.doc, from, to });
 
   // Only handle a CLEAN whole-table delete: the range must not include inline
   // text OUTSIDE the table(s). A mixed selection (surrounding text + table)
@@ -464,7 +438,7 @@ const tryStructuralTableDelete = ({ newTr, step, map, originalStep, originalStep
   // Stamp each whole table's rows with a structural rowDelete revision (shared
   // revisionGroupId per table). Required for an empty table (no cell text) and
   // for the structural "Deleted table" change/bubble in all cases.
-  const stamped = stampDeletedTableRows({ tr: newTr, from, to, user, date });
+  const stamped = stampTableRows({ type: 'rowDelete', tr: newTr, from, to, user, date });
 
   // Nothing trackable — decline so the caller can fall through.
   if (!stamped && !hasInlineText) {
@@ -705,7 +679,8 @@ const tryCompileStep = ({
   // The inserted range is [step.from, insertedTo); setNodeMarkup keeps sizes
   // stable so it does not disturb the mapping established above.
   if (typeof result.insertedTo === 'number' && result.insertedTo > step.from) {
-    stampInsertedTableRows({
+    stampTableRows({
+      type: 'rowInsert',
       tr: newTr,
       from: step.from,
       to: result.insertedTo,

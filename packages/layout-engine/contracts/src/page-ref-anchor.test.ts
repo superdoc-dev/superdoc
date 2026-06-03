@@ -150,6 +150,58 @@ describe('buildPageRefAnchorMap', () => {
     );
   });
 
+  it('limits table fallback ranges to the rows covered by each table fragment', () => {
+    const table: TableBlock = {
+      kind: 'table',
+      id: 't1',
+      rows: [
+        {
+          id: 'r1',
+          cells: [
+            {
+              id: 'c1',
+              paragraph: {
+                kind: 'paragraph',
+                id: 'p1',
+                runs: [{ text: 'First row', fontFamily: 'Arial', fontSize: 12, pmStart: 100, pmEnd: 109 }],
+              },
+            },
+          ],
+        },
+        {
+          id: 'r2',
+          cells: [
+            {
+              id: 'c2',
+              paragraph: {
+                kind: 'paragraph',
+                id: 'p2',
+                runs: [{ text: 'Second row', fontFamily: 'Arial', fontSize: 12, pmStart: 200, pmEnd: 210 }],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const layout: Layout = {
+      pageSize: { w: 800, h: 1000 },
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'table', blockId: 't1', fromRow: 0, toRow: 1, x: 0, y: 0, width: 100, height: 20 }],
+        },
+        {
+          number: 2,
+          fragments: [{ kind: 'table', blockId: 't1', fromRow: 1, toRow: 2, x: 0, y: 0, width: 100, height: 20 }],
+        },
+      ],
+    };
+
+    expect(buildPageRefAnchorMap(new Map([['secondRow', 205]]), layout, [table]).get('secondRow')?.physicalPage).toBe(
+      2,
+    );
+  });
+
   it('falls back to list item paragraph ranges when fragment PM data is missing', () => {
     const list: ListBlock = {
       kind: 'list',

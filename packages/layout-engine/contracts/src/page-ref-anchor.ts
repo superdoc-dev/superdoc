@@ -8,6 +8,7 @@ import type {
   ParagraphBlock,
   Run,
   TableBlock,
+  TableFragment,
 } from './index.js';
 
 export function buildPageRefAnchorMap(
@@ -51,7 +52,7 @@ function findPageRefLocation(
       if (fragment.kind === 'para' && block?.kind === 'paragraph' && blockContainsPosition(block, pmPosition)) {
         return pageRefLocationFromPage(page, pmPosition);
       }
-      if (fragment.kind === 'table' && block?.kind === 'table' && tableContainsPosition(block, pmPosition)) {
+      if (fragment.kind === 'table' && block?.kind === 'table' && tableContainsPosition(block, fragment, pmPosition)) {
         return pageRefLocationFromPage(page, pmPosition);
       }
       if (
@@ -100,13 +101,30 @@ function blockContainsPosition(block: ParagraphBlock, pmPosition: number): boole
   return range != null && pmPosition >= range.start && pmPosition < range.end;
 }
 
-function tableContainsPosition(block: TableBlock, pmPosition: number): boolean {
+function tableContainsPosition(block: TableBlock, fragment: TableFragment, pmPosition: number): boolean {
+  const fromRow = Math.max(0, fragment.fromRow);
+  const toRow = Math.min(block.rows.length, fragment.toRow);
+  for (let rowIndex = fromRow; rowIndex < toRow; rowIndex += 1) {
+    const row = block.rows[rowIndex];
+    if (!row) continue;
+    for (const cell of row.cells) {
+      const blocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+      for (const childBlock of blocks) {
+        if (childBlock.kind === 'paragraph' && blockContainsPosition(childBlock, pmPosition)) return true;
+        if (childBlock.kind === 'table' && tableBlockContainsPosition(childBlock, pmPosition)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function tableBlockContainsPosition(block: TableBlock, pmPosition: number): boolean {
   for (const row of block.rows) {
     for (const cell of row.cells) {
       const blocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
       for (const childBlock of blocks) {
         if (childBlock.kind === 'paragraph' && blockContainsPosition(childBlock, pmPosition)) return true;
-        if (childBlock.kind === 'table' && tableContainsPosition(childBlock, pmPosition)) return true;
+        if (childBlock.kind === 'table' && tableBlockContainsPosition(childBlock, pmPosition)) return true;
       }
     }
   }

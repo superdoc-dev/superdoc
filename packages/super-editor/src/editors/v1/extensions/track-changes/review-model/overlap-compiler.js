@@ -679,6 +679,17 @@ const compileTextDelete = (ctx, intent) => {
   // refinement in compileTextInsert (TC-EDIT-018). Replacement-driven deletes
   // keep their caller-provided pairing id; preserve-review-state edits never
   // fold into an existing change.
+  //
+  // Date semantics: the new run is marked with this edit's date while the
+  // existing runs keep theirs, so one changeId can span runs with mixed dates
+  // (the same as same-user insertion refinement, and as coalescing into an
+  // imported older-session same-author deletion — both intentional). This does
+  // not create ambiguity: the read model takes the change date from the first
+  // segment (review-graph buildLogicalChange `primary = segments[0]`), and on
+  // export mergeConsecutiveTrackedChanges joins the per-run w:del/w:ins wrappers
+  // by w:id and keeps the first wrapper's attributes — so one logical deletion
+  // exports as a single w:del with the first run's w:date, and the panel shows
+  // that same date.
   const coalesceTarget =
     intent.replacementGroupHint || intent.preserveExistingReviewState
       ? null

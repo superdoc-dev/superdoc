@@ -35,10 +35,10 @@ import {
   buildLayoutSourceIdentityForFragment,
   normalizeColumnLayout,
   getFragmentZIndex,
+  resolveAnchoredGraphicY,
   resolveEffectiveHeaderFooterRef,
   selectHeaderFooterVariantForPage,
 } from '@superdoc/contracts';
-import { buildLayoutSourceIdentityForFragment, normalizeColumnLayout, getFragmentZIndex, resolveAnchoredGraphicY  } from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
 import {
@@ -2526,10 +2526,6 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
 
-      // Paragraph start Y (OOXML: anchor for vertAnchor="text"). Captured before layout so
-      // paragraph-anchored tables use it as base; offsetV (tblpY) positions below start to avoid overlap.
-      const paragraphStartY = paginator.ensurePage().cursorY;
-
       layoutParagraphBlock(
         {
           block,
@@ -2569,16 +2565,26 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (tablesForPara) {
         const state = paginator.ensurePage();
         const columnWidthForTable = getCurrentColumnWidth();
+
+        // Paragraph top after layout (first fragment on this page). Pre-layout cursorY can still
+        // sit on the previous page when the anchor paragraph breaks across pages.
+        let anchorParagraphTopY = state.cursorY;
+        for (const fragment of state.page.fragments) {
+          if (fragment.kind === 'para' && fragment.blockId === block.id) {
+            anchorParagraphTopY = Math.min(anchorParagraphTopY, fragment.y);
+          }
+        }
+
         let tableBottomY = state.cursorY;
+        let nextStackY = state.cursorY;
         for (const { block: tableBlock, measure: tableMeasure } of tablesForPara) {
           if (placedAnchoredTableIds.has(tableBlock.id)) continue;
           const totalWidth = tableMeasure.totalWidth ?? 0;
           if (columnWidthForTable > 0 && totalWidth >= columnWidthForTable * ANCHORED_TABLE_FULL_WIDTH_RATIO) continue;
 
-          // OOXML anchor base is paragraph-relative. Clamp to paragraph bottom so the table never overlaps
-          // paragraph text, then apply offsetV from that resolved anchor position.
+          // OOXML anchor base is paragraph-relative. Clamp below laid-out paragraph text, then offsetV.
           const offsetV = tableBlock.anchor?.offsetV ?? 0;
-          const anchorBaseY = Math.max(paragraphStartY, state.cursorY);
+          const anchorBaseY = Math.max(anchorParagraphTopY, nextStackY);
           const anchorY = anchorBaseY + offsetV;
           floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
 
@@ -2593,7 +2599,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           const wrapType = tableBlock.wrap?.type ?? 'None';
           if (wrapType !== 'None') {
             const bottom = anchorY + (tableMeasure.totalHeight ?? 0);
+            const distBottom = tableBlock.wrap?.distBottom ?? 0;
             if (bottom > tableBottomY) tableBottomY = bottom;
+            nextStackY = bottom + distBottom;
           }
         }
         state.cursorY = tableBottomY;

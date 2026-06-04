@@ -51,6 +51,39 @@ describe('sequenceField export routing', () => {
     });
 
     expect(encoded.attrs.resolvedNumber).toBe('1');
+    expect(encoded.attrs.resolvedNumberIsCurrent).toBe(false);
+    expect(encoded.attrs.identifier).toBe('level2');
+    expect(encoded.attrs.format).toBe('arabic');
+  });
+
+  it('round-trips lowercase SEQ cached result text before recompute', () => {
+    const encoded = sequenceFieldTranslator.encode({
+      nodes: [
+        {
+          name: 'sd:sequenceField',
+          attributes: { instruction: 'seq Figure \\* arabic' },
+          elements: [
+            {
+              type: 'run',
+              content: [{ type: 'text', text: '42', marks: [] }],
+            },
+          ],
+        },
+      ],
+      nodeListHandler: {
+        handler: () => [{ type: 'run', content: [{ type: 'text', text: '42', marks: [] }] }],
+      },
+    });
+
+    const exported = exportSchemaToJson({ node: encoded });
+    const resultRun = exported.find(
+      (node) =>
+        node?.name === 'w:r' &&
+        node?.elements?.some((element) => element?.name === 'w:t' && element?.elements?.[0]?.text === '42'),
+    );
+
+    expect(encoded.attrs.resolvedNumberIsCurrent).toBe(false);
+    expect(resultRun).toBeTruthy();
   });
 
   it('exports sequenceField nodes as fldChar + instrText runs', () => {

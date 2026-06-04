@@ -1,6 +1,7 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
 import { exportSchemaToJson, processOutputMarks } from '../../../../exporter.js';
+import { parseSeqInstruction } from '../../../../field-references/shared/seq-instruction.js';
 import { buildInstructionElements } from '../shared/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
@@ -24,17 +25,26 @@ const encode = (params) => {
   });
 
   const instruction = node.attributes?.instruction || '';
-  const { identifier, format, restartLevel } = parseSeqInstruction(instruction);
+  const parsed = parseSeqInstruction(instruction);
 
   return {
     type: SD_NODE_NAME,
     attrs: {
       instruction,
       instructionTokens: node.attributes?.instructionTokens || null,
-      identifier,
-      format,
-      restartLevel,
+      // Raw instruction remains the export source of truth; these parsed attrs support import-time routing and later evaluation.
+      identifier: parsed.identifier,
+      fieldArgument: parsed.fieldArgument,
+      sequenceMode: parsed.sequenceMode,
+      hideResult: parsed.hideResult,
+      restartNumber: parsed.restartNumber,
+      restartLevel: parsed.restartLevel,
+      format: parsed.format,
+      hasGeneralFormat: parsed.hasGeneralFormat,
+      pageNumberFieldFormat: parsed.pageNumberFieldFormat ?? null,
+      numericPictureFormat: parsed.numericPictureFormat,
       resolvedNumber: extractResolvedText(processedText),
+      resolvedNumberIsCurrent: false,
       marksAsAttrs: node.marks || [],
     },
     content: processedText,
@@ -81,30 +91,6 @@ const decode = (params) => {
     },
   ];
 };
-
-/**
- * Parses a SEQ instruction into its components.
- * @param {string} instruction
- * @returns {{ identifier: string; format: string; restartLevel: number | null }}
- */
-function parseSeqInstruction(instruction) {
-  const parts = instruction.trim().split(/\s+/);
-  const identifier = parts[1] || '';
-  let format = 'ARABIC';
-  let restartLevel = null;
-
-  for (let i = 2; i < parts.length; i++) {
-    if (parts[i] === '\\*' && parts[i + 1]) {
-      format = parts[i + 1];
-      i++;
-    } else if (parts[i] === '\\s' && parts[i + 1]) {
-      restartLevel = parseInt(parts[i + 1], 10) || null;
-      i++;
-    }
-  }
-
-  return { identifier, format, restartLevel };
-}
 
 /**
  * Extracts resolved text from processed content.

@@ -38,16 +38,48 @@ export const SequenceField = Node.create({
         default: '',
         rendered: false,
       },
+      fieldArgument: {
+        default: '',
+        rendered: false,
+      },
+      sequenceMode: {
+        default: 'next',
+        rendered: false,
+      },
+      hideResult: {
+        default: false,
+        rendered: false,
+      },
+      restartNumber: {
+        default: null,
+        rendered: false,
+      },
       format: {
-        default: 'ARABIC',
+        default: 'Arabic',
         rendered: false,
       },
       restartLevel: {
         default: null,
         rendered: false,
       },
+      hasGeneralFormat: {
+        default: false,
+        rendered: false,
+      },
+      pageNumberFieldFormat: {
+        default: null,
+        rendered: false,
+      },
+      numericPictureFormat: {
+        default: null,
+        rendered: false,
+      },
       resolvedNumber: {
         default: '',
+        rendered: false,
+      },
+      resolvedNumberIsCurrent: {
+        default: false,
         rendered: false,
       },
       sdBlockId: {

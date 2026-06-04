@@ -8,6 +8,7 @@ export const GENERAL_FORMATS = new Map([
   ['alphabetic', 'lowerLetter'],
   ['ALPHABETIC', 'upperLetter'],
   ['ArabicDash', 'numberInDash'],
+  ['Ordinal', 'ordinal'],
 ]);
 
 export const CASE_INSENSITIVE_GENERAL_FORMATS = new Map([
@@ -18,17 +19,18 @@ export const CASE_INSENSITIVE_GENERAL_FORMATS = new Map([
 /**
  * @param {string} instruction
  * @param {'PAGE' | 'NUMPAGES' | 'SECTIONPAGES'} fieldType
- * @returns {{ instruction?: string, pageNumberFormat?: string, pageNumberZeroPadding?: number }}
+ * @returns {{ instruction?: string, pageNumberFormat?: string, pageNumberZeroPadding?: number, pageNumberNumericPicture?: string }}
  */
 export function parsePageNumberFieldSwitches(instruction, fieldType) {
-  const normalizedInstruction = typeof instruction === 'string' ? instruction.trim().replace(/\s+/g, ' ') : fieldType;
+  const switchInstruction = typeof instruction === 'string' ? instruction.trim() : fieldType;
+  const normalizedInstruction = switchInstruction.replace(/\s+/g, ' ');
   const result = {};
 
   if (normalizedInstruction && normalizedInstruction !== fieldType) {
     result.instruction = normalizedInstruction;
   }
 
-  for (const match of normalizedInstruction.matchAll(/\\\*\s+("[^"]+"|\S+)/g)) {
+  for (const match of switchInstruction.matchAll(/\\\*\s+("[^"]+"|\S+)/g)) {
     const rawValue = unquote(match[1]);
     const mapped = GENERAL_FORMATS.get(rawValue) ?? CASE_INSENSITIVE_GENERAL_FORMATS.get(rawValue.toLowerCase());
     if (mapped) {
@@ -37,13 +39,18 @@ export function parsePageNumberFieldSwitches(instruction, fieldType) {
     }
   }
 
-  for (const match of normalizedInstruction.matchAll(/\\#\s+("[^"]+"|\S+)/g)) {
+  for (const match of switchInstruction.matchAll(/\\#\s+("[^"]+"|\S+)/g)) {
     const picture = unquote(match[1]);
+    if (!picture) continue;
+
     if (/^0+$/.test(picture)) {
       result.pageNumberFormat ??= 'decimal';
       result.pageNumberZeroPadding = picture.length;
-      break;
+    } else {
+      result.pageNumberNumericPicture = picture;
     }
+
+    break;
   }
 
   return result;

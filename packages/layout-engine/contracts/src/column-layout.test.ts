@@ -10,6 +10,7 @@ import {
   getColumnWidth,
   getColumnX,
   normalizeColumnLayout,
+  resolveColumnCount,
   resolveColumnMode,
   widthsEqual,
 } from './column-layout.js';
@@ -233,5 +234,32 @@ describe('resolveColumnMode (SD-2629)', () => {
 
   it('is equal for missing input', () => {
     expect(resolveColumnMode(undefined)).toBe('equal');
+  });
+});
+
+describe('resolveColumnCount (SD-2629)', () => {
+  it('clamps explicit count to the usable-width count (min(num, widths))', () => {
+    expect(resolveColumnCount({ count: 4, gap: 20, widths: [192, 384], equalWidth: false })).toBe(2);
+    expect(resolveColumnCount({ count: 4, gap: 20, widths: [192], equalWidth: false })).toBe(1);
+  });
+
+  it('keeps num when it does not exceed the usable-width count', () => {
+    expect(resolveColumnCount({ count: 2, gap: 20, widths: [192, 384], equalWidth: false })).toBe(2);
+  });
+
+  it('does not clamp in equal mode (no usable explicit widths)', () => {
+    expect(resolveColumnCount({ count: 3, gap: 20 })).toBe(3);
+    expect(resolveColumnCount({ count: 4, gap: 20, widths: [192, 384], equalWidth: true })).toBe(4);
+    expect(resolveColumnCount({ count: 4, gap: 20, equalWidth: false })).toBe(4);
+  });
+
+  it('floors to a minimum of 1', () => {
+    expect(resolveColumnCount({ count: 0, gap: 0 })).toBe(1);
+    expect(resolveColumnCount(undefined)).toBe(1);
+  });
+
+  it('agrees with normalizeColumnLayout.count (single count authority)', () => {
+    const input: ColumnLayout = { count: 4, gap: 20, widths: [192, 384], equalWidth: false };
+    expect(normalizeColumnLayout(input, 600).count).toBe(resolveColumnCount(input));
   });
 });

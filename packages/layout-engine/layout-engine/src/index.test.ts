@@ -279,6 +279,26 @@ describe('layoutDocument', () => {
     });
   });
 
+  it('caps the fill at the resolved column count when w:num exceeds the supplied widths (SD-2629)', () => {
+    // count:4 but only two explicit widths -> the resolved count is 2 (Word renders min(num,
+    // widths)). The fill loop must advance through 2 columns then start a new page, NOT into
+    // phantom columns 3-4. Before SD-2629, advanceColumn read the raw count (4) while width math
+    // read the clamped count (2): two answers for "how many columns exist".
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 4, gap: 20, widths: [192, 384], equalWidth: false },
+    };
+
+    // Eight 350px lines: each 720px column fits two, so a 2-column page holds four lines -> exactly
+    // two pages. Under the bug (4 columns), all eight fit on one page across four column positions.
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350, 350, 350, 350, 350, 350])], options);
+
+    const columnXs = new Set(layout.pages.flatMap((page) => page.fragments.map((fragment) => Math.round(fragment.x))));
+    expect(columnXs.size).toBe(2);
+    expect(layout.pages).toHaveLength(2);
+  });
+
   it('does not set "page.columns" on single column layout', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },

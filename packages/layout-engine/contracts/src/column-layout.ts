@@ -45,6 +45,21 @@ export function resolveColumnMode(input: ColumnLayout | undefined): 'explicit' |
   return usableExplicitWidths(input).length > 0 ? 'explicit' : 'equal';
 }
 
+/**
+ * Resolved column count and the SINGLE authority for "how many columns exist": the raw `w:num`
+ * (default 1, floored, min 1) clamped to the usable explicit-width count in explicit mode (Word
+ * renders min(num, valid-width count)). Both `normalizeColumnLayout` (width math) and the paginator
+ * fill loop read this, so the two tracks cannot disagree — a section that declares more columns
+ * than it supplies widths (e.g. w:num="4" with two <w:col>) neither pads surplus columns to ~0px
+ * slivers nor advances the fill into non-existent columns. Content-width-independent. (SD-2324 F8 /
+ * SD-2629)
+ */
+export function resolveColumnCount(input: ColumnLayout | undefined): number {
+  const rawCount = input && Number.isFinite(input.count) ? Math.max(1, Math.floor(input.count)) : 1;
+  const explicit = usableExplicitWidths(input);
+  return explicit.length > 0 ? Math.min(rawCount, explicit.length) : rawCount;
+}
+
 export function cloneColumnLayout(columns?: ColumnLayout): ColumnLayout {
   return columns
     ? {
@@ -83,20 +98,12 @@ export function normalizeColumnLayout(
   contentWidth: number,
   epsilon = 0.0001,
 ): NormalizedColumnLayout {
-  const rawCount = input && Number.isFinite(input.count) ? Math.floor(input.count) : 1;
-  let count = Math.max(1, rawCount || 1);
+  const count = resolveColumnCount(input);
   const gap = Math.max(0, input?.gap ?? 0);
   // Honor per-column widths ONLY in explicit mode (`equalWidth === false` with usable widths).
   // In equal mode (true or omitted) Word ignores child widths and divides the content area evenly,
   // so any widths that reach here are not authoritative and must not drive geometry. (SD-2324)
   const explicitWidths = usableExplicitWidths(input);
-  // Explicit columns are defined by their <w:col> widths. When the section declares more
-  // columns than it supplies widths (e.g. w:num="4" with two <w:col>), the surplus columns
-  // have no width and previously padded to ~0px, rendering as 1px slivers of vertical text
-  // (SD-2324 F8). Clamp the count to the widths actually provided so every column renders.
-  if (explicitWidths.length > 0 && explicitWidths.length < count) {
-    count = explicitWidths.length;
-  }
   const totalGap = gap * (count - 1);
   const availableWidth = contentWidth - totalGap;
 

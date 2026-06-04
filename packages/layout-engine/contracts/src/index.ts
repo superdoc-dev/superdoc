@@ -109,6 +109,7 @@ export {
   getColumnWidth,
   getColumnX,
   normalizeColumnLayout,
+  resolveColumnCount,
   resolveColumnMode,
   widthsEqual,
 } from './column-layout.js';

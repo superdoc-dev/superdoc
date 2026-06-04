@@ -213,8 +213,7 @@ function insertNumPagesField(
     );
   }
 
-  const normalizedInstruction = input.instruction.trim().replace(/\s+/g, ' ');
-  const parsedInstruction = parsePageNumberFieldSwitches(normalizedInstruction, 'NUMPAGES');
+  const parsedInstruction = parsePageNumberFieldSwitches(input.instruction, 'NUMPAGES');
 
   const receipt = executeDomainCommand(
     editor,

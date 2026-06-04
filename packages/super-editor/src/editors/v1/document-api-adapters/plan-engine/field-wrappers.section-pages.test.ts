@@ -243,6 +243,24 @@ describe('fieldsRebuildWrapper NUMPAGES fields', () => {
     });
   });
 
+  it('preserves quoted NUMPAGES numeric picture whitespace during insert', () => {
+    const editor = createEditorForInsert(undefined, true);
+
+    const result = fieldsInsertWrapper(editor, {
+      mode: 'raw',
+      instruction: 'NUMPAGES \\# "#   pages"',
+      at: { kind: 'text', segments: [{ blockId: 'block-1', range: { start: 0, end: 0 } }] },
+    });
+
+    expect(result.success).toBe(true);
+    const insertedField = editor.state.doc.nodeAt(1);
+    expect(insertedField?.type.name).toBe('total-page-number');
+    expect(insertedField?.attrs).toMatchObject({
+      instruction: 'NUMPAGES \\# "# pages"',
+      pageNumberNumericPicture: '#   pages',
+    });
+  });
+
   it('inserts NUMPAGES as a total-page-number node with general format attrs in headers/footers', () => {
     const editor = createEditorForInsert(undefined, true);
 

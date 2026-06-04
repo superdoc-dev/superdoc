@@ -449,7 +449,7 @@ export type TextRun = RunMarks & {
   visualPlaceholder?: SdtVisualPlaceholder;
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
-  token?: 'pageNumber' | 'totalPageCount' | 'pageReference' | 'sectionPageCount';
+  token?: 'pageNumber' | 'totalPageCount' | 'pageReference' | 'sectionPageCount' | 'seq';
   /** Explicit formatting requested by PAGE/NUMPAGES/SECTIONPAGES field switches. */
   pageNumberFieldFormat?: PageNumberFieldFormat;
   /** Absolute ProseMirror position (inclusive) of first character in this run. */
@@ -468,6 +468,21 @@ export type TextRun = RunMarks & {
     numericPictureFormat?: NumericPictureFormat;
     /** CHARFORMAT / MERGEFORMAT, if present. */
     fieldResultFormat?: FieldResultFormat;
+  };
+  /** Metadata for SEQ tokens (resolved by super-editor before layout measurement). */
+  seqMetadata?: {
+    identifier: string;
+    instruction?: string;
+    fieldArgument?: string;
+    sequenceMode?: 'next' | 'current';
+    hideResult?: boolean;
+    restartNumber?: number | null;
+    restartLevel?: number | null;
+    format?: string;
+    hasGeneralFormat?: boolean;
+    pageNumberFieldFormat?: PageNumberFieldFormat | null;
+    numericPictureFormat?: NumericPictureFormat | null;
+    cachedText?: string;
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;

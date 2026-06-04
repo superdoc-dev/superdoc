@@ -98,7 +98,7 @@ export const SequenceField = Node.create({
   },
 
   renderDOM({ node, htmlAttributes }) {
-    const text = node.attrs.resolvedNumber || '0';
+    const text = node.attrs.resolvedNumber || '';
     return ['span', Attribute.mergeAttributes(this.options.htmlAttributes, htmlAttributes), text];
   },
 });

@@ -32,6 +32,22 @@ function toUpperLetter(value: number): string {
   return String.fromCharCode(65 + index).repeat(repeatCount);
 }
 
+function toOrdinal(value: number): string {
+  const remainder = value % 100;
+  if (remainder >= 11 && remainder <= 13) return `${value}th`;
+
+  switch (value % 10) {
+    case 1:
+      return `${value}st`;
+    case 2:
+      return `${value}nd`;
+    case 3:
+      return `${value}rd`;
+    default:
+      return `${value}th`;
+  }
+}
+
 export function formatPageNumber(pageNumber: number, format: PageNumberFormat): string {
   const value = Math.max(1, Math.trunc(Number.isFinite(pageNumber) ? pageNumber : 1));
 
@@ -46,6 +62,8 @@ export function formatPageNumber(pageNumber: number, format: PageNumberFormat): 
       return toUpperLetter(value).toLowerCase();
     case 'numberInDash':
       return `- ${value} -`;
+    case 'ordinal':
+      return toOrdinal(value);
     case 'decimal':
     default:
       return String(value);
@@ -53,6 +71,11 @@ export function formatPageNumber(pageNumber: number, format: PageNumberFormat): 
 }
 
 export function formatPageNumberFieldValue(pageNumber: number, fieldFormat?: PageNumberFieldFormat): string {
+  if (fieldFormat?.numericPicture) {
+    const value = Math.max(1, Math.trunc(Number.isFinite(pageNumber) ? pageNumber : 1));
+    return formatIntegerWithNumericPicture(value, fieldFormat.numericPicture);
+  }
+
   const format = fieldFormat?.format ?? 'decimal';
   const formatted = formatPageNumber(pageNumber, format);
   return fieldFormat?.zeroPadding && format === 'decimal'
@@ -102,7 +125,7 @@ export function formatSectionPageNumberText(args: {
 }
 
 /**
- * Formats integer field values with a Word numeric picture subset used by PAGEREF.
+ * Formats integer page field values with a Word numeric picture subset.
  * Unsupported ECMA features are intentionally out of scope here: backtick
  * numbered-item references, localized separators, and fractional rounding.
  */

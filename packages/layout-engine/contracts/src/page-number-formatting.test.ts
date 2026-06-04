@@ -14,6 +14,16 @@ describe('page number formatting', () => {
     expect(formatPageNumber(28, 'upperLetter')).toBe('BB');
     expect(formatPageNumber(703, 'lowerLetter')).toBe('a'.repeat(28));
     expect(formatPageNumber(12, 'numberInDash')).toBe('- 12 -');
+    expect(formatPageNumber(1, 'ordinal')).toBe('1st');
+    expect(formatPageNumber(2, 'ordinal')).toBe('2nd');
+    expect(formatPageNumber(3, 'ordinal')).toBe('3rd');
+    expect(formatPageNumber(4, 'ordinal')).toBe('4th');
+    expect(formatPageNumber(11, 'ordinal')).toBe('11th');
+    expect(formatPageNumber(12, 'ordinal')).toBe('12th');
+    expect(formatPageNumber(13, 'ordinal')).toBe('13th');
+    expect(formatPageNumber(21, 'ordinal')).toBe('21st');
+    expect(formatPageNumber(22, 'ordinal')).toBe('22nd');
+    expect(formatPageNumber(23, 'ordinal')).toBe('23rd');
   });
 
   it('normalizes page numbers before formatting', () => {
@@ -33,6 +43,16 @@ describe('page number formatting', () => {
   it('applies decimal zero padding for field values', () => {
     expect(formatPageNumberFieldValue(7, { format: 'decimal', zeroPadding: 3 })).toBe('007');
     expect(formatPageNumberFieldValue(7, { format: 'lowerRoman', zeroPadding: 3 })).toBe('vii');
+  });
+
+  it('formats ordinal field values', () => {
+    expect(formatPageNumberFieldValue(32, { format: 'ordinal' })).toBe('32nd');
+  });
+
+  it('uses numeric pictures before enum format and zero padding', () => {
+    expect(formatPageNumberFieldValue(1234, { numericPicture: '#,##0' })).toBe('1,234');
+    expect(formatPageNumberFieldValue(7, { format: 'ordinal', zeroPadding: 3, numericPicture: '00' })).toBe('07');
+    expect(formatPageNumberFieldValue(0, { numericPicture: '00' })).toBe('01');
   });
 
   it('formats integer values with numeric pictures', () => {

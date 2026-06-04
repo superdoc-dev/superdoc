@@ -256,7 +256,7 @@ describe('fieldsRebuildWrapper NUMPAGES fields', () => {
     const insertedField = editor.state.doc.nodeAt(1);
     expect(insertedField?.type.name).toBe('total-page-number');
     expect(insertedField?.attrs).toMatchObject({
-      instruction: 'NUMPAGES \\# "# pages"',
+      instruction: 'NUMPAGES \\# "#   pages"',
       pageNumberNumericPicture: '#   pages',
     });
   });

@@ -23,7 +23,7 @@ export const CASE_INSENSITIVE_GENERAL_FORMATS = new Map([
  */
 export function parsePageNumberFieldSwitches(instruction, fieldType) {
   const switchInstruction = typeof instruction === 'string' ? instruction.trim() : fieldType;
-  const normalizedInstruction = switchInstruction.replace(/\s+/g, ' ');
+  const normalizedInstruction = normalizeInstructionWhitespace(switchInstruction);
   const result = {};
 
   if (normalizedInstruction && normalizedInstruction !== fieldType) {
@@ -73,4 +73,41 @@ export function formatPageNumberFieldValue(pageNumber, attrs = {}) {
  */
 function unquote(value) {
   return value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+}
+
+/**
+ * Collapse field-code whitespace outside quoted switch arguments while
+ * preserving significant whitespace inside numeric-picture literals.
+ *
+ * @param {string} instruction
+ */
+function normalizeInstructionWhitespace(instruction) {
+  let normalized = '';
+  let inQuote = false;
+  let pendingSpace = false;
+
+  for (const char of instruction) {
+    if (char === '"') {
+      if (pendingSpace && normalized.length > 0) {
+        normalized += ' ';
+        pendingSpace = false;
+      }
+      normalized += char;
+      inQuote = !inQuote;
+      continue;
+    }
+
+    if (!inQuote && /\s/.test(char)) {
+      pendingSpace = true;
+      continue;
+    }
+
+    if (pendingSpace && normalized.length > 0) {
+      normalized += ' ';
+      pendingSpace = false;
+    }
+    normalized += char;
+  }
+
+  return normalized;
 }

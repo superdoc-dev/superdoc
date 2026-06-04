@@ -293,11 +293,11 @@ describe('sd:totalPageNumber translator', () => {
       const result = config.decode({
         node: {
           type: 'total-page-number',
-          attrs: { instruction: 'NUMPAGES \\# "00"', importedCachedText: '07' },
+          attrs: { instruction: 'NUMPAGES \\# "#   pages"', importedCachedText: '7   pages' },
         },
       });
 
-      expect(result[1].elements[1].elements[0].text).toBe(' NUMPAGES \\# "00"');
+      expect(result[1].elements[1].elements[0].text).toBe(' NUMPAGES \\# "#   pages"');
     });
   });
 });

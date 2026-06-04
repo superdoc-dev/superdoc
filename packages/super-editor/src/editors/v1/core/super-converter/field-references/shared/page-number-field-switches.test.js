@@ -44,7 +44,7 @@ describe('parsePageNumberFieldSwitches', () => {
     ['NUMPAGES \\# "#,##0"', { instruction: 'NUMPAGES \\# "#,##0"', pageNumberNumericPicture: '#,##0' }],
     ['NUMPAGES \\# #,##0', { instruction: 'NUMPAGES \\# #,##0', pageNumberNumericPicture: '#,##0' }],
     ['NUMPAGES \\# "# pages"', { instruction: 'NUMPAGES \\# "# pages"', pageNumberNumericPicture: '# pages' }],
-    ['NUMPAGES \\# "#   pages"', { instruction: 'NUMPAGES \\# "# pages"', pageNumberNumericPicture: '#   pages' }],
+    ['NUMPAGES \\# "#   pages"', { instruction: 'NUMPAGES \\# "#   pages"', pageNumberNumericPicture: '#   pages' }],
   ])('preserves non-zero numeric picture switch %s', (instruction, expected) => {
     expect(parsePageNumberFieldSwitches(instruction, 'NUMPAGES')).toEqual(expected);
   });

@@ -171,7 +171,7 @@ describe('preProcessPageFieldsOnly', () => {
       expect(result.processedNodes[0]).toMatchObject({
         name: 'sd:totalPageNumber',
         attributes: {
-          instruction: 'NUMPAGES \\# "# pages"',
+          instruction: 'NUMPAGES \\# "#   pages"',
           pageNumberNumericPicture: '#   pages',
           importedCachedText: '1   pages',
         },

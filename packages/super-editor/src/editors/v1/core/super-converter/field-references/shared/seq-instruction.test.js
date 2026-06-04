@@ -32,6 +32,34 @@ describe('parseSeqInstruction', () => {
       },
     ],
     [
+      'SEQ Figure \\*roman',
+      {
+        identifier: 'Figure',
+        format: 'roman',
+        hasGeneralFormat: true,
+        pageNumberFieldFormat: { format: 'lowerRoman' },
+      },
+    ],
+    [
+      'seq level2 \\*arabic',
+      {
+        keyword: 'seq',
+        identifier: 'level2',
+        format: 'arabic',
+        hasGeneralFormat: true,
+        pageNumberFieldFormat: { format: 'decimal' },
+      },
+    ],
+    [
+      'SEQ Figure \\*"Roman"',
+      {
+        identifier: 'Figure',
+        format: 'Roman',
+        hasGeneralFormat: true,
+        pageNumberFieldFormat: { format: 'upperRoman' },
+      },
+    ],
+    [
       'SEQ Figure \\* ALPHABETIC',
       {
         identifier: 'Figure',
@@ -50,6 +78,8 @@ describe('parseSeqInstruction', () => {
       },
     ],
     ['SEQ Figure \\# "00"', { identifier: 'Figure', numericPictureFormat: { picture: '00' } }],
+    ['SEQ Figure \\#00', { identifier: 'Figure', numericPictureFormat: { picture: '00' } }],
+    ['SEQ Figure \\#"00"', { identifier: 'Figure', numericPictureFormat: { picture: '00' } }],
     ['SEQ Figure \\# "#,##0"', { identifier: 'Figure', numericPictureFormat: { picture: '#,##0' } }],
     [
       'SEQ Figure \\r 10 \\* roman \\h',

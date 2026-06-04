@@ -1,7 +1,7 @@
 import { extractFieldKeyword } from '../field-keyword.js';
 import { CASE_INSENSITIVE_GENERAL_FORMATS, GENERAL_FORMATS } from './page-number-field-switches.js';
 
-const TOKEN_PATTERN = /"((?:[^"\\]|\\.)*)"|\\[#*]|\\[^\s]+|[^\s]+/g;
+const TOKEN_PATTERN = /"((?:[^"\\]|\\.)*)"|\\[#*](?=\s|$)|\\[^\s]+|[^\s]+/g;
 
 /**
  * @typedef {'next' | 'current'} SeqMode
@@ -96,28 +96,30 @@ export function parseSeqInstruction(instruction) {
         continue;
       }
 
-      if (token === '\\*') {
-        const value = tokens[index + 1]?.value;
-        if (value != null && !value.startsWith('\\')) {
+      const attachedGeneralFormat = parseAttachedGeneralFormatSwitch(token);
+      if (normalized === '\\*' || attachedGeneralFormat != null) {
+        const value = attachedGeneralFormat ?? tokens[index + 1]?.value;
+        if (value != null && (attachedGeneralFormat != null || !value.startsWith('\\'))) {
           result.format = value;
           result.hasGeneralFormat = true;
           applyGeneralFormat(result, value);
-          index += 1;
+          if (attachedGeneralFormat == null) index += 1;
         } else {
           result.unknownSwitches.push(token);
         }
         continue;
       }
 
-      if (token === '\\#') {
-        const value = tokens[index + 1]?.value;
-        if (value != null && !value.startsWith('\\')) {
+      const attachedNumericPicture = parseAttachedNumericPictureSwitch(token);
+      if (normalized === '\\#' || attachedNumericPicture != null) {
+        const value = attachedNumericPicture ?? tokens[index + 1]?.value;
+        if (value != null && (attachedNumericPicture != null || !value.startsWith('\\'))) {
           if (result.numericPictureFormat == null) {
             result.numericPictureFormat = { picture: value };
           } else {
             result.unknownSwitches.push(token, value);
           }
-          index += 1;
+          if (attachedNumericPicture == null) index += 1;
         } else {
           result.unknownSwitches.push(token);
         }
@@ -238,6 +240,38 @@ function parseAttachedNumericSwitch(token) {
     switchToken: `\\${match[1]}`,
     value: match[2],
   };
+}
+
+/**
+ * Word can serialize general-format switches without a separating space
+ * (`\*roman`). Normalize those into the same path as `\* roman`.
+ *
+ * @param {string} token
+ */
+function parseAttachedGeneralFormatSwitch(token) {
+  const match = /^\\\*(\S+)$/.exec(token);
+  return normalizeAttachedSwitchValue(match?.[1]);
+}
+
+/**
+ * Keep attached numeric picture switches (`\#00`) equivalent to `\# 00`.
+ *
+ * @param {string} token
+ */
+function parseAttachedNumericPictureSwitch(token) {
+  const match = /^\\#(\S+)$/.exec(token);
+  return normalizeAttachedSwitchValue(match?.[1]);
+}
+
+/**
+ * @param {string | undefined} value
+ */
+function normalizeAttachedSwitchValue(value) {
+  if (value == null) return null;
+  if (value.startsWith('"') && value.endsWith('"')) {
+    return unescapeQuotedToken(value.slice(1, -1));
+  }
+  return value;
 }
 
 /**

@@ -28,11 +28,14 @@ import type {
   SectionNumbering,
   FlowMode,
   NormalizedColumnLayout,
+  ColumnGeometry,
 } from '@superdoc/contracts';
 import {
   buildLayoutSourceIdentityForFragment,
   normalizeColumnLayout,
   getFragmentZIndex,
+  getColumnGeometry,
+  getColumnWidth,
   resolveColumnCount,
   resolveColumnLayout,
 } from '@superdoc/contracts';
@@ -1802,11 +1805,26 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     return normalized;
   };
 
+  // SD-2629: state-aware resolved geometry. Derives from the SAME state's columns + page size +
+  // margins (NOT the global latest-section values), so positioning an older page uses that page's
+  // own geometry. Behavior-identical to getCurrentColumns for the latest state and constant margins,
+  // and more correct for older pages once section margins/size vary.
+  const getColumnGeometryForState = (state: PageState): ColumnGeometry[] => {
+    const cols = getActiveColumnsForState(state);
+    const pageWidth = state.page.size?.w ?? pageSize.w;
+    // page.margins is always set by startNewPage but optional in the type; fall back to the current
+    // active margins (the guard never fires at runtime).
+    const left = state.page.margins?.left ?? activeLeftMargin;
+    const right = state.page.margins?.right ?? activeRightMargin;
+    return getColumnGeometry(normalizeColumns(cols, pageWidth - (left + right)));
+  };
+
+  const columnWidthForState = (state: PageState, columnIndex: number = state.columnIndex): number =>
+    getColumnWidth(getColumnGeometryForState(state), columnIndex);
+
   const getCurrentColumnWidth = (): number => {
-    const cols = getCurrentColumns();
     const state = states[states.length - 1] ?? null;
-    const columnIndex = state?.columnIndex ?? 0;
-    return getColumnWidthAt(cols, columnIndex);
+    return state ? columnWidthForState(state) : getColumnWidthAt(getCurrentColumns(), 0);
   };
 
   // Helper to get column X position

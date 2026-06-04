@@ -2176,6 +2176,32 @@ describe('layoutDocument', () => {
       expect(p2.y).toBe(options.margins!.top);
     });
 
+    it('treats the last resolved column as last for column breaks when w:num exceeds widths (SD-2629)', () => {
+      // count:4 but two explicit widths -> resolved count 2. The first break moves to column 1 (the
+      // last resolved column); the second must start a new page, NOT advance into a phantom column
+      // 2. Mirror of the advanceColumn fix for explicit <w:br w:type="column"> handling.
+      const blocks: FlowBlock[] = [
+        { kind: 'columnBreak', id: 'br-1' } as ColumnBreakBlock,
+        { kind: 'columnBreak', id: 'br-2' } as ColumnBreakBlock,
+        { kind: 'paragraph', id: 'p2', runs: [] },
+      ];
+
+      const measures: Measure[] = [{ kind: 'columnBreak' }, { kind: 'columnBreak' }, makeMeasure([40])];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+        columns: { count: 4, gap: 48, widths: [192, 384], equalWidth: false },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+
+      expect(layout.pages.length).toBe(2);
+      const p2 = layout.pages[1].fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+      expect(p2.x).toBeCloseTo(options.margins!.left);
+      expect(p2.y).toBe(options.margins!.top);
+    });
+
     it('starts a new page when columnBreak occurs in last column', () => {
       const blocks: FlowBlock[] = [
         // First columnBreak moves to column 2, second starts a new page

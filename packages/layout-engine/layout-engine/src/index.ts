@@ -29,7 +29,12 @@ import type {
   FlowMode,
   NormalizedColumnLayout,
 } from '@superdoc/contracts';
-import { buildLayoutSourceIdentityForFragment, normalizeColumnLayout, getFragmentZIndex } from '@superdoc/contracts';
+import {
+  buildLayoutSourceIdentityForFragment,
+  normalizeColumnLayout,
+  getFragmentZIndex,
+  resolveColumnCount,
+} from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
 import {
@@ -1192,7 +1197,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       page.orientation = activeOrientation;
     }
 
-    if (activeColumns.count > 1) {
+    if (resolveColumnCount(activeColumns) > 1) {
       page.columns = cloneColumnLayout(activeColumns);
     }
 
@@ -2306,7 +2311,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const willBalance =
           endingSectionIndex !== null &&
           !!endingSectionColumns &&
-          endingSectionColumns.count > 1 &&
+          resolveColumnCount(endingSectionColumns) > 1 &&
           !sectionHasExplicitColumnBreak.has(endingSectionIndex);
 
         // Balance BEFORE any forced page break. After balancing, all of the
@@ -2358,7 +2363,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             alreadyBalancedSections.add(endingSectionIndex!);
           }
         }
-        if (balanceResult === null && columnIndexBefore >= newColumns.count) {
+        if (balanceResult === null && columnIndexBefore >= resolveColumnCount(newColumns)) {
           // No balancing applied (either willBalance was false, or
           // balanceSectionOnPage skipped late). Reducing column count without
           // balancing means starting the new region at col 0 could overwrite
@@ -2836,7 +2841,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       const state = paginator.ensurePage();
       const activeCols = getActiveColumnsForState(state);
 
-      if (state.columnIndex < activeCols.count - 1) {
+      if (state.columnIndex < resolveColumnCount(activeCols) - 1) {
         // Not in last column: advance to next column
         advanceColumn(state);
       } else {
@@ -3000,7 +3005,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   if (
     sectionColumnsMap.size === 0 &&
     !documentHasAnySectionBreak &&
-    activeColumns.count > 1 &&
+    resolveColumnCount(activeColumns) > 1 &&
     !documentHasExplicitColumnBreak
   ) {
     sectionColumnsMap.set(FALLBACK_SECTION_IDX, cloneColumnLayout(activeColumns));
@@ -3010,7 +3015,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   }
 
   for (const [sectionIdx, sectionCols] of sectionColumnsMap) {
-    if (sectionCols.count <= 1) continue;
+    if (resolveColumnCount(sectionCols) <= 1) continue;
     if (sectionHasExplicitColumnBreak.has(sectionIdx)) continue;
     if (alreadyBalancedSections.has(sectionIdx)) continue;
 
@@ -3226,7 +3231,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // after processing sections. Page/region-specific column changes are encoded
     // implicitly via fragment positions. Consumers should not assume this is
     // a static document-wide value.
-    columns: activeColumns.count > 1 ? cloneColumnLayout(activeColumns) : undefined,
+    columns: resolveColumnCount(activeColumns) > 1 ? cloneColumnLayout(activeColumns) : undefined,
   };
 }
 

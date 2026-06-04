@@ -555,9 +555,10 @@ describe('updateFieldsInSelection — TOC + stat fields combined (regression)', 
     const outerTr = editorState.tr;
     outerTr.setMeta = vi.fn(outerTr.setMeta.bind(outerTr));
     const dispatch = vi.fn();
+    const seqPos = toc.nodeSize + 1;
     const result = command({
       editor,
-      state: { doc, selection: { from: 0, to: doc.content.size }, schema: mixedSchema, tr: outerTr },
+      state: { doc, selection: { from: seqPos, to: seqPos + seqField.nodeSize }, schema: mixedSchema, tr: outerTr },
       tr: outerTr,
       dispatch,
     });

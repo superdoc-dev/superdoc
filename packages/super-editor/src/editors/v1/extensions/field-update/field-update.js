@@ -44,6 +44,8 @@ export const FieldUpdate = Extension.create({
         () =>
         ({ editor, state, tr: outerTr, dispatch }) => {
           const { from, to } = state.selection;
+          const originalSelectionFields = findFieldsInRange(state.doc, from, to);
+          const selectionHadSeq = originalSelectionFields.some((field) => field.fieldType === 'SEQ');
           let tocPathRan = false;
 
           // toc.update dispatches its own transaction per TOC; CommandService
@@ -97,7 +99,7 @@ export const FieldUpdate = Extension.create({
 
           const fields = findFieldsInRange(activeDoc, activeFrom, activeTo);
           const updatable = fields.filter((f) => UPDATABLE_FIELD_TYPES.has(f.fieldType));
-          const hasSeqSelection = fields.some((field) => field.fieldType === 'SEQ');
+          const hasSeqSelection = selectionHadSeq || fields.some((field) => field.fieldType === 'SEQ');
           if (updatable.length === 0 && !hasSeqSelection) return tocPathRan;
 
           const mainEditor = resolveMainBodyEditor(editor);

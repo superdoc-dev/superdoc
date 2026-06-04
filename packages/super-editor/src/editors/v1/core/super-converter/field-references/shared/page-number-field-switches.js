@@ -58,12 +58,13 @@ export function parsePageNumberFieldSwitches(instruction, fieldType) {
 
 /**
  * @param {number} pageNumber
- * @param {{ pageNumberFormat?: string | null, pageNumberZeroPadding?: number | null }} attrs
+ * @param {{ pageNumberFormat?: string | null, pageNumberZeroPadding?: number | null, pageNumberNumericPicture?: string | null }} attrs
  */
 export function formatPageNumberFieldValue(pageNumber, attrs = {}) {
   return formatSharedPageNumberFieldValue(pageNumber, {
     format: attrs.pageNumberFormat || 'decimal',
     zeroPadding: attrs.pageNumberZeroPadding ?? undefined,
+    numericPicture: attrs.pageNumberNumericPicture ?? undefined,
   });
 }
 

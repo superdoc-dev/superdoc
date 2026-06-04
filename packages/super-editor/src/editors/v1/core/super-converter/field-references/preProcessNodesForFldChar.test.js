@@ -86,6 +86,44 @@ describe('preProcessNodesForFldChar', () => {
     },
   );
 
+  it('preserves complex NUMPAGES numeric picture switches', () => {
+    const { processedNodes } = preProcessNodesForFldChar(complexFieldNodes('NUMPAGES \\# "#,##0"', '1,234'), mockDocx);
+
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toMatchObject({
+      name: 'sd:totalPageNumber',
+      attributes: {
+        instruction: 'NUMPAGES \\# "#,##0"',
+        pageNumberNumericPicture: '#,##0',
+        importedCachedText: '1,234',
+      },
+    });
+  });
+
+  it('preserves fldSimple NUMPAGES zero-padding switches', () => {
+    const { processedNodes } = preProcessNodesForFldChar(
+      [
+        {
+          name: 'w:fldSimple',
+          attributes: { 'w:instr': 'NUMPAGES \\# "000"' },
+          elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '007' }] }] }],
+        },
+      ],
+      mockDocx,
+    );
+
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toMatchObject({
+      name: 'sd:totalPageNumber',
+      attributes: {
+        instruction: 'NUMPAGES \\# "000"',
+        pageNumberFormat: 'decimal',
+        pageNumberZeroPadding: 3,
+        importedCachedText: '007',
+      },
+    });
+  });
+
   it('preserves SECTIONPAGES field run properties when cached result has no run properties', () => {
     const fieldRunRPr = { name: 'w:rPr', elements: [{ name: 'w:i' }] };
     const { processedNodes } = preProcessNodesForFldChar(

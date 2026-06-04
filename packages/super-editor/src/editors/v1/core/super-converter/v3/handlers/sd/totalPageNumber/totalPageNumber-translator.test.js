@@ -89,6 +89,30 @@ describe('sd:totalPageNumber translator', () => {
           {
             name: 'sd:totalPageNumber',
             attributes: {
+              instruction: 'NUMPAGES \\# "#,##0"',
+              pageNumberNumericPicture: '#,##0',
+            },
+            elements: [],
+          },
+        ],
+      });
+
+      expect(result.attrs).toEqual({
+        marksAsAttrs: [],
+        importedCachedText: null,
+        instruction: 'NUMPAGES \\# "#,##0"',
+        pageNumberNumericPicture: '#,##0',
+      });
+    });
+
+    it('preserves imported zero-padding field attributes', () => {
+      vi.mocked(parseMarks).mockReturnValue([]);
+
+      const result = config.encode({
+        nodes: [
+          {
+            name: 'sd:totalPageNumber',
+            attributes: {
               instruction: 'NUMPAGES \\# "00"',
               pageNumberFormat: 'decimal',
               pageNumberZeroPadding: 2,
@@ -184,6 +208,39 @@ describe('sd:totalPageNumber translator', () => {
         'w:fldCharType': 'begin',
       });
       expect(result[3].elements[1].elements[0].text).toBe('07');
+    });
+
+    it('round-trips an imported numeric-picture attr through PM attrs and exported cached text', () => {
+      vi.mocked(parseMarks).mockReturnValue([]);
+      vi.mocked(processOutputMarks).mockReturnValue([]);
+
+      const imported = config.encode({
+        nodes: [
+          {
+            name: 'sd:totalPageNumber',
+            attributes: {
+              instruction: 'NUMPAGES \\# "#,##0"',
+              pageNumberNumericPicture: '#,##0',
+              importedCachedText: '1,000',
+            },
+            elements: [],
+          },
+        ],
+      });
+
+      expect(imported.attrs).toMatchObject({
+        instruction: 'NUMPAGES \\# "#,##0"',
+        pageNumberNumericPicture: '#,##0',
+        importedCachedText: '1,000',
+      });
+
+      const exported = config.decode({
+        node: imported,
+        statFieldCacheMap: new Map([['NUMPAGES', 1234]]),
+      });
+
+      expect(exported[1].elements[1].elements[0].text).toBe(' NUMPAGES \\# "#,##0"');
+      expect(exported[3].elements[1].elements[0].text).toBe('1,234');
     });
 
     it('falls back to resolvedText when cache map is absent', () => {

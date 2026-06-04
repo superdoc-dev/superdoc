@@ -1,8 +1,6 @@
 import { resolveColumnCount } from '@superdoc/contracts';
 import type { ColumnLayout, Page, PageMargins } from '@superdoc/contracts';
 
-export type NormalizedColumns = ColumnLayout & { width: number };
-
 export type ConstraintBoundary = {
   y: number;
   columns: ColumnLayout;

@@ -1883,9 +1883,17 @@ export class DomPainter {
   private getColumnSeparatorPositions(columns: ColumnLayout, leftMargin: number, contentWidth: number): number[] {
     // SD-2629: separator positions come from the one resolved column geometry (the same source as
     // fill count and column widths), not a re-derivation here. The caller has already gated on
-    // withSeparator and count > 1; we only skip when a participating column is too narrow for a 1px
-    // line, preserving the prior <= 1 width guards (equal and explicit modes alike).
-    const geometry = getColumnGeometry(normalizeColumnLayout(columns, contentWidth));
+    // withSeparator and count > 1.
+    const normalized = normalizeColumnLayout(columns, contentWidth);
+    // Equal mode: skip when the evenly-divided column is too narrow for a 1px line. This must be
+    // checked PRE-geometry because normalize floors fabricated widths at 1 (and falls back to the
+    // full content width when the gap overflows the content area), so the geometry width alone would
+    // not reveal the overflow. Preserves the legacy guard.
+    if (!Array.isArray(columns.widths) || columns.widths.length === 0) {
+      const equalWidth = (contentWidth - columns.gap * (normalized.count - 1)) / normalized.count;
+      if (equalWidth <= 1) return [];
+    }
+    const geometry = getColumnGeometry(normalized);
     if (geometry.length <= 1) return [];
     if (geometry.some((column) => column.width <= 1)) return [];
     return getColumnSeparatorPositionsFromGeometry(geometry, leftMargin);

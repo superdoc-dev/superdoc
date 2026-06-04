@@ -110,6 +110,7 @@ export {
   getColumnX,
   normalizeColumnLayout,
   resolveColumnCount,
+  resolveColumnLayout,
   resolveColumnMode,
   widthsEqual,
 } from './column-layout.js';

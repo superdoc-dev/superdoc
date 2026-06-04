@@ -11,6 +11,7 @@ import {
   getColumnX,
   normalizeColumnLayout,
   resolveColumnCount,
+  resolveColumnLayout,
   resolveColumnMode,
   widthsEqual,
 } from './column-layout.js';
@@ -261,5 +262,31 @@ describe('resolveColumnCount (SD-2629)', () => {
   it('agrees with normalizeColumnLayout.count (single count authority)', () => {
     const input: ColumnLayout = { count: 4, gap: 20, widths: [192, 384], equalWidth: false };
     expect(normalizeColumnLayout(input, 600).count).toBe(resolveColumnCount(input));
+  });
+});
+
+describe('resolveColumnLayout (SD-2629)', () => {
+  it('clamps count without advertising phantom columns (count:4 with two widths -> 2)', () => {
+    expect(resolveColumnLayout({ count: 4, gap: 20, widths: [192, 384], equalWidth: false })).toEqual({
+      count: 2,
+      gap: 20,
+      widths: [192, 384],
+      equalWidth: false,
+    });
+  });
+
+  it('slices surplus widths/gaps when num is below the supplied widths', () => {
+    expect(
+      resolveColumnLayout({ count: 2, gap: 20, widths: [100, 200, 300, 400], gaps: [10, 20, 30], equalWidth: false }),
+    ).toEqual({ count: 2, gap: 20, widths: [100, 200], gaps: [10], equalWidth: false });
+  });
+
+  it('leaves an already-consistent config unchanged', () => {
+    const input: ColumnLayout = { count: 2, gap: 20, widths: [100, 400], equalWidth: false, withSeparator: true };
+    expect(resolveColumnLayout(input)).toEqual(input);
+  });
+
+  it('does not slice in equal mode (no explicit widths)', () => {
+    expect(resolveColumnLayout({ count: 3, gap: 20 })).toEqual({ count: 3, gap: 20 });
   });
 });

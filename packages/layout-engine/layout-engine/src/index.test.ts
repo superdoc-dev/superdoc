@@ -299,6 +299,18 @@ describe('layoutDocument', () => {
     expect(layout.pages).toHaveLength(2);
   });
 
+  it('resolves page/document column metadata to the rendered count, not the raw w:num (SD-2629)', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 4, gap: 20, widths: [192, 384], equalWidth: false },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350])], options);
+    // count:4 with two widths renders two columns; metadata must not advertise four.
+    expect(layout.columns).toEqual({ count: 2, gap: 20, widths: [192, 384], equalWidth: false });
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, widths: [192, 384], equalWidth: false });
+  });
+
   it('does not set "page.columns" on single column layout', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },

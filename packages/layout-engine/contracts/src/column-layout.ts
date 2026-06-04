@@ -74,6 +74,21 @@ export function cloneColumnLayout(columns?: ColumnLayout): ColumnLayout {
 }
 
 /**
+ * Resolve an authored column config to what actually renders: count clamped to resolveColumnCount,
+ * and explicit widths/gaps sliced to that count (NOT scaled to a content width; that is
+ * normalizeColumnLayout's job). Use for render-facing metadata (page.columns / layout.columns) so
+ * it never advertises phantom columns, e.g. count:4 with two widths becomes count:2. (SD-2629)
+ */
+export function resolveColumnLayout(input: ColumnLayout): ColumnLayout {
+  const count = resolveColumnCount(input);
+  const resolved = cloneColumnLayout(input);
+  resolved.count = count;
+  if (Array.isArray(resolved.widths)) resolved.widths = resolved.widths.slice(0, count);
+  if (Array.isArray(resolved.gaps)) resolved.gaps = resolved.gaps.slice(0, Math.max(0, count - 1));
+  return resolved;
+}
+
+/**
  * Build resolved per-column geometry from already-resolved widths and the uniform scalar gap.
  * SD-2629 step 1 keeps this behavior-preserving: it mirrors today's normalized output (scaled
  * widths, uniform gap). Per-column `gaps` do NOT drive geometry until the semantic flip (step 4).

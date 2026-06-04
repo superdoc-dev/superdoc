@@ -34,6 +34,7 @@ import {
   normalizeColumnLayout,
   getFragmentZIndex,
   resolveColumnCount,
+  resolveColumnLayout,
 } from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
@@ -1198,7 +1199,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
 
     if (resolveColumnCount(activeColumns) > 1) {
-      page.columns = cloneColumnLayout(activeColumns);
+      // Render-facing metadata: resolve so it never advertises more columns than render (SD-2629).
+      page.columns = resolveColumnLayout(activeColumns);
     }
 
     // Set vertical alignment from active section state
@@ -3231,7 +3233,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // after processing sections. Page/region-specific column changes are encoded
     // implicitly via fragment positions. Consumers should not assume this is
     // a static document-wide value.
-    columns: resolveColumnCount(activeColumns) > 1 ? cloneColumnLayout(activeColumns) : undefined,
+    columns: resolveColumnCount(activeColumns) > 1 ? resolveColumnLayout(activeColumns) : undefined,
   };
 }
 

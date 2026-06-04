@@ -47,6 +47,7 @@ import {
   getColumnGeometry,
   getColumnSeparatorPositions as getColumnSeparatorPositionsFromGeometry,
   normalizeColumnLayout,
+  resolveColumnMode,
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
@@ -1888,8 +1889,9 @@ export class DomPainter {
     // Equal mode: skip when the evenly-divided column is too narrow for a 1px line. This must be
     // checked PRE-geometry because normalize floors fabricated widths at 1 (and falls back to the
     // full content width when the gap overflows the content area), so the geometry width alone would
-    // not reveal the overflow. Preserves the legacy guard.
-    if (!Array.isArray(columns.widths) || columns.widths.length === 0) {
+    // not reveal the overflow. Keyed on resolveColumnMode (not the presence of a widths array) so a
+    // raw equalWidth:true config carrying stray widths still takes the equal-mode guard. Legacy guard.
+    if (resolveColumnMode(columns) === 'equal') {
       const equalWidth = (contentWidth - columns.gap * (normalized.count - 1)) / normalized.count;
       if (equalWidth <= 1) return [];
     }

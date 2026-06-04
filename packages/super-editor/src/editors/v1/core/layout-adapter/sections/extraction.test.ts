@@ -622,6 +622,45 @@ describe('extraction', () => {
       });
     });
 
+    it('derives the explicit scalar gap from the first valid column, ignoring a preceding invalid child (SD-2629)', () => {
+      // A leading <w:col> with no usable w:w is dropped from the record model. The scalar gap (the
+      // single-gap fallback) must come from the first VALID column's own w:space (720tw -> 48px),
+      // NOT that dropped column's w:space (1440tw -> 96px). The scalar gap and gaps[0] agree.
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [
+                {
+                  name: 'w:cols',
+                  attributes: { 'w:num': '2', 'w:equalWidth': '0' },
+                  elements: [
+                    { name: 'w:col', attributes: { 'w:space': '1440' } },
+                    { name: 'w:col', attributes: { 'w:w': '2880', 'w:space': '720' } },
+                    { name: 'w:col', attributes: { 'w:w': '2880' } },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      };
+
+      const result = extractSectionData(para);
+
+      expect(result?.columnsPx).toEqual({
+        count: 2,
+        gap: 48,
+        withSeparator: false,
+        widths: [192, 192],
+        gaps: [48],
+        equalWidth: false,
+      });
+    });
+
     it('takes the count from w:num in equal mode (count 3, no children) (SD-2324)', () => {
       // Equal mode (omitted equalWidth) takes the count straight from w:num and the gap from the
       // section w:space (720 twips -> 48px); no per-column widths are emitted.

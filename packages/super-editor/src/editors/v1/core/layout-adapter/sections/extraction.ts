@@ -296,18 +296,17 @@ function extractColumns(elements: SectionElement[]): ColumnLayout | undefined {
   const widths = columnRecords.slice(0, count).map((record) => toPx(record.widthTwips));
   const gaps = columnRecords.slice(0, Math.max(0, count - 1)).map((record) => toPx(record.spaceTwips));
 
-  // Scalar gap is UNCHANGED from prior behavior: the first child's w:space in explicit mode, the
-  // section w:cols/@w:space otherwise. Per-column `gaps` above are the SD-2629 source; the scalar
-  // stays the single-gap fallback for consumers not yet migrated to geometry (flip is step 4).
-  const firstChildSpace = columnChildren.find((child) => child?.attributes?.['w:space'] != null)?.attributes?.[
-    'w:space'
-  ];
-  const gapTwips = isExplicit ? (firstChildSpace ?? 0) : cols.attributes['w:space'];
-  const gapInches = parseColumnGap(gapTwips as string | number | undefined);
+  // Scalar gap is the single-gap fallback for consumers not yet reading geometry: in explicit mode
+  // the first VALID column's own space (=== gaps[0]), NOT the first raw child that declares a
+  // w:space — a dropped or zero-width column must never contribute a gap. Equal mode uses the
+  // section w:cols/@w:space (default 720). The flip to per-column geometry is step 4. (SD-2629)
+  const gapPx = isExplicit
+    ? toPx(columnRecords[0]?.spaceTwips ?? 0)
+    : parseColumnGap(cols.attributes['w:space'] as string | number | undefined) * PX_PER_INCH;
 
   const result: ColumnLayout = {
     count,
-    gap: gapInches * PX_PER_INCH,
+    gap: gapPx,
     withSeparator,
     // Only explicit columns carry per-column widths/gaps; equal mode divides evenly (Word ignores
     // child `w:w`/`w:space` when equalWidth is "1" or omitted).

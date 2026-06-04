@@ -237,3 +237,28 @@ export function columnLayoutsEqual(a?: ColumnLayout, b?: ColumnLayout): boolean 
     widthsEqual(a.gaps, b.gaps)
   );
 }
+
+/**
+ * Render equality: true when two column configs produce the SAME rendered layout even if their raw
+ * fields differ. Compares the canonical render form (resolved mode + count, scalar gap,
+ * withSeparator, and in explicit mode the sliced widths/gaps) and deliberately ignores raw
+ * `equalWidth` and the surplus count/widths that resolution discards. Use for region/cache change
+ * detection so e.g. `{num:4, widths:[a,b]}` vs `{num:2, widths:[a,b]}`, or `equalWidth:true` vs an
+ * omitted equalWidth, do not split into separate regions. (SD-2629)
+ */
+export function columnRenderLayoutsEqual(a?: ColumnLayout, b?: ColumnLayout): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  const mode = resolveColumnMode(a);
+  if (mode !== resolveColumnMode(b)) return false;
+  if (resolveColumnCount(a) !== resolveColumnCount(b)) return false;
+  if ((a.gap ?? 0) !== (b.gap ?? 0)) return false;
+  if (Boolean(a.withSeparator) !== Boolean(b.withSeparator)) return false;
+  if (mode === 'explicit') {
+    const ra = resolveColumnLayout(a);
+    const rb = resolveColumnLayout(b);
+    if (!widthsEqual(ra.widths, rb.widths)) return false;
+    if (!widthsEqual(ra.gaps, rb.gaps)) return false;
+  }
+  return true;
+}

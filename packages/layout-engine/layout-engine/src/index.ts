@@ -37,6 +37,7 @@ import {
   getColumnGeometry,
   getColumnWidth,
   getColumnX,
+  columnRenderLayoutsEqual,
   resolveColumnCount,
   resolveColumnLayout,
 } from '@superdoc/contracts';
@@ -63,7 +64,7 @@ import { createPaginator, type PageState, type ConstraintBoundary } from './pagi
 import { formatPageNumber } from './pageNumbering.js';
 import { shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
 import { balanceSectionOnPage, type BalancingFragment, type MeasureData } from './column-balancing.js';
-import { cloneColumnLayout, widthsEqual } from './column-utils.js';
+import { cloneColumnLayout } from './column-utils.js';
 
 type PageSize = { w: number; h: number };
 type Margins = {
@@ -1122,20 +1123,13 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (block.pageSize) next.pendingPageSize = { w: block.pageSize.w, h: block.pageSize.h };
     if (block.orientation) next.pendingOrientation = block.orientation;
     const sectionType = block.type ?? 'continuous';
-    // Check if columns are changing: either explicitly to a different config,
-    // or implicitly resetting to single column (undefined = single column in OOXML).
-    // withSeparator must be compared because a sep-only toggle still needs a new
-    // column region so the renderer can draw (or stop drawing) the separator from
-    // the toggle point onward.
+    // Columns change when the block's resolved RENDER layout differs from the active one (render
+    // equality ignores raw equalWidth / surplus count that resolution discards), or when columns
+    // reset to single (undefined). withSeparator is part of render equality: a sep-only toggle still
+    // needs a new region so the renderer can start or stop the separator from the toggle point.
     const isColumnsChanging =
-      (block.columns &&
-        (block.columns.count !== next.activeColumns.count ||
-          block.columns.gap !== next.activeColumns.gap ||
-          Boolean(block.columns.withSeparator) !== Boolean(next.activeColumns.withSeparator) ||
-          block.columns.equalWidth !== next.activeColumns.equalWidth ||
-          !widthsEqual(block.columns.widths, next.activeColumns.widths) ||
-          !widthsEqual(block.columns.gaps, next.activeColumns.gaps))) ||
-      (!block.columns && (next.activeColumns.count > 1 || Boolean(next.activeColumns.withSeparator)));
+      (block.columns && !columnRenderLayoutsEqual(block.columns, next.activeColumns)) ||
+      (!block.columns && (resolveColumnCount(next.activeColumns) > 1 || Boolean(next.activeColumns.withSeparator)));
     // Schedule section index change for next page (enables section-aware page numbering)
     const sectionIndexRaw = block.attrs?.sectionIndex;
     const metadataIndex = typeof sectionIndexRaw === 'number' ? sectionIndexRaw : Number(sectionIndexRaw ?? NaN);
@@ -1784,11 +1778,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       cachedColumnsState.state === state &&
       cachedColumnsState.constraintIndex === constraintIndex &&
       cachedColumnsState.contentWidth === currentContentWidth &&
-      cachedColumnsState.colsConfig?.count === colsConfig.count &&
-      cachedColumnsState.colsConfig?.gap === colsConfig.gap &&
-      cachedColumnsState.colsConfig?.equalWidth === colsConfig.equalWidth &&
-      widthsEqual(cachedColumnsState.colsConfig?.widths, colsConfig.widths) &&
-      widthsEqual(cachedColumnsState.colsConfig?.gaps, colsConfig.gaps) &&
+      columnRenderLayoutsEqual(cachedColumnsState.colsConfig ?? undefined, colsConfig) &&
       cachedColumnsState.normalized
     ) {
       return cachedColumnsState.normalized;

@@ -102,6 +102,7 @@ import type { LayoutSourceIdentity } from './layout-identity.js';
 export {
   cloneColumnLayout,
   columnLayoutsEqual,
+  columnRenderLayoutsEqual,
   getColumnAtX,
   getColumnGapAfter,
   getColumnGeometry,

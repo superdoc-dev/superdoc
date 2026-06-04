@@ -3,6 +3,7 @@ import type { ColumnLayout } from './index.js';
 import {
   cloneColumnLayout,
   columnLayoutsEqual,
+  columnRenderLayoutsEqual,
   getColumnAtX,
   getColumnGapAfter,
   getColumnGeometry,
@@ -298,5 +299,47 @@ describe('resolveColumnLayout (SD-2629)', () => {
     });
     // Omitted equalWidth is equal mode too.
     expect(resolveColumnLayout({ count: 2, gap: 20, widths: [100, 200] })).toEqual({ count: 2, gap: 20 });
+  });
+});
+
+describe('columnRenderLayoutsEqual (SD-2629)', () => {
+  it('treats equalWidth:true and omitted equalWidth as render-equal (both equal mode)', () => {
+    expect(columnRenderLayoutsEqual({ count: 2, gap: 24, equalWidth: true }, { count: 2, gap: 24 })).toBe(true);
+  });
+
+  it('treats num>widths and num===widths as render-equal when the resolved columns match', () => {
+    expect(
+      columnRenderLayoutsEqual(
+        { count: 4, gap: 24, widths: [192, 384], equalWidth: false },
+        { count: 2, gap: 24, widths: [192, 384], equalWidth: false },
+      ),
+    ).toBe(true);
+  });
+
+  it('distinguishes a separator toggle', () => {
+    expect(
+      columnRenderLayoutsEqual({ count: 2, gap: 24, withSeparator: true }, { count: 2, gap: 24, withSeparator: false }),
+    ).toBe(false);
+  });
+
+  it('distinguishes a different gap', () => {
+    expect(columnRenderLayoutsEqual({ count: 2, gap: 24 }, { count: 2, gap: 48 })).toBe(false);
+  });
+
+  it('distinguishes explicit vs equal mode and different resolved widths', () => {
+    expect(
+      columnRenderLayoutsEqual({ count: 2, gap: 24, widths: [192, 384], equalWidth: false }, { count: 2, gap: 24 }),
+    ).toBe(false);
+    expect(
+      columnRenderLayoutsEqual(
+        { count: 2, gap: 24, widths: [192, 384], equalWidth: false },
+        { count: 2, gap: 24, widths: [100, 400], equalWidth: false },
+      ),
+    ).toBe(false);
+  });
+
+  it('handles missing inputs', () => {
+    expect(columnRenderLayoutsEqual(undefined, undefined)).toBe(true);
+    expect(columnRenderLayoutsEqual({ count: 2, gap: 24 }, undefined)).toBe(false);
   });
 });

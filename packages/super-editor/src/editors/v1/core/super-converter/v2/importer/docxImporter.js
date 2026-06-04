@@ -14,7 +14,7 @@ import { lineBreakNodeHandlerEntity } from './lineBreakImporter.js';
 import { bookmarkStartNodeHandlerEntity } from './bookmarkStartImporter.js';
 import { bookmarkEndNodeHandlerEntity } from './bookmarkEndImporter.js';
 import { alternateChoiceHandler } from './alternateChoiceImporter.js';
-import { autoPageHandlerEntity, autoTotalPageCountEntity } from './autoPageNumberImporter.js';
+import { autoPageHandlerEntity, autoTotalPageCountEntity, sectionPageCountEntity } from './autoPageNumberImporter.js';
 import { documentStatFieldHandlerEntity } from './documentStatFieldImporter.js';
 import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { crossReferenceEntity } from './crossReferenceImporter.js';
@@ -179,6 +179,23 @@ const parseTrackedChangeSourceIdMap = (raw) => {
 const readTrackedChangeSourceIdMap = (docx) =>
   parseTrackedChangeSourceIdMap(readCustomProperty(docx, TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY));
 
+const normalizeDocumentBackgroundColor = (value) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(trimmed)) return null;
+  return `#${trimmed.toUpperCase()}`;
+};
+
+const getDocumentBackground = (documentNode) => {
+  const background = documentNode?.elements?.find((el) => el?.name === 'w:background');
+  const color = normalizeDocumentBackgroundColor(background?.attributes?.['w:color'] ?? background?.attributes?.color);
+  if (!background || !color) return null;
+  return {
+    color,
+    originalXml: carbonCopy(background),
+  };
+};
+
 /**
  * Detect the document-level threading profile for comments based on file structure.
  * @param {ParsedDocx} docx The parsed docx object
@@ -203,6 +220,7 @@ const detectCommentThreadingProfile = (docx) => {
 export const createDocumentJson = (docx, converter, editor) => {
   const json = carbonCopy(getInitialJSON(docx));
   if (!json) return null;
+  const documentBackground = getDocumentBackground(json.elements?.[0]);
 
   if (converter) {
     importFootnotePropertiesFromSettings(docx, converter);
@@ -290,21 +308,26 @@ export const createDocumentJson = (docx, converter, editor) => {
         attributes: json.elements[0].attributes,
         // Attach body-level sectPr if it exists
         ...(bodySectPr ? { bodySectPr } : {}),
+        ...(documentBackground ? { documentBackground } : {}),
       },
     };
+    const pageStyles = getDocumentStyles(
+      node,
+      docx,
+      converter,
+      editor,
+      numbering,
+      translatedNumbering,
+      translatedLinkedStyles,
+    );
+    if (documentBackground) {
+      pageStyles.documentBackground = { color: documentBackground.color };
+    }
 
     return {
       pmDoc: result,
       savedTagsToRestore: node,
-      pageStyles: getDocumentStyles(
-        node,
-        docx,
-        converter,
-        editor,
-        numbering,
-        translatedNumbering,
-        translatedLinkedStyles,
-      ),
+      pageStyles,
       comments,
       footnotes,
       endnotes,
@@ -349,6 +372,7 @@ export const defaultNodeListHandler = () => {
     indexEntryHandlerEntity,
     autoPageHandlerEntity,
     autoTotalPageCountEntity,
+    sectionPageCountEntity,
     documentStatFieldHandlerEntity,
     pageReferenceEntity,
     crossReferenceEntity,
@@ -928,6 +952,7 @@ export function filterOutRootInlineNodes(content = []) {
     'hardBreak',
     'pageNumber',
     'totalPageCount',
+    'section-page-count',
     'runItem',
     'image',
     'tab',

@@ -998,7 +998,8 @@ const handleChartDrawing = (params, node, graphicData, size, padding, marginOffs
  *   parts: Array<{
  *     text: string,
  *     formatting?: { bold?: boolean, italic?: boolean, color?: string, fontSize?: number, fontFamily?: string },
- *     fieldType?: 'PAGE' | 'NUMPAGES',
+ *     fieldType?: 'PAGE' | 'NUMPAGES' | 'SECTIONPAGES',
+ *     pageNumberFormat?: string,
  *     isLineBreak?: boolean,
  *     isEmptyParagraph?: boolean
  *   }>,
@@ -1017,15 +1018,24 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
   let horizontalAlign = null;
 
   /**
-   * Appends a field part (PAGE or NUMPAGES) to textParts with formatting.
-   * @param {'PAGE' | 'NUMPAGES'} fieldType - The field type
+   * Appends a field part (PAGE, NUMPAGES, or SECTIONPAGES) to textParts with formatting.
+   * @param {'PAGE' | 'NUMPAGES' | 'SECTIONPAGES'} fieldType - The field type
    * @param {Object} node - The field node element
    * @param {Object} paragraphProperties - Resolved paragraph properties
    */
   const appendFieldPart = (fieldType, node, paragraphProperties) => {
     const rPr = node?.elements?.find((el) => el.name === 'w:rPr');
     const formatting = extractRunFormatting(rPr, paragraphProperties, params);
-    textParts.push({ text: '', formatting, fieldType });
+    const cachedText =
+      fieldType === 'SECTIONPAGES'
+        ? (node?.attributes?.resolvedText ?? node?.attributes?.importedCachedText ?? '')
+        : '';
+    textParts.push({
+      text: cachedText,
+      formatting,
+      fieldType,
+      ...(node?.attributes?.pageNumberFormat ? { pageNumberFormat: node.attributes.pageNumberFormat } : {}),
+    });
   };
 
   /**
@@ -1061,6 +1071,9 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
       } else if (el.name === 'sd:totalPageNumber') {
         hasText = true;
         appendFieldPart('NUMPAGES', el, paragraphProperties);
+      } else if (el.name === 'sd:sectionPageCount') {
+        hasText = true;
+        appendFieldPart('SECTIONPAGES', el, paragraphProperties);
       } else if (el.name === 'w:drawing') {
         // SD-2804 / ECMA-376 §20.4.2.38: a textbox can hold body-level
         // content, including runs with inline w:drawing images. Defer to
@@ -1115,6 +1128,10 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
     }
     if (el.name === 'sd:totalPageNumber') {
       appendFieldPart('NUMPAGES', el, paragraphProperties);
+      return true;
+    }
+    if (el.name === 'sd:sectionPageCount') {
+      appendFieldPart('SECTIONPAGES', el, paragraphProperties);
       return true;
     }
     if ((el.name === 'w:hyperlink' || el.name === 'sd:pageReference') && Array.isArray(el.elements)) {

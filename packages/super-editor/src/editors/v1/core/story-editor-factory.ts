@@ -35,11 +35,38 @@ export interface StoryEditorOptions {
   currentPageNumber?: number;
 
   /**
+   * The current formatted PAGE field display text for section-aware story editors.
+   */
+  currentPageNumberText?: string;
+
+  /**
+   * The current numeric PAGE display value for field-local formatting.
+   */
+  currentPageDisplayNumber?: number;
+
+  /**
+   * The current PAGE chapter prefix for field-local formatting.
+   */
+  currentPageChapterNumberText?: string;
+
+  /**
+   * The current PAGE chapter separator for field-local formatting.
+   */
+  currentPageChapterSeparator?: 'hyphen' | 'period' | 'colon' | 'emDash' | 'enDash';
+
+  /**
    * The total page count for NUMPAGES field resolution.
    * Must be a positive integer.
    * @default 1
    */
   totalPageCount?: number;
+
+  /**
+   * The current section's physical page count for SECTIONPAGES field resolution.
+   * Must be a positive integer.
+   * @default 1
+   */
+  sectionPageCount?: number;
 
   /**
    * The container element to mount the editor into.
@@ -114,7 +141,12 @@ export function createStoryEditor(
     isHeaderOrFooter = true,
     headless,
     currentPageNumber = 1,
+    currentPageNumberText,
+    currentPageDisplayNumber,
+    currentPageChapterNumberText,
+    currentPageChapterSeparator,
     totalPageCount = 1,
+    sectionPageCount,
     element = null,
     editorOptions = {},
   } = options;
@@ -155,7 +187,12 @@ export function createStoryEditor(
     pagination: false,
     annotations: true,
     currentPageNumber,
+    currentPageNumberText,
+    currentPageDisplayNumber,
+    currentPageChapterNumberText,
+    currentPageChapterSeparator,
     totalPageCount,
+    sectionPageCount,
     editable: false,
     documentMode: 'viewing',
 

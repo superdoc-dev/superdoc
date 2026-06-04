@@ -276,4 +276,27 @@ describe('resolveTokensInBlock', () => {
     expect((block.runs[0] as { pmStart?: number }).pmStart).toBe(10);
     expect((block.runs[0] as { pmEnd?: number }).pmEnd).toBe(11);
   });
+
+  it('should apply run-local page number format when resolving tokens', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'test-local-format',
+      runs: [
+        {
+          text: '0',
+          token: 'pageNumber',
+          pageNumberFieldFormat: { format: 'upperRoman' },
+          fontFamily: 'Arial',
+          fontSize: 12,
+        } as TextRun,
+      ],
+    };
+
+    const wasModified = resolveTokensInBlock(block, 5, 10);
+
+    expect(wasModified).toBe(true);
+    expect((block.runs[0] as TextRun).text).toBe('V');
+    expect((block.runs[0] as TextRun).token).toBeUndefined();
+    expect((block.runs[0] as TextRun).pageNumberFieldFormat).toBeUndefined();
+  });
 });

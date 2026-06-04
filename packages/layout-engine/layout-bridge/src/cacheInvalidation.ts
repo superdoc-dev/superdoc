@@ -51,6 +51,9 @@ export function computeHeaderFooterContentHash(blocks: FlowBlock[]): string {
         if ('bold' in run && run.bold) parts.push('b');
         if ('italic' in run && run.italic) parts.push('i');
         if ('token' in run && run.token) parts.push(`token:${run.token}`);
+        if ('pageNumberFieldFormat' in run && run.pageNumberFieldFormat) {
+          parts.push(`pnf:${JSON.stringify(run.pageNumberFieldFormat)}`);
+        }
       }
     }
   }

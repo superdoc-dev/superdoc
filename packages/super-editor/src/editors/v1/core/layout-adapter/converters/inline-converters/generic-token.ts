@@ -3,6 +3,7 @@ import type { PMMark } from '../../types.js';
 import { applyMarksToRun } from '../../marks/index.js';
 import { applyInlineRunProperties, type InlineConverterParams } from './common.js';
 import { TOKEN_INLINE_TYPES } from '../../constants.js';
+import { getPageNumberFieldFormat } from './page-number-field-format.js';
 
 /**
  * Converts a token PM node (e.g., page-number) to a TextRun with token metadata.
@@ -42,6 +43,10 @@ export function tokenNodeToRun({
     fontFamily: defaultFont,
     fontSize: defaultSize,
   };
+  const pageNumberFieldFormat = getPageNumberFieldFormat(node.attrs);
+  if (pageNumberFieldFormat) {
+    run.pageNumberFieldFormat = pageNumberFieldFormat;
+  }
 
   // Attach PM position tracking
   const pos = positions.get(node);

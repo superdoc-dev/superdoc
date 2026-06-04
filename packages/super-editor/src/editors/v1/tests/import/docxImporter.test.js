@@ -113,6 +113,65 @@ describe('createDocumentJson', () => {
     expect(converter.footers).toEqual({});
   });
 
+  it('imports document-level w:background color as document metadata', () => {
+    const simpleDocXml =
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:background w:color="eeeeee"/>' +
+      '<w:body><w:p><w:r><w:t>Hello</w:t></w:r></w:p></w:body>' +
+      '</w:document>';
+
+    const docx = {
+      'word/document.xml': parseXmlToJson(simpleDocXml),
+      'word/styles.xml': parseXmlToJson(minimalStylesXml),
+    };
+
+    const converter = {
+      headers: {},
+      footers: {},
+      headerIds: {},
+      footerIds: {},
+    };
+
+    const editor = { options: {}, emit: vi.fn() };
+
+    const result = createDocumentJson(docx, converter, editor);
+
+    expect(result.pmDoc.attrs.documentBackground).toMatchObject({
+      color: '#EEEEEE',
+      originalXml: {
+        name: 'w:background',
+        attributes: { 'w:color': 'eeeeee' },
+      },
+    });
+    expect(result.pageStyles.documentBackground).toEqual({ color: '#EEEEEE' });
+  });
+
+  it('keeps default page behavior when document-level w:background is absent', () => {
+    const simpleDocXml =
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:body><w:p><w:r><w:t>Hello</w:t></w:r></w:p></w:body>' +
+      '</w:document>';
+
+    const docx = {
+      'word/document.xml': parseXmlToJson(simpleDocXml),
+      'word/styles.xml': parseXmlToJson(minimalStylesXml),
+    };
+
+    const converter = {
+      headers: {},
+      footers: {},
+      headerIds: {},
+      footerIds: {},
+    };
+
+    const editor = { options: {}, emit: vi.fn() };
+
+    const result = createDocumentJson(docx, converter, editor);
+
+    expect(result.pmDoc.attrs.documentBackground).toBeUndefined();
+    expect(result.pageStyles.documentBackground).toBeUndefined();
+  });
+
   it('imports alternatecontent_valid sample and preserves choice content', async () => {
     const docx = await getTestDataByFileName('alternateContent_valid.docx');
 

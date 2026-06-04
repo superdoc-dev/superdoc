@@ -123,4 +123,33 @@ describe('incrementalLayout semantic flow', () => {
     expect(result.footers).toBeUndefined();
     expect(headerMeasure).not.toHaveBeenCalled();
   });
+
+  it('stamps section display numbering onto body page context without chapter prefixes', async () => {
+    const paragraph = makeParagraph('body-1', 'Body content');
+    const measureBlock = vi.fn(async (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => {
+      if (block.kind !== 'paragraph') {
+        throw new Error(`Unexpected block kind in test measure: ${block.kind}`);
+      }
+      const runLength = block.runs[0]?.text?.length ?? 1;
+      return makeParagraphMeasure(20, runLength, constraints.maxWidth);
+    });
+
+    const result = await incrementalLayout(
+      [],
+      null,
+      [paragraph],
+      {
+        flowMode: 'semantic',
+        pageSize: { w: 800, h: 900 },
+        margins: { top: 40, right: 100, bottom: 40, left: 100 },
+        semantic: { contentWidth: 600, marginTop: 40, marginBottom: 40 },
+        sectionMetadata: [{ sectionIndex: 0, numbering: { start: 5, format: 'upperRoman' } }],
+      },
+      measureBlock,
+    );
+
+    expect(result.layout.pages[0]?.numberText).toBe('V');
+    expect(result.layout.pages[0]?.displayNumber).toBe(5);
+    expect(result.layout.pages[0]?.pageNumberFormat).toBe('upperRoman');
+  });
 });

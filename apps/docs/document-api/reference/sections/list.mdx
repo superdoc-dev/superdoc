@@ -586,6 +586,20 @@ Returns a SectionsListResult with an ordered array of section summaries and thei
           "pageNumbering": {
             "additionalProperties": false,
             "properties": {
+              "chapterSeparator": {
+                "enum": [
+                  "hyphen",
+                  "period",
+                  "colon",
+                  "emDash",
+                  "enDash"
+                ],
+                "type": "string"
+              },
+              "chapterStyle": {
+                "minimum": 1,
+                "type": "integer"
+              },
               "format": {
                 "enum": [
                   "decimal",

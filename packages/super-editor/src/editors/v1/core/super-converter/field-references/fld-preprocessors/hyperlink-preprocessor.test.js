@@ -31,7 +31,7 @@ describe('preProcessHyperlinkInstruction', () => {
       },
     };
 
-    const result = preProcessHyperlinkInstruction(mockNodesToCombine, instruction, mockDocx);
+    const result = preProcessHyperlinkInstruction(mockNodesToCombine, instruction, { docx: mockDocx });
     expect(result).toEqual([
       {
         name: 'w:hyperlink',
@@ -144,7 +144,7 @@ describe('preProcessHyperlinkInstruction', () => {
       },
     };
 
-    const result = preProcessHyperlinkInstruction(mockNodesToCombine, instruction, mockDocx);
+    const result = preProcessHyperlinkInstruction(mockNodesToCombine, instruction, { docx: mockDocx });
 
     // The Relationship Id should start with 'rId', not with a digit
     const relationshipId = mockDocx['word/_rels/document.xml.rels'].elements[0].elements[0].attributes.Id;
@@ -161,7 +161,7 @@ describe('preProcessHyperlinkInstruction', () => {
       'word/_rels/document.xml.rels': { elements: [] }, // Missing Relationships element
     };
     // Expect it not to crash, but to return w:anchor as before
-    const result = preProcessHyperlinkInstruction(mockNodesToCombine, instruction, mockDocx);
+    const result = preProcessHyperlinkInstruction(mockNodesToCombine, instruction, { docx: mockDocx });
     expect(result).toEqual([
       {
         name: 'w:hyperlink',

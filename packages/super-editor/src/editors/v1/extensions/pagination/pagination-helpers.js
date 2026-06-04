@@ -96,7 +96,12 @@ const getSectionHeight = async (editor, data) => {
  * @param {number} [params.availableWidth] - The width of the editing region in pixels. Must be positive.
  * @param {number} [params.availableHeight] - The height of the editing region in pixels. Must be positive.
  * @param {number} [params.currentPageNumber] - The current page number for PAGE field resolution. Must be a positive integer.
+ * @param {string} [params.currentPageNumberText] - The formatted PAGE field display text.
+ * @param {number} [params.currentPageDisplayNumber] - The numeric PAGE display value for local field formatting.
+ * @param {string} [params.currentPageChapterNumberText] - The PAGE chapter prefix for local field formatting.
+ * @param {string} [params.currentPageChapterSeparator] - The PAGE chapter separator for local field formatting.
  * @param {number} [params.totalPageCount] - The total page count for NUMPAGES field resolution. Must be a positive integer.
+ * @param {number} [params.sectionPageCount] - The current section page count for SECTIONPAGES field resolution. Must be a positive integer.
  * @returns {Editor} The created header/footer editor instance
  *
  * @throws {TypeError} If required parameters are missing or have invalid types
@@ -112,7 +117,12 @@ export const createHeaderFooterEditor = ({
   availableWidth,
   availableHeight,
   currentPageNumber,
+  currentPageNumberText,
+  currentPageDisplayNumber,
+  currentPageChapterNumberText,
+  currentPageChapterSeparator,
   totalPageCount,
+  sectionPageCount,
 }) => {
   // Validate required parameters
   if (!editor) {
@@ -157,6 +167,12 @@ export const createHeaderFooterEditor = ({
   if (totalPageCount !== undefined) {
     if (typeof totalPageCount !== 'number' || !Number.isInteger(totalPageCount) || totalPageCount < 1) {
       throw new RangeError('totalPageCount must be a positive integer');
+    }
+  }
+
+  if (sectionPageCount !== undefined) {
+    if (typeof sectionPageCount !== 'number' || !Number.isInteger(sectionPageCount) || sectionPageCount < 1) {
+      throw new RangeError('sectionPageCount must be a positive integer');
     }
   }
 
@@ -205,7 +221,12 @@ export const createHeaderFooterEditor = ({
     documentId: headerFooterRefId || 'headerFooterRefId',
     isHeaderOrFooter: true,
     currentPageNumber,
+    currentPageNumberText,
+    currentPageDisplayNumber,
+    currentPageChapterNumberText,
+    currentPageChapterSeparator,
     totalPageCount,
+    sectionPageCount,
     element: editorContainer,
     editorOptions: {
       headerFooterRefId,

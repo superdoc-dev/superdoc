@@ -1,6 +1,7 @@
 import type {
   ColumnLayout,
   ColumnRegion,
+  DocumentBackground,
   DrawingBlock,
   FlowMode,
   Fragment,
@@ -10,6 +11,8 @@ import type {
   ListBlock,
   ListMeasure,
   PageMargins,
+  PageNumberChapterSeparator,
+  PageNumberFormat,
   ParagraphBlock,
   ParagraphBorders,
   ParagraphMeasure,
@@ -32,6 +35,8 @@ export type ResolvedLayout = {
   blockVersions?: Record<string, string>;
   /** Resolved pages with normalized dimensions. */
   pages: ResolvedPage[];
+  /** Optional document-level page background from OOXML w:background. */
+  documentBackground?: DocumentBackground;
   /** Document epoch identifier from the source layout. Used for change tracking in the painter. */
   layoutEpoch?: number;
 };
@@ -58,6 +63,14 @@ export type ResolvedPage = {
   displayNumber?: number;
   /** Formatted page number text (e.g. "i", "ii" for Roman numeral sections). */
   numberText?: string;
+  /** Numeric page number after section page numbering settings are applied. */
+  effectivePageNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   /** Vertical alignment of content within this page. */
   vAlign?: SectionVerticalAlign;
   /** Base section margins before header/footer inflation. Used for vAlign centering calculations. */
@@ -450,9 +463,15 @@ export function isResolvedDrawingItem(item: ResolvedPaintItem): item is Resolved
 /** A resolved header/footer page — mirrors HeaderFooterPage but with resolved items. */
 export type ResolvedHeaderFooterPage = {
   number: number;
-  /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
-  displayNumber?: number;
   numberText?: string;
+  /** Section-aware numeric page value before formatting. */
+  displayNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   items: ResolvedPaintItem[];
 };
 

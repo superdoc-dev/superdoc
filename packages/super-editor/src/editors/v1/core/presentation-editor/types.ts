@@ -15,6 +15,7 @@ import type {
   FlowMode,
   SectionMetadata,
   TrackChangeAuthor,
+  DocumentBackground,
 } from '@superdoc/contracts';
 import type { LayoutMode, RulerOptions } from '@superdoc/painter-dom';
 import type { ProofingConfig } from './proofing/types.js';
@@ -130,6 +131,7 @@ export type ResolvedLayoutOptions =
       pageSize: PageSize;
       margins: ResolvedMarginsBase;
       columns?: { count: number; gap: number };
+      documentBackground?: DocumentBackground;
       sectionMetadata: SectionMetadata[];
       alternateHeaders?: boolean;
     }
@@ -138,6 +140,7 @@ export type ResolvedLayoutOptions =
       pageSize: PageSize;
       margins: ResolvedMarginsBase;
       columns: { count: 1; gap: 0 };
+      documentBackground?: DocumentBackground;
       semantic: {
         contentWidth: number;
         marginLeft: number;
@@ -151,6 +154,7 @@ export type ResolvedLayoutOptions =
 export type LayoutEngineOptions = {
   pageSize?: PageSize;
   margins?: PageMargins;
+  documentBackground?: DocumentBackground;
   zoom?: number;
   virtualization?: VirtualizationOptions;
   pageStyles?: Record<string, unknown>;

@@ -479,6 +479,51 @@ function inlinePageFieldFooterXml(): string {
 `;
 }
 
+function lowercasePageFieldFooterXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:p>
+    <w:pPr>
+      <w:pStyle w:val="Footer"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r><w:t xml:space="preserve">Case footer </w:t></w:r>
+    <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+    <w:r><w:instrText xml:space="preserve">page \\* arabic</w:instrText></w:r>
+    <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+    <w:r><w:t>1</w:t></w:r>
+    <w:r><w:fldChar w:fldCharType="end"/></w:r>
+  </w:p>
+</w:ftr>
+`;
+}
+
+function formattedPageFieldFooterXml(): string {
+  const pageField = (instruction: string, cachedText: string) => `
+    <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+    <w:r><w:instrText xml:space="preserve">${instruction}</w:instrText></w:r>
+    <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+    <w:r><w:t>${cachedText}</w:t></w:r>
+    <w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:p>
+    <w:pPr>
+      <w:pStyle w:val="Footer"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r><w:t xml:space="preserve">Formats </w:t></w:r>
+    ${pageField('PAGE \\* Roman', 'I')}
+    <w:r><w:t xml:space="preserve"> </w:t></w:r>
+    ${pageField('PAGE \\* ALPHABETIC', 'A')}
+    <w:r><w:t xml:space="preserve"> </w:t></w:r>
+    ${pageField('PAGE \\* ArabicDash', '- 1 -')}
+  </w:p>
+</w:ftr>
+`;
+}
+
 function inlinePageFieldSingleRunFooterXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:ftr xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:mo="http://schemas.microsoft.com/office/mac/office/2008/main" xmlns:mv="urn:schemas-microsoft-com:mac:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="${NS_R}" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w="${NS_W}" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 wp14">
@@ -629,6 +674,22 @@ export const FOOTER_INLINE_PAGE_FIELD_DOC_PATH = ensureGeneratedFixture(
   'h_f-normal.docx',
   {
     'word/footer2.xml': inlinePageFieldFooterXml(),
+  },
+);
+export const FOOTER_LOWERCASE_PAGE_FIELD_DOC_PATH = ensureGeneratedFixture(
+  'footer-lowercase-page-field.docx',
+  'h_f-normal.docx',
+  {
+    'word/document.xml': multiPageHeaderFooterDocumentXml(),
+    'word/footer2.xml': lowercasePageFieldFooterXml(),
+  },
+);
+export const FOOTER_FORMATTED_PAGE_FIELD_DOC_PATH = ensureGeneratedFixture(
+  'footer-formatted-page-field.docx',
+  'h_f-normal.docx',
+  {
+    'word/document.xml': multiPageHeaderFooterDocumentXml(),
+    'word/footer2.xml': formattedPageFieldFooterXml(),
   },
 );
 export const FOOTER_SIMPLE_TEXT_WITH_TABLE_AND_FOOTNOTE_DOC_PATH = ensureGeneratedFixture(

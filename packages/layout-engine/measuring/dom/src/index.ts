@@ -1614,7 +1614,12 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toChar: 1,
           width: 0,
           maxFontSize: lastFontSize,
-          maxFontInfo: hasSeenTextRun ? undefined : fallbackFontInfo,
+          // A tab-only paragraph has no text run, so fallbackFontInfo is undefined and the line
+          // would fall back to synthetic 0.8/0.2 ascent/descent. Derive metrics from the tab's own
+          // font (it carries fontFamily/fontSize) so a tab-only underlined line gets the same
+          // measured ascent/descent - hence underline offset and line height - as the equivalent
+          // text line. getFontInfoFromRun reads only fontFamily/fontSize/bold/italic, all on a TabRun.
+          maxFontInfo: hasSeenTextRun ? undefined : (fallbackFontInfo ?? getFontInfoFromRun(run as unknown as TextRun)),
           maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
           segments: [],
           spaceCount: 0,

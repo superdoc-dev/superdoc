@@ -7,6 +7,7 @@ import type { GetNodeAdapter } from '../get-node/get-node.js';
 import type { WriteAdapter } from '../write/write.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
 import type { StylesAdapter } from '../styles/index.js';
+import type { TemplatesAdapter, TemplatesApplyReceipt } from '../templates/index.js';
 import type { TrackChangesAdapter } from '../track-changes/track-changes.js';
 import type { CreateAdapter } from '../create/create.js';
 import type { ListsAdapter } from '../lists/lists.js';
@@ -135,6 +136,26 @@ function makeAdapters() {
       before: { bold: 'inherit' as const },
       after: { bold: 'on' as const },
     })),
+  };
+  // templates.apply is the first async Document API operation (SD-3247): the
+  // adapter resolves a Promise<TemplatesApplyReceipt>.
+  const templatesAdapter: TemplatesAdapter = {
+    apply: mock(
+      async (): Promise<TemplatesApplyReceipt> => ({
+        success: true as const,
+        changed: true,
+        dryRun: false,
+        bodyPolicy: 'preserve' as const,
+        source: { kind: 'base64' as const, fingerprint: 'deadbeef', partCount: 2 },
+        detectedScopes: [{ scope: 'styles' as const, part: 'word/styles.xml' }],
+        appliedScopes: [{ scope: 'styles' as const, part: 'word/styles.xml' }],
+        skippedScopes: [],
+        unsupportedItems: [],
+        changedParts: [{ part: 'word/styles.xml', scope: 'styles' as const, change: 'merged' as const }],
+        idMappings: {},
+        warnings: [],
+      }),
+    ),
   };
   const trackChangesAdapter: TrackChangesAdapter = {
     list: mock(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } })),
@@ -265,6 +286,7 @@ function makeAdapters() {
     write: writeAdapter,
     selectionMutation: selectionMutationAdapter,
     styles: stylesAdapter,
+    templates: templatesAdapter,
     trackChanges: trackChangesAdapter,
     create: createAdapter,
     lists: listsAdapter,
@@ -422,6 +444,26 @@ describe('invoke', () => {
       const direct = api.create.heading(input);
       const invoked = api.invoke({ operationId: 'create.heading', input });
       expect(invoked).toEqual(direct);
+    });
+
+    it('templates.apply: direct and invoke both infer Promise<TemplatesApplyReceipt> and resolve identically', async () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = { source: { kind: 'base64' as const, data: 'AAAA' } };
+
+      const direct = api.templates.apply(input);
+      const invoked = api.invoke({ operationId: 'templates.apply', input });
+
+      // Type-level assertions: both call shapes must be Promise<TemplatesApplyReceipt>.
+      const directType: Promise<TemplatesApplyReceipt> = direct;
+      const invokedType: Promise<TemplatesApplyReceipt> = invoked;
+      expect(directType).toBeInstanceOf(Promise);
+      expect(invokedType).toBeInstanceOf(Promise);
+
+      const directReceipt = await direct;
+      const invokedReceipt = await invoked;
+      expect(invokedReceipt).toEqual(directReceipt);
+      expect(directReceipt.success).toBe(true);
     });
   });
 

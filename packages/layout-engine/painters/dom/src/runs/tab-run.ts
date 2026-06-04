@@ -1,12 +1,84 @@
 import type { Line, LineSegment, Run } from '@superdoc/contracts';
 import { underlineThicknessPx } from './text-run.js';
 
+type UnderlinePaintRun = {
+  underline?: {
+    style?: string;
+    color?: string;
+  } | null;
+  fontSize?: number;
+  color?: string;
+};
+
+type UnderlineSource = Run | UnderlinePaintRun;
+
+const getRunUnderline = (run: UnderlineSource): UnderlinePaintRun['underline'] =>
+  'underline' in run ? (run.underline as UnderlinePaintRun['underline']) : undefined;
+
+const getRunFontSize = (run: UnderlineSource): number =>
+  'fontSize' in run && typeof run.fontSize === 'number' ? run.fontSize : 16;
+
+const getRunColor = (run: UnderlineSource): string | undefined =>
+  'color' in run && typeof run.color === 'string' ? run.color : undefined;
+
+export const underlineStyleForRun = (run: UnderlineSource): string | undefined =>
+  getRunUnderline(run)?.style ?? 'single';
+
+export const canPaintUnderlineAsBorder = (run: UnderlineSource): boolean => {
+  if (!getRunUnderline(run)) return false;
+  const style = underlineStyleForRun(run);
+  return style !== 'none' && style !== 'words';
+};
+
+/**
+ * Whether the line-level underline overlay may own this run's underline (SD-3330).
+ *
+ * Scoped to the styles a single CSS `border-top` reproduces faithfully: `single`, `double`,
+ * `dotted`, `dashed`. Everything else stays on its existing path on purpose, so the overlay
+ * never silently flattens a distinct style into solid inside a "continuous" line:
+ * - `none` paints nothing (rejected by canPaintUnderlineAsBorder);
+ * - `wave`, `thick`, and the OOXML heavy/compound spellings (`dotDash`, `dashLongHeavy`, ...) a
+ *   border-top cannot draw - they keep their current (degraded) per-run rendering.
+ *
+ * `words` is NOT solved end-to-end here. canPaintUnderlineAsBorder rejects a literal `words`, but
+ * the v1 adapter's normalizeUnderlineStyle collapses OOXML `words` to `single` BEFORE paint, so a
+ * `words` underline reaches this layer as `single` and gets overlaid - it does not reproduce Word's
+ * "underline the words, not the tab whitespace". Fixing that needs an importer/adapter change and is
+ * out of scope for the seam fix; the guard here is only defensive for a producer that passes `words` raw.
+ *
+ * Color is a separate axis: this gate is style-only, and underlineBorderForRun does not resolve
+ * theme/`auto` underline colors (it uses the literal color string, as the prior border path did),
+ * so theme-color fidelity is out of scope here too.
+ *
+ * Mixed lines stay per-run: a single-underlined tab can be overlaid while an adjacent wavy run
+ * keeps its native text-decoration.
+ */
+export const canPaintUnderlineOverlay = (run: UnderlineSource): boolean => {
+  if (!canPaintUnderlineAsBorder(run)) return false;
+  const style = underlineStyleForRun(run);
+  return style === 'single' || style === 'double' || style === 'dotted' || style === 'dashed';
+};
+
+export const underlineBorderForRun = (run: UnderlineSource): string | undefined => {
+  if (!canPaintUnderlineAsBorder(run)) return undefined;
+
+  const underlineStyle = underlineStyleForRun(run);
+  const borderStyle =
+    underlineStyle === 'double' || underlineStyle === 'dotted' || underlineStyle === 'dashed'
+      ? underlineStyle
+      : 'solid';
+  const underlineColor = getRunUnderline(run)?.color ?? getRunColor(run) ?? '#000000';
+  const fontSize = getRunFontSize(run);
+  return `${underlineThicknessPx(fontSize)}px ${borderStyle} ${underlineColor}`;
+};
+
 export const renderInlineTabRun = (
   run: Extract<Run, { kind: 'tab' }>,
   line: Line,
   doc: Document,
   layoutEpoch: number,
   styleId?: string,
+  paintUnderline = true,
 ): HTMLElement => {
   const tabEl = doc.createElement('span');
   tabEl.classList.add('superdoc-tab');
@@ -16,7 +88,8 @@ export const renderInlineTabRun = (
 
   tabEl.style.display = 'inline-block';
   tabEl.style.width = `${tabWidth}px`;
-  if (run.underline) {
+  const shouldPaintUnderline = paintUnderline && canPaintUnderlineAsBorder(run);
+  if (shouldPaintUnderline) {
     // Underlined tabs render the underline as a border-bottom (the tab has no glyphs to
     // carry a text-decoration, and a transparent-filler text-decoration would become
     // selectable content and break line selection). A full-height, bottom-aligned box
@@ -30,7 +103,9 @@ export const renderInlineTabRun = (
     tabEl.style.verticalAlign = 'bottom';
   }
 
-  applyTabUnderlineBorder(tabEl, run);
+  if (shouldPaintUnderline) {
+    applyTabUnderlineBorder(tabEl, run);
+  }
 
   if (styleId) {
     tabEl.setAttribute('styleid', styleId);
@@ -51,6 +126,7 @@ export const renderPositionedTabRun = (
   indentOffset: number,
   immediateNextSegment?: LineSegment,
   styleId?: string,
+  paintUnderline = true,
 ): { element: HTMLElement; tabEndX: number; actualTabWidth: number } => {
   // The tab should span from where previous content ended to where next content begins.
   // If layout supplied a tab-end boundary for the next segment, prefer it.
@@ -65,18 +141,17 @@ export const renderPositionedTabRun = (
   tabEl.style.left = `${tabStartX + indentOffset}px`;
   tabEl.style.top = '0px';
   tabEl.style.width = `${actualTabWidth}px`;
-  // Underlined positioned tabs end the box at the text underline offset (not the full
-  // line height) so the border-bottom aligns with adjacent text underlines (SD-3330).
-  // Non-underlined positioned tabs keep the full line height (they are hidden below).
-  // Positioned tabs are absolutely placed, so the baseline-aligned text-decoration path
-  // used for inline tabs does not apply here; a border at the computed offset is used.
-  tabEl.style.height = run.underline ? `${underlineOffsetFromLineTop(line)}px` : `${line.lineHeight}px`;
+  // Underlined positioned tabs use the same computed offset as inline tabs, while
+  // non-underlined positioned tabs keep the full line height and are hidden below.
+  const shouldPaintUnderline = paintUnderline && canPaintUnderlineAsBorder(run);
+  tabEl.style.height = shouldPaintUnderline ? `${underlineOffsetFromLineTop(line)}px` : `${line.lineHeight}px`;
   tabEl.style.display = 'inline-block';
   tabEl.style.pointerEvents = 'none';
   tabEl.style.zIndex = '1';
 
-  applyTabUnderlineBorder(tabEl, run);
-  if (!run.underline) {
+  if (shouldPaintUnderline) {
+    applyTabUnderlineBorder(tabEl, run);
+  } else {
     tabEl.style.visibility = 'hidden';
   }
 
@@ -99,9 +174,9 @@ export const renderPositionedTabRun = (
  * (the remaining `half-leading + descent` sits below). `text-decoration`
  * underlines render slightly below the baseline, so we add a small gap that
  * scales with font size (capped by the descent). This is geometry derived from
- * the resolved line metrics — the painter never measures the DOM (SD-2957).
+ * the resolved line metrics. The painter never measures the DOM (SD-2957).
  */
-const underlineOffsetFromLineTop = (line: Line): number => {
+export const underlineOffsetFromLineTop = (line: Line): number => {
   const halfLeading = Math.max(0, (line.lineHeight - line.ascent - line.descent) / 2);
   const baselineFromTop = halfLeading + line.ascent;
   const underlineGap = Math.min(line.descent, line.lineHeight * 0.08);
@@ -117,11 +192,7 @@ const underlineOffsetFromLineTop = (line: Line): number => {
  * (not currentColor) because the tab has no visible text to inherit a color from.
  */
 const applyTabUnderlineBorder = (tabEl: HTMLElement, run: Extract<Run, { kind: 'tab' }>): void => {
-  if (!run.underline) return;
-
-  const underlineStyle = run.underline.style ?? 'single';
-  const underlineColor = run.underline.color ?? '#000000';
-  const borderStyle = underlineStyle === 'double' ? 'double' : 'solid';
-  const fontSize = run.fontSize ?? 16;
-  tabEl.style.borderBottom = `${underlineThicknessPx(fontSize)}px ${borderStyle} ${underlineColor}`;
+  const border = underlineBorderForRun(run);
+  if (!border) return;
+  tabEl.style.borderBottom = border;
 };

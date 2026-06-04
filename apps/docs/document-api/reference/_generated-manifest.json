@@ -426,6 +426,8 @@
     "apps/docs/document-api/reference/tables/split-cell.mdx",
     "apps/docs/document-api/reference/tables/split.mdx",
     "apps/docs/document-api/reference/tables/unmerge-cells.mdx",
+    "apps/docs/document-api/reference/templates/apply.mdx",
+    "apps/docs/document-api/reference/templates/index.mdx",
     "apps/docs/document-api/reference/toc/configure.mdx",
     "apps/docs/document-api/reference/toc/edit-entry.mdx",
     "apps/docs/document-api/reference/toc/get-entry.mdx",
@@ -579,6 +581,13 @@
       "operationIds": ["styles.apply"],
       "pagePath": "apps/docs/document-api/reference/styles/index.mdx",
       "title": "Styles"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "templates",
+      "operationIds": ["templates.apply"],
+      "pagePath": "apps/docs/document-api/reference/templates/index.mdx",
+      "title": "Templates"
     },
     {
       "aliasMemberPaths": [],
@@ -1078,5 +1087,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "608536b99749f3a5a1988fa9d39bfafb41aa3814485b64df6812050db98e9d0f"
+  "sourceHash": "2e3e47b8df74df6d5012419a46d3d38c436f4186f136a101035e5ce90dfdc11c"
 }

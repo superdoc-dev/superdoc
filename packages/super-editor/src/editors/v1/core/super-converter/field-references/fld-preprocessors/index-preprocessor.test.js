@@ -20,13 +20,13 @@ describe('preProcessIndexInstruction', () => {
     const instrText = 'INDEX \\e "\t"';
     const instructionTokens = [{ type: 'text', text: 'INDEX \\e "' }, { type: 'tab' }, { type: 'text', text: '"' }];
 
-    const result = preProcessIndexInstruction(nodesToCombine, instrText, null, instructionTokens);
+    const result = preProcessIndexInstruction(nodesToCombine, instrText, { instructionTokens });
 
     expect(result[0].attributes.instructionTokens).toEqual(instructionTokens);
   });
 
   it('omits instructionTokens when null', () => {
-    const result = preProcessIndexInstruction([], 'INDEX', null, null);
+    const result = preProcessIndexInstruction([], 'INDEX', { instructionTokens: null });
 
     expect(result[0].attributes).not.toHaveProperty('instructionTokens');
   });

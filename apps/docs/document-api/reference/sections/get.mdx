@@ -111,6 +111,8 @@ Returns a SectionInfo object with full section properties including margins, col
 | `pageBorders.top.style` | string | no |  |
 | `pageBorders.zOrder` | enum | no | `"front"`, `"back"` |
 | `pageNumbering` | object | no |  |
+| `pageNumbering.chapterSeparator` | enum | no | `"hyphen"`, `"period"`, `"colon"`, `"emDash"`, `"enDash"` |
+| `pageNumbering.chapterStyle` | integer | no |  |
 | `pageNumbering.format` | enum | no | `"decimal"`, `"lowerLetter"`, `"upperLetter"`, `"lowerRoman"`, `"upperRoman"`, `"numberInDash"` |
 | `pageNumbering.start` | integer | no |  |
 | `pageSetup` | object | no |  |
@@ -614,6 +616,20 @@ Returns a SectionInfo object with full section properties including margins, col
     "pageNumbering": {
       "additionalProperties": false,
       "properties": {
+        "chapterSeparator": {
+          "enum": [
+            "hyphen",
+            "period",
+            "colon",
+            "emDash",
+            "enDash"
+          ],
+          "type": "string"
+        },
+        "chapterStyle": {
+          "minimum": 1,
+          "type": "integer"
+        },
         "format": {
           "enum": [
             "decimal",

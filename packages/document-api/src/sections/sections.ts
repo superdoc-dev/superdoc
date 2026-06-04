@@ -10,6 +10,7 @@ import type {
   SectionHeaderFooterVariant,
   SectionDirection,
   SectionOrientation,
+  SectionPageNumberingChapterSeparator,
   SectionVerticalAlign,
   SectionsClearHeaderFooterRefInput,
   SectionsClearPageBordersInput,
@@ -41,6 +42,7 @@ export type {
   SectionBreakType,
   SectionHeaderFooterKind,
   SectionHeaderFooterVariant,
+  SectionPageNumberingChapterSeparator,
   SectionsClearHeaderFooterRefInput,
   SectionsClearPageBordersInput,
   SectionsGetInput,
@@ -80,6 +82,13 @@ const PAGE_NUMBER_FORMATS = [
   'lowerRoman',
   'upperRoman',
   'numberInDash',
+] as const;
+const PAGE_NUMBER_CHAPTER_SEPARATORS: readonly SectionPageNumberingChapterSeparator[] = [
+  'hyphen',
+  'period',
+  'colon',
+  'emDash',
+  'enDash',
 ] as const;
 const PAGE_BORDER_DISPLAYS = ['allPages', 'firstPage', 'notFirstPage'] as const;
 const PAGE_BORDER_OFFSET_FROM_VALUES = ['page', 'text'] as const;
@@ -390,16 +399,24 @@ export function executeSectionsSetPageNumbering(
   options?: MutationOptions,
 ): SectionMutationResult {
   assertSectionTarget(input, 'sections.setPageNumbering');
-  if (!hasAnyDefined(input as unknown as Record<string, unknown>, ['start', 'format'])) {
+  if (
+    !hasAnyDefined(input as unknown as Record<string, unknown>, ['start', 'format', 'chapterStyle', 'chapterSeparator'])
+  ) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
-      'sections.setPageNumbering requires at least one of start or format.',
+      'sections.setPageNumbering requires at least one of start, format, chapterStyle, or chapterSeparator.',
     );
   }
 
   if (input.start !== undefined) assertPositiveInteger(input.start, 'sections.setPageNumbering.start');
   if (input.format !== undefined) {
     assertOneOf(input.format, 'sections.setPageNumbering.format', PAGE_NUMBER_FORMATS);
+  }
+  if (input.chapterStyle !== undefined) {
+    assertPositiveInteger(input.chapterStyle, 'sections.setPageNumbering.chapterStyle');
+  }
+  if (input.chapterSeparator !== undefined) {
+    assertOneOf(input.chapterSeparator, 'sections.setPageNumbering.chapterSeparator', PAGE_NUMBER_CHAPTER_SEPARATORS);
   }
 
   return adapter.setPageNumbering(input, normalizeMutationOptions(options));

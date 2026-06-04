@@ -105,7 +105,57 @@ describe('sections API validation', () => {
       executeSectionsSetPageNumbering(adapter, {
         target: { kind: 'section', sectionId: 'section-0' },
       }),
-    ).toThrow(/requires at least one of start or format/i);
+    ).toThrow(/requires at least one of start, format, chapterStyle, or chapterSeparator/i);
+  });
+
+  it('accepts chapterStyle for setPageNumbering', () => {
+    const setPageNumbering = mock(makeAdapter().setPageNumbering);
+    const adapter = makeAdapter({ setPageNumbering });
+
+    executeSectionsSetPageNumbering(adapter, {
+      target: { kind: 'section', sectionId: 'section-0' },
+      chapterStyle: 1,
+    });
+
+    expect(setPageNumbering).toHaveBeenCalledWith(
+      { target: { kind: 'section', sectionId: 'section-0' }, chapterStyle: 1 },
+      { changeMode: 'direct', dryRun: false, expectedRevision: undefined },
+    );
+  });
+
+  it('accepts valid chapterSeparator for setPageNumbering', () => {
+    const setPageNumbering = mock(makeAdapter().setPageNumbering);
+    const adapter = makeAdapter({ setPageNumbering });
+
+    executeSectionsSetPageNumbering(adapter, {
+      target: { kind: 'section', sectionId: 'section-0' },
+      chapterSeparator: 'enDash',
+    });
+
+    expect(setPageNumbering).toHaveBeenCalledWith(
+      { target: { kind: 'section', sectionId: 'section-0' }, chapterSeparator: 'enDash' },
+      { changeMode: 'direct', dryRun: false, expectedRevision: undefined },
+    );
+  });
+
+  it('rejects invalid chapterSeparator for setPageNumbering', () => {
+    const adapter = makeAdapter();
+    expect(() =>
+      executeSectionsSetPageNumbering(adapter, {
+        target: { kind: 'section', sectionId: 'section-0' },
+        chapterSeparator: 'slash' as any,
+      }),
+    ).toThrow(/chapterSeparator/i);
+  });
+
+  it('rejects chapterStyle less than 1 for setPageNumbering', () => {
+    const adapter = makeAdapter();
+    expect(() =>
+      executeSectionsSetPageNumbering(adapter, {
+        target: { kind: 'section', sectionId: 'section-0' },
+        chapterStyle: 0,
+      }),
+    ).toThrow(/chapterStyle/i);
   });
 
   it('requires at least one field for setPageBorders', () => {

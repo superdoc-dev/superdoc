@@ -332,6 +332,10 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
     footnoteReserved: page.footnoteReserved,
     displayNumber: page.displayNumber,
     numberText: page.numberText,
+    effectivePageNumber: page.effectivePageNumber,
+    pageNumberFormat: page.pageNumberFormat,
+    pageNumberChapterText: page.pageNumberChapterText,
+    pageNumberChapterSeparator: page.pageNumberChapterSeparator,
     vAlign: page.vAlign,
     baseMargins: page.baseMargins,
     sectionIndex: page.sectionIndex,
@@ -344,6 +348,7 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
     flowMode,
     pageGap: layout.pageGap ?? 0,
     pages,
+    ...(layout.documentBackground ? { documentBackground: layout.documentBackground } : {}),
   };
 
   if (blocks.length > 0) {

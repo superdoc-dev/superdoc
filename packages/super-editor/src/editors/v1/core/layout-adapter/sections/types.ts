@@ -5,7 +5,7 @@
  * Includes section ranges, signatures, and OOXML structures.
  */
 
-import type { ColumnLayout } from '@superdoc/contracts';
+import type { ColumnLayout, SectionNumbering } from '@superdoc/contracts';
 
 /**
  * Section types in Word documents.
@@ -75,10 +75,7 @@ export type SectionSignature = {
   headerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
   footerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
   columnsPx?: ColumnLayout;
-  numbering?: {
-    format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
-    start?: number;
-  };
+  numbering?: SectionNumbering;
 } | null;
 
 /**
@@ -129,9 +126,6 @@ export interface SectionRange {
   titlePg: boolean;
   headerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
   footerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
-  numbering?: {
-    format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
-    start?: number;
-  };
+  numbering?: SectionNumbering;
   vAlign?: SectionVerticalAlign;
 }

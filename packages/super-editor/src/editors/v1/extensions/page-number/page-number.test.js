@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PageNumber, TotalPageCount, AutoPageNumberNodeView } from './page-number.js';
+import { PageNumber, TotalPageCount, SectionPageCount, AutoPageNumberNodeView } from './page-number.js';
 
 describe('PageNumber commands', () => {
   it('addAutoPageNumber aborts when not in header/footer', () => {
@@ -65,6 +65,42 @@ describe('PageNumber commands', () => {
       {
         type: 'total-page-number',
         content: [{ type: 'text', text: '7' }],
+      },
+      false,
+    );
+  });
+
+  it('addSectionPageCount inserts section pages only in header/footer contexts', () => {
+    const commands = SectionPageCount.config.addCommands();
+    expect(
+      commands.addSectionPageCount()({
+        editor: { options: { isHeaderOrFooter: false } },
+        state: { schema: {} },
+      }),
+    ).toBe(false);
+
+    const replaceSelectionWith = vi.fn();
+    const schema = {
+      nodes: { 'section-page-count': {} },
+      nodeFromJSON: vi.fn().mockImplementation((json) => json),
+    };
+
+    const result = commands.addSectionPageCount()({
+      editor: { options: { isHeaderOrFooter: true, sectionPageCount: 4 } },
+      tr: { replaceSelectionWith },
+      dispatch: vi.fn(),
+      state: { schema },
+    });
+
+    expect(result).toBe(true);
+    expect(schema.nodeFromJSON).toHaveBeenCalledWith({
+      type: 'section-page-count',
+      content: [{ type: 'text', text: '4' }],
+    });
+    expect(replaceSelectionWith).toHaveBeenCalledWith(
+      {
+        type: 'section-page-count',
+        content: [{ type: 'text', text: '4' }],
       },
       false,
     );
@@ -179,6 +215,88 @@ describe('AutoPageNumberNodeView', () => {
     expect(nodeView.update({ type: { name: 'total-page-number' } })).toBe(false);
   });
 
+  it('renders page number node with section-aware display text when provided', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: { currentPageNumber: 7, currentPageNumberText: 'iii' },
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'page-number' }, attrs: {} };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('iii');
+  });
+
+  it('formats page number node from section-aware display number when provided', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: { currentPageNumber: 7, currentPageNumberText: '3', currentPageDisplayNumber: 3 },
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'page-number' }, attrs: { pageNumberFormat: 'upperRoman' } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('III');
+  });
+
+  it('preserves chapter prefix when applying node pageNumberFormat', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: {
+        currentPageNumber: 7,
+        currentPageNumberText: '3\u2011IV',
+        currentPageDisplayNumber: 4,
+        currentPageChapterNumberText: '3',
+        currentPageChapterSeparator: 'hyphen',
+      },
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'page-number' }, attrs: { pageNumberFormat: 'upperRoman' } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('3\u2011IV');
+  });
+
+  it('formats page number node from current page number when display text is unavailable', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: { currentPageNumber: 4 },
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'page-number' }, attrs: { pageNumberFormat: 'upperRoman' } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('IV');
+  });
+
   it('renders total page count node with parent editor value', () => {
     const doc = {
       resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
@@ -198,5 +316,86 @@ describe('AutoPageNumberNodeView', () => {
     expect(nodeView.dom.textContent).toBe('12');
     expect(nodeView.dom.className).toBe('sd-editor-auto-total-pages');
     expect(nodeView.dom.getAttribute('data-id')).toBe('auto-total-pages');
+  });
+
+  it('renders formatted section page count node', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: { sectionPageCount: 4, totalPageCount: 9 },
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'section-page-count' }, attrs: { pageNumberFormat: 'upperRoman' } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('IV');
+    expect(nodeView.dom.className).toBe('sd-editor-auto-section-pages');
+    expect(nodeView.dom.getAttribute('data-id')).toBe('auto-section-pages');
+  });
+
+  it('renders zero-padded section page count node', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: { sectionPageCount: 4, totalPageCount: 9 },
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'section-page-count' }, attrs: { pageNumberZeroPadding: 3 } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('004');
+  });
+
+  it('renders imported SECTIONPAGES cached text when section page context is unavailable', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: {},
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'section-page-count' }, attrs: { importedCachedText: '3' } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('3');
+  });
+
+  it('renders resolved SECTIONPAGES text before imported cached text when section context is unavailable', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: {},
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = {
+      type: { name: 'section-page-count' },
+      attrs: { resolvedText: '4', importedCachedText: '3' },
+    };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('4');
   });
 });

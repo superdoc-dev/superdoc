@@ -1,5 +1,6 @@
 import { preProcessPageInstruction } from './page-preprocessor.js';
 import { preProcessNumPagesInstruction } from './num-pages-preprocessor.js';
+import { preProcessSectionPagesInstruction } from './section-pages-preprocessor.js';
 import { preProcessPageRefInstruction } from './page-ref-preprocessor.js';
 import { preProcessHyperlinkInstruction } from './hyperlink-preprocessor.js';
 import { preProcessTocInstruction } from './toc-preprocessor.js';
@@ -15,12 +16,20 @@ import { preProcessBibliographyInstruction } from './bibliography-preprocessor.j
 import { preProcessTaInstruction } from './ta-preprocessor.js';
 import { preProcessToaInstruction } from './toa-preprocessor.js';
 import { preProcessDocumentStatInstruction } from './document-stat-preprocessor.js';
+import { extractFieldKeyword } from '../field-keyword.js';
+
+/**
+ * @typedef {object} FieldPreprocessorOptions
+ * @property {import('../../v2/docxHelper').ParsedDocx} [docx] The docx object.
+ * @property {Array<{type: string, text?: string}> | null} [instructionTokens] Raw instruction tokens.
+ * @property {import('../../v2/types/index.js').OpenXmlNode | null} [fieldRunRPr] The w:rPr node captured from field sequence nodes.
+ */
 
 /**
  * @callback InstructionPreProcessor
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine
  * @param {string} instruction
- * @param {import('../../v2/docxHelper').ParsedDocx} [docx] - The docx object.
+ * @param {FieldPreprocessorOptions} [options]
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  */
 
@@ -30,12 +39,17 @@ import { preProcessDocumentStatInstruction } from './document-stat-preprocessor.
  * @returns {InstructionPreProcessor | null} The pre-processor function or null if not found.
  */
 export const getInstructionPreProcessor = (instruction) => {
-  const instructionType = instruction.split(' ')[0];
+  const rawInstructionType = String(instruction ?? '')
+    .trim()
+    .split(/\s+/)[0];
+  const instructionType = extractFieldKeyword(instruction);
   switch (instructionType) {
     case 'PAGE':
       return preProcessPageInstruction;
     case 'NUMPAGES':
       return preProcessNumPagesInstruction;
+    case 'SECTIONPAGES':
+      return preProcessSectionPagesInstruction;
     case 'NUMWORDS':
     case 'NUMCHARS':
       return preProcessDocumentStatInstruction;
@@ -58,6 +72,7 @@ export const getInstructionPreProcessor = (instruction) => {
     case 'STYLEREF':
       return preProcessStylerefInstruction;
     case 'SEQ':
+      if (rawInstructionType !== 'SEQ') return null;
       return preProcessSeqInstruction;
     case 'CITATION':
       return preProcessCitationInstruction;

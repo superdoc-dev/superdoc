@@ -20,13 +20,13 @@ describe('preProcessXeInstruction', () => {
     const instrText = 'XE "Term:Subterm"';
     const instructionTokens = [{ type: 'text', text: 'XE "Term:Subterm"' }];
 
-    const result = preProcessXeInstruction(nodesToCombine, instrText, null, instructionTokens);
+    const result = preProcessXeInstruction(nodesToCombine, instrText, { instructionTokens });
 
     expect(result[0].attributes.instructionTokens).toEqual(instructionTokens);
   });
 
   it('omits instructionTokens when null', () => {
-    const result = preProcessXeInstruction([], 'XE "Test"', null, null);
+    const result = preProcessXeInstruction([], 'XE "Test"', { instructionTokens: null });
 
     expect(result[0].attributes).not.toHaveProperty('instructionTokens');
   });

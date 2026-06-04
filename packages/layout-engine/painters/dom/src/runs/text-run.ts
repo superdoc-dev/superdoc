@@ -1,5 +1,11 @@
 import type { FlowRunLink, Run, TextRun } from '@superdoc/contracts';
-import { normalizeBaselineShift, resolveBaseFontSizeForVerticalText } from '@superdoc/contracts';
+import {
+  formatChapterPageNumberText,
+  formatPageNumberFieldValue,
+  formatSectionPageNumberText,
+  normalizeBaselineShift,
+  resolveBaseFontSizeForVerticalText,
+} from '@superdoc/contracts';
 import { resolvePhysicalFamily } from '@superdoc/font-system';
 import { assertPmPositions } from '../pm-position-validation.js';
 import type { FragmentRenderContext } from '../renderer.js';
@@ -159,10 +165,41 @@ export const resolveRunText = (run: Run, context: FragmentRenderContext): string
     return run.text ?? '';
   }
   if (runToken === 'pageNumber') {
+    if (run.pageNumberFieldFormat) {
+      return formatChapterPageNumberText({
+        pageComponent: formatPageNumberFieldValue(
+          context.displayPageNumber ?? context.pageNumber,
+          run.pageNumberFieldFormat,
+        ),
+        chapterNumberText: context.pageNumberChapterText,
+        chapterSeparator: context.pageNumberChapterSeparator,
+      });
+    }
+    if (context.pageNumberChapterText) {
+      return formatSectionPageNumberText({
+        displayNumber: context.displayPageNumber ?? context.pageNumber,
+        pageFormat: context.pageNumberFormat ?? 'decimal',
+        chapterNumberText: context.pageNumberChapterText,
+        chapterSeparator: context.pageNumberChapterSeparator,
+      });
+    }
     return context.pageNumberText ?? String(context.pageNumber);
   }
   if (runToken === 'totalPageCount') {
+    if (run.pageNumberFieldFormat) {
+      return formatPageNumberFieldValue(context.totalPages || 1, run.pageNumberFieldFormat);
+    }
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
+  }
+  if (runToken === 'sectionPageCount') {
+    const sectionPageCount = context.sectionPageCount;
+    if (sectionPageCount == null) {
+      return run.text ?? '';
+    }
+    if (run.pageNumberFieldFormat) {
+      return formatPageNumberFieldValue(sectionPageCount, run.pageNumberFieldFormat);
+    }
+    return String(sectionPageCount);
   }
   return run.text ?? '';
 };

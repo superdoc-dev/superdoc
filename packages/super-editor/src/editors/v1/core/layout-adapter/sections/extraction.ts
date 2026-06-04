@@ -6,7 +6,7 @@
 
 import type { PMNode } from '../types.js';
 import type { ParagraphProperties, SectionVerticalAlign } from './types.js';
-import type { ColumnLayout } from '@superdoc/contracts';
+import type { ColumnLayout, PageNumberChapterSeparator } from '@superdoc/contracts';
 
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96;
@@ -52,10 +52,26 @@ export function parseColumnSeparator(rawValue: string | number | undefined): boo
   return rawValue === '1' || rawValue === 'true' || rawValue === 'on' || rawValue === 1;
 }
 
+function parsePositiveInteger(rawValue: unknown): number | undefined {
+  const value = Number(rawValue);
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function isKnownChapterSeparator(value: unknown): value is PageNumberChapterSeparator {
+  return typeof value === 'string' && (CHAPTER_SEPARATOR_VALUES as readonly string[]).includes(value);
+}
+
 type SectionType = 'continuous' | 'nextPage' | 'evenPage' | 'oddPage';
 type Orientation = 'portrait' | 'landscape';
 type HeaderRefType = Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
 type NumberingFormat = 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
+const CHAPTER_SEPARATOR_VALUES: readonly PageNumberChapterSeparator[] = [
+  'hyphen',
+  'period',
+  'colon',
+  'emDash',
+  'enDash',
+] as const;
 
 interface SectionElement {
   name: string;
@@ -210,6 +226,8 @@ function extractPageNumbering(elements: SectionElement[]):
   | {
       format?: NumberingFormat;
       start?: number;
+      chapterStyle?: number;
+      chapterSeparator?: PageNumberChapterSeparator;
     }
   | undefined {
   const pgNumType = elements.find((el) => el?.name === 'w:pgNumType');
@@ -228,13 +246,23 @@ function extractPageNumbering(elements: SectionElement[]):
 
   const startRaw = pgNumType.attributes['w:start'];
   const startNum = startRaw != null ? Number(startRaw) : undefined;
+  const hasStart = Number.isFinite(startNum);
+  const chapterStyle = parsePositiveInteger(pgNumType.attributes['w:chapStyle']);
+  const chapterSeparatorRaw = pgNumType.attributes['w:chapSep'];
+  const chapterSeparator = isKnownChapterSeparator(chapterSeparatorRaw) ? chapterSeparatorRaw : undefined;
 
   // Per OOXML spec, when w:start restarts numbering without w:fmt, default to decimal (Arabic numerals)
-  const effectiveFormat = fmt ?? (Number.isFinite(startNum) ? 'decimal' : undefined);
+  const effectiveFormat = fmt ?? (hasStart ? 'decimal' : undefined);
+
+  if (effectiveFormat === undefined && !hasStart && chapterStyle === undefined && chapterSeparator === undefined) {
+    return undefined;
+  }
 
   return {
     format: effectiveFormat,
-    ...(Number.isFinite(startNum) ? { start: Number(startNum) } : {}),
+    ...(hasStart ? { start: Number(startNum) } : {}),
+    ...(chapterStyle !== undefined ? { chapterStyle } : {}),
+    ...(chapterSeparator !== undefined ? { chapterSeparator } : {}),
   };
 }
 
@@ -346,7 +374,12 @@ export function extractSectionData(para: PMNode): {
   titlePg?: boolean;
   headerRefs?: HeaderRefType;
   footerRefs?: HeaderRefType;
-  numbering?: { format?: NumberingFormat; start?: number };
+  numbering?: {
+    format?: NumberingFormat;
+    start?: number;
+    chapterStyle?: number;
+    chapterSeparator?: PageNumberChapterSeparator;
+  };
   vAlign?: SectionVerticalAlign;
 } | null {
   const attrs = (para.attrs ?? {}) as Record<string, unknown>;

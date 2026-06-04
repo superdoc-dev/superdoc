@@ -1,4 +1,11 @@
-import type { FlowBlock, HeaderFooterLayout, Layout, SectionMetadata } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  HeaderFooterLayout,
+  Layout,
+  PageNumberChapterSeparator,
+  PageNumberFormat,
+  SectionMetadata,
+} from '@superdoc/contracts';
 import {
   computeDisplayPageNumber,
   layoutHeaderFooterWithCache,
@@ -20,6 +27,15 @@ export type HeaderFooterPerRidLayoutInput = {
 };
 
 type Constraints = HeaderFooterConstraints;
+type PageResolver = (pageNumber: number) => {
+  displayText: string;
+  displayNumber: number;
+  totalPages: number;
+  sectionPageCount: number;
+  pageFormat?: PageNumberFormat;
+  chapterNumberText?: string;
+  chapterSeparator?: PageNumberChapterSeparator;
+};
 
 /**
  * Layout header/footer blocks per rId, respecting per-section margins.
@@ -46,14 +62,21 @@ export async function layoutPerRIdHeaderFooters(
   const { headerBlocksByRId, footerBlocksByRId, constraints } = headerFooterInput;
 
   const displayPages = computeDisplayPageNumber(layout.pages, sectionMetadata);
+  const pageByNumber = new Map(layout.pages.map((page) => [page.number, page]));
   const totalPages = layout.pages.length;
 
-  const pageResolver = (pageNumber: number): { displayText: string; totalPages: number } => {
+  const pageResolver: PageResolver = (pageNumber: number) => {
     const pageIndex = pageNumber - 1;
     const displayInfo = displayPages[pageIndex];
+    const page = pageByNumber.get(pageNumber);
     return {
-      displayText: displayInfo?.displayText ?? String(pageNumber),
+      displayText: page?.numberText ?? displayInfo?.displayText ?? String(pageNumber),
+      displayNumber: page?.displayNumber ?? displayInfo?.displayNumber ?? pageNumber,
       totalPages,
+      sectionPageCount: displayInfo?.sectionPageCount ?? totalPages ?? 1,
+      pageFormat: page?.pageNumberFormat,
+      chapterNumberText: page?.pageNumberChapterText,
+      chapterSeparator: page?.pageNumberChapterSeparator,
     };
   };
 
@@ -108,7 +131,7 @@ async function layoutBlocksByRId(
   blocksByRId: Map<string, FlowBlock[]> | undefined,
   referencedRIds: Set<string>,
   constraints: Constraints,
-  pageResolver: (pageNumber: number) => { displayText: string; totalPages: number },
+  pageResolver: PageResolver,
   layoutsByRId: Map<string, HeaderFooterLayoutResult>,
 ): Promise<void> {
   if (!blocksByRId || referencedRIds.size === 0) return;
@@ -208,7 +231,7 @@ async function layoutWithPerSectionConstraints(
   blocksByRId: Map<string, FlowBlock[]> | undefined,
   sectionMetadata: SectionMetadata[],
   fallbackConstraints: Constraints,
-  pageResolver: (pageNumber: number) => { displayText: string; totalPages: number },
+  pageResolver: PageResolver,
   layoutsByRId: Map<string, HeaderFooterLayoutResult>,
 ): Promise<void> {
   if (!blocksByRId) return;

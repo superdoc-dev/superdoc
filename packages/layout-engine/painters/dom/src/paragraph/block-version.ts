@@ -166,6 +166,7 @@ export const deriveParagraphBlockVersion = (
         textRun.vertAlign ?? '',
         textRun.baselineShift != null ? textRun.baselineShift : '',
         textRun.token ?? '',
+        textRun.pageNumberFieldFormat ? JSON.stringify(textRun.pageNumberFieldFormat) : '',
         trackedVersion,
         textRun.comments?.length ?? 0,
       ].join(',');

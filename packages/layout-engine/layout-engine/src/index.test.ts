@@ -6067,6 +6067,7 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { odd: 'h-odd', even: 'h-even' } }],
       headerContentHeights: {
         odd: 80, // Odd pages: header pushes body start down
         even: 40, // Even pages: smaller header
@@ -6090,6 +6091,26 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(p2Fragment!.y).toBeCloseTo(70, 0);
   });
 
+  it('uses default header height when odd pages resolve through the default ref', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'rIdDefault' } }],
+      headerContentHeights: {
+        default: 80,
+      },
+    };
+
+    const layout = layoutDocument([tallBlock('p1')], [tallMeasure], options);
+
+    expect(layout.pages).toHaveLength(1);
+
+    const p1Fragment = layout.pages[0].fragments.find((f) => f.blockId === 'p1');
+    expect(p1Fragment).toBeDefined();
+    expect(p1Fragment!.y).toBeCloseTo(110, 0);
+    expect(layout.pages[0].margins.top).toBeCloseTo(110, 0);
+  });
   it('uses section page-numbering start for odd/even header parity', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },
@@ -6122,6 +6143,7 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       alternateHeaders: false,
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'h-default' } }],
       headerContentHeights: {
         default: 60,
         odd: 80,
@@ -6146,6 +6168,7 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       // alternateHeaders not set
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'h-default' } }],
       headerContentHeights: {
         default: 60,
         odd: 80,
@@ -6177,7 +6200,9 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       alternateHeaders: true,
-      sectionMetadata: [{ sectionIndex: 0, titlePg: true }],
+      sectionMetadata: [
+        { sectionIndex: 0, titlePg: true, headerRefs: { first: 'h-first', odd: 'h-odd', even: 'h-even' } },
+      ],
       headerContentHeights: {
         first: 100, // First page: tallest header
         odd: 80,
@@ -6236,7 +6261,7 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       alternateHeaders: true,
-      sectionMetadata: [{ sectionIndex: 0 }, { sectionIndex: 1 }],
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { odd: 'h-odd', even: 'h-even' } }, { sectionIndex: 1 }],
       headerContentHeights: {
         odd: 80,
         even: 40,
@@ -6257,6 +6282,53 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     const p4Fragment = layout.pages[3]?.fragments.find((f) => f.blockId === 'p4');
     expect(p4Fragment).toBeDefined();
     expect(p4Fragment!.y).toBeCloseTo(70, 0);
+  });
+
+  it('uses restarted section page numbering for even/odd header selection', () => {
+    const sb1: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb1-restart',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+    const sb2: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb2-restart',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [
+        { sectionIndex: 0 },
+        { sectionIndex: 1, numbering: { start: 2 }, headerRefs: { odd: 'h-odd', even: 'h-even' } },
+      ],
+      headerContentHeightsByRId: new Map([
+        ['h-odd', 80],
+        ['h-even', 40],
+      ]),
+    };
+
+    const layout = layoutDocument(
+      [sb1, tallBlock('p1'), tallBlock('p2'), sb2, tallBlock('p3')],
+      [{ kind: 'sectionBreak' }, tallMeasure, tallMeasure, { kind: 'sectionBreak' }, tallMeasure],
+      options,
+    );
+
+    expect(layout.pages.length).toBeGreaterThanOrEqual(3);
+    expect(layout.pages[2].number).toBe(3);
+    expect(layout.pages[2].effectivePageNumber).toBe(2);
+    expect(layout.pages[2].numberText).toBe('2');
+
+    const p3Fragment = layout.pages[2]?.fragments.find((f) => f.blockId === 'p3');
+    expect(p3Fragment).toBeDefined();
+    expect(p3Fragment!.y).toBeCloseTo(70, 0);
   });
 
   it('selects even/odd footer heights when alternateHeaders is true', () => {
@@ -6315,6 +6387,190 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(layout.pages[1].margins?.top).toBeCloseTo(50, 0);
   });
 
+  it('uses inherited first and even refs across multiple sections for margin heights', () => {
+    const sb0: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb0',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      margins: {},
+    };
+    const sb1: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb1',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      margins: {},
+    };
+    const sb2: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb2',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 2 },
+      margins: {},
+    };
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [
+        { sectionIndex: 0, titlePg: true, headerRefs: { first: 'h0-first', even: 'h0-even' } },
+        { sectionIndex: 1 },
+        { sectionIndex: 2, titlePg: true },
+      ],
+      headerContentHeightsByRId: new Map([
+        ['h0-first', 100],
+        ['h0-even', 80],
+      ]),
+    };
+
+    const layout = layoutDocument(
+      [sb0, tallBlock('p1'), sb1, tallBlock('p2'), sb2, tallBlock('p3'), tallBlock('p4')],
+      [
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        tallMeasure,
+      ],
+      options,
+    );
+
+    expect(layout.pages[2].fragments.find((f) => f.blockId === 'p3')?.y).toBeCloseTo(130, 0);
+    expect(layout.pages[3].fragments.find((f) => f.blockId === 'p4')?.y).toBeCloseTo(110, 0);
+  });
+
+  it('uses inherited footer refs across sections for margin heights', () => {
+    const sb0: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb0-footer',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      margins: {},
+    };
+    const sb1: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb1-footer',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      margins: {},
+    };
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, footer: 30 },
+      sectionMetadata: [{ sectionIndex: 0, footerRefs: { default: 'f0-default' } }, { sectionIndex: 1 }],
+      footerContentHeightsByRId: new Map([['f0-default', 80]]),
+    };
+
+    const layout = layoutDocument(
+      [sb0, tallBlock('p1-footer'), sb1, tallBlock('p2-footer')],
+      [{ kind: 'sectionBreak' }, tallMeasure, { kind: 'sectionBreak' }, tallMeasure],
+      options,
+    );
+
+    expect(layout.pages[1].margins?.bottom).toBeCloseTo(110, 0);
+  });
+
+  it('uses metadata matched by sparse sectionIndex for title-page header selection', () => {
+    const sb0: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb0-sparse',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      margins: {},
+    };
+    const sb2: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb2-sparse',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 2 },
+      margins: {},
+    };
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      sectionMetadata: [{ sectionIndex: 0 }, { sectionIndex: 2, titlePg: true, headerRefs: { first: 'h2-first' } }],
+      headerContentHeightsByRId: new Map([['h2-first', 100]]),
+    };
+
+    const layout = layoutDocument(
+      [sb0, tallBlock('p1-sparse'), sb2, tallBlock('p2-sparse')],
+      [{ kind: 'sectionBreak' }, tallMeasure, { kind: 'sectionBreak' }, tallMeasure],
+      options,
+    );
+
+    expect(layout.pages[1].fragments.find((f) => f.blockId === 'p2-sparse')?.y).toBeCloseTo(130, 0);
+  });
+
+  it('resets to base margin when selected first variant is blank', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      sectionMetadata: [{ sectionIndex: 0, titlePg: true, headerRefs: { default: 'h-default' } }],
+      headerContentHeightsByRId: new Map([['h-default', 100]]),
+    };
+
+    const layout = layoutDocument([tallBlock('p1')], [tallMeasure], options);
+
+    expect(layout.pages[0].fragments.find((f) => f.blockId === 'p1')?.y).toBeCloseTo(50, 0);
+    expect(layout.pages[0].margins?.top).toBeCloseTo(50, 0);
+  });
+
+  it('uses default variant height when odd selection is backed by a default ref', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'h-default' } }],
+      headerContentHeights: {
+        default: 60,
+        odd: 140,
+      },
+    };
+
+    const layout = layoutDocument([tallBlock('p1')], [tallMeasure], options);
+
+    expect(layout.pages[0].fragments.find((f) => f.blockId === 'p1')?.y).toBeCloseTo(90, 0);
+  });
+
+  it('uses variant header heights when no section refs are available', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      headerContentHeights: {
+        default: 100,
+      },
+    };
+
+    const layout = layoutDocument([tallBlock('p1')], [tallMeasure], options);
+
+    expect(layout.pages[0].fragments.find((f) => f.blockId === 'p1')?.y).toBeCloseTo(130, 0);
+    expect(layout.pages[0].margins?.top).toBeCloseTo(130, 0);
+  });
+
+  it('prefers runtime section refs over stale metadata for margin heights', () => {
+    const sb0: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb0-runtime-refs',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      headerRefs: { default: 'h-runtime' },
+      margins: {},
+    };
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'h-metadata' } }],
+      headerContentHeightsByRId: new Map([
+        ['h-metadata', 20],
+        ['h-runtime', 100],
+      ]),
+    };
+
+    const layout = layoutDocument([sb0, tallBlock('p1')], [{ kind: 'sectionBreak' }, tallMeasure], options);
+
+    expect(layout.pages[0].fragments.find((f) => f.blockId === 'p1')?.y).toBeCloseTo(130, 0);
+    expect(layout.pages[0].margins?.top).toBeCloseTo(130, 0);
+  });
+
   it('prefers section-aware header heights over the plain rId fallback', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },
@@ -6332,6 +6588,65 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(pageOneFragment).toBeDefined();
     expect(pageOneFragment!.y).toBeCloseTo(130, 0);
     expect(layout.pages[0].margins?.top).toBeCloseTo(130, 0);
+  });
+
+  it('uses inherited first-page header height through intermediate sections that omit first refs', () => {
+    const sb1: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb1',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+    const sb2: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb2',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+    const sb3: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb3',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 2 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      sectionMetadata: [
+        { sectionIndex: 0, titlePg: true, headerRefs: { first: 'rIdS0First', default: 'rIdS0Default' } },
+        { sectionIndex: 1, titlePg: true, headerRefs: { default: 'rIdS1Default' } },
+        { sectionIndex: 2, titlePg: true, headerRefs: { default: 'rIdS2Default' } },
+      ],
+      headerContentHeightsByRId: new Map([
+        ['rIdS0First', 100],
+        ['rIdS2Default', 10],
+      ]),
+    };
+
+    const layout = layoutDocument(
+      [sb1, tallBlock('p1'), sb2, tallBlock('p2'), sb3, tallBlock('p3')],
+      [
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        { kind: 'sectionBreak' },
+        tallMeasure,
+      ],
+      options,
+    );
+
+    expect(layout.pages.length).toBeGreaterThanOrEqual(3);
+
+    const p3Fragment = layout.pages[2]?.fragments.find((fragment) => fragment.blockId === 'p3');
+    expect(p3Fragment).toBeDefined();
+    expect(p3Fragment!.y).toBeCloseTo(130, 0);
+    expect(layout.pages[2]?.margins?.top).toBeCloseTo(130, 0);
   });
 
   it('multi-section + titlePg + alternateHeaders: first page of section 2 lands on an even doc-page', () => {
@@ -6363,7 +6678,10 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
       pageSize: { w: 600, h: 800 },
       margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
       alternateHeaders: true,
-      sectionMetadata: [{ sectionIndex: 0 }, { sectionIndex: 1, titlePg: true }],
+      sectionMetadata: [
+        { sectionIndex: 0 },
+        { sectionIndex: 1, titlePg: true, headerRefs: { first: 'h-first', odd: 'h-odd', even: 'h-even' } },
+      ],
       headerContentHeights: {
         first: 100, // section 2 title-page header
         odd: 80,

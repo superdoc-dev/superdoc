@@ -351,6 +351,71 @@ describe('extraction', () => {
     });
   });
 
+  describe('extractSectionData - page numbering chapter attributes', () => {
+    function paragraphWithPgNumType(attributes: Record<string, string>): PMNode {
+      return {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [{ name: 'w:pgNumType', attributes }],
+            },
+          },
+        },
+      };
+    }
+
+    it('should extract positive w:chapStyle from pgNumType', () => {
+      const result = extractSectionData(paragraphWithPgNumType({ 'w:chapStyle': '1' }));
+
+      expect(result?.numbering).toEqual({
+        format: undefined,
+        chapterStyle: 1,
+      });
+    });
+
+    it('should extract each valid w:chapSep value', () => {
+      const separators = ['hyphen', 'period', 'colon', 'emDash', 'enDash'] as const;
+
+      for (const separator of separators) {
+        const result = extractSectionData(paragraphWithPgNumType({ 'w:chapSep': separator }));
+
+        expect(result?.numbering).toEqual({
+          format: undefined,
+          chapterSeparator: separator,
+        });
+      }
+    });
+
+    it('should ignore invalid w:chapSep values', () => {
+      const result = extractSectionData(paragraphWithPgNumType({ 'w:chapSep': 'slash' }));
+
+      expect(result?.numbering).toBeUndefined();
+    });
+
+    it('should ignore invalid and non-positive w:chapStyle values', () => {
+      expect(extractSectionData(paragraphWithPgNumType({ 'w:chapStyle': '0' }))?.numbering).toBeUndefined();
+      expect(extractSectionData(paragraphWithPgNumType({ 'w:chapStyle': '-1' }))?.numbering).toBeUndefined();
+      expect(extractSectionData(paragraphWithPgNumType({ 'w:chapStyle': '1.5' }))?.numbering).toBeUndefined();
+      expect(extractSectionData(paragraphWithPgNumType({ 'w:chapStyle': 'Heading1' }))?.numbering).toBeUndefined();
+    });
+
+    it('should preserve existing start-implies-decimal behavior with chapter attributes', () => {
+      const result = extractSectionData(
+        paragraphWithPgNumType({ 'w:start': '3', 'w:chapStyle': '2', 'w:chapSep': 'colon' }),
+      );
+
+      expect(result?.numbering).toEqual({
+        format: 'decimal',
+        start: 3,
+        chapterStyle: 2,
+        chapterSeparator: 'colon',
+      });
+    });
+  });
+
   // ==================== parseColumnCount Tests ====================
   describe('parseColumnCount', () => {
     it('should return 1 when rawValue is undefined', () => {

@@ -284,11 +284,12 @@ describe('preProcessPageFieldsOnly', () => {
       },
     );
 
-    it('should process SECTIONPAGES field with fldSimple syntax and preserve format', () => {
+    it('should process SECTIONPAGES field with fldSimple syntax and preserve parsed format', () => {
+      const instruction = ' SECTIONPAGES  \\* roman \\* MERGEFORMAT ';
       const nodes = [
         {
           name: 'w:fldSimple',
-          attributes: { 'w:instr': ' SECTIONPAGES  \\* roman \\* MERGEFORMAT ' },
+          attributes: { 'w:instr': instruction },
           elements: [
             {
               name: 'w:r',
@@ -306,7 +307,7 @@ describe('preProcessPageFieldsOnly', () => {
       expect(result.processedNodes).toHaveLength(1);
       expect(result.processedNodes[0].name).toBe('sd:sectionPageCount');
       expect(result.processedNodes[0].attributes).toMatchObject({
-        instruction: 'SECTIONPAGES  \\* roman \\* MERGEFORMAT',
+        instruction: instruction.trim().replace(/\s+/g, ' '),
         pageNumberFormat: 'lowerRoman',
         importedCachedText: 'iv',
       });

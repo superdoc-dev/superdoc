@@ -49,7 +49,7 @@ export function resolveColumnMode(input: ColumnLayout | undefined): 'explicit' |
  * Resolved column count and the SINGLE authority for "how many columns exist": the raw `w:num`
  * (default 1, floored, min 1) clamped to the usable explicit-width count in explicit mode (Word
  * renders min(num, valid-width count)). Both `normalizeColumnLayout` (width math) and the paginator
- * fill loop read this, so the two tracks cannot disagree — a section that declares more columns
+ * fill loop read this, so the two tracks cannot disagree: a section that declares more columns
  * than it supplies widths (e.g. w:num="4" with two <w:col>) neither pads surplus columns to ~0px
  * slivers nor advances the fill into non-existent columns. Content-width-independent. (SD-2324 F8 /
  * SD-2629)

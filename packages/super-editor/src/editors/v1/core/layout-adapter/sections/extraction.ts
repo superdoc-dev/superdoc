@@ -298,7 +298,7 @@ function extractColumns(elements: SectionElement[]): ColumnLayout | undefined {
 
   // Scalar gap is the single-gap fallback for consumers not yet reading geometry: in explicit mode
   // the first VALID column's own space (=== gaps[0]), NOT the first raw child that declares a
-  // w:space — a dropped or zero-width column must never contribute a gap. Equal mode uses the
+  // w:space; a dropped or zero-width column must never contribute a gap. Equal mode uses the
   // section w:cols/@w:space (default 720). The flip to per-column geometry is step 4. (SD-2629)
   const gapPx = isExplicit
     ? toPx(columnRecords[0]?.spaceTwips ?? 0)

@@ -171,7 +171,7 @@ export function createPaginator(opts: PaginatorOptions) {
     const activeCols = getActiveColumnsForState(state);
     // Use the RESOLVED count (clamped to usable explicit widths), not the raw w:num, so the fill
     // loop and the width math (normalizeColumnLayout) agree on how many columns exist. Without this
-    // the loop advances into columns that have no width — the SD-2629 two-track count bug.
+    // the loop advances into columns that have no width (the SD-2629 two-track count bug).
     if (state.columnIndex < resolveColumnCount(activeCols) - 1) {
       // Snapshot max Y before resetting cursor for the next column
       state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);

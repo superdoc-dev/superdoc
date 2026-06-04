@@ -1,7 +1,10 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
 import { exportSchemaToJson, processOutputMarks } from '../../../../exporter.js';
-import { parseSeqInstruction } from '../../../../field-references/shared/seq-instruction.js';
+import {
+  parseSeqInstruction,
+  sequenceFieldAttrsFromParsed,
+} from '../../../../field-references/shared/seq-instruction.js';
 import { buildInstructionElements } from '../shared/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
@@ -26,6 +29,7 @@ const encode = (params) => {
 
   const instruction = node.attributes?.instruction || '';
   const parsed = parseSeqInstruction(instruction);
+  const parsedAttrs = sequenceFieldAttrsFromParsed(parsed);
 
   return {
     type: SD_NODE_NAME,
@@ -33,16 +37,7 @@ const encode = (params) => {
       instruction,
       instructionTokens: node.attributes?.instructionTokens || null,
       // Raw instruction remains the export source of truth; these parsed attrs support import-time routing and later evaluation.
-      identifier: parsed.identifier,
-      fieldArgument: parsed.fieldArgument,
-      sequenceMode: parsed.sequenceMode,
-      hideResult: parsed.hideResult,
-      restartNumber: parsed.restartNumber,
-      restartLevel: parsed.restartLevel,
-      format: parsed.format,
-      hasGeneralFormat: parsed.hasGeneralFormat,
-      pageNumberFieldFormat: parsed.pageNumberFieldFormat ?? null,
-      numericPictureFormat: parsed.numericPictureFormat,
+      ...parsedAttrs,
       resolvedNumber: extractResolvedText(processedText),
       resolvedNumberIsCurrent: false,
       marksAsAttrs: node.marks || [],

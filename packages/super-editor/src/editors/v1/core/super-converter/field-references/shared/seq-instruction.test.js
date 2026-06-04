@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isSeqInstruction, normalizeSeqIdentifier, parseSeqInstruction } from './seq-instruction.js';
+import {
+  isSeqInstruction,
+  normalizeSeqIdentifier,
+  parseSeqInstruction,
+  sequenceFieldAttrsFromParsed,
+} from './seq-instruction.js';
 
 describe('parseSeqInstruction', () => {
   it.each([
@@ -154,5 +159,35 @@ describe('normalizeSeqIdentifier', () => {
   it('trims string identifiers and ignores non-strings', () => {
     expect(normalizeSeqIdentifier(' Figure ')).toBe('Figure');
     expect(normalizeSeqIdentifier(null)).toBe('');
+  });
+});
+
+describe('sequenceFieldAttrsFromParsed', () => {
+  it('projects parsed SEQ metadata into normalized sequenceField attrs', () => {
+    const attrs = sequenceFieldAttrsFromParsed(parseSeqInstruction('SEQ Figure \\r 3 \\* roman'));
+
+    expect(attrs).toEqual({
+      identifier: 'Figure',
+      fieldArgument: '',
+      sequenceMode: 'next',
+      hideResult: false,
+      restartNumber: 3,
+      restartLevel: null,
+      format: 'roman',
+      hasGeneralFormat: true,
+      pageNumberFieldFormat: { format: 'lowerRoman' },
+      numericPictureFormat: null,
+    });
+  });
+
+  it('keeps the parser default separate from the legacy PM attr default', () => {
+    const parsed = parseSeqInstruction('SEQ Figure');
+
+    expect(parsed.format).toBe('Arabic');
+    expect(sequenceFieldAttrsFromParsed(parsed)).toMatchObject({
+      format: 'ARABIC',
+      pageNumberFieldFormat: null,
+      numericPictureFormat: null,
+    });
   });
 });

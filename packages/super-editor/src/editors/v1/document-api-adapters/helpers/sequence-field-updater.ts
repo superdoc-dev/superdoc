@@ -8,6 +8,7 @@ import { SequenceFieldEvaluator } from '../../core/super-converter/field-referen
 import {
   normalizeSeqIdentifier,
   parseSeqInstruction,
+  sequenceFieldAttrsFromParsed,
 } from '../../core/super-converter/field-references/shared/seq-instruction.js';
 
 export type SequenceFieldUpdateScope =
@@ -117,20 +118,13 @@ function resolveNodeHeadingLevel(node: ProseMirrorNode, converterContext?: Conve
 function buildEvaluatedSequenceAttrs(node: ProseMirrorNode): SequenceFieldAttrs {
   const instruction = typeof node.attrs.instruction === 'string' ? node.attrs.instruction : '';
   const parsed = parseSeqInstruction(instruction);
+  const parsedAttrs = sequenceFieldAttrsFromParsed(parsed);
 
   return {
     ...node.attrs,
     instruction,
-    identifier: parsed.identifier || readStringAttr(node, 'identifier'),
-    fieldArgument: parsed.fieldArgument,
-    sequenceMode: parsed.sequenceMode,
-    hideResult: parsed.hideResult,
-    restartNumber: parsed.restartNumber,
-    restartLevel: parsed.restartLevel,
-    format: parsed.format,
-    hasGeneralFormat: parsed.hasGeneralFormat,
-    pageNumberFieldFormat: parsed.pageNumberFieldFormat ?? null,
-    numericPictureFormat: parsed.numericPictureFormat,
+    ...parsedAttrs,
+    identifier: parsedAttrs.identifier || readStringAttr(node, 'identifier'),
   };
 }
 

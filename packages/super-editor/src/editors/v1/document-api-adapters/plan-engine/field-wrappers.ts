@@ -34,6 +34,7 @@ import { parsePageNumberFieldSwitches } from '../../core/super-converter/field-r
 import {
   isSeqInstruction,
   parseSeqInstruction,
+  sequenceFieldAttrsFromParsed,
 } from '../../core/super-converter/field-references/shared/seq-instruction.js';
 import {
   getSequenceFieldUpdaterConverterContext,
@@ -279,16 +280,7 @@ function insertRawField(
         parsed
           ? {
               instruction: input.instruction,
-              identifier: parsed.identifier,
-              fieldArgument: parsed.fieldArgument,
-              sequenceMode: parsed.sequenceMode,
-              hideResult: parsed.hideResult,
-              restartNumber: parsed.restartNumber,
-              restartLevel: parsed.restartLevel,
-              format: parsed.format,
-              hasGeneralFormat: parsed.hasGeneralFormat,
-              pageNumberFieldFormat: parsed.pageNumberFieldFormat ?? null,
-              numericPictureFormat: parsed.numericPictureFormat,
+              ...sequenceFieldAttrsFromParsed(parsed),
               resolvedNumber: '',
               resolvedNumberIsCurrent: false,
               sdBlockId: `field-${Date.now()}`,

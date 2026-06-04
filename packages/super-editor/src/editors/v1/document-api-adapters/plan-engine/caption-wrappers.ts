@@ -35,7 +35,10 @@ import {
   getSequenceFieldUpdaterConverterContext,
   updateSequenceFieldsInTransaction,
 } from '../helpers/sequence-field-updater.js';
-import { parseSeqInstruction } from '../../core/super-converter/field-references/shared/seq-instruction.js';
+import {
+  parseSeqInstruction,
+  sequenceFieldAttrsFromParsed,
+} from '../../core/super-converter/field-references/shared/seq-instruction.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -140,16 +143,7 @@ export function captionsInsertWrapper(
         children.push(
           schema.nodes.sequenceField.create({
             instruction,
-            identifier: parsed.identifier,
-            fieldArgument: parsed.fieldArgument,
-            sequenceMode: parsed.sequenceMode,
-            hideResult: parsed.hideResult,
-            restartNumber: parsed.restartNumber,
-            restartLevel: parsed.restartLevel,
-            format: parsed.format,
-            hasGeneralFormat: parsed.hasGeneralFormat,
-            pageNumberFieldFormat: parsed.pageNumberFieldFormat ?? null,
-            numericPictureFormat: parsed.numericPictureFormat,
+            ...sequenceFieldAttrsFromParsed(parsed),
             resolvedNumber: '',
             resolvedNumberIsCurrent: false,
             sdBlockId: `seq-${Date.now()}`,
@@ -291,11 +285,11 @@ export function captionsConfigureWrapper(
         const format = CAPTION_FORMAT_TO_OOXML[input.format ?? 'decimal'] ?? 'ARABIC';
         const newInstruction = `SEQ ${input.label} \\* ${format}`;
         const parsed = parseSeqInstruction(newInstruction);
-        const pageNumberFieldFormat = parsed.pageNumberFieldFormat ?? { format: 'decimal' };
+        const parsedAttrs = sequenceFieldAttrsFromParsed(parsed);
         if (
           node.attrs.instruction === newInstruction &&
           node.attrs.format === format &&
-          JSON.stringify(node.attrs.pageNumberFieldFormat) === JSON.stringify(pageNumberFieldFormat)
+          JSON.stringify(node.attrs.pageNumberFieldFormat) === JSON.stringify(parsedAttrs.pageNumberFieldFormat)
         ) {
           return true;
         }
@@ -303,10 +297,7 @@ export function captionsConfigureWrapper(
         tr.setNodeMarkup(tr.mapping.map(pos), undefined, {
           ...node.attrs,
           instruction: newInstruction,
-          format,
-          pageNumberFieldFormat,
-          hasGeneralFormat: true,
-          numericPictureFormat: null,
+          ...parsedAttrs,
           resolvedNumberIsCurrent: false,
         });
         changed = true;

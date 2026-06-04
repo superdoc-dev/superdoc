@@ -21,6 +21,19 @@ const TOKEN_PATTERN = /"((?:[^"\\]|\\.)*)"|\\[#*]|\\[^\s]+|[^\s]+/g;
  *   hasGeneralFormat: boolean,
  *   unknownSwitches: string[],
  * }} ParsedSeqInstruction
+ *
+ * @typedef {{
+ *   identifier: string,
+ *   fieldArgument: string,
+ *   sequenceMode: SeqMode,
+ *   hideResult: boolean,
+ *   restartNumber: number | null,
+ *   restartLevel: number | null,
+ *   format: string,
+ *   hasGeneralFormat: boolean,
+ *   pageNumberFieldFormat: import('@superdoc/contracts').PageNumberFieldFormat | null,
+ *   numericPictureFormat: SeqNumericPictureFormat | null,
+ * }} SequenceFieldParsedAttrs
  */
 
 /**
@@ -147,6 +160,27 @@ export function isSeqInstruction(instruction) {
  */
 export function normalizeSeqIdentifier(identifier) {
   return typeof identifier === 'string' ? identifier.trim() : '';
+}
+
+/**
+ * Project parsed SEQ instruction metadata into sequenceField PM attrs.
+ *
+ * @param {ParsedSeqInstruction} parsed
+ * @returns {SequenceFieldParsedAttrs}
+ */
+export function sequenceFieldAttrsFromParsed(parsed) {
+  return {
+    identifier: parsed.identifier,
+    fieldArgument: parsed.fieldArgument,
+    sequenceMode: parsed.sequenceMode,
+    hideResult: parsed.hideResult,
+    restartNumber: parsed.restartNumber,
+    restartLevel: parsed.restartLevel,
+    format: parsed.hasGeneralFormat ? parsed.format : 'ARABIC',
+    hasGeneralFormat: parsed.hasGeneralFormat,
+    pageNumberFieldFormat: parsed.pageNumberFieldFormat ?? null,
+    numericPictureFormat: parsed.numericPictureFormat,
+  };
 }
 
 /**

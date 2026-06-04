@@ -1,4 +1,5 @@
 import { Extension } from '@core/Extension.js';
+import { formatPageNumberFieldValue } from '@superdoc/contracts';
 import { findFieldsInRange } from '../../document-api-adapters/helpers/field-resolver.js';
 import { findAllTocNodes } from '../../document-api-adapters/helpers/toc-resolver.js';
 import {
@@ -14,6 +15,31 @@ import {
 
 /** Stat-field types refreshed by F9 when the doc has no TOCs. */
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES', 'SECTIONPAGES']);
+
+function getTotalPageNumberFieldFormat(attrs) {
+  const format = typeof attrs?.pageNumberFormat === 'string' ? attrs.pageNumberFormat : undefined;
+  const zeroPadding =
+    typeof attrs?.pageNumberZeroPadding === 'number' && Number.isFinite(attrs.pageNumberZeroPadding)
+      ? attrs.pageNumberZeroPadding
+      : undefined;
+  const numericPicture =
+    typeof attrs?.pageNumberNumericPicture === 'string' && attrs.pageNumberNumericPicture.length > 0
+      ? attrs.pageNumberNumericPicture
+      : undefined;
+
+  if (!format && !zeroPadding && !numericPicture) return undefined;
+
+  return {
+    ...(format ? { format } : {}),
+    ...(zeroPadding ? { zeroPadding } : {}),
+    ...(numericPicture ? { numericPicture } : {}),
+  };
+}
+
+function resolveTotalPageNumberFieldValue(stats, node) {
+  if (stats.pages == null) return null;
+  return formatPageNumberFieldValue(stats.pages, getTotalPageNumberFieldFormat(node.attrs));
+}
 
 /**
  * @module FieldUpdate
@@ -119,7 +145,9 @@ export const FieldUpdate = Extension.create({
             const freshValue =
               field.fieldType === 'SECTIONPAGES'
                 ? resolveSectionPageCountFieldValue(editor, node)
-                : resolveDocumentStatFieldValue(field.fieldType, stats);
+                : field.fieldType === 'NUMPAGES' && node.type.name === 'total-page-number'
+                  ? resolveTotalPageNumberFieldValue(stats, node)
+                  : resolveDocumentStatFieldValue(field.fieldType, stats);
             if (freshValue == null) continue;
 
             if (node.type.name === 'total-page-number' || node.type.name === 'section-page-count') {

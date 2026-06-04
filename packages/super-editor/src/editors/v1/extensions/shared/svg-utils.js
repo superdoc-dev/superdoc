@@ -159,7 +159,8 @@ export function createTextElement(textContent, textAlign, width, height, options
       });
     }
     if (part.fieldType === 'NUMPAGES') {
-      return totalPages != null ? String(totalPages) : '1';
+      const count = totalPages ?? 1;
+      return part.pageNumberFormat ? formatPageNumber(count, part.pageNumberFormat) : String(count);
     }
     if (part.fieldType === 'SECTIONPAGES') {
       if (sectionPageCount == null) return part.text ?? '1';

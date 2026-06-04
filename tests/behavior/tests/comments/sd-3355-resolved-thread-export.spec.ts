@@ -152,15 +152,30 @@ test('SD-3355 resolving a range-threaded thread clears every highlight; one undo
   await expect(superdoc.page.locator('.superdoc-comment-highlight').first()).toBeVisible();
 
   // …and the open thread in the store, in the SAME step.
-  const storeState = await superdoc.page.evaluate(() => {
-    const sd = (window as any).superdoc;
-    const raw = sd?.commentsStore?.commentsList;
-    const list = Array.isArray(raw) ? raw : (raw?.value ?? []);
-    const valuesOf = (c: any) => (typeof c?.getValues === 'function' ? c.getValues() : c) ?? {};
-    const values = list.map(valuesOf);
-    const root = values.find((v: any) => !v.parentCommentId && !v.trackedChange);
-    return { rootResolvedTime: root?.resolvedTime ?? null, total: values.length };
-  });
-  expect(storeState.total).toBeGreaterThanOrEqual(2);
-  expect(storeState.rootResolvedTime).toBeNull();
+  const readRootStoreState = () =>
+    superdoc.page.evaluate(() => {
+      const sd = (window as any).superdoc;
+      const raw = sd?.commentsStore?.commentsList;
+      const list = Array.isArray(raw) ? raw : (raw?.value ?? []);
+      const valuesOf = (c: any) => (typeof c?.getValues === 'function' ? c.getValues() : c) ?? {};
+      const values = list.map(valuesOf);
+      const root = values.find((v: any) => !v.parentCommentId && !v.trackedChange);
+      return { rootResolvedTime: root?.resolvedTime ?? null, total: values.length };
+    });
+
+  const afterUndo = await readRootStoreState();
+  expect(afterUndo.total).toBeGreaterThanOrEqual(2);
+  expect(afterUndo.rootResolvedTime).toBeNull();
+
+  // Redo symmetry: redoing the resolve restores BOTH sides in one step — the
+  // highlight drops again and the store regains the original resolved state
+  // (document anchors and store resolvedTime must never disagree, or the
+  // sidebar shows an open thread the document renders as resolved and the
+  // export writes inconsistent w15:done).
+  await superdoc.executeCommand('redo');
+  await superdoc.waitForStable();
+
+  await expect(superdoc.page.locator('.superdoc-comment-highlight')).toHaveCount(0);
+  const afterRedo = await readRootStoreState();
+  expect(afterRedo.rootResolvedTime).not.toBeNull();
 });

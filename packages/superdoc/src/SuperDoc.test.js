@@ -244,6 +244,7 @@ const buildCommentsStore = () => ({
   },
   processLoadedDocxComments: vi.fn(),
   translateCommentsForExport: vi.fn(() => []),
+  syncResolvedCommentsWithDocument: vi.fn(),
   requestInstantSidebarAlignment: vi.fn(),
   peekInstantSidebarAlignment: vi.fn(() => null),
   clearInstantSidebarAlignment: vi.fn(),
@@ -999,6 +1000,10 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncResolvedCommentsWithDocument).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      editor: editorMock,
+    });
     expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
     await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
@@ -1009,6 +1014,7 @@ describe('SuperDoc.vue', () => {
 
     commentsStoreStub.syncTrackedChangePositionsWithDocument.mockClear();
     commentsStoreStub.syncTrackedChangeComments.mockClear();
+    commentsStoreStub.syncResolvedCommentsWithDocument.mockClear();
 
     options.onTransaction({
       editor: editorMock,
@@ -1017,6 +1023,10 @@ describe('SuperDoc.vue', () => {
     });
 
     expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      editor: editorMock,
+    });
+    expect(commentsStoreStub.syncResolvedCommentsWithDocument).toHaveBeenCalledWith({
       documentId: 'doc-1',
       editor: editorMock,
     });

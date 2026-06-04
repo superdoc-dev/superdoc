@@ -691,6 +691,54 @@ describe('comments-store', () => {
     );
   });
 
+  it('restores standard comment resolved metadata when redo returns resolved anchor nodes', () => {
+    const comment = {
+      commentId: 'root-comment',
+      importedId: 'imported-root',
+      resolvedTime: 12345,
+      resolvedById: 'reviewer-id',
+      resolvedByEmail: 'reviewer@example.com',
+      resolvedByName: 'Reviewer',
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [comment];
+
+    const makeEditor = (nodes) => ({
+      state: {
+        doc: {
+          descendants(callback) {
+            nodes.forEach((node, index) => callback(node, index));
+          },
+        },
+      },
+      options: { documentId: 'doc-1' },
+    });
+
+    const liveMarkEditor = makeEditor([
+      {
+        type: { name: 'text' },
+        marks: [{ type: { name: 'commentMark' }, attrs: { commentId: 'root-comment', importedId: 'imported-root' } }],
+      },
+    ]);
+    store.syncResolvedCommentsWithDocument({ editor: liveMarkEditor });
+
+    expect(comment.resolvedTime).toBeNull();
+    expect(comment.resolvedById).toBeNull();
+    expect(comment.resolvedByEmail).toBeNull();
+    expect(comment.resolvedByName).toBeNull();
+
+    const resolvedAnchorEditor = makeEditor([
+      { type: { name: 'commentRangeStart' }, attrs: { 'w:id': 'root-comment' }, marks: [] },
+      { type: { name: 'commentRangeEnd' }, attrs: { 'w:id': 'root-comment' }, marks: [] },
+    ]);
+    store.syncResolvedCommentsWithDocument({ editor: resolvedAnchorEditor });
+
+    expect(comment.resolvedTime).toBe(12345);
+    expect(comment.resolvedById).toBe('reviewer-id');
+    expect(comment.resolvedByEmail).toBe('reviewer@example.com');
+    expect(comment.resolvedByName).toBe('Reviewer');
+  });
+
   it('does not blanket-cascade linked user comments on tracked-change resolve events', async () => {
     const superdoc = {
       emit: vi.fn(),

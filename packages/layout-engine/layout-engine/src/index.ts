@@ -2302,6 +2302,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
               gap: normalized.gap,
               width: normalized.width,
               widths: endingSectionColumns!.widths,
+              gaps: normalized.gaps,
               equalWidth: endingSectionColumns!.equalWidth,
             },
             sectionHasExplicitColumnBreak: false,
@@ -3122,6 +3123,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         gap: normalized.gap,
         width: normalized.width,
         widths: sectionCols.widths,
+        gaps: normalized.gaps,
         equalWidth: sectionCols.equalWidth,
       },
       sectionHasExplicitColumnBreak: false, // already filtered above

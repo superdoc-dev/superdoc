@@ -137,6 +137,47 @@ describe('preProcessPageFieldsOnly', () => {
       });
     });
 
+    it('should preserve NUMPAGES quoted numeric picture whitespace across split instrText runs', () => {
+      const nodes = [
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'NUMPAGES \\# "#' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: '   pages"' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:t', elements: [{ type: 'text', text: '1   pages' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }],
+        },
+      ];
+
+      const result = preProcessPageFieldsOnly(nodes);
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0]).toMatchObject({
+        name: 'sd:totalPageNumber',
+        attributes: {
+          instruction: 'NUMPAGES \\# "# pages"',
+          pageNumberNumericPicture: '#   pages',
+          importedCachedText: '1   pages',
+        },
+      });
+    });
+
     it.each([' numpages ', ' NumPages ', ' NUMPAGES '])(
       'should process NUMPAGES field case-insensitively with fldChar syntax: %s',
       (instruction) => {

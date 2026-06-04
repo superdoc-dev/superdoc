@@ -389,13 +389,16 @@ const getNodeAttributes = (nodeName, editor, node = null) => {
         ariaLabel: 'Page number node',
       };
     }
-    case 'total-page-number':
+    case 'total-page-number': {
+      const totalPageCount =
+        Number(editor.options.totalPageCount || editor.options.parentEditor?.currentTotalPages || 1) || 1;
       return {
-        text: editor.options.totalPageCount || editor.options.parentEditor?.currentTotalPages || '1',
+        text: formatPageNumberFieldValue(totalPageCount, getPageNumberFieldFormat(node?.attrs)),
         className: 'sd-editor-auto-total-pages',
         dataId: 'auto-total-pages',
         ariaLabel: 'Total page count node',
       };
+    }
     case 'section-page-count': {
       const sectionPageCount = editor.options.sectionPageCount;
       const cachedText = node?.attrs?.resolvedText ?? node?.attrs?.importedCachedText ?? node?.textContent ?? '1';
@@ -425,6 +428,26 @@ const getNodeAttributes = (nodeName, editor, node = null) => {
       return {};
   }
 };
+
+function getPageNumberFieldFormat(attrs) {
+  const format = typeof attrs?.pageNumberFormat === 'string' ? attrs.pageNumberFormat : undefined;
+  const zeroPadding =
+    typeof attrs?.pageNumberZeroPadding === 'number' && Number.isFinite(attrs.pageNumberZeroPadding)
+      ? attrs.pageNumberZeroPadding
+      : undefined;
+  const numericPicture =
+    typeof attrs?.pageNumberNumericPicture === 'string' && attrs.pageNumberNumericPicture.length > 0
+      ? attrs.pageNumberNumericPicture
+      : undefined;
+
+  if (!format && !zeroPadding && !numericPicture) return undefined;
+
+  return {
+    ...(format ? { format } : {}),
+    ...(zeroPadding != null ? { zeroPadding } : {}),
+    ...(numericPicture ? { numericPicture } : {}),
+  };
+}
 
 export class AutoPageNumberNodeView {
   constructor(node, getPos, decorations, editor, htmlAttributes = {}) {

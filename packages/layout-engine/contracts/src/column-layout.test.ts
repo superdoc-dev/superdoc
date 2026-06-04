@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { ColumnLayout } from './index.js';
-import { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
+import {
+  cloneColumnLayout,
+  columnLayoutsEqual,
+  getColumnAtX,
+  getColumnGapAfter,
+  getColumnGeometry,
+  getColumnSeparatorPositions,
+  getColumnWidth,
+  getColumnX,
+  normalizeColumnLayout,
+  widthsEqual,
+} from './column-layout.js';
 
 describe('widthsEqual', () => {
   it('treats two missing width arrays as equal', () => {
@@ -133,5 +144,70 @@ describe('normalizeColumnLayout', () => {
       gap: 0,
       width: 0,
     });
+  });
+});
+
+describe('getColumnGeometry + geometry helpers (SD-2629, behavior-preserving)', () => {
+  it('mirrors equal-width normalized output (uniform gap, content-relative x)', () => {
+    const geom = getColumnGeometry(normalizeColumnLayout({ count: 2, gap: 24 }, 624));
+    expect(geom).toEqual([
+      { index: 0, x: 0, width: 300, gapAfter: 24 },
+      { index: 1, x: 324, width: 300, gapAfter: 0 },
+    ]);
+  });
+
+  it('mirrors explicit (scaled) widths', () => {
+    const geom = getColumnGeometry(
+      normalizeColumnLayout({ count: 2, gap: 24, widths: [100, 200], equalWidth: false }, 624),
+    );
+    expect(geom).toEqual([
+      { index: 0, x: 0, width: 200, gapAfter: 24 },
+      { index: 1, x: 224, width: 400, gapAfter: 0 },
+    ]);
+  });
+
+  it('reflects the F8 count clamp (4 declared, 2 widths => 2 columns)', () => {
+    const geom = getColumnGeometry(
+      normalizeColumnLayout({ count: 4, gap: 48, widths: [192, 384], equalWidth: false }, 624),
+    );
+    expect(geom).toHaveLength(2);
+    expect(geom.map((c) => c.width)).toEqual([192, 384]);
+  });
+
+  it('places a separator centered in the gap after each non-last column', () => {
+    const geom = getColumnGeometry(normalizeColumnLayout({ count: 2, gap: 24, withSeparator: true }, 624));
+    expect(geom[0].separatorX).toBe(312);
+    expect(geom[1].separatorX).toBeUndefined();
+    expect(getColumnSeparatorPositions(geom, 96)).toEqual([408]);
+  });
+
+  it('resolves width / x / gap / column-at-x with an explicit originX', () => {
+    const geom = getColumnGeometry(normalizeColumnLayout({ count: 2, gap: 24 }, 624));
+    expect(getColumnWidth(geom, 1)).toBe(300);
+    expect(getColumnX(geom, 1, 96)).toBe(420);
+    expect(getColumnGapAfter(geom, 0)).toBe(24);
+    expect(getColumnGapAfter(geom, 1)).toBe(0);
+    expect(getColumnAtX(geom, 96 + 330, 96)).toBe(1);
+    expect(getColumnAtX(geom, 96 + 100, 96)).toBe(0);
+  });
+
+  it('does NOT let per-column gaps drive geometry yet (step 1 is behavior-preserving)', () => {
+    // `gaps` is raw explicit-mode input; geometry still uses the scalar gap until the step-4 flip.
+    const geom = getColumnGeometry({ count: 2, gap: 24, widths: [300, 300], gaps: [999], width: 300 });
+    expect(geom[0].gapAfter).toBe(24);
+  });
+});
+
+describe('columnLayoutsEqual', () => {
+  it('treats layouts differing only by gaps as not equal', () => {
+    const a: ColumnLayout = { count: 2, gap: 24, widths: [200, 400], gaps: [24], equalWidth: false };
+    const b: ColumnLayout = { count: 2, gap: 24, widths: [200, 400], gaps: [48], equalWidth: false };
+    expect(columnLayoutsEqual(a, b)).toBe(false);
+    expect(columnLayoutsEqual(a, { ...a, gaps: [24] })).toBe(true);
+  });
+
+  it('matches on the full shape and handles missing inputs', () => {
+    expect(columnLayoutsEqual(undefined, undefined)).toBe(true);
+    expect(columnLayoutsEqual({ count: 2, gap: 24 }, { count: 3, gap: 24 })).toBe(false);
   });
 });

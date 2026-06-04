@@ -1,5 +1,20 @@
 import type { ColumnLayout } from './index.js';
 
+/**
+ * Resolved geometry for a single column. `x` and `separatorX` are CONTENT-RELATIVE (measured from
+ * the content-area left edge); add the content-left / left margin to get an absolute page x. This
+ * is the single source every column consumer should read for positioning. (SD-2629)
+ */
+export type ColumnGeometry = {
+  index: number;
+  x: number;
+  width: number;
+  /** Gap after this column; 0 for the last column. */
+  gapAfter: number;
+  /** Separator x (content-relative); present only when a separator line is drawn after this column. */
+  separatorX?: number;
+};
+
 export type NormalizedColumnLayout = ColumnLayout & { width: number };
 
 export function widthsEqual(a?: number[], b?: number[]): boolean {
@@ -23,6 +38,26 @@ export function cloneColumnLayout(columns?: ColumnLayout): ColumnLayout {
         ...(columns.withSeparator !== undefined ? { withSeparator: columns.withSeparator } : {}),
       }
     : { count: 1, gap: 0 };
+}
+
+/**
+ * Build resolved per-column geometry from already-resolved widths and the uniform scalar gap.
+ * SD-2629 step 1 keeps this behavior-preserving: it mirrors today's normalized output (scaled
+ * widths, uniform gap). Per-column `gaps` do NOT drive geometry until the semantic flip (step 4).
+ */
+function buildColumnGeometry(widths: number[], gap: number, withSeparator: boolean): ColumnGeometry[] {
+  const geometry: ColumnGeometry[] = [];
+  let x = 0;
+  for (let i = 0; i < widths.length; i += 1) {
+    const width = widths[i];
+    const isLast = i === widths.length - 1;
+    const gapAfter = isLast ? 0 : gap;
+    const col: ColumnGeometry = { index: i, x, width, gapAfter };
+    if (withSeparator && !isLast) col.separatorX = x + width + gap / 2;
+    geometry.push(col);
+    x += width + gapAfter;
+  }
+  return geometry;
 }
 
 export function normalizeColumnLayout(
@@ -86,4 +121,74 @@ export function normalizeColumnLayout(
     ...(input?.withSeparator !== undefined ? { withSeparator: input.withSeparator } : {}),
     width,
   };
+}
+
+/**
+ * Resolve per-column geometry for an already-normalized layout. This is the SD-2629 consumer API:
+ * fill/positioning/separators/hit-testing/footnotes/floating anchors/balancing should read this
+ * single source rather than re-deriving from `widths`/`gap`. Behavior-preserving in step 1: it
+ * mirrors today's normalized widths + scalar gap; per-column `gaps` drive it only after the flip.
+ */
+export function getColumnGeometry(normalized: NormalizedColumnLayout): ColumnGeometry[] {
+  const widths =
+    Array.isArray(normalized.widths) && normalized.widths.length > 0 ? normalized.widths : [normalized.width];
+  return buildColumnGeometry(widths, normalized.gap, Boolean(normalized.withSeparator));
+}
+
+// ---------------------------------------------------------------------------
+// Resolved-geometry consumer API (SD-2629). All x values are CONTENT-RELATIVE;
+// callers pass the content-left / left margin as `originX` to get an absolute page x.
+// ---------------------------------------------------------------------------
+
+function clampColumnIndex(geometry: ColumnGeometry[], index: number): number {
+  if (geometry.length === 0) return 0;
+  return Math.max(0, Math.min(index, geometry.length - 1));
+}
+
+/** Width of the column at `index` (px). */
+export function getColumnWidth(geometry: ColumnGeometry[], index: number): number {
+  return geometry[clampColumnIndex(geometry, index)]?.width ?? 0;
+}
+
+/** Left edge of the column at `index`, as `originX + content-relative x`. */
+export function getColumnX(geometry: ColumnGeometry[], index: number, originX = 0): number {
+  return originX + (geometry[clampColumnIndex(geometry, index)]?.x ?? 0);
+}
+
+/** Gap after the column at `index` (0 for the last column). */
+export function getColumnGapAfter(geometry: ColumnGeometry[], index: number): number {
+  return geometry[clampColumnIndex(geometry, index)]?.gapAfter ?? 0;
+}
+
+/** Absolute x of each separator line (only columns that draw one), as `originX + content-relative`. */
+export function getColumnSeparatorPositions(geometry: ColumnGeometry[], originX = 0): number[] {
+  return geometry
+    .filter((col) => typeof col.separatorX === 'number')
+    .map((col) => originX + (col.separatorX as number));
+}
+
+/** Index of the column containing absolute `x` (clicks in a gap map to the preceding column). */
+export function getColumnAtX(geometry: ColumnGeometry[], x: number, originX = 0): number {
+  if (geometry.length === 0) return 0;
+  const cx = x - originX;
+  let result = 0;
+  for (const col of geometry) {
+    if (cx >= col.x) result = col.index;
+    else break;
+  }
+  return result;
+}
+
+/** Structural equality of two column layouts, including per-column `gaps`. */
+export function columnLayoutsEqual(a?: ColumnLayout, b?: ColumnLayout): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return (
+    a.count === b.count &&
+    a.gap === b.gap &&
+    a.equalWidth === b.equalWidth &&
+    Boolean(a.withSeparator) === Boolean(b.withSeparator) &&
+    widthsEqual(a.widths, b.widths) &&
+    widthsEqual(a.gaps, b.gaps)
+  );
 }

@@ -3198,7 +3198,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       regions.push({
         yStart: start.y,
         yEnd: end ? end.y : state.contentBottom,
-        columns: start.columns,
+        // Render-facing region metadata: resolve so a count>widths region does not advertise
+        // phantom columns to the separator renderer, which reads these configs raw (SD-2629).
+        columns: resolveColumnLayout(start.columns),
       });
     }
     state.page.columnRegions = regions;

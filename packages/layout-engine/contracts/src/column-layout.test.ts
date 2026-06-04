@@ -289,4 +289,14 @@ describe('resolveColumnLayout (SD-2629)', () => {
   it('does not slice in equal mode (no explicit widths)', () => {
     expect(resolveColumnLayout({ count: 3, gap: 20 })).toEqual({ count: 3, gap: 20 });
   });
+
+  it('drops stray widths/gaps in equal mode (the renderer would treat any widths as explicit)', () => {
+    expect(resolveColumnLayout({ count: 2, gap: 20, widths: [100, 200], gaps: [10], equalWidth: true })).toEqual({
+      count: 2,
+      gap: 20,
+      equalWidth: true,
+    });
+    // Omitted equalWidth is equal mode too.
+    expect(resolveColumnLayout({ count: 2, gap: 20, widths: [100, 200] })).toEqual({ count: 2, gap: 20 });
+  });
 });

@@ -75,16 +75,24 @@ export function cloneColumnLayout(columns?: ColumnLayout): ColumnLayout {
 
 /**
  * Resolve an authored column config to what actually renders: count clamped to resolveColumnCount,
- * and explicit widths/gaps sliced to that count (NOT scaled to a content width; that is
- * normalizeColumnLayout's job). Use for render-facing metadata (page.columns / layout.columns) so
- * it never advertises phantom columns, e.g. count:4 with two widths becomes count:2. (SD-2629)
+ * and per-column data reconciled with the mode. In explicit mode widths/gaps are sliced to the
+ * resolved count (drop surplus); in equal mode they are dropped entirely, because Word ignores
+ * child widths/spaces and divides evenly, and consumers like the DOM painter treat any `widths` as
+ * explicit. NOT scaled to a content width; that is normalizeColumnLayout's job. Use for
+ * render-facing metadata (page.columns / layout.columns / columnRegions) so it never advertises
+ * phantom columns or stray explicit widths, e.g. count:4 with two widths becomes count:2. (SD-2629)
  */
 export function resolveColumnLayout(input: ColumnLayout): ColumnLayout {
   const count = resolveColumnCount(input);
   const resolved = cloneColumnLayout(input);
   resolved.count = count;
-  if (Array.isArray(resolved.widths)) resolved.widths = resolved.widths.slice(0, count);
-  if (Array.isArray(resolved.gaps)) resolved.gaps = resolved.gaps.slice(0, Math.max(0, count - 1));
+  if (resolveColumnMode(input) === 'explicit') {
+    if (Array.isArray(resolved.widths)) resolved.widths = resolved.widths.slice(0, count);
+    if (Array.isArray(resolved.gaps)) resolved.gaps = resolved.gaps.slice(0, Math.max(0, count - 1));
+  } else {
+    delete resolved.widths;
+    delete resolved.gaps;
+  }
   return resolved;
 }
 

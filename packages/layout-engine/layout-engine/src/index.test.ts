@@ -336,6 +336,34 @@ describe('layoutDocument', () => {
     expect(layout.columns).toEqual({ count: 2, gap: 20, withSeparator: false });
   });
 
+  it('resolves mid-page region column metadata to the rendered count (SD-2629)', () => {
+    // A continuous break to count:4 with two widths must surface as a 2-column region, not 4 - the
+    // renderer prefers columnRegions over page.columns and reads the config raw.
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'intro', runs: [] },
+      {
+        kind: 'sectionBreak',
+        id: 'sb-continuous',
+        type: 'continuous',
+        columns: { count: 4, gap: 20, widths: [192, 384], equalWidth: false },
+      },
+      { kind: 'paragraph', id: 'body', runs: [] },
+    ];
+    const measures: Measure[] = [makeMeasure([30]), { kind: 'sectionBreak' }, makeMeasure([30, 30, 30])];
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20 },
+    };
+
+    const layout = layoutDocument(blocks, measures, options);
+    const regions = layout.pages[0].columnRegions;
+    expect(regions).toBeDefined();
+    const last = regions![regions!.length - 1];
+    expect(last.columns.count).toBe(2);
+    expect(last.columns.widths).toEqual([192, 384]);
+  });
+
   it('emits page.columnRegions for continuous section breaks that change column config mid-page', () => {
     // Two sections on the same page: first 2-col with separator, then a
     // continuous break that switches to 3-col still with separator. The

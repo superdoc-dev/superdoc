@@ -222,7 +222,10 @@ function scanFieldSequence(nodes, beginIndex) {
 }
 
 function shouldInsertSwitchBoundarySpace(existingInstruction, nextFragment) {
-  return /\w$/.test(existingInstruction) && /^\\/.test(nextFragment);
+  return (
+    (/\w$/.test(existingInstruction) && /^\\/.test(nextFragment)) ||
+    (/(^|\s)\\[#*]$/.test(existingInstruction) && /^\S/.test(nextFragment))
+  );
 }
 
 /**

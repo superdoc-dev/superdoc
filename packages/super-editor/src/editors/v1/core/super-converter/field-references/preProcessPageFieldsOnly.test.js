@@ -28,6 +28,31 @@ describe('preProcessPageFieldsOnly', () => {
     ];
   }
 
+  function complexFieldNodesFromInstructionFragments(instructionFragments, cachedText = '1') {
+    return [
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }],
+      },
+      ...instructionFragments.map((text) => ({
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text }] }],
+      })),
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }],
+      },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:t', elements: [{ type: 'text', text: cachedText }] }],
+      },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }],
+      },
+    ];
+  }
+
   describe('complex field syntax (w:fldChar)', () => {
     it('should process PAGE field with fldChar syntax', () => {
       const nodes = [
@@ -216,6 +241,36 @@ describe('preProcessPageFieldsOnly', () => {
           pageNumberFormat: 'decimal',
           pageNumberZeroPadding: 3,
           importedCachedText: '007',
+        },
+      });
+    });
+
+    it('should process NUMPAGES numeric switches split between operator and argument', () => {
+      const result = preProcessPageFieldsOnly(
+        complexFieldNodesFromInstructionFragments(['NUMPAGES', '\\#', '"000"'], '007'),
+      );
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0]).toMatchObject({
+        name: 'sd:totalPageNumber',
+        attributes: {
+          instruction: 'NUMPAGES \\# "000"',
+          pageNumberFormat: 'decimal',
+          pageNumberZeroPadding: 3,
+          importedCachedText: '007',
+        },
+      });
+    });
+
+    it('should process PAGE general-format switches split between operator and argument', () => {
+      const result = preProcessPageFieldsOnly(complexFieldNodesFromInstructionFragments(['PAGE', '\\*', 'Roman']));
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0]).toMatchObject({
+        name: 'sd:autoPageNumber',
+        attributes: {
+          instruction: 'PAGE \\* Roman',
+          pageNumberFormat: 'upperRoman',
         },
       });
     });

@@ -203,6 +203,18 @@ describe('getColumnGeometry + geometry helpers (SD-2629)', () => {
     expect(geom[0].gapAfter).toBe(999);
     expect(geom[1].x).toBe(300 + 999);
   });
+
+  it('expands an equal-mode layout with no widths array to `count` columns (SD-2629 regression)', () => {
+    // A hand-built equal-mode layout (column-balancing) carries only the scalar `width`, no widths
+    // array. Geometry must still yield `count` columns; collapsing to a single column mapped every
+    // index past 0 onto column 0's x, stacking balanced multi-column content on the left margin.
+    const geom = getColumnGeometry({ count: 2, gap: 48, width: 288 });
+    expect(geom).toEqual([
+      { index: 0, x: 0, width: 288, gapAfter: 48 },
+      { index: 1, x: 336, width: 288, gapAfter: 0 },
+    ]);
+    expect(getColumnX(geom, 1, 96)).toBe(432);
+  });
 });
 
 describe('columnLayoutsEqual', () => {

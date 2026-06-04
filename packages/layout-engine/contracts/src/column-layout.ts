@@ -197,8 +197,16 @@ export function normalizeColumnLayout(
  * widths and per-column `gaps`, falling back to the uniform gap when no per-column gaps exist.
  */
 export function getColumnGeometry(normalized: NormalizedColumnLayout): ColumnGeometry[] {
+  // A geometry must have exactly `count` columns. normalizeColumnLayout always emits one width per
+  // column, but a hand-built equal-mode layout may carry only the scalar `width` with no widths array
+  // (e.g. column-balancing constructs its input directly). Expand that to `count` equal columns
+  // instead of collapsing to a single [width] column, which would map every column index past 0 onto
+  // column 0's x and stack later columns on the left margin. (SD-2629)
+  const count = Number.isFinite(normalized.count) ? Math.max(1, Math.floor(normalized.count)) : 1;
   const widths =
-    Array.isArray(normalized.widths) && normalized.widths.length > 0 ? normalized.widths : [normalized.width];
+    Array.isArray(normalized.widths) && normalized.widths.length > 0
+      ? normalized.widths
+      : new Array(count).fill(normalized.width);
   return buildColumnGeometry(widths, normalized.gap, Boolean(normalized.withSeparator), normalized.gaps);
 }
 

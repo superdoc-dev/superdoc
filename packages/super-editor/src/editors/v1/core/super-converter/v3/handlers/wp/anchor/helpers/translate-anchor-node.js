@@ -134,12 +134,6 @@ export function translateAnchorNode(params) {
       if ('distRight' in (attrs.wrap.attrs || {})) {
         attributes.distR = pixelsToEmu(attrs.wrap.attrs.distRight);
       }
-      if ('distTop' in (attrs.wrap.attrs || {})) {
-        attributes.distT = pixelsToEmu(attrs.wrap.attrs.distTop);
-      }
-      if ('distBottom' in (attrs.wrap.attrs || {})) {
-        attributes.distB = pixelsToEmu(attrs.wrap.attrs.distBottom);
-      }
       const wrapText = attrs.wrap.attrs?.wrapText || 'bothSides';
       if (wrapText) {
         attributes.wrapText = wrapText;

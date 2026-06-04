@@ -19,6 +19,7 @@ import {
   coerceBoolean,
   toBoolean,
   toBoxSpacing,
+  mergeWrapDistancesFromPadding,
   normalizeCellPaddingTopBottom,
   normalizeMediaKey,
   inferExtensionFromPath,
@@ -1795,5 +1796,31 @@ describe('z-index utilities', () => {
       };
       expect(getFragmentZIndex(block)).toBe(5);
     });
+  });
+});
+
+describe('mergeWrapDistancesFromPadding', () => {
+  it('merges all four sides for Square', () => {
+    const wrap = { type: 'Square' as const, wrapText: 'bothSides' as const };
+    mergeWrapDistancesFromPadding(wrap, { top: 1, bottom: 2, left: 3, right: 4 });
+    expect(wrap).toMatchObject({ distTop: 1, distBottom: 2, distLeft: 3, distRight: 4 });
+  });
+
+  it('merges only vertical sides for TopAndBottom', () => {
+    const wrap = { type: 'TopAndBottom' as const };
+    mergeWrapDistancesFromPadding(wrap, { top: 10, bottom: 20, left: 30, right: 40 });
+    expect(wrap.distTop).toBe(10);
+    expect(wrap.distBottom).toBe(20);
+    expect(wrap.distLeft).toBeUndefined();
+    expect(wrap.distRight).toBeUndefined();
+  });
+
+  it('merges only horizontal sides for Tight', () => {
+    const wrap = { type: 'Tight' as const, wrapText: 'bothSides' as const };
+    mergeWrapDistancesFromPadding(wrap, { top: 10, bottom: 20, left: 30, right: 40 });
+    expect(wrap.distLeft).toBe(30);
+    expect(wrap.distRight).toBe(40);
+    expect(wrap.distTop).toBeUndefined();
+    expect(wrap.distBottom).toBeUndefined();
   });
 });

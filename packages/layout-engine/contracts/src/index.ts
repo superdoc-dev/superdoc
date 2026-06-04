@@ -1714,6 +1714,12 @@ export type ColumnLayout = {
   withSeparator?: boolean;
   widths?: number[];
   equalWidth?: boolean;
+  /**
+   * Per-column inter-column gaps in px, length `count - 1`: the gap after each column except the
+   * last. Explicit mode (`equalWidth === false`) only, derived from each `<w:col w:space>`; equal
+   * mode uses the scalar `gap`. When absent, consumers fall back to the uniform `gap`. (SD-2629)
+   */
+  gaps?: number[];
 };
 
 /**

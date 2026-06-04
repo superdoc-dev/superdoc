@@ -18,6 +18,7 @@ export function cloneColumnLayout(columns?: ColumnLayout): ColumnLayout {
         count: columns.count,
         gap: columns.gap,
         ...(Array.isArray(columns.widths) ? { widths: [...columns.widths] } : {}),
+        ...(Array.isArray(columns.gaps) ? { gaps: [...columns.gaps] } : {}),
         ...(columns.equalWidth !== undefined ? { equalWidth: columns.equalWidth } : {}),
         ...(columns.withSeparator !== undefined ? { withSeparator: columns.withSeparator } : {}),
       }

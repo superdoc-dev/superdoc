@@ -246,7 +246,6 @@ export function buildChapterContextByPage(
 
   return chapterInfoByPage;
 }
-
 /**
  * Computes section-aware display page numbers for all pages in a document.
  *

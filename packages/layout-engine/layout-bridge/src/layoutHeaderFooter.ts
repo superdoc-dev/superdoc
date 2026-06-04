@@ -3,12 +3,14 @@ import type {
   HeaderFooterLayout,
   ListBlock,
   Measure,
-  ParagraphBlock,
-  TableBlock,
+  PageNumberFieldFormat,
   PageNumberChapterSeparator,
   PageNumberFormat,
+  ParagraphBlock,
+  TableBlock,
+  TextRun,
 } from '@superdoc/contracts';
-import { layoutHeaderFooter, type HeaderFooterConstraints } from '@superdoc/layout-engine';
+import { formatPageNumberFieldValue, layoutHeaderFooter, type HeaderFooterConstraints } from '@superdoc/layout-engine';
 import { MeasureCache } from './cache';
 import { resolveHeaderFooterTokens, cloneHeaderFooterBlocks } from './resolveHeaderFooterTokens';
 import { FeatureFlags } from './featureFlags';
@@ -114,6 +116,138 @@ export function getBucketRepresentative(bucket: DigitBucket): number {
     case 'd4':
       return 5000;
   }
+}
+
+function getBucketForDigitCount(digitCount: number): DigitBucket {
+  if (digitCount <= 1) return 'd1';
+  if (digitCount === 2) return 'd2';
+  if (digitCount === 3) return 'd3';
+  return 'd4';
+}
+
+function getBucketForRenderedPageNumberText(text: string): DigitBucket | null {
+  const digitCount = (text.match(/\d/g) ?? []).length;
+  if (digitCount <= 0) return null;
+  return getBucketForDigitCount(digitCount);
+}
+
+type PageNumberBucketingStrategy =
+  | { kind: 'displayText' }
+  | { kind: 'fieldFormat'; fieldFormat: PageNumberFieldFormat };
+
+function forEachPageNumberRun(blocks: FlowBlock[], visit: (run: TextRun) => void): void {
+  for (const block of blocks) {
+    if (block.kind === 'paragraph') {
+      const paraBlock = block as ParagraphBlock;
+      for (const run of paraBlock.runs) {
+        if ('token' in run && run.token === 'pageNumber') {
+          visit(run as TextRun);
+        }
+      }
+    } else if (block.kind === 'list') {
+      const list = block as ListBlock;
+      for (const item of list.items ?? []) {
+        for (const run of item.paragraph.runs) {
+          if ('token' in run && run.token === 'pageNumber') {
+            visit(run as TextRun);
+          }
+        }
+      }
+    } else if (block.kind === 'table') {
+      const table = block as TableBlock;
+      for (const row of table.rows ?? []) {
+        for (const cell of row.cells ?? []) {
+          const cellBlocks: FlowBlock[] = cell.blocks
+            ? (cell.blocks as FlowBlock[])
+            : cell.paragraph
+              ? [cell.paragraph]
+              : [];
+          forEachPageNumberRun(cellBlocks, visit);
+        }
+      }
+    }
+  }
+}
+
+function buildCompatibleFieldFormatKey(fieldFormat: PageNumberFieldFormat): string {
+  return `${fieldFormat.format ?? 'decimal'}:${fieldFormat.zeroPadding ?? ''}`;
+}
+
+function getPageNumberBucketingStrategy(blocks: FlowBlock[]): PageNumberBucketingStrategy | null {
+  let sawImplicitPageNumber = false;
+  const explicitFieldFormats = new Map<string, PageNumberFieldFormat>();
+
+  forEachPageNumberRun(blocks, (run) => {
+    const fieldFormat = run.pageNumberFieldFormat;
+    if (!fieldFormat) {
+      sawImplicitPageNumber = true;
+      return;
+    }
+
+    if (!isDigitBucketCompatiblePageNumberFormat(fieldFormat.format)) {
+      explicitFieldFormats.clear();
+      sawImplicitPageNumber = true;
+      return;
+    }
+
+    explicitFieldFormats.set(buildCompatibleFieldFormatKey(fieldFormat), fieldFormat);
+  });
+
+  if (explicitFieldFormats.size === 0) {
+    return sawImplicitPageNumber ? { kind: 'displayText' } : null;
+  }
+
+  if (sawImplicitPageNumber || explicitFieldFormats.size > 1) {
+    return null;
+  }
+
+  return { kind: 'fieldFormat', fieldFormat: explicitFieldFormats.values().next().value! };
+}
+
+function canUseDigitBucketingForVariant(
+  blocks: FlowBlock[],
+  docTotalPages: number,
+  pageResolver: PageResolver,
+): boolean {
+  const strategy = getPageNumberBucketingStrategy(blocks);
+  if (!strategy) return false;
+
+  const renderedBucketForPage = (pageNumber: number): DigitBucket | null => {
+    const pageInfo = pageResolver(pageNumber);
+    const renderedText =
+      strategy.kind === 'fieldFormat'
+        ? Number.isFinite(pageInfo.displayNumber)
+          ? formatPageNumberFieldValue(pageInfo.displayNumber ?? pageNumber, strategy.fieldFormat)
+          : null
+        : pageInfo.displayText;
+    return renderedText ? getBucketForRenderedPageNumberText(renderedText) : null;
+  };
+
+  const expectedRenderedBuckets = new Map<DigitBucket, DigitBucket>();
+  for (let pageNumber = 1; pageNumber <= docTotalPages; pageNumber += 1) {
+    const physicalBucket = getBucketForPageNumber(pageNumber);
+    const renderedBucket = renderedBucketForPage(pageNumber);
+    if (!renderedBucket) {
+      return false;
+    }
+    const expectedBucket = expectedRenderedBuckets.get(physicalBucket);
+    if (!expectedBucket) {
+      expectedRenderedBuckets.set(physicalBucket, renderedBucket);
+      continue;
+    }
+    if (expectedBucket !== renderedBucket) {
+      return false;
+    }
+  }
+
+  for (const [physicalBucket, expectedRenderedBucket] of expectedRenderedBuckets) {
+    const representativeBucket = renderedBucketForPage(getBucketRepresentative(physicalBucket));
+    if (representativeBucket !== expectedRenderedBucket) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -254,7 +388,6 @@ function hasPageNumberTokens(blocks: FlowBlock[]): boolean {
   }
   return false;
 }
-
 function hasPageNumberTokensRequiringPerPageLayout(blocks: FlowBlock[]): boolean {
   for (const block of blocks) {
     if (block.kind === 'paragraph') {
@@ -276,27 +409,6 @@ function hasPageNumberTokensRequiringPerPageLayout(blocks: FlowBlock[]): boolean
           if (hasPageNumberTokensRequiringPerPageLayout(cellBlocks)) return true;
         }
       }
-    }
-  }
-  return false;
-}
-
-function hasChapterNumberTextForAnyPage(totalPages: number, pageResolver: PageResolver): boolean {
-  // Chapter prefixes can change width inside one page-number digit bucket
-  // ("1-1" vs "12-1"), so large chapter-numbered docs must use per-page
-  // header/footer measurement instead of bucket representatives.
-  for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
-    if (pageResolver(pageNumber).chapterNumberText) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function hasSectionAwarePageTextForAnyPage(totalPages: number, pageResolver: PageResolver): boolean {
-  for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
-    if (pageResolver(pageNumber).displayText !== String(pageNumber)) {
-      return true;
     }
   }
   return false;
@@ -428,13 +540,11 @@ export async function layoutHeaderFooterWithCache(
       useBucketing &&
       !hasPageNumberTokensRequiringPerPageLayout(blocks) &&
       !hasSectionPageCountTokens(blocks) &&
-      (!hasPageNumberToken ||
-        (!hasChapterNumberTextForAnyPage(docTotalPages, pageResolver) &&
-          !hasSectionAwarePageTextForAnyPage(docTotalPages, pageResolver)));
+      (!hasPageNumberToken || canUseDigitBucketingForVariant(blocks, docTotalPages, pageResolver));
 
     if (!useBucketingForVariant) {
-      // Per-page layout: small docs, disabled bucketing, SECTIONPAGES, PAGE variants with
-      // chapter prefixes or section-aware display text, or non-digit-bucket-compatible PAGE formats.
+      // Per-page layout: small docs, disabled bucketing, SECTIONPAGES, or PAGE variants
+      // whose rendered digit buckets diverge within one physical-page bucket.
       pagesToLayout = Array.from({ length: docTotalPages }, (_, i) => i + 1);
       HeaderFooterCacheLogger.logBucketingDecision(docTotalPages, false);
     } else {
@@ -453,12 +563,12 @@ export async function layoutHeaderFooterWithCache(
     // Create layouts for each page (or bucket representative)
     const pages: Array<{
       number: number;
+      displayNumber?: number;
       blocks: FlowBlock[];
       measures: Measure[];
       fragments: HeaderFooterLayout['pages'][0]['fragments'];
       layout: HeaderFooterLayout;
       numberText?: string;
-      displayNumber?: number;
       pageNumberFormat?: PageNumberFormat;
       pageNumberChapterText?: string;
       pageNumberChapterSeparator?: PageNumberChapterSeparator;
@@ -516,12 +626,12 @@ export async function layoutHeaderFooterWithCache(
       // Store page-specific data
       pages.push({
         number: pageNum,
+        displayNumber,
         blocks: clonedBlocks,
         measures,
         fragments: fragmentsWithLines,
         layout: pageLayout,
         numberText: displayText,
-        displayNumber,
         // Mirrored from body page metadata for layout contract parity. Paint
         // reads chapter fields from the body page context; measurement above
         // has already resolved these tokens into page-local HF blocks.
@@ -547,6 +657,7 @@ export async function layoutHeaderFooterWithCache(
       renderHeight,
       pages: pages.map((p) => ({
         number: p.number,
+        displayNumber: p.displayNumber,
         fragments: p.fragments,
         numberText: p.numberText,
         pageNumberFormat: p.pageNumberFormat,

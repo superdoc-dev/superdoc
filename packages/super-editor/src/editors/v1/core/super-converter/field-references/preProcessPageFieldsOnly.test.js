@@ -311,7 +311,6 @@ describe('preProcessPageFieldsOnly', () => {
         importedCachedText: 'iv',
       });
     });
-
     it('should preserve rPr styling from fldSimple content', () => {
       const nodes = [
         {

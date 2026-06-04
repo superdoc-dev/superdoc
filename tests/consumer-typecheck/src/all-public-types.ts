@@ -85,7 +85,12 @@ import type {
   FindReplaceResolution,
   FlowBlock,
   FlowMode,
+  FontAssetUrlContext,
+  FontAssetUrlResolver,
   FontConfig,
+  FontResolutionRecord,
+  FontsChangedPayload,
+  FontsConfig,
   FontsResolvedPayload,
   ImageDeselectedEvent,
   ImageSelectedEvent,
@@ -167,6 +172,7 @@ import type {
   SuperDocExceptionPayload,
   SuperDocExceptionRestorePayload,
   SuperDocExceptionStorePayload,
+  SuperDocFontsApi,
   SuperDocLayoutEngineOptions,
   SuperDocLockedPayload,
   SuperDocReadyPayload,
@@ -269,7 +275,12 @@ const _real_FindReplaceRenderContext: AssertNotAny<FindReplaceRenderContext> = t
 const _real_FindReplaceResolution: AssertNotAny<FindReplaceResolution> = true;
 const _real_FlowBlock: AssertNotAny<FlowBlock> = true;
 const _real_FlowMode: AssertNotAny<FlowMode> = true;
+const _real_FontAssetUrlContext: AssertNotAny<FontAssetUrlContext> = true;
+const _real_FontAssetUrlResolver: AssertNotAny<FontAssetUrlResolver> = true;
 const _real_FontConfig: AssertNotAny<FontConfig> = true;
+const _real_FontResolutionRecord: AssertNotAny<FontResolutionRecord> = true;
+const _real_FontsChangedPayload: AssertNotAny<FontsChangedPayload> = true;
+const _real_FontsConfig: AssertNotAny<FontsConfig> = true;
 const _real_FontsResolvedPayload: AssertNotAny<FontsResolvedPayload> = true;
 const _real_ImageDeselectedEvent: AssertNotAny<ImageDeselectedEvent> = true;
 const _real_ImageSelectedEvent: AssertNotAny<ImageSelectedEvent> = true;
@@ -351,6 +362,7 @@ const _real_SuperDocExceptionEditorPayload: AssertNotAny<SuperDocExceptionEditor
 const _real_SuperDocExceptionPayload: AssertNotAny<SuperDocExceptionPayload> = true;
 const _real_SuperDocExceptionRestorePayload: AssertNotAny<SuperDocExceptionRestorePayload> = true;
 const _real_SuperDocExceptionStorePayload: AssertNotAny<SuperDocExceptionStorePayload> = true;
+const _real_SuperDocFontsApi: AssertNotAny<SuperDocFontsApi> = true;
 const _real_SuperDocLayoutEngineOptions: AssertNotAny<SuperDocLayoutEngineOptions> = true;
 const _real_SuperDocLockedPayload: AssertNotAny<SuperDocLockedPayload> = true;
 const _real_SuperDocReadyPayload: AssertNotAny<SuperDocReadyPayload> = true;

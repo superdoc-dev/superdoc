@@ -1313,18 +1313,19 @@ export class DomPainter {
 
     this.totalPages = resolvedLayout.pages.length;
     this.sectionPageCounts = buildSectionPageCounts(resolvedLayout.pages);
+    const previousLayout = this.currentLayout;
+    this.currentLayout = resolvedLayout;
     if (this.isSemanticFlow) {
       // Semantic mode always renders as a single continuous surface.
       applyStyles(mount, containerStyles);
       mount.style.gap = '0px';
       mount.style.alignItems = 'stretch';
-      if (!this.currentLayout || this.pageStates.length === 0) {
+      if (!previousLayout || this.pageStates.length === 0) {
         this.fullRender(resolvedLayout);
       } else {
         this.patchLayout(resolvedLayout);
       }
       this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
-      this.currentLayout = resolvedLayout;
       this.changedBlocks.clear();
       this.currentMapping = null;
       return;
@@ -1371,7 +1372,7 @@ export class DomPainter {
     } else {
       // Use configured page gap for normal vertical rendering
       mount.style.gap = `${this.pageGap}px`;
-      if (!this.currentLayout || this.pageStates.length === 0) {
+      if (!previousLayout || this.pageStates.length === 0) {
         this.fullRender(resolvedLayout);
       } else {
         this.patchLayout(resolvedLayout);
@@ -2613,11 +2614,16 @@ export class DomPainter {
   }
 
   private getEffectivePageStyles(): PageStyles | undefined {
+    const documentBackgroundColor = this.currentLayout?.documentBackground?.color;
+    const base = this.options.pageStyles ?? {};
+    const baseWithDocumentBackground = documentBackgroundColor
+      ? { ...base, background: documentBackgroundColor }
+      : base;
+
     if (this.isSemanticFlow) {
-      const base = this.options.pageStyles ?? {};
       return {
-        ...base,
-        background: base.background ?? 'var(--sd-layout-page-bg, #fff)',
+        ...baseWithDocumentBackground,
+        background: baseWithDocumentBackground.background ?? 'var(--sd-layout-page-bg, #fff)',
         boxShadow: 'none',
         border: 'none',
         margin: '0',
@@ -2625,10 +2631,9 @@ export class DomPainter {
     }
     if (this.virtualEnabled && this.layoutMode === 'vertical') {
       // Remove top/bottom margins to avoid double-counting with container gap during virtualization
-      const base = this.options.pageStyles ?? {};
-      return { ...base, margin: '0 auto' };
+      return { ...baseWithDocumentBackground, margin: '0 auto' };
     }
-    return this.options.pageStyles;
+    return documentBackgroundColor ? baseWithDocumentBackground : this.options.pageStyles;
   }
 
   private renderFragment(

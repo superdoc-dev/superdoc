@@ -92,15 +92,26 @@ describe('header/footer effective ref resolution', () => {
     ).toBe('even');
   });
 
-  it('returns null for non-positive page numbers', () => {
+  it('accepts non-positive document page numbers for parity when the section page is valid', () => {
     expect(
       selectHeaderFooterVariantForPage({
         documentPageNumber: 0,
         sectionPageNumber: 1,
         titlePg: false,
-        alternateHeaders: false,
+        alternateHeaders: true,
       }),
-    ).toBeNull();
+    ).toBe('even');
+    expect(
+      selectHeaderFooterVariantForPage({
+        documentPageNumber: -1,
+        sectionPageNumber: 1,
+        titlePg: false,
+        alternateHeaders: true,
+      }),
+    ).toBe('odd');
+  });
+
+  it('returns null when the section page number is invalid', () => {
     expect(
       selectHeaderFooterVariantForPage({
         documentPageNumber: 1,

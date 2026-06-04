@@ -6,7 +6,7 @@
  */
 
 import type { Editor } from '../Editor.js';
-import type { CollaborationProvider } from '../types/EditorConfig.js';
+import type { CollaborationProvider, FontsConfig } from '../types/EditorConfig.js';
 import type {
   TrackedChangesMode,
   FlowBlock,
@@ -15,6 +15,7 @@ import type {
   FlowMode,
   SectionMetadata,
   TrackChangeAuthor,
+  DocumentBackground,
 } from '@superdoc/contracts';
 import type { LayoutMode, RulerOptions } from '@superdoc/painter-dom';
 import type { ProofingConfig } from './proofing/types.js';
@@ -130,6 +131,7 @@ export type ResolvedLayoutOptions =
       pageSize: PageSize;
       margins: ResolvedMarginsBase;
       columns?: { count: number; gap: number };
+      documentBackground?: DocumentBackground;
       sectionMetadata: SectionMetadata[];
       alternateHeaders?: boolean;
     }
@@ -138,6 +140,7 @@ export type ResolvedLayoutOptions =
       pageSize: PageSize;
       margins: ResolvedMarginsBase;
       columns: { count: 1; gap: 0 };
+      documentBackground?: DocumentBackground;
       semantic: {
         contentWidth: number;
         marginLeft: number;
@@ -151,6 +154,7 @@ export type ResolvedLayoutOptions =
 export type LayoutEngineOptions = {
   pageSize?: PageSize;
   margins?: PageMargins;
+  documentBackground?: DocumentBackground;
   zoom?: number;
   virtualization?: VirtualizationOptions;
   pageStyles?: Record<string, unknown>;
@@ -205,6 +209,12 @@ export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] 
    * Layout-specific configuration consumed by PresentationEditor.
    */
   layoutEngineOptions?: LayoutEngineOptions;
+  /**
+   * Font system configuration (the SuperDoc-level `fonts` config). Currently the served
+   * location of the bundled substitute pack: `assetBaseUrl` / `resolveAssetUrl`. Threaded
+   * here (not the legacy untyped `EditorConfig.fonts`) so the asset config is typed.
+   */
+  fontAssets?: FontsConfig;
   /**
    * Document mode for the editor. Determines editability and tracked changes behavior.
    * @default 'editing'

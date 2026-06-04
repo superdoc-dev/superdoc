@@ -91,6 +91,49 @@ describe('headerFooterUtils', () => {
     expect(getHeaderFooterType(1, identifier, { parityPageNumber: -1 })).toBe('odd');
   });
 
+  it('keeps section-aware header selection when the effective page number is zero', () => {
+    const identifier = buildMultiSectionIdentifier(
+      [{ sectionIndex: 0, headerRefs: { default: 'rIdDefault', even: 'rIdEven' } }],
+      { alternateHeaders: true },
+    );
+
+    expect(
+      getHeaderFooterTypeForSection(0, 0, identifier, {
+        kind: 'header',
+        sectionPageNumber: 1,
+        parityPageNumber: 0,
+      }),
+    ).toBe('even');
+  });
+
+  it('resolves section-aware header/footer pages when the effective page number is zero', () => {
+    const identifier = buildMultiSectionIdentifier(
+      [{ sectionIndex: 0, headerRefs: { default: 'rIdDefault', even: 'rIdEven' } }],
+      { alternateHeaders: true },
+    );
+    const layout: Layout = {
+      pageSize: { w: 600, h: 800 },
+      pages: [
+        {
+          number: 1,
+          fragments: [],
+          sectionIndex: 0,
+          displayNumber: 0,
+          effectivePageNumber: 0,
+          sectionRefs: { headerRefs: { default: 'rIdDefault', even: 'rIdEven' }, footerRefs: {} },
+        },
+      ],
+      headerFooter: {
+        default: { height: 36, pages: [{ number: 1, fragments: [] }] },
+        even: { height: 36, pages: [{ number: 1, fragments: [] }] },
+      },
+    };
+
+    expect(resolveHeaderFooterForPageAndSection(layout, 0, identifier, { kind: 'header' })).toMatchObject({
+      type: 'even',
+      contentId: 'rIdEven',
+    });
+  });
   it('uses default only for odd pages when alternating slots are missing', () => {
     const identifier = extractIdentifierFromConverter({
       headerIds: { default: 'rId1' },
@@ -1193,6 +1236,5 @@ describe('headerFooterUtils', () => {
 
       expect(getHeaderFooterIdForPage(page, identifier, { kind: 'header', sectionPageNumber: 3 })).toBe('h0-default');
     });
-
   });
 });

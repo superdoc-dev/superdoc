@@ -11,7 +11,8 @@ import { parsePageNumberFieldSwitches } from '../shared/page-number-field-switch
  */
 export function preProcessPageInstruction(nodesToCombine, instrText = 'PAGE', options = {}) {
   const fieldRunRPr = options.fieldRunRPr ?? null;
-  const normalizedInstruction = typeof instrText === 'string' && instrText.trim() ? instrText.trim().replace(/\s+/g, ' ') : 'PAGE';
+  const normalizedInstruction =
+    typeof instrText === 'string' && instrText.trim() ? instrText.trim().replace(/\s+/g, ' ') : 'PAGE';
   const fieldAttrs = {
     instruction: normalizedInstruction,
     ...parsePageNumberFieldSwitches(normalizedInstruction, 'PAGE'),

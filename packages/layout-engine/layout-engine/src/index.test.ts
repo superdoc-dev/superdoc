@@ -6111,7 +6111,6 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(p1Fragment!.y).toBeCloseTo(110, 0);
     expect(layout.pages[0].margins.top).toBeCloseTo(110, 0);
   });
-
   it('uses section page-numbering start for odd/even header parity', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },

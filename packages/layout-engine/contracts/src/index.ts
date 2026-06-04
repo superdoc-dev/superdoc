@@ -1,9 +1,5 @@
 import type { TabStop } from './engines/tabs.js';
-import type {
-  PageNumberChapterSeparator,
-  PageNumberFieldFormat,
-  PageNumberFormat,
-} from './page-number-formatting.js';
+import type { PageNumberChapterSeparator, PageNumberFieldFormat, PageNumberFormat } from './page-number-formatting.js';
 export { computeTabStops, layoutWithTabs, calculateTabWidth } from './engines/tabs.js';
 
 // Re-export TabStop for external consumers
@@ -457,6 +453,13 @@ export type TextRun = RunMarks & {
 export type TabRun = RunMarks & {
   kind: 'tab';
   text: '\t';
+  /**
+   * Font of the tab, inherited from the paragraph's resolved run properties. A tab has
+   * no glyphs, but its font drives the line height (so a tab-only line matches a text
+   * line) and the underline weight. Optional: not every producer sets it.
+   */
+  fontFamily?: string;
+  fontSize?: number;
   /** Width in pixels (assigned by measurer/resolver). */
   width?: number;
   tabStops?: TabStop[];
@@ -833,6 +836,11 @@ export type PageMargins = {
   header?: number;
   footer?: number;
   gutter?: number;
+};
+
+export type DocumentBackground = {
+  /** Solid page background color as a CSS hex value. */
+  color: string;
 };
 
 export type ImageBlockAttrs = {
@@ -2039,7 +2047,7 @@ export type Page = {
    * SD-2656: page-level footnote planning ledger. Populated by the layout
    * bridge when footnotes are present. Read by the diagnostic toolkit and
    * (in later phases) by body pagination itself.
-  */
+   */
   footnoteLedger?: FootnotePageLedger;
   /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
   displayNumber?: number;
@@ -2315,6 +2323,8 @@ export type HeaderFooterLayout = {
 export type Layout = {
   pageSize: { w: number; h: number };
   pages: Page[];
+  /** Optional document-level page background from OOXML w:background. */
+  documentBackground?: DocumentBackground;
   columns?: ColumnLayout;
   headerFooter?: Partial<Record<HeaderFooterType, HeaderFooterLayout>>;
   /**

@@ -109,7 +109,6 @@ describe('preProcessNodesForFldChar', () => {
       elements: [fieldRunRPr],
     });
   });
-
   it('should process non-page field instructions case-insensitively', () => {
     const docx = {
       'word/_rels/document.xml.rels': {

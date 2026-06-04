@@ -231,65 +231,73 @@ vi.mock('../input/PositionHitResolver.js', () => ({
 // Mock Editor class
 vi.mock('../../Editor', () => {
   return {
-    Editor: vi.fn().mockImplementation(() => ({
-      setDocumentMode: vi.fn(),
-      setOptions: vi.fn(),
-      on: vi.fn(),
-      off: vi.fn(),
-      destroy: vi.fn(),
-      getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
-      isEditable: true,
-      state: {
-        selection: {
-          from: 0,
-          to: 0,
-          $from: {
-            depth: 0,
-            node: vi.fn(),
+    Editor: vi.fn().mockImplementation((options: { content?: unknown } = {}) => {
+      const contentAttrs =
+        options.content && typeof options.content === 'object' && !Array.isArray(options.content)
+          ? (((options.content as { attrs?: Record<string, unknown> }).attrs ?? {}) as Record<string, unknown>)
+          : {};
+
+      return {
+        setDocumentMode: vi.fn(),
+        setOptions: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        destroy: vi.fn(),
+        getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
+        isEditable: true,
+        state: {
+          selection: {
+            from: 0,
+            to: 0,
+            $from: {
+              depth: 0,
+              node: vi.fn(),
+            },
+          },
+          doc: {
+            attrs: contentAttrs,
+            nodeSize: 100,
+            content: {
+              size: 100,
+            },
+            descendants: vi.fn(),
+            nodesBetween: vi.fn((_from: number, _to: number, callback: (node: unknown, pos: number) => void) => {
+              // Simulate a simple document with one text block at position 0.
+              callback({ isTextblock: true }, 0);
+            }),
+            resolve: vi.fn((pos: number) => ({
+              pos,
+              depth: 0,
+              parent: { inlineContent: true },
+              node: vi.fn(),
+              min: vi.fn((other: { pos: number }) => Math.min(pos, other.pos)),
+              max: vi.fn((other: { pos: number }) => Math.max(pos, other.pos)),
+            })),
+          },
+          tr: {
+            setSelection: vi.fn().mockReturnThis(),
           },
         },
-        doc: {
-          nodeSize: 100,
-          content: {
-            size: 100,
+        view: {
+          dom: {
+            dispatchEvent: vi.fn(() => true),
+            focus: vi.fn(),
           },
-          descendants: vi.fn(),
-          nodesBetween: vi.fn((_from: number, _to: number, callback: (node: unknown, pos: number) => void) => {
-            // Simulate a simple document with one text block at position 0.
-            callback({ isTextblock: true }, 0);
-          }),
-          resolve: vi.fn((pos: number) => ({
-            pos,
-            depth: 0,
-            parent: { inlineContent: true },
-            node: vi.fn(),
-            min: vi.fn((other: { pos: number }) => Math.min(pos, other.pos)),
-            max: vi.fn((other: { pos: number }) => Math.max(pos, other.pos)),
-          })),
-        },
-        tr: {
-          setSelection: vi.fn().mockReturnThis(),
-        },
-      },
-      view: {
-        dom: {
-          dispatchEvent: vi.fn(() => true),
           focus: vi.fn(),
+          dispatch: vi.fn(),
         },
-        focus: vi.fn(),
-        dispatch: vi.fn(),
-      },
-      options: {
-        documentId: 'test-doc',
-        element: document.createElement('div'),
-      },
-      converter: mockEditorConverterStore.current,
-      storage: {
-        image: {
-          media: mockEditorConverterStore.mediaFiles,
+        options: {
+          documentId: 'test-doc',
+          element: document.createElement('div'),
         },
-      },
-    })),
+        converter: mockEditorConverterStore.current,
+        storage: {
+          image: {
+            media: mockEditorConverterStore.mediaFiles,
+          },
+        },
+      };
+    }),
   };
 });
 
@@ -1097,6 +1105,56 @@ describe('PresentationEditor', () => {
         alternateHeaders?: boolean;
       };
       expect(layoutOptions.alternateHeaders).toBe(false);
+    });
+  });
+
+  describe('documentBackground resolution', () => {
+    it('forwards configured documentBackground when the document has no imported background', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'doc-background-config-doc',
+        mode: 'docx',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        layoutEngineOptions: {
+          documentBackground: { color: '#EEEEEE' },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.getLayoutOptions().documentBackground).toEqual({ color: '#EEEEEE' });
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        documentBackground?: { color?: string };
+      };
+      expect(layoutOptions.documentBackground).toEqual({ color: '#EEEEEE' });
+    });
+
+    it('prefers imported documentBackground over the configured fallback', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'doc-background-import-doc',
+        mode: 'docx',
+        content: {
+          type: 'doc',
+          attrs: {
+            documentBackground: { color: '#DDDDDD' },
+          },
+          content: [{ type: 'paragraph' }],
+        },
+        layoutEngineOptions: {
+          documentBackground: { color: '#EEEEEE' },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.getLayoutOptions().documentBackground).toEqual({ color: '#DDDDDD' });
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        documentBackground?: { color?: string };
+      };
+      expect(layoutOptions.documentBackground).toEqual({ color: '#DDDDDD' });
     });
   });
 
@@ -2936,9 +2994,16 @@ describe('PresentationEditor', () => {
     });
 
     it('emits headerFooterEditBlocked when keyboard shortcut has no matching region', async () => {
-      const layoutNoHeaders = buildLayoutResult();
-      layoutNoHeaders.headers = [];
-      mockIncrementalLayout.mockResolvedValueOnce(layoutNoHeaders);
+      // Header/footer regions are derived from the resolved layout's PAGES
+      // (HeaderFooterSessionManager.rebuildRegions builds one region per page), not
+      // from the headers[] array. To exercise the "no matching region" path the
+      // resolved layout must have no page 0 at all; emptying headers[] still leaves a
+      // per-page region and takes the activation path instead. With no pages,
+      // getRegionForPage('header', 0) returns null deterministically, independent of
+      // render timing.
+      const layoutNoPages = buildLayoutResult();
+      layoutNoPages.layout.pages = [];
+      mockIncrementalLayout.mockResolvedValueOnce(layoutNoPages);
 
       const blockedSpy = vi.fn();
 
@@ -2955,7 +3020,9 @@ describe('PresentationEditor', () => {
         new KeyboardEvent('keydown', { ctrlKey: true, altKey: true, code: 'KeyH', bubbles: true }),
       );
 
-      expect(blockedSpy).toHaveBeenCalledWith(expect.objectContaining({ reason: 'missingRegion' }));
+      await vi.waitFor(() =>
+        expect(blockedSpy).toHaveBeenCalledWith(expect.objectContaining({ reason: 'missingRegion' })),
+      );
     });
 
     it('returns false without emitting an error when an unqualified bookmark is not found', async () => {

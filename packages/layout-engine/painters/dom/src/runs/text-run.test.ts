@@ -74,7 +74,6 @@ describe('resolveRunText', () => {
 
     expect(resolveRunText(run, { ...context, sectionPageCount: 7 })).toBe('VII');
   });
-
   it('changes merge signature when pageNumberFieldFormat changes', () => {
     const baseRun: TextRun = { text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 };
     const formattedRun: TextRun = { ...baseRun, pageNumberFieldFormat: { format: 'upperRoman' } };

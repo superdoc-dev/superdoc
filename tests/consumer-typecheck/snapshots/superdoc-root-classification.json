@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-05-19T11:33:50.546Z",
   "summary": {
-    "total": 216,
+    "total": 222,
     "byBucket": {
       "legacy-root": 60,
       "internal-candidate": 8,
-      "supported-root": 148
+      "supported-root": 154
     },
     "byConfidence": {
-      "high": 113,
+      "high": 119,
       "medium": 101,
       "low": 2
     }
@@ -807,10 +807,65 @@
       "inCjs": false
     },
     {
+      "name": "FontAssetUrlContext",
+      "bucket": "supported-root",
+      "rationale": "Context passed to the public FontsConfig.resolveAssetUrl resolver.",
+      "confidence": "high",
+      "source": "config-supported",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "FontAssetUrlResolver",
+      "bucket": "supported-root",
+      "rationale": "Type of the public FontsConfig.resolveAssetUrl hook.",
+      "confidence": "high",
+      "source": "config-supported",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
       "name": "FontConfig",
       "bucket": "supported-root",
       "rationale": "Configuration type for a supported feature.",
       "confidence": "medium",
+      "source": "config-supported",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "FontResolutionRecord",
+      "bucket": "supported-root",
+      "rationale": "Per-font logical-to-physical resolution record returned by superdoc.fonts.getReport().",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "FontsChangedPayload",
+      "bucket": "supported-root",
+      "rationale": "Payload of the public fonts-changed event / onFontsChanged callback and fonts.onReport.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "FontsConfig",
+      "bucket": "supported-root",
+      "rationale": "Consumer fonts configuration (assetBaseUrl/resolveAssetUrl); part of the public SuperDoc Config.",
+      "confidence": "high",
       "source": "config-supported",
       "inDts": true,
       "inDcts": true,
@@ -1756,6 +1811,17 @@
       "name": "SuperDocExceptionStorePayload",
       "bucket": "supported-root",
       "rationale": "Member of the SuperDocExceptionPayload union; named so consumers can discriminate the store-init shape via `'stage' in payload`. SD-673 Phase 4D.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocFontsApi",
+      "bucket": "supported-root",
+      "rationale": "Return type of the public superdoc.fonts read surface (getReport/getMissingFonts/getDocumentFonts/onReport).",
       "confidence": "high",
       "source": "locked",
       "inDts": true,

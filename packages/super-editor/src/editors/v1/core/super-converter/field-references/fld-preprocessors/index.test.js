@@ -58,7 +58,6 @@ describe('getInstructionPreProcessor', () => {
       expect(processor).toBe(preProcessSectionPagesInstruction);
     },
   );
-
   it('should return preProcessPageRefInstruction for PAGEREF instruction', () => {
     const instruction = 'PAGEREF _Toc123456789 h';
     const processor = getInstructionPreProcessor(instruction);

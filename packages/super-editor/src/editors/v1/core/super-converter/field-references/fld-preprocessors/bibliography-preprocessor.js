@@ -11,7 +11,12 @@ import { buildBlockFieldNode } from './build-block-field-node.js';
  * @param {Array<{type: string, text?: string}>} [legacyInstructionTokens] Legacy raw instruction tokens.
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  */
-export function preProcessBibliographyInstruction(nodesToCombine, instrText, options = {}, legacyInstructionTokens = null) {
+export function preProcessBibliographyInstruction(
+  nodesToCombine,
+  instrText,
+  options = {},
+  legacyInstructionTokens = null,
+) {
   const instructionTokens = options?.instructionTokens ?? legacyInstructionTokens;
   return buildBlockFieldNode('sd:bibliography', nodesToCombine, instrText, instructionTokens);
 }

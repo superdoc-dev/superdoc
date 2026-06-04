@@ -36,7 +36,8 @@ export function selectHeaderFooterVariantForPage({
   titlePg,
   alternateHeaders,
 }: HeaderFooterVariantSelectionInput): HeaderFooterVariant | null {
-  if (documentPageNumber <= 0 || sectionPageNumber <= 0) return null;
+  if (!Number.isFinite(documentPageNumber) || !Number.isFinite(sectionPageNumber)) return null;
+  if (sectionPageNumber < 1) return null;
   if (sectionPageNumber === 1 && titlePg === true) return 'first';
   if (alternateHeaders === true) return documentPageNumber % 2 === 0 ? 'even' : 'odd';
   return 'default';

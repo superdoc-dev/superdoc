@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { handleStructuredContentNode } from './handle-structured-content-node';
 import { parseAnnotationMarks } from './handle-annotation-node';
+import { defaultNodeListHandler } from '../../../../../v2/importer/docxImporter.js';
+import { initTestEditor } from '@tests/helpers/helpers.js';
 
 // Mock dependencies
 vi.mock('./handle-annotation-node', () => ({
@@ -29,6 +31,10 @@ describe('handleStructuredContentNode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     parseAnnotationMarks.mockReturnValue({ marks: [] });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('returns null when nodes array is empty', () => {
@@ -79,7 +85,7 @@ describe('handleStructuredContentNode', () => {
     const params = {
       nodes: [node],
       nodeListHandler: mockNodeListHandler,
-      path: [],
+      path: [{ name: 'w:p' }],
     };
 
     parseAnnotationMarks.mockReturnValue({ marks: [{ type: 'bold' }] });
@@ -361,5 +367,179 @@ describe('handleStructuredContentNode', () => {
       expect(detectFrom([{ name: 'w:picture' }])).toBeNull();
       expect(detectFrom([{ name: 'w:docPartList' }])).toBeNull();
     });
+  });
+});
+
+describe('handleStructuredContentNode nested SDT import regression', () => {
+  let editor;
+
+  const textRun = (text) => ({
+    name: 'w:r',
+    elements: [{ name: 'w:t', elements: [{ type: 'text', text }] }],
+  });
+
+  const paragraph = (text) => ({
+    name: 'w:p',
+    elements: [textRun(text)],
+  });
+
+  const sdtPr = ({ id, tag, alias, lockMode = 'unlocked', controlType = 'w:richText' }) => ({
+    name: 'w:sdtPr',
+    elements: [
+      { name: 'w:id', attributes: { 'w:val': id } },
+      { name: 'w:tag', attributes: { 'w:val': tag } },
+      { name: 'w:alias', attributes: { 'w:val': alias } },
+      { name: 'w:lock', attributes: { 'w:val': lockMode } },
+      { name: controlType },
+    ],
+  });
+
+  const sdt = (props, contentElements) => ({
+    name: 'w:sdt',
+    elements: [sdtPr(props), { name: 'w:sdtContent', elements: contentElements }],
+  });
+
+  const table = (text) => ({
+    name: 'w:tbl',
+    elements: [
+      {
+        name: 'w:tblPr',
+        elements: [{ name: 'w:tblW', attributes: { 'w:w': '2400', 'w:type': 'dxa' } }],
+      },
+      {
+        name: 'w:tblGrid',
+        elements: [{ name: 'w:gridCol', attributes: { 'w:w': '2400' } }],
+      },
+      {
+        name: 'w:tr',
+        elements: [
+          {
+            name: 'w:tc',
+            elements: [
+              {
+                name: 'w:tcPr',
+                elements: [{ name: 'w:tcW', attributes: { 'w:w': '2400', 'w:type': 'dxa' } }],
+              },
+              paragraph(text),
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  const importNodes = (nodes) => {
+    const nodeListHandler = defaultNodeListHandler();
+    return nodeListHandler.handler({
+      nodes,
+      nodeListHandler,
+      docx: {},
+      editor,
+      path: [],
+    });
+  };
+
+  const expectSchemaValid = (content) => {
+    let pmDoc;
+    expect(() => {
+      pmDoc = editor.schema.nodeFromJSON({ type: 'doc', content });
+      pmDoc.check();
+    }).not.toThrow();
+    return pmDoc;
+  };
+
+  const findFirstJson = (node, predicate) => {
+    if (!node) return null;
+    if (predicate(node)) return node;
+    for (const child of node.content || []) {
+      const found = findFirstJson(child, predicate);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  beforeEach(() => {
+    ({ editor } = initTestEditor({
+      isHeadless: true,
+      loadFromSchema: true,
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+    }));
+    parseAnnotationMarks.mockReturnValue({ marks: [] });
+  });
+
+  afterEach(() => {
+    editor?.destroy();
+    editor = null;
+    vi.restoreAllMocks();
+  });
+
+  it('imports nested block SDT when outer sdtContent directly contains w:sdt wrapping a paragraph', () => {
+    const inner = sdt({ id: 'inner-block', tag: 'inner-tag', alias: 'Inner Alias', lockMode: 'contentLocked' }, [
+      paragraph('Nested paragraph'),
+    ]);
+    const outer = sdt({ id: 'outer-block', tag: 'outer-tag', alias: 'Outer Alias', lockMode: 'sdtLocked' }, [inner]);
+
+    const result = importNodes([outer]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('structuredContentBlock');
+    expect(result[0].attrs).toMatchObject({
+      id: 'outer-block',
+      tag: 'outer-tag',
+      alias: 'Outer Alias',
+      lockMode: 'sdtLocked',
+      controlType: 'richText',
+    });
+
+    const nested = result[0].content?.[0];
+    expect(nested?.type).toBe('structuredContentBlock');
+    expect(nested.attrs).toMatchObject({
+      id: 'inner-block',
+      tag: 'inner-tag',
+      alias: 'Inner Alias',
+      lockMode: 'contentLocked',
+      controlType: 'richText',
+    });
+    expect(nested.attrs.sdtPr?.elements?.find((el) => el.name === 'w:alias')?.attributes?.['w:val']).toBe(
+      'Inner Alias',
+    );
+
+    expectSchemaValid(result);
+  });
+
+  it('wraps nested inline SDT safely when an outer block SDT also contains paragraph and table content', () => {
+    const inlineNested = sdt(
+      { id: 'inner-inline', tag: 'inline-tag', alias: 'Inline Alias', lockMode: 'sdtContentLocked' },
+      [textRun('Inline value')],
+    );
+    const outer = sdt({ id: 'outer-mixed', tag: 'outer-mixed-tag', alias: 'Outer Mixed', lockMode: 'sdtLocked' }, [
+      inlineNested,
+      paragraph('Outer paragraph'),
+      table('Cell text'),
+    ]);
+
+    const result = importNodes([outer]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('structuredContentBlock');
+    expect(result[0].content?.map((node) => node.type)).toEqual(['paragraph', 'paragraph', 'table']);
+
+    const nested = findFirstJson(
+      result[0],
+      (node) => node.type === 'structuredContent' && node.attrs?.id === 'inner-inline',
+    );
+    expect(nested).toBeTruthy();
+    expect(nested.attrs).toMatchObject({
+      id: 'inner-inline',
+      tag: 'inline-tag',
+      alias: 'Inline Alias',
+      lockMode: 'sdtContentLocked',
+      controlType: 'richText',
+    });
+    expect(nested.attrs.sdtPr?.elements?.find((el) => el.name === 'w:lock')?.attributes?.['w:val']).toBe(
+      'sdtContentLocked',
+    );
+
+    expectSchemaValid(result);
   });
 });

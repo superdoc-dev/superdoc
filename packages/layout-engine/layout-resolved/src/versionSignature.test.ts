@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deriveBlockVersion, sourceAnchorSignature } from './versionSignature.js';
-import type { FlowBlock, ImageBlock, ImageRun, SourceAnchor, TableBlock, TextRun } from '@superdoc/contracts';
+import type { FlowBlock, ImageBlock, ImageRun, SourceAnchor, TableBlock, TabRun, TextRun } from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
   it('is stable for equivalent source anchors with different object key order', () => {
@@ -63,6 +63,95 @@ describe('deriveBlockVersion - bidi', () => {
   it('is stable when bidi is identical', () => {
     const a = deriveBlockVersion(makeParagraph({ rtl: true }));
     const b = deriveBlockVersion(makeParagraph({ rtl: true }));
+    expect(a).toBe(b);
+  });
+});
+
+describe('deriveBlockVersion - tab underline', () => {
+  const makeTabParagraph = (underline?: { style?: string; color?: string }): FlowBlock => ({
+    kind: 'paragraph',
+    id: 'p1',
+    attrs: {},
+    runs: [{ kind: 'tab', text: '\t', pmStart: 1, pmEnd: 2, ...(underline ? { underline } : {}) } as TabRun],
+  });
+
+  // SD-3330: toggling underline on a tab must change the block version, otherwise the
+  // DomPainter reuses the cached (non-underlined) fragment and the underline does not
+  // appear until an unrelated edit forces a rebuild.
+  it('produces a different version when a tab gains an underline', () => {
+    const plain = deriveBlockVersion(makeTabParagraph());
+    const underlined = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
+    expect(underlined).not.toBe(plain);
+  });
+
+  it('produces a different version when the tab underline color changes', () => {
+    const black = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
+    const red = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#FF0000' }));
+    expect(red).not.toBe(black);
+  });
+
+  it('is stable when the tab underline is identical', () => {
+    const a = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
+    const b = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
+    expect(a).toBe(b);
+  });
+
+  // SD-3330: the painter's tab underline thickness comes from fontSize, and its offset/color
+  // come from measured line metrics fed by fontFamily and the run color. Each must change the
+  // block version, or a font-size/family/color edit leaves a stale tab underline cached.
+  const makeStyledTabParagraph = (
+    overrides: Partial<{ fontSize: number; fontFamily: string; color: string; bold: boolean; italic: boolean }>,
+  ): FlowBlock => ({
+    kind: 'paragraph',
+    id: 'p1',
+    attrs: {},
+    runs: [
+      {
+        kind: 'tab',
+        text: '\t',
+        pmStart: 1,
+        pmEnd: 2,
+        underline: { style: 'single', color: '#000000' },
+        ...overrides,
+      } as TabRun,
+    ],
+  });
+
+  it('produces a different version when the tab fontSize changes', () => {
+    const small = deriveBlockVersion(makeStyledTabParagraph({ fontSize: 12 }));
+    const large = deriveBlockVersion(makeStyledTabParagraph({ fontSize: 24 }));
+    expect(large).not.toBe(small);
+  });
+
+  it('produces a different version when the tab fontFamily changes', () => {
+    const arial = deriveBlockVersion(makeStyledTabParagraph({ fontFamily: 'Arial' }));
+    const times = deriveBlockVersion(makeStyledTabParagraph({ fontFamily: 'Times New Roman' }));
+    expect(times).not.toBe(arial);
+  });
+
+  it('produces a different version when the tab run color changes', () => {
+    const black = deriveBlockVersion(makeStyledTabParagraph({ color: '#000000' }));
+    const red = deriveBlockVersion(makeStyledTabParagraph({ color: '#FF0000' }));
+    expect(red).not.toBe(black);
+  });
+
+  // SD-3330 review: tab-only line metrics now come from the tab's font via getFontInfoFromRun, which
+  // feeds bold/italic into the measured ascent/descent, so toggling them must change the version.
+  it('produces a different version when the tab bold changes', () => {
+    const plain = deriveBlockVersion(makeStyledTabParagraph({ bold: false }));
+    const bold = deriveBlockVersion(makeStyledTabParagraph({ bold: true }));
+    expect(bold).not.toBe(plain);
+  });
+
+  it('produces a different version when the tab italic changes', () => {
+    const plain = deriveBlockVersion(makeStyledTabParagraph({ italic: false }));
+    const italic = deriveBlockVersion(makeStyledTabParagraph({ italic: true }));
+    expect(italic).not.toBe(plain);
+  });
+
+  it('is stable when tab fontSize, fontFamily and color are identical', () => {
+    const a = deriveBlockVersion(makeStyledTabParagraph({ fontSize: 16, fontFamily: 'Arial', color: '#123456' }));
+    const b = deriveBlockVersion(makeStyledTabParagraph({ fontSize: 16, fontFamily: 'Arial', color: '#123456' }));
     expect(a).toBe(b);
   });
 });

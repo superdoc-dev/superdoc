@@ -108,7 +108,6 @@ describe('resolveHeaderFooterTokens', () => {
     expect(block.runs[0].text).toBe('3:V');
     expect((block.runs[0] as TextRun).token).toBe('pageNumber');
   });
-
   it('should resolve totalPageCount token in footer blocks', () => {
     const blocks: FlowBlock[] = [
       {
@@ -190,7 +189,6 @@ describe('resolveHeaderFooterTokens', () => {
     expect(block.runs[1].text).toBe('IV');
     expect((block.runs[1] as TextRun).token).toBe('sectionPageCount');
   });
-
   it('should resolve both tokens in the same block', () => {
     const blocks: FlowBlock[] = [
       {

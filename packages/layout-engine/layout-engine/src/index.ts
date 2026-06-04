@@ -1123,7 +1123,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           block.columns.gap !== next.activeColumns.gap ||
           Boolean(block.columns.withSeparator) !== Boolean(next.activeColumns.withSeparator) ||
           block.columns.equalWidth !== next.activeColumns.equalWidth ||
-          !widthsEqual(block.columns.widths, next.activeColumns.widths))) ||
+          !widthsEqual(block.columns.widths, next.activeColumns.widths) ||
+          !widthsEqual(block.columns.gaps, next.activeColumns.gaps))) ||
       (!block.columns && (next.activeColumns.count > 1 || Boolean(next.activeColumns.withSeparator)));
     // Schedule section index change for next page (enables section-aware page numbering)
     const sectionIndexRaw = block.attrs?.sectionIndex;
@@ -1777,6 +1778,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       cachedColumnsState.colsConfig?.gap === colsConfig.gap &&
       cachedColumnsState.colsConfig?.equalWidth === colsConfig.equalWidth &&
       widthsEqual(cachedColumnsState.colsConfig?.widths, colsConfig.widths) &&
+      widthsEqual(cachedColumnsState.colsConfig?.gaps, colsConfig.gaps) &&
       cachedColumnsState.normalized
     ) {
       return cachedColumnsState.normalized;

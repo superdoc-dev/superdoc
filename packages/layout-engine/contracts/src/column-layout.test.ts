@@ -10,6 +10,7 @@ import {
   getColumnWidth,
   getColumnX,
   normalizeColumnLayout,
+  resolveColumnMode,
   widthsEqual,
 } from './column-layout.js';
 
@@ -209,5 +210,28 @@ describe('columnLayoutsEqual', () => {
   it('matches on the full shape and handles missing inputs', () => {
     expect(columnLayoutsEqual(undefined, undefined)).toBe(true);
     expect(columnLayoutsEqual({ count: 2, gap: 24 }, { count: 3, gap: 24 })).toBe(false);
+  });
+});
+
+describe('resolveColumnMode (SD-2629)', () => {
+  it('is explicit only when equalWidth is false AND usable widths exist', () => {
+    expect(resolveColumnMode({ count: 2, gap: 24, widths: [100, 200], equalWidth: false })).toBe('explicit');
+  });
+
+  it('is equal when equalWidth is true, even with widths present', () => {
+    expect(resolveColumnMode({ count: 2, gap: 24, widths: [100, 200], equalWidth: true })).toBe('equal');
+  });
+
+  it('is equal when equalWidth is omitted (Word divides evenly)', () => {
+    expect(resolveColumnMode({ count: 2, gap: 24, widths: [100, 200] })).toBe('equal');
+  });
+
+  it('is equal when explicit mode is declared but no usable widths are supplied', () => {
+    expect(resolveColumnMode({ count: 2, gap: 24, equalWidth: false })).toBe('equal');
+    expect(resolveColumnMode({ count: 2, gap: 24, widths: [0, -5], equalWidth: false })).toBe('equal');
+  });
+
+  it('is equal for missing input', () => {
+    expect(resolveColumnMode(undefined)).toBe('equal');
   });
 });

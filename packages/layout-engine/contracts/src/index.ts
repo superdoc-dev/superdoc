@@ -99,8 +99,20 @@ export type {
   LayoutStoryLocator,
 } from './layout-identity.js';
 import type { LayoutSourceIdentity } from './layout-identity.js';
-export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
-export type { NormalizedColumnLayout } from './column-layout.js';
+export {
+  cloneColumnLayout,
+  columnLayoutsEqual,
+  getColumnAtX,
+  getColumnGapAfter,
+  getColumnGeometry,
+  getColumnSeparatorPositions,
+  getColumnWidth,
+  getColumnX,
+  normalizeColumnLayout,
+  resolveColumnMode,
+  widthsEqual,
+} from './column-layout.js';
+export type { ColumnGeometry, NormalizedColumnLayout } from './column-layout.js';
 export {
   composeAuthorColorResolver,
   fallbackAuthorColor,

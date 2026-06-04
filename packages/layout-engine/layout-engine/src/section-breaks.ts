@@ -57,15 +57,16 @@ function getColumnConfig(blockColumns: ColumnLayout | undefined): ColumnLayout {
 function isColumnConfigChanging(blockColumns: ColumnLayout | undefined, activeColumns: ColumnLayout): boolean {
   if (blockColumns) {
     // Explicit column change: any of count, gap, separator presence, equalWidth,
-    // or widths differs. withSeparator must be included because a sep-only toggle
-    // still needs a new column region so the renderer can draw (or stop drawing)
-    // the separator from the toggle point onward.
+    // widths, or per-column gaps differs. withSeparator must be included because a
+    // sep-only toggle still needs a new column region so the renderer can draw (or
+    // stop drawing) the separator from the toggle point onward.
     return (
       blockColumns.count !== activeColumns.count ||
       blockColumns.gap !== activeColumns.gap ||
       Boolean(blockColumns.withSeparator) !== Boolean(activeColumns.withSeparator) ||
       blockColumns.equalWidth !== activeColumns.equalWidth ||
-      !widthsEqual(blockColumns.widths, activeColumns.widths)
+      !widthsEqual(blockColumns.widths, activeColumns.widths) ||
+      !widthsEqual(blockColumns.gaps, activeColumns.gaps)
     );
   }
   // No columns specified = reset to single column (OOXML default).

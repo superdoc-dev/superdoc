@@ -27,6 +27,24 @@ export function widthsEqual(a?: number[], b?: number[]): boolean {
   return true;
 }
 
+/**
+ * Usable explicit widths: finite and > 0. Empty unless explicit mode applies. (SD-2629)
+ */
+function usableExplicitWidths(input: ColumnLayout | undefined): number[] {
+  if (!input || input.equalWidth !== false || !Array.isArray(input.widths)) return [];
+  return input.widths.filter((width) => typeof width === 'number' && Number.isFinite(width) && width > 0);
+}
+
+/**
+ * Resolved column mode. Explicit ONLY when `equalWidth === false` AND at least one usable child
+ * width exists; otherwise equal mode. In equal mode Word ignores any child `w:col/@w` and divides
+ * the content area evenly, so this is the single explicit/equal decision shared by extraction,
+ * normalization, and geometry. (SD-2324 / SD-2629)
+ */
+export function resolveColumnMode(input: ColumnLayout | undefined): 'explicit' | 'equal' {
+  return usableExplicitWidths(input).length > 0 ? 'explicit' : 'equal';
+}
+
 export function cloneColumnLayout(columns?: ColumnLayout): ColumnLayout {
   return columns
     ? {
@@ -68,13 +86,10 @@ export function normalizeColumnLayout(
   const rawCount = input && Number.isFinite(input.count) ? Math.floor(input.count) : 1;
   let count = Math.max(1, rawCount || 1);
   const gap = Math.max(0, input?.gap ?? 0);
-  // Honor per-column widths ONLY in explicit mode (`equalWidth === false`). In equal mode
-  // (true or omitted) Word ignores child widths and divides the content area evenly, so any
-  // widths that reach here are not authoritative and must not drive geometry. (SD-2324)
-  const explicitWidths =
-    input?.equalWidth === false && Array.isArray(input?.widths) && input.widths.length > 0
-      ? input.widths.filter((width) => typeof width === 'number' && Number.isFinite(width) && width > 0)
-      : [];
+  // Honor per-column widths ONLY in explicit mode (`equalWidth === false` with usable widths).
+  // In equal mode (true or omitted) Word ignores child widths and divides the content area evenly,
+  // so any widths that reach here are not authoritative and must not drive geometry. (SD-2324)
+  const explicitWidths = usableExplicitWidths(input);
   // Explicit columns are defined by their <w:col> widths. When the section declares more
   // columns than it supplies widths (e.g. w:num="4" with two <w:col>), the surplus columns
   // have no width and previously padded to ~0px, rendering as 1px slivers of vertical text

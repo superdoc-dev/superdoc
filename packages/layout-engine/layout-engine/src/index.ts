@@ -2733,7 +2733,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         } else if (relativeFrom === 'margin') {
           maxWidth = activePageSize.w - (activeLeftMargin + activeRightMargin);
         } else {
-          maxWidth = getColumnWidthAt(cols, state.columnIndex);
+          maxWidth = columnWidthForState(state);
         }
 
         const aspectRatio = imgMeasure.width > 0 && imgMeasure.height > 0 ? imgMeasure.width / imgMeasure.height : 1.0;

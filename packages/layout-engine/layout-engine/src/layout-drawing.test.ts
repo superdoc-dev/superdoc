@@ -98,7 +98,7 @@ describe('layoutDrawingBlock', () => {
           columnIndex: currentState.columnIndex + 1,
           cursorY: currentState.topMargin,
         }) as unknown as PageState,
-      columnX: (columnIndex: number) => columnIndex * (mockColumns.width + mockColumns.gap),
+      columnX: (state: PageState) => state.columnIndex * (mockColumns.width + mockColumns.gap),
     };
   };
 
@@ -370,7 +370,7 @@ describe('layoutDrawingBlock', () => {
           };
           return stateRef as unknown as PageState;
         },
-        columnX: (columnIndex: number) => columnIndex * (mockColumns.width + mockColumns.gap),
+        columnX: (state: PageState) => state.columnIndex * (mockColumns.width + mockColumns.gap),
       };
 
       layoutDrawingBlock(context);

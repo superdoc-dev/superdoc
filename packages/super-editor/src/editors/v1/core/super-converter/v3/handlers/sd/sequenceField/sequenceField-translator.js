@@ -59,7 +59,7 @@ const encode = (params) => {
 const decode = (params) => {
   const { node } = params;
   const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
-  const contentNodes = (node.content ?? []).flatMap((n) => exportSchemaToJson({ ...params, node: n }));
+  const contentNodes = buildResultContentNodes(params, outputMarks);
   const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens);
 
   return [
@@ -91,6 +91,46 @@ const decode = (params) => {
     },
   ];
 };
+
+/**
+ * @param {import('@translator').SCDecoderConfig} params
+ * @param {Array<any>} outputMarks
+ * @returns {Array<any>}
+ */
+function buildResultContentNodes(params, outputMarks) {
+  const { node } = params;
+  const resolvedNumber = node.attrs?.resolvedNumber;
+  const hasCurrentResult = node.attrs?.resolvedNumberIsCurrent === true;
+
+  if (hasCurrentResult) {
+    return typeof resolvedNumber === 'string' && resolvedNumber.length > 0
+      ? [buildResolvedNumberRun(resolvedNumber, outputMarks)]
+      : [];
+  }
+
+  if (Array.isArray(node.content) && node.content.length > 0) {
+    return node.content.flatMap((n) => exportSchemaToJson({ ...params, node: n }));
+  }
+
+  return typeof resolvedNumber === 'string' && resolvedNumber.length > 0
+    ? [buildResolvedNumberRun(resolvedNumber, outputMarks)]
+    : [];
+}
+
+/**
+ * @param {string} text
+ * @param {Array<any>} outputMarks
+ * @returns {any}
+ */
+function buildResolvedNumberRun(text, outputMarks) {
+  return {
+    name: 'w:r',
+    elements: [
+      { name: 'w:rPr', elements: outputMarks },
+      { name: 'w:t', elements: [{ type: 'text', text }] },
+    ],
+  };
+}
 
 /**
  * Extracts resolved text from processed content.

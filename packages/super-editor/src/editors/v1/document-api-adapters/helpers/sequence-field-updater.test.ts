@@ -177,4 +177,17 @@ describe('updateSequenceFieldsInTransaction', () => {
     expect(field?.attrs.pageNumberFieldFormat).toEqual({ format: 'lowerRoman' });
     expect(field?.attrs.resolvedNumber).toBe('vii');
   });
+
+  it('handles field arguments conservatively without advancing counters', () => {
+    const doc = schema.nodes.doc.create(null, [
+      p(seq('SEQ Figure')),
+      p(seq('SEQ Figure bookmark', { resolvedNumber: 'cached' })),
+      p(seq('SEQ Figure bookmark')),
+      p(seq('SEQ Figure')),
+    ]);
+
+    const updated = updateDoc(doc);
+
+    expect(resolvedNumbers(updated.doc)).toEqual(['1', 'cached', '1', '2']);
+  });
 });

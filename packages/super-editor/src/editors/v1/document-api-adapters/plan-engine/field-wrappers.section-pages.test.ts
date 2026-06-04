@@ -44,6 +44,21 @@ const schema = new Schema({
       },
       toDOM: () => ['span', 0],
     },
+    'total-page-number': {
+      group: 'inline',
+      inline: true,
+      atom: true,
+      content: 'text*',
+      attrs: {
+        instruction: { default: null },
+        importedCachedText: { default: null },
+        resolvedText: { default: null },
+        pageNumberFormat: { default: null },
+        pageNumberZeroPadding: { default: null },
+        pageNumberNumericPicture: { default: null },
+      },
+      toDOM: () => ['span', 0],
+    },
   },
 });
 
@@ -64,6 +79,32 @@ function createEditorWithSectionPageCount(
     schema,
     state: EditorState.create({ schema, doc }),
     options,
+    view: { dispatch: () => {} },
+    dispatch(tr) {
+      this.state = this.state.apply(tr);
+    },
+  };
+
+  return editor as unknown as Editor;
+}
+
+function createEditorWithTotalPageNumber(
+  pageCount: number | undefined,
+  initialValue = '1',
+  attrs: Record<string, unknown> = {},
+): Editor {
+  const field = schema.nodes['total-page-number'].create(
+    { instruction: 'NUMPAGES', resolvedText: initialValue, ...attrs },
+    schema.text(initialValue),
+  );
+  const paragraph = schema.nodes.paragraph.create({ sdBlockId: 'block-1' }, field);
+  const doc = schema.nodes.doc.create(null, paragraph);
+
+  const editor = {
+    schema,
+    state: EditorState.create({ schema, doc }),
+    currentTotalPages: pageCount,
+    options: {},
     view: { dispatch: () => {} },
     dispatch(tr) {
       this.state = this.state.apply(tr);
@@ -177,5 +218,38 @@ describe('fieldsRebuildWrapper SECTIONPAGES fields', () => {
     expect(updatedField?.type.name).toBe('section-page-count');
     expect(updatedField?.attrs.resolvedText).toBe('3');
     expect(updatedField?.textContent).toBe('3');
+  });
+});
+
+describe('fieldsRebuildWrapper NUMPAGES fields', () => {
+  it('formats rebuilt total-page-number values with pageNumberFormat', () => {
+    const editor = createEditorWithTotalPageNumber(4, '1', { pageNumberFormat: 'upperRoman' });
+
+    const result = fieldsRebuildWrapper(editor, {
+      target: { kind: 'field', blockId: 'block-1', occurrenceIndex: 0, nestingDepth: 0 },
+    });
+
+    expect(result.success).toBe(true);
+    const updatedField = editor.state.doc.nodeAt(1);
+    expect(updatedField?.type.name).toBe('total-page-number');
+    expect(updatedField?.attrs.resolvedText).toBe('IV');
+    expect(updatedField?.textContent).toBe('IV');
+  });
+
+  it('formats rebuilt total-page-number values with numeric picture switches', () => {
+    const editor = createEditorWithTotalPageNumber(1234, '1', {
+      pageNumberFormat: 'decimal',
+      pageNumberNumericPicture: '#,##0 pages',
+    });
+
+    const result = fieldsRebuildWrapper(editor, {
+      target: { kind: 'field', blockId: 'block-1', occurrenceIndex: 0, nestingDepth: 0 },
+    });
+
+    expect(result.success).toBe(true);
+    const updatedField = editor.state.doc.nodeAt(1);
+    expect(updatedField?.type.name).toBe('total-page-number');
+    expect(updatedField?.attrs.resolvedText).toBe('1,234 pages');
+    expect(updatedField?.textContent).toBe('1,234 pages');
   });
 });

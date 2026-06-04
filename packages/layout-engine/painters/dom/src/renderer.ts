@@ -3158,7 +3158,8 @@ export class DomPainter {
       return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
     }
     if (part.fieldType === 'NUMPAGES') {
-      return String(context?.totalPages ?? 1);
+      const totalPages = context?.totalPages ?? 1;
+      return part.pageNumberFormat ? formatPageNumber(totalPages, part.pageNumberFormat) : String(totalPages);
     }
     if (part.fieldType === 'SECTIONPAGES') {
       if (context?.sectionPageCount == null) return part.text ?? '1';

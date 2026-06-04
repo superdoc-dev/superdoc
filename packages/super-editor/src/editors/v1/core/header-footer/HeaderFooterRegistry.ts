@@ -6,7 +6,6 @@ import {
   formatSectionPageNumberText,
   type FlowBlock,
   type PageNumberChapterSeparator,
-  type PageNumberFieldFormat,
   type PageNumberFormat,
   type TrackedChangesMode,
 } from '@superdoc/contracts';
@@ -16,6 +15,7 @@ import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
 import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
 import { buildStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
+import { getPageNumberFieldFormat } from '../layout-adapter/converters/inline-converters/page-number-field-format.js';
 
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'] as const;
 const DEFAULT_HEADER_FOOTER_HEIGHT = 100;
@@ -552,30 +552,13 @@ export class HeaderFooterEditorManager extends EventEmitter {
     }
   }
 
-  #getPageNumberFieldFormatForDomNode(editor: Editor, el: Element): PageNumberFieldFormat | undefined {
+  #getPageNumberFieldFormatForDomNode(editor: Editor, el: Element): ReturnType<typeof getPageNumberFieldFormat> {
     try {
       const view = editor.view;
       if (!view) return undefined;
       const pos = view.posAtDOM(el, 0);
       const node = editor.state.doc.nodeAt(pos);
-      const attrs = node?.attrs;
-      const format = typeof attrs?.pageNumberFormat === 'string' ? attrs.pageNumberFormat : undefined;
-      const zeroPadding =
-        typeof attrs?.pageNumberZeroPadding === 'number' && Number.isFinite(attrs.pageNumberZeroPadding)
-          ? attrs.pageNumberZeroPadding
-          : undefined;
-      const numericPicture =
-        typeof attrs?.pageNumberNumericPicture === 'string' && attrs.pageNumberNumericPicture.length > 0
-          ? attrs.pageNumberNumericPicture
-          : undefined;
-
-      if (!format && !zeroPadding && !numericPicture) return undefined;
-
-      return {
-        ...(format ? { format: format as PageNumberFieldFormat['format'] } : {}),
-        ...(zeroPadding != null ? { zeroPadding } : {}),
-        ...(numericPicture ? { numericPicture } : {}),
-      };
+      return getPageNumberFieldFormat(node?.attrs);
     } catch {
       return undefined;
     }

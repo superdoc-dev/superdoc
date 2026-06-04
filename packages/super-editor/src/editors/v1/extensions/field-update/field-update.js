@@ -12,33 +12,14 @@ import {
   getSequenceFieldUpdaterConverterContext,
   updateSequenceFieldsInTransaction,
 } from '../../document-api-adapters/helpers/sequence-field-updater.js';
+import { getPageNumberFieldFormat } from '../../core/layout-adapter/converters/inline-converters/page-number-field-format.js';
 
 /** Stat-field types refreshed by F9 when the doc has no TOCs. */
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES', 'SECTIONPAGES']);
 
-function getTotalPageNumberFieldFormat(attrs) {
-  const format = typeof attrs?.pageNumberFormat === 'string' ? attrs.pageNumberFormat : undefined;
-  const zeroPadding =
-    typeof attrs?.pageNumberZeroPadding === 'number' && Number.isFinite(attrs.pageNumberZeroPadding)
-      ? attrs.pageNumberZeroPadding
-      : undefined;
-  const numericPicture =
-    typeof attrs?.pageNumberNumericPicture === 'string' && attrs.pageNumberNumericPicture.length > 0
-      ? attrs.pageNumberNumericPicture
-      : undefined;
-
-  if (!format && !zeroPadding && !numericPicture) return undefined;
-
-  return {
-    ...(format ? { format } : {}),
-    ...(zeroPadding ? { zeroPadding } : {}),
-    ...(numericPicture ? { numericPicture } : {}),
-  };
-}
-
 function resolveTotalPageNumberFieldValue(stats, node) {
   if (stats.pages == null) return null;
-  return formatPageNumberFieldValue(stats.pages, getTotalPageNumberFieldFormat(node.attrs));
+  return formatPageNumberFieldValue(stats.pages, getPageNumberFieldFormat(node.attrs));
 }
 
 /**

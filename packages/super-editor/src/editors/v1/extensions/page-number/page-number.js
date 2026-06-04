@@ -2,6 +2,7 @@ import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
 import { isHeadless } from '@utils/headless-helpers.js';
 import { formatPageNumberFieldValue, formatSectionPageNumberText } from '@superdoc/contracts';
+import { getPageNumberFieldFormat } from '../../core/layout-adapter/converters/inline-converters/page-number-field-format.js';
 /**
  * Configuration options for PageNumber
  * @typedef {Object} PageNumberOptions
@@ -428,26 +429,6 @@ const getNodeAttributes = (nodeName, editor, node = null) => {
       return {};
   }
 };
-
-function getPageNumberFieldFormat(attrs) {
-  const format = typeof attrs?.pageNumberFormat === 'string' ? attrs.pageNumberFormat : undefined;
-  const zeroPadding =
-    typeof attrs?.pageNumberZeroPadding === 'number' && Number.isFinite(attrs.pageNumberZeroPadding)
-      ? attrs.pageNumberZeroPadding
-      : undefined;
-  const numericPicture =
-    typeof attrs?.pageNumberNumericPicture === 'string' && attrs.pageNumberNumericPicture.length > 0
-      ? attrs.pageNumberNumericPicture
-      : undefined;
-
-  if (!format && !zeroPadding && !numericPicture) return undefined;
-
-  return {
-    ...(format ? { format } : {}),
-    ...(zeroPadding != null ? { zeroPadding } : {}),
-    ...(numericPicture ? { numericPicture } : {}),
-  };
-}
 
 export class AutoPageNumberNodeView {
   constructor(node, getPos, decorations, editor, htmlAttributes = {}) {

@@ -16,7 +16,7 @@ export function getPageNumberFieldFormat(
   if (!format && !zeroPadding && !numericPicture) return undefined;
   return {
     ...(format ? { format: format as NonNullable<TextRun['pageNumberFieldFormat']>['format'] } : {}),
-    ...(zeroPadding ? { zeroPadding } : {}),
+    ...(zeroPadding != null ? { zeroPadding } : {}),
     ...(numericPicture ? { numericPicture } : {}),
   };
 }

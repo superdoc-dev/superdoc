@@ -15,7 +15,7 @@ import type {
   MutationOptions,
   ReceiptFailureCode,
 } from '@superdoc/document-api';
-import { formatPageNumberFieldValue, type PageNumberFieldFormat } from '@superdoc/contracts';
+import { formatPageNumberFieldValue } from '@superdoc/contracts';
 import { buildDiscoveryResult } from '@superdoc/document-api';
 import {
   findAllFields,
@@ -32,6 +32,7 @@ import { DocumentApiAdapterError } from '../errors.js';
 import { getWordStatistics, resolveDocumentStatFieldValue, resolveMainBodyEditor } from '../helpers/word-statistics.js';
 import { resolveSectionPageCountFieldValue } from '../helpers/section-page-count.js';
 import { parsePageNumberFieldSwitches } from '../../core/super-converter/field-references/shared/page-number-field-switches.js';
+import { getPageNumberFieldFormat } from '../../core/layout-adapter/converters/inline-converters/page-number-field-format.js';
 import {
   isSeqInstruction,
   parseSeqInstruction,
@@ -90,27 +91,6 @@ export function fieldsGetWrapper(editor: Editor, input: FieldGetInput): FieldInf
 
 /** Field types that use the documentStatField node representation. */
 const DOCUMENT_STAT_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS']);
-
-function getTotalPageNumberFieldFormat(attrs: Record<string, unknown> | undefined): PageNumberFieldFormat | undefined {
-  if (!attrs) return undefined;
-  const format = typeof attrs.pageNumberFormat === 'string' ? attrs.pageNumberFormat : undefined;
-  const zeroPadding =
-    typeof attrs.pageNumberZeroPadding === 'number' && Number.isFinite(attrs.pageNumberZeroPadding)
-      ? attrs.pageNumberZeroPadding
-      : undefined;
-  const numericPicture =
-    typeof attrs.pageNumberNumericPicture === 'string' && attrs.pageNumberNumericPicture.length > 0
-      ? attrs.pageNumberNumericPicture
-      : undefined;
-
-  if (!format && !zeroPadding && !numericPicture) return undefined;
-
-  return {
-    ...(format ? { format: format as PageNumberFieldFormat['format'] } : {}),
-    ...(zeroPadding ? { zeroPadding } : {}),
-    ...(numericPicture ? { numericPicture } : {}),
-  };
-}
 
 export function fieldsInsertWrapper(
   editor: Editor,
@@ -481,7 +461,7 @@ function rebuildTotalPageNumber(
   const node = editor.state.doc.nodeAt(resolved.pos);
   if (!node) return fieldFailure('TARGET_NOT_FOUND', 'Node not found.');
 
-  const freshValue = formatPageNumberFieldValue(stats.pages, getTotalPageNumberFieldFormat(node.attrs));
+  const freshValue = formatPageNumberFieldValue(stats.pages, getPageNumberFieldFormat(node.attrs));
 
   const receipt = executeDomainCommand(
     editor,

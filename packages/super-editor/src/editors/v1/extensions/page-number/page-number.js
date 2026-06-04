@@ -139,6 +139,7 @@ export const PageNumber = Node.create({
  * @property {string|null} [instruction=null] @internal - Original NUMPAGES field instruction when switched
  * @property {string|null} [pageNumberFormat=null] @internal - Normalized field switch format
  * @property {number|null} [pageNumberZeroPadding=null] @internal - Zero-padding width from numeric picture switch
+ * @property {string|null} [pageNumberNumericPicture=null] @internal - Raw numeric picture switch
  */
 
 /**
@@ -183,6 +184,10 @@ export const TotalPageCount = Node.create({
         rendered: false,
       },
       pageNumberZeroPadding: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberNumericPicture: {
         default: null,
         rendered: false,
       },

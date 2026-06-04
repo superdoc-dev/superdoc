@@ -1,6 +1,7 @@
 export type PageNumberFieldFormat = {
-  format?: 'decimal' | 'upperRoman' | 'lowerRoman' | 'upperLetter' | 'lowerLetter' | 'numberInDash';
+  format?: 'decimal' | 'upperRoman' | 'lowerRoman' | 'upperLetter' | 'lowerLetter' | 'numberInDash' | 'ordinal';
   zeroPadding?: number;
+  numericPicture?: string;
 };
 
 export type PageNumberFormat = NonNullable<PageNumberFieldFormat['format']>;

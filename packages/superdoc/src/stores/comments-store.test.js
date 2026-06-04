@@ -1811,6 +1811,30 @@ describe('comments-store', () => {
         'user-comment-1',
       ]);
     });
+
+    it('fails closed when structural enumeration throws (bootstrap-safety): no crash, no structural bubble, inline change still surfaces', () => {
+      const editor = makeEditor();
+      const superdoc = { emit: vi.fn(), config: { isInternal: true } };
+
+      // enumerateStructuralRowChanges throwing must be swallowed by BOTH the
+      // structural sync and the table-summary suppression guard (the inline
+      // change is routed through handleTrackedChangeUpdate, which consults the
+      // summary). The store should degrade to "no structural data", not throw.
+      trackChangesHelpersMock.enumerateStructuralRowChanges.mockImplementation(() => {
+        throw new Error('enumerate boom');
+      });
+      const cellChar = inlineInsert({ id: 'inline-when-enum-throws', from: 20, to: 21 });
+      trackChangesHelpersMock.getTrackChanges.mockReturnValue([cellChar.raw]);
+      groupChangesMock.mockReturnValue([cellChar.grouped]);
+
+      store.commentsList = [];
+      expect(() => store.syncTrackedChangeComments({ superdoc, editor })).not.toThrow();
+
+      // No structural bubble (enumeration yielded nothing), and the inline change
+      // is NOT suppressed (the summary failed closed to empty ranges/ids).
+      expect(store.commentsList.find((c) => c.trackedChangeDisplayType === 'tableInsert')).toBeUndefined();
+      expect(store.commentsList.find((c) => c.commentId === 'inline-when-enum-throws')).toBeTruthy();
+    });
   });
 
   it('emits deleted events when replay sync prunes stale tracked-change comments', () => {

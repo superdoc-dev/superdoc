@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { FlowBlock, ParagraphAttrs } from '@superdoc/contracts';
-import { isRtlBlock } from '../src/position-hit';
+import type { FlowBlock, ParagraphAttrs, Layout } from '@superdoc/contracts';
+import { isRtlBlock, determineColumn } from '../src/position-hit';
 
 const paragraph = (attrs?: Record<string, unknown>): FlowBlock => ({
   kind: 'paragraph',
@@ -65,5 +65,30 @@ describe('isRtlBlock', () => {
   it('falls back to paragraphProperties.rightToLeft when no other direction signal is present', () => {
     expect(isRtlBlock(paragraph({ paragraphProperties: { rightToLeft: true } }))).toBe(true);
     expect(isRtlBlock(paragraph({ paragraphProperties: { rightToLeft: false } }))).toBe(false);
+  });
+});
+
+describe('determineColumn (SD-2629: resolved per-column boundaries)', () => {
+  const makeLayout = (columns: Layout['columns']): Layout =>
+    ({ pageSize: { w: 600, h: 800 }, pages: [], columns }) as unknown as Layout;
+
+  it('returns 0 for single-column or missing columns', () => {
+    expect(determineColumn(makeLayout(undefined), 300)).toBe(0);
+    expect(determineColumn(makeLayout({ count: 1, gap: 0 }), 300)).toBe(0);
+  });
+
+  it('maps x to equal columns by uniform boundaries', () => {
+    // Two equal columns in a 600px page (gap 0): boundary at 300.
+    const layout = makeLayout({ count: 2, gap: 0 });
+    expect(determineColumn(layout, 100)).toBe(0);
+    expect(determineColumn(layout, 350)).toBe(1);
+  });
+
+  it('honors per-column widths for explicit columns, not a uniform stride', () => {
+    // Explicit unequal widths [100, 400] (gap 0): the boundary is at the authored 100px, not the
+    // equal-split 300px. x=150 lands in column 1, where a uniform stride would say column 0.
+    const layout = makeLayout({ count: 2, gap: 0, widths: [100, 400], equalWidth: false });
+    expect(determineColumn(layout, 50)).toBe(0);
+    expect(determineColumn(layout, 150)).toBe(1);
   });
 });

@@ -26,8 +26,11 @@ import type {
 import {
   adjustAvailableWidthForTextIndent,
   computeLinePmRange,
+  getColumnAtX,
+  getColumnGeometry,
   getFirstLineIndentOffset,
   getParagraphInlineDirection,
+  normalizeColumnLayout,
 } from '@superdoc/contracts';
 import { charOffsetToPm, findCharacterAtX } from './text-measurement.js';
 import type { PageGeometryHelper } from './page-geometry-helper.js';
@@ -133,12 +136,12 @@ export const isRtlBlock = (block: FlowBlock): boolean => {
 export const determineColumn = (layout: Layout, fragmentX: number): number => {
   const columns = layout.columns;
   if (!columns || columns.count <= 1) return 0;
-  const usableWidth = layout.pageSize.w - columns.gap * (columns.count - 1);
-  const columnWidth = usableWidth / columns.count;
-  const span = columnWidth + columns.gap;
-  const relative = fragmentX;
-  const raw = Math.floor(relative / Math.max(span, 1));
-  return Math.max(0, Math.min(columns.count - 1, raw));
+  // Resolve the column boundaries from the single geometry source (SD-2629). This honors per-column
+  // widths for explicit columns instead of assuming a uniform stride. Coordinate assumptions are
+  // preserved from the prior implementation: contentWidth = pageSize.w (margins are not subtracted)
+  // and origin 0 (fragmentX is layout-absolute). getColumnAtX maps a gap to the preceding column.
+  const geometry = getColumnGeometry(normalizeColumnLayout(columns, layout.pageSize.w));
+  return getColumnAtX(geometry, fragmentX, 0);
 };
 
 const determineTableColumn = (layout: Layout, fragment: TableFragment): number => {

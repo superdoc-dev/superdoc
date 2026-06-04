@@ -56,7 +56,14 @@ const SYNTHETIC_FIELD_NODE_TYPES: Record<
   string,
   { fieldType: string; instruction: string; resolveInstruction?: (node: ProseMirrorNode) => string }
 > = {
-  'total-page-number': { fieldType: 'NUMPAGES', instruction: 'NUMPAGES' },
+  'total-page-number': {
+    fieldType: 'NUMPAGES',
+    instruction: 'NUMPAGES',
+    resolveInstruction: (node) =>
+      typeof node.attrs?.instruction === 'string' && node.attrs.instruction.trim()
+        ? node.attrs.instruction
+        : 'NUMPAGES',
+  },
   'section-page-count': {
     fieldType: 'SECTIONPAGES',
     instruction: 'SECTIONPAGES',

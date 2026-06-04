@@ -156,9 +156,18 @@ export function calculateBalancedColumnHeight(
     };
   }
 
-  // Calculate total content height and block-height extremes
+  // Calculate total content height and block-height extremes. A column can
+  // never be shorter than its tallest INDIVISIBLE chunk: the full height for
+  // an unbreakable block, but only the tallest LINE for a breakable paragraph
+  // (SD-3359 — flooring at a breakable paragraph's full height pinned the
+  // search above the balanced height and packed the overflow lines into the
+  // first column instead of splitting evenly).
   const totalHeight = ctx.contentBlocks.reduce((sum, b) => sum + b.measuredHeight, 0);
-  const maxBlockHeight = ctx.contentBlocks.reduce((m, b) => Math.max(m, b.measuredHeight), 0);
+  const maxBlockHeight = ctx.contentBlocks.reduce((m, b) => {
+    const indivisible =
+      b.canBreak && b.lineHeights && b.lineHeights.length > 1 ? Math.max(...b.lineHeights) : b.measuredHeight;
+    return Math.max(m, indivisible);
+  }, 0);
 
   // Early exit: content is very small, no need to balance
   if (totalHeight < config.minColumnHeight * ctx.columnCount) {
@@ -658,6 +667,12 @@ export interface BalanceSectionOnPageArgs {
    * Optional; when omitted no fragment is treated as a marker.
    */
   sectPrMarkerBlockIds?: Set<string>;
+  /**
+   * Block IDs of paragraphs with `w:keepLines` — the author asked Word not to
+   * split these, so they stay atomic during balancing. Optional; when omitted
+   * every multi-line paragraph is splittable. (SD-3359)
+   */
+  keepLinesBlockIds?: Set<string>;
 }
 
 /**
@@ -777,13 +792,36 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
   // Use `getBalancingHeight` so empty sectPr-marker paragraphs contribute 0
   // to their column's cursor — matching Word's behavior of not rendering a
   // blank line for such markers.
-  const contentBlocks: BalancingBlock[] = ordered.map((f, i) => ({
-    blockId: `${f.blockId}#${i}`,
-    measuredHeight: getBalancingHeight(f, args.measureMap, args.sectPrMarkerBlockIds),
-    canBreak: false,
-    keepWithNext: false,
-    keepTogether: true,
-  }));
+  //
+  // SD-3359: multi-line paragraphs additionally expose their per-line heights so
+  // the balancer can SPLIT a paragraph that straddles the column boundary (Word
+  // flows content line-by-line when balancing a continuous section, ECMA-376
+  // §17.18.77 — atomic assignment leaves the columns lumpy whenever one
+  // paragraph is large relative to the section). sectPr markers, `w:keepLines`
+  // paragraphs, non-paragraph fragments, and single-line paragraphs stay atomic.
+  const lineHeightsFor = (f: BalancingFragment): number[] | undefined => {
+    if (f.kind !== 'para') return undefined;
+    if (args.sectPrMarkerBlockIds?.has(f.blockId)) return undefined;
+    if (args.keepLinesBlockIds?.has(f.blockId)) return undefined;
+    const measure = args.measureMap.get(f.blockId);
+    if (!measure || measure.kind !== 'paragraph' || !Array.isArray(measure.lines)) return undefined;
+    const fromLine = f.fromLine ?? 0;
+    const toLine = f.toLine ?? measure.lines.length;
+    if (toLine - fromLine <= 1) return undefined;
+    return measure.lines.slice(fromLine, toLine).map((l) => l.lineHeight);
+  };
+
+  const contentBlocks: BalancingBlock[] = ordered.map((f, i) => {
+    const lineHeights = lineHeightsFor(f);
+    return {
+      blockId: `${f.blockId}#${i}`,
+      measuredHeight: getBalancingHeight(f, args.measureMap, args.sectPrMarkerBlockIds),
+      canBreak: lineHeights !== undefined,
+      keepWithNext: false,
+      keepTogether: lineHeights === undefined,
+      lineHeights,
+    };
+  });
 
   if (
     shouldSkipBalancing({
@@ -814,6 +852,42 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
     f.x = columnX(col);
     f.y = colCursors[col];
     f.width = columnWidth;
+    // SD-3359: apply a line-boundary split chosen by the balancer. The first
+    // half keeps the leading lines in this column; a cloned second half carries
+    // the remaining lines to the top of the next column — the same
+    // fromLine/toLine + continuation-flag surgery pagination uses when a
+    // paragraph splits across pages. The simulation assigns the block to the
+    // column of its FIRST half and flows the remainder into the next column,
+    // so the cursors advance by the split heights it computed.
+    const bp = result.blockBreakPoints?.get(block.blockId);
+    if (bp && bp.heightAfterBreak > 0 && col < columnCount - 1) {
+      const fromLine = f.fromLine ?? 0;
+      const splitLine = fromLine + bp.breakAfterLine + 1;
+      const measureLineCount = args.measureMap.get(f.blockId)?.lines?.length ?? splitLine;
+      const originalToLine = f.toLine ?? measureLineCount;
+      const originalContinuesOnNext = (f as { continuesOnNext?: boolean }).continuesOnNext ?? false;
+      const secondHalf = {
+        ...f,
+        fromLine: splitLine,
+        toLine: originalToLine,
+        x: columnX(col + 1),
+        y: colCursors[col + 1],
+        width: columnWidth,
+        continuesFromPrev: true,
+        continuesOnNext: originalContinuesOnNext,
+      } as BalancingFragment;
+      f.toLine = splitLine;
+      (f as { continuesOnNext?: boolean }).continuesOnNext = true;
+      colCursors[col] += bp.heightBeforeBreak;
+      colCursors[col + 1] += bp.heightAfterBreak;
+      // Insert right after the first half so document order is preserved for
+      // any later consumer that walks the page fragments.
+      const fragIdx = fragments.indexOf(f);
+      if (fragIdx >= 0) fragments.splice(fragIdx + 1, 0, secondHalf);
+      if (colCursors[col] > maxY) maxY = colCursors[col];
+      if (colCursors[col + 1] > maxY) maxY = colCursors[col + 1];
+      continue;
+    }
     colCursors[col] += block.measuredHeight;
     if (colCursors[col] > maxY) maxY = colCursors[col];
   }

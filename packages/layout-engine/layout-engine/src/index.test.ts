@@ -311,6 +311,29 @@ describe('layoutDocument', () => {
     expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, widths: [192, 384], equalWidth: false });
   });
 
+  it('places explicit columns at authored widths driven by per-column gaps (SD-2629 step 4)', () => {
+    // The step-4 flip: explicit widths are no longer scaled to fill the content box, and each
+    // column is positioned by its own gap. Three authored 192px columns (sum 576) sit in a 720px
+    // content box with per-column gaps [0, 48]; total 624 < 720 leaves trailing space (Word does
+    // not stretch authored widths). Per-column geometry:
+    //   col0 @ 40                                  (left margin)
+    //   col1 @ 40 + 192 + gaps[0]=0          = 232
+    //   col2 @ 40 + 192 + 0 + 192 + gaps[1]=48 = 472
+    // Before the flip, normalize scaled the widths to ~240px and applied the scalar gap (0),
+    // placing the columns at 40 / 280 / 520. This test fails on the pre-flip engine.
+    const options: LayoutOptions = {
+      pageSize: { w: 800, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 3, gap: 0, widths: [192, 192, 192], gaps: [0, 48], equalWidth: false },
+    };
+    // One 700px line per column: each 720px-tall column holds exactly one, filling all three.
+    const layout = layoutDocument([block], [makeMeasure([700, 700, 700])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    const xs = layout.pages[0].fragments.map((fragment) => Math.round(fragment.x)).sort((a, b) => a - b);
+    expect(xs).toEqual([40, 232, 472]);
+  });
+
   it('does not set "page.columns" on single column layout', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },

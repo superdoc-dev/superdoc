@@ -284,6 +284,7 @@ describe('extraction', () => {
         gap: 101.53333333333333,
         withSeparator: false,
         widths: [72, 497.26666666666665],
+        gaps: [101.53333333333333],
         equalWidth: false,
       });
     });
@@ -324,6 +325,7 @@ describe('extraction', () => {
         gap: 0,
         withSeparator: false,
         widths: [156, 156, 156, 156],
+        gaps: [0, 0, 0],
         equalWidth: false,
       });
     });
@@ -466,6 +468,7 @@ describe('extraction', () => {
         gap: 0,
         withSeparator: false,
         widths: [312, 312],
+        gaps: [0],
         equalWidth: false,
       });
     });
@@ -536,6 +539,7 @@ describe('extraction', () => {
         gap: 48,
         withSeparator: false,
         widths: [192, 384],
+        gaps: [48],
         equalWidth: false,
       });
     });
@@ -574,6 +578,46 @@ describe('extraction', () => {
         gap: 0,
         withSeparator: false,
         widths: [192, 384],
+        gaps: [0],
+        equalWidth: false,
+      });
+    });
+
+    it('emits per-column gaps in explicit mode, dropping the last column space (SD-2629 F9)', () => {
+      // equalWidth="0", w:num="3" with child spaces [0, 720, 9999]: a gap is the space AFTER each
+      // non-last column, so gaps.length === count-1 === 2 and the third column's 9999-twip space is
+      // never a gap. Widths stay 192px each (2880 twips). This is the F9 geometry target.
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [
+                {
+                  name: 'w:cols',
+                  attributes: { 'w:num': '3', 'w:equalWidth': '0' },
+                  elements: [
+                    { name: 'w:col', attributes: { 'w:w': '2880', 'w:space': '0' } },
+                    { name: 'w:col', attributes: { 'w:w': '2880', 'w:space': '720' } },
+                    { name: 'w:col', attributes: { 'w:w': '2880', 'w:space': '9999' } },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      };
+
+      const result = extractSectionData(para);
+
+      expect(result?.columnsPx).toEqual({
+        count: 3,
+        gap: 0,
+        withSeparator: false,
+        widths: [192, 192, 192],
+        gaps: [0, 48],
         equalWidth: false,
       });
     });

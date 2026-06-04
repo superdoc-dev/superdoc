@@ -148,6 +148,25 @@ describe('resolveSequenceFieldTokens', () => {
     expect(runTexts(blocks)).toEqual(['1', '', '3']);
   });
 
+  it('lets hidden restart-zero fields seed the next visible value at one', () => {
+    const { blocks } = toFlowBlocks({
+      type: 'doc',
+      content: [
+        paragraph([
+          seq({
+            instruction: 'seq level2 \\h \\r0',
+            identifier: 'level2',
+            hideResult: true,
+            restartNumber: 0,
+          }),
+        ]),
+        paragraph([seq({ instruction: 'seq level2 \\*arabic', identifier: 'level2', hasGeneralFormat: true })]),
+      ],
+    });
+
+    expect(runTexts(blocks)).toEqual(['', '1']);
+  });
+
   it('restarts after resolved heading-level paragraphs', () => {
     const headingAttrs = { paragraphProperties: { outlineLvl: 0 } };
     const { blocks } = toFlowBlocks({

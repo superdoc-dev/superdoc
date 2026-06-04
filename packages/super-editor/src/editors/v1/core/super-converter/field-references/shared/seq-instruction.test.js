@@ -9,7 +9,12 @@ describe('parseSeqInstruction', () => {
     ['SEQ Figure \\c', { identifier: 'Figure', sequenceMode: 'current' }],
     ['SEQ Figure \\h', { identifier: 'Figure', hideResult: true }],
     ['SEQ Figure \\r 10', { identifier: 'Figure', restartNumber: 10 }],
+    ['SEQ Figure \\r0', { identifier: 'Figure', restartNumber: 0 }],
+    ['SEQ Figure \\R0', { identifier: 'Figure', restartNumber: 0 }],
     ['SEQ Figure \\s 1', { identifier: 'Figure', restartLevel: 1 }],
+    ['SEQ Figure \\s1', { identifier: 'Figure', restartLevel: 1 }],
+    ['SEQ Figure \\S1', { identifier: 'Figure', restartLevel: 1 }],
+    ['seq level2 \\h \\r0', { keyword: 'seq', identifier: 'level2', hideResult: true, restartNumber: 0 }],
     ['SEQ Figure bookmarkName', { identifier: 'Figure', fieldArgument: 'bookmarkName' }],
     ['SEQ Figure "bookmark name"', { identifier: 'Figure', fieldArgument: 'bookmark name' }],
     [

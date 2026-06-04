@@ -45,7 +45,8 @@ export function parseSeqInstruction(instruction) {
 
     if (token.startsWith('\\')) {
       sawSwitch = true;
-      const normalized = token.toLowerCase();
+      const attachedValueSwitch = parseAttachedNumericSwitch(token);
+      const normalized = (attachedValueSwitch?.switchToken ?? token).toLowerCase();
 
       if (normalized === '\\n') {
         result.sequenceMode = 'next';
@@ -63,21 +64,21 @@ export function parseSeqInstruction(instruction) {
       }
 
       if (normalized === '\\r') {
-        const value = tokens[index + 1]?.value;
-        if (value != null && !value.startsWith('\\')) {
+        const value = attachedValueSwitch?.value ?? tokens[index + 1]?.value;
+        if (value != null && (attachedValueSwitch || !value.startsWith('\\'))) {
           const parsed = parseInteger(value);
           if (parsed != null) result.restartNumber = parsed;
-          index += 1;
+          if (!attachedValueSwitch) index += 1;
         }
         continue;
       }
 
       if (normalized === '\\s') {
-        const value = tokens[index + 1]?.value;
-        if (value != null && !value.startsWith('\\')) {
+        const value = attachedValueSwitch?.value ?? tokens[index + 1]?.value;
+        if (value != null && (attachedValueSwitch || !value.startsWith('\\'))) {
           const parsed = parseInteger(value);
           if (parsed != null && parsed >= 1 && parsed <= 9) result.restartLevel = parsed;
-          index += 1;
+          if (!attachedValueSwitch) index += 1;
         }
         continue;
       }
@@ -188,6 +189,21 @@ function parseInteger(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || !Number.isInteger(number)) return null;
   return Math.trunc(number);
+}
+
+/**
+ * Word often serializes numeric SEQ switches without a separating space
+ * (`\r0`, `\s1`). Normalize those into the same path as `\r 0` / `\s 1`.
+ *
+ * @param {string} token
+ */
+function parseAttachedNumericSwitch(token) {
+  const match = /^\\([rRsS])([+-]?\d+(?:\.\d+)?)$/.exec(token);
+  if (!match) return null;
+  return {
+    switchToken: `\\${match[1]}`,
+    value: match[2],
+  };
 }
 
 /**

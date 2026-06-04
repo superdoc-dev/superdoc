@@ -51,6 +51,8 @@ export interface SDSection {
   pageNumbering?: {
     start?: number;
     format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
+    chapterStyle?: number;
+    chapterSeparator?: 'hyphen' | 'period' | 'colon' | 'emDash' | 'enDash';
   };
   titlePage?: boolean;
   oddEvenHeadersFooters?: boolean;

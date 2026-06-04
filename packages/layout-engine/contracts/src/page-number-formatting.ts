@@ -4,6 +4,7 @@ export type PageNumberFieldFormat = {
 };
 
 export type PageNumberFormat = NonNullable<PageNumberFieldFormat['format']>;
+export type PageNumberChapterSeparator = 'hyphen' | 'period' | 'colon' | 'emDash' | 'enDash';
 
 function toUpperRoman(value: number): string {
   if (value < 1 || value > 3999) return String(value);
@@ -56,4 +57,45 @@ export function formatPageNumberFieldValue(pageNumber: number, fieldFormat?: Pag
   return fieldFormat?.zeroPadding && format === 'decimal'
     ? formatted.padStart(fieldFormat.zeroPadding, '0')
     : formatted;
+}
+
+export function formatChapterPageNumberText(args: {
+  pageComponent: string;
+  chapterNumberText?: string;
+  chapterSeparator?: PageNumberChapterSeparator;
+}): string {
+  if (!args.chapterNumberText) {
+    return args.pageComponent;
+  }
+
+  const separator = (() => {
+    switch (args.chapterSeparator ?? 'hyphen') {
+      case 'period':
+        return '.';
+      case 'colon':
+        return ':';
+      case 'emDash':
+        return '\u2014';
+      case 'enDash':
+        return '\u2013';
+      case 'hyphen':
+      default:
+        return '\u2011';
+    }
+  })();
+
+  return `${args.chapterNumberText}${separator}${args.pageComponent}`;
+}
+
+export function formatSectionPageNumberText(args: {
+  displayNumber: number;
+  pageFormat: PageNumberFormat;
+  chapterNumberText?: string;
+  chapterSeparator?: PageNumberChapterSeparator;
+}): string {
+  return formatChapterPageNumberText({
+    pageComponent: formatPageNumber(args.displayNumber, args.pageFormat),
+    chapterNumberText: args.chapterNumberText,
+    chapterSeparator: args.chapterSeparator,
+  });
 }

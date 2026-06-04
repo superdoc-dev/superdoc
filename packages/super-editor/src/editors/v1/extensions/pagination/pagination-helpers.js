@@ -98,6 +98,8 @@ const getSectionHeight = async (editor, data) => {
  * @param {number} [params.currentPageNumber] - The current page number for PAGE field resolution. Must be a positive integer.
  * @param {string} [params.currentPageNumberText] - The formatted PAGE field display text.
  * @param {number} [params.currentPageDisplayNumber] - The numeric PAGE display value for local field formatting.
+ * @param {string} [params.currentPageChapterNumberText] - The PAGE chapter prefix for local field formatting.
+ * @param {string} [params.currentPageChapterSeparator] - The PAGE chapter separator for local field formatting.
  * @param {number} [params.totalPageCount] - The total page count for NUMPAGES field resolution. Must be a positive integer.
  * @param {number} [params.sectionPageCount] - The current section page count for SECTIONPAGES field resolution. Must be a positive integer.
  * @returns {Editor} The created header/footer editor instance
@@ -117,6 +119,8 @@ export const createHeaderFooterEditor = ({
   currentPageNumber,
   currentPageNumberText,
   currentPageDisplayNumber,
+  currentPageChapterNumberText,
+  currentPageChapterSeparator,
   totalPageCount,
   sectionPageCount,
 }) => {
@@ -219,6 +223,8 @@ export const createHeaderFooterEditor = ({
     currentPageNumber,
     currentPageNumberText,
     currentPageDisplayNumber,
+    currentPageChapterNumberText,
+    currentPageChapterSeparator,
     totalPageCount,
     sectionPageCount,
     element: editorContainer,

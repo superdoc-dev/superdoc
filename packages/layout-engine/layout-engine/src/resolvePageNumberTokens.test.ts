@@ -75,7 +75,7 @@ describe('resolvePageNumberTokens', () => {
       const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
       expect(updatedBlock).toBeDefined();
       expect(updatedBlock.runs[1].text).toBe('i');
-      expect(updatedBlock.runs[1].token).toBeUndefined();
+      expect(updatedBlock.runs[1].token).toBe('pageNumber');
 
       // Verify original block is not mutated
       expect((blocks[0] as ParagraphBlock).runs[1].text).toBe('0');
@@ -122,6 +122,42 @@ describe('resolvePageNumberTokens', () => {
 
       const updatedBlock = result.updatedBlocks.get('para-format') as ParagraphBlock;
       expect(updatedBlock.runs[0].text).toBe('v');
+      expect(updatedBlock.runs[0].token).toBe('pageNumber');
+      expect(updatedBlock.runs[0].pageNumberFieldFormat).toEqual({ format: 'lowerRoman' });
+    });
+
+    it('should update already-resolved body page tokens when display context changes', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [{ text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun],
+        } as ParagraphBlock,
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'para-1', fromLine: 0, toLine: 1, x: 0, y: 0, width: 100 }],
+          },
+        ],
+      };
+
+      const firstPass = resolvePageNumberTokens(layout, blocks, measures, {
+        totalPages: 1,
+        displayPages: [{ physicalPage: 1, displayNumber: 1, displayText: '1', sectionIndex: 0 }],
+      });
+      const firstBlock = firstPass.updatedBlocks.get('para-1') as ParagraphBlock;
+
+      const secondPass = resolvePageNumberTokens(layout, [firstBlock], measures, {
+        totalPages: 1,
+        displayPages: [{ physicalPage: 1, displayNumber: 2, displayText: '2', sectionIndex: 0 }],
+      });
+
+      expect(secondPass.affectedBlockIds.has('para-1')).toBe(true);
+      expect((secondPass.updatedBlocks.get('para-1') as ParagraphBlock).runs[0].text).toBe('2');
     });
 
     it('should resolve totalPageCount tokens', () => {
@@ -185,7 +221,7 @@ describe('resolvePageNumberTokens', () => {
 
       const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
       expect(updatedBlock.runs[1].text).toBe('99');
-      expect(updatedBlock.runs[1].token).toBeUndefined();
+      expect(updatedBlock.runs[1].token).toBe('totalPageCount');
     });
 
     it('should resolve formatted sectionPageCount tokens', () => {
@@ -248,8 +284,8 @@ describe('resolvePageNumberTokens', () => {
 
       expect(result.affectedBlockIds.has('para-1')).toBe(true);
       expect(updatedBlock.runs[1].text).toBe('IV');
-      expect(updatedBlock.runs[1].token).toBeUndefined();
-      expect(updatedBlock.runs[1].pageNumberFieldFormat).toBeUndefined();
+      expect(updatedBlock.runs[1].token).toBe('sectionPageCount');
+      expect(updatedBlock.runs[1].pageNumberFieldFormat).toEqual({ format: 'upperRoman' });
     });
 
     it('should resolve both pageNumber and totalPageCount in same paragraph', () => {
@@ -707,7 +743,7 @@ describe('resolvePageNumberTokens', () => {
       // Updated block should have resolved token
       const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
       expect(updatedBlock.runs[0].text).toBe('1');
-      expect(updatedBlock.runs[0].token).toBeUndefined();
+      expect(updatedBlock.runs[0].token).toBe('pageNumber');
 
       // Other properties should be preserved
       expect(updatedBlock.runs[0].bold).toBe(true);

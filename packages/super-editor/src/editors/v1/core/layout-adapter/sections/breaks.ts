@@ -98,7 +98,9 @@ export function signaturesEqual(a: SectionSignature, b: SectionSignature): boole
     (Boolean(a?.numbering) &&
       Boolean(b?.numbering) &&
       (a?.numbering?.format ?? null) === (b?.numbering?.format ?? null) &&
-      (a?.numbering?.start ?? null) === (b?.numbering?.start ?? null));
+      (a?.numbering?.start ?? null) === (b?.numbering?.start ?? null) &&
+      (a?.numbering?.chapterStyle ?? null) === (b?.numbering?.chapterStyle ?? null) &&
+      (a?.numbering?.chapterSeparator ?? null) === (b?.numbering?.chapterSeparator ?? null));
 
   return (
     (a.titlePg ?? false) === (b.titlePg ?? false) &&

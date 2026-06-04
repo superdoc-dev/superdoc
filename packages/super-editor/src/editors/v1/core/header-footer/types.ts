@@ -41,6 +41,12 @@ export type HeaderFooterRegion = {
   /** Numeric section-aware display page number before PAGE field-local formatting */
   displayPageNumberValue?: number;
 
+  /** Chapter prefix for PAGE fields on this page, when chapter numbering is enabled */
+  displayPageChapterNumberText?: string;
+
+  /** Separator between chapter prefix and PAGE component */
+  displayPageChapterSeparator?: 'hyphen' | 'period' | 'colon' | 'emDash' | 'enDash';
+
   /** Physical page count in this region's section */
   sectionPageCount?: number;
 

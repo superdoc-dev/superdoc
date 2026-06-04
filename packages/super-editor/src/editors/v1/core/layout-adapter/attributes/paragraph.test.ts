@@ -223,6 +223,53 @@ describe('computeParagraphAttrs', () => {
     expect(resolvedParagraphProperties.styleId).toBe('Heading1');
   });
 
+  it('resolves built-in heading level from localized style metadata', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: { styleId: 'Ttulo1' },
+      },
+    };
+    const converterContext = {
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        docDefaults: {},
+        styles: {
+          Ttulo1: {
+            type: 'paragraph',
+            styleId: 'Ttulo1',
+            name: 'heading 1',
+            paragraphProperties: { outlineLvl: 0 },
+          },
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, converterContext as never);
+
+    expect(paragraphAttrs.styleId).toBe('Ttulo1');
+    expect(paragraphAttrs.headingLevel).toBe(1);
+  });
+
+  it('exposes the current structured list level ordinal', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {},
+        listRendering: {
+          numberingType: 'decimal',
+          markerText: '',
+          path: [3, 1],
+          suffix: 'nothing',
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.listLevelOrdinal).toBe(1);
+  });
+
   it('passes previousParagraphFont to marker run when paragraph has listRendering and numbering', () => {
     const previousFont = { fontFamily: 'MarkerFont, sans-serif', fontSize: 11 };
 

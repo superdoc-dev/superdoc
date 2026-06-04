@@ -5680,6 +5680,8 @@ export class PresentationEditor extends EventEmitter {
             currentPageNumber: editorContext.currentPageNumber,
             currentPageNumberText: editorContext.currentPageNumberText,
             currentPageDisplayNumber: editorContext.currentPageDisplayNumber,
+            currentPageChapterNumberText: editorContext.currentPageChapterNumberText,
+            currentPageChapterSeparator: editorContext.currentPageChapterSeparator,
             totalPageCount: editorContext.totalPageCount,
             sectionPageCount: editorContext.sectionPageCount,
           }) ?? null)
@@ -5714,6 +5716,8 @@ export class PresentationEditor extends EventEmitter {
       currentPageNumber: editorContext.currentPageNumber,
       currentPageNumberText: editorContext.currentPageNumberText,
       currentPageDisplayNumber: editorContext.currentPageDisplayNumber,
+      currentPageChapterNumberText: editorContext.currentPageChapterNumberText,
+      currentPageChapterSeparator: editorContext.currentPageChapterSeparator,
       totalPageCount: editorContext.totalPageCount,
       sectionPageCount: editorContext.sectionPageCount,
       editorOptions: headerFooterRefId ? { headerFooterRefId } : undefined,

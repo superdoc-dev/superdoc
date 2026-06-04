@@ -6,8 +6,14 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { formatPageNumber, computeDisplayPageNumber } from './pageNumbering';
-import type { Page, SectionMetadata } from '@superdoc/contracts';
+import {
+  buildChapterContextByPage,
+  computeDisplayPageNumber,
+  formatPageNumber,
+  formatSectionPageNumberText,
+  normalizeChapterMarkerText,
+} from './pageNumbering';
+import type { FlowBlock, Layout, Page, SectionMetadata } from '@superdoc/contracts';
 
 describe('formatPageNumber', () => {
   describe('decimal format', () => {
@@ -181,6 +187,305 @@ describe('formatPageNumber', () => {
   });
 });
 
+describe('formatSectionPageNumberText', () => {
+  it('formats the page component without a chapter prefix', () => {
+    expect(formatSectionPageNumberText({ displayNumber: 3, pageFormat: 'upperRoman' })).toBe('III');
+  });
+
+  it('prefixes chapter text with supported separators', () => {
+    expect(
+      formatSectionPageNumberText({
+        displayNumber: 1,
+        pageFormat: 'decimal',
+        chapterNumberText: '3',
+        chapterSeparator: 'hyphen',
+      }),
+    ).toBe('3\u20111');
+    expect(
+      formatSectionPageNumberText({
+        displayNumber: 1,
+        pageFormat: 'decimal',
+        chapterNumberText: '3',
+        chapterSeparator: 'period',
+      }),
+    ).toBe('3.1');
+    expect(
+      formatSectionPageNumberText({
+        displayNumber: 1,
+        pageFormat: 'decimal',
+        chapterNumberText: '3',
+        chapterSeparator: 'colon',
+      }),
+    ).toBe('3:1');
+    expect(
+      formatSectionPageNumberText({
+        displayNumber: 1,
+        pageFormat: 'decimal',
+        chapterNumberText: '3',
+        chapterSeparator: 'emDash',
+      }),
+    ).toBe('3\u20141');
+    expect(
+      formatSectionPageNumberText({
+        displayNumber: 1,
+        pageFormat: 'decimal',
+        chapterNumberText: '3',
+        chapterSeparator: 'enDash',
+      }),
+    ).toBe('3\u20131');
+  });
+
+  it('defaults chapter separator to hyphen and applies run-local page component format', () => {
+    expect(
+      formatSectionPageNumberText({
+        displayNumber: 4,
+        pageFormat: 'upperRoman',
+        chapterNumberText: '2',
+      }),
+    ).toBe('2\u2011IV');
+  });
+});
+
+describe('chapter page context', () => {
+  it('normalizes common visible heading markers', () => {
+    expect(normalizeChapterMarkerText('1.')).toBe('1');
+    expect(normalizeChapterMarkerText('1.2.')).toBe('1.2');
+    expect(normalizeChapterMarkerText('1-2.')).toBe('1-2');
+    expect(normalizeChapterMarkerText('1)')).toBe('1');
+    expect(normalizeChapterMarkerText('A.')).toBe('A');
+    expect(normalizeChapterMarkerText('III.')).toBe('III');
+  });
+
+  it('omits unsupported custom marker text', () => {
+    expect(normalizeChapterMarkerText('Article 1.')).toBeUndefined();
+    expect(normalizeChapterMarkerText('1/2')).toBeUndefined();
+  });
+
+  it('tracks the nearest numbered Heading N marker by physical page', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'heading-1',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '1.' } } },
+      },
+      { kind: 'paragraph', id: 'body-1', runs: [] },
+      {
+        kind: 'paragraph',
+        id: 'heading-2',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '2.' } } },
+      },
+    ] as FlowBlock[];
+    const layout = {
+      pages: [
+        { number: 1, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-1' }] },
+        { number: 2, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'body-1' }] },
+        { number: 3, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-2' }] },
+      ],
+    } as Layout;
+    const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 1 } }];
+
+    const result = buildChapterContextByPage(layout, blocks, sections);
+
+    expect(result.get(1)?.chapterNumberText).toBe('1');
+    expect(result.get(2)?.chapterNumberText).toBe('1');
+    expect(result.get(3)?.chapterNumberText).toBe('2');
+  });
+
+  it('uses resolved heading level and structured list ordinal for localized headings', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'localized-heading-1',
+        runs: [],
+        attrs: {
+          styleId: 'Ttulo1',
+          headingLevel: 1,
+          listLevelOrdinal: 1,
+          wordLayout: { marker: { markerText: '' } },
+        },
+      },
+    ] as FlowBlock[];
+    const layout = {
+      pages: [{ number: 1, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'localized-heading-1' }] }],
+    } as Layout;
+    const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 1 } }];
+
+    const result = buildChapterContextByPage(layout, blocks, sections);
+
+    expect(result.get(1)?.chapterNumberText).toBe('1');
+  });
+
+  it('falls back to the nearest numbered previous heading level for chapter style', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'heading-1',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '3.' } } },
+      },
+      { kind: 'paragraph', id: 'body-before-heading-2', runs: [] },
+      {
+        kind: 'paragraph',
+        id: 'heading-2',
+        runs: [],
+        attrs: { styleId: 'Heading2', wordLayout: { marker: { markerText: '4.' } } },
+      },
+    ] as FlowBlock[];
+    const layout = {
+      pages: [
+        { number: 1, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-1' }] },
+        { number: 2, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'body-before-heading-2' }] },
+        { number: 3, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-2' }] },
+      ],
+    } as Layout;
+    const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 2 } }];
+
+    const result = buildChapterContextByPage(layout, blocks, sections);
+
+    expect(result.get(1)?.chapterNumberText).toBe('3');
+    expect(result.get(2)?.chapterNumberText).toBe('3');
+    expect(result.get(3)?.chapterNumberText).toBe('4');
+  });
+
+  it('clears stale child heading markers when a new parent heading appears', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'heading-1-a',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '3.' } } },
+      },
+      {
+        kind: 'paragraph',
+        id: 'heading-2-a',
+        runs: [],
+        attrs: { styleId: 'Heading2', wordLayout: { marker: { markerText: '2.' } } },
+      },
+      {
+        kind: 'paragraph',
+        id: 'heading-1-b',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '4.' } } },
+      },
+      { kind: 'paragraph', id: 'body-after-heading-1-b', runs: [] },
+    ] as FlowBlock[];
+    const layout = {
+      pages: [
+        { number: 1, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-1-a' }] },
+        { number: 2, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-2-a' }] },
+        { number: 3, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-1-b' }] },
+        { number: 4, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'body-after-heading-1-b' }] },
+      ],
+    } as Layout;
+    const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 2 } }];
+
+    const result = buildChapterContextByPage(layout, blocks, sections);
+
+    expect(result.get(1)).toEqual({ chapterNumberText: '3', chapterStyle: 1 });
+    expect(result.get(2)).toEqual({ chapterNumberText: '2', chapterStyle: 2 });
+    expect(result.get(3)).toEqual({ chapterNumberText: '4', chapterStyle: 1 });
+    expect(result.get(4)).toEqual({ chapterNumberText: '4', chapterStyle: 1 });
+  });
+
+  it('uses clean multi-level heading markers for matching chapter style', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'heading-1',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '1.' } } },
+      },
+      {
+        kind: 'paragraph',
+        id: 'heading-2',
+        runs: [],
+        attrs: { styleId: 'Heading2', wordLayout: { marker: { markerText: '1.2.' } } },
+      },
+    ] as FlowBlock[];
+    const layout = {
+      pages: [
+        { number: 1, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-1' }] },
+        { number: 2, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-2' }] },
+      ],
+    } as Layout;
+    const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 2 } }];
+
+    const result = buildChapterContextByPage(layout, blocks, sections);
+
+    expect(result.get(1)).toEqual({ chapterNumberText: '1', chapterStyle: 1 });
+    expect(result.get(2)).toEqual({ chapterNumberText: '1.2', chapterStyle: 2 });
+  });
+
+  it('uses clean hyphenated heading markers for matching chapter style', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'heading-1',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '1.' } } },
+      },
+      {
+        kind: 'paragraph',
+        id: 'heading-2',
+        runs: [],
+        attrs: { styleId: 'Heading2', wordLayout: { marker: { markerText: '1-2.' } } },
+      },
+    ] as FlowBlock[];
+    const layout = {
+      pages: [
+        { number: 1, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-1' }] },
+        { number: 2, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-2' }] },
+      ],
+    } as Layout;
+    const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 2 } }];
+
+    const result = buildChapterContextByPage(layout, blocks, sections);
+
+    expect(result.get(2)).toEqual({ chapterNumberText: '1-2', chapterStyle: 2 });
+  });
+
+  it('omits chapter context when the matching heading marker is not a clean single token', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'heading-1',
+        runs: [],
+        attrs: { styleId: 'Heading1', wordLayout: { marker: { markerText: '1.2.' } } },
+      },
+    ] as FlowBlock[];
+    const layout = {
+      pages: [{ number: 1, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-1' }] }],
+    } as Layout;
+    const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 1 } }];
+
+    expect(buildChapterContextByPage(layout, blocks, sections).get(1)).toBeUndefined();
+  });
+
+  it('does not synthesize nested chapter prefixes from list ordinal fallback', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'heading-2',
+        runs: [],
+        attrs: {
+          styleId: 'Heading2',
+          headingLevel: 2,
+          listLevelOrdinal: 2,
+          wordLayout: { marker: { markerText: 'Article 1.' } },
+        },
+      },
+    ] as FlowBlock[];
+    const layout = {
+      pages: [{ number: 1, sectionIndex: 0, fragments: [{ kind: 'para', blockId: 'heading-2' }] }],
+    } as Layout;
+    const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 2 } }];
+
+    expect(buildChapterContextByPage(layout, blocks, sections).get(1)).toBeUndefined();
+  });
+});
+
 describe('computeDisplayPageNumber', () => {
   describe('empty or single section documents', () => {
     it('should return empty array for empty pages', () => {
@@ -301,6 +606,53 @@ describe('computeDisplayPageNumber', () => {
         sectionIndex: 0,
         sectionPageCount: 3,
       });
+    });
+
+    it('should prefix display text when chapter context is available', () => {
+      const pages: Page[] = [{ number: 1, fragments: [] }];
+      const sections: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          numbering: { format: 'decimal', start: 1, chapterStyle: 1, chapterSeparator: 'colon' },
+        },
+      ];
+
+      const result = computeDisplayPageNumber(pages, sections, new Map([[1, { chapterNumberText: '3' }]]));
+
+      expect(result[0]).toEqual({
+        physicalPage: 1,
+        displayNumber: 1,
+        displayText: '3:1',
+        sectionIndex: 0,
+        sectionPageCount: 1,
+        pageFormat: 'decimal',
+        chapterNumberText: '3',
+        chapterSeparator: 'colon',
+      });
+    });
+
+    it('omits chapter prefix when section has chapterStyle but no resolved chapter context', () => {
+      const pages: Page[] = [{ number: 1, fragments: [] }];
+      const sections: SectionMetadata[] = [{ sectionIndex: 0, numbering: { chapterStyle: 1 } }];
+
+      const result = computeDisplayPageNumber(pages, sections);
+
+      expect(result[0].displayText).toBe('1');
+      expect(result[0].chapterNumberText).toBeUndefined();
+      expect(result[0].chapterSeparator).toBeUndefined();
+    });
+
+    it('uses hyphen as the default chapter separator and applies section page format', () => {
+      const pages: Page[] = [{ number: 1, fragments: [] }];
+      const sections: SectionMetadata[] = [
+        { sectionIndex: 0, numbering: { format: 'upperRoman', start: 4, chapterStyle: 1 } },
+      ];
+
+      const result = computeDisplayPageNumber(pages, sections, new Map([[1, { chapterNumberText: 'A' }]]));
+
+      expect(result[0].displayText).toBe('A\u2011IV');
+      expect(result[0].pageFormat).toBe('upperRoman');
+      expect(result[0].chapterSeparator).toBe('hyphen');
     });
   });
 

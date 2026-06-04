@@ -1281,6 +1281,8 @@ const sectionLineNumberingSchema = objectSchema(
 const sectionPageNumberingSchema = objectSchema({
   start: { type: 'integer', minimum: 1 },
   format: sectionPageNumberFormatSchema,
+  chapterStyle: { type: 'integer', minimum: 1 },
+  chapterSeparator: { type: 'string', enum: ['hyphen', 'period', 'colon', 'emDash', 'enDash'] },
 });
 
 const sectionHeaderFooterRefsSchema = objectSchema({
@@ -4018,10 +4020,17 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           target: sectionAddressSchema,
           start: { type: 'integer', minimum: 1 },
           format: sectionPageNumberFormatSchema,
+          chapterStyle: { type: 'integer', minimum: 1 },
+          chapterSeparator: { type: 'string', enum: ['hyphen', 'period', 'colon', 'emDash', 'enDash'] },
         },
         ['target'],
       ),
-      oneOf: [{ required: ['target', 'start'] }, { required: ['target', 'format'] }],
+      anyOf: [
+        { required: ['target', 'start'] },
+        { required: ['target', 'format'] },
+        { required: ['target', 'chapterStyle'] },
+        { required: ['target', 'chapterSeparator'] },
+      ],
     },
     output: sectionMutationResultSchemaFor('sections.setPageNumbering'),
     success: sectionMutationSuccessSchema,

@@ -462,6 +462,12 @@ export interface EditorOptions {
   /** Current numeric PAGE display value for story editor field-local formatting */
   currentPageDisplayNumber?: number;
 
+  /** Current PAGE chapter prefix for story editor field-local formatting */
+  currentPageChapterNumberText?: string;
+
+  /** Current PAGE chapter separator for story editor field-local formatting */
+  currentPageChapterSeparator?: 'hyphen' | 'period' | 'colon' | 'emDash' | 'enDash';
+
   /** Total document page count for NUMPAGES field rendering in story editors */
   totalPageCount?: number;
 

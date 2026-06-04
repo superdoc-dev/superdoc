@@ -1429,6 +1429,7 @@ export type {
   SectionPageBorders,
   SectionPageMargins,
   SectionPageNumbering,
+  SectionPageNumberingChapterSeparator,
   SectionPageNumberingFormat,
   SectionPageSetup,
   SectionRangeDomain,

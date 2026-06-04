@@ -1520,7 +1520,6 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     getActivePageSize: () => activePageSize,
     getDefaultPageSize: () => pageSize,
     getActiveColumns: () => activeColumns,
-    getCurrentColumns: () => getCurrentColumns(),
     createPage,
     onNewPage: (state?: PageState) => {
       // apply pending->active and invalidate columns cache (first callback)

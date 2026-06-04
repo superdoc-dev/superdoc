@@ -65,7 +65,6 @@ export type PaginatorOptions = {
   getActivePageSize(): { w: number; h: number };
   getDefaultPageSize(): { w: number; h: number };
   getActiveColumns(): ColumnLayout;
-  getCurrentColumns(): NormalizedColumns;
   createPage(number: number, pageMargins: PageMargins, pageSizeOverride?: { w: number; h: number }): Page;
   onNewPage?: (state: PageState) => void;
   /**
@@ -92,19 +91,6 @@ export function createPaginator(opts: PaginatorOptions) {
       return state.constraintBoundaries[state.activeConstraintIndex].columns;
     }
     return opts.getActiveColumns();
-  };
-
-  const columnX = (columnIndex: number): number => {
-    const cols = opts.getCurrentColumns();
-    const widths = Array.isArray(cols.widths) && cols.widths.length > 0 ? cols.widths : null;
-    if (!widths) {
-      return opts.margins.left + columnIndex * (cols.width + cols.gap);
-    }
-    let x = opts.margins.left;
-    for (let index = 0; index < columnIndex; index += 1) {
-      x += (widths[index] ?? cols.width) + cols.gap;
-    }
-    return x;
   };
 
   const startNewPage = (): PageState => {
@@ -203,7 +189,6 @@ export function createPaginator(opts: PaginatorOptions) {
     startNewPage,
     ensurePage,
     advanceColumn,
-    columnX,
     getActiveColumnsForState,
     getPageByNumber,
     pruneTrailingEmptyPages,

@@ -153,7 +153,7 @@ describe('normalizeColumnLayout', () => {
   });
 });
 
-describe('getColumnGeometry + geometry helpers (SD-2629, behavior-preserving)', () => {
+describe('getColumnGeometry + geometry helpers (SD-2629)', () => {
   it('mirrors equal-width normalized output (uniform gap, content-relative x)', () => {
     const geom = getColumnGeometry(normalizeColumnLayout({ count: 2, gap: 24 }, 624));
     expect(geom).toEqual([

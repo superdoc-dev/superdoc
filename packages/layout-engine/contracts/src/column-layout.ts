@@ -193,8 +193,8 @@ export function normalizeColumnLayout(
 /**
  * Resolve per-column geometry for an already-normalized layout. This is the SD-2629 consumer API:
  * fill/positioning/separators/hit-testing/footnotes/floating anchors/balancing should read this
- * single source rather than re-deriving from `widths`/`gap`. Behavior-preserving in step 1: it
- * mirrors today's normalized widths + scalar gap; per-column `gaps` drive it only after the flip.
+ * single source rather than re-deriving from `widths`/`gap`. Geometry uses the resolved (unscaled)
+ * widths and per-column `gaps`, falling back to the uniform gap when no per-column gaps exist.
  */
 export function getColumnGeometry(normalized: NormalizedColumnLayout): ColumnGeometry[] {
   const widths =

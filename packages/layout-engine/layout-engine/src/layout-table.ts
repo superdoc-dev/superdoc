@@ -33,7 +33,7 @@ export type TableLayoutContext = {
   columnWidth: number;
   ensurePage: () => PageState;
   advanceColumn: (state: PageState) => PageState;
-  columnX: (columnIndex: number) => number;
+  columnX: (state: PageState, columnIndex?: number) => number;
 };
 
 /**
@@ -1252,7 +1252,7 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
   state = context.ensurePage();
   const height = Math.min(context.measure.totalHeight, state.contentBottom - state.cursorY);
 
-  const baseX = context.columnX(state.columnIndex);
+  const baseX = context.columnX(state);
   const baseWidth = Math.max(0, context.measure.totalWidth || context.columnWidth);
   const { x, width } = resolveTableFrame(baseX, context.columnWidth, baseWidth, context.block.attrs);
   const columnWidths = rescaleColumnWidths(context.measure.columnWidths, context.measure.totalWidth, width);
@@ -1412,7 +1412,7 @@ export function layoutTableBlock({
   if (block.rows.length === 0 && measure.totalHeight > 0) {
     const height = Math.min(measure.totalHeight, state.contentBottom - state.cursorY);
 
-    const baseX = columnX(state.columnIndex);
+    const baseX = columnX(state);
     const baseWidth = Math.max(0, measure.totalWidth || columnWidth);
     const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
     const columnWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
@@ -1569,7 +1569,7 @@ export function layoutTableBlock({
       // Only create a fragment if we made progress (rendered some lines)
       // Don't create empty fragments with just padding
       if (fragmentHeight > 0 && madeProgress) {
-        const baseX = columnX(state.columnIndex);
+        const baseX = columnX(state);
         const baseWidth = Math.max(0, measure.totalWidth || columnWidth);
         const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
         const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
@@ -1686,7 +1686,7 @@ export function layoutTableBlock({
         forcedPartialRow,
       );
 
-      const baseX = columnX(state.columnIndex);
+      const baseX = columnX(state);
       const baseWidth = Math.max(0, measure.totalWidth || columnWidth);
       const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
       const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
@@ -1738,7 +1738,7 @@ export function layoutTableBlock({
       partialRow,
     );
 
-    const baseX = columnX(state.columnIndex);
+    const baseX = columnX(state);
     const baseWidth = Math.max(0, measure.totalWidth || columnWidth);
     const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
     const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);

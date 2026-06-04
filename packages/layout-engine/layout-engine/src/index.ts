@@ -36,6 +36,7 @@ import {
   getFragmentZIndex,
   getColumnGeometry,
   getColumnWidth,
+  getColumnX,
   resolveColumnCount,
   resolveColumnLayout,
 } from '@superdoc/contracts';
@@ -1829,13 +1830,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const columnWidthForState = (state: PageState, columnIndex: number = state.columnIndex): number =>
     getColumnWidth(getColumnGeometryForState(state), columnIndex);
 
+  const columnXForState = (state: PageState, columnIndex: number = state.columnIndex): number =>
+    getColumnX(getColumnGeometryForState(state), columnIndex, state.page.margins?.left ?? activeLeftMargin);
+
   const getCurrentColumnWidth = (): number => {
     const state = states[states.length - 1] ?? null;
     return state ? columnWidthForState(state) : getColumnWidthAt(getCurrentColumns(), 0);
   };
 
-  // Helper to get column X position
-  const columnX = paginator.columnX;
+  // Helper to get column X position (state-aware; positions the passed page state, SD-2629).
+  const columnX = columnXForState;
 
   const advanceColumn = paginator.advanceColumn;
 
@@ -2688,7 +2692,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           const anchorY = anchorBaseY + offsetV;
           floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
 
-          const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
+          const anchorX = tableBlock.anchor?.offsetH ?? columnX(state);
 
           const tableFragment = createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY);
           state.page.fragments.push(tableFragment);
@@ -2914,7 +2918,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
 
       const anchorY = resolveParagraphlessAnchoredTableY(tableBlock, tableMeasure, state);
-      const anchorX = tableBlock.anchor?.offsetH ?? columnX(state.columnIndex);
+      const anchorX = tableBlock.anchor?.offsetH ?? columnX(state);
 
       floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
       state.page.fragments.push(createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY));

@@ -141,7 +141,7 @@ export function fieldsInsertWrapper(
   }
 
   if (fieldType === 'NUMPAGES') {
-    return insertNumPagesField(editor, resolved, options);
+    return insertNumPagesField(editor, input, resolved, options);
   }
 
   if (fieldType === 'SECTIONPAGES') {
@@ -195,6 +195,7 @@ function insertDocumentStatField(
 
 function insertNumPagesField(
   editor: Editor,
+  input: FieldInsertInput,
   resolved: { from: number },
   options?: MutationOptions,
 ): FieldMutationResult {
@@ -212,10 +213,13 @@ function insertNumPagesField(
     );
   }
 
+  const normalizedInstruction = input.instruction.trim().replace(/\s+/g, ' ');
+  const parsedInstruction = parsePageNumberFieldSwitches(normalizedInstruction, 'NUMPAGES');
+
   const receipt = executeDomainCommand(
     editor,
     (): boolean => {
-      const node = nodeType.create({});
+      const node = nodeType.create(parsedInstruction);
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
       editor.dispatch(tr);

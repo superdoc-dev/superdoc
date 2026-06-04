@@ -114,10 +114,13 @@ function createEditorWithTotalPageNumber(
   return editor as unknown as Editor;
 }
 
-function createEditorForInsert(sectionPageCount?: number): Editor {
+function createEditorForInsert(sectionPageCount?: number, isHeaderOrFooter = false): Editor {
   const paragraph = schema.nodes.paragraph.create({ sdBlockId: 'block-1' }, schema.text('x'));
   const doc = schema.nodes.doc.create(null, paragraph);
-  const options = sectionPageCount == null ? {} : { sectionPageCount };
+  const options = {
+    ...(sectionPageCount == null ? {} : { sectionPageCount }),
+    ...(isHeaderOrFooter ? { isHeaderOrFooter: true } : {}),
+  };
 
   const editor = {
     schema,
@@ -222,6 +225,42 @@ describe('fieldsRebuildWrapper SECTIONPAGES fields', () => {
 });
 
 describe('fieldsRebuildWrapper NUMPAGES fields', () => {
+  it('inserts NUMPAGES as a total-page-number node with numeric picture attrs in headers/footers', () => {
+    const editor = createEditorForInsert(undefined, true);
+
+    const result = fieldsInsertWrapper(editor, {
+      mode: 'raw',
+      instruction: 'NUMPAGES \\# "#,##0"',
+      at: { kind: 'text', segments: [{ blockId: 'block-1', range: { start: 0, end: 0 } }] },
+    });
+
+    expect(result.success).toBe(true);
+    const insertedField = editor.state.doc.nodeAt(1);
+    expect(insertedField?.type.name).toBe('total-page-number');
+    expect(insertedField?.attrs).toMatchObject({
+      instruction: 'NUMPAGES \\# "#,##0"',
+      pageNumberNumericPicture: '#,##0',
+    });
+  });
+
+  it('inserts NUMPAGES as a total-page-number node with general format attrs in headers/footers', () => {
+    const editor = createEditorForInsert(undefined, true);
+
+    const result = fieldsInsertWrapper(editor, {
+      mode: 'raw',
+      instruction: 'NUMPAGES \\* Ordinal',
+      at: { kind: 'text', segments: [{ blockId: 'block-1', range: { start: 0, end: 0 } }] },
+    });
+
+    expect(result.success).toBe(true);
+    const insertedField = editor.state.doc.nodeAt(1);
+    expect(insertedField?.type.name).toBe('total-page-number');
+    expect(insertedField?.attrs).toMatchObject({
+      instruction: 'NUMPAGES \\* Ordinal',
+      pageNumberFormat: 'ordinal',
+    });
+  });
+
   it('formats rebuilt total-page-number values with pageNumberFormat', () => {
     const editor = createEditorWithTotalPageNumber(4, '1', { pageNumberFormat: 'upperRoman' });
 

@@ -31,6 +31,14 @@ import { DocumentApiAdapterError } from '../errors.js';
 import { getWordStatistics, resolveDocumentStatFieldValue, resolveMainBodyEditor } from '../helpers/word-statistics.js';
 import { resolveSectionPageCountFieldValue } from '../helpers/section-page-count.js';
 import { parsePageNumberFieldSwitches } from '../../core/super-converter/field-references/shared/page-number-field-switches.js';
+import {
+  isSeqInstruction,
+  parseSeqInstruction,
+} from '../../core/super-converter/field-references/shared/seq-instruction.js';
+import {
+  getSequenceFieldUpdaterConverterContext,
+  updateSequenceFieldsInTransaction,
+} from '../helpers/sequence-field-updater.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -265,15 +273,44 @@ function insertRawField(
     editor,
     (): boolean => {
       const fieldType = extractFieldType(input.instruction);
-      const node = fieldNodeType.create({
-        instruction: input.instruction,
-        identifier: fieldType,
-        format: 'ARABIC',
-        resolvedNumber: '',
-        sdBlockId: `field-${Date.now()}`,
-      });
+      const isSeq = isSeqInstruction(input.instruction);
+      const parsed = isSeq ? parseSeqInstruction(input.instruction) : null;
+      const node = fieldNodeType.create(
+        parsed
+          ? {
+              instruction: input.instruction,
+              identifier: parsed.identifier,
+              fieldArgument: parsed.fieldArgument,
+              sequenceMode: parsed.sequenceMode,
+              hideResult: parsed.hideResult,
+              restartNumber: parsed.restartNumber,
+              restartLevel: parsed.restartLevel,
+              format: parsed.format,
+              hasGeneralFormat: parsed.hasGeneralFormat,
+              pageNumberFieldFormat: parsed.pageNumberFieldFormat ?? null,
+              numericPictureFormat: parsed.numericPictureFormat,
+              resolvedNumber: '',
+              resolvedNumberIsCurrent: false,
+              sdBlockId: `field-${Date.now()}`,
+            }
+          : {
+              instruction: input.instruction,
+              identifier: fieldType,
+              format: 'ARABIC',
+              resolvedNumber: '',
+              sdBlockId: `field-${Date.now()}`,
+            },
+      );
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
+      if (parsed) {
+        updateSequenceFieldsInTransaction({
+          tr,
+          schema: editor.schema,
+          scope: { kind: 'identifier', identifier: parsed.identifier },
+          converterContext: getSequenceFieldUpdaterConverterContext(editor),
+        });
+      }
       editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
@@ -318,6 +355,10 @@ export function fieldsRebuildWrapper(
     return rebuildSectionPageCount(editor, resolved, address, options);
   }
 
+  if (node.type.name === 'sequenceField' && isSeqInstruction((node.attrs?.instruction as string) ?? '')) {
+    return rebuildSequenceFields(editor, address, options);
+  }
+
   // Default: clear resolvedNumber to force re-evaluation (sequence fields, etc.)
   const receipt = executeDomainCommand(
     editor,
@@ -337,6 +378,29 @@ export function fieldsRebuildWrapper(
   );
 
   if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Rebuild produced no change.');
+  return fieldSuccess(address);
+}
+
+function rebuildSequenceFields(editor: Editor, address: FieldAddress, options?: MutationOptions): FieldMutationResult {
+  executeDomainCommand(
+    editor,
+    () => {
+      const { tr } = editor.state;
+      const result = updateSequenceFieldsInTransaction({
+        tr,
+        schema: editor.schema,
+        scope: { kind: 'all' },
+        converterContext: getSequenceFieldUpdaterConverterContext(editor),
+      });
+      if (result.changed) {
+        editor.dispatch(tr);
+        clearIndexCache(editor);
+      }
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
   return fieldSuccess(address);
 }
 

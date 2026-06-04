@@ -22,6 +22,16 @@ const schema = new Schema({
         resolvedText: { default: null },
       },
     },
+    sequenceField: {
+      group: 'inline',
+      inline: true,
+      atom: true,
+      attrs: {
+        instruction: { default: '' },
+        identifier: { default: '' },
+        resolvedNumber: { default: '' },
+      },
+    },
   },
 });
 
@@ -63,5 +73,27 @@ describe('field-resolver synthetic section page count fields', () => {
         resolvedText: '4',
       },
     ]);
+  });
+});
+
+describe('field-resolver sequence fields', () => {
+  it('uses sequenceField.resolvedNumber as resolvedText', () => {
+    const field = schema.nodes.sequenceField.create({
+      instruction: 'SEQ Figure \\* ARABIC',
+      identifier: 'Figure',
+      resolvedNumber: '2',
+    });
+    const paragraph = schema.nodes.paragraph.create({ sdBlockId: 'block-seq' }, field);
+    const doc = schema.nodes.doc.create(null, paragraph);
+
+    expect(findAllFields(doc)).toContainEqual({
+      pos: 1,
+      blockId: 'block-seq',
+      occurrenceIndex: 0,
+      nestingDepth: 0,
+      instruction: 'SEQ Figure \\* ARABIC',
+      fieldType: 'SEQ',
+      resolvedText: '2',
+    });
   });
 });

@@ -308,6 +308,27 @@ const mixedSchema = new Schema({
       },
       toDOM: () => ['span', 0],
     },
+    sequenceField: {
+      group: 'inline',
+      inline: true,
+      atom: true,
+      attrs: {
+        instruction: { default: '' },
+        identifier: { default: '' },
+        fieldArgument: { default: '' },
+        sequenceMode: { default: 'next' },
+        hideResult: { default: false },
+        restartNumber: { default: null },
+        restartLevel: { default: null },
+        format: { default: 'Arabic' },
+        hasGeneralFormat: { default: false },
+        pageNumberFieldFormat: { default: null },
+        numericPictureFormat: { default: null },
+        resolvedNumber: { default: '' },
+        resolvedNumberIsCurrent: { default: false },
+      },
+      toDOM: () => ['span', 0],
+    },
     text: { group: 'inline' },
   },
 });
@@ -463,6 +484,78 @@ describe('updateFieldsInSelection — TOC + stat fields combined (regression)', 
     const unchangedField = editorState.doc.nodeAt(1);
     expect(unchangedField.attrs.resolvedText).toBe('3');
     expect(unchangedField.textContent).toBe('3');
+  });
+
+  it('recomputes stale SEQ fields when the selection contains SEQ', () => {
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const seq = (instruction) =>
+      mixedSchema.nodes.sequenceField.create({
+        instruction,
+        identifier: 'Figure',
+        resolvedNumber: '9',
+      });
+    const doc = mixedSchema.nodes.doc.create({}, [para([seq('SEQ Figure')]), para([seq('SEQ Figure')])]);
+    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      state: editorState,
+      converter: { translatedLinkedStyles: { docDefaults: {}, styles: {} }, translatedNumbering: {} },
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const dispatch = vi.fn();
+    const result = command({
+      editor,
+      state: { doc, selection: { from: 0, to: doc.content.size }, schema: mixedSchema, tr: editorState.tr },
+      tr: editorState.tr,
+      dispatch,
+    });
+
+    expect(result).toBe(true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    const updatedValues = [];
+    dispatch.mock.calls[0][0].doc.descendants((node) => {
+      if (node.type.name === 'sequenceField') updatedValues.push(node.attrs.resolvedNumber);
+      return true;
+    });
+    expect(updatedValues).toEqual(['1', '2']);
+  });
+
+  it('updates TOC and SEQ fields on the same F9 command without merging TOC transactions', () => {
+    const tocUpdate = vi.fn(() => ({ success: true }));
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const text = (t) => mixedSchema.text(t);
+    const toc = mixedSchema.nodes.tableOfContents.create({ sdBlockId: 'toc-1' }, [para([text('entry')])]);
+    const seqField = mixedSchema.nodes.sequenceField.create({
+      instruction: 'SEQ Figure',
+      identifier: 'Figure',
+      resolvedNumber: '9',
+    });
+    const doc = mixedSchema.nodes.doc.create({}, [toc, para([seqField])]);
+    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      doc: { toc: { update: tocUpdate } },
+      state: editorState,
+      converter: { translatedLinkedStyles: { docDefaults: {}, styles: {} }, translatedNumbering: {} },
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const outerTr = editorState.tr;
+    outerTr.setMeta = vi.fn(outerTr.setMeta.bind(outerTr));
+    const dispatch = vi.fn();
+    const result = command({
+      editor,
+      state: { doc, selection: { from: 0, to: doc.content.size }, schema: mixedSchema, tr: outerTr },
+      tr: outerTr,
+      dispatch,
+    });
+
+    expect(result).toBe(true);
+    expect(tocUpdate).toHaveBeenCalledTimes(1);
+    expect(outerTr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch.mock.calls[0][0].doc.nodeAt(toc.nodeSize + 1).attrs.resolvedNumber).toBe('1');
   });
 });
 

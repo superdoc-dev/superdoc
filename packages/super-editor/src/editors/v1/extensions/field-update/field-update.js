@@ -7,6 +7,10 @@ import {
   resolveMainBodyEditor,
 } from '../../document-api-adapters/helpers/word-statistics.js';
 import { resolveSectionPageCountFieldValue } from '../../document-api-adapters/helpers/section-page-count.js';
+import {
+  getSequenceFieldUpdaterConverterContext,
+  updateSequenceFieldsInTransaction,
+} from '../../document-api-adapters/helpers/sequence-field-updater.js';
 
 /** Stat-field types refreshed by F9 when the doc has no TOCs. */
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES', 'SECTIONPAGES']);
@@ -87,7 +91,8 @@ export const FieldUpdate = Extension.create({
 
           const fields = findFieldsInRange(state.doc, from, to);
           const updatable = fields.filter((f) => UPDATABLE_FIELD_TYPES.has(f.fieldType));
-          if (updatable.length === 0) return tocPathRan;
+          const hasSeqSelection = fields.some((field) => field.fieldType === 'SEQ');
+          if (updatable.length === 0 && !hasSeqSelection) return tocPathRan;
 
           const mainEditor = resolveMainBodyEditor(editor);
           const stats = getWordStatistics(mainEditor);
@@ -127,6 +132,16 @@ export const FieldUpdate = Extension.create({
               });
               changed = true;
             }
+          }
+
+          if (hasSeqSelection) {
+            const result = updateSequenceFieldsInTransaction({
+              tr,
+              schema: state.schema,
+              scope: { kind: 'all' },
+              converterContext: getSequenceFieldUpdaterConverterContext(editor),
+            });
+            changed = changed || result.changed;
           }
 
           if (!changed) return tocPathRan;

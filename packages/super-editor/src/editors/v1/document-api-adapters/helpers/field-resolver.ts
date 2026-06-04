@@ -112,7 +112,10 @@ export function findAllFields(doc: ProseMirrorNode): ResolvedField[] {
     blockOccurrenceCounters.set(blockId, counter + 1);
 
     const fieldType = extractFieldType(instruction);
-    const resolvedText = (node.attrs?.resolvedText as string) ?? '';
+    const resolvedText =
+      node.type.name === 'sequenceField'
+        ? ((node.attrs?.resolvedNumber as string) ?? '')
+        : ((node.attrs?.resolvedText as string) ?? '');
 
     results.push({
       pos,

@@ -540,6 +540,86 @@ describe('extraction', () => {
       });
     });
 
+    it('caps to the valid child-width count, ignoring <w:col> with no usable w:w (SD-2324)', () => {
+      // Four <w:col> but only two carry a usable w:w; the count caps to those two (widths.length),
+      // not the raw four children. min(4, 2) -> 2.
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [
+                {
+                  name: 'w:cols',
+                  attributes: { 'w:num': '4', 'w:equalWidth': '0' },
+                  elements: [
+                    { name: 'w:col', attributes: { 'w:w': '2880' } },
+                    { name: 'w:col', attributes: { 'w:w': '5760' } },
+                    { name: 'w:col', attributes: { 'w:w': '0' } },
+                    { name: 'w:col', attributes: {} },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      };
+
+      const result = extractSectionData(para);
+
+      expect(result?.columnsPx).toEqual({
+        count: 2,
+        gap: 0,
+        withSeparator: false,
+        widths: [192, 384],
+        equalWidth: false,
+      });
+    });
+
+    it('takes the count from w:num in equal mode (count 3, no children) (SD-2324)', () => {
+      // Equal mode (omitted equalWidth) takes the count straight from w:num and the gap from the
+      // section w:space (720 twips -> 48px); no per-column widths are emitted.
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [{ name: 'w:cols', attributes: { 'w:num': '3', 'w:space': '720' } }],
+            },
+          },
+        },
+      };
+
+      const result = extractSectionData(para);
+
+      expect(result?.columnsPx).toEqual({ count: 3, gap: 48, withSeparator: false });
+    });
+
+    it('returns no columnsPx when the section has no <w:cols> element (SD-2324)', () => {
+      // A sectPr without <w:cols> must not synthesize a column layout.
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [{ name: 'w:pgSz', attributes: { 'w:w': '12240', 'w:h': '15840' } }],
+            },
+          },
+        },
+      };
+
+      const result = extractSectionData(para);
+
+      expect(result).not.toBeNull();
+      expect(result?.columnsPx).toBeUndefined();
+    });
+
     it('should handle section with only normalized margins and no sectPr elements', () => {
       const para: PMNode = {
         type: 'paragraph',

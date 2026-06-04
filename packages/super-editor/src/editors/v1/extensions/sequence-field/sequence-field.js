@@ -55,7 +55,7 @@ export const SequenceField = Node.create({
         rendered: false,
       },
       format: {
-        default: 'Arabic',
+        default: 'ARABIC',
         rendered: false,
       },
       restartLevel: {

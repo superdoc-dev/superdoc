@@ -95,8 +95,6 @@ export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './
 export {
   resolveAnchoredGraphicY,
   resolveAnchoredGraphicX,
-  computeParagraphContentStartY,
-  computeParagraphLayoutStartY,
   type ColumnLayoutForAnchor,
   type ResolveAnchoredGraphicYInput,
 } from './graphic-placement.js';

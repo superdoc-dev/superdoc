@@ -20,8 +20,11 @@ import {
   extractBlockPmRange,
   isEmptyTextParagraph,
   shouldSuppressOwnSpacing,
+  collapseSpacingBefore,
+  rewindPreviousParagraphTrailing,
+  computeParagraphLayoutStartY,
 } from './layout-utils.js';
-import { resolveAnchoredGraphicY, resolveAnchoredGraphicX, computeParagraphLayoutStartY, getFragmentZIndex  } from '@superdoc/contracts';
+import { resolveAnchoredGraphicY, resolveAnchoredGraphicX, getFragmentZIndex } from '@superdoc/contracts';
 
 /** Points → CSS pixels (96 dpi / 72 pt-per-inch). */
 const PX_PER_PT = 96 / 72;
@@ -706,7 +709,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     if (shouldSuppressOwnSpacing(state.lastParagraphStyleId, state.lastParagraphContextualSpacing, styleId)) {
       const prevTrailing = asSafeNumber(state.trailingSpacing);
       if (prevTrailing > 0) {
-        state.cursorY -= prevTrailing;
+        state.cursorY = rewindPreviousParagraphTrailing(state.cursorY, prevTrailing);
         state.trailingSpacing = 0;
       }
     }
@@ -725,8 +728,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
 
     const keepLines = attrs?.keepLines === true;
     if (keepLines && fromLine === 0) {
-      const prevTrailing = state.trailingSpacing ?? 0;
-      const neededSpacingBefore = Math.max(spacingBefore - prevTrailing, 0);
+      const neededSpacingBefore = collapseSpacingBefore(spacingBefore, state.trailingSpacing);
       const pageContentHeight = state.contentBottom - state.topMargin;
       const linesHeight = lines.reduce((sum, line) => sum + (line.lineHeight || 0), 0);
       const fullHeight = linesHeight + borderExpansion.top + borderExpansion.bottom;
@@ -743,7 +745,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     if (!appliedSpacingBefore && spacingBefore > 0) {
       while (!appliedSpacingBefore) {
         const prevTrailing = state.trailingSpacing ?? 0;
-        const neededSpacingBefore = Math.max(spacingBefore - prevTrailing, 0);
+        const neededSpacingBefore = collapseSpacingBefore(spacingBefore, state.trailingSpacing);
         if (spacingDebugEnabled) {
           spacingDebugLog('spacingBefore pending', {
             blockId: block.id,

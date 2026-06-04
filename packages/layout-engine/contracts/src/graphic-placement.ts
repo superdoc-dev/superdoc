@@ -103,47 +103,6 @@ export function resolveAnchoredGraphicY(input: ResolveAnchoredGraphicYInput): nu
 }
 
 /**
- * Y coordinate where paragraph text begins (after spacing-before collapse).
- */
-export function computeParagraphContentStartY(
-  cursorY: number,
-  spacingBefore: number,
-  appliedSpacingBefore: boolean,
-  trailingSpacing: number | undefined,
-): number {
-  if (appliedSpacingBefore || spacingBefore <= 0) {
-    return cursorY;
-  }
-  const prevTrailing = trailingSpacing ?? 0;
-  return cursorY + Math.max(spacingBefore - prevTrailing, 0);
-}
-
-/**
- * Paragraph text start Y including contextual-spacing rewind from the previous paragraph.
- */
-export function computeParagraphLayoutStartY(input: {
-  cursorY: number;
-  spacingBefore: number;
-  trailingSpacing?: number;
-  suppressSpacingBefore?: boolean;
-  rewindTrailingFromPrevious?: boolean;
-}): number {
-  let y = input.cursorY;
-  let trailingForCollapse = input.trailingSpacing;
-  if (input.rewindTrailingFromPrevious) {
-    const prevTrailing = input.trailingSpacing ?? 0;
-    if (prevTrailing > 0) {
-      y -= prevTrailing;
-      // Match layout-paragraph.ts: after rewind, trailingSpacing is cleared before
-      // spacing-before is applied — do not collapse against the rewound gap again.
-      trailingForCollapse = 0;
-    }
-  }
-  const effectiveSpacingBefore = input.suppressSpacingBefore ? 0 : input.spacingBefore;
-  return computeParagraphContentStartY(y, effectiveSpacingBefore, effectiveSpacingBefore === 0, trailingForCollapse);
-}
-
-/**
  * Resolve horizontal paint position for an anchored graphic.
  */
 export function resolveAnchoredGraphicX(

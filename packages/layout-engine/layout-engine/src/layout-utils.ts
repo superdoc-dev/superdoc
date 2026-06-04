@@ -175,6 +175,61 @@ export function shouldSuppressOwnSpacing(
   return ownContextualSpacing && !!ownStyleId && !!adjacentStyleId && ownStyleId === adjacentStyleId;
 }
 
+// ============================================================================
+// Paragraph spacing-before Y (shared by layout-paragraph preview + PHASE 2)
+// ============================================================================
+
+/** Pixels of spacing.before to add after collapsing against previous trailingSpacing. */
+export function collapseSpacingBefore(spacingBefore: number, trailingSpacing: number | undefined): number {
+  const prevTrailing = trailingSpacing ?? 0;
+  return Math.max(spacingBefore - prevTrailing, 0);
+}
+
+/** OOXML contextual spacing: previous paragraph rewinds its after-gap from cursorY. */
+export function rewindPreviousParagraphTrailing(cursorY: number, trailingSpacing: number | undefined): number {
+  const prevTrailing = trailingSpacing ?? 0;
+  return prevTrailing > 0 ? cursorY - prevTrailing : cursorY;
+}
+
+/**
+ * Y coordinate where paragraph text begins (after spacing-before collapse).
+ * Does not advance pages — pagination stays in layout-paragraph PHASE 2.
+ */
+export function computeParagraphContentStartY(
+  cursorY: number,
+  spacingBefore: number,
+  appliedSpacingBefore: boolean,
+  trailingSpacing: number | undefined,
+): number {
+  if (appliedSpacingBefore || spacingBefore <= 0) {
+    return cursorY;
+  }
+  return cursorY + collapseSpacingBefore(spacingBefore, trailingSpacing);
+}
+
+/**
+ * Paragraph text start Y including contextual-spacing rewind from the previous paragraph.
+ * Used for float-scan preview at paragraph entry; PHASE 2 uses the same primitives inline.
+ */
+export function computeParagraphLayoutStartY(input: {
+  cursorY: number;
+  spacingBefore: number;
+  trailingSpacing?: number;
+  suppressSpacingBefore?: boolean;
+  rewindTrailingFromPrevious?: boolean;
+}): number {
+  let y = input.cursorY;
+  let trailingForCollapse = input.trailingSpacing;
+  if (input.rewindTrailingFromPrevious) {
+    y = rewindPreviousParagraphTrailing(y, input.trailingSpacing);
+    if ((input.trailingSpacing ?? 0) > 0) {
+      trailingForCollapse = 0;
+    }
+  }
+  const effectiveSpacingBefore = input.suppressSpacingBefore ? 0 : input.spacingBefore;
+  return computeParagraphContentStartY(y, effectiveSpacingBefore, effectiveSpacingBefore === 0, trailingForCollapse);
+}
+
 export const extractBlockPmRange = (block: { attrs?: Record<string, unknown> } | null | undefined): LinePmRange => {
   if (!block || !block.attrs) {
     return {};

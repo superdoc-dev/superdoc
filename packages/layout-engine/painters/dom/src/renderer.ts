@@ -44,6 +44,8 @@ import {
   buildLayoutSourceIdentityForFragment,
   expandRunsForInlineNewlines,
   getCellSpacingPx,
+  getColumnGeometry,
+  getColumnSeparatorPositions as getColumnSeparatorPositionsFromGeometry,
   normalizeColumnLayout,
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
@@ -1879,37 +1881,14 @@ export class DomPainter {
   }
 
   private getColumnSeparatorPositions(columns: ColumnLayout, leftMargin: number, contentWidth: number): number[] {
-    const hasExplicitWidths = Array.isArray(columns.widths) && columns.widths.length > 0;
-
-    if (!hasExplicitWidths) {
-      const equalWidth = (contentWidth - columns.gap * (columns.count - 1)) / columns.count;
-      if (equalWidth <= 1) return [];
-
-      const separatorPositions: number[] = [];
-      for (let index = 0; index < columns.count - 1; index += 1) {
-        separatorPositions.push(leftMargin + (index + 1) * equalWidth + index * columns.gap + columns.gap / 2);
-      }
-      return separatorPositions;
-    }
-
-    const normalizedColumns = normalizeColumnLayout(columns, contentWidth);
-    if (normalizedColumns.count <= 1) return [];
-
-    const columnWidths =
-      normalizedColumns.widths ?? Array.from({ length: normalizedColumns.count }, () => normalizedColumns.width);
-    // A 1px separator only makes sense when every participating column is wider than the separator itself.
-    if (columnWidths.some((columnWidth) => columnWidth <= 1)) return [];
-
-    const separatorPositions: number[] = [];
-    let cursorX = leftMargin;
-
-    for (let index = 0; index < normalizedColumns.count - 1; index += 1) {
-      const currentColumnWidth = columnWidths[index] ?? normalizedColumns.width;
-      separatorPositions.push(cursorX + currentColumnWidth + normalizedColumns.gap / 2);
-      cursorX += currentColumnWidth + normalizedColumns.gap;
-    }
-
-    return separatorPositions;
+    // SD-2629: separator positions come from the one resolved column geometry (the same source as
+    // fill count and column widths), not a re-derivation here. The caller has already gated on
+    // withSeparator and count > 1; we only skip when a participating column is too narrow for a 1px
+    // line, preserving the prior <= 1 width guards (equal and explicit modes alike).
+    const geometry = getColumnGeometry(normalizeColumnLayout(columns, contentWidth));
+    if (geometry.length <= 1) return [];
+    if (geometry.some((column) => column.width <= 1)) return [];
+    return getColumnSeparatorPositionsFromGeometry(geometry, leftMargin);
   }
   private renderDecorationsForPage(pageEl: HTMLElement, page: ResolvedPage, pageIndex: number): void {
     if (this.isSemanticFlow) return;

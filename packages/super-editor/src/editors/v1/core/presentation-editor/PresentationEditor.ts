@@ -84,16 +84,6 @@ function serializePerIdNumbering(
   return parts.join(';');
 }
 
-function isBodyPageTokensEnabled(): boolean {
-  if (typeof process === 'undefined' || typeof process.env === 'undefined') {
-    return true;
-  }
-  const value = process.env.SD_BODY_PAGE_TOKENS;
-  if (value === 'false' || value === '0') return false;
-  if (value === 'true' || value === '1') return true;
-  return true;
-}
-
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import {
@@ -3442,7 +3432,7 @@ export class PresentationEditor extends EventEmitter {
       blocks,
       measures,
       fontSignature: this.#layoutFontSignature,
-      bookmarks: isBodyPageTokensEnabled() ? this.#layoutState.bookmarks : undefined,
+      bookmarks: this.#layoutState.bookmarks,
     });
 
     const isSemanticFlow = this.#layoutOptions.flowMode === 'semantic';
@@ -7063,7 +7053,7 @@ export class PresentationEditor extends EventEmitter {
           blocks: bodyBlocksForPaint,
           measures: bodyMeasuresForPaint,
           fontSignature,
-          bookmarks: isBodyPageTokensEnabled() ? bookmarks : undefined,
+          bookmarks,
         });
 
         headerLayouts = result.headers;

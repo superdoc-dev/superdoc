@@ -407,6 +407,7 @@ vi.mock('../../header-footer/EditorOverlayManager', () => ({
 describe('PresentationEditor', () => {
   let container: HTMLElement;
   let editor: PresentationEditor;
+  let originalBodyPageTokens: string | undefined;
 
   const makeNodeSelection = (from: number, to: number, node: Record<string, unknown>) => {
     const selection = Object.create(NodeSelection.prototype);
@@ -439,6 +440,8 @@ describe('PresentationEditor', () => {
   };
 
   beforeEach(() => {
+    originalBodyPageTokens = process.env.SD_BODY_PAGE_TOKENS;
+
     // Create a container element for the presentation editor
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -469,6 +472,12 @@ describe('PresentationEditor', () => {
   });
 
   afterEach(() => {
+    if (originalBodyPageTokens === undefined) {
+      delete process.env.SD_BODY_PAGE_TOKENS;
+    } else {
+      process.env.SD_BODY_PAGE_TOKENS = originalBodyPageTokens;
+    }
+
     if (editor) {
       editor.destroy();
     }
@@ -582,7 +591,49 @@ describe('PresentationEditor', () => {
   });
 
   describe('formatting marks repaint', () => {
+    it('passes body bookmarks to initial layout resolution when body page tokens are disabled', async () => {
+      // Disabling PAGE/NUMPAGES convergence must not suppress PAGEREF bookmark resolution.
+      process.env.SD_BODY_PAGE_TOKENS = 'false';
+
+      const bookmarks = new Map([['target', 100]]);
+      const blocks = [
+        {
+          kind: 'paragraph',
+          id: 'source',
+          runs: [{ text: '5', fontFamily: 'Arial', fontSize: 12 }],
+        },
+      ];
+      const measures = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 }],
+        },
+      ];
+      mockToFlowBlocks.mockReturnValue({ blocks, bookmarks });
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 800, h: 1000 },
+          pages: [{ number: 1, fragments: [{ kind: 'para', blockId: 'source', fromLine: 0, toLine: 1 }] }],
+        },
+        measures,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'body-page-tokens-disabled-pageref-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      await vi.waitFor(() => expect(mockResolveLayout).toHaveBeenCalled());
+
+      expect(mockResolveLayout.mock.calls[0]?.[0]).toMatchObject({ bookmarks });
+    });
+
     it('preserves body bookmarks when repainting the current layout', async () => {
+      // Disabling PAGE/NUMPAGES convergence must not suppress PAGEREF bookmark resolution.
+      process.env.SD_BODY_PAGE_TOKENS = 'false';
+
       const bookmarks = new Map([['target', 100]]);
       const blocks = [
         {

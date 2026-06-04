@@ -25,7 +25,7 @@ describe('sd:sectionPageCount translator', () => {
     expect(translator).toBeInstanceOf(NodeTranslator);
   });
 
-  it('encodes sd:sectionPageCount with marks, instruction, cached text, and pageNumberFormat', () => {
+  it('encodes sd:sectionPageCount with marks, instruction, cached text, and page-number formatting attrs', () => {
     const marks = [{ type: 'textStyle', attrs: { fontSize: '12pt' } }];
     vi.mocked(parseMarks).mockReturnValue(marks);
 
@@ -34,8 +34,9 @@ describe('sd:sectionPageCount translator', () => {
         {
           name: 'sd:sectionPageCount',
           attributes: {
-            instruction: 'SECTIONPAGES \\* roman',
-            pageNumberFormat: 'lowerRoman',
+            instruction: 'SECTIONPAGES \\# "000"',
+            pageNumberFormat: 'decimal',
+            pageNumberZeroPadding: 3,
             importedCachedText: 'iv',
           },
           elements: [{ name: 'w:rPr', elements: [{ name: 'w:b' }] }],
@@ -47,8 +48,9 @@ describe('sd:sectionPageCount translator', () => {
       type: 'section-page-count',
       attrs: {
         marksAsAttrs: marks,
-        instruction: 'SECTIONPAGES \\* roman',
-        pageNumberFormat: 'lowerRoman',
+        instruction: 'SECTIONPAGES \\# "000"',
+        pageNumberFormat: 'decimal',
+        pageNumberZeroPadding: 3,
         importedCachedText: 'iv',
       },
     });
@@ -86,6 +88,22 @@ describe('sd:sectionPageCount translator', () => {
 
     expect(result[1].elements[1].elements[0].text).toBe(' SECTIONPAGES \\* roman');
     expect(result[3].elements[1].elements[0].text).toBe('iii');
+  });
+
+  it('synthesizes SECTIONPAGES numeric picture switches when only zero-padding attrs are present', () => {
+    const result = config.decode({
+      node: {
+        type: 'section-page-count',
+        attrs: {
+          pageNumberFormat: 'decimal',
+          pageNumberZeroPadding: 3,
+          resolvedText: '007',
+        },
+      },
+    });
+
+    expect(result[1].elements[1].elements[0].text).toBe(' SECTIONPAGES \\* Arabic \\# 000');
+    expect(result[3].elements[1].elements[0].text).toBe('007');
   });
 
   it('falls back to plain SECTIONPAGES without instruction or supported format', () => {

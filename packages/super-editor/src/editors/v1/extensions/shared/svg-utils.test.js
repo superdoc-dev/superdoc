@@ -174,6 +174,22 @@ describe('svg-utils', () => {
         expect(span.textContent).toBe('III');
       });
 
+      it('should preserve chapter prefix when applying pageNumberFormat to section-aware PAGE display number', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'PAGE', pageNumberFormat: 'upperRoman', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          pageNumber: 7,
+          pageNumberText: '3\u2011III',
+          pageNumberDisplayNumber: 3,
+          pageNumberChapterText: '3',
+          pageNumberChapterSeparator: 'hyphen',
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('3\u2011III');
+      });
+
       it('should preserve SECTIONPAGES cached text when section page count is unavailable', () => {
         const textContent = {
           parts: [{ text: '3', fieldType: 'SECTIONPAGES', formatting: {} }],

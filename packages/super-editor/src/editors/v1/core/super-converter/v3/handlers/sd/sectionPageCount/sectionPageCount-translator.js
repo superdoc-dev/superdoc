@@ -35,6 +35,9 @@ const encode = (params) => {
   if (typeof node.attributes?.pageNumberFormat === 'string') {
     processedNode.attrs.pageNumberFormat = node.attributes.pageNumberFormat;
   }
+  if (node.attributes?.pageNumberZeroPadding != null) {
+    processedNode.attrs.pageNumberZeroPadding = Number(node.attributes.pageNumberZeroPadding);
+  }
   if (node.attributes?.importedCachedText) {
     processedNode.attrs.importedCachedText = node.attributes.importedCachedText;
   }
@@ -69,8 +72,16 @@ function getSectionPagesInstructionText(attrs = {}) {
   if (typeof attrs.pageNumberFormat === 'string') {
     const instructionSwitch = pageNumberFormatToInstructionSwitch(attrs.pageNumberFormat);
     if (instructionSwitch) {
-      return `SECTIONPAGES \\* ${instructionSwitch}`;
+      const numericPicture =
+        typeof attrs.pageNumberZeroPadding === 'number' && attrs.pageNumberZeroPadding > 0
+          ? ` \\# ${'0'.repeat(attrs.pageNumberZeroPadding)}`
+          : '';
+      return `SECTIONPAGES \\* ${instructionSwitch}${numericPicture}`;
     }
+  }
+
+  if (typeof attrs.pageNumberZeroPadding === 'number' && attrs.pageNumberZeroPadding > 0) {
+    return `SECTIONPAGES \\# ${'0'.repeat(attrs.pageNumberZeroPadding)}`;
   }
 
   return 'SECTIONPAGES';

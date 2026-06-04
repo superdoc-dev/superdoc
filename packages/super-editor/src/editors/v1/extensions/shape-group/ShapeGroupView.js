@@ -284,6 +284,8 @@ export class ShapeGroupView {
         const pageNumber = this.editor?.options?.currentPageNumber;
         const pageNumberText = this.editor?.options?.currentPageNumberText;
         const pageNumberDisplayNumber = this.editor?.options?.currentPageDisplayNumber;
+        const pageNumberChapterText = this.editor?.options?.currentPageChapterNumberText;
+        const pageNumberChapterSeparator = this.editor?.options?.currentPageChapterSeparator;
         const totalPages = this.editor?.options?.totalPageCount;
         const sectionPageCount = this.editor?.options?.sectionPageCount;
         const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
@@ -292,6 +294,8 @@ export class ShapeGroupView {
           pageNumber,
           pageNumberText,
           pageNumberDisplayNumber,
+          pageNumberChapterText,
+          pageNumberChapterSeparator,
           totalPages,
           sectionPageCount,
         });
@@ -365,6 +369,8 @@ export class ShapeGroupView {
         const pageNumber = this.editor?.options?.currentPageNumber;
         const pageNumberText = this.editor?.options?.currentPageNumberText;
         const pageNumberDisplayNumber = this.editor?.options?.currentPageDisplayNumber;
+        const pageNumberChapterText = this.editor?.options?.currentPageChapterNumberText;
+        const pageNumberChapterSeparator = this.editor?.options?.currentPageChapterSeparator;
         const totalPages = this.editor?.options?.totalPageCount;
         const sectionPageCount = this.editor?.options?.sectionPageCount;
         const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
@@ -373,6 +379,8 @@ export class ShapeGroupView {
           pageNumber,
           pageNumberText,
           pageNumberDisplayNumber,
+          pageNumberChapterText,
+          pageNumberChapterSeparator,
           totalPages,
           sectionPageCount,
         });
@@ -497,6 +505,8 @@ export class ShapeGroupView {
       const pageNumber = this.editor?.options?.currentPageNumber;
       const pageNumberText = this.editor?.options?.currentPageNumberText;
       const pageNumberDisplayNumber = this.editor?.options?.currentPageDisplayNumber;
+      const pageNumberChapterText = this.editor?.options?.currentPageChapterNumberText;
+      const pageNumberChapterSeparator = this.editor?.options?.currentPageChapterSeparator;
       const totalPages = this.editor?.options?.totalPageCount;
       const sectionPageCount = this.editor?.options?.sectionPageCount;
       const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
@@ -505,6 +515,8 @@ export class ShapeGroupView {
         pageNumber,
         pageNumberText,
         pageNumberDisplayNumber,
+        pageNumberChapterText,
+        pageNumberChapterSeparator,
         totalPages,
         sectionPageCount,
       });

@@ -1,4 +1,4 @@
-import { formatPageNumber, type PageNumberFormat } from '@superdoc/contracts';
+import { formatPageNumberFieldValue, type PageNumberFieldFormat } from '@superdoc/contracts';
 import type { Editor } from '../../core/Editor.js';
 
 export function resolveSectionPageCountFieldValue(
@@ -8,9 +8,20 @@ export function resolveSectionPageCountFieldValue(
   const sectionPageCount = editor.options?.sectionPageCount;
   if (sectionPageCount == null) return null;
 
-  const pageNumberFormat = node.attrs?.pageNumberFormat;
-  if (typeof pageNumberFormat === 'string' && pageNumberFormat) {
-    return formatPageNumber(Number(sectionPageCount) || 1, pageNumberFormat as PageNumberFormat);
+  const pageNumberFormat =
+    typeof node.attrs?.pageNumberFormat === 'string' && node.attrs.pageNumberFormat
+      ? node.attrs.pageNumberFormat
+      : undefined;
+  const pageNumberZeroPadding =
+    typeof node.attrs?.pageNumberZeroPadding === 'number' && Number.isFinite(node.attrs.pageNumberZeroPadding)
+      ? node.attrs.pageNumberZeroPadding
+      : undefined;
+
+  if (pageNumberFormat || pageNumberZeroPadding != null) {
+    return formatPageNumberFieldValue(Number(sectionPageCount) || 1, {
+      ...(pageNumberFormat ? { format: pageNumberFormat as PageNumberFieldFormat['format'] } : {}),
+      ...(pageNumberZeroPadding != null ? { zeroPadding: pageNumberZeroPadding } : {}),
+    });
   }
   return String(sectionPageCount);
 }

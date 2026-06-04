@@ -1,4 +1,4 @@
-import { formatPageNumber } from '@superdoc/contracts';
+import { formatChapterPageNumberText, formatPageNumber } from '@superdoc/contracts';
 
 /**
  * Shared utility functions for SVG shape rendering
@@ -82,6 +82,8 @@ export function createGradient(gradientData, gradientId) {
  * @param {number} [options.pageNumber] - Current page number for PAGE field resolution
  * @param {string} [options.pageNumberText] - Current formatted PAGE display text
  * @param {number} [options.pageNumberDisplayNumber] - Current numeric PAGE display value for local field formatting
+ * @param {string} [options.pageNumberChapterText] - Current chapter prefix text for section-aware PAGE display
+ * @param {string} [options.pageNumberChapterSeparator] - Current chapter separator for section-aware PAGE display
  * @param {number} [options.totalPages] - Total page count for NUMPAGES field resolution
  * @param {number} [options.sectionPageCount] - Current section page count for SECTIONPAGES field resolution
  * @returns {SVGForeignObjectElement} The created foreignObject element containing the formatted text
@@ -93,6 +95,8 @@ export function createTextElement(textContent, textAlign, width, height, options
     pageNumber,
     pageNumberText,
     pageNumberDisplayNumber,
+    pageNumberChapterText,
+    pageNumberChapterSeparator,
     totalPages,
     sectionPageCount,
   } = options;
@@ -145,7 +149,14 @@ export function createTextElement(textContent, textAlign, width, height, options
   const resolveFieldText = (part) => {
     if (part.fieldType === 'PAGE') {
       const count = pageNumberDisplayNumber ?? pageNumber ?? 1;
-      return part.pageNumberFormat ? formatPageNumber(count, part.pageNumberFormat) : (pageNumberText ?? String(count));
+      if (!part.pageNumberFormat) {
+        return pageNumberText ?? String(count);
+      }
+      return formatChapterPageNumberText({
+        pageComponent: formatPageNumber(count, part.pageNumberFormat),
+        chapterNumberText: pageNumberChapterText,
+        chapterSeparator: pageNumberChapterSeparator,
+      });
     }
     if (part.fieldType === 'NUMPAGES') {
       return totalPages != null ? String(totalPages) : '1';

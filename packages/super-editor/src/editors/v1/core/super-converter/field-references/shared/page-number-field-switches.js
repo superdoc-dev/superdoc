@@ -17,7 +17,7 @@ const CASE_INSENSITIVE_GENERAL_FORMATS = new Map([
 
 /**
  * @param {string} instruction
- * @param {'PAGE' | 'NUMPAGES'} fieldType
+ * @param {'PAGE' | 'NUMPAGES' | 'SECTIONPAGES'} fieldType
  * @returns {{ instruction?: string, pageNumberFormat?: string, pageNumberZeroPadding?: number }}
  */
 export function parsePageNumberFieldSwitches(instruction, fieldType) {

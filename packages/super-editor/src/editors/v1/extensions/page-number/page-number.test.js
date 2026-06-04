@@ -339,6 +339,25 @@ describe('AutoPageNumberNodeView', () => {
     expect(nodeView.dom.getAttribute('data-id')).toBe('auto-section-pages');
   });
 
+  it('renders zero-padded section page count node', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: { sectionPageCount: 4, totalPageCount: 9 },
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'section-page-count' }, attrs: { pageNumberZeroPadding: 3 } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('004');
+  });
+
   it('renders imported SECTIONPAGES cached text when section page context is unavailable', () => {
     const doc = {
       resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),

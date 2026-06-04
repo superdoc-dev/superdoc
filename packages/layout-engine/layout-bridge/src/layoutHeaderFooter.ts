@@ -10,6 +10,7 @@ import type {
   TableBlock,
   TextRun,
 } from '@superdoc/contracts';
+import { formatChapterPageNumberText } from '@superdoc/contracts';
 import { formatPageNumberFieldValue, layoutHeaderFooter, type HeaderFooterConstraints } from '@superdoc/layout-engine';
 import { MeasureCache } from './cache';
 import { resolveHeaderFooterTokens, cloneHeaderFooterBlocks } from './resolveHeaderFooterTokens';
@@ -217,7 +218,11 @@ function canUseDigitBucketingForVariant(
     const renderedText =
       strategy.kind === 'fieldFormat'
         ? Number.isFinite(pageInfo.displayNumber)
-          ? formatPageNumberFieldValue(pageInfo.displayNumber ?? pageNumber, strategy.fieldFormat)
+          ? formatChapterPageNumberText({
+              pageComponent: formatPageNumberFieldValue(pageInfo.displayNumber ?? pageNumber, strategy.fieldFormat),
+              chapterNumberText: pageInfo.chapterNumberText,
+              chapterSeparator: pageInfo.chapterSeparator,
+            })
           : null
         : pageInfo.displayText;
     return renderedText ? getBucketForRenderedPageNumberText(renderedText) : null;

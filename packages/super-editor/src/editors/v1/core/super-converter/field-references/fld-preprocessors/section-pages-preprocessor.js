@@ -1,4 +1,4 @@
-import { parsePageInstruction } from './page-instruction.js';
+import { parsePageNumberFieldSwitches } from '../shared/page-number-field-switches.js';
 
 /**
  * Processes a SECTIONPAGES instruction and creates a `sd:sectionPageCount` node.
@@ -18,13 +18,18 @@ export function preProcessSectionPagesInstruction(
   fieldRunRPr = null,
 ) {
   const effectiveFieldRunRPr = fieldRunRPr ?? options?.fieldRunRPr ?? (options?.name === 'w:rPr' ? options : null);
-  const parsedInstruction = parsePageInstruction(instrText, 'SECTIONPAGES');
+  const normalizedInstruction =
+    typeof instrText === 'string' && instrText.trim() ? instrText.trim().replace(/\s+/g, ' ') : 'SECTIONPAGES';
+  const parsedInstruction = parsePageNumberFieldSwitches(normalizedInstruction, 'SECTIONPAGES');
   const sectionPageCountNode = {
     name: 'sd:sectionPageCount',
     type: 'element',
     attributes: {
-      instruction: parsedInstruction.instruction,
+      instruction: normalizedInstruction,
       ...(parsedInstruction.pageNumberFormat ? { pageNumberFormat: parsedInstruction.pageNumberFormat } : {}),
+      ...(parsedInstruction.pageNumberZeroPadding != null
+        ? { pageNumberZeroPadding: parsedInstruction.pageNumberZeroPadding }
+        : {}),
     },
   };
 

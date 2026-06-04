@@ -1,7 +1,7 @@
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
 import { isHeadless } from '@utils/headless-helpers.js';
-import { formatPageNumber, formatSectionPageNumberText } from '@superdoc/contracts';
+import { formatPageNumberFieldValue, formatSectionPageNumberText } from '@superdoc/contracts';
 /**
  * Configuration options for PageNumber
  * @typedef {Object} PageNumberOptions
@@ -311,6 +311,10 @@ export const SectionPageCount = Node.create({
         default: null,
         rendered: false,
       },
+      pageNumberZeroPadding: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 
@@ -390,10 +394,19 @@ const getNodeAttributes = (nodeName, editor, node = null) => {
     case 'section-page-count': {
       const sectionPageCount = editor.options.sectionPageCount;
       const cachedText = node?.attrs?.resolvedText ?? node?.attrs?.importedCachedText ?? node?.textContent ?? '1';
+      const pageNumberFormat =
+        typeof node?.attrs?.pageNumberFormat === 'string' ? node.attrs.pageNumberFormat : undefined;
+      const pageNumberZeroPadding =
+        typeof node?.attrs?.pageNumberZeroPadding === 'number' && Number.isFinite(node.attrs.pageNumberZeroPadding)
+          ? node.attrs.pageNumberZeroPadding
+          : undefined;
       const text =
         sectionPageCount != null
-          ? node?.attrs?.pageNumberFormat
-            ? formatPageNumber(Number(sectionPageCount) || 1, node.attrs.pageNumberFormat)
+          ? pageNumberFormat || pageNumberZeroPadding != null
+            ? formatPageNumberFieldValue(Number(sectionPageCount) || 1, {
+                ...(pageNumberFormat ? { format: pageNumberFormat } : {}),
+                ...(pageNumberZeroPadding != null ? { zeroPadding: pageNumberZeroPadding } : {}),
+              })
             : sectionPageCount
           : cachedText;
       return {

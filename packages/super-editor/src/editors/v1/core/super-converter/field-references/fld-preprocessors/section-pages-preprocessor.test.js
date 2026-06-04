@@ -4,25 +4,30 @@ import { preProcessSectionPagesInstruction } from './section-pages-preprocessor.
 
 describe('preProcessSectionPagesInstruction', () => {
   it.each([
-    ['SECTIONPAGES', undefined],
-    ['sectionpages', undefined],
-    ['SectionPages', undefined],
-    ['SECTIONPAGES \\* roman', 'lowerRoman'],
-    ['SECTIONPAGES \\* Roman \\* MERGEFORMAT', 'upperRoman'],
-    ['SECTIONPAGES \\* Unsupported \\* MERGEFORMAT', undefined],
-  ])('creates sd:sectionPageCount and parses supported value format: %s', (instruction, pageNumberFormat) => {
-    const result = preProcessSectionPagesInstruction([], instruction, null);
+    ['SECTIONPAGES', undefined, undefined],
+    ['sectionpages', undefined, undefined],
+    ['SectionPages', undefined, undefined],
+    ['SECTIONPAGES \\* roman', 'lowerRoman', undefined],
+    ['SECTIONPAGES \\* Roman \\* MERGEFORMAT', 'upperRoman', undefined],
+    ['SECTIONPAGES \\# "000"', 'decimal', 3],
+    ['SECTIONPAGES \\* Unsupported \\* MERGEFORMAT', undefined, undefined],
+  ])(
+    'creates sd:sectionPageCount and parses supported value format: %s',
+    (instruction, pageNumberFormat, pageNumberZeroPadding) => {
+      const result = preProcessSectionPagesInstruction([], instruction, null);
 
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      name: 'sd:sectionPageCount',
-      type: 'element',
-      attributes: {
-        instruction,
-        ...(pageNumberFormat ? { pageNumberFormat } : {}),
-      },
-    });
-  });
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        name: 'sd:sectionPageCount',
+        type: 'element',
+        attributes: {
+          instruction: instruction.trim().replace(/\s+/g, ' '),
+          ...(pageNumberFormat ? { pageNumberFormat } : {}),
+          ...(pageNumberZeroPadding != null ? { pageNumberZeroPadding } : {}),
+        },
+      });
+    },
+  );
 
   it('preserves cached text and content run styling', () => {
     const rPr = { name: 'w:rPr', elements: [{ name: 'w:b' }] };

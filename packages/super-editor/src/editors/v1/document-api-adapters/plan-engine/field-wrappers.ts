@@ -30,6 +30,7 @@ import { clearIndexCache } from '../helpers/index-cache.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { getWordStatistics, resolveDocumentStatFieldValue, resolveMainBodyEditor } from '../helpers/word-statistics.js';
 import { resolveSectionPageCountFieldValue } from '../helpers/section-page-count.js';
+import { parsePageNumberFieldSwitches } from '../../core/super-converter/field-references/shared/page-number-field-switches.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -112,6 +113,10 @@ export function fieldsInsertWrapper(
     return insertNumPagesField(editor, resolved, options);
   }
 
+  if (fieldType === 'SECTIONPAGES') {
+    return insertSectionPagesField(editor, input, resolved, options);
+  }
+
   return insertRawField(editor, input, resolved, options);
 }
 
@@ -180,6 +185,55 @@ function insertNumPagesField(
     editor,
     (): boolean => {
       const node = nodeType.create({});
+      const { tr } = editor.state;
+      tr.insert(resolved.from, node);
+      editor.dispatch(tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Insert produced no change.');
+  return fieldSuccess(computeFieldAddress(editor.state.doc, resolved.from));
+}
+
+function insertSectionPagesField(
+  editor: Editor,
+  input: FieldInsertInput,
+  resolved: { from: number },
+  options?: MutationOptions,
+): FieldMutationResult {
+  const nodeType = editor.schema.nodes['section-page-count'];
+  if (!nodeType) {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      'fields.insert: section-page-count node type not in schema.',
+    );
+  }
+
+  const normalizedInstruction = input.instruction.trim().replace(/\s+/g, ' ');
+  const parsedInstruction = parsePageNumberFieldSwitches(normalizedInstruction, 'SECTIONPAGES');
+  const initialAttrs = {
+    instruction: normalizedInstruction,
+    ...(parsedInstruction.pageNumberFormat ? { pageNumberFormat: parsedInstruction.pageNumberFormat } : {}),
+    ...(parsedInstruction.pageNumberZeroPadding != null
+      ? { pageNumberZeroPadding: parsedInstruction.pageNumberZeroPadding }
+      : {}),
+  };
+  const initialValue = resolveSectionPageCountFieldValue(editor, { attrs: initialAttrs }) ?? '';
+
+  const receipt = executeDomainCommand(
+    editor,
+    (): boolean => {
+      const textChild = initialValue ? editor.schema.text(initialValue) : null;
+      const node = nodeType.create(
+        {
+          ...initialAttrs,
+          ...(initialValue ? { resolvedText: initialValue } : {}),
+        },
+        textChild,
+      );
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
       editor.dispatch(tr);

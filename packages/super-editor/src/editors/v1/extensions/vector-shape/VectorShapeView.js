@@ -165,6 +165,8 @@ export class VectorShapeView {
         const pageNumber = this.editor?.options?.currentPageNumber;
         const pageNumberText = this.editor?.options?.currentPageNumberText;
         const pageNumberDisplayNumber = this.editor?.options?.currentPageDisplayNumber;
+        const pageNumberChapterText = this.editor?.options?.currentPageChapterNumberText;
+        const pageNumberChapterSeparator = this.editor?.options?.currentPageChapterSeparator;
         const totalPages = this.editor?.options?.totalPageCount;
         const sectionPageCount = this.editor?.options?.sectionPageCount;
         const textElement = this.createTextElement(attrs.textContent, attrs.textAlign, attrs.width, attrs.height, {
@@ -173,6 +175,8 @@ export class VectorShapeView {
           pageNumber,
           pageNumberText,
           pageNumberDisplayNumber,
+          pageNumberChapterText,
+          pageNumberChapterSeparator,
           totalPages,
           sectionPageCount,
         });

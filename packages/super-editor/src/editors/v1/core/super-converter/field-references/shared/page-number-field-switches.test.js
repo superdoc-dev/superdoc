@@ -32,6 +32,14 @@ describe('parsePageNumberFieldSwitches', () => {
     expect(parsePageNumberFieldSwitches(instruction, 'NUMPAGES')).toEqual(expected);
   });
 
+  it('parses SECTIONPAGES zero-padding picture switches', () => {
+    expect(parsePageNumberFieldSwitches('SECTIONPAGES \\# "000"', 'SECTIONPAGES')).toEqual({
+      instruction: 'SECTIONPAGES \\# "000"',
+      pageNumberFormat: 'decimal',
+      pageNumberZeroPadding: 3,
+    });
+  });
+
   it('preserves unsupported switched instructions without format metadata', () => {
     expect(parsePageNumberFieldSwitches('PAGE \\* OrdText', 'PAGE')).toEqual({ instruction: 'PAGE \\* OrdText' });
   });

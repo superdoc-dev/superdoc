@@ -89,7 +89,13 @@ export const FieldUpdate = Extension.create({
             }
           }
 
-          const fields = findFieldsInRange(state.doc, from, to);
+          const activeState = tocPathRan && editor?.state?.doc ? editor.state : state;
+          const activeDoc = activeState.doc ?? state.doc;
+          const activeSchema = activeState.schema ?? state.schema;
+          const activeFrom = Math.min(from, activeDoc.content.size);
+          const activeTo = to >= state.doc.content.size ? activeDoc.content.size : Math.min(to, activeDoc.content.size);
+
+          const fields = findFieldsInRange(activeDoc, activeFrom, activeTo);
           const updatable = fields.filter((f) => UPDATABLE_FIELD_TYPES.has(f.fieldType));
           const hasSeqSelection = fields.some((field) => field.fieldType === 'SEQ');
           if (updatable.length === 0 && !hasSeqSelection) return tocPathRan;
@@ -97,7 +103,7 @@ export const FieldUpdate = Extension.create({
           const mainEditor = resolveMainBodyEditor(editor);
           const stats = getWordStatistics(mainEditor);
 
-          const tr = state.tr;
+          const tr = activeState.tr;
           let changed = false;
 
           // Process in reverse position order so earlier positions stay valid
@@ -118,7 +124,7 @@ export const FieldUpdate = Extension.create({
               // Page-count fields store their display value as a text child,
               // not just an attr. Replace the entire node so both the text
               // content and resolvedText stay in sync.
-              const textChild = freshValue ? state.schema.text(freshValue) : null;
+              const textChild = freshValue ? activeSchema.text(freshValue) : null;
               const newNode = node.type.create({ ...node.attrs, resolvedText: freshValue }, textChild);
               tr.replaceWith(field.pos, field.pos + node.nodeSize, newNode);
               changed = true;
@@ -137,7 +143,7 @@ export const FieldUpdate = Extension.create({
           if (hasSeqSelection) {
             const result = updateSequenceFieldsInTransaction({
               tr,
-              schema: state.schema,
+              schema: activeSchema,
               scope: { kind: 'all' },
               converterContext: getSequenceFieldUpdaterConverterContext(editor),
             });

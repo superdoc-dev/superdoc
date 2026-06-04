@@ -521,8 +521,7 @@ describe('updateFieldsInSelection — TOC + stat fields combined (regression)', 
     expect(updatedValues).toEqual(['1', '2']);
   });
 
-  it('updates TOC and SEQ fields on the same F9 command without merging TOC transactions', () => {
-    const tocUpdate = vi.fn(() => ({ success: true }));
+  it('updates SEQ from fresh state after TOC update dispatches its own transaction', () => {
     const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
     const text = (t) => mixedSchema.text(t);
     const toc = mixedSchema.nodes.tableOfContents.create({ sdBlockId: 'toc-1' }, [para([text('entry')])]);
@@ -532,10 +531,22 @@ describe('updateFieldsInSelection — TOC + stat fields combined (regression)', 
       resolvedNumber: '9',
     });
     const doc = mixedSchema.nodes.doc.create({}, [toc, para([seqField])]);
-    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    let editorState = EditorState.create({ schema: mixedSchema, doc });
     const editor = {
-      doc: { toc: { update: tocUpdate } },
-      state: editorState,
+      doc: {
+        toc: {
+          update: vi.fn(() => {
+            // Simulate toc.update dispatching independently before the SEQ
+            // path runs. The later SEQ transaction must be based on this fresh
+            // state, preserving the TOC edit and the shifted SEQ position.
+            editorState = editorState.apply(editorState.tr.insertText(' updated', 7));
+            return { success: true };
+          }),
+        },
+      },
+      get state() {
+        return editorState;
+      },
       converter: { translatedLinkedStyles: { docDefaults: {}, styles: {} }, translatedNumbering: {} },
     };
 
@@ -552,10 +563,18 @@ describe('updateFieldsInSelection — TOC + stat fields combined (regression)', 
     });
 
     expect(result).toBe(true);
-    expect(tocUpdate).toHaveBeenCalledTimes(1);
+    expect(editor.doc.toc.update).toHaveBeenCalledTimes(1);
     expect(outerTr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
     expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(dispatch.mock.calls[0][0].doc.nodeAt(toc.nodeSize + 1).attrs.resolvedNumber).toBe('1');
+
+    const dispatchedDoc = dispatch.mock.calls[0][0].doc;
+    expect(dispatchedDoc.textContent).toContain('entry updated');
+    const seqValues = [];
+    dispatchedDoc.descendants((node) => {
+      if (node.type.name === 'sequenceField') seqValues.push(node.attrs.resolvedNumber);
+      return true;
+    });
+    expect(seqValues).toEqual(['1']);
   });
 });
 

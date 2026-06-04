@@ -100,13 +100,15 @@ describe('normalizeColumnLayout', () => {
     });
   });
 
-  it('scales explicit widths to the available width', () => {
+  it('does not scale explicit widths; authored widths are preserved (SD-2629 step 4)', () => {
+    // Word renders authored column widths as-is and leaves trailing space when they underfill, so
+    // [100, 200] in a 600px content area stays [100, 200] rather than stretching to [200, 400].
     expect(normalizeColumnLayout({ count: 2, gap: 24, widths: [100, 200], equalWidth: false }, 624)).toEqual({
       count: 2,
       gap: 24,
-      widths: [200, 400],
+      widths: [100, 200],
       equalWidth: false,
-      width: 400,
+      width: 200,
     });
   });
 
@@ -160,13 +162,13 @@ describe('getColumnGeometry + geometry helpers (SD-2629, behavior-preserving)', 
     ]);
   });
 
-  it('mirrors explicit (scaled) widths', () => {
+  it('mirrors explicit widths without scaling (SD-2629 step 4)', () => {
     const geom = getColumnGeometry(
       normalizeColumnLayout({ count: 2, gap: 24, widths: [100, 200], equalWidth: false }, 624),
     );
     expect(geom).toEqual([
-      { index: 0, x: 0, width: 200, gapAfter: 24 },
-      { index: 1, x: 224, width: 400, gapAfter: 0 },
+      { index: 0, x: 0, width: 100, gapAfter: 24 },
+      { index: 1, x: 124, width: 200, gapAfter: 0 },
     ]);
   });
 
@@ -195,10 +197,11 @@ describe('getColumnGeometry + geometry helpers (SD-2629, behavior-preserving)', 
     expect(getColumnAtX(geom, 96 + 100, 96)).toBe(0);
   });
 
-  it('does NOT let per-column gaps drive geometry yet (step 1 is behavior-preserving)', () => {
-    // `gaps` is raw explicit-mode input; geometry still uses the scalar gap until the step-4 flip.
+  it('lets per-column gaps drive geometry (SD-2629 step 4)', () => {
+    // gaps[i] is the gap after column i; geometry uses it instead of the uniform scalar gap.
     const geom = getColumnGeometry({ count: 2, gap: 24, widths: [300, 300], gaps: [999], width: 300 });
-    expect(geom[0].gapAfter).toBe(24);
+    expect(geom[0].gapAfter).toBe(999);
+    expect(geom[1].x).toBe(300 + 999);
   });
 });
 

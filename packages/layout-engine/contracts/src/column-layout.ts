@@ -112,19 +112,19 @@ export function resolveColumnLayout(input: ColumnLayout): ColumnLayout {
 }
 
 /**
- * Build resolved per-column geometry from already-resolved widths and the uniform scalar gap.
- * SD-2629 step 1 keeps this behavior-preserving: it mirrors today's normalized output (scaled
- * widths, uniform gap). Per-column `gaps` do NOT drive geometry until the semantic flip (step 4).
+ * Build resolved per-column geometry from already-resolved widths. The gap after each column is its
+ * own `gaps[i]` when provided (SD-2629 step 4), falling back to the uniform scalar gap; the last
+ * column has no following gap. The separator sits at the midpoint of that column's own gap.
  */
-function buildColumnGeometry(widths: number[], gap: number, withSeparator: boolean): ColumnGeometry[] {
+function buildColumnGeometry(widths: number[], gap: number, withSeparator: boolean, gaps?: number[]): ColumnGeometry[] {
   const geometry: ColumnGeometry[] = [];
   let x = 0;
   for (let i = 0; i < widths.length; i += 1) {
     const width = widths[i];
     const isLast = i === widths.length - 1;
-    const gapAfter = isLast ? 0 : gap;
+    const gapAfter = isLast ? 0 : (gaps?.[i] ?? gap);
     const col: ColumnGeometry = { index: i, x, width, gapAfter };
-    if (withSeparator && !isLast) col.separatorX = x + width + gap / 2;
+    if (withSeparator && !isLast) col.separatorX = x + width + gapAfter / 2;
     geometry.push(col);
     x += width + gapAfter;
   }
@@ -156,11 +156,17 @@ export function normalizeColumnLayout(
     widths.push(...Array.from({ length: count - widths.length }, () => fallbackWidth));
   }
 
-  const totalExplicitWidth = widths.reduce((sum, width) => sum + width, 0);
-  if (availableWidth > 0 && totalExplicitWidth > 0) {
-    const scale = availableWidth / totalExplicitWidth;
-    widths = widths.map((width) => Math.max(1, width * scale));
+  // Floor each column to >= 1px. Explicit widths are NOT scaled to fill the content area: Word
+  // renders authored widths as-is (a 2880tw column stays 2880tw, leaving trailing space when the
+  // columns underfill), so scaling them up would distort the document. Equal-mode widths already
+  // divide availableWidth evenly. (SD-2629 step 4)
+  if (availableWidth > 0) {
+    widths = widths.map((value) => Math.max(1, value));
   }
+
+  // Per-column gaps drive geometry in explicit mode (step 4); equal mode uses the uniform gap.
+  const gaps =
+    explicitWidths.length > 0 && Array.isArray(input?.gaps) ? input.gaps.slice(0, Math.max(0, count - 1)) : undefined;
 
   const width = widths.reduce((max, value) => Math.max(max, value), 0);
 
@@ -177,6 +183,7 @@ export function normalizeColumnLayout(
     count,
     gap,
     ...(widths.length > 0 ? { widths } : {}),
+    ...(gaps && gaps.length > 0 ? { gaps } : {}),
     ...(input?.equalWidth !== undefined ? { equalWidth: input.equalWidth } : {}),
     ...(input?.withSeparator !== undefined ? { withSeparator: input.withSeparator } : {}),
     width,
@@ -192,7 +199,7 @@ export function normalizeColumnLayout(
 export function getColumnGeometry(normalized: NormalizedColumnLayout): ColumnGeometry[] {
   const widths =
     Array.isArray(normalized.widths) && normalized.widths.length > 0 ? normalized.widths : [normalized.width];
-  return buildColumnGeometry(widths, normalized.gap, Boolean(normalized.withSeparator));
+  return buildColumnGeometry(widths, normalized.gap, Boolean(normalized.withSeparator), normalized.gaps);
 }
 
 // ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ import type {
   TableWrap,
   ColumnLayoutForAnchor,
 } from '@superdoc/contracts';
-import { resolveAnchoredGraphicX } from '@superdoc/contracts';
+import { resolveAnchoredGraphicX, getColumnGeometry, getColumnWidth, getColumnX } from '@superdoc/contracts';
 
 type FloatBlock = ImageBlock | DrawingBlock;
 type FloatMeasure = ImageMeasure | DrawingMeasure;
@@ -234,8 +234,9 @@ export function createFloatingObjectManager(
       const leftFloats: ExclusionZone[] = [];
       const rightFloats: ExclusionZone[] = [];
 
-      // Use absolute coordinates for comparison - columnOrigin is the left edge of content
-      const columnOrigin = marginLeft + columnIndex * (currentColumns.width + currentColumns.gap);
+      // Use absolute coordinates for comparison - columnOrigin is the left edge of content.
+      // Resolved geometry honors per-column widths/gaps (SD-2629); equal columns match the old stride.
+      const columnOrigin = getColumnX(getColumnGeometry(currentColumns), columnIndex, marginLeft);
       const columnCenter = columnOrigin + baseWidth / 2;
 
       for (const zone of wrappingZones) {
@@ -374,7 +375,8 @@ function computeTableAnchorX(
   const contentWidth = pageWidth != null ? Math.max(1, pageWidth - (marginLeft + marginRight)) : columns.width;
 
   const contentLeft = marginLeft;
-  const columnLeft = contentLeft + columnIndex * (columns.width + columns.gap);
+  const geometry = getColumnGeometry(columns);
+  const columnLeft = getColumnX(geometry, columnIndex, contentLeft);
 
   const relativeFrom = anchor.hRelativeFrom ?? 'column';
 
@@ -395,7 +397,7 @@ function computeTableAnchorX(
   } else {
     // 'column' (default)
     baseX = columnLeft;
-    availableWidth = columns.width;
+    availableWidth = getColumnWidth(geometry, columnIndex);
   }
 
   // Handle table-specific alignment values (inside/outside map to left/right for now)

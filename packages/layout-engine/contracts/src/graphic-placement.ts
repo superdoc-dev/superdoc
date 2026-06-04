@@ -1,3 +1,5 @@
+import { getColumnGeometry, getColumnX, getColumnWidth } from './column-layout.js';
+
 type AnchorVRelative = 'paragraph' | 'page' | 'margin';
 type AnchorHRelative = 'column' | 'page' | 'margin';
 type AnchorAlignH = 'left' | 'center' | 'right';
@@ -7,6 +9,11 @@ export type ColumnLayoutForAnchor = {
   width: number;
   gap: number;
   count: number;
+  // Per-column widths/gaps from the resolved (normalized) columns. When present, column-relative
+  // anchor x honors them via getColumnGeometry instead of a uniform columnIndex * (width + gap)
+  // stride; equal columns reduce to the old stride. (SD-2629)
+  widths?: number[];
+  gaps?: number[];
 };
 
 /**
@@ -125,7 +132,10 @@ export function resolveAnchoredGraphicX(
   const contentWidth = pageWidth != null ? Math.max(1, pageWidth - (marginLeft + marginRight)) : columns.width;
 
   const contentLeft = marginLeft;
-  const columnLeft = contentLeft + columnIndex * (columns.width + columns.gap);
+  // Column origin/width from the resolved geometry so column-relative anchors honor per-column
+  // widths and gaps (SD-2629) rather than a uniform columnIndex * (width + gap) stride. Equal
+  // columns reduce to the old stride. Page/margin semantics are unchanged.
+  const geometry = getColumnGeometry(columns);
 
   const relativeFrom = anchor.hRelativeFrom ?? 'column';
 
@@ -138,8 +148,8 @@ export function resolveAnchoredGraphicX(
     baseX = contentLeft;
     availableWidth = contentWidth;
   } else {
-    baseX = columnLeft;
-    availableWidth = columns.width;
+    baseX = getColumnX(geometry, columnIndex, contentLeft);
+    availableWidth = getColumnWidth(geometry, columnIndex);
   }
 
   if (alignH === 'left') {

@@ -1810,9 +1810,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // own geometry. Behavior-identical to getCurrentColumns for the latest state and constant margins,
   // and more correct for older pages once section margins/size vary.
   const getColumnGeometryForState = (state: PageState): ColumnGeometry[] => {
-    const cols = getActiveColumnsForState(state);
+    // Columns for THIS page: the active mid-page region's config if one applies, else the page's own
+    // creation-time snapshot (page.columns, the resolved metadata set in createPage). NOT
+    // getActiveColumnsForState, which falls back to the global latest-section columns and would
+    // mis-position an older page once columns vary across sections. (SD-2629)
+    const cols =
+      state.activeConstraintIndex >= 0 && state.constraintBoundaries[state.activeConstraintIndex]
+        ? state.constraintBoundaries[state.activeConstraintIndex].columns
+        : (state.page.columns ?? { count: 1, gap: 0 });
     const pageWidth = state.page.size?.w ?? pageSize.w;
-    // page.margins is always set by startNewPage but optional in the type; fall back to the current
+    // page.margins is always set by createPage but optional in the type; fall back to the current
     // active margins (the guard never fires at runtime).
     const left = state.page.margins?.left ?? activeLeftMargin;
     const right = state.page.margins?.right ?? activeRightMargin;

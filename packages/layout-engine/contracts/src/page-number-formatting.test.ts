@@ -24,6 +24,9 @@ describe('page number formatting', () => {
     expect(formatPageNumber(21, 'ordinal')).toBe('21st');
     expect(formatPageNumber(22, 'ordinal')).toBe('22nd');
     expect(formatPageNumber(23, 'ordinal')).toBe('23rd');
+    expect(formatPageNumber(111, 'ordinal')).toBe('111th');
+    expect(formatPageNumber(112, 'ordinal')).toBe('112th');
+    expect(formatPageNumber(113, 'ordinal')).toBe('113th');
   });
 
   it('normalizes page numbers before formatting', () => {

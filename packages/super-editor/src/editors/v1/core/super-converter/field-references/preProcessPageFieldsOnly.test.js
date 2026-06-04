@@ -178,6 +178,48 @@ describe('preProcessPageFieldsOnly', () => {
       });
     });
 
+    it('should process NUMPAGES switches split at a run boundary without whitespace', () => {
+      const nodes = [
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'NUMPAGES' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: '\\# "000"' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:t', elements: [{ type: 'text', text: '007' }] }],
+        },
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }],
+        },
+      ];
+
+      const result = preProcessPageFieldsOnly(nodes);
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0]).toMatchObject({
+        name: 'sd:totalPageNumber',
+        attributes: {
+          instruction: 'NUMPAGES \\# "000"',
+          pageNumberFormat: 'decimal',
+          pageNumberZeroPadding: 3,
+          importedCachedText: '007',
+        },
+      });
+    });
+
     it.each([' numpages ', ' NumPages ', ' NUMPAGES '])(
       'should process NUMPAGES field case-insensitively with fldChar syntax: %s',
       (instruction) => {

@@ -24,7 +24,7 @@ import type {
   TableWrap,
   ColumnLayoutForAnchor,
 } from '@superdoc/contracts';
-import { resolveAnchoredGraphicX, getColumnGeometry, getColumnWidth, getColumnX } from '@superdoc/contracts';
+import { resolveAnchoredGraphicX, getColumnGeometry, getColumnX } from '@superdoc/contracts';
 
 type FloatBlock = ImageBlock | DrawingBlock;
 type FloatMeasure = ImageMeasure | DrawingMeasure;
@@ -397,7 +397,10 @@ function computeTableAnchorX(
   } else {
     // 'column' (default)
     baseX = columnLeft;
-    availableWidth = getColumnWidth(geometry, columnIndex);
+    // Scalar (max) column width, matching anchored-object measurement (clamped to columns.width).
+    // Per-column origin above is honored; per-column available width waits on per-column measurement
+    // so a max-sized object is not centered/right-aligned into the margin or gap. (SD-2629)
+    availableWidth = columns.width;
   }
 
   // Handle table-specific alignment values (inside/outside map to left/right for now)

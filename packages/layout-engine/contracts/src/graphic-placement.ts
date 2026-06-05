@@ -1,4 +1,4 @@
-import { getColumnGeometry, getColumnX, getColumnWidth } from './column-layout.js';
+import { getColumnGeometry, getColumnX } from './column-layout.js';
 
 type AnchorVRelative = 'paragraph' | 'page' | 'margin';
 type AnchorHRelative = 'column' | 'page' | 'margin';
@@ -132,9 +132,9 @@ export function resolveAnchoredGraphicX(
   const contentWidth = pageWidth != null ? Math.max(1, pageWidth - (marginLeft + marginRight)) : columns.width;
 
   const contentLeft = marginLeft;
-  // Column origin/width from the resolved geometry so column-relative anchors honor per-column
-  // widths and gaps (SD-2629) rather than a uniform columnIndex * (width + gap) stride. Equal
-  // columns reduce to the old stride. Page/margin semantics are unchanged.
+  // Column ORIGIN from the resolved geometry so column-relative anchors honor per-column widths and
+  // gaps (SD-2629) rather than a uniform columnIndex * (width + gap) stride. Equal columns reduce to
+  // the old stride. Page/margin semantics are unchanged. (Available width stays scalar; see below.)
   const geometry = getColumnGeometry(columns);
 
   const relativeFrom = anchor.hRelativeFrom ?? 'column';
@@ -149,7 +149,12 @@ export function resolveAnchoredGraphicX(
     availableWidth = contentWidth;
   } else {
     baseX = getColumnX(geometry, columnIndex, contentLeft);
-    availableWidth = getColumnWidth(geometry, columnIndex);
+    // Available width is the scalar (max) column width, matching anchored-object MEASUREMENT, which
+    // clamps width to columns.width (layout-image / layout-drawing), not the per-column width.
+    // Centering / right-aligning against a narrower per-column width while the object was sized to
+    // the max width would push it into the margin or gap. The column ORIGIN above is already
+    // per-column; revisit this once per-column object measurement exists. (SD-2629)
+    availableWidth = columns.width;
   }
 
   if (alignH === 'left') {

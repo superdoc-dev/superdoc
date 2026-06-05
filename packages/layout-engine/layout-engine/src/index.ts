@@ -447,13 +447,27 @@ function calculateChainHeight(
 
         totalHeight += interParagraphSpacing + anchorHeight;
       } else {
-        // Non-paragraph anchor (table, image, etc.): use full height
-        // No contextual spacing applies to non-paragraph blocks
+        // Non-paragraph anchor (table, image, etc.).
+        // No contextual spacing applies to non-paragraph blocks.
         // Skip anchored tables - they're positioned out of flow and don't consume flow height
         // (consistent with shouldSkipAnchoredTable guard in legacy keepNext path)
         const isAnchoredTable = anchorBlock.kind === 'table' && (anchorBlock as TableBlock).anchor?.isAnchored === true;
         if (!isAnchoredTable) {
-          totalHeight += prevSpacingAfter + getMeasureHeight(anchorBlock, anchorMeasure);
+          // For a table anchor, only require the FIRST ROW to stay with the chain, not
+          // the full table. The keepNext contract keeps the heading with the table's
+          // start; the table itself splits across pages (SD-3345). Reserving the full
+          // height pushed a heading + tall splittable table wholly to the next page,
+          // leaving a large gap, where Word starts the table here and splits it. This
+          // mirrors the paragraph anchor's first-line optimization (SD-1282). A table
+          // whose first row cannot split is still handled by the table-start preflight.
+          let anchorHeight = getMeasureHeight(anchorBlock, anchorMeasure);
+          if (anchorBlock.kind === 'table' && anchorMeasure.kind === 'table' && anchorMeasure.rows.length > 0) {
+            const firstRowHeight = anchorMeasure.rows[0]?.height;
+            if (typeof firstRowHeight === 'number' && Number.isFinite(firstRowHeight) && firstRowHeight > 0) {
+              anchorHeight = firstRowHeight;
+            }
+          }
+          totalHeight += prevSpacingAfter + anchorHeight;
         }
       }
     }

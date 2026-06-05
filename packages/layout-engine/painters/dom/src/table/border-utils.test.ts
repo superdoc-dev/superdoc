@@ -22,6 +22,7 @@ import {
   hasExplicitCellBorders,
   swapTableBordersLR,
   swapCellBordersLR,
+  resolveBorderConflict,
 } from './border-utils.js';
 
 describe('applyBorder', () => {
@@ -520,5 +521,44 @@ describe('swapCellBordersLR', () => {
 
   it('returns undefined for undefined input', () => {
     expect(swapCellBordersLR(undefined)).toBeUndefined();
+  });
+});
+
+describe('resolveBorderConflict (ECMA-376 §17.4.66)', () => {
+  const D9 = { style: 'single' as const, width: 1.333, color: '#BDD7EE' };
+
+  it('collapses two identical borders to one (symmetric → no doubling)', () => {
+    // The M&A checklist case: adjacent cells both specify the same border.
+    const winner = resolveBorderConflict(D9, { ...D9 });
+    expect(winner).toMatchObject({ style: 'single', color: '#BDD7EE' });
+  });
+
+  it('keeps the present border when the opposing side is none (asymmetric → no dropped border)', () => {
+    // The it1007 case: header has a bottom border, the body cell below has no top.
+    const headerBottom = { style: 'single' as const, width: 1, color: '#000000' };
+    expect(resolveBorderConflict(undefined, headerBottom)).toEqual(headerBottom);
+    expect(resolveBorderConflict({ style: 'none' }, headerBottom)).toEqual(headerBottom);
+    expect(resolveBorderConflict(headerBottom, undefined)).toEqual(headerBottom);
+  });
+
+  it('returns undefined when neither side has a border', () => {
+    expect(resolveBorderConflict(undefined, undefined)).toBeUndefined();
+    expect(resolveBorderConflict({ style: 'none' }, { style: 'none' })).toBeUndefined();
+    expect(resolveBorderConflict({ style: 'single', width: 0, color: '#000' }, undefined)).toBeUndefined();
+  });
+
+  it('the heavier-weight border wins (double over single)', () => {
+    const single = { style: 'single' as const, width: 1, color: '#000000' };
+    const dbl = { style: 'double' as const, width: 1, color: '#000000' };
+    // weight: single = 1×1 = 1, double = 2×3 = 6 → double wins
+    expect(resolveBorderConflict(single, dbl)).toEqual(dbl);
+    expect(resolveBorderConflict(dbl, single)).toEqual(dbl);
+  });
+
+  it('on equal weight + identical style, the darker color wins', () => {
+    const dark = { style: 'single' as const, width: 1, color: '#000000' };
+    const light = { style: 'single' as const, width: 1, color: '#FFFFFF' };
+    // brightness(R+B+2G): dark=0 < light=1020 → dark wins
+    expect(resolveBorderConflict(light, dark)).toEqual(dark);
   });
 });

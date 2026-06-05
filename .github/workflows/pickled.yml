@@ -20,9 +20,13 @@ on:
   workflow_dispatch:
     inputs:
       max_cells:
-        description: Max Pickled cells for real-agent jobs
+        description: Max Pickled question cells for real-agent jobs
         required: false
         default: '20'
+      build_max_cells:
+        description: Max Pickled build executions for real-agent jobs
+        required: false
+        default: '6'
 
 concurrency:
   group: pickled-${{ github.event.pull_request.number || github.run_id }}
@@ -71,7 +75,7 @@ jobs:
         run: |
           bunx @pickled-dev/cli ci . \
             --questions-max-cells "${{ github.event.inputs.max_cells || '20' }}" \
-            --builds-max-cells 4 \
+            --builds-max-cells "${{ github.event.inputs.build_max_cells || '6' }}" \
             --report-dir pickled-reports
 
       - name: Upload Pickled reports

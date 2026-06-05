@@ -215,31 +215,69 @@ const getCommentMarkRangesById = (commentId, doc, importedId) => {
  * @returns {boolean} True if the comment mark existed and was processed
  */
 export const resolveCommentById = ({ commentId, importedId, state, tr, dispatch }) => {
+  const converted = resolveCommentsInTr({ items: [{ commentId, importedId }], state, tr });
+  if (converted) dispatch(tr);
+  return converted;
+};
+
+/**
+ * Resolve several comments (a whole thread) inside a SINGLE transaction so the
+ * resulting mark→node conversions form ONE undo step.
+ *
+ * Mirrors {@link resolveCommentById} but batches multiple comment ids and maps
+ * every insert position through `tr.mapping`, so overlapping/shared anchors
+ * (e.g. a reply that shares the thread root's range, as in Google-Docs-style
+ * nested comments) stay correct. The caller dispatches `tr`.
+ *
+ * @param {{ commentId: string, importedId?: string, preserveAnchor?: boolean }[]} items Comments to resolve
+ * @param {import('prosemirror-state').EditorState} state
+ * @param {import('prosemirror-state').Transaction} tr
+ * @returns {boolean} Whether any comment mark was converted
+ */
+export const resolveCommentsInTr = ({ items = [], state, tr }) => {
   const { schema } = state;
   const markType = schema.marks?.[CommentMarkName];
   if (!markType) return false;
-
-  const { segments, ranges } = getCommentMarkRangesById(commentId, state.doc, importedId);
-  if (!segments.length) return false;
-
-  segments.forEach(({ from, to, attrs }) => {
-    tr.removeMark(from, to, markType.create(attrs));
-  });
-
   const startType = schema.nodes?.commentRangeStart;
   const endType = schema.nodes?.commentRangeEnd;
-  if (startType && endType) {
-    ranges
-      .slice()
-      .sort((a, b) => b.from - a.from)
-      .forEach(({ from, to, internal }) => {
-        tr.insert(to, endType.create({ 'w:id': commentId }));
-        tr.insert(from, startType.create({ 'w:id': commentId, internal }));
+
+  const insertions = [];
+  const seen = new Set();
+  let converted = false;
+
+  // First pass: remove every comment's mark. `removeMark` does not change doc
+  // size, so the ranges read from `state.doc` stay valid across all items.
+  for (const item of items) {
+    if (!item) continue;
+    const { commentId, importedId } = item;
+    if (commentId == null) continue;
+    const key = `${commentId}:${importedId ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const { segments, ranges } = getCommentMarkRangesById(commentId, state.doc, importedId);
+    if (!segments.length) continue;
+    converted = true;
+    segments.forEach(({ from, to, attrs }) => {
+      tr.removeMark(from, to, markType.create(attrs));
+    });
+    if (startType && endType && item.preserveAnchor !== false) {
+      ranges.forEach(({ from, to, internal }) => insertions.push({ from, to, internal, commentId }));
+    }
+  }
+
+  // Second pass: insert the anchor nodes. Process highest position first and
+  // map through `tr.mapping` so prior inserts (including at a shared range) are
+  // accounted for.
+  if (startType && endType && insertions.length) {
+    insertions
+      .sort((a, b) => b.from - a.from || b.to - a.to)
+      .forEach(({ from, to, internal, commentId }) => {
+        tr.insert(tr.mapping.map(to), endType.create({ 'w:id': commentId }));
+        tr.insert(tr.mapping.map(from), startType.create({ 'w:id': commentId, internal }));
       });
   }
 
-  dispatch(tr);
-  return true;
+  return converted;
 };
 
 /**
@@ -681,6 +719,77 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         });
       });
   }
+
+  // SD-3355 — re-anchor resolved-thread replies. Resolving a thread converts
+  // the root's mark into commentRangeStart/End nodes and normalizes reply
+  // marks away entirely (a reply carries no anchor of its own). The passes
+  // above only walk comment MARKS, so such replies survive word/comments.xml
+  // but lose their document.xml markers — and Word silently drops a comment
+  // with no w:commentReference in a story. Nest each unrepresented reply
+  // inside its nearest node-anchored ancestor's preserved range (Parent
+  // Start, Child Start … Parent End, Child End) so the commentRangeEnd
+  // translator synthesizes the reply's w:commentReference again.
+  const nodeAnchorsById = new Map();
+  doc.descendants((node, pos) => {
+    const typeName = node.type?.name;
+    if (typeName !== 'commentRangeStart' && typeName !== 'commentRangeEnd') return;
+    const anchorId = node.attrs?.['w:id'];
+    if (anchorId == null) return;
+    const entry = nodeAnchorsById.get(anchorId) || {};
+    if (typeName === 'commentRangeStart') entry.startPos = pos;
+    else entry.endPos = pos;
+    nodeAnchorsById.set(anchorId, entry);
+  });
+
+  const isRepresented = (c) =>
+    seen.has(c.commentId) ||
+    (c.importedId != null && seen.has(c.importedId)) ||
+    nodeAnchorsById.has(c.commentId) ||
+    (c.importedId != null && nodeAnchorsById.has(c.importedId));
+
+  const findAncestorNodeAnchor = (comment) => {
+    let current = comment;
+    const visited = new Set();
+    while (current) {
+      const parentId = getThreadingParentId(current);
+      if (parentId == null || visited.has(parentId)) return null;
+      visited.add(parentId);
+      const parent =
+        commentMap.get(parentId) || comments.find((c) => c.importedId === parentId || c.commentId === parentId);
+      const anchor =
+        nodeAnchorsById.get(parentId) ??
+        (parent ? (nodeAnchorsById.get(parent.commentId) ?? nodeAnchorsById.get(parent.importedId)) : undefined);
+      if (anchor?.startPos != null && anchor?.endPos != null) return anchor;
+      current = parent;
+    }
+    return null;
+  };
+
+  comments
+    .filter((c) => !c.trackedChange && c.commentId != null && !isRepresented(c))
+    .sort((a, b) => (a.createdTime || 0) - (b.createdTime || 0))
+    .forEach((c) => {
+      const anchor = findAncestorNodeAnchor(c);
+      if (!anchor) return;
+      seen.add(c.commentId);
+
+      const childAttrs = getPreparedComment({
+        commentId: c.commentId,
+        internal: c.isInternal,
+      });
+      startNodes.push({
+        pos: anchor.startPos + 1,
+        node: schema.nodes.commentRangeStart.create(childAttrs),
+        commentId: c.commentId,
+        parentCommentId: getThreadingParentId(c),
+      });
+      endNodes.push({
+        pos: anchor.endPos + 1,
+        node: schema.nodes.commentRangeEnd.create(childAttrs),
+        commentId: c.commentId,
+        parentCommentId: getThreadingParentId(c),
+      });
+    });
 
   // Sort start nodes to ensure proper nesting order for Google Docs format:
   // Parent ranges must wrap child ranges: Parent Start, Child Start, Content, Parent End, Child End

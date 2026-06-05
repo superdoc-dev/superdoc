@@ -1,5 +1,6 @@
 import {
   getCommentDefinition,
+  isCommentResolvedInThread,
   updateCommentsExtendedXml,
   updateCommentsIdsAndExtensible,
   updateCommentsXml,
@@ -560,6 +561,57 @@ describe('removeCommentsFilesFromConvertedXml', () => {
 // =============================================================================
 
 describe('updateCommentsExtendedXml', () => {
+  it('SD-3355: exports every comment in a resolved thread as done', () => {
+    const comments = [
+      {
+        commentId: 'root-comment',
+        commentParaId: 'ROOT-PARA',
+        resolvedTime: 1711234567890,
+      },
+      {
+        commentId: 'reply-comment',
+        commentParaId: 'REPLY-PARA',
+        parentCommentId: 'root-comment',
+        resolvedTime: null,
+      },
+      {
+        commentId: 'nested-reply',
+        commentParaId: 'NESTED-PARA',
+        parentCommentId: 'reply-comment',
+        resolvedTime: null,
+      },
+    ];
+
+    const result = updateCommentsExtendedXml(comments, { elements: [{ elements: [] }] }, 'word');
+    const entries = result.elements[0].elements;
+
+    expect(entries.map((entry) => entry.attributes['w15:done'])).toEqual(['1', '1', '1']);
+    expect(isCommentResolvedInThread(comments[2], comments)).toBe(true);
+  });
+
+  it('resolves thread state and parent paraId through imported-id aliases', () => {
+    const comments = [
+      {
+        commentId: 'root-comment',
+        importedId: 'imported-root',
+        commentParaId: 'ROOT-PARA',
+        resolvedTime: 1711234567890,
+      },
+      {
+        commentId: 'reply-comment',
+        commentParaId: 'REPLY-PARA',
+        threadingParentCommentId: 'imported-root',
+        resolvedTime: null,
+      },
+    ];
+
+    const result = updateCommentsExtendedXml(comments, { elements: [{ elements: [] }] }, 'word');
+    const replyEntry = result.elements[0].elements.find((entry) => entry.attributes['w15:paraId'] === 'REPLY-PARA');
+
+    expect(replyEntry.attributes['w15:done']).toBe('1');
+    expect(replyEntry.attributes['w15:paraIdParent']).toBe('ROOT-PARA');
+  });
+
   it('uses threadingParentCommentId for threaded replies when parent is tracked', () => {
     const comments = [
       {

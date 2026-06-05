@@ -8,12 +8,13 @@ import {
 } from './index';
 
 describe('font resolver', () => {
-  it('maps the five verified clean clones (bare names)', () => {
+  it('maps the verified clean clones (bare names)', () => {
     expect(resolvePhysicalFamily('Calibri')).toBe('Carlito');
     expect(resolvePhysicalFamily('Cambria')).toBe('Caladea');
     expect(resolvePhysicalFamily('Arial')).toBe('Liberation Sans');
     expect(resolvePhysicalFamily('Times New Roman')).toBe('Liberation Serif');
     expect(resolvePhysicalFamily('Courier New')).toBe('Liberation Mono');
+    expect(resolvePhysicalFamily('Helvetica')).toBe('Liberation Sans');
   });
 
   it('resolves the PRIMARY family of a CSS stack and keeps the fallbacks', () => {
@@ -47,6 +48,21 @@ describe('font resolver', () => {
       reason: 'bundled_substitute',
     });
     expect(resolveFontFamily('Calibri, sans-serif').logicalFamily).toBe('Calibri, sans-serif');
+  });
+
+  it('aliases Helvetica to the already-bundled Liberation Sans (metric_safe alias, no new asset)', () => {
+    // docfonts records Helvetica -> Liberation Sans as metric_safe (0.000% analytic advance, all four
+    // faces; resolver-alias only, no layout proof). Resolves like a bundled substitute, not a visual
+    // fallback.
+    expect(resolveFontFamily('Helvetica')).toEqual({
+      logicalFamily: 'Helvetica',
+      physicalFamily: 'Liberation Sans',
+      reason: 'bundled_substitute',
+    });
+    // Resolves like the other clones: CSS stack keeps fallbacks, case/quote-insensitive.
+    expect(resolvePhysicalFamily('Helvetica, Arial, sans-serif')).toBe('Liberation Sans, Arial, sans-serif');
+    expect(resolvePhysicalFamily('"helvetica"')).toBe('Liberation Sans');
+    expect(resolvePrimaryPhysicalFamily('Helvetica, sans-serif')).toBe('Liberation Sans');
   });
 
   it('extracts the bare physical face the gate must await', () => {

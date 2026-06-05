@@ -17,11 +17,13 @@
  * own so two editors on one page can map the same logical family differently (a
  * customer `fonts.map`) without leaking across documents - the same per-document
  * isolation the registry already has per `FontFaceSet`. Every instance is seeded with
- * the five verified clean clones (Calibri->Carlito, Cambria->Caladea, Arial->Liberation
- * Sans, Times New Roman->Liberation Serif, Courier New->Liberation Mono). The
- * module-level `resolve*` functions delegate to a shared default instance for callers
- * that have no document context (and for backward compatibility).
+ * the verified clean clones (Calibri->Carlito, Cambria->Caladea, Arial->Liberation Sans,
+ * Times New Roman->Liberation Serif, Courier New->Liberation Mono, plus Helvetica aliased
+ * to the same Liberation Sans). The module-level `resolve*` functions delegate to a shared
+ * default instance for callers that have no document context (and for backward compatibility).
  */
+
+import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
 
 export type FontResolutionReason =
   /** No substitute is known; the requested family is used as-is. */
@@ -67,21 +69,6 @@ export interface FaceKey {
  */
 export type HasFace = (physicalFamily: string, weight: '400' | '700', style: 'normal' | 'italic') => boolean;
 
-/**
- * Logical (normalized) -> physical family. Lowercased, quote-stripped keys.
- *
- * Only metric-verified clean clones (advance widths + OS/2 line metrics match the Word
- * original) belong here. Each target MUST be a family the bundled pack supplies
- * (see `bundled.ts`). Aptos/Georgia are intentionally absent - no clean clone yet.
- */
-const BUNDLED_SUBSTITUTES: Readonly<Record<string, string>> = Object.freeze({
-  calibri: 'Carlito',
-  cambria: 'Caladea',
-  arial: 'Liberation Sans',
-  'times new roman': 'Liberation Serif',
-  'courier new': 'Liberation Mono',
-});
-
 /** Normalize a family name for lookup: trim, strip surrounding quotes, lowercase. */
 function normalizeFamilyKey(family: string): string {
   return family
@@ -89,6 +76,31 @@ function normalizeFamilyKey(family: string): string {
     .replace(/^["']|["']$/g, '')
     .toLowerCase();
 }
+
+/**
+ * Logical (normalized) -> physical family, DERIVED from the substitution evidence registry
+ * ({@link ./substitution-evidence}): every row docfonts marks `policyAction: 'substitute'` with a
+ * physical target. The evidence file is the single source of truth; this is its resolver projection
+ * (lowercased, quote-stripped keys).
+ *
+ * The inclusion predicate is policyAction, NOT verdict: a QUALIFIED substitute - e.g. Cambria ->
+ * Caladea, top-level `visual_only` because Bold Italic's U+0060 advance reflows - is still the
+ * recommended substitute and stays mapped. Verdict drives how fidelity is REPORTED (a later pass),
+ * never whether SuperDoc substitutes. Gate status (e.g. Helvetica's stale `ship: fail`) is diagnostic,
+ * never an inclusion input. Each physical target MUST be a family the bundled pack supplies
+ * (see `bundled-manifest.ts`); `substitution-evidence.test.ts` enforces that.
+ */
+function deriveBundledSubstitutes(): Readonly<Record<string, string>> {
+  const substitutes: Record<string, string> = {};
+  for (const row of SUBSTITUTION_EVIDENCE) {
+    if (row.policyAction === 'substitute' && row.physicalFamily) {
+      substitutes[normalizeFamilyKey(row.logicalFamily)] = row.physicalFamily;
+    }
+  }
+  return Object.freeze(substitutes);
+}
+
+const BUNDLED_SUBSTITUTES: Readonly<Record<string, string>> = deriveBundledSubstitutes();
 
 /**
  * Strip surrounding quotes from a family name, PRESERVING case, so a STRUCTURED resolution returns a

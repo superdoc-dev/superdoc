@@ -676,6 +676,7 @@ describe('comments-store', () => {
       id: 'reviewer-id',
       email: 'reviewer@example.com',
       name: 'Reviewer',
+      decision: null,
       superdoc,
     });
     expect(existingComment.resolvedTime).not.toBeNull();

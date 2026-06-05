@@ -96,7 +96,9 @@ const dispatchReviewDecision = ({ editor, state, dispatch, decision, target }) =
           originalId: event.changeId,
         }).some(({ mark }) => mark.attrs?.splitFromId === event.changeId);
         if (successorsPresent) continue;
-        editor.emit('commentsUpdate', event);
+        // Carry the decision so resolved bubbles can report accepted vs
+        // rejected instead of assuming every resolution was an accept.
+        editor.emit('commentsUpdate', { ...event, decision });
       }
 
       const touched =

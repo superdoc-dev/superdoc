@@ -102,6 +102,9 @@ export default function useComment(params) {
   const resolvedById = ref(params.resolvedById || null);
   const resolvedByEmail = ref(params.resolvedByEmail || null);
   const resolvedByName = ref(params.resolvedByName || null);
+  // For tracked-change threads: which decision resolved the thread
+  // ('accept' | 'reject'). Null for plain comments and legacy payloads.
+  const trackedChangeDecision = ref(params.trackedChangeDecision || null);
 
   /**
    * Mark this conversation as resolved with UTC date
@@ -109,14 +112,18 @@ export default function useComment(params) {
    * @param {String} id The actor id of the user marking this conversation as done
    * @param {String} email The email of the user marking this conversation as done
    * @param {String} name The name of the user marking this conversation as done
+   * @param {'accept' | 'reject'} [decision] The tracked-change decision that resolved this thread
    * @returns {void}
    */
-  const resolveComment = ({ id, email, name, superdoc }) => {
+  const resolveComment = ({ id, email, name, superdoc, decision }) => {
     if (resolvedTime.value) return;
     resolvedTime.value = Date.now();
     resolvedById.value = id ?? null;
     resolvedByEmail.value = email;
     resolvedByName.value = name;
+    if (decision === 'accept' || decision === 'reject') {
+      trackedChangeDecision.value = decision;
+    }
 
     const emitData = { type: comments_module_events.RESOLVED, comment: getValues() };
     propagateUpdate(superdoc, emitData);
@@ -318,6 +325,7 @@ export default function useComment(params) {
       trackedChangeStoryKind: trackedChangeStoryKind.value,
       trackedChangeStoryLabel: trackedChangeStoryLabel.value,
       trackedChangeAnchorKey: trackedChangeAnchorKey.value,
+      trackedChangeDecision: trackedChangeDecision.value,
       deletedText: deletedText.value,
       resolvedTime: resolvedTime.value,
       resolvedById: resolvedById.value,
@@ -360,6 +368,7 @@ export default function useComment(params) {
     trackedChangeStoryKind,
     trackedChangeStoryLabel,
     trackedChangeAnchorKey,
+    trackedChangeDecision,
     resolvedTime,
     resolvedById,
     resolvedByEmail,

@@ -11,6 +11,7 @@
 import type {
   FlowBlock,
   Layout,
+  Page,
   Measure,
   Fragment,
   DrawingFragment,
@@ -133,23 +134,31 @@ export const isRtlBlock = (block: FlowBlock): boolean => {
   return getParagraphInlineDirection(block.attrs) === 'rtl';
 };
 
-export const determineColumn = (layout: Layout, fragmentX: number): number => {
-  const columns = layout.columns;
+export const determineColumn = (layout: Layout, fragmentX: number, page?: Page): number => {
+  const columns = page !== undefined ? page.columns : layout.columns;
   if (!columns || columns.count <= 1) return 0;
-  // Resolve the column boundaries from the single geometry source (SD-2629). This honors per-column
-  // widths for explicit columns instead of assuming a uniform stride. Coordinate assumptions are
-  // preserved from the prior implementation: contentWidth = pageSize.w (margins are not subtracted)
-  // and origin 0 (fragmentX is layout-absolute). getColumnAtX maps a gap to the preceding column.
-  const geometry = getColumnGeometry(normalizeColumnLayout(columns, layout.pageSize.w));
-  return getColumnAtX(geometry, fragmentX, 0);
+  // Resolve column boundaries from the single geometry source (SD-2629), honoring per-column widths
+  // for explicit columns. Mirror the engine's placement coordinates: fragments sit at marginLeft +
+  // content-relative column x over the CONTENT width (page width minus side margins), NOT the full
+  // page width from origin 0 - the latter mis-classifies clicks near boundaries once margins are
+  // non-zero (and for 3+ or asymmetric-margin layouts). Use the fragment's own page so multi-section
+  // docs with varying margins stay correct, falling back to the first page's margins when no page is
+  // supplied. getColumnAtX maps a gap to the preceding column.
+  const pageWidth = page?.size?.w ?? layout.pageSize.w;
+  const margins = page?.margins ?? layout.pages[0]?.margins;
+  const marginLeft = Math.max(0, margins?.left ?? 0);
+  const marginRight = Math.max(0, margins?.right ?? 0);
+  const contentWidth = Math.max(1, pageWidth - (marginLeft + marginRight));
+  const geometry = getColumnGeometry(normalizeColumnLayout(columns, contentWidth));
+  return getColumnAtX(geometry, fragmentX, marginLeft);
 };
 
-const determineTableColumn = (layout: Layout, fragment: TableFragment): number => {
+const determineTableColumn = (layout: Layout, fragment: TableFragment, page?: Page): number => {
   if (typeof fragment.columnIndex === 'number') {
-    const count = layout.columns?.count ?? 1;
+    const count = (page?.columns ?? layout.columns)?.count ?? 1;
     return Math.max(0, Math.min(Math.max(0, count - 1), fragment.columnIndex));
   }
-  return determineColumn(layout, fragment.x);
+  return determineColumn(layout, fragment.x, page);
 };
 
 // ---------------------------------------------------------------------------
@@ -698,7 +707,7 @@ export function resolvePositionHitFromDomPosition(
         if (domPos >= fragment.pmStart && domPos <= fragment.pmEnd) {
           blockId = fragment.blockId;
           pageIndex = pi;
-          column = determineColumn(layout, fragment.x);
+          column = determineColumn(layout, fragment.x, page);
           const blockIndex = findBlockIndexByFragmentId(blocks, fragment.blockId);
           if (blockIndex !== -1) {
             const measure = measures[blockIndex];
@@ -859,7 +868,7 @@ export function clickToPositionGeometry(
         return null;
       }
 
-      const column = determineColumn(layout, fragment.x);
+      const column = determineColumn(layout, fragment.x, layout.pages[pageIndex]);
 
       return {
         pos,
@@ -884,7 +893,7 @@ export function clickToPositionGeometry(
         layoutEpoch,
         blockId: fragment.blockId,
         pageIndex,
-        column: determineColumn(layout, fragment.x),
+        column: determineColumn(layout, fragment.x, layout.pages[pageIndex]),
         lineIndex: -1,
       };
     }
@@ -944,7 +953,7 @@ export function clickToPositionGeometry(
           layoutEpoch,
           blockId: tableHit.fragment.blockId,
           pageIndex,
-          column: determineTableColumn(layout, tableHit.fragment),
+          column: determineTableColumn(layout, tableHit.fragment, layout.pages[pageIndex]),
           lineIndex,
         };
       }
@@ -958,7 +967,7 @@ export function clickToPositionGeometry(
         layoutEpoch,
         blockId: tableHit.fragment.blockId,
         pageIndex,
-        column: determineTableColumn(layout, tableHit.fragment),
+        column: determineTableColumn(layout, tableHit.fragment, layout.pages[pageIndex]),
         lineIndex: 0,
       };
     }
@@ -979,7 +988,7 @@ export function clickToPositionGeometry(
       layoutEpoch,
       blockId: fragment.blockId,
       pageIndex,
-      column: determineColumn(layout, fragment.x),
+      column: determineColumn(layout, fragment.x, layout.pages[pageIndex]),
       lineIndex: -1,
     };
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FlowBlock, ParagraphAttrs, Layout } from '@superdoc/contracts';
+import type { FlowBlock, ParagraphAttrs, Layout, Page } from '@superdoc/contracts';
 import { isRtlBlock, determineColumn } from '../src/position-hit';
 
 const paragraph = (attrs?: Record<string, unknown>): FlowBlock => ({
@@ -90,5 +90,24 @@ describe('determineColumn (SD-2629: resolved per-column boundaries)', () => {
     const layout = makeLayout({ count: 2, gap: 0, widths: [100, 400], equalWidth: false });
     expect(determineColumn(layout, 50)).toBe(0);
     expect(determineColumn(layout, 150)).toBe(1);
+  });
+
+  it('maps an absolute x using the page margins and content width, not full page from origin 0 (SD-2629)', () => {
+    // 3 equal columns in an 816px page with 96px side margins: content width 624 -> 192px columns.
+    // Column boundaries are absolute (marginLeft + content-relative x), so a click must be resolved
+    // over the content box. Resolving over the full page width from origin 0 (the prior behavior)
+    // mis-classifies clicks near the boundaries once margins are non-zero.
+    const page = {
+      columns: { count: 3, gap: 24 },
+      margins: { left: 96, right: 96 },
+      size: { w: 816, h: 1056 },
+    } as unknown as Page;
+    const layout = { pageSize: { w: 816, h: 1056 }, columns: page.columns, pages: [page] } as unknown as Layout;
+    // col1 starts at 96 + 192 + 24 = 312; x=300 is left of it -> col 0. Full-page math (boundary 280)
+    // would wrongly return col 1.
+    expect(determineColumn(layout, 300, page)).toBe(0);
+    // col2 starts at 96 + 2*(192+24) = 528; x=540 is past it -> col 2. Full-page math (boundary 560)
+    // would wrongly return col 1.
+    expect(determineColumn(layout, 540, page)).toBe(2);
   });
 });

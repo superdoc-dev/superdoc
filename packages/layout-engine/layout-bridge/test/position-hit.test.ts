@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { FlowBlock, ParagraphAttrs, Layout, Page } from '@superdoc/contracts';
-import { isRtlBlock, determineColumn } from '../src/position-hit';
+import type { FlowBlock, ParagraphAttrs, Layout, Page, TableFragment } from '@superdoc/contracts';
+import { isRtlBlock, determineColumn, determineTableColumn } from '../src/position-hit';
 
 const paragraph = (attrs?: Record<string, unknown>): FlowBlock => ({
   kind: 'paragraph',
@@ -130,5 +130,27 @@ describe('determineColumn (SD-2629: resolved per-column boundaries)', () => {
     // y=200 is in the single-column region -> column 0 at the same x (page.columns alone would always
     // say 0; the region lookup is what makes the y=400 case return 1).
     expect(determineColumn(layout, 450, page, 200)).toBe(0);
+  });
+
+  it('clamps a table fragment columnIndex against its mid-page region count, not page-start (SD-2629)', () => {
+    // Table fragments carry columnIndex (the column they were laid out in). A table in a mid-page
+    // two-column region has columnIndex 1; clamping against the page-START single-column count would
+    // wrongly snap it to 0. Clamp against the region's count, selected by the fragment's y.
+    const page = {
+      columns: { count: 1, gap: 0 },
+      columnRegions: [
+        { yStart: 96, yEnd: 300, columns: { count: 1, gap: 0 } },
+        { yStart: 300, yEnd: 700, columns: { count: 2, gap: 24 } },
+      ],
+      margins: { left: 96, right: 96 },
+      size: { w: 816, h: 1056 },
+    } as unknown as Page;
+    const layout = { pageSize: { w: 816, h: 1056 }, columns: page.columns, pages: [page] } as unknown as Layout;
+    const tableInRegion = { kind: 'table', x: 96, y: 400, columnIndex: 1 } as unknown as TableFragment;
+    const tableInSingle = { kind: 'table', x: 96, y: 200, columnIndex: 1 } as unknown as TableFragment;
+    // y=400 is in the two-column region (count 2) -> columnIndex 1 is preserved.
+    expect(determineTableColumn(layout, tableInRegion, page)).toBe(1);
+    // y=200 is in the single-column region (count 1) -> columnIndex 1 clamps to 0.
+    expect(determineTableColumn(layout, tableInSingle, page)).toBe(0);
   });
 });

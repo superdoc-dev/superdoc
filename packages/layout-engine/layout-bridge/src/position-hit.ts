@@ -12,6 +12,7 @@ import type {
   FlowBlock,
   Layout,
   Page,
+  ColumnLayout,
   Measure,
   Fragment,
   DrawingFragment,
@@ -134,17 +135,22 @@ export const isRtlBlock = (block: FlowBlock): boolean => {
   return getParagraphInlineDirection(block.attrs) === 'rtl';
 };
 
-export const determineColumn = (layout: Layout, fragmentX: number, page?: Page, fragmentY?: number): number => {
-  // Columns for THIS fragment: prefer the mid-page column REGION it sits in. A continuous section
-  // break can change columns within a single page, and page.columns is only the page-START config -
-  // the contract carries per-region geometry in page.columnRegions (yStart/yEnd are page-relative,
-  // the same frame as fragment.y). Fall back to page.columns, then the document-wide layout.columns.
-  // (SD-2629)
-  let columns = page !== undefined ? page.columns : layout.columns;
-  if (page?.columnRegions && typeof fragmentY === 'number') {
+// Columns governing a hit at this page-relative y: prefer the mid-page column REGION it falls in (a
+// continuous section break can change columns within a page; page.columns is only the page-START
+// config, so the contract carries per-region geometry in page.columnRegions). columnRegions
+// yStart/yEnd are page-relative, the same frame as fragment.y. Falls back to page.columns, then the
+// document-wide layout.columns. Shared by determineColumn and determineTableColumn. (SD-2629)
+function resolveColumnsForHit(layout: Layout, page: Page | undefined, fragmentY?: number): ColumnLayout | undefined {
+  if (page === undefined) return layout.columns;
+  if (page.columnRegions && typeof fragmentY === 'number') {
     const region = page.columnRegions.find((r) => fragmentY >= r.yStart && fragmentY < r.yEnd);
-    if (region) columns = region.columns;
+    if (region) return region.columns;
   }
+  return page.columns;
+}
+
+export const determineColumn = (layout: Layout, fragmentX: number, page?: Page, fragmentY?: number): number => {
+  const columns = resolveColumnsForHit(layout, page, fragmentY);
   if (!columns || columns.count <= 1) return 0;
   // Mirror the engine's placement coordinates: fragments sit at marginLeft + content-relative column
   // x over the CONTENT width (page width minus side margins), NOT the full page width from origin 0 -
@@ -161,9 +167,12 @@ export const determineColumn = (layout: Layout, fragmentX: number, page?: Page, 
   return getColumnAtX(geometry, fragmentX, marginLeft);
 };
 
-const determineTableColumn = (layout: Layout, fragment: TableFragment, page?: Page): number => {
+export const determineTableColumn = (layout: Layout, fragment: TableFragment, page?: Page): number => {
   if (typeof fragment.columnIndex === 'number') {
-    const count = (page?.columns ?? layout.columns)?.count ?? 1;
+    // Clamp against the count of the region the table sits in (by its y), not the page-START
+    // page.columns: a table laid out in a mid-page two-column region carries columnIndex 1 that the
+    // single-column page-start count would wrongly snap to 0. (SD-2629)
+    const count = resolveColumnsForHit(layout, page, fragment.y)?.count ?? 1;
     return Math.max(0, Math.min(Math.max(0, count - 1), fragment.columnIndex));
   }
   return determineColumn(layout, fragment.x, page, fragment.y);

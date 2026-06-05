@@ -513,6 +513,13 @@ export interface BalancingFragment {
   fromLine?: number;
   /** Ending line index (exclusive) for partial paragraph fragments */
   toLine?: number;
+  /**
+   * Remeasured lines carried by the fragment itself (set when a paragraph measured at one
+   * width is placed in a narrower column or beside a float). When present, the resolve
+   * stage renders THIS array and ignores fromLine/toLine into measure.lines - so balancing
+   * must source heights from it and slice it when splitting a fragment across columns.
+   */
+  lines?: Array<{ lineHeight: number }>;
   /** Pre-computed height for non-paragraph fragments */
   height?: number;
 }
@@ -556,6 +563,11 @@ interface FragmentInfo {
  */
 function getFragmentHeight(fragment: BalancingFragment, measureMap: Map<string, MeasureData>): number {
   if (fragment.kind === 'para') {
+    // A fragment remeasured for a narrower column carries its own lines; the resolve
+    // stage renders (and sizes) from THAT array, so balancing must agree with it.
+    if (fragment.lines && fragment.lines.length > 0) {
+      return fragment.lines.reduce((sum, l) => sum + (l.lineHeight ?? 0), 0);
+    }
     const measure = measureMap.get(fragment.blockId);
     if (!measure || measure.kind !== 'paragraph' || !measure.lines) {
       return 0;
@@ -803,6 +815,12 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
     if (f.kind !== 'para') return undefined;
     if (args.sectPrMarkerBlockIds?.has(f.blockId)) return undefined;
     if (args.keepLinesBlockIds?.has(f.blockId)) return undefined;
+    // A remeasured fragment renders its own `lines` (resolveParagraph ignores
+    // fromLine/toLine then), so break points must be computed against that array.
+    if (f.lines && f.lines.length > 0) {
+      if (f.lines.length <= 1) return undefined;
+      return f.lines.map((l) => l.lineHeight);
+    }
     const measure = args.measureMap.get(f.blockId);
     if (!measure || measure.kind !== 'paragraph' || !Array.isArray(measure.lines)) return undefined;
     const fromLine = f.fromLine ?? 0;
@@ -876,6 +894,13 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
         continuesFromPrev: true,
         continuesOnNext: originalContinuesOnNext,
       } as BalancingFragment;
+      // Remeasured fragments render their own `lines` wholesale (fromLine/toLine are
+      // ignored by the resolve stage then), so the halves must each carry ONLY their
+      // slice or both columns render the entire paragraph.
+      if (f.lines && f.lines.length > 0) {
+        secondHalf.lines = f.lines.slice(bp.breakAfterLine + 1);
+        f.lines = f.lines.slice(0, bp.breakAfterLine + 1);
+      }
       f.toLine = splitLine;
       (f as { continuesOnNext?: boolean }).continuesOnNext = true;
       colCursors[col] += bp.heightBeforeBreak;

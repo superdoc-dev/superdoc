@@ -653,6 +653,42 @@ describe('balanceSectionOnPage', () => {
       expect(result!.maxY).toBeLessThan(TOP + 280);
     });
 
+    it('slices remeasured fragment.lines across the split (no duplicated halves)', () => {
+      // A fragment remeasured for a narrower column carries its own `lines`, and
+      // resolveParagraph renders that array INSTEAD of measure.lines[fromLine..toLine].
+      // The split must slice `lines` for each half, or both columns render the whole
+      // paragraph. The remeasured heights (22px) also differ from the stale measure
+      // (20px), so the break point and cursors must come from the remeasured lines.
+      const { fragments, measureMap, blockSectionMap } = straddleFixture();
+      const REMEASURED = 22;
+      const c = fragments[2] as SplitFragment & { lines?: Array<{ lineHeight: number }> };
+      c.lines = Array.from({ length: 14 }, () => ({ lineHeight: REMEASURED }));
+
+      const result = balance(fragments, measureMap, blockSectionMap);
+
+      expect(result).not.toBeNull();
+      const cFrags = (
+        fragments.filter((f) => f.blockId === 'C') as Array<SplitFragment & { lines?: Array<{ lineHeight: number }> }>
+      ).sort((a, b) => (a.fromLine ?? 0) - (b.fromLine ?? 0));
+      expect(cFrags.length).toBe(2);
+      const [c1, c2] = cFrags;
+      // Each half carries ONLY its own remeasured lines, partitioning the original 14.
+      expect(c1.lines).toBeDefined();
+      expect(c2.lines).toBeDefined();
+      expect(c1.lines!.length + c2.lines!.length).toBe(14);
+      expect(c1.lines!.length).toBe((c1.toLine ?? 0) - (c1.fromLine ?? 0));
+      expect(c2.lines!.length).toBe(c2.toLine! - c2.fromLine!);
+      // Cursors advanced by the remeasured heights: the second column's bottom is
+      // its line count at 22px, not at the stale 20px measure.
+      const col1Frags = fragments.filter((f) => f.x === COL1_X) as Array<
+        SplitFragment & { lines?: Array<{ lineHeight: number }> }
+      >;
+      const col1Bottom = Math.max(
+        ...col1Frags.map((f) => f.y + (f.lines ? f.lines.reduce((s, l) => s + l.lineHeight, 0) : 0)),
+      );
+      expect(col1Bottom).toBe(result!.maxY);
+    });
+
     it('offsets the split by the fragment fromLine when pagination already split the paragraph', () => {
       const { fragments, measureMap, blockSectionMap } = straddleFixture();
       // C is the tail of a 16-line paragraph: this page renders lines [2, 16).

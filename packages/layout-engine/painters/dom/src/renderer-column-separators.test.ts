@@ -157,6 +157,22 @@ describe('DomPainter renderColumnSeparators', () => {
       // contentWidth=90, columnWidth=(90-100)/2=-5 → guard fires.
       expect(querySeparators(mount)).toHaveLength(0);
     });
+
+    it('renders nothing for equal columns whose gap overflows the content area (SD-2629 legacy guard)', () => {
+      // count:3 with a gap so large the evenly-divided column width goes negative. normalize floors
+      // fabricated widths at the full content width, so the geometry width alone would not reveal the
+      // overflow; the pre-geometry equalWidth<=1 guard must still suppress the separators. The far
+      // fragment sits past where the phantom separators would land, so only the guard (not the
+      // content-past-separator gate) can suppress them.
+      const page = buildPage({
+        columns: { count: 3, gap: 400, withSeparator: true },
+        fragments: [fragAt(96), fragAt(2000)],
+      });
+      paintOnce(buildLayout(page), mount);
+
+      // contentWidth=624, equalWidth=(624-400*2)/3 < 0, so the guard fires.
+      expect(querySeparators(mount)).toHaveLength(0);
+    });
   });
 
   describe('region-aware path (page.columnRegions)', () => {

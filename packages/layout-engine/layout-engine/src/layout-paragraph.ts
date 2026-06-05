@@ -298,7 +298,7 @@ export type ParagraphLayoutContext = {
   columnWidth: number;
   ensurePage: () => PageState;
   advanceColumn: (state: PageState) => PageState;
-  columnX: (columnIndex: number) => number;
+  columnX: (state: PageState, columnIndex?: number) => number;
   floatManager: FloatingObjectManager;
   remeasureParagraph?: (block: ParagraphBlock, maxWidth: number, firstLineIndent?: number) => ParagraphMeasure;
   /**
@@ -495,7 +495,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
             { left: anchors.pageMargins.left, right: anchors.pageMargins.right },
             anchors.pageWidth,
           )
-        : columnX(state.columnIndex);
+        : columnX(state);
 
       const pmRange = extractBlockPmRange(entry.block);
       if (entry.block.kind === 'image' && entry.measure.kind === 'image') {
@@ -581,7 +581,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     const maxLineWidth = lines.reduce((max, line) => Math.max(max, line.width ?? 0), 0);
     const fragmentWidth = maxLineWidth || columnWidth;
 
-    let x = columnX(state.columnIndex);
+    let x = columnX(state);
     if (frame.xAlign === 'right') {
       x += columnWidth - fragmentWidth;
     } else if (frame.xAlign === 'center') {
@@ -1058,11 +1058,11 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // This matches Word's behavior where paragraphs with negative indents extend beyond the content area.
     // Adjust x position: negative indent shifts left (e.g., -48px moves fragment 48px left).
     // When text was remeasured around floats, do not pull lines back into exclusion zones.
-    const floatAdjustedX = columnX(state.columnIndex) + offsetX;
+    const floatAdjustedX = columnX(state) + offsetX;
     const adjustedX = didRemeasureForFloats
       ? floatAdjustedX + Math.max(negativeLeftIndent, 0)
       : floatAdjustedX + negativeLeftIndent;
-    const columnRight = columnX(state.columnIndex) + columnWidth;
+    const columnRight = columnX(state) + columnWidth;
     let adjustedWidth = didRemeasureForFloats
       ? effectiveColumnWidth
       : effectiveColumnWidth - negativeLeftIndent - negativeRightIndent;
@@ -1117,9 +1117,9 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       }
 
       if (floatAlignment === 'right') {
-        fragment.x = columnX(state.columnIndex) + offsetX + (effectiveColumnWidth - maxLineWidth);
+        fragment.x = columnX(state) + offsetX + (effectiveColumnWidth - maxLineWidth);
       } else if (floatAlignment === 'center') {
-        fragment.x = columnX(state.columnIndex) + offsetX + (effectiveColumnWidth - maxLineWidth) / 2;
+        fragment.x = columnX(state) + offsetX + (effectiveColumnWidth - maxLineWidth) / 2;
       }
     }
     state.page.fragments.push(fragment);

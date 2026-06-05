@@ -462,7 +462,9 @@ describe('category_fallback (non-metric family fallback: Calibri Light -> Carlit
       physicalFamily: 'Calibri Light',
       reason: 'as_requested',
     });
-    expect(r.resolvePhysicalFamilyForFace('Calibri Light, sans-serif', R400, noFaces)).toBe('Calibri Light, sans-serif');
+    expect(r.resolvePhysicalFamilyForFace('Calibri Light, sans-serif', R400, noFaces)).toBe(
+      'Calibri Light, sans-serif',
+    );
   });
 
   it('a customer fonts.map still overrides the category fallback (custom_mapping wins)', () => {

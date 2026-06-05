@@ -38,6 +38,22 @@ export const SequenceField = Node.create({
         default: '',
         rendered: false,
       },
+      fieldArgument: {
+        default: '',
+        rendered: false,
+      },
+      sequenceMode: {
+        default: 'next',
+        rendered: false,
+      },
+      hideResult: {
+        default: false,
+        rendered: false,
+      },
+      restartNumber: {
+        default: null,
+        rendered: false,
+      },
       format: {
         default: 'ARABIC',
         rendered: false,
@@ -46,8 +62,24 @@ export const SequenceField = Node.create({
         default: null,
         rendered: false,
       },
+      hasGeneralFormat: {
+        default: false,
+        rendered: false,
+      },
+      pageNumberFieldFormat: {
+        default: null,
+        rendered: false,
+      },
+      numericPictureFormat: {
+        default: null,
+        rendered: false,
+      },
       resolvedNumber: {
         default: '',
+        rendered: false,
+      },
+      resolvedNumberIsCurrent: {
+        default: false,
         rendered: false,
       },
       sdBlockId: {
@@ -66,7 +98,7 @@ export const SequenceField = Node.create({
   },
 
   renderDOM({ node, htmlAttributes }) {
-    const text = node.attrs.resolvedNumber || '0';
+    const text = node.attrs.resolvedNumber || '';
     return ['span', Attribute.mergeAttributes(this.options.htmlAttributes, htmlAttributes), text];
   },
 });

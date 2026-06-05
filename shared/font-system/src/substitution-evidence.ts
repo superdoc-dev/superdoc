@@ -134,10 +134,7 @@ export const SUBSTITUTION_EVIDENCE: readonly SubstitutionEvidence[] = Object.fre
     advance: { meanDelta: 0, maxDelta: 0 },
     gates: { static: 'pass', metric: 'pass', layout: 'pass', ship: 'pass' },
     policyAction: 'substitute',
-    measurementRefs: [
-      'calibri__carlito#analytic_advance#2026-06-03',
-      'calibri__carlito#face_aggregate#2026-06-03',
-    ],
+    measurementRefs: ['calibri__carlito#analytic_advance#2026-06-03', 'calibri__carlito#face_aggregate#2026-06-03'],
     candidateLicense: 'OFL-1.1',
     exportRule: 'preserve_original_name',
   },

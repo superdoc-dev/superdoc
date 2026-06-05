@@ -14,8 +14,16 @@ describe('parsePageNumberFieldSwitches', () => {
     ['PAGE \\* ArabicDash', { instruction: 'PAGE \\* ArabicDash', pageNumberFormat: 'numberInDash' }],
     ['PAGE \\* arabicdash', { instruction: 'PAGE \\* arabicdash', pageNumberFormat: 'numberInDash' }],
     ['PAGE \\* ARABICDASH', { instruction: 'PAGE \\* ARABICDASH', pageNumberFormat: 'numberInDash' }],
+    ['PAGE \\* Ordinal', { instruction: 'PAGE \\* Ordinal', pageNumberFormat: 'ordinal' }],
   ])('parses general format switch %s', (instruction, expected) => {
     expect(parsePageNumberFieldSwitches(instruction, 'PAGE')).toEqual(expected);
+  });
+
+  it('parses NUMPAGES Ordinal format switches', () => {
+    expect(parsePageNumberFieldSwitches('NUMPAGES \\* Ordinal', 'NUMPAGES')).toEqual({
+      instruction: 'NUMPAGES \\* Ordinal',
+      pageNumberFormat: 'ordinal',
+    });
   });
 
   it.each([['PAGE \\* rOman'], ['PAGE \\* Alphabetic'], ['PAGE \\* aLpHaBeTiC']])(
@@ -29,6 +37,15 @@ describe('parsePageNumberFieldSwitches', () => {
     ['NUMPAGES \\# "00"', { instruction: 'NUMPAGES \\# "00"', pageNumberFormat: 'decimal', pageNumberZeroPadding: 2 }],
     ['NUMPAGES \\# 000', { instruction: 'NUMPAGES \\# 000', pageNumberFormat: 'decimal', pageNumberZeroPadding: 3 }],
   ])('parses zero-padding picture switch %s', (instruction, expected) => {
+    expect(parsePageNumberFieldSwitches(instruction, 'NUMPAGES')).toEqual(expected);
+  });
+
+  it.each([
+    ['NUMPAGES \\# "#,##0"', { instruction: 'NUMPAGES \\# "#,##0"', pageNumberNumericPicture: '#,##0' }],
+    ['NUMPAGES \\# #,##0', { instruction: 'NUMPAGES \\# #,##0', pageNumberNumericPicture: '#,##0' }],
+    ['NUMPAGES \\# "# pages"', { instruction: 'NUMPAGES \\# "# pages"', pageNumberNumericPicture: '# pages' }],
+    ['NUMPAGES \\# "#   pages"', { instruction: 'NUMPAGES \\# "#   pages"', pageNumberNumericPicture: '#   pages' }],
+  ])('preserves non-zero numeric picture switch %s', (instruction, expected) => {
     expect(parsePageNumberFieldSwitches(instruction, 'NUMPAGES')).toEqual(expected);
   });
 

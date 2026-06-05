@@ -98,7 +98,7 @@ describe('layoutDrawingBlock', () => {
           columnIndex: currentState.columnIndex + 1,
           cursorY: currentState.topMargin,
         }) as unknown as PageState,
-      columnX: (columnIndex: number) => columnIndex * (mockColumns.width + mockColumns.gap),
+      columnX: (state: PageState) => state.columnIndex * (mockColumns.width + mockColumns.gap),
     };
   };
 
@@ -370,7 +370,7 @@ describe('layoutDrawingBlock', () => {
           };
           return stateRef as unknown as PageState;
         },
-        columnX: (columnIndex: number) => columnIndex * (mockColumns.width + mockColumns.gap),
+        columnX: (state: PageState) => state.columnIndex * (mockColumns.width + mockColumns.gap),
       };
 
       layoutDrawingBlock(context);
@@ -685,7 +685,7 @@ describe('layoutDrawingBlock', () => {
 
     it('should use correct columnX for multi-column layout', () => {
       const context = createMockContext({}, {}, { columnIndex: 2 });
-      context.columnX = (index: number) => index * 620; // width(600) + gap(20)
+      context.columnX = (state: PageState) => state.columnIndex * 620; // width(600) + gap(20)
 
       const state = context.ensurePage();
       layoutDrawingBlock(context);

@@ -11,6 +11,15 @@ describe('getPageNumberFieldFormat', () => {
     ).toEqual({ format: 'decimal', zeroPadding: 2 });
   });
 
+  it('threads ordinal and numeric-picture attributes for layout runs', () => {
+    expect(
+      getPageNumberFieldFormat({
+        pageNumberFormat: 'ordinal',
+        pageNumberNumericPicture: '#,##0',
+      }),
+    ).toEqual({ format: 'ordinal', numericPicture: '#,##0' });
+  });
+
   it('ignores invalid format attributes', () => {
     expect(getPageNumberFieldFormat(undefined)).toBeUndefined();
     expect(getPageNumberFieldFormat({ pageNumberFormat: 1, pageNumberZeroPadding: Number.NaN })).toBeUndefined();

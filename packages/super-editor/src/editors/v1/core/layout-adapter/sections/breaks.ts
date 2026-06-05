@@ -90,7 +90,8 @@ export function signaturesEqual(a: SectionSignature, b: SectionSignature): boole
       a.columnsPx.count === b.columnsPx.count &&
       a.columnsPx.gap === b.columnsPx.gap &&
       a.columnsPx.equalWidth === b.columnsPx.equalWidth &&
-      widthsEqual(a.columnsPx.widths, b.columnsPx.widths)
+      widthsEqual(a.columnsPx.widths, b.columnsPx.widths) &&
+      widthsEqual(a.columnsPx.gaps, b.columnsPx.gaps)
     );
 
   const numberingEq =

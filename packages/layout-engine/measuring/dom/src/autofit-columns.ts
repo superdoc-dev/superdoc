@@ -254,7 +254,33 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
     targetTableWidth = Math.min(targetTableWidth, maxResolvedTableWidth);
   } else {
     targetTableWidth = Math.min(targetTableWidth, maxResolvedTableWidth);
-    if (!shouldPreservePreferredGrid) {
+    if (workingInput.contentSizeAutoTable === true) {
+      // Pure-auto tables content-size like Word: each column takes its max-content
+      // width and the table ends at the content demand, capped by the available
+      // width (the shrink below redistributes overflow). The authored grid sum is
+      // deliberately ignored here; it is not a Word layout cache for this shape.
+      // (SD-3309)
+      const columnBandAllowances = workingInput.columnBandAllowances;
+      resolvedWidths = maxBounds.map(
+        (max, index) => Math.max(max, minBounds[index]) + (columnBandAllowances?.[index] ?? 0),
+      );
+      // Spanning cells must keep their max-content demand: the proportional spread in
+      // applyMultiSpanMaximums can leave the covered columns collectively short (span
+      // padding is per cell, not per column), which wraps the span text where Word
+      // keeps one line. Top up the covered columns evenly. (SD-3309)
+      for (const spanCell of multiSpanCells) {
+        const covered = resolvedWidths.slice(spanCell.startColumn, spanCell.startColumn + spanCell.span);
+        const currentTotal = sumWidths(covered);
+        const demand = spanCell.preferredWidth ?? spanCell.maxContentWidth;
+        if (currentTotal < demand && covered.length > 0) {
+          const topUp = (demand - currentTotal) / covered.length;
+          for (let index = 0; index < covered.length; index++) {
+            resolvedWidths[spanCell.startColumn + index] += topUp;
+          }
+        }
+      }
+      targetTableWidth = Math.min(sumWidths(resolvedWidths), maxResolvedTableWidth);
+    } else if (!shouldPreservePreferredGrid) {
       resolvedWidths = redistributeTowardMaximumsWithinCurrentTable(resolvedWidths, minBounds, maxBounds);
       resolvedWidths = redistributeTowardContentWeightedShape(resolvedWidths, minBounds, maxBounds);
     }

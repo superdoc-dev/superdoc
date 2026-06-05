@@ -3952,7 +3952,7 @@ describe('measureBlock', () => {
       expect(Math.abs(measure.columnWidths[0] - measure.columnWidths[1])).toBeLessThan(1);
     });
 
-    it('preserves authored widths and synthesizes runtime widths for missing logical columns', async () => {
+    it('synthesizes runtime widths for missing logical columns and content-sizes pure-auto tables', async () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'table-3',
@@ -4017,7 +4017,10 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
       expect(measure.columnWidths).toHaveLength(3);
       expect(measure.columnWidths[0]).toBeGreaterThan(0);
-      expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[0]);
+      // SD-3309: pure-auto tables (auto tblW, no tcW anywhere) content-size like Word;
+      // the partial authored grid is not a layout cache, so equal content gives equal columns.
+      expect(measure.columnWidths[1]).toBeGreaterThan(0);
+      expect(measure.totalWidth).toBeLessThan(250);
       expect(measure.columnWidths[2]).toBeGreaterThan(0);
       expect(measure.totalWidth).toBeCloseTo(
         measure.columnWidths.reduce((sum, width) => sum + width, 0),
@@ -4553,7 +4556,7 @@ describe('measureBlock', () => {
       expect(measure.totalWidth).toBe(300);
     });
 
-    it('does not scale when widths are within target', async () => {
+    it('does not upscale a pure-auto table beyond its content', async () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'scale-test-2',
@@ -4593,8 +4596,11 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
       // Auto layout preserves explicit widths (no scale-up)
-      expect(measure.columnWidths).toEqual([50, 50]);
-      expect(measure.totalWidth).toBe(100);
+      // SD-3309: pure-auto tables content-size like Word; equal content gives equal
+      // columns and the table never upscales toward the authored grid sum.
+      expect(Math.abs(measure.columnWidths[0] - measure.columnWidths[1])).toBeLessThan(1);
+      expect(measure.totalWidth).toBeLessThanOrEqual(100);
+      expect(measure.totalWidth).toBeGreaterThan(0);
     });
 
     it('produces exact sum after rounding adjustment', async () => {

@@ -879,6 +879,33 @@ describe('layoutDocument', () => {
     expect(para2Fragment.width).toBe(contentWidth);
   });
 
+  it('positions anchored tables from paragraph top plus offsetV (form-field row)', () => {
+    const paragraphBlock: FlowBlock = { kind: 'paragraph', id: 'para-1', runs: [] };
+    const paragraphMeasure = makeMeasure([18, 18, 18]);
+
+    const tableBlock = makeTableBlock('table-field', 1, {
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 280,
+        offsetV: 2,
+      },
+      wrap: { type: 'None' },
+    });
+    const tableMeasure = makeTableMeasure([120], [14]);
+
+    const layout = layoutDocument([paragraphBlock, tableBlock], [paragraphMeasure, tableMeasure], DEFAULT_OPTIONS);
+
+    const tableFragment = layout.pages[0].fragments.find(
+      (fragment) => fragment.kind === 'table' && fragment.blockId === 'table-field',
+    ) as { y: number; x: number } | undefined;
+
+    expect(tableFragment).toBeTruthy();
+    expect(tableFragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 2);
+    expect(tableFragment?.x).toBe(DEFAULT_OPTIONS.margins!.left + 280);
+  });
+
   it('treats 99% width floating tables as inline but anchors narrower tables', () => {
     const paragraphBlock: FlowBlock = { kind: 'paragraph', id: 'para-1', runs: [] };
     const paragraphMeasure = makeMeasure([20]);

@@ -8,6 +8,10 @@ import type {
   TableBlock,
   TableMeasure,
 } from '@superdoc/contracts';
+import { resolveFloatingTableAnchorResolution } from './floating-table-anchor.js';
+
+export type { FloatingTableAnchorResolution } from './floating-table-anchor.js';
+export { resolveFloatingTableAnchorResolution };
 
 /**
  * Represents an anchored image or drawing block with its measurements.
@@ -21,6 +25,8 @@ export type AnchoredDrawing = {
 export type AnchoredTable = {
   block: TableBlock;
   measure: TableMeasure;
+  /** Resolved paint offset when OOXML tblpY targets a later checkbox row. */
+  layoutOffsetV?: number;
 };
 
 export type AnchoredObject = AnchoredDrawing | AnchoredTable;
@@ -184,20 +190,19 @@ export function collectAnchoredTables(blocks: FlowBlock[], measures: Measure[]):
     // Check if the table is anchored/floating
     if (!tableBlock.anchor?.isAnchored) continue;
 
-    // Heuristic: anchor to explicit paragraph id, else nearest preceding paragraph, else nearest next paragraph
-    const anchorParagraphId =
-      typeof tableBlock.attrs === 'object' && tableBlock.attrs
-        ? (tableBlock.attrs as { anchorParagraphId?: unknown }).anchorParagraphId
-        : undefined;
-    const anchorParaIndex = resolveAnchorParagraphIndex(blocks, len, paragraphIndexById, i, anchorParagraphId);
-    if (anchorParaIndex == null) {
+    const resolution = resolveFloatingTableAnchorResolution(blocks, measures, len, i, tableBlock, paragraphIndexById);
+    if (resolution == null) {
       withoutParagraph.push({ block: tableBlock, measure: tableMeasure });
       continue;
     }
 
-    const list = byParagraph.get(anchorParaIndex) ?? [];
-    list.push({ block: tableBlock, measure: tableMeasure });
-    byParagraph.set(anchorParaIndex, list);
+    const list = byParagraph.get(resolution.paragraphIndex) ?? [];
+    list.push({
+      block: tableBlock,
+      measure: tableMeasure,
+      layoutOffsetV: resolution.offsetV,
+    });
+    byParagraph.set(resolution.paragraphIndex, list);
   }
 
   return {

@@ -25,6 +25,8 @@ import {
   computeParagraphLayoutStartY,
 } from './layout-utils.js';
 import { resolveAnchoredGraphicY, resolveAnchoredGraphicX, getFragmentZIndex } from '@superdoc/contracts';
+import { createAnchoredTableFragment, isAnchoredTableFullWidth } from './layout-table.js';
+import type { AnchoredTable } from './anchors.js';
 
 /** Points → CSS pixels (96 dpi / 72 pt-per-inch). */
 const PX_PER_PT = 96 / 72;
@@ -364,6 +366,8 @@ export type AnchoredDrawingEntry = {
 
 export type ParagraphAnchorsContext = {
   anchoredDrawings?: AnchoredDrawingEntry[];
+  anchoredTables?: AnchoredTable[];
+  columnWidth: number;
   pageWidth: number;
   pageMargins: PageMargins;
   columns: { width: number; gap: number; count: number };
@@ -570,6 +574,72 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   };
 
   registerAnchoredDrawingsAt(paragraphAnchorBaseY);
+
+  const registerAnchoredTablesAt = (paragraphContentStartY: number, entries: AnchoredTable[]) => {
+    if (!entries.length) return;
+    const columnWidthForTable = anchors!.columnWidth;
+    let nextStackY = paragraphContentStartY;
+    for (const entry of entries) {
+      if (anchors!.placedAnchoredIds.has(entry.block.id)) continue;
+      const totalWidth = entry.measure.totalWidth ?? 0;
+      if (isAnchoredTableFullWidth(entry.block, entry.measure, columnWidthForTable)) {
+        continue;
+      }
+
+      const state = ensurePage();
+      const contentTop = state.topMargin;
+      const contentBottom = state.contentBottom;
+      const layoutOffsetV = entry.layoutOffsetV;
+      const anchorForY =
+        layoutOffsetV != null && entry.block.anchor
+          ? { ...entry.block.anchor, offsetV: layoutOffsetV }
+          : entry.block.anchor;
+      const anchorY = resolveAnchoredGraphicY({
+        anchor: anchorForY,
+        objectHeight: entry.measure.totalHeight ?? 0,
+        contentTop,
+        contentBottom,
+        pageBottomMargin: anchors!.pageMargins.bottom ?? 0,
+        anchorParagraphY: nextStackY,
+        firstLineHeight: measure.lines?.[0]?.lineHeight ?? 0,
+      });
+
+      floatManager.registerTable(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
+
+      const anchorX = entry.block.anchor
+        ? resolveAnchoredGraphicX(
+            entry.block.anchor,
+            state.columnIndex,
+            anchors!.columns,
+            totalWidth,
+            { left: anchors!.pageMargins.left, right: anchors!.pageMargins.right },
+            anchors!.pageWidth,
+          )
+        : columnX(state.columnIndex);
+
+      state.page.fragments.push(createAnchoredTableFragment(entry.block, entry.measure, anchorX, anchorY));
+      anchors!.placedAnchoredIds.add(entry.block.id);
+
+      const wrapType = entry.block.wrap?.type ?? 'None';
+      if (wrapType !== 'None') {
+        const bottom = anchorY + (entry.measure.totalHeight ?? 0);
+        const distBottom = entry.block.wrap?.distBottom ?? 0;
+        nextStackY = Math.max(nextStackY, bottom + distBottom);
+      }
+    }
+  };
+
+  const anchoredTablesForPara = anchors?.anchoredTables ?? [];
+  const totalLineHeight = lines.reduce((sum, line) => sum + (line.lineHeight ?? 0), 0);
+  const remainingHeightOnStartPage = previewState.contentBottom - paragraphAnchorBaseY;
+  const paragraphWillSpanPages = lines.length > 1 && totalLineHeight > remainingHeightOnStartPage;
+  const usePostLayoutSquareAnchors = paragraphWillSpanPages || emptyTextParagraph;
+
+  const preLayoutAnchoredTables = anchoredTablesForPara.filter((entry) => {
+    const wrapType = entry.block.wrap?.type ?? 'None';
+    return wrapType === 'None' || !usePostLayoutSquareAnchors;
+  });
+  registerAnchoredTablesAt(paragraphAnchorBaseY, preLayoutAnchoredTables);
 
   const isPositionedFrame = frame?.wrap === 'none';
   if (isPositionedFrame) {
@@ -1166,5 +1236,14 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     lastState.lastParagraphStyleId = styleId;
     lastState.lastParagraphContextualSpacing = contextualSpacing;
     lastState.lastParagraphBorderHash = currentBorderHash;
+  }
+
+  const postLayoutAnchoredTables = anchoredTablesForPara.filter((entry) => {
+    const wrapType = entry.block.wrap?.type ?? 'None';
+    return wrapType !== 'None' && usePostLayoutSquareAnchors;
+  });
+  if (postLayoutAnchoredTables.length > 0) {
+    const anchorEndY = lastState?.cursorY ?? paragraphAnchorBaseY;
+    registerAnchoredTablesAt(anchorEndY, postLayoutAnchoredTables);
   }
 }

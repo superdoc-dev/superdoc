@@ -285,6 +285,34 @@ describe('renderTableRow', () => {
     expect(secondCall.borders?.left).toBeDefined();
   });
 
+  // SD-3308: double borders paint as pixel-snapped strip overlays (rule + gap + rule)
+  // with square junctions like Word; the cell keeps a transparent CSS double border so
+  // border-box layout is unchanged.
+  it('paints double borders as strip overlays and hides the cell CSS border paint', () => {
+    renderTableRow(
+      createDeps({
+        rowIndex: 0,
+        totalRows: 1,
+        cellSpacingPx: 0,
+        tableBorders: {
+          top: { style: 'double', width: 2, color: '#000000' },
+          bottom: { style: 'double', width: 2, color: '#000000' },
+          left: { style: 'double', width: 2, color: '#000000' },
+          right: { style: 'double', width: 2, color: '#000000' },
+        },
+      }) as never,
+    );
+
+    const strips = container.querySelectorAll('.superdoc-double-border-strip');
+    expect(strips.length).toBe(4);
+    const top = [...strips].find((el) => (el as HTMLElement).style.borderTop !== '');
+    expect(top).toBeDefined();
+    expect((top as HTMLElement).style.height).toBe('6px');
+    expect((top as HTMLElement).style.borderTop).toMatch(/2px solid/);
+    const cellArgs = renderTableCellMock.mock.calls[0][0] as { borders?: { top?: { style?: string } } };
+    expect(cellArgs.borders?.top?.style).toBe('double');
+  });
+
   // SD-1797: a single row's measure only lists cells that START in it, so on a w:vMerge
   // (rowspan) continuation row the columns held by a cell spanning from above look empty.
   // `rowOccupiedRightCol` / `nextRowOccupiedRightCol` count that occupancy so the single-owner

@@ -362,6 +362,40 @@ describe('groupTrackedChanges', () => {
     const grouped = groupTrackedChanges(makeEditor());
     expect(grouped.find((change) => change.rawId === 'inline-partial')).toBeDefined();
   });
+
+  it('subsumes a single revision id whose disjoint segments each sit in a different whole table', () => {
+    // One imported id reused across two tables: marks at [20,25] (table A 10-40)
+    // and [70,75] (table B 60-90). The collapsed envelope [20,75] spans the gap
+    // between the tables, so an envelope-only check would wrongly keep it — the
+    // per-segment rule correctly subsumes it (every segment is table-owned).
+    const shared = makeTrackMark(TrackInsertMarkName, 'shared-across-tables', { author: 'Alice' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...shared, node: { text: 'A', marks: [shared.mark] }, from: 20, to: 25 },
+      { ...shared, node: { text: 'B', marks: [shared.mark] }, from: 70, to: 75 },
+    ] as never);
+    vi.mocked(enumerateStructuralRowChanges).mockReturnValueOnce([
+      wholeTableInsert({ id: 'logical-a', sourceId: '7', tableFrom: 10, tableTo: 40, tablePos: 10 }),
+      wholeTableInsert({ id: 'logical-b', sourceId: '8', tableFrom: 60, tableTo: 90, tablePos: 60 }),
+    ]);
+
+    const grouped = groupTrackedChanges(makeEditor());
+    expect(grouped.find((change) => change.rawId === 'shared-across-tables')).toBeUndefined();
+    // Both structural tables survive.
+    expect(grouped.filter((change) => change.id?.startsWith('word:structural:'))).toHaveLength(2);
+  });
+
+  it('does NOT subsume an inline change whose segment straddles a table edge', () => {
+    // Segment [35,45] crosses the table's right edge (table 10-40): it is not
+    // wholly inside any whole-table range, so the change is kept.
+    const straddle = makeTrackMark(TrackInsertMarkName, 'edge-straddle', { author: 'Alice' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...straddle, node: { text: 'edge', marks: [straddle.mark] }, from: 35, to: 45 },
+    ] as never);
+    vi.mocked(enumerateStructuralRowChanges).mockReturnValueOnce([wholeTableInsert()]);
+
+    const grouped = groupTrackedChanges(makeEditor());
+    expect(grouped.find((change) => change.rawId === 'edge-straddle')).toBeDefined();
+  });
 });
 
 describe('resolveTrackedChange', () => {

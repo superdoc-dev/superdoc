@@ -308,6 +308,21 @@ const mixedSchema = new Schema({
       },
       toDOM: () => ['span', 0],
     },
+    'total-page-number': {
+      group: 'inline',
+      inline: true,
+      atom: true,
+      content: 'text*',
+      attrs: {
+        instruction: { default: null },
+        importedCachedText: { default: null },
+        resolvedText: { default: null },
+        pageNumberFormat: { default: null },
+        pageNumberZeroPadding: { default: null },
+        pageNumberNumericPicture: { default: null },
+      },
+      toDOM: () => ['span', 0],
+    },
     sequenceField: {
       group: 'inline',
       inline: true,
@@ -448,6 +463,44 @@ describe('updateFieldsInSelection — TOC + stat fields combined (regression)', 
     const updatedField = updatedDoc.nodeAt(1);
     expect(updatedField.attrs.resolvedText).toBe('004');
     expect(updatedField.textContent).toBe('004');
+  });
+
+  it('updates NUMPAGES fields with preserved numeric picture formatting', () => {
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const totalPageNumberField = mixedSchema.nodes['total-page-number'].create(
+      {
+        instruction: 'NUMPAGES \\# "#,##0 pages"',
+        pageNumberNumericPicture: '#,##0 pages',
+        resolvedText: '1 pages',
+      },
+      mixedSchema.text('1 pages'),
+    );
+    const doc = mixedSchema.nodes.doc.create({}, [para([totalPageNumberField])]);
+    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      currentTotalPages: 1234,
+      state: editorState,
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const outerTr = editorState.tr;
+    const dispatch = vi.fn();
+    const state = {
+      doc,
+      selection: { from: 0, to: doc.content.size },
+      schema: mixedSchema,
+      tr: outerTr,
+    };
+
+    const result = command({ editor, state, tr: outerTr, dispatch });
+
+    expect(result).toBe(true);
+    const updatedDoc = dispatch.mock.calls[0][0].doc;
+    const updatedField = updatedDoc.nodeAt(1);
+    expect(updatedField.type.name).toBe('total-page-number');
+    expect(updatedField.attrs.resolvedText).toBe('1,234 pages');
+    expect(updatedField.textContent).toBe('1,234 pages');
   });
 
   it('leaves SECTIONPAGES fields unchanged when section page context is unavailable', () => {

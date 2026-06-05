@@ -1,4 +1,5 @@
 import { Extension } from '@core/Extension.js';
+import { formatPageNumberFieldValue } from '@superdoc/contracts';
 import { findFieldsInRange } from '../../document-api-adapters/helpers/field-resolver.js';
 import { findAllTocNodes } from '../../document-api-adapters/helpers/toc-resolver.js';
 import {
@@ -11,9 +12,15 @@ import {
   getSequenceFieldUpdaterConverterContext,
   updateSequenceFieldsInTransaction,
 } from '../../document-api-adapters/helpers/sequence-field-updater.js';
+import { getPageNumberFieldFormat } from '../../core/layout-adapter/converters/inline-converters/page-number-field-format.js';
 
 /** Stat-field types refreshed by F9 when the doc has no TOCs. */
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES', 'SECTIONPAGES']);
+
+function resolveTotalPageNumberFieldValue(stats, node) {
+  if (stats.pages == null) return null;
+  return formatPageNumberFieldValue(stats.pages, getPageNumberFieldFormat(node.attrs));
+}
 
 /**
  * @module FieldUpdate
@@ -119,7 +126,9 @@ export const FieldUpdate = Extension.create({
             const freshValue =
               field.fieldType === 'SECTIONPAGES'
                 ? resolveSectionPageCountFieldValue(editor, node)
-                : resolveDocumentStatFieldValue(field.fieldType, stats);
+                : field.fieldType === 'NUMPAGES' && node.type.name === 'total-page-number'
+                  ? resolveTotalPageNumberFieldValue(stats, node)
+                  : resolveDocumentStatFieldValue(field.fieldType, stats);
             if (freshValue == null) continue;
 
             if (node.type.name === 'total-page-number' || node.type.name === 'section-page-count') {

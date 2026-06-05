@@ -299,4 +299,70 @@ describe('resolveTokensInBlock', () => {
     expect((block.runs[0] as TextRun).token).toBeUndefined();
     expect((block.runs[0] as TextRun).pageNumberFieldFormat).toBeUndefined();
   });
+
+  it('should apply run-local total page count zero padding', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'test-total-count-zero-padding-format',
+      runs: [
+        {
+          text: '0',
+          token: 'totalPageCount',
+          pageNumberFieldFormat: { format: 'decimal', zeroPadding: 3 },
+          fontFamily: 'Arial',
+          fontSize: 12,
+        } as TextRun,
+      ],
+    };
+
+    const wasModified = resolveTokensInBlock(block, 1, 7);
+
+    expect(wasModified).toBe(true);
+    expect((block.runs[0] as TextRun).text).toBe('007');
+    expect((block.runs[0] as TextRun).token).toBeUndefined();
+  });
+
+  it('should apply run-local total page count grouping picture', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'test-total-count-picture-format',
+      runs: [
+        {
+          text: '0',
+          token: 'totalPageCount',
+          pageNumberFieldFormat: { numericPicture: '#,##0' },
+          fontFamily: 'Arial',
+          fontSize: 12,
+        } as TextRun,
+      ],
+    };
+
+    const wasModified = resolveTokensInBlock(block, 1, 1234);
+
+    expect(wasModified).toBe(true);
+    expect((block.runs[0] as TextRun).text).toBe('1,234');
+    expect((block.runs[0] as TextRun).token).toBeUndefined();
+  });
+
+  it('should apply run-local total page count ordinal format', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'test-total-count-ordinal-format',
+      runs: [
+        {
+          text: '0',
+          token: 'totalPageCount',
+          pageNumberFieldFormat: { format: 'ordinal' },
+          fontFamily: 'Arial',
+          fontSize: 12,
+        } as TextRun,
+      ],
+    };
+
+    const wasModified = resolveTokensInBlock(block, 1, 22);
+
+    expect(wasModified).toBe(true);
+    expect((block.runs[0] as TextRun).text).toBe('22nd');
+    expect((block.runs[0] as TextRun).token).toBeUndefined();
+  });
 });

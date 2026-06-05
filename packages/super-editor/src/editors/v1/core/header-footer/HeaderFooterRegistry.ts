@@ -2,6 +2,7 @@ import { toFlowBlocks } from '@core/layout-adapter';
 import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from '../presentation-editor/utils/SchemaNodeTypes.js';
 import {
   formatPageNumber,
+  formatPageNumberFieldValue,
   formatSectionPageNumberText,
   type FlowBlock,
   type PageNumberChapterSeparator,
@@ -14,6 +15,7 @@ import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
 import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
 import { buildStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
+import { getPageNumberFieldFormat } from '../layout-adapter/converters/inline-converters/page-number-field-format.js';
 
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'] as const;
 const DEFAULT_HEADER_FOOTER_HEIGHT = 100;
@@ -504,7 +506,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       typeof opts.currentPageChapterSeparator === 'string'
         ? (opts.currentPageChapterSeparator as PageNumberChapterSeparator)
         : undefined;
-    const totalPages = String(opts.totalPageCount || parentEditor?.currentTotalPages || '1');
+    const totalPages = Number(opts.totalPageCount || parentEditor?.currentTotalPages || 1) || 1;
     const sectionPages = opts.sectionPageCount;
 
     const pageNumberEls = container.querySelectorAll('[data-id="auto-page-number"]');
@@ -524,7 +526,9 @@ export class HeaderFooterEditorManager extends EventEmitter {
       if (el.textContent !== text) el.textContent = text;
     });
     totalPagesEls.forEach((el) => {
-      if (el.textContent !== totalPages) el.textContent = totalPages;
+      const pageNumberFieldFormat = this.#getPageNumberFieldFormatForDomNode(editor, el);
+      const text = formatPageNumberFieldValue(totalPages, pageNumberFieldFormat);
+      if (el.textContent !== text) el.textContent = text;
     });
     sectionPagesEls.forEach((el) => {
       if (sectionPages == null) return;
@@ -545,6 +549,18 @@ export class HeaderFooterEditorManager extends EventEmitter {
       return typeof format === 'string' ? (format as PageNumberFormat) : null;
     } catch {
       return null;
+    }
+  }
+
+  #getPageNumberFieldFormatForDomNode(editor: Editor, el: Element): ReturnType<typeof getPageNumberFieldFormat> {
+    try {
+      const view = editor.view;
+      if (!view) return undefined;
+      const pos = view.posAtDOM(el, 0);
+      const node = editor.state.doc.nodeAt(pos);
+      return getPageNumberFieldFormat(node?.attrs);
+    } catch {
+      return undefined;
     }
   }
 

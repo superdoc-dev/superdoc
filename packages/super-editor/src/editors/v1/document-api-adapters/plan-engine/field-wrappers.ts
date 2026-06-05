@@ -15,6 +15,7 @@ import type {
   MutationOptions,
   ReceiptFailureCode,
 } from '@superdoc/document-api';
+import { formatPageNumberFieldValue } from '@superdoc/contracts';
 import { buildDiscoveryResult } from '@superdoc/document-api';
 import {
   findAllFields,
@@ -31,6 +32,7 @@ import { DocumentApiAdapterError } from '../errors.js';
 import { getWordStatistics, resolveDocumentStatFieldValue, resolveMainBodyEditor } from '../helpers/word-statistics.js';
 import { resolveSectionPageCountFieldValue } from '../helpers/section-page-count.js';
 import { parsePageNumberFieldSwitches } from '../../core/super-converter/field-references/shared/page-number-field-switches.js';
+import { getPageNumberFieldFormat } from '../../core/layout-adapter/converters/inline-converters/page-number-field-format.js';
 import {
   isSeqInstruction,
   parseSeqInstruction,
@@ -119,7 +121,7 @@ export function fieldsInsertWrapper(
   }
 
   if (fieldType === 'NUMPAGES') {
-    return insertNumPagesField(editor, resolved, options);
+    return insertNumPagesField(editor, input, resolved, options);
   }
 
   if (fieldType === 'SECTIONPAGES') {
@@ -173,6 +175,7 @@ function insertDocumentStatField(
 
 function insertNumPagesField(
   editor: Editor,
+  input: FieldInsertInput,
   resolved: { from: number },
   options?: MutationOptions,
 ): FieldMutationResult {
@@ -190,10 +193,12 @@ function insertNumPagesField(
     );
   }
 
+  const parsedInstruction = parsePageNumberFieldSwitches(input.instruction, 'NUMPAGES');
+
   const receipt = executeDomainCommand(
     editor,
     (): boolean => {
-      const node = nodeType.create({});
+      const node = nodeType.create(parsedInstruction);
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
       editor.dispatch(tr);
@@ -453,7 +458,10 @@ function rebuildTotalPageNumber(
 
   if (stats.pages == null) return fieldSuccess(address);
 
-  const freshValue = String(stats.pages);
+  const node = editor.state.doc.nodeAt(resolved.pos);
+  if (!node) return fieldFailure('TARGET_NOT_FOUND', 'Node not found.');
+
+  const freshValue = formatPageNumberFieldValue(stats.pages, getPageNumberFieldFormat(node.attrs));
 
   const receipt = executeDomainCommand(
     editor,

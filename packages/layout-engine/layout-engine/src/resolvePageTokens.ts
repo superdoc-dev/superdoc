@@ -335,9 +335,12 @@ export function resolveTokensInBlock(block: ParagraphBlock, pageNumber: number, 
         blockModified = true;
       } else if (run.token === 'totalPageCount') {
         // Replace placeholder text with total page count
-        run.text = totalPagesStr;
+        run.text = run.pageNumberFieldFormat
+          ? formatPageNumberFieldValue(totalPages, run.pageNumberFieldFormat)
+          : totalPagesStr;
         // Clear token metadata to treat as normal text after resolution
         delete run.token;
+        delete run.pageNumberFieldFormat;
         blockModified = true;
       }
       // Note: pageReference tokens are handled by resolvePageRefs.ts

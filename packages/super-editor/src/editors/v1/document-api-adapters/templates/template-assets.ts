@@ -23,6 +23,16 @@ import { decodeText } from '../../core/opc/read-package.js';
 import { resolveSectionProjections } from '../helpers/sections-resolver.js';
 import { applySectPrToProjection } from '../helpers/section-mutation-wrapper.js';
 import { readTargetSectPr } from '../helpers/section-projection-access.js';
+import { clearIndexCache } from '../helpers/index-cache.js';
+import {
+  type XmlElement as SectionXmlElement,
+  clearSectPrHeaderFooterRef,
+  ensureSectPrElement,
+  getSectPrHeaderFooterRef,
+  readSectPrTitlePage,
+  setSectPrHeaderFooterRef,
+  writeSectPrTitlePage,
+} from '../helpers/sections-xml.js';
 
 const HEADER_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
 const FOOTER_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
@@ -133,11 +143,10 @@ export function importHeaderFooterAssets(
   const srcRelEls = srcRelsRoot?.elements ?? [];
 
   // Detect every header/footer part present in the source (even if the page-1
-  // governing section does not reference it), then attach a representative
-  // source rel id when one exists so the selected sectPr can be rewired.
-  const hfPartNames = [...byName.keys()]
-    .filter((n) => /^word\/(header|footer)\d+\.xml$/.test(n))
-    .sort();
+  // governing section does not reference it), then collect every source
+  // document-rel id that targets that part so the adopted sectPr can rewrite
+  // all references coherently.
+  const hfPartNames = [...byName.keys()].filter((n) => /^word\/(header|footer)\d+\.xml$/.test(n)).sort();
   if (hfPartNames.length === 0) return result;
   result.detected = true;
   if (dryRun) {
@@ -220,15 +229,18 @@ export function importHeaderFooterAssets(
     return allocated;
   };
 
-  // Build a quick lookup of source document rels by target part name.
-  const sourceRelByTarget = new Map<string, { id: string; type: string }>();
+  // Build a quick lookup of source document rel ids by target part name.
+  const sourceRelIdsByTarget = new Map<string, string[]>();
   for (const rel of srcRelEls) {
     const type = rel.attributes?.Type;
     const target = rel.attributes?.Target;
     const id = rel.attributes?.Id;
     if (!type || !target || !id) continue;
     if (type === HEADER_REL_TYPE || type === FOOTER_REL_TYPE) {
-      sourceRelByTarget.set(relTargetToWordPath(target).replace(/^word\//, ''), { id, type });
+      const sourceTarget = relTargetToWordPath(target).replace(/^word\//, '');
+      const existing = sourceRelIdsByTarget.get(sourceTarget);
+      if (existing) existing.push(id);
+      else sourceRelIdsByTarget.set(sourceTarget, [id]);
     }
   }
 
@@ -323,15 +335,21 @@ export function importHeaderFooterAssets(
     });
     docRelsChanged = true;
 
-    // Map the source document-rel id (if this part was referenced) to the new id.
-    const srcRel = sourceRelByTarget.get(sourceTarget);
-    if (srcRel) {
-      result.relIdRemap.set(srcRel.id, relId);
-      result.mappings.push({ kind: 'relationship', from: srcRel.id, to: relId });
+    // Map every source document-rel id that referenced this part to the new id.
+    const sourceRelIds = sourceRelIdsByTarget.get(sourceTarget) ?? [];
+    for (const sourceRelId of sourceRelIds) {
+      result.relIdRemap.set(sourceRelId, relId);
+      result.mappings.push({ kind: 'relationship', from: sourceRelId, to: relId });
     }
 
     // Content-type override.
-    if (ensureContentTypeOverride(converter, targetPartName, kind === 'header' ? HEADER_CONTENT_TYPE : FOOTER_CONTENT_TYPE)) {
+    if (
+      ensureContentTypeOverride(
+        converter,
+        targetPartName,
+        kind === 'header' ? HEADER_CONTENT_TYPE : FOOTER_CONTENT_TYPE,
+      )
+    ) {
       contentTypesChanged = true;
     }
 
@@ -387,12 +405,53 @@ export interface SectionDefaultsResult {
   warnings: TemplateApplyWarning[];
 }
 
+const HEADER_FOOTER_KINDS = ['header', 'footer'] as const;
+const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even'] as const;
+
+function toSectionXmlElement(node: XmlElement): SectionXmlElement {
+  if (!node.name) {
+    throw new Error('Expected named XML element.');
+  }
+
+  return {
+    type: node.type,
+    name: node.name,
+    attributes: node.attributes ? { ...node.attributes } : undefined,
+    elements: node.elements
+      ?.filter((child): child is XmlElement & { name: string } => typeof child.name === 'string')
+      .map((child) => toSectionXmlElement(child)),
+  };
+}
+
+function mergePageOneHeaderFooterModel(
+  targetSectPr: SectionXmlElement | null,
+  sourceSectPr: SectionXmlElement,
+): SectionXmlElement {
+  const mergedSectPr = ensureSectPrElement(targetSectPr);
+
+  for (const kind of HEADER_FOOTER_KINDS) {
+    for (const variant of HEADER_FOOTER_VARIANTS) {
+      const sourceRef = getSectPrHeaderFooterRef(sourceSectPr, kind, variant);
+      if (sourceRef) {
+        setSectPrHeaderFooterRef(mergedSectPr, kind, variant, sourceRef);
+      } else {
+        clearSectPrHeaderFooterRef(mergedSectPr, kind, variant);
+      }
+    }
+  }
+
+  writeSectPrTitlePage(mergedSectPr, readSectPrTitlePage(sourceSectPr));
+  return mergedSectPr;
+}
+
 /**
  * Adopt the source `w:sectPr` that governs page 1 as the active section
  * defaults (`DA-TEMPLATE-017`), routed through the real section-mutation/sync
- * path so `bodySectPr`, saved body XML and page-style runtime state stay
- * consistent. Header/footer reference relationship ids are rewritten via
- * `relIdRemap`.
+ * path so the current document's final/body section defaults stay consistent.
+ * On multi-section targets, the source's header/footer visibility model
+ * (`headerReference` / `footerReference` / `w:titlePg`) is also projected
+ * across the earlier sections without overwriting their own page geometry.
+ * Header/footer reference relationship ids are rewritten via `relIdRemap`.
  */
 export function applyPageOneSectionDefaults(
   editor: Editor,
@@ -401,7 +460,13 @@ export function applyPageOneSectionDefaults(
   parseXml: (xml: string) => XmlElement,
   dryRun: boolean,
 ): SectionDefaultsResult {
-  const result: SectionDefaultsResult = { detected: false, applied: false, changed: false, changedParts: [], warnings: [] };
+  const result: SectionDefaultsResult = {
+    detected: false,
+    applied: false,
+    changed: false,
+    changedParts: [],
+    warnings: [],
+  };
 
   let parsedDoc: XmlElement;
   try {
@@ -413,10 +478,22 @@ export function applyPageOneSectionDefaults(
   if (!sourceSectPr) return result;
   result.detected = true;
 
-  const sectPr = clone(sourceSectPr);
-  rewriteSectPrRefs(sectPr, relIdRemap);
+  let sectPr: SectionXmlElement;
+  try {
+    const rewrittenSectPr = clone(sourceSectPr);
+    rewriteSectPrRefs(rewrittenSectPr, relIdRemap);
+    sectPr = toSectionXmlElement(rewrittenSectPr);
+  } catch {
+    result.warnings.push({
+      code: 'SECTION_DEFAULTS_UNAVAILABLE',
+      message: 'Could not normalize the source page-1 sectPr.',
+    });
+    return result;
+  }
 
-  // Find the final/body section projection and apply via the section path.
+  // Keep the existing final/body defaults adoption path, but also project the
+  // source header/footer visibility model across earlier sections so a
+  // multi-section target does not keep stale target-specific headers/footers.
   let projections;
   try {
     projections = resolveSectionProjections(editor);
@@ -427,26 +504,60 @@ export function applyPageOneSectionDefaults(
     });
     return result;
   }
-  const bodyProjection = [...projections].reverse().find((p) => p.target.kind === 'body') ?? projections[projections.length - 1];
-  if (!bodyProjection) {
+  if (projections.length === 0) {
     result.warnings.push({
       code: 'SECTION_DEFAULTS_UNAVAILABLE',
-      message: 'No body section projection found for page-1 sectPr adoption.',
+      message: 'No section projections found for page-1 sectPr adoption.',
     });
     return result;
   }
 
-  const currentSectPr = readTargetSectPr(editor, bodyProjection);
-  if (xmlDeepEqual(currentSectPr, sectPr)) {
+  const bodyProjection =
+    [...projections].reverse().find((projection) => projection.target.kind === 'body') ??
+    projections[projections.length - 1];
+
+  const sectionUpdates = projections
+    .map((projection) => {
+      const currentSectPr = readTargetSectPr(editor, projection);
+      const nextSectPr =
+        projection.sectionId === bodyProjection.sectionId
+          ? clone(sectPr)
+          : mergePageOneHeaderFooterModel(currentSectPr, sectPr);
+      if (xmlDeepEqual(currentSectPr, nextSectPr)) return null;
+      return {
+        sectionId: projection.sectionId,
+        nextSectPr,
+      };
+    })
+    .filter((update): update is { sectionId: string; nextSectPr: SectionXmlElement } => Boolean(update));
+
+  if (sectionUpdates.length === 0) {
     return result;
   }
 
   result.changed = true;
-  result.changedParts.push({ part: 'word/document.xml', scope: 'sectionDefaults', change: 'replaced' });
+  result.changedParts.push({
+    part: 'word/document.xml',
+    scope: 'sectionDefaults',
+    change: sectionUpdates.some((update) => update.sectionId !== bodyProjection.sectionId) ? 'merged' : 'replaced',
+  });
   if (dryRun) return result;
 
   try {
-    applySectPrToProjection(editor, bodyProjection, sectPr as unknown as Parameters<typeof applySectPrToProjection>[2]);
+    for (let index = 0; index < sectionUpdates.length; index += 1) {
+      const update = sectionUpdates[index];
+      const liveProjection = resolveSectionProjections(editor).find(
+        (projection) => projection.sectionId === update.sectionId,
+      );
+      if (!liveProjection) {
+        throw new Error(`Section ${update.sectionId} disappeared during page-1 sectPr adoption.`);
+      }
+
+      applySectPrToProjection(editor, liveProjection, clone(update.nextSectPr), {
+        addToHistory: index === sectionUpdates.length - 1,
+      });
+    }
+    clearIndexCache(editor);
     result.applied = true;
   } catch (err) {
     result.changed = false;

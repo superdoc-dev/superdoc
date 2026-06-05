@@ -99,9 +99,9 @@ describe('executeTemplatesApply contract', () => {
 
   it('throws INVALID_INPUT when path source has empty path', () => {
     const adapter = makeAdapter();
-    expect(() =>
-      executeTemplatesApply(adapter, { source: { kind: 'path', path: '' } } as TemplatesApplyInput),
-    ).toThrow(DocumentApiValidationError);
+    expect(() => executeTemplatesApply(adapter, { source: { kind: 'path', path: '' } } as TemplatesApplyInput)).toThrow(
+      DocumentApiValidationError,
+    );
   });
 
   it('throws INVALID_INPUT when base64 source has empty data', () => {

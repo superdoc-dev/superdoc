@@ -55,6 +55,9 @@ const NUMBERING_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w
 const CUSTOM_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><root sentinel="CUSTOM_XML_SENTINEL"/>`;
 const PAGE_ONE_SECTION_DOCUMENT_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:pPr><w:sectPr><w:headerReference w:type="first" r:id="rId10"/><w:headerReference w:type="default" r:id="rId11"/><w:footerReference w:type="default" r:id="rId12"/><w:type w:val="continuous"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/><w:cols w:space="720"/><w:titlePg/></w:sectPr></w:pPr><w:r><w:t>Section 1</w:t></w:r></w:p><w:p><w:r><w:t>Section 2</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rId13"/><w:footerReference w:type="default" r:id="rId14"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/><w:cols w:space="720"/></w:sectPr></w:body></w:document>`;
 const PAGE_ONE_SECTION_RELS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId10" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header10.xml"/><Relationship Id="rId11" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header11.xml"/><Relationship Id="rId12" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer12.xml"/><Relationship Id="rId13" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header13.xml"/><Relationship Id="rId14" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer14.xml"/></Relationships>`;
+const DEFAULT_HEADER_SECTION_DOCUMENT_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:pPr><w:sectPr><w:headerReference w:type="default" r:id="rId20"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/><w:cols w:space="720"/></w:sectPr></w:pPr><w:r><w:t>Section 1</w:t></w:r></w:p><w:p><w:r><w:t>Section 2</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/><w:cols w:space="720"/></w:sectPr></w:body></w:document>`;
+const DEFAULT_HEADER_SECTION_RELS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId20" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header20.xml"/></Relationships>`;
+const DEFAULT_SECTION_HEADER_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>VISIBLE_DEFAULT_HEADER_SENTINEL</w:t></w:r></w:p></w:hdr>`;
 const FIRST_PAGE_HEADER_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>FIRST_PAGE_HEADER_SENTINEL</w:t></w:r></w:p></w:hdr>`;
 const FIRST_SECTION_DEFAULT_HEADER_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>FIRST_SECTION_DEFAULT_HEADER_SENTINEL</w:t></w:r></w:p></w:hdr>`;
 const FINAL_SECTION_HEADER_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>FINAL_SECTION_HEADER_SENTINEL</w:t></w:r></w:p></w:hdr>`;
@@ -70,10 +73,12 @@ async function exportDocxFiles(editor: Editor): Promise<Record<string, string>> 
 
 describe('templates.apply adapter integration', () => {
   let docData: LoadedDocData;
+  let multiSectionDocData: LoadedDocData;
   let editor: Editor | undefined;
 
   beforeAll(async () => {
     docData = await loadTestDataForEditorTests('blank-doc.docx');
+    multiSectionDocData = await loadTestDataForEditorTests('multi_section_doc.docx');
   });
 
   afterEach(() => {
@@ -87,6 +92,17 @@ describe('templates.apply adapter integration', () => {
       media: docData.media,
       mediaFiles: docData.mediaFiles,
       fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    });
+    return result.editor as Editor;
+  }
+
+  function newMultiSectionEditor(): Editor {
+    const result = initTestEditor({
+      content: multiSectionDocData.docx,
+      media: multiSectionDocData.media,
+      mediaFiles: multiSectionDocData.mediaFiles,
+      fonts: multiSectionDocData.fonts,
       useImmediateSetTimeout: false,
     });
     return result.editor as Editor;
@@ -124,10 +140,13 @@ describe('templates.apply adapter integration', () => {
     const beforeStyles = JSON.stringify(cvt.convertedXml['word/styles.xml']);
     const beforeTheme = cvt.convertedXml['word/theme/theme1.xml'];
 
-    const receipt = (await editor.doc.templates.apply({
-      source: { kind: 'base64', data },
-      bodyPolicy: 'preserve',
-    }, { dryRun: true })) as TemplatesApplyReceipt;
+    const receipt = (await editor.doc.templates.apply(
+      {
+        source: { kind: 'base64', data },
+        bodyPolicy: 'preserve',
+      },
+      { dryRun: true },
+    )) as TemplatesApplyReceipt;
 
     expect(receipt.success).toBe(true);
     if (!receipt.success) return;
@@ -166,8 +185,12 @@ describe('templates.apply adapter integration', () => {
     });
 
     editor = newEditor();
-    const cvt = (editor as unknown as { converter: { convertedXml: Record<string, unknown>; schemaToXml: (d: unknown) => string } }).converter;
-    const bodyBeforeXml = cvt.schemaToXml((cvt.convertedXml['word/document.xml'] as { elements: unknown[] }).elements[0]);
+    const cvt = (
+      editor as unknown as { converter: { convertedXml: Record<string, unknown>; schemaToXml: (d: unknown) => string } }
+    ).converter;
+    const bodyBeforeXml = cvt.schemaToXml(
+      (cvt.convertedXml['word/document.xml'] as { elements: unknown[] }).elements[0],
+    );
 
     const receipt = (await editor.doc.templates.apply({ source: { kind: 'base64', data } })) as TemplatesApplyReceipt;
     expect(receipt.success).toBe(true);
@@ -184,7 +207,9 @@ describe('templates.apply adapter integration', () => {
     });
 
     // Body preserved in-memory immediately after apply.
-    const bodyAfterXml = cvt.schemaToXml((cvt.convertedXml['word/document.xml'] as { elements: unknown[] }).elements[0]);
+    const bodyAfterXml = cvt.schemaToXml(
+      (cvt.convertedXml['word/document.xml'] as { elements: unknown[] }).elements[0],
+    );
     expect(bodyAfterXml).toBe(bodyBeforeXml);
 
     // Export and re-unzip the real output.
@@ -282,6 +307,35 @@ describe('templates.apply adapter integration', () => {
     expect(
       Object.entries(out).some(
         ([name, content]) => /^word\/header\d+\.xml$/.test(name) && content.includes('FIRST_PAGE_HEADER_SENTINEL'),
+      ),
+    ).toBe(true);
+  });
+
+  it('propagates the source page-1 visible default header across every target section without flattening earlier section layout', async () => {
+    const data = await buildSourceTemplateBase64({
+      'word/document.xml': DEFAULT_HEADER_SECTION_DOCUMENT_XML,
+      'word/_rels/document.xml.rels': DEFAULT_HEADER_SECTION_RELS_XML,
+      'word/header20.xml': DEFAULT_SECTION_HEADER_XML,
+    });
+
+    editor = newMultiSectionEditor();
+    const receipt = (await editor.doc.templates.apply({ source: { kind: 'base64', data } })) as TemplatesApplyReceipt;
+    expect(receipt.success).toBe(true);
+    if (!receipt.success) return;
+
+    const out = await exportDocxFiles(editor);
+    const documentXml = out['word/document.xml'];
+    const sectPrCount = documentXml.match(/<w:sectPr\b/g)?.length ?? 0;
+    const defaultHeaderRefCount = documentXml.match(/w:headerReference w:type="default"/g)?.length ?? 0;
+    const twoColumnSectPrCount = documentXml.match(/<w:cols\b[^>]*w:num="2"[^>]*\/>/g)?.length ?? 0;
+
+    expect(sectPrCount).toBeGreaterThan(1);
+    expect(defaultHeaderRefCount).toBe(sectPrCount);
+    expect(twoColumnSectPrCount).toBe(1);
+    expect(documentXml).not.toContain('<w:titlePg');
+    expect(
+      Object.entries(out).some(
+        ([name, content]) => /^word\/header\d+\.xml$/.test(name) && content.includes('VISIBLE_DEFAULT_HEADER_SENTINEL'),
       ),
     ).toBe(true);
   });

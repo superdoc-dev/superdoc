@@ -31,6 +31,14 @@ import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { Fragment } from 'prosemirror-model';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { buildTextWithTabs } from '../helpers/text-with-tabs.js';
+import {
+  getSequenceFieldUpdaterConverterContext,
+  updateSequenceFieldsInTransaction,
+} from '../helpers/sequence-field-updater.js';
+import {
+  parseSeqInstruction,
+  sequenceFieldAttrsFromParsed,
+} from '../../core/super-converter/field-references/shared/seq-instruction.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -130,12 +138,14 @@ export function captionsInsertWrapper(
 
       // Add SEQ field if the node type exists
       if (schema.nodes.sequenceField) {
+        const instruction = `SEQ ${label} \\* ARABIC`;
+        const parsed = parseSeqInstruction(instruction);
         children.push(
           schema.nodes.sequenceField.create({
-            instruction: `SEQ ${label} \\* ARABIC`,
-            identifier: label,
-            format: 'ARABIC',
+            instruction,
+            ...sequenceFieldAttrsFromParsed(parsed),
             resolvedNumber: '',
+            resolvedNumberIsCurrent: false,
             sdBlockId: `seq-${Date.now()}`,
           }),
         );
@@ -155,6 +165,12 @@ export function captionsInsertWrapper(
 
       const { tr } = editor.state;
       tr.insert(pos, captionParagraph);
+      updateSequenceFieldsInTransaction({
+        tr,
+        schema,
+        scope: { kind: 'identifier', identifier: label },
+        converterContext: getSequenceFieldUpdaterConverterContext(editor),
+      });
       editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
@@ -268,18 +284,33 @@ export function captionsConfigureWrapper(
 
         const format = CAPTION_FORMAT_TO_OOXML[input.format ?? 'decimal'] ?? 'ARABIC';
         const newInstruction = `SEQ ${input.label} \\* ${format}`;
-        if (node.attrs.instruction === newInstruction && node.attrs.format === format) return true;
+        const parsed = parseSeqInstruction(newInstruction);
+        const parsedAttrs = sequenceFieldAttrsFromParsed(parsed);
+        if (
+          node.attrs.instruction === newInstruction &&
+          node.attrs.format === format &&
+          JSON.stringify(node.attrs.pageNumberFieldFormat) === JSON.stringify(parsedAttrs.pageNumberFieldFormat)
+        ) {
+          return true;
+        }
 
         tr.setNodeMarkup(tr.mapping.map(pos), undefined, {
           ...node.attrs,
           instruction: newInstruction,
-          format,
+          ...parsedAttrs,
+          resolvedNumberIsCurrent: false,
         });
         changed = true;
         return true;
       });
 
       if (!changed) return false;
+      updateSequenceFieldsInTransaction({
+        tr,
+        schema: editor.schema,
+        scope: { kind: 'identifier', identifier: input.label },
+        converterContext: getSequenceFieldUpdaterConverterContext(editor),
+      });
       editor.dispatch(tr);
       clearIndexCache(editor);
       return true;

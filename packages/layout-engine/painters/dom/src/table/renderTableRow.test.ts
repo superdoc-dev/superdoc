@@ -3,6 +3,13 @@ import { renderTableRow } from './renderTableRow.js';
 
 const renderTableCellMock = vi.fn(() => ({ cellElement: document.createElement('div') }));
 
+const makeParagraph = (trackedChangesMode?: string, trackedChangesEnabled?: boolean) => ({
+  kind: 'paragraph',
+  id: 'p1',
+  runs: [],
+  attrs: { trackedChangesMode, trackedChangesEnabled },
+});
+
 vi.mock('./renderTableCell.js', () => ({
   renderTableCell: (args: unknown) => renderTableCellMock(args),
 }));
@@ -871,6 +878,97 @@ describe('renderTableRow', () => {
       expect(calls[0].x).toBe(112);
       // Col 2 (w=100): ltrX = 4+100+4+100+4 = 212, rtlX = 316 - 212 - 100 = 4
       expect(calls[1].x).toBe(4);
+    });
+  });
+
+  describe('structural row tracked changes', () => {
+    const trackedRowDeps = (
+      kind: 'insert' | 'delete',
+      mode: string,
+      overrides: Record<string, unknown> = {},
+    ): Record<string, unknown> =>
+      createDeps({
+        rowIndex: 0,
+        totalRows: 1,
+        cellSpacingPx: 0,
+        columnWidths: [100, 100],
+        rowMeasure: {
+          height: 20,
+          cells: [
+            { width: 100, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 1 },
+            { width: 100, height: 20, gridColumnStart: 1, colSpan: 1, rowSpan: 1 },
+          ],
+        },
+        row: {
+          id: 'row-1',
+          attrs: {
+            trackedChange: { kind, id: `row-tc-${kind}`, author: 'Alice', color: '#abcdef' },
+          },
+          cells: [
+            { id: 'c1', blocks: [makeParagraph(mode, true)] },
+            { id: 'c2', blocks: [makeParagraph(mode, true)] },
+          ],
+        },
+        ...overrides,
+      });
+
+    it('adds the insert class + author-color vars to every cell element of an inserted row', () => {
+      renderTableRow(trackedRowDeps('insert', 'review') as never);
+
+      const cells = Array.from(container.children) as HTMLElement[];
+      expect(cells).toHaveLength(2);
+      for (const cell of cells) {
+        expect(cell.classList.contains('track-insert-dec')).toBe(true);
+        expect(cell.classList.contains('highlighted')).toBe(true);
+        expect(cell.classList.contains('track-row-cell-dec')).toBe(true);
+        expect(cell.style.getPropertyValue('--sd-tracked-changes-insert-border')).toBe('#abcdef');
+        expect(cell.dataset.trackChangeKind).toBe('insert');
+        expect(cell.dataset.trackChangeStructural).toBe('row');
+      }
+    });
+
+    it('adds the delete class + author-color vars to every cell element of a deleted row', () => {
+      renderTableRow(trackedRowDeps('delete', 'review') as never);
+
+      const cells = Array.from(container.children) as HTMLElement[];
+      expect(cells).toHaveLength(2);
+      for (const cell of cells) {
+        expect(cell.classList.contains('track-delete-dec')).toBe(true);
+        expect(cell.classList.contains('highlighted')).toBe(true);
+        expect(cell.style.getPropertyValue('--sd-tracked-changes-delete-text')).toBe('#abcdef');
+      }
+    });
+
+    it("hides an inserted row in 'original' mode (cells get the hidden modifier)", () => {
+      renderTableRow(trackedRowDeps('insert', 'original') as never);
+
+      const cells = Array.from(container.children) as HTMLElement[];
+      for (const cell of cells) {
+        expect(cell.classList.contains('track-insert-dec')).toBe(true);
+        expect(cell.classList.contains('hidden')).toBe(true);
+        expect(cell.classList.contains('highlighted')).toBe(false);
+      }
+    });
+
+    it("hides a deleted row in 'final' mode (cells get the hidden modifier)", () => {
+      renderTableRow(trackedRowDeps('delete', 'final') as never);
+
+      const cells = Array.from(container.children) as HTMLElement[];
+      for (const cell of cells) {
+        expect(cell.classList.contains('track-delete-dec')).toBe(true);
+        expect(cell.classList.contains('hidden')).toBe(true);
+      }
+    });
+
+    it('leaves cells of an untracked row undecorated', () => {
+      renderTableRow(createDeps() as never);
+
+      const cells = Array.from(container.children) as HTMLElement[];
+      for (const cell of cells) {
+        expect(cell.classList.contains('track-insert-dec')).toBe(false);
+        expect(cell.classList.contains('track-delete-dec')).toBe(false);
+        expect(cell.classList.contains('track-row-cell-dec')).toBe(false);
+      }
     });
   });
 });

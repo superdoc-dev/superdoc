@@ -270,11 +270,17 @@ class TrackedChangeIndexImpl implements TrackedChangeIndex {
       (change.excerpt !== undefined ? change.excerpt : undefined) ??
       normalizeExcerpt(editor.state.doc.textBetween(change.from, change.to, ' ', '\ufffc'));
 
+    const subtype =
+      type === 'structural' && change.structural
+        ? (change.structural.subtype as TrackedChangeSnapshot['subtype'])
+        : undefined;
+
     return {
       address,
       runtimeRef,
       story: locator,
       type,
+      subtype,
       author: toNonEmptyString(change.attrs.author),
       authorEmail: toNonEmptyString(change.attrs.authorEmail),
       authorImage: toNonEmptyString(change.attrs.authorImage),

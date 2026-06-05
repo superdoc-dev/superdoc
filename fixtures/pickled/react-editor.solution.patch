@@ -1,9 +1,7 @@
 diff --git a/src/ContractEditor.tsx b/src/ContractEditor.tsx
-new file mode 100644
-index 0000000..35c895d
---- /dev/null
+--- a/src/ContractEditor.tsx
 +++ b/src/ContractEditor.tsx
-@@ -0,0 +1,16 @@
+@@ -1,3 +1,16 @@
 +import { SuperDocEditor } from '@superdoc-dev/react';
 +import '@superdoc-dev/react/style.css';
 +
@@ -19,4 +17,6 @@ index 0000000..35c895d
 +      onReady={({ superdoc }) => console.log('Ready', superdoc)}
 +    />
 +  );
-+}
+-export function ContractEditor() {
+-  return null;
+ }

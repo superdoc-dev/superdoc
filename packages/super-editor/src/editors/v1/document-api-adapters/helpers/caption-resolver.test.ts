@@ -81,4 +81,39 @@ describe('caption resolver', () => {
     expect(seqCaption?.instruction).toBe('SEQ Figure \\* ARABIC');
     expect(seqCaption?.label).toBe('Figure');
   });
+
+  it('detects lowercase seq fields by SEQ field fallback', () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    }));
+
+    const sequenceField = editor.schema.nodes.sequenceField.create({
+      instruction: 'seq Figure \\* arabic',
+      identifier: 'Figure',
+      format: 'arabic',
+      resolvedNumber: '1',
+      marksAsAttrs: [],
+      sdBlockId: 'seq-caption-node-lowercase',
+    });
+
+    const captionParagraph = editor.schema.nodes.paragraph.create(
+      {
+        sdBlockId: 'caption-seq-only-lowercase',
+      },
+      [sequenceField, editor.schema.text(': Caption with lowercase seq')],
+    );
+
+    editor.dispatch(editor.state.tr.insert(editor.state.doc.content.size, captionParagraph));
+
+    const captions = findAllCaptions(editor.state.doc);
+    const seqCaption = captions.find((caption) => caption.nodeId === 'caption-seq-only-lowercase');
+
+    expect(seqCaption).toBeTruthy();
+    expect(seqCaption?.instruction).toBe('seq Figure \\* arabic');
+    expect(seqCaption?.label).toBe('Figure');
+  });
 });

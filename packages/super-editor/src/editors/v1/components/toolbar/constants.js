@@ -1,41 +1,24 @@
-export const TOOLBAR_FONTS = [
-  {
-    label: 'Georgia',
-    key: 'Georgia, serif',
-    fontWeight: 400,
-    props: {
-      style: { fontFamily: 'Georgia, serif' },
-      'data-item': 'btn-fontFamily-option',
-    },
+import { getDefaultFontOfferings, fontOfferingStack, fontOfferingRenderStack } from '@superdoc/font-system';
+
+/**
+ * Built-in toolbar font dropdown options, DERIVED from the shared font-offering registry
+ * (`@superdoc/font-system`) instead of a hand-maintained list. Only metric-safe, bundled-backed fonts
+ * are advertised as defaults; Cambria (qualified), Calibri Light (category fallback), and not-yet-
+ * bundled candidates like Georgia are intentionally absent until they ship with a fidelity status.
+ *
+ * Per `FontConfig`: `label` is the Word-facing logical name (stored on the selection + active-state
+ * match), `key` is the logical CSS stack, and the row preview renders in the physical clone that
+ * actually paints (e.g. Carlito), so the dropdown looks like the rendered result.
+ */
+export const TOOLBAR_FONTS = getDefaultFontOfferings().map((offering) => ({
+  label: offering.logicalFamily,
+  key: fontOfferingStack(offering),
+  fontWeight: 400,
+  props: {
+    style: { fontFamily: fontOfferingRenderStack(offering) },
+    'data-item': 'btn-fontFamily-option',
   },
-  {
-    label: 'Arial',
-    key: 'Arial, sans-serif',
-    fontWeight: 400,
-    props: {
-      style: { fontFamily: 'Arial, sans-serif' },
-      'data-item': 'btn-fontFamily-option',
-    },
-  },
-  {
-    label: 'Courier New',
-    key: 'Courier New, monospace',
-    fontWeight: 400,
-    props: {
-      style: { fontFamily: 'Courier New, monospace' },
-      'data-item': 'btn-fontFamily-option',
-    },
-  },
-  {
-    label: 'Times New Roman',
-    key: 'Times New Roman, serif',
-    fontWeight: 400,
-    props: {
-      style: { fontFamily: 'Times New Roman, serif' },
-      'data-item': 'btn-fontFamily-option',
-    },
-  },
-];
+}));
 
 export const TOOLBAR_FONT_SIZES = [
   { label: '8', key: '8pt', props: { 'data-item': 'btn-fontSize-option' } },

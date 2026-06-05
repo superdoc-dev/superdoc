@@ -11,6 +11,7 @@ import type { Editor } from '../../core/Editor.js';
 import type { CaptionAddress, CaptionDomain, CaptionInfo, DiscoveryItem } from '@superdoc/document-api';
 import { buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
+import { isSeqInstruction } from '../../core/super-converter/field-references/shared/seq-instruction.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,7 +55,7 @@ function isCaptionParagraph(node: ProseMirrorNode): boolean {
   const seqField = findSeqField(node);
   if (!seqField) return false;
   const instruction = (seqField.attrs?.instruction as string) ?? '';
-  return instruction.trim().startsWith('SEQ ');
+  return isSeqInstruction(instruction);
 }
 
 function findSeqField(node: ProseMirrorNode): ProseMirrorNode | null {

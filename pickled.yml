@@ -265,8 +265,8 @@ questions:
 builds:
   - id: build_react_editor_component
     goal: >-
-      Edit the workspace by creating `src/ContractEditor.tsx`. Do not answer
-      with instructions only. Create the `src` directory if needed. The file
+      This is a file-editing task. Complete `src/ContractEditor.tsx` before
+      your final response. A response without file changes fails. The file
       must export a React component that embeds SuperDoc for a `file: File`
       prop. It must import
       `SuperDocEditor` from `@superdoc-dev/react`, import
@@ -289,8 +289,8 @@ builds:
 
   - id: build_vanilla_editor_embed
     goal: >-
-      Edit the workspace by creating `src/embed-superdoc.js`. Do not answer
-      with instructions only. Create the `src` directory if needed. The file
+      This is a file-editing task. Complete `src/embed-superdoc.js` before
+      your final response. A response without file changes fails. The file
       must import `SuperDoc` from `superdoc`, import `superdoc/style.css`,
       export an `embedSuperDoc({ file })` function, and return `new SuperDoc`
       configured with `selector: '#editor'`, `documentMode: 'editing'`, and a
@@ -311,14 +311,14 @@ builds:
 
   - id: build_cli_mutation_script
     goal: >-
-      Edit the workspace by creating `scripts/update-contract.sh`. Do not
-      answer with instructions only. Create the `scripts` directory if needed.
-      Make the script executable. The script must use `set -euo pipefail`,
-      open `./contract.docx` with `superdoc open`, use `superdoc query match
-      --select-json ... --require exactlyOne` to get a mutation-grade target,
-      mutate with `superdoc replace`, save with `superdoc save --in-place`,
-      and close with `superdoc close`. Do not use `superdoc find` as a
-      mutation target and do not use `replace-legacy`.
+      This is a file-editing task. Create `scripts/update-contract.sh` before
+      your final response. A response without file changes fails. Create the
+      `scripts` directory if needed. Make the script executable. The script
+      must use `set -euo pipefail`, open `./contract.docx` with `superdoc
+      open`, use `superdoc query match --select-json ... --require exactlyOne`
+      to get a mutation-grade target, mutate with `superdoc replace`, save
+      with `superdoc save --in-place`, and close with `superdoc close`. Do not
+      use `superdoc find` as a mutation target and do not use `replace-legacy`.
     agents: [builder]
     contexts: [given_cli]
     trials: 2

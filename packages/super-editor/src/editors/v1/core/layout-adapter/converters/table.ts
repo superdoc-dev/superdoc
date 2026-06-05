@@ -22,6 +22,7 @@ import type {
   TableAnchor,
   TableWrap,
   SourceAnchor,
+  TrackedChangeMeta,
 } from '@superdoc/contracts';
 import type {
   PMNode,
@@ -47,7 +48,7 @@ import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
 import { resolveShadingFillColor } from '@converter/helpers.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
-import { annotateBlockWithTrackedChange, shouldHideTrackedNode } from '../tracked-changes.js';
+import { annotateBlockWithTrackedChange, shouldHideTrackedNode, deriveTrackedChangeId } from '../tracked-changes.js';
 import {
   resolveNodeSdtMetadata,
   applySdtMetadataToParagraphBlocks,
@@ -685,6 +686,48 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * });
  * // Returns: null
  */
+/**
+ * Builds shared {@link TrackedChangeMeta} for a structural row-level tracked
+ * change (inserted/deleted whole row) from the PM `tableRow` node's
+ * `attrs.trackChange`. Mirrors the inline mark conversion in
+ * `layout-adapter/tracked-changes.ts` (`buildTrackedChangeMetaFromMark`) and
+ * reuses `deriveTrackedChangeId` so structural and inline changes share one
+ * metadata system. The author color is intentionally not set here; it is
+ * stamped downstream by `stampTrackedChangeColors` in `@superdoc/contracts`.
+ *
+ * @param rowNode - PM table row node.
+ * @param storyKey - Owning content story key, threaded onto the meta.
+ * @returns The row's TrackedChangeMeta, or undefined when the row is untracked.
+ */
+const buildRowTrackedChangeMeta = (rowNode: PMNode, storyKey?: string): TrackedChangeMeta | undefined => {
+  const trackChange = (rowNode.attrs as Record<string, unknown> | undefined)?.trackChange as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  if (!trackChange || typeof trackChange !== 'object') return undefined;
+  const rawType = trackChange.type;
+  if (rawType !== 'rowInsert' && rawType !== 'rowDelete') return undefined;
+
+  const kind = rawType === 'rowInsert' ? 'insert' : 'delete';
+  const meta: TrackedChangeMeta = {
+    kind,
+    id: deriveTrackedChangeId(kind, trackChange),
+  };
+  if (typeof trackChange.author === 'string' && trackChange.author) {
+    meta.author = trackChange.author;
+  }
+  if (typeof trackChange.authorEmail === 'string' && trackChange.authorEmail) {
+    meta.authorEmail = trackChange.authorEmail;
+  }
+  if (typeof trackChange.date === 'string' && trackChange.date) {
+    meta.date = trackChange.date;
+  }
+  if (typeof storyKey === 'string' && storyKey.length > 0) {
+    meta.storyKey = storyKey;
+  }
+  return meta;
+};
+
 const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
   const { rowNode, rowIndex, context, defaultCellPadding, tableProperties, numRows } = args;
   if (!isTableRowNode(rowNode) || !Array.isArray(rowNode.content)) {
@@ -720,6 +763,14 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
 
   const rowProps = rowNode.attrs?.tableRowProperties;
   const rowHeight = normalizeRowHeight(rowProps as Record<string, unknown> | undefined);
+  // Structural row-level tracked change (inserted/deleted whole row). Only
+  // surfaced when tracked changes are enabled and not in 'off' mode, matching
+  // how inline tracked-change metadata is gated (annotateBlockWithTrackedChange).
+  const trackedChangesConfig = context.trackedChangesConfig;
+  const rowTrackedChange =
+    trackedChangesConfig?.enabled && trackedChangesConfig.mode !== 'off'
+      ? buildRowTrackedChangeMeta(rowNode, context.storyKey)
+      : undefined;
 
   // Row-level border override from w:tblPrEx/w:tblBorders (ECMA-376 §17.4.61).
   // The converter stores these raw (eighth-points) under tableRowProperties.tblPrExBorders.
@@ -736,10 +787,11 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
       ? {
           tableRowProperties: rowProps as Record<string, unknown>,
           ...(rowHeight ? { rowHeight } : {}),
+          ...(rowTrackedChange ? { trackedChange: rowTrackedChange } : {}),
           ...(rowBorders ? { borders: rowBorders } : {}),
         }
-      : rowHeight
-        ? { rowHeight }
+      : rowHeight || rowTrackedChange
+        ? { ...(rowHeight ? { rowHeight } : {}), ...(rowTrackedChange ? { trackedChange: rowTrackedChange } : {}) }
         : undefined;
 
   // Note: cantSplit is stored within tableRowProperties.cantSplit (not as a separate attr)
@@ -770,6 +822,26 @@ type FloatingTableProperties = {
   tblpXSpec?: 'left' | 'center' | 'right' | 'inside' | 'outside';
   tblpYSpec?: 'inline' | 'top' | 'center' | 'bottom' | 'inside' | 'outside';
 };
+
+function countFloatingTableContentColumns(node: PMNode): number {
+  const grid = node.attrs?.grid;
+  if (Array.isArray(grid) && grid.length > 0) {
+    return grid.length;
+  }
+
+  const firstRow = node.content?.[0];
+  if (!firstRow || !isTableRowNode(firstRow) || !Array.isArray(firstRow.content)) {
+    return 0;
+  }
+
+  let columns = 0;
+  for (const cellNode of firstRow.content) {
+    if (!cellNode || !isTableCellNode(cellNode)) continue;
+    const colSpan = typeof cellNode.attrs?.colspan === 'number' ? cellNode.attrs.colspan : 1;
+    columns += colSpan > 0 ? colSpan : 1;
+  }
+  return columns;
+}
 
 /**
  * Extract floating table properties from node attrs and convert to TableAnchor and TableWrap.
@@ -844,15 +916,18 @@ function extractFloatingTableAnchorWrap(node: PMNode): { anchor?: TableAnchor; w
   }
 
   // Build wrap properties from text distances
-  const hasDistances =
-    floatingProps.leftFromText !== undefined ||
-    floatingProps.rightFromText !== undefined ||
-    floatingProps.topFromText !== undefined ||
-    floatingProps.bottomFromText !== undefined;
+  const hasHorizontalDistances = floatingProps.leftFromText !== undefined || floatingProps.rightFromText !== undefined;
+  const hasVerticalDistances = floatingProps.topFromText !== undefined || floatingProps.bottomFromText !== undefined;
+  const hasDistances = hasHorizontalDistances || hasVerticalDistances;
+
+  const contentColumnCount = countFloatingTableContentColumns(node);
+  // Single-cell form fields (Fair Work F3) are absolute overlays. Multi-column tables with
+  // side distances (advanced-tables.docx) participate in square text wrapping.
+  const isSingleCellHorizontalOverlay = contentColumnCount <= 1 && hasHorizontalDistances && !hasVerticalDistances;
 
   const wrap: TableWrap = {
-    type: 'Square', // Floating tables with text distances use square wrapping
-    wrapText: 'bothSides', // Default to text on both sides
+    type: isSingleCellHorizontalOverlay ? 'None' : 'Square',
+    wrapText: 'bothSides',
   };
 
   if (hasDistances) {
@@ -951,7 +1026,15 @@ export function tableNodeToBlock(
       tableProperties: tablePropertiesForCascade,
     });
     if (parsedRow) {
-      rows.push(parsedRow);
+      // Drop a tracked row from the layout entirely (not just CSS-hide it in the
+      // painter) when the current view mode removes it — inserted rows in
+      // "original", deleted rows in "final" — so it never reserves blank table
+      // space during measurement/pagination. Mirrors `shouldHideTrackedNode` for
+      // inline content. If every row is hidden, the `rows.length === 0` guard
+      // below omits the whole table block.
+      if (!shouldHideTrackedNode(parsedRow.attrs?.trackedChange, parserDeps.trackedChangesConfig)) {
+        rows.push(parsedRow);
+      }
     }
   });
 

@@ -138,6 +138,71 @@ export const resolveTrackedChangesConfig = (block: ParagraphBlock): TrackedChang
   return { mode, enabled };
 };
 
+/**
+ * Marks a row-level tracked-change cell so block-context CSS (cell tint /
+ * strikethrough / collapse) can target it without colliding with the inline
+ * `.track-insert-dec` / `.track-delete-dec` span rules.
+ */
+const TRACK_CHANGE_ROW_CELL_CLASS = 'track-row-cell-dec';
+
+/**
+ * Applies a structural row-level tracked change (inserted/deleted whole row) to
+ * a single table cell element, reusing the exact same machinery as inline runs:
+ * the shared {@link TrackedChangeMeta}, the `TRACK_CHANGE_BASE_CLASS`
+ * (`track-insert-dec` / `track-delete-dec`), the `TRACK_CHANGE_MODIFIER_CLASS`
+ * mode map (insert → review:highlighted / original:hidden / final:normal;
+ * delete → review:highlighted / original:normal / final:hidden), and
+ * `applyAuthorColorVariables` for the per-author color CSS variable family.
+ *
+ * The painter renders a row as cells appended to a container (there is no
+ * `<tr>` element), so the row's tracked-change visual is applied to each cell.
+ * Boundary-safe: this lives in the painter and only reads paint-ready
+ * `TrackedChangeMeta` from contracts.
+ *
+ * @param elem - The cell element to decorate.
+ * @param meta - The row's resolved tracked-change metadata.
+ * @param config - Tracked-changes mode/enabled (same source inline runs use).
+ */
+export const applyRowTrackedChangeToCell = (
+  elem: HTMLElement,
+  meta: TrackedChangeMeta,
+  config: TrackedChangesRenderConfig,
+): void => {
+  if (!config.enabled || config.mode === 'off') {
+    return;
+  }
+  if (meta.kind !== 'insert' && meta.kind !== 'delete') {
+    return;
+  }
+
+  const baseClass = TRACK_CHANGE_BASE_CLASS[meta.kind];
+  if (baseClass) {
+    elem.classList.add(baseClass);
+  }
+  elem.classList.add(TRACK_CHANGE_ROW_CELL_CLASS);
+
+  const modifier = TRACK_CHANGE_MODIFIER_CLASS[meta.kind]?.[config.mode];
+  if (modifier) {
+    elem.classList.add(modifier);
+  }
+
+  applyAuthorColorVariables(elem, meta);
+
+  elem.dataset.trackChangeId = meta.id;
+  elem.dataset.trackChangeKind = meta.kind;
+  elem.dataset.trackChangeStructural = 'row';
+  elem.dataset.storyKey = meta.storyKey ?? 'body';
+  if (meta.author) {
+    elem.dataset.trackChangeAuthor = meta.author;
+  }
+  if (meta.authorEmail) {
+    elem.dataset.trackChangeAuthorEmail = meta.authorEmail;
+  }
+  if (meta.date) {
+    elem.dataset.trackChangeDate = meta.date;
+  }
+};
+
 export const applyTrackedChangeDecorations = (
   elem: HTMLElement,
   run: Run,

@@ -182,7 +182,8 @@ function scanFieldSequence(nodes, beginIndex) {
     const instrTextEl = node.elements?.find((el) => el.name === 'w:instrText');
 
     if (instrTextEl) {
-      instrText += (instrTextEl.elements?.[0]?.text || '') + ' ';
+      const fragment = instrTextEl.elements?.[0]?.text || '';
+      instrText += shouldInsertSwitchBoundarySpace(instrText, fragment) ? ` ${fragment}` : fragment;
     }
 
     // Capture rPr from field sequence nodes (before separate) if we don't have one yet
@@ -218,6 +219,13 @@ function scanFieldSequence(nodes, beginIndex) {
     fieldRunRPr,
     endIndex,
   };
+}
+
+function shouldInsertSwitchBoundarySpace(existingInstruction, nextFragment) {
+  return (
+    (/\w$/.test(existingInstruction) && /^\\/.test(nextFragment)) ||
+    (/(^|\s)\\[#*]$/.test(existingInstruction) && /^\S/.test(nextFragment))
+  );
 }
 
 /**

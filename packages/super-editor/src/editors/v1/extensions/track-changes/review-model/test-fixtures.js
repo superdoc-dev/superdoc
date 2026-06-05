@@ -24,6 +24,26 @@ const NODES = {
     parseDOM: [{ tag: 'p' }],
     toDOM: () => ['p', 0],
   },
+  // Minimal table family for structural (whole-table) tracked-change tests.
+  table: {
+    content: 'tableRow+',
+    group: 'block',
+    isolating: true,
+    parseDOM: [{ tag: 'table' }],
+    toDOM: () => ['table', ['tbody', 0]],
+  },
+  tableRow: {
+    content: 'tableCell+',
+    attrs: { trackChange: { default: null } },
+    parseDOM: [{ tag: 'tr' }],
+    toDOM: () => ['tr', 0],
+  },
+  tableCell: {
+    content: 'block+',
+    isolating: true,
+    parseDOM: [{ tag: 'td' }],
+    toDOM: () => ['td', 0],
+  },
   text: { group: 'inline' },
 };
 
@@ -100,6 +120,96 @@ export const stateFromTrackedSpans = ({ schema, spans }) => {
   const doc = schema.nodes.doc.create({}, [paragraph]);
   const state = EditorState.create({ schema, doc });
   return { state, schema, paragraphStart: 1 };
+};
+
+/**
+ * Build an EditorState with a leading paragraph, a single-row table whose row
+ * carries a structural `trackChange` attr, and a trailing paragraph. Mirrors
+ * the imported shape of the Word whole-table insert/delete fixtures.
+ *
+ * @param {{
+ *   schema: Schema,
+ *   trackChange: { type: 'rowInsert'|'rowDelete', id: string, [k: string]: unknown },
+ *   rowCount?: number,
+ *   cellText?: string,
+ * }} input
+ * @returns {{ state: EditorState, schema: Schema, tablePos: number }}
+ */
+export const stateWithTrackedTable = ({ schema, trackChange, rowCount = 1, cellText = 'Cell' }) => {
+  const makeRow = () => {
+    const cellParagraph = schema.nodes.paragraph.create({}, [schema.text(cellText)]);
+    const cell = schema.nodes.tableCell.create({}, [cellParagraph]);
+    return schema.nodes.tableRow.create({ trackChange }, [cell]);
+  };
+  const rows = Array.from({ length: rowCount }, makeRow);
+  const table = schema.nodes.table.create({}, rows);
+  const before = schema.nodes.paragraph.create({}, [schema.text('Before.')]);
+  const after = schema.nodes.paragraph.create({}, [schema.text('After.')]);
+  const doc = schema.nodes.doc.create({}, [before, table, after]);
+  const state = EditorState.create({ schema, doc });
+  // before paragraph = "Before." → nodeSize 9 (pos 0..8 inclusive open/close).
+  const tablePos = before.nodeSize;
+  return { state, schema, tablePos };
+};
+
+/**
+ * Build a doc with a table whose rows carry per-row `trackChange` attrs (or
+ * `null`). Mirrors a real Word whole-table insert where each row gets a
+ * DISTINCT `w:id`, and supports partial / mixed-side / untracked-row shapes.
+ *
+ * @param {{
+ *   schema: Schema,
+ *   rowTrackChanges: Array<Record<string, unknown> | null>,
+ *   cellText?: string,
+ *   trailing?: boolean,
+ * }} input
+ * @returns {{ state: EditorState, schema: Schema, tablePos: number }}
+ */
+export const stateWithPerRowTrackedTable = ({ schema, rowTrackChanges, cellText = 'Cell', trailing = true }) => {
+  const rows = rowTrackChanges.map((trackChange) => {
+    const cellParagraph = schema.nodes.paragraph.create({}, [schema.text(cellText)]);
+    const cell = schema.nodes.tableCell.create({}, [cellParagraph]);
+    return schema.nodes.tableRow.create({ trackChange: trackChange ?? null }, [cell]);
+  });
+  const table = schema.nodes.table.create({}, rows);
+  const before = schema.nodes.paragraph.create({}, [schema.text('Before.')]);
+  const children = trailing
+    ? [before, table, schema.nodes.paragraph.create({}, [schema.text('After.')])]
+    : [before, table];
+  const doc = schema.nodes.doc.create({}, children);
+  const state = EditorState.create({ schema, doc });
+  const tablePos = before.nodeSize;
+  return { state, schema, tablePos };
+};
+
+/**
+ * Build a doc with two independent tracked tables, optionally sharing the same
+ * Word revision id, so identity/table-scoping can be exercised.
+ *
+ * @param {{
+ *   schema: Schema,
+ *   first: Record<string, unknown>,
+ *   second: Record<string, unknown>,
+ * }} input
+ * @returns {{ state: EditorState, schema: Schema, firstTablePos: number, secondTablePos: number }}
+ */
+export const stateWithTwoTrackedTables = ({ schema, first, second }) => {
+  const makeTable = (trackChange) => {
+    const cellParagraph = schema.nodes.paragraph.create({}, [schema.text('Cell')]);
+    const cell = schema.nodes.tableCell.create({}, [cellParagraph]);
+    const row = schema.nodes.tableRow.create({ trackChange }, [cell]);
+    return schema.nodes.table.create({}, [row]);
+  };
+  const before = schema.nodes.paragraph.create({}, [schema.text('Before.')]);
+  const mid = schema.nodes.paragraph.create({}, [schema.text('Middle.')]);
+  const after = schema.nodes.paragraph.create({}, [schema.text('After.')]);
+  const t1 = makeTable(first);
+  const t2 = makeTable(second);
+  const doc = schema.nodes.doc.create({}, [before, t1, mid, t2, after]);
+  const state = EditorState.create({ schema, doc });
+  const firstTablePos = before.nodeSize;
+  const secondTablePos = before.nodeSize + t1.nodeSize + mid.nodeSize;
+  return { state, schema, firstTablePos, secondTablePos };
 };
 
 /**

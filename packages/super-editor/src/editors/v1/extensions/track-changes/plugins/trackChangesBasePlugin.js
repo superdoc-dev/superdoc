@@ -1,7 +1,9 @@
+// @ts-check
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
 import { getTrackChanges } from '../trackChangesHelpers/getTrackChanges.js';
+import { enumerateStructuralRowChanges } from '../trackChangesHelpers/structuralRowChanges.js';
 
 export const TrackChangesBasePluginKey = new PluginKey('TrackChangesBase');
 
@@ -73,7 +75,10 @@ export const TrackChangesBasePlugin = () => {
           let mightAffectTrackChanges = false;
 
           tr.steps.forEach((step) => {
-            if (step.slice || step.from !== step.to) {
+            // Only Replace(Around)Step carry slice/from/to; the base Step type
+            // does not expose them, so narrow before reading.
+            const replaceStep = /** @type {{ slice?: unknown, from?: number, to?: number }} */ (step);
+            if (replaceStep.slice || replaceStep.from !== replaceStep.to) {
               mightAffectTrackChanges = true;
             }
           });
@@ -126,8 +131,14 @@ const getTrackChangesDecorations = (state, onlyOriginalShown, onlyModifiedShown)
   const decorations = [];
   const trackedChanges = getTrackChanges(state);
 
+  // Structural row revisions (whole-table insert/delete) live on tableRow node
+  // attributes, not inline marks, so they are decorated separately as node
+  // decorations on each tracked <tr>. Done here (not in a separate plugin) so the
+  // show-original / show-modified modes and styling stay in one place.
+  addStructuralRowDecorations(decorations, state, onlyOriginalShown, onlyModifiedShown);
+
   if (!trackedChanges.length) {
-    return DecorationSet.empty;
+    return decorations.length ? DecorationSet.create(state.doc, decorations) : DecorationSet.empty;
   }
 
   trackedChanges.forEach(({ mark, from, to }) => {
@@ -210,4 +221,45 @@ const getTrackChangesDecorations = (state, onlyOriginalShown, onlyModifiedShown)
   });
 
   return DecorationSet.create(state.doc, decorations);
+};
+
+/**
+ * Append node decorations for structural row revisions (whole-table
+ * insert/delete) to `decorations`. Each tracked `<tr>` gets a
+ * `track-row-insert-dec` / `track-row-delete-dec` class plus the same
+ * `highlighted` / `hidden` / `normal` mode the inline marks use, so insertions
+ * and deletions read consistently across inline and structural changes.
+ *
+ * @param {Array<import('prosemirror-view').Decoration>} decorations
+ * @param {import('prosemirror-state').EditorState} state
+ * @param {boolean} onlyOriginalShown
+ * @param {boolean} onlyModifiedShown
+ */
+const addStructuralRowDecorations = (decorations, state, onlyOriginalShown, onlyModifiedShown) => {
+  const structuralChanges = enumerateStructuralRowChanges(state);
+  if (!structuralChanges.length) return;
+
+  for (const change of structuralChanges) {
+    const isInsert = change.side === 'insertion';
+    const baseClass = isInsert ? 'track-row-insert-dec' : 'track-row-delete-dec';
+
+    // Mode mirrors the inline marks: an insertion is hidden in the original view
+    // and plain in the modified view; a deletion is plain in the original view
+    // and hidden in the modified view.
+    let mode = 'highlighted';
+    if (onlyOriginalShown) mode = isInsert ? 'hidden' : 'normal';
+    else if (onlyModifiedShown) mode = isInsert ? 'normal' : 'hidden';
+
+    for (const row of change.rows) {
+      decorations.push(
+        Decoration.node(row.from, row.to, {
+          class: `${baseClass} ${mode}`,
+          'data-track-change-id': change.id,
+          'data-track-change-kind': change.subtype,
+          'data-track-change-author': change.author || '',
+          'data-track-change-date': change.date || '',
+        }),
+      );
+    }
+  }
 };

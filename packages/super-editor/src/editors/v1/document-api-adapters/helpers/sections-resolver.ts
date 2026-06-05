@@ -4,6 +4,8 @@ import type {
   SectionDomain,
   SectionInfo,
   SectionPageMargins,
+  SectionPageNumbering,
+  SectionPageNumberingFormat,
   SectionsListQuery,
   SectionsListResult,
 } from '@superdoc/document-api';
@@ -65,10 +67,43 @@ interface ConverterWithSections {
 }
 
 const PIXELS_PER_INCH = 96;
+const SECTION_PAGE_NUMBER_FORMATS: readonly SectionPageNumberingFormat[] = [
+  'decimal',
+  'lowerLetter',
+  'upperLetter',
+  'lowerRoman',
+  'upperRoman',
+  'numberInDash',
+] as const;
 
 function pxToInches(value: number | null | undefined): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   return value / PIXELS_PER_INCH;
+}
+
+function toSectionPageNumbering(numbering: SectionRange['numbering']): SectionPageNumbering | undefined {
+  if (!numbering) return undefined;
+
+  const format = SECTION_PAGE_NUMBER_FORMATS.includes(numbering.format as SectionPageNumberingFormat)
+    ? (numbering.format as SectionPageNumberingFormat)
+    : undefined;
+  const result: SectionPageNumbering = {
+    start: numbering.start,
+    format,
+    chapterStyle: numbering.chapterStyle,
+    chapterSeparator: numbering.chapterSeparator,
+  };
+
+  if (
+    result.start === undefined &&
+    result.format === undefined &&
+    result.chapterStyle === undefined &&
+    result.chapterSeparator === undefined
+  ) {
+    return undefined;
+  }
+
+  return result;
 }
 
 function buildSectionId(index: number): string {
@@ -301,7 +336,7 @@ function sectionRangeToSectionDomain(
     headerFooterMargins: hasHeaderFooterMargins ? headerFooterMargins : undefined,
     columns: hasColumns ? columns : undefined,
     lineNumbering: parsedLineNumbering,
-    pageNumbering: range.numbering ?? parsedPageNumbering,
+    pageNumbering: toSectionPageNumbering(range.numbering) ?? parsedPageNumbering,
     titlePage: range.titlePg,
     oddEvenHeadersFooters,
     verticalAlign: range.vAlign ?? parsedVerticalAlign,

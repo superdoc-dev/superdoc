@@ -87,10 +87,13 @@ describe('getInstructionPreProcessor', () => {
     expect(processor).toBe(preProcessSeqInstruction);
   });
 
-  it('should leave lowercase seq fields unprocessed to preserve cached numbering results', () => {
-    const processor = getInstructionPreProcessor('seq level2 \\*arabic');
-    expect(processor).toBeNull();
-  });
+  it.each(['seq level2 \\*arabic', 'Seq Figure \\* Arabic'])(
+    'should dispatch SEQ fields case-insensitively: %s',
+    (instruction) => {
+      const processor = getInstructionPreProcessor(instruction);
+      expect(processor).toBe(preProcessSeqInstruction);
+    },
+  );
 
   it('should return preProcessTocInstruction for TOC instruction', () => {
     const instruction = 'TOC \\o "1-3" \\h \\z \\u';

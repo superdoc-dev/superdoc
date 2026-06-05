@@ -2198,6 +2198,10 @@ async function measureParagraphBlock(
     // Handle text runs
     lastFontSize = run.fontSize;
     hasSeenTextRun = true;
+    if (run.text === '') {
+      pendingRunSpacing = 0;
+      continue;
+    }
     const { font } = buildFontString(run, fontContext);
     const tabSegments = run.text.split('\t');
 

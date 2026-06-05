@@ -376,6 +376,36 @@ describe('balanceSectionOnPage', () => {
     expect(col1).toBe(3);
   });
 
+  it('balances equal-width columns with non-uniform gaps using per-column geometry (SD-2629 F9)', () => {
+    // The headline SD-2629 case: equal column WIDTHS (so the equal-width guard admits balancing) but
+    // NON-UNIFORM gaps [0, 48]. Column x must follow the resolved per-column geometry, not a uniform
+    // stride. With 6 paragraphs across 3 columns (2 each): col1 sits at margin(96) + width(192) +
+    // gaps[0]=0 = 288 (a uniform scalar gap of 24 would wrongly place it at 312); col2 at
+    // 96 + 192 + 0 + 192 + gaps[1]=48 = 528.
+    const top = 96;
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(2, 6, 20, top);
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 3, gap: 24, width: 192, widths: [192, 192, 192], gaps: [0, 48], equalWidth: false },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: top,
+      columnWidth: 192,
+      availableHeight: 40,
+      measureMap,
+    });
+
+    expect(result).not.toBeNull();
+    const xs = [...new Set(fragments.map((f) => f.x))].sort((a, b) => a - b);
+    expect(xs).toEqual([96, 288, 528]);
+    // col1 is at the per-column position 288, never the uniform-stride 312.
+    expect(fragments.filter((f) => f.x === 288).length).toBe(2);
+    expect(fragments.filter((f) => f.x === 312).length).toBe(0);
+  });
+
   it('returns null and leaves fragments untouched when section has <= 1 column', () => {
     const { fragments, measureMap, blockSectionMap } = buildSectionFixture(2, 3);
     const snapshot = fragments.map((f) => ({ x: f.x, y: f.y }));

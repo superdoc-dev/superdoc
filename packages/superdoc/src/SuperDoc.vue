@@ -57,6 +57,7 @@ import { useFindReplace } from './composables/use-find-replace.js';
 import { createV1EditorRuntimeAdapter } from './core/editor-runtime/v1/v1-editor-runtime-adapter.js';
 import { markRuntimeRoot, unmarkRuntimeRoot } from './core/editor-runtime/root-marker.js';
 import { collectTouchedTrackedChangeIds } from './helpers/collect-touched-tracked-change-ids.js';
+import { transactionTouchesStructuralChange } from './helpers/transaction-touches-structural-change.js';
 import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 import {
   DEFAULT_COMMENTS_DISPLAY_MODE,
@@ -1360,6 +1361,12 @@ const onEditorTransaction = (payload = {}) => {
       // collaboration comment update is already shared through the comments ydoc.
       broadcastChanges: !isPeerCollaborationReplayTransaction(transaction, ySyncMeta),
     });
+  } else if (transactionTouchesStructuralChange(transaction)) {
+    // Structural row tracked changes (whole-table insert/delete) live on node
+    // attrs, not inline marks, so the id-based targeted resync cannot see them.
+    // Force a full resync so structural bubbles appear/refresh during editing,
+    // not only on import.
+    queueTrackedChangeCommentResync({ editor });
   } else {
     queueTrackedChangeCommentResync({
       editor,

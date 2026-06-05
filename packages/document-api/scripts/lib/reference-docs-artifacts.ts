@@ -1019,6 +1019,17 @@ function getOperationExamples(
   snapshot: ReturnType<typeof buildContractSnapshot>,
 ): { input: unknown; output: unknown } {
   const inputOverrides: Partial<Record<ContractOperationSnapshot['operationId'], unknown>> = {
+    // The id-target variant carries an optional `range` qualifier used only to
+    // fail closed (INVALID_INPUT) on indivisible revisions. A canonical id
+    // decision does NOT pass it, so the auto-generated example's `"range": {}`
+    // is misleading — pin an explicit clean id-target example here.
+    'trackChanges.decide': {
+      decision: 'accept',
+      target: {
+        id: 'id-001',
+        story: { kind: 'story', storyType: 'body' },
+      },
+    },
     insert: {
       target: {
         kind: 'block',

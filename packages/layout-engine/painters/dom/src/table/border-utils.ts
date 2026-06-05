@@ -6,6 +6,7 @@ import type {
   TableBorders,
   TableFragment,
 } from '@superdoc/contracts';
+import { getBorderBandWidthPx } from '@superdoc/contracts';
 import { getTableCellGridBounds, type TableCellGridPosition } from './grid-geometry.js';
 
 const ALLOWED_BORDER_STYLES = new Set<BorderStyle>([
@@ -80,14 +81,13 @@ export const applyBorder = (
   }
 
   const style = borderStyleToCSS(border.style);
-  const width = border.width ?? 1;
   const color = border.color ?? '#000000';
   const safeColor = isValidHexColor(color) ? color : '#000000';
-  // CSS `double` only renders two distinct rules at >= 3px (1px rule + 1px gap + 1px rule);
-  // below that it collapses to a single solid-looking line. Word always shows two rules for
-  // w:val="double", so clamp the rendered width up (never shrink an authored width). (SD-3308)
-  const minStyleWidth = style === 'double' ? 3 : 0;
-  const actualWidth = border.style === 'thick' ? Math.max(width * 2, 3) : Math.max(width, minStyleWidth);
+  // Band width comes from the shared contracts helper so the painted width and the
+  // measuring engine's row-height reservation can never disagree. Word semantics:
+  // thick = 2x (min 3px); double = 3x the per-rule w:sz (min 3px so CSS renders both
+  // rules); everything else = authored width. (SD-3308)
+  const actualWidth = getBorderBandWidthPx(border);
   element.style[`border${side}`] = `${actualWidth}px ${style} ${safeColor}`;
 };
 

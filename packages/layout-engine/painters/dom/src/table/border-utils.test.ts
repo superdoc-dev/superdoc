@@ -39,19 +39,26 @@ describe('applyBorder', () => {
     expect(element.style.borderTop).toMatch(/2px solid (#FF0000|rgb\(255,\s*0,\s*0\))/i);
   });
 
-  // SD-3308: CSS `double` only renders two distinct rules at >= 3px (1px rule + 1px gap +
-  // 1px rule); below that it collapses to a single solid-looking line, while Word always
-  // shows two rules for w:val="double". The painter clamps the width up, never down.
-  it('clamps a double border below 3px up so both rules render', () => {
+  // SD-3308: OOXML w:sz on a double border is the width of EACH rule; Word renders
+  // rule + gap + rule at ~3x that width (measured: sz12 = 1.5pt rules, 6px band at
+  // 100dpi). The shared contracts band helper emits 3x the authored single-rule
+  // width, floored at 3px so CSS renders both rules.
+  it('renders a double border at three times the authored rule width', () => {
     const border: BorderSpec = { style: 'double', width: 2, color: '#FF0000' };
+    applyBorder(element, 'Top', border);
+    expect(element.style.borderTop).toMatch(/6px double (#FF0000|rgb\(255,\s*0,\s*0\))/i);
+  });
+
+  it('floors a hairline double border at 3px so both rules render', () => {
+    const border: BorderSpec = { style: 'double', width: 1, color: '#FF0000' };
     applyBorder(element, 'Top', border);
     expect(element.style.borderTop).toMatch(/3px double (#FF0000|rgb\(255,\s*0,\s*0\))/i);
   });
 
-  it('keeps an authored double width that is already >= 3px', () => {
+  it('scales a heavy double border by the same three-times rule', () => {
     const border: BorderSpec = { style: 'double', width: 4, color: '#FF0000' };
     applyBorder(element, 'Top', border);
-    expect(element.style.borderTop).toMatch(/4px double (#FF0000|rgb\(255,\s*0,\s*0\))/i);
+    expect(element.style.borderTop).toMatch(/12px double (#FF0000|rgb\(255,\s*0,\s*0\))/i);
   });
 
   it('should apply border with dashed style', () => {

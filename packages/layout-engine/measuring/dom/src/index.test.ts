@@ -4298,6 +4298,58 @@ describe('measureBlock', () => {
     });
   });
 
+  describe('border band row-height reservation (SD-3308)', () => {
+    const makeTable = (borderStyle: string, width: number): FlowBlock =>
+      ({
+        kind: 'table',
+        id: 'table-band',
+        rows: [0, 1].map((r) => ({
+          id: `row-${r}`,
+          cells: [
+            {
+              id: `cell-${r}-0`,
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  id: `para-${r}`,
+                  runs: [{ text: 'X', fontFamily: 'Arial', fontSize: 12 }],
+                },
+              ],
+            },
+          ],
+        })),
+        attrs: {
+          borders: {
+            top: { style: borderStyle, width },
+            bottom: { style: borderStyle, width },
+            left: { style: borderStyle, width },
+            right: { style: borderStyle, width },
+            insideH: { style: borderStyle, width },
+            insideV: { style: borderStyle, width },
+          },
+        },
+      }) as unknown as FlowBlock;
+
+    it('reserves the band excess for double borders and nothing for hairline singles', async () => {
+      const single = await measureBlock(makeTable('single', 1), { maxWidth: 600 });
+      const double = await measureBlock(makeTable('double', 2), { maxWidth: 600 });
+      if (single.kind !== 'table' || double.kind !== 'table') throw new Error('expected table measures');
+      // double sz12: band = 3 * 2 = 6px -> reservation 5px per gridline.
+      // row 0 owns its top gridline; the last row owns its top gridline plus the bottom edge.
+      expect(double.rows[0].height).toBeCloseTo(single.rows[0].height + 5, 5);
+      expect(double.rows[1].height).toBeCloseTo(single.rows[1].height + 10, 5);
+    });
+
+    it('does not reserve anything in separate-borders mode', async () => {
+      const base = makeTable('double', 2) as { attrs: Record<string, unknown> };
+      base.attrs.cellSpacing = { type: 'dxa', value: 60 };
+      const separate = await measureBlock(base as unknown as FlowBlock, { maxWidth: 600 });
+      const collapsed = await measureBlock(makeTable('double', 2), { maxWidth: 600 });
+      if (separate.kind !== 'table' || collapsed.kind !== 'table') throw new Error('expected table measures');
+      expect(separate.rows[0].height).toBeLessThan(collapsed.rows[0].height);
+    });
+  });
+
   describe('autofit tables with colspan should not truncate grid columns', () => {
     const makeCell = (id: string) => ({
       id,

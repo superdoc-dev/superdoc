@@ -22,13 +22,16 @@ export interface FontResolutionRecord {
   /** The family export writes back - always the logical name, so intent is preserved. */
   exportFamily: string;
   /**
-   * True when the physical face reached a SETTLED state that is not `loaded` - the user
-   * sees a generic fallback, not the intended font. This covers BOTH a font with no known
-   * substitute (`reason: 'as_requested'`, e.g. Aptos) AND a substitute whose asset failed
-   * to load (`reason: 'bundled_substitute'`, `loadStatus: 'failed'`, e.g. a misconfigured
-   * `assetBaseUrl` that 404s). Transient states (`unloaded` / `loading`) are NOT missing,
-   * so an early `getReport()` pull before the gate settles does not over-report. The
-   * `reason` and `loadStatus` fields distinguish the cause (unsupported vs failed vs timed out).
+   * True when SuperDoc did NOT faithfully render the requested font with a metric-compatible face.
+   * Two ways this happens:
+   *   - a non-metric substitute rendered but is not faithful, so it is missing EVEN WHEN `loaded`:
+   *     `reason: 'category_fallback'` (wrong weight / reflows, e.g. Calibri Light -> Carlito), and on
+   *     face-level rows `reason: 'fallback_face_absent'` (the substitute lacks this weight/style).
+   *   - the physical face settled to a state other than `loaded`: a font with no known substitute
+   *     (`reason: 'as_requested'`, e.g. Aptos), or a substitute whose asset failed
+   *     (`reason: 'bundled_substitute'`, `loadStatus: 'failed'`, e.g. a 404ing `assetBaseUrl`).
+   * Transient states (`unloaded` / `loading`) are NOT missing, so an early `getReport()` pull before
+   * the gate settles does not over-report. `reason` and `loadStatus` distinguish the cause.
    */
   missing: boolean;
   /**
@@ -70,7 +73,9 @@ export function buildFontReport(
       reason,
       loadStatus,
       exportFamily: logical,
-      missing: isSettled(loadStatus) && loadStatus !== 'loaded',
+      // `category_fallback` is a non-metric substitute (reflows / wrong weight), so it lacks a faithful
+      // render the same way `fallback_face_absent` does, regardless of whether the family loaded.
+      missing: reason === 'category_fallback' || (isSettled(loadStatus) && loadStatus !== 'loaded'),
     });
   }
   return report;
@@ -120,9 +125,14 @@ export function buildFaceReport(
     //   report `loaded` (document.fonts.load resolves only registered faces, not system fonts - it is
     //   always `fallback_used` here), which is why this is reason-based and deterministic rather than
     //   keyed on a probe.
+    // - `category_fallback` is ALWAYS missing too: a non-metric family fallback (reflows / wrong weight,
+    //   e.g. Calibri Light -> Carlito at Regular) renders something, but not a faithful metric match.
     // - Otherwise: missing once the load settles to anything but `loaded` (failed/timed_out/
     //   fallback_used); `loading`/`unloaded` are not yet settled, so not yet missing.
-    const missing = reason === 'fallback_face_absent' || (isSettled(loadStatus) && loadStatus !== 'loaded');
+    const missing =
+      reason === 'fallback_face_absent' ||
+      reason === 'category_fallback' ||
+      (isSettled(loadStatus) && loadStatus !== 'loaded');
     report.push({
       logicalFamily,
       physicalFamily,

@@ -72,4 +72,16 @@ describe('substitution evidence -> resolver derivation', () => {
     });
     expect(cambria?.glyphExceptions?.[0]).toMatchObject({ slot: 'boldItalic', codepoint: 0x60 });
   });
+
+  it('Calibri Light is a category_fallback (visual_only), not a metric substitute', () => {
+    const cl = SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'calibri-light');
+    expect(cl).toMatchObject({ policyAction: 'category_fallback', verdict: 'visual_only', physicalFamily: 'Carlito' });
+    // NOT among the metric substitutes, so the six-pair guard above is unaffected; the resolver maps it
+    // with reason category_fallback, never bundled_substitute.
+    const substituteRows = SUBSTITUTION_EVIDENCE.filter((r) => r.policyAction === 'substitute' && r.physicalFamily);
+    expect(substituteRows.some((r) => r.evidenceId === 'calibri-light')).toBe(false);
+    expect(resolveFontFamily('Calibri Light').reason).toBe('category_fallback');
+    // Its Carlito target still ships in the bundled pack, so the runtime can render the fallback.
+    expect(new Set(BUNDLED_MANIFEST.map((f) => f.family)).has('Carlito')).toBe(true);
+  });
 });

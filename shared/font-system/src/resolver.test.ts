@@ -417,3 +417,61 @@ describe('face-aware resolution (resolveFace / resolvePhysicalFamilyForFace)', (
     });
   });
 });
+
+describe('category_fallback (non-metric family fallback: Calibri Light -> Carlito)', () => {
+  const norm = (f: string) => f.replace(/^["']|["']$/g, '').toLowerCase();
+  const carlito = (f: string) => norm(f) === 'carlito'; // bundled Carlito is registered; Calibri Light is not
+  const noFaces = () => false;
+  const R400 = { weight: '400', style: 'normal' } as const;
+
+  it('family-level: Calibri Light -> Carlito with reason category_fallback (NOT bundled_substitute)', () => {
+    expect(resolveFontFamily('Calibri Light')).toEqual({
+      logicalFamily: 'Calibri Light',
+      physicalFamily: 'Carlito',
+      reason: 'category_fallback',
+    });
+    // Calibri (Regular) stays a metric clone, unaffected.
+    expect(resolveFontFamily('Calibri').reason).toBe('bundled_substitute');
+    // CSS stack keeps fallbacks; case/quote-insensitive.
+    expect(resolvePhysicalFamily('Calibri Light, sans-serif')).toBe('Carlito, sans-serif');
+    expect(resolvePhysicalFamily('"calibri light"')).toBe('Carlito');
+    expect(resolvePrimaryPhysicalFamily('Calibri Light, sans-serif')).toBe('Carlito');
+  });
+
+  it('face-aware: resolveFace maps Calibri Light -> Carlito (category_fallback) when Carlito has the face', () => {
+    const r = createFontResolver();
+    expect(r.resolveFace('Calibri Light', R400, carlito)).toEqual({
+      logicalFamily: 'Calibri Light',
+      physicalFamily: 'Carlito',
+      reason: 'category_fallback',
+    });
+  });
+
+  it('paint/measure: resolvePhysicalFamilyForFace swaps the stack to Carlito (incl. a quoted primary)', () => {
+    const r = createFontResolver();
+    expect(r.resolvePhysicalFamilyForFace('Calibri Light, sans-serif', R400, carlito)).toBe('Carlito, sans-serif');
+    // The normalized swap guard swaps a quoted/cased primary too (not a raw physical !== parts[0]).
+    expect(r.resolvePhysicalFamilyForFace('"Calibri Light"', R400, carlito)).toBe('Carlito');
+  });
+
+  it('category target lacking the face falls through to as_requested (no swap, NOT fallback_face_absent)', () => {
+    const r = createFontResolver();
+    // Carlito provides no faces here: there is no metric substitute that could be "absent".
+    expect(r.resolveFace('Calibri Light', R400, noFaces)).toEqual({
+      logicalFamily: 'Calibri Light',
+      physicalFamily: 'Calibri Light',
+      reason: 'as_requested',
+    });
+    expect(r.resolvePhysicalFamilyForFace('Calibri Light, sans-serif', R400, noFaces)).toBe('Calibri Light, sans-serif');
+  });
+
+  it('a customer fonts.map still overrides the category fallback (custom_mapping wins)', () => {
+    const r = createFontResolver();
+    r.map('Calibri Light', 'Customer Light');
+    expect(r.resolveFontFamily('Calibri Light')).toEqual({
+      logicalFamily: 'Calibri Light',
+      physicalFamily: 'Customer Light',
+      reason: 'custom_mapping',
+    });
+  });
+});

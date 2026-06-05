@@ -228,4 +228,22 @@ export const SUBSTITUTION_EVIDENCE: readonly SubstitutionEvidence[] = Object.fre
     candidateLicense: 'OFL-1.1',
     exportRule: 'preserve_original_name',
   },
+  {
+    // No open Calibri Light clone: Carlito carries the Calibri letterforms but has no Light face, so it
+    // renders at Regular (weight 400 vs Light 300) and reflows up to 6.6%. `category_fallback` (a family
+    // fallback, NOT a metric clone), verdict `visual_only`, metric gate fails. `faces` are all false:
+    // Carlito faithfully supplies none of Calibri Light's own faces - the runtime still renders Carlito
+    // Regular where it is loadable, but reports it non-metric.
+    evidenceId: 'calibri-light',
+    logicalFamily: 'Calibri Light',
+    physicalFamily: 'Carlito',
+    verdict: 'visual_only',
+    faces: { regular: false, bold: false, italic: false, boldItalic: false },
+    advance: { meanDelta: 0.0148, maxDelta: 0.066 },
+    gates: { static: 'not_run', metric: 'fail', layout: 'not_run', ship: 'fail' },
+    policyAction: 'category_fallback',
+    measurementRefs: ['calibri-light__carlito#analytic_advance#2026-06-05'],
+    candidateLicense: 'OFL-1.1',
+    exportRule: 'preserve_original_name',
+  },
 ]);

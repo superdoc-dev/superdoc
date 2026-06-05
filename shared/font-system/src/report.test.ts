@@ -85,6 +85,17 @@ describe('buildFontReport', () => {
     ]);
     expect(report.every((r) => r.reason === 'bundled_substitute' && !r.missing)).toBe(true);
   });
+
+  it('reports Calibri Light as a non-metric category_fallback and marks it missing even when loaded', () => {
+    const reg = new FakeRegistry();
+    reg.statuses.set('Carlito', 'loaded'); // the fallback family itself loads fine...
+    const [rec] = buildFontReport(['Calibri Light'], reg.asRegistry());
+    expect(rec.physicalFamily).toBe('Carlito');
+    expect(rec.reason).toBe('category_fallback');
+    // ...but it is NOT a metric clone (reflows + Regular weight), so it is reported missing.
+    expect(rec.missing).toBe(true);
+    expect(rec.exportFamily).toBe('Calibri Light');
+  });
 });
 
 /** A face-aware fake: tracks per-face load status + which faces are registered (hasFace). */
@@ -215,5 +226,18 @@ describe('buildFaceReport (face-level)', () => {
     expect(regular?.missing).toBe(false);
     expect(bold?.loadStatus).toBe('failed');
     expect(bold?.missing).toBe(true); // the bold face failed - reported missing, regular unaffected
+  });
+
+  it('Calibri Light face resolves to Carlito (category_fallback) and stays missing though the face loaded', () => {
+    const reg = new FaceRegistry();
+    reg.setFace('Carlito', '400', 'normal', 'loaded'); // Carlito Regular registered + loaded
+    const rows = buildFaceReport(
+      [{ logicalFamily: 'Calibri Light', weight: '400', style: 'normal' }],
+      reg.asRegistry(),
+    );
+    expect(rows[0]?.physicalFamily).toBe('Carlito');
+    expect(rows[0]?.reason).toBe('category_fallback');
+    // The face loaded, but it is a non-metric fallback (wrong weight), so it is still reported missing.
+    expect(rows[0]?.missing).toBe(true);
   });
 });

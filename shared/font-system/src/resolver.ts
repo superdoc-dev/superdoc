@@ -40,6 +40,13 @@ export type FontResolutionReason =
   /** Replaced by a runtime mapping set on this document's resolver (customer `fonts.map`). */
   | 'custom_mapping'
   /**
+   * Replaced by the closest bundled FAMILY, but NOT a metric-compatible clone: advances reflow and/or
+   * the weight differs (e.g. Calibri Light -> Carlito, which has no Light face, so it renders at Regular
+   * and reflows ~6.6%). A useful family fallback, never reported as metric-safe. Lower precedence than
+   * `bundled_substitute`; sourced from docfonts rows with `policyAction: 'category_fallback'`.
+   */
+  | 'category_fallback'
+  /**
    * A substitute is known for the family but does NOT provide the requested face (weight/style),
    * so the family passes through UNsubstituted rather than faux-styling the substitute's Regular
    * onto a face it lacks. Reported non-metric. Only the face-aware path (`resolveFace` /
@@ -101,6 +108,26 @@ function deriveBundledSubstitutes(): Readonly<Record<string, string>> {
 }
 
 const BUNDLED_SUBSTITUTES: Readonly<Record<string, string>> = deriveBundledSubstitutes();
+
+/**
+ * Logical (normalized) -> non-metric family fallback, DERIVED from the evidence rows docfonts marks
+ * `policyAction: 'category_fallback'`. These carry the right letterforms but are NOT metric clones
+ * (they reflow and/or differ in weight, e.g. Calibri Light -> Carlito), so they resolve with reason
+ * `category_fallback`, never `bundled_substitute`. A SEPARATE map and reason keep a lower-fidelity
+ * fallback from being mistaken for a clean clone. Same source of truth as
+ * {@link deriveBundledSubstitutes}; the two partition the evidence by `policyAction`.
+ */
+function deriveCategoryFallbacks(): Readonly<Record<string, string>> {
+  const fallbacks: Record<string, string> = {};
+  for (const row of SUBSTITUTION_EVIDENCE) {
+    if (row.policyAction === 'category_fallback' && row.physicalFamily) {
+      fallbacks[normalizeFamilyKey(row.logicalFamily)] = row.physicalFamily;
+    }
+  }
+  return Object.freeze(fallbacks);
+}
+
+const CATEGORY_FALLBACKS: Readonly<Record<string, string>> = deriveCategoryFallbacks();
 
 /**
  * Strip surrounding quotes from a family name, PRESERVING case, so a STRUCTURED resolution returns a
@@ -233,6 +260,8 @@ export class FontResolver {
     if (override) return { physical: override, reason: 'custom_mapping' };
     const bundled = BUNDLED_SUBSTITUTES[key];
     if (bundled) return { physical: bundled, reason: 'bundled_substitute' };
+    const category = CATEGORY_FALLBACKS[key];
+    if (category) return { physical: category, reason: 'category_fallback' };
     return { physical: bareFamily, reason: 'as_requested' };
   }
 
@@ -243,8 +272,11 @@ export class FontResolver {
    *   2. a registered real face for the logical family itself (customer `fonts.add` / embedded)
    *      -> registered_face  (so SuperDoc renders the real family instead of the bundled clone)
    *   3. bundled metric-compatible substitute -> bundled_substitute  (if it provides the face)
-   *   4. otherwise as_requested (no provider) - or fallback_face_absent when an override/substitute
-   *      WAS known but lacked the face, so a single-face clone is never faux-styled.
+   *   4. non-metric category fallback -> category_fallback  (if it provides the face; a lower-fidelity
+   *      family fallback like Calibri Light -> Carlito, never reported metric-safe)
+   *   5. otherwise as_requested (no provider, including a category fallback that lacked the face) - or
+   *      fallback_face_absent when an override/bundled substitute WAS known but lacked the face, so a
+   *      single-face clone is never faux-styled.
    * `physical === primary` (no swap) for registered_face / as_requested / fallback_face_absent.
    */
   #resolveFaceLadder(
@@ -270,12 +302,19 @@ export class FontResolver {
     if (bundled && hasFace(bundled, face.weight, face.style)) {
       return { physical: bundled, reason: 'bundled_substitute' };
     }
-    // 4. a configured provider (an override or a bundled clone) was known but none could supply this
+    // 4. non-metric category fallback (e.g. Calibri Light -> Carlito): a family fallback, lower
+    //    fidelity. Apply only when it actually supplies the face. On a miss it falls through to
+    //    as_requested below (there was no metric substitute to be "absent"), never fallback_face_absent.
+    const category = CATEGORY_FALLBACKS[key];
+    if (category && hasFace(category, face.weight, face.style)) {
+      return { physical: category, reason: 'category_fallback' };
+    }
+    // 5. a configured provider (an override or a bundled clone) was known but none could supply this
     //    face: pass the logical family through, reported non-metric, never faux-styled.
     if (override || bundled) {
       return { physical: primary, reason: 'fallback_face_absent' };
     }
-    // 5. no provider at all: render the requested family as-is (browser/system fallback).
+    // 6. no provider at all: render the requested family as-is (browser/system fallback).
     return { physical: primary, reason: 'as_requested' };
   }
 
@@ -336,11 +375,14 @@ export class FontResolver {
     if (!cssFontFamily) return cssFontFamily;
     const parts = splitStack(cssFontFamily);
     if (parts.length === 0) return cssFontFamily;
-    const { physical, reason } = this.#resolveFaceLadder(parts[0], face, hasFace);
-    // Swap the primary to the physical ONLY when a substitute/override actually applies. For
-    // registered_face / as_requested / fallback_face_absent the physical IS the logical family, so
-    // keep the original stack (the registered real face or the browser fallback renders it).
-    if (reason === 'custom_mapping' || reason === 'bundled_substitute') {
+    const { physical } = this.#resolveFaceLadder(parts[0], face, hasFace);
+    // Swap the primary to the physical whenever resolution actually CHANGED the family - any provider
+    // tier (custom_mapping / bundled_substitute / category_fallback). Comparing the family instead of
+    // enumerating reasons is deliberate: enumerating is exactly how category_fallback was missed, and a
+    // future tier would repeat it. Compare NORMALIZED (quote-stripped + lowercased) because
+    // registered_face / as_requested / fallback_face_absent return the logical primary itself, so they
+    // must NOT swap even when the primary was quoted or cased.
+    if (normalizeFamilyKey(physical) !== normalizeFamilyKey(parts[0])) {
       return [physical, ...parts.slice(1)].join(', ');
     }
     return cssFontFamily;

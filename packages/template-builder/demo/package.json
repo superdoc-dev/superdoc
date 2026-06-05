@@ -9,16 +9,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@superdoc-dev/template-builder": "link:..",
-    "react": "catalog:",
-    "react-dom": "catalog:",
-    "superdoc": "workspace:*"
+    "@superdoc-dev/react": "1.10.0-next.24",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "superdoc": "1.39.0-next.22"
   },
   "devDependencies": {
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "@vitejs/plugin-react": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:"
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
   }
 }

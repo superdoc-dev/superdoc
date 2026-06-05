@@ -125,7 +125,6 @@ export function translateAnchorNode(params) {
       }
       break;
     }
-    case 'Through':
     case 'Tight': {
       const attributes = {};
       if ('distLeft' in (attrs.wrap.attrs || {})) {
@@ -142,7 +141,42 @@ export function translateAnchorNode(params) {
         wrapElement.attributes = attributes;
       }
 
-      // Add polygon if present
+      if (attrs.wrap.attrs?.polygon) {
+        const polygonNode = objToPolygon(attrs.wrap.attrs.polygon);
+        if (polygonNode) {
+          if (attrs.wrap.attrs?.polygonEdited !== undefined) {
+            polygonNode.attributes = {
+              ...(polygonNode.attributes || {}),
+              edited: String(attrs.wrap.attrs.polygonEdited),
+            };
+          }
+          wrapElement.elements = [polygonNode];
+        }
+      }
+      break;
+    }
+    case 'Through': {
+      const attributes = {};
+      if ('distBottom' in (attrs.wrap.attrs || {})) {
+        attributes.distB = pixelsToEmu(attrs.wrap.attrs.distBottom);
+      }
+      if ('distLeft' in (attrs.wrap.attrs || {})) {
+        attributes.distL = pixelsToEmu(attrs.wrap.attrs.distLeft);
+      }
+      if ('distRight' in (attrs.wrap.attrs || {})) {
+        attributes.distR = pixelsToEmu(attrs.wrap.attrs.distRight);
+      }
+      if ('distTop' in (attrs.wrap.attrs || {})) {
+        attributes.distT = pixelsToEmu(attrs.wrap.attrs.distTop);
+      }
+      const wrapText = attrs.wrap.attrs?.wrapText || 'bothSides';
+      if (wrapText) {
+        attributes.wrapText = wrapText;
+      }
+      if (Object.keys(attributes).length) {
+        wrapElement.attributes = attributes;
+      }
+
       if (attrs.wrap.attrs?.polygon) {
         const polygonNode = objToPolygon(attrs.wrap.attrs.polygon);
         if (polygonNode) {

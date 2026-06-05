@@ -365,63 +365,76 @@ type TableRowRenderDependencies = {
  * ```
  */
 /**
- * Paints a cell's double borders as pixel-snapped strip overlays (rule + gap + rule)
- * instead of CSS borders. CSS double borders miter diagonally at element corners and
- * land on fractional device pixels (row heights are fractional), which renders uneven
- * rule weights and notched joins; Word draws both rules at even weight and crosses
- * them squarely at junctions. The cell keeps its CSS double border with a TRANSPARENT
- * color so border-box layout (content inset, band reservation) is unchanged, and the
- * visible rules come from the strips. (SD-3308)
+ * Paints a cell's double borders the way Word does: as a single-rule INNER RECTANGLE
+ * per cell, connected with square L-joins at the corners (verified against 300dpi Word
+ * renders of the same file). The band's two rules sit at its faces; the inner face rule
+ * belongs to this cell's rectangle and the outer face rule belongs to the table outline
+ * (outer edges) or to the neighboring cell's rectangle (interior edges). CSS double
+ * borders cannot do this: they miter diagonally and their band hugs the owning cell, so
+ * junctions render as crossings instead of closed boxes.
+ *
+ * The cell keeps its CSS double border with a TRANSPARENT color so border-box layout
+ * (content inset, band reservation) is unchanged. For each double side, the rectangle's
+ * rule sits at the inner face of that side's band: inset (band - rule) on sides whose
+ * band lives in this cell (top/left always, bottom/right at table boundaries), and
+ * extended rule px past the box on interior bottom/right sides whose band lives in the
+ * neighboring cell. The table outline rules are painted by renderTableFragment. (SD-3308)
  */
-const appendDoubleBorderStrips = (
+const appendDoubleBorderInnerRect = (
   doc: Document,
   container: HTMLElement,
   cellElement: HTMLElement,
   borders: CellBorders | undefined,
   rect: { x: number; y: number; width: number; height: number },
+  ownsBottomBand: boolean,
+  ownsRightBand: boolean,
 ): void => {
   if (!borders) return;
-  const sides: Array<['top' | 'right' | 'bottom' | 'left', 'Top' | 'Right' | 'Bottom' | 'Left']> = [
-    ['top', 'Top'],
-    ['right', 'Right'],
-    ['bottom', 'Bottom'],
-    ['left', 'Left'],
-  ];
+  const sideInfo = (['top', 'right', 'bottom', 'left'] as const).map((side) => {
+    const spec = borders[side];
+    if (!spec || spec.style !== 'double') return null;
+    const band = Math.max(3, Math.round(getBorderBandWidthPx(spec)));
+    const rule = Math.max(1, Math.round(band / 3));
+    const color = spec.color && /^#[0-9A-Fa-f]{6}$/.test(spec.color) ? spec.color : '#000000';
+    return { side, band, rule, color };
+  });
+  if (!sideInfo.some(Boolean)) return;
+
   const x0 = Math.round(rect.x);
   const y0 = Math.round(rect.y);
   const x1 = Math.round(rect.x + rect.width);
   const y1 = Math.round(rect.y + rect.height);
-  for (const [side, cssSide] of sides) {
-    const spec = borders[side];
-    if (!spec || spec.style !== 'double') continue;
-    const band = Math.max(3, Math.round(getBorderBandWidthPx(spec)));
-    const rule = Math.max(1, Math.round(band / 3));
-    const color = spec.color && /^#[0-9A-Fa-f]{6}$/.test(spec.color) ? spec.color : '#000000';
-    // Keep the layout border, hide its paint.
+
+  // Hide the CSS paint for double sides, keep the layout band.
+  for (const info of sideInfo) {
+    if (!info) continue;
+    const cssSide = (info.side[0].toUpperCase() + info.side.slice(1)) as 'Top' | 'Right' | 'Bottom' | 'Left';
     cellElement.style[`border${cssSide}Color`] = 'transparent';
-    const strip = doc.createElement('div');
-    strip.className = 'superdoc-double-border-strip';
-    const st = strip.style;
-    st.position = 'absolute';
-    st.boxSizing = 'border-box';
-    st.pointerEvents = 'none';
-    if (side === 'top' || side === 'bottom') {
-      st.left = `${x0}px`;
-      st.width = `${x1 - x0}px`;
-      st.height = `${band}px`;
-      st.top = side === 'top' ? `${y0}px` : `${y1 - band}px`;
-      st.borderTop = `${rule}px solid ${color}`;
-      st.borderBottom = `${rule}px solid ${color}`;
-    } else {
-      st.top = `${y0}px`;
-      st.height = `${y1 - y0}px`;
-      st.width = `${band}px`;
-      st.left = side === 'left' ? `${x0}px` : `${x1 - band}px`;
-      st.borderLeft = `${rule}px solid ${color}`;
-      st.borderRight = `${rule}px solid ${color}`;
-    }
-    container.appendChild(strip);
   }
+
+  const [top, right, bottom, left] = sideInfo;
+  const rectEl = doc.createElement('div');
+  rectEl.className = 'superdoc-double-border-rect';
+  const st = rectEl.style;
+  st.position = 'absolute';
+  st.boxSizing = 'border-box';
+  st.pointerEvents = 'none';
+  // Inner-face placement per side. Owned band: rule sits band-rule inside the box.
+  // Neighbor-owned band (interior bottom/right): rule sits at the band's near face,
+  // which is rule px past this cell's box inside the neighbor.
+  const topInset = top ? top.band - top.rule : 0;
+  const leftInset = left ? left.band - left.rule : 0;
+  const bottomInset = bottom ? (ownsBottomBand ? bottom.band - bottom.rule : -bottom.rule) : 0;
+  const rightInset = right ? (ownsRightBand ? right.band - right.rule : -right.rule) : 0;
+  st.left = `${x0 + leftInset}px`;
+  st.top = `${y0 + topInset}px`;
+  st.width = `${x1 - x0 - leftInset - rightInset}px`;
+  st.height = `${y1 - y0 - topInset - bottomInset}px`;
+  if (top) st.borderTop = `${top.rule}px solid ${top.color}`;
+  if (bottom) st.borderBottom = `${bottom.rule}px solid ${bottom.color}`;
+  if (left) st.borderLeft = `${left.rule}px solid ${left.color}`;
+  if (right) st.borderRight = `${right.rule}px solid ${right.color}`;
+  container.appendChild(rectEl);
 };
 
 export const renderTableRow = (deps: TableRowRenderDependencies): void => {
@@ -748,11 +761,44 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     });
 
     container.appendChild(cellElement);
-    appendDoubleBorderStrips(doc, container, cellElement, finalBorders, {
-      x,
-      y,
-      width: computedCellWidth > 0 ? computedCellWidth : (cellMeasure.width ?? 0),
-      height: cellHeight,
-    });
+    const cellGridBounds = getTableCellGridBounds(cellPosition);
+    // Word's double model needs the EFFECTIVE border of every side of this cell,
+    // not the single-owner-suppressed set: ownership picks which band face the rule
+    // sits on, but every surrounding double edge contributes a side to this cell's
+    // rectangle. (SD-3308)
+    const cb = (cellBordersAttr ?? {}) as CellBorders;
+    const effectiveSideSpecs: CellBorders = {
+      top:
+        cellGridBounds.touchesTopEdge || continuesFromPrev === true
+          ? resolveTableBorderValue(cb.top, effectiveTableBorders?.top)
+          : (resolveBorderConflict(cb.top, aboveCellBorders?.bottom) ??
+            borderValueToSpec(effectiveTableBorders?.insideH)),
+      bottom:
+        cellGridBounds.touchesBottomEdge || continuesOnNext === true
+          ? resolveTableBorderValue(cb.bottom, effectiveTableBorders?.bottom)
+          : (resolveBorderConflict(cb.bottom, undefined) ?? borderValueToSpec(effectiveTableBorders?.insideH)),
+      left: cellGridBounds.touchesLeftEdge
+        ? resolveTableBorderValue(cb.left, effectiveTableBorders?.left)
+        : (resolveBorderConflict(cb.left, leftCellBorders?.right) ?? borderValueToSpec(effectiveTableBorders?.insideV)),
+      right: cellGridBounds.touchesRightEdge
+        ? resolveTableBorderValue(cb.right, effectiveTableBorders?.right)
+        : (resolveBorderConflict(cb.right, rightCellBorders?.left) ??
+          borderValueToSpec(effectiveTableBorders?.insideV)),
+    };
+    const rectBorders = isRtl ? swapCellBordersLR(effectiveSideSpecs) : effectiveSideSpecs;
+    appendDoubleBorderInnerRect(
+      doc,
+      container,
+      cellElement,
+      rectBorders,
+      {
+        x,
+        y,
+        width: computedCellWidth > 0 ? computedCellWidth : (cellMeasure.width ?? 0),
+        height: cellHeight,
+      },
+      cellGridBounds.touchesBottomEdge || continuesOnNext === true,
+      cellGridBounds.touchesRightEdge,
+    );
   }
 };

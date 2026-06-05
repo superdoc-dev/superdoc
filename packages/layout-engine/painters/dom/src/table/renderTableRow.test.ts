@@ -285,10 +285,10 @@ describe('renderTableRow', () => {
     expect(secondCall.borders?.left).toBeDefined();
   });
 
-  // SD-3308: double borders paint as pixel-snapped strip overlays (rule + gap + rule)
-  // with square junctions like Word; the cell keeps a transparent CSS double border so
-  // border-box layout is unchanged.
-  it('paints double borders as strip overlays and hides the cell CSS border paint', () => {
+  // SD-3308: double borders paint as a single-rule inner rectangle per cell (Word
+  // model: closed boxes with square L-joins, verified against 300dpi Word renders);
+  // the cell keeps a transparent CSS double border so border-box layout is unchanged.
+  it('paints double borders as a per-cell inner rectangle and hides the CSS border paint', () => {
     renderTableRow(
       createDeps({
         rowIndex: 0,
@@ -303,12 +303,16 @@ describe('renderTableRow', () => {
       }) as never,
     );
 
-    const strips = container.querySelectorAll('.superdoc-double-border-strip');
-    expect(strips.length).toBe(4);
-    const top = [...strips].find((el) => (el as HTMLElement).style.borderTop !== '');
-    expect(top).toBeDefined();
-    expect((top as HTMLElement).style.height).toBe('6px');
-    expect((top as HTMLElement).style.borderTop).toMatch(/2px solid/);
+    const rects = container.querySelectorAll('.superdoc-double-border-rect');
+    expect(rects.length).toBe(1);
+    const rect = rects[0] as HTMLElement;
+    // band 6, rule 2: the inner-face rule sits band - rule = 4px inside the owned edges.
+    expect(rect.style.left).toBe('4px');
+    expect(rect.style.top).toBe('4px');
+    expect(rect.style.borderTop).toMatch(/2px solid/);
+    expect(rect.style.borderBottom).toMatch(/2px solid/);
+    expect(rect.style.borderLeft).toMatch(/2px solid/);
+    expect(rect.style.borderRight).toMatch(/2px solid/);
     const cellArgs = renderTableCellMock.mock.calls[0][0] as { borders?: { top?: { style?: string } } };
     expect(cellArgs.borders?.top?.style).toBe('double');
   });

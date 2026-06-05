@@ -107,7 +107,58 @@ describe('floating-table-anchor', () => {
         blocks[1] as TableBlock,
         paragraphIndexById,
       );
-      expect(resolution).toEqual({ paragraphIndex: 2, offsetV: 0.07 });
+      expect(resolution).toEqual({ paragraphIndex: 2, offsetV: 0.07, lineScopedOnAnchor: true });
+    });
+
+    it('anchors a line-scoped field beside a label after empty spacers (notification AUD$ field)', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'spacer-1', runs: [] },
+        { kind: 'paragraph', id: 'spacer-2', runs: [] },
+        makeFloatingTable('aud-field', 0.27),
+        { kind: 'paragraph', id: 'aud-label', runs: [{ text: 'AUD$ ' }] },
+      ];
+      const measures: Measure[] = [
+        makeParaMeasure(12),
+        makeParaMeasure(12),
+        { kind: 'table', rows: [], columnWidths: [100], totalWidth: 100, totalHeight: 30 } as TableMeasure,
+        makeParaMeasure(17),
+      ];
+
+      const resolution = resolveFloatingTableAnchorResolution(
+        blocks,
+        measures,
+        blocks.length,
+        2,
+        blocks[2] as TableBlock,
+        new Map(),
+      );
+
+      expect(resolution).toEqual({ paragraphIndex: 3, offsetV: 0.27, lineScopedOnAnchor: true });
+    });
+
+    it('does not mark lineScopedOnAnchor for page-relative anchors', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'label', runs: [{ text: 'Label' }] },
+        {
+          ...makeFloatingTable('page-field', 0.27),
+          anchor: { isAnchored: true, vRelativeFrom: 'page', offsetV: 0.27 },
+        },
+      ];
+      const measures: Measure[] = [
+        makeParaMeasure(17),
+        { kind: 'table', rows: [], columnWidths: [100], totalWidth: 100, totalHeight: 30 } as TableMeasure,
+      ];
+
+      const resolution = resolveFloatingTableAnchorResolution(
+        blocks,
+        measures,
+        blocks.length,
+        1,
+        blocks[1] as TableBlock,
+        new Map(),
+      );
+
+      expect(resolution?.lineScopedOnAnchor).toBe(false);
     });
 
     it('walks forward by measured paragraph heights for large tblpY', () => {
@@ -140,25 +191,11 @@ describe('floating-table-anchor', () => {
       );
 
       expect(resolution?.paragraphIndex).toBe(6);
-      expect(resolution?.offsetV).toBe(3.8);
+      expect(resolution?.offsetV).toBe(3);
+      expect(resolution?.lineScopedOnAnchor).toBe(false);
     });
 
     it('targets the first option row after a multi-line heading (Form F3 hearing loop field)', () => {
-      const makeMultiLineParaMeasure = (lineHeights: number[]) => ({
-        kind: 'paragraph' as const,
-        lines: lineHeights.map((lineHeight) => ({
-          fromRun: 0,
-          fromChar: 0,
-          toRun: 0,
-          toChar: 0,
-          width: 100,
-          ascent: lineHeight * 0.8,
-          descent: lineHeight * 0.2,
-          lineHeight,
-        })),
-        totalHeight: lineHeights.reduce((sum, h) => sum + h, 0),
-      });
-
       const blocks: FlowBlock[] = [
         { kind: 'paragraph', id: 'info', runs: [{ text: 'Long body copy.' }] },
         makeFloatingTable('field-1', 3.8),
@@ -180,12 +217,12 @@ describe('floating-table-anchor', () => {
       const measures: Measure[] = [
         makeParaMeasure(67),
         { kind: 'table', rows: [], columnWidths: [100], totalWidth: 100, totalHeight: 14 } as TableMeasure,
-        makeParaMeasure(17),
-        makeParaMeasure(17),
+        makeParaMeasure(16.866666666666664),
+        makeParaMeasure(16.866666666666664),
         { kind: 'table', rows: [], columnWidths: [100], totalWidth: 100, totalHeight: 14 } as TableMeasure,
-        makeMultiLineParaMeasure([18, 19]),
-        makeParaMeasure(17),
-        makeParaMeasure(17),
+        makeParaMeasure(36.96875),
+        makeParaMeasure(16.866666666666664),
+        makeParaMeasure(16.866666666666664),
       ];
 
       const resolution = resolveFloatingTableAnchorResolution(
@@ -198,7 +235,8 @@ describe('floating-table-anchor', () => {
       );
 
       expect(resolution?.paragraphIndex).toBe(6);
-      expect(resolution?.offsetV).toBe(3.8);
+      expect(resolution?.offsetV).toBeCloseTo(2.43, 2);
+      expect(resolution?.lineScopedOnAnchor).toBe(false);
     });
   });
 });

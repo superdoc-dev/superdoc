@@ -934,7 +934,8 @@ describe('anchors', () => {
       const result = collectAnchoredTables(blocks, measures);
       const anchored = result.byParagraph.get(6)?.[0];
       expect(anchored?.block.id).toBe('field-2');
-      expect(anchored?.layoutOffsetV).toBe(3.8);
+      expect(anchored?.layoutOffsetV).toBe(3);
+      expect(anchored?.lineScopedOnAnchor).toBe(false);
     });
   });
 });

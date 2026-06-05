@@ -25,8 +25,10 @@ export type AnchoredDrawing = {
 export type AnchoredTable = {
   block: TableBlock;
   measure: TableMeasure;
-  /** Resolved paint offset when OOXML tblpY targets a later checkbox row. */
+  /** Resolved paint offset after tblpY paragraph walk. */
   layoutOffsetV?: number;
+  /** True when raw w:tblpY is line-scoped on the anchor paragraph (Word centers tall form fields). */
+  lineScopedOnAnchor?: boolean;
 };
 
 export type AnchoredObject = AnchoredDrawing | AnchoredTable;
@@ -201,6 +203,7 @@ export function collectAnchoredTables(blocks: FlowBlock[], measures: Measure[]):
       block: tableBlock,
       measure: tableMeasure,
       layoutOffsetV: resolution.offsetV,
+      lineScopedOnAnchor: resolution.lineScopedOnAnchor,
     });
     byParagraph.set(resolution.paragraphIndex, list);
   }

@@ -12,6 +12,11 @@ import { OOXML_PCT_DIVISOR, resolveTableWidthAttr } from '@superdoc/contracts';
 export type FloatingTableAnchorResolution = {
   paragraphIndex: number;
   offsetV: number;
+  /**
+   * True when w:tblpY applies directly on the anchor paragraph's first line (Word line-scoped).
+   * Tall wrap-none form fields vertically center on that line; forward-walk remainders do not.
+   */
+  lineScopedOnAnchor?: boolean;
 };
 
 /** Width ratio for inline (paginated) layout vs single float fragment. */
@@ -128,16 +133,6 @@ function findForwardCompactOptionLine(
   return null;
 }
 
-/** Paint offset for form-field overlays — inherit from the nearest prior single-cell field table. */
-function findNearestFormFieldPaintOffset(blocks: FlowBlock[], tableIndex: number): number {
-  for (let i = tableIndex - 1; i >= 0; i -= 1) {
-    const block = blocks[i];
-    if (block.kind !== 'table' || !block.anchor?.isAnchored || block.wrap?.type !== 'None') continue;
-    return block.anchor.offsetV ?? 0;
-  }
-  return 0;
-}
-
 /**
  * Short option line after taller body copy (form yes/no rows).
  * Uses measured line count and height — not content pattern matching.
@@ -157,6 +152,44 @@ function isCompactOptionLineAfterBody(
 
   const bodyHeight = paragraphMeasureHeight(measures, bodyIndex);
   return bodyHeight > optionHeight * 1.5;
+}
+
+function resolutionWithLineScopedFlag(
+  blocks: FlowBlock[],
+  measures: Measure[],
+  paragraphIndex: number,
+  offsetV: number,
+  rawOffsetV: number,
+  forwardResolved = false,
+): FloatingTableAnchorResolution {
+  return {
+    paragraphIndex,
+    offsetV,
+    lineScopedOnAnchor:
+      !forwardResolved && offsetV === rawOffsetV && isLineScopedTblpY(blocks, measures, paragraphIndex, offsetV),
+  };
+}
+
+/**
+ * Word tblpY paint offset after anchoring to a forward checkbox row: subtract measured
+ * heights of every paragraph from the first follower through the anchor (inclusive).
+ */
+function paintOffsetThroughAnchorParagraphs(
+  blocks: FlowBlock[],
+  measures: Measure[],
+  len: number,
+  tableIndex: number,
+  anchorParagraphIndex: number,
+  rawOffsetV: number,
+): number {
+  let consumed = 0;
+  let index = findNextParagraphIndex(blocks, tableIndex, len);
+  while (index != null && index <= anchorParagraphIndex) {
+    consumed += paragraphMeasureHeight(measures, index);
+    if (index === anchorParagraphIndex) break;
+    index = findNextParagraphIndex(blocks, index, len);
+  }
+  return Math.max(0, rawOffsetV - consumed);
 }
 
 /**
@@ -189,14 +222,22 @@ function resolveForwardParagraphByTblpY(
     const lineHeight = paragraphFirstLineHeight(blocks, measures, index);
     if (remaining <= height + 1) {
       const effectiveOffsetV = lineHeight > 0 ? Math.min(remaining, lineHeight) : remaining;
-      return { paragraphIndex: index, offsetV: effectiveOffsetV };
+      return {
+        paragraphIndex: index,
+        offsetV: effectiveOffsetV,
+        lineScopedOnAnchor: false,
+      };
     }
 
     remaining -= height;
     const nextIndex = findNextParagraphIndex(blocks, index, len);
     if (nextIndex == null && remaining > 0) {
       const effectiveOffsetV = lineHeight > 0 ? Math.min(remaining, lineHeight) : remaining;
-      return { paragraphIndex: index, offsetV: effectiveOffsetV };
+      return {
+        paragraphIndex: index,
+        offsetV: effectiveOffsetV,
+        lineScopedOnAnchor: false,
+      };
     }
 
     index = nextIndex;
@@ -225,7 +266,7 @@ function walkBackTblpYAnchor(
     candidate = earlierIndex;
   }
 
-  return { paragraphIndex: candidate, offsetV };
+  return resolutionWithLineScopedFlag(blocks, measures, candidate, offsetV, offsetV);
 }
 
 function getTableIndentPx(attrs: TableBlock['attrs']): number {
@@ -280,14 +321,21 @@ export function resolveFloatingTableAnchorResolution(
   if (typeof anchorParagraphId === 'string') {
     const explicitIndex = paragraphIndexById.get(anchorParagraphId);
     if (typeof explicitIndex === 'number') {
-      return { paragraphIndex: explicitIndex, offsetV: tableBlock.anchor?.offsetV ?? 0 };
+      const offsetV = tableBlock.anchor?.offsetV ?? 0;
+      const vRelativeFrom = tableBlock.anchor?.vRelativeFrom ?? 'paragraph';
+      if (vRelativeFrom !== 'paragraph') {
+        return { paragraphIndex: explicitIndex, offsetV, lineScopedOnAnchor: false };
+      }
+      return resolutionWithLineScopedFlag(blocks, measures, explicitIndex, offsetV, offsetV);
     }
   }
 
   const vRelativeFrom = tableBlock.anchor?.vRelativeFrom ?? 'paragraph';
   if (vRelativeFrom !== 'paragraph') {
     const fallback = findNearestParagraphIndex(blocks, len, tableIndex);
-    return fallback == null ? null : { paragraphIndex: fallback, offsetV: tableBlock.anchor?.offsetV ?? 0 };
+    if (fallback == null) return null;
+    const offsetV = tableBlock.anchor?.offsetV ?? 0;
+    return { paragraphIndex: fallback, offsetV, lineScopedOnAnchor: false };
   }
 
   const offsetV = tableBlock.anchor?.offsetV ?? 0;
@@ -295,23 +343,32 @@ export function resolveFloatingTableAnchorResolution(
   const nextIndex = findNextParagraphIndex(blocks, tableIndex, len);
 
   if (nextIndex != null && isLineScopedTblpY(blocks, measures, nextIndex, offsetV)) {
-    // Spacer + wrapping text: empty predecessor, non-empty follower (advanced-tables.docx).
+    // Spacer + wrapping text: empty predecessor, non-empty follower (notification AUD$ field).
     if (!isTextEmptyParagraph(blocks, nextIndex) && (prevIndex == null || isTextEmptyParagraph(blocks, prevIndex))) {
-      return { paragraphIndex: nextIndex, offsetV };
+      return resolutionWithLineScopedFlag(blocks, measures, nextIndex, offsetV, offsetV);
     }
 
     if (isCompactOptionLineAfterBody(blocks, measures, nextIndex, prevIndex)) {
-      return { paragraphIndex: nextIndex, offsetV };
+      return resolutionWithLineScopedFlag(blocks, measures, nextIndex, offsetV, offsetV);
     }
   }
 
   if (!isLineScopedTblpY(blocks, measures, prevIndex ?? nextIndex ?? tableIndex, offsetV)) {
     const forwardCompact = findForwardCompactOptionLine(blocks, measures, len, tableIndex);
     if (forwardCompact != null) {
-      const paintOffsetV = isLineScopedTblpY(blocks, measures, forwardCompact, offsetV)
-        ? offsetV
-        : findNearestFormFieldPaintOffset(blocks, tableIndex);
-      return { paragraphIndex: forwardCompact, offsetV: paintOffsetV };
+      const paintOffsetV = paintOffsetThroughAnchorParagraphs(
+        blocks,
+        measures,
+        len,
+        tableIndex,
+        forwardCompact,
+        offsetV,
+      );
+      return {
+        paragraphIndex: forwardCompact,
+        offsetV: paintOffsetV,
+        lineScopedOnAnchor: false,
+      };
     }
 
     const forward = resolveForwardParagraphByTblpY(blocks, measures, len, tableIndex, offsetV);

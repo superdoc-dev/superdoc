@@ -12,7 +12,7 @@ import type {
   DrawingBlock,
   DrawingMeasure,
   DrawingFragment,
-  ParagraphBorders,
+  ParagraphBorders, TableAnchor, TableWrap 
 } from '@superdoc/contracts';
 import {
   computeFragmentPmRange,
@@ -32,6 +32,31 @@ import type { AnchoredTable } from './anchors.js';
 const PX_PER_PT = 96 / 72;
 
 const spacingDebugEnabled = false;
+
+/** Line-scoped tblpY (form field beside label on the same line). */
+function isLineScopedTblpY(firstLineHeight: number, offsetV: number): boolean {
+  if (firstLineHeight <= 0) return offsetV <= 1;
+  return offsetV <= firstLineHeight * 1.5;
+}
+
+/** Vertically center a tall single-line form field with its anchor line (Word line-scoped tblpY). */
+function anchorForLineScopedFormField(
+  anchor: TableAnchor | undefined,
+  tableHeight: number,
+  firstLineHeight: number,
+  layoutOffsetV?: number,
+  lineScopedOnAnchor = false,
+  wrapType: TableWrap['type'] | undefined = 'None',
+): TableAnchor | undefined {
+  if (!anchor) return anchor;
+  if ((anchor.vRelativeFrom ?? 'paragraph') !== 'paragraph') return anchor;
+  if (wrapType !== 'None') return anchor;
+  if (!lineScopedOnAnchor) return anchor;
+  const offsetV = layoutOffsetV ?? anchor.offsetV ?? 0;
+  if (anchor.alignV || firstLineHeight <= 0 || tableHeight <= firstLineHeight) return anchor;
+  if (!isLineScopedTblpY(firstLineHeight, offsetV)) return anchor;
+  return { ...anchor, vRelativeFrom: 'paragraph', alignV: 'center', offsetV: 0 };
+}
 
 /**
  * SD-2656: ordered footnote anchor entry. The body slicer reads the candidate
@@ -469,6 +494,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   });
   const paragraphAnchorBaseY =
     floatScanParagraphStartY + borderExpansion.top - (inBorderGroup ? rawBorderExpansion.bottom : 0);
+  let paragraphContentEndY = paragraphAnchorBaseY;
 
   const registerAnchoredDrawingsAt = (paragraphContentStartY: number) => {
     if (!anchors?.anchoredDrawings?.length) return;
@@ -590,10 +616,18 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       const contentTop = state.topMargin;
       const contentBottom = state.contentBottom;
       const layoutOffsetV = entry.layoutOffsetV;
-      const anchorForY =
+      const firstLineHeight = measure.lines?.[0]?.lineHeight ?? 0;
+      const wrapType = entry.block.wrap?.type ?? 'None';
+      const anchorForY = anchorForLineScopedFormField(
         layoutOffsetV != null && entry.block.anchor
           ? { ...entry.block.anchor, offsetV: layoutOffsetV }
-          : entry.block.anchor;
+          : entry.block.anchor,
+        entry.measure.totalHeight ?? 0,
+        firstLineHeight,
+        layoutOffsetV,
+        entry.lineScopedOnAnchor === true,
+        wrapType,
+      );
       const anchorY = resolveAnchoredGraphicY({
         anchor: anchorForY,
         objectHeight: entry.measure.totalHeight ?? 0,
@@ -620,7 +654,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       state.page.fragments.push(createAnchoredTableFragment(entry.block, entry.measure, anchorX, anchorY));
       anchors!.placedAnchoredIds.add(entry.block.id);
 
-      const wrapType = entry.block.wrap?.type ?? 'None';
       if (wrapType !== 'None') {
         const bottom = anchorY + (entry.measure.totalHeight ?? 0);
         const distBottom = entry.block.wrap?.distBottom ?? 0;
@@ -1197,6 +1230,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     state.cursorY += borderExpansion.top + fragmentHeight + borderExpansion.bottom;
     state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
     lastState = state;
+    paragraphContentEndY = state.cursorY;
     fromLine = slice.toLine;
   }
 
@@ -1243,7 +1277,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     return wrapType !== 'None' && usePostLayoutSquareAnchors;
   });
   if (postLayoutAnchoredTables.length > 0) {
-    const anchorEndY = lastState?.cursorY ?? paragraphAnchorBaseY;
-    registerAnchoredTablesAt(anchorEndY, postLayoutAnchoredTables);
+    const postLayoutAnchorY = emptyTextParagraph ? paragraphAnchorBaseY : paragraphContentEndY;
+    registerAnchoredTablesAt(postLayoutAnchorY, postLayoutAnchoredTables);
   }
 }

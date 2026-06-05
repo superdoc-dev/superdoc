@@ -99,6 +99,34 @@ test('identified user: deleting inside own pending insertion refines it in place
   expectSingleRefinedInsertion(await snapshotTrackedState(superdoc));
 });
 
+test('anonymous session: typing over a selection inside own insertion refines it in place (SD-3352)', async ({
+  superdoc,
+}) => {
+  // Replace-path variant: selecting inside your own pending insertion and
+  // typing must refine the insertion under its original id — not collapse the
+  // deleted half while minting the replacement text as a nested child
+  // insertion (overlapParentId) under your own suggestion.
+  await setUser(superdoc, ANONYMOUS_DEFAULT);
+  await superdoc.setDocumentMode('suggesting');
+  await superdoc.waitForStable();
+  await superdoc.type('ABCHELLOXYZ');
+  await superdoc.waitForStable();
+
+  const pos = await superdoc.findTextPos('HELLO');
+  await superdoc.setTextSelection(pos, pos + 'HELLO'.length);
+  await superdoc.waitForStable();
+  await superdoc.type('Q');
+  await superdoc.waitForStable();
+
+  const state = await snapshotTrackedState(superdoc);
+  expect(state.docText).toBe('ABCQXYZ');
+  expect(Object.keys(state.deleteById)).toHaveLength(0);
+  const insertIds = Object.keys(state.insertById);
+  expect(insertIds).toHaveLength(1);
+  expect(state.insertById[insertIds[0]]).toBe('ABCQXYZ');
+  expect(state.listItems).toEqual([{ type: 'insert', text: 'ABCQXYZ' }]);
+});
+
 test('anonymous session: backspacing char-by-char through own insertion stays one refined insertion', async ({
   superdoc,
 }) => {

@@ -4535,6 +4535,70 @@ describe('requirePageBoundary edge cases', () => {
       expect(p3.width).toBeCloseTo(550);
     });
 
+    it('keeps the current explicit column after a manual column break when only later per-column gaps differ', () => {
+      const toExplicitColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-explicit',
+        type: 'continuous',
+        columns: { count: 3, gap: 48, widths: [100, 100, 300], gaps: [48, 48], equalWidth: false },
+        margins: {},
+      };
+      const laterGapsOnlyDelta: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-gaps-only',
+        type: 'continuous',
+        columns: { count: 3, gap: 48, widths: [100, 100, 300], gaps: [48, 96], equalWidth: false },
+        margins: {},
+      };
+
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        toExplicitColumns,
+        { kind: 'paragraph', id: 'p2', runs: [] },
+        { kind: 'columnBreak', id: 'br-1' } as ColumnBreakBlock,
+        { kind: 'paragraph', id: 'p3', runs: [] },
+        laterGapsOnlyDelta,
+        { kind: 'paragraph', id: 'p4', runs: [] },
+      ];
+
+      const measures: Measure[] = [
+        makeMeasure([40]),
+        { kind: 'sectionBreak' },
+        makeMeasure([40]),
+        { kind: 'columnBreak' },
+        makeMeasure([40]),
+        { kind: 'sectionBreak' },
+        makeMeasure([40]),
+      ];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 700, h: 792 },
+        margins: { top: 72, right: 50, bottom: 72, left: 50 },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+      const page = layout.pages[0];
+      const contentWidth = options.pageSize!.w - options.margins!.left - options.margins!.right;
+      const totalGap = 48 * 2;
+      const expectedSecondColumnX = 50 + (100 * (contentWidth - totalGap)) / (100 + 100 + 300) + 48;
+
+      const p2 = page.fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+      const p3 = page.fragments.find((f) => f.blockId === 'p3') as ParaFragment;
+      const p4 = page.fragments.find((f) => f.blockId === 'p4') as ParaFragment;
+
+      expect(p2.x).toBeCloseTo(50);
+      expect(p3.x).toBeCloseTo(expectedSecondColumnX);
+      expect(p4.x).toBeCloseTo(expectedSecondColumnX);
+      expect(page.columnRegions).toHaveLength(2);
+      expect(page.columnRegions?.[1]?.columns).toEqual({
+        count: 3,
+        gap: 48,
+        widths: [100, 100, 300],
+        gaps: [48, 48],
+        equalWidth: false,
+      });
+    });
+
     it('does not balance the final page for explicit custom-width columns', () => {
       const blocks: FlowBlock[] = [
         {

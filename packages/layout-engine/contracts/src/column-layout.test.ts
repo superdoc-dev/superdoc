@@ -326,6 +326,15 @@ describe('columnRenderLayoutsEqual (SD-2629)', () => {
     expect(columnRenderLayoutsEqual({ count: 2, gap: 24 }, { count: 2, gap: 48 })).toBe(false);
   });
 
+  it('treats explicit layouts differing only by per-column gaps as render-equal until geometry flips', () => {
+    expect(
+      columnRenderLayoutsEqual(
+        { count: 3, gap: 24, widths: [100, 100, 300], gaps: [24, 24], equalWidth: false },
+        { count: 3, gap: 24, widths: [100, 100, 300], gaps: [24, 96], equalWidth: false },
+      ),
+    ).toBe(true);
+  });
+
   it('distinguishes explicit vs equal mode and different resolved widths', () => {
     expect(
       columnRenderLayoutsEqual({ count: 2, gap: 24, widths: [192, 384], equalWidth: false }, { count: 2, gap: 24 }),

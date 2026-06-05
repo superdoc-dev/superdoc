@@ -685,7 +685,7 @@ describe('layoutDrawingBlock', () => {
 
     it('should use correct columnX for multi-column layout', () => {
       const context = createMockContext({}, {}, { columnIndex: 2 });
-      context.columnX = (index: number) => index * 620; // width(600) + gap(20)
+      context.columnX = (state: PageState) => state.columnIndex * 620; // width(600) + gap(20)
 
       const state = context.ensurePage();
       layoutDrawingBlock(context);

@@ -4351,6 +4351,23 @@ describe('measureBlock', () => {
       if (separate.kind !== 'table' || collapsed.kind !== 'table') throw new Error('expected table measures');
       expect(separate.rows[0].height).toBeLessThan(collapsed.rows[0].height);
     });
+
+    it('reserves the band excess for compound thinThick* and triple borders', async () => {
+      // The shared contracts band profile drives the reservation, so compound
+      // styles reserve exactly like double does. (SD-3308)
+      const single = await measureBlock(makeTable('single', 1), { maxWidth: 600 });
+      const thinThick = await measureBlock(makeTable('thinThickSmallGap', 4), { maxWidth: 600 });
+      const triple = await measureBlock(makeTable('triple', 2), { maxWidth: 600 });
+      if (single.kind !== 'table' || thinThick.kind !== 'table' || triple.kind !== 'table') {
+        throw new Error('expected table measures');
+      }
+      // thinThickSmallGap w4: band = 4 + 1 + 1 = 6px -> reservation 5px per gridline.
+      expect(thinThick.rows[0].height).toBeCloseTo(single.rows[0].height + 5, 5);
+      expect(thinThick.rows[1].height).toBeCloseTo(single.rows[1].height + 10, 5);
+      // triple w2: band = 5 * 2 = 10px -> reservation 9px per gridline.
+      expect(triple.rows[0].height).toBeCloseTo(single.rows[0].height + 9, 5);
+      expect(triple.rows[1].height).toBeCloseTo(single.rows[1].height + 18, 5);
+    });
   });
 
   describe('autofit tables with colspan should not truncate grid columns', () => {
@@ -4601,6 +4618,134 @@ describe('measureBlock', () => {
       expect(Math.abs(measure.columnWidths[0] - measure.columnWidths[1])).toBeLessThan(1);
       expect(measure.totalWidth).toBeLessThanOrEqual(100);
       expect(measure.totalWidth).toBeGreaterThan(0);
+    });
+
+    // SD-3308: a SINGLE-column pure-auto grid is not a Word layout cache either.
+    // Word content-sizes such tables to the text (band-scaling probe: gridCol 3000
+    // renders ~70px wide around "XXXX", not 200px). The single-column arm of
+    // hasNonUniformGrid must not let preserveAutoGrid pin the stale grid.
+    it('content-sizes a single-column pure-auto table instead of preserving its grid', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'single-col-pure-auto',
+        attrs: { tableWidth: { width: 0, type: 'auto' } },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'XXXX', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [200],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 624 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+      // Content demand for "XXXX" plus margins is far below the stale 200px grid.
+      expect(measure.totalWidth).toBeLessThan(120);
+      expect(measure.totalWidth).toBeGreaterThan(0);
+    });
+
+    // SD-3308 Word-measured band rule for content-sized columns (band-scaling probes):
+    // each vertical gridline grants HALF its band to each adjacent column, then the
+    // painted band sits fully inside the cell box and eats the other half back from
+    // the PADDING. Padding may compress to zero but text never clips, so:
+    //   column = text + max(padding + band, 2 x band)
+    // Probe evidence: Word's thinThickSmallGap content span shrinks by exactly the
+    // band delta as sz grows (padding absorbing), while triple sz24's content span
+    // bottoms out at the text width (floor active, margins fully consumed).
+    it('content-sized columns add half a band per edge, padding absorbing until the text floor', async () => {
+      const makeBordered = (style: string, width: number): FlowBlock =>
+        ({
+          kind: 'table',
+          id: `band-allowance-${style}-${width}`,
+          attrs: {
+            tableWidth: { width: 0, type: 'auto' },
+            borders: {
+              top: { style, width },
+              bottom: { style, width },
+              left: { style, width },
+              right: { style, width },
+            },
+          },
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0-0',
+                  blocks: [
+                    {
+                      kind: 'paragraph',
+                      id: 'para-0',
+                      runs: [{ text: 'XXXX', fontFamily: 'Arial', fontSize: 12 }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          columnWidths: [200],
+        }) as unknown as FlowBlock;
+
+      const bare = await measureBlock(makeBordered('none', 0), { maxWidth: 624 });
+      const single = await measureBlock(makeBordered('single', 2), { maxWidth: 624 });
+      const triple = await measureBlock(makeBordered('triple', 2), { maxWidth: 624 });
+      if (bare.kind !== 'table' || single.kind !== 'table' || triple.kind !== 'table') {
+        throw new Error('expected table measures');
+      }
+      // bare = text + default padding 8. single band 2: 2x2 < 8+2 -> padding absorbs,
+      // column = bare + band.
+      expect(single.totalWidth - bare.totalWidth).toBeCloseTo(2, 5);
+      // triple band 10: 2x10 > 8+10 -> text floor wins, column = text + 2x10 =
+      // (bare - 8) + 20 = bare + 12. The content area between the painted bands is
+      // exactly the text width: no clipping.
+      expect(triple.totalWidth - bare.totalWidth).toBeCloseTo(12, 5);
+    });
+
+    it('still preserves a single-column auto grid when the cell carries a concrete width', async () => {
+      // With tcW present the authored grid IS a valid Word layout cache: keep it.
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'single-col-cached-grid',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                attrs: { tableCellProperties: { cellWidth: { value: 3000, type: 'dxa' } } },
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'XXXX', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [200],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 624 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+      expect(measure.totalWidth).toBeCloseTo(200, 0);
     });
 
     it('produces exact sum after rounding adjustment', async () => {
@@ -5593,9 +5738,13 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // No tableWidth - auto layout preserves column widths
-      expect(measure.totalWidth).toBe(140);
-      expect(measure.columnWidths[0]).toBe(140);
+      // SD-1239 invariant: a missing tableWidth must not be misread as a percentage
+      // or crash; the table still measures sanely. SD-3308: a single-column
+      // pure-auto table content-sizes to its text like Word (the stale 140px grid
+      // is not a layout cache), so the width tracks content, not the grid.
+      expect(measure.totalWidth).toBeGreaterThan(0);
+      expect(measure.totalWidth).toBeLessThan(140);
+      expect(measure.columnWidths[0]).toBe(measure.totalWidth);
     });
 
     it('does NOT scale up column widths for fixed layout tables with explicit width', async () => {

@@ -45,6 +45,8 @@ export type AutoFitCellInput = {
   maxContentWidth?: number;
   /** Preferred width hint equivalent to `tcW`, in pixels. */
   preferredWidth?: number;
+  /** Horizontal padding + cell-border insets baked into the content widths, in pixels. */
+  horizontalInsets?: number;
 };
 
 /**
@@ -76,6 +78,8 @@ export type AutoFitContentMetricsCell = {
   minContentWidth: number;
   /** Maximum outer cell width, in pixels. */
   maxContentWidth: number;
+  /** Horizontal padding + cell-border insets baked into the content widths, in pixels. */
+  horizontalInsets?: number;
 };
 
 /**
@@ -166,6 +170,7 @@ type NormalizedCell = {
   preferredWidth?: number;
   minContentWidth: number;
   maxContentWidth: number;
+  horizontalInsets: number;
 };
 
 type NormalizedRow = {
@@ -214,6 +219,7 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
   const currentWidths = fixedLayout.columnWidths.slice(0, gridColumnCount);
   const minBounds = new Array<number>(gridColumnCount).fill(0);
   const maxBounds = new Array<number>(gridColumnCount).fill(0);
+  const textBounds = new Array<number>(gridColumnCount).fill(0);
   const preferredOverrides = new Array<number | undefined>(gridColumnCount).fill(undefined);
   const multiSpanCells: NormalizedCell[] = [];
 
@@ -221,6 +227,7 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
     rows: normalizedRows,
     minBounds,
     maxBounds,
+    textBounds,
     preferredOverrides,
     multiSpanCells,
   });
@@ -261,9 +268,16 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
       // deliberately ignored here; it is not a Word layout cache for this shape.
       // (SD-3309)
       const columnBandAllowances = workingInput.columnBandAllowances;
-      resolvedWidths = maxBounds.map(
-        (max, index) => Math.max(max, minBounds[index]) + (columnBandAllowances?.[index] ?? 0),
-      );
+      // Word band rule (SD-3308 probes): the column grows by half a band per edge
+      // (the allowance); the painted band then consumes the other half from the
+      // padding. Padding compresses but TEXT never clips, so the column is floored
+      // at text + the full bands (2x the allowance).
+      resolvedWidths = maxBounds.map((max, index) => {
+        const allowance = columnBandAllowances?.[index] ?? 0;
+        const withAllowance = Math.max(max, minBounds[index]) + allowance;
+        const textFloor = textBounds[index] + allowance * 2;
+        return Math.max(withAllowance, textFloor);
+      });
       // Spanning cells must keep their max-content demand: the proportional spread in
       // applyMultiSpanMaximums can leave the covered columns collectively short (span
       // padding is per cell, not per column), which wraps the span text where Word
@@ -360,6 +374,7 @@ function resolveAutoFitContext(input: AutoFitInput): AutoFitContext {
       preferredWidth: cell.preferredWidth,
       minContentWidth: cell.minContentWidth,
       maxContentWidth: cell.maxContentWidth,
+      horizontalInsets: cell.horizontalInsets,
     })),
   }));
 
@@ -408,6 +423,7 @@ function normalizeLegacyRows(rows: AutoFitRowInput[]): NormalizedRow[] {
         preferredWidth: sanitizeOptionalWidth(cell.preferredWidth),
         minContentWidth: Math.max(0, cell.minContentWidth ?? 0),
         maxContentWidth: Math.max(0, cell.maxContentWidth ?? cell.minContentWidth ?? 0),
+        horizontalInsets: Math.max(0, cell.horizontalInsets ?? 0),
       });
       columnIndex += span;
     }
@@ -455,6 +471,7 @@ function buildNormalizedRows(
           preferredWidth: sanitizeOptionalWidth(metrics?.preferredWidth ?? placedCell.preferredWidth),
           minContentWidth: Math.max(0, metrics?.minContentWidth ?? 0),
           maxContentWidth: Math.max(0, metrics?.maxContentWidth ?? metrics?.minContentWidth ?? 0),
+          horizontalInsets: Math.max(0, metrics?.horizontalInsets ?? 0),
         };
       }),
       skippedColumns: (workingRow.skippedColumns ?? []).map((skipped) => ({
@@ -475,10 +492,11 @@ function accumulateBounds(args: {
   rows: NormalizedRow[];
   minBounds: number[];
   maxBounds: number[];
+  textBounds: number[];
   preferredOverrides: Array<number | undefined>;
   multiSpanCells: NormalizedCell[];
 }): void {
-  const { rows, minBounds, maxBounds, preferredOverrides, multiSpanCells } = args;
+  const { rows, minBounds, maxBounds, textBounds, preferredOverrides, multiSpanCells } = args;
 
   for (const row of rows) {
     for (const skipped of row.skippedColumns) {
@@ -493,6 +511,13 @@ function accumulateBounds(args: {
       if (cell.span === 1) {
         minBounds[cell.startColumn] = Math.max(minBounds[cell.startColumn], cell.minContentWidth);
         maxBounds[cell.startColumn] = Math.max(maxBounds[cell.startColumn], cell.maxContentWidth);
+        // Text-only demand (content width minus padding/cell-border insets), used by
+        // the content-size band floor: padding may compress under a fat border band
+        // but the text itself never loses space. (SD-3308)
+        textBounds[cell.startColumn] = Math.max(
+          textBounds[cell.startColumn],
+          Math.max(0, cell.maxContentWidth - cell.horizontalInsets),
+        );
         if (preferredOverrides[cell.startColumn] == null && cell.preferredWidth != null) {
           preferredOverrides[cell.startColumn] = cell.preferredWidth;
         }

@@ -1,4 +1,5 @@
 import type {
+  BorderSpec,
   CellBorders,
   DrawingBlock,
   ImageDrawing,
@@ -18,7 +19,7 @@ import type {
   WrapExclusion,
   WrapTextMode,
 } from '@superdoc/contracts';
-import { rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
+import { rescaleColumnWidths, normalizeZIndex, getCellSpacingPx, getBorderBandProfile } from '@superdoc/contracts';
 import type { ResolvePhysicalFamily } from '@superdoc/font-system';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
@@ -714,9 +715,24 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   ): HTMLElement => buildImageHyperlinkAnchor(doc, imageEl, hyperlink, display);
 
   // RTL: swap left↔right cell margins (ECMA-376 Part 4 §14.3.3–14.3.4, §14.3.7–14.3.8)
-  const paddingLeft = isRtl ? (padding.right ?? 4) : (padding.left ?? 4);
+  // Word eats half of a border band back from the cell padding on that side
+  // (band-scaling probe measurements: leftover margin = padding - band/2, floored
+  // at 0). Scoped to compound bands (double, triple, thinThick*): for single-rule
+  // borders the difference is sub-pixel and not worth disturbing existing layouts.
+  // The matching column growth lives in measuring resolveColumnBandAllowances. (SD-3308)
+  const compoundBandEats = (border: BorderSpec | undefined): number => {
+    const profile = border ? getBorderBandProfile(border) : null;
+    return profile ? profile.band / 2 : 0;
+  };
+  const paddingLeft = Math.max(
+    0,
+    (isRtl ? (padding.right ?? 4) : (padding.left ?? 4)) - compoundBandEats(borders?.left),
+  );
   const paddingTop = padding.top ?? 0;
-  const paddingRight = isRtl ? (padding.left ?? 4) : (padding.right ?? 4);
+  const paddingRight = Math.max(
+    0,
+    (isRtl ? (padding.left ?? 4) : (padding.right ?? 4)) - compoundBandEats(borders?.right),
+  );
   const paddingBottom = padding.bottom ?? 0;
 
   const cellEl = doc.createElement('div');

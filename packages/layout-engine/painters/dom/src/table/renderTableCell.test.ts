@@ -101,6 +101,43 @@ describe('renderTableCell', () => {
     },
   });
 
+  // SD-3308 Word-measured padding rule for compound border bands: the painted band
+  // eats HALF its width back from the cell padding per side (probe evidence: Word's
+  // thinThickSmallGap sz24 leftover margin = padding - band/2). Padding floors at 0;
+  // non-compound borders keep the full padding (sub-pixel difference, deliberately
+  // out of scope to avoid corpus churn).
+  it('compresses horizontal padding by half the band on compound border sides', () => {
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: baseCellMeasure,
+      cell: baseCell,
+      borders: {
+        // thinThickSmallGap w4: band 6 -> padding 4 - 3 = 1px
+        left: { style: 'thinThickSmallGap', width: 4, color: '#000000' },
+        // triple w2: band 10 -> padding 4 - 5 -> floors at 0
+        right: { style: 'triple', width: 2, color: '#000000' },
+      },
+    });
+
+    expect(cellElement.style.paddingLeft).toBe('1px');
+    expect(cellElement.style.paddingRight).toBe('0px');
+  });
+
+  it('keeps full padding for non-compound border sides', () => {
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: baseCellMeasure,
+      cell: baseCell,
+      borders: {
+        left: { style: 'single', width: 2, color: '#000000' },
+        right: { style: 'thick', width: 2, color: '#000000' },
+      },
+    });
+
+    expect(cellElement.style.paddingLeft).toBe('4px');
+    expect(cellElement.style.paddingRight).toBe('4px');
+  });
+
   it('uses an end-of-cell mark for the final paragraph in a table cell', () => {
     const secondParagraphBlock: ParagraphBlock = {
       kind: 'paragraph',

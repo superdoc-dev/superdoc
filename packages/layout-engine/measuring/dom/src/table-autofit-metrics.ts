@@ -69,6 +69,12 @@ export type TableCellContentMetrics = {
    * This is the no-wrap authored line width, plus horizontal cell chrome.
    */
   maxWidthPx: number;
+  /**
+   * Horizontal cell chrome (padding + cell-border widths) baked into the outer
+   * widths, in pixels. Lets the AutoFit solver recover the text-only demand for
+   * the content-size band floor. (SD-3308)
+   */
+  horizontalInsetsPx?: number;
 };
 
 /**
@@ -376,6 +382,7 @@ export async function measureTableCellContentMetrics(
     const emptyMetrics = {
       minWidthPx: horizontalInsets,
       maxWidthPx: horizontalInsets,
+      horizontalInsetsPx: horizontalInsets,
     };
     tableCellMetricsCache.set(cacheKey, emptyMetrics);
     return emptyMetrics;
@@ -393,6 +400,7 @@ export async function measureTableCellContentMetrics(
   const result = {
     minWidthPx: minContentWidthPx + horizontalInsets,
     maxWidthPx: maxContentWidthPx + horizontalInsets,
+    horizontalInsetsPx: horizontalInsets,
   };
 
   tableCellMetricsCache.set(cacheKey, result);
@@ -461,6 +469,7 @@ export async function measureTableAutoFitContentMetrics(
             preferredWidth: normalizedCell?.preferredWidth,
             minContentWidth: metrics.minWidthPx,
             maxContentWidth: metrics.maxWidthPx,
+            horizontalInsets: metrics.horizontalInsetsPx,
           };
         }),
       );
@@ -483,6 +492,7 @@ export async function measureTableAutoFitContentMetrics(
           preferredWidth: cellMetrics.preferredWidth,
           minContentWidth: cellMetrics.minContentWidth,
           maxContentWidth: cellMetrics.maxContentWidth,
+          horizontalInsets: cellMetrics.horizontalInsets,
         })),
         skippedAfter: normalizedRow.skippedAfter ?? [],
       };

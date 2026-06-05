@@ -192,6 +192,7 @@ export function buildAutoFitWorkingGridInput(
     preferredColumnWidths,
     preferredTableWidth,
     gridColumnCount,
+    rows,
   });
   const preserveExplicitAutoGrid = shouldPreserveExplicitAutoGrid({
     layoutMode,
@@ -270,11 +271,17 @@ function shouldPreserveAutoGrid(args: {
   preferredColumnWidths: number[];
   preferredTableWidth: number | undefined;
   gridColumnCount: number;
+  rows: WorkingTableRowInput[];
 }): boolean {
-  const { layoutMode, preferredColumnWidths, preferredTableWidth, gridColumnCount } = args;
+  const { layoutMode, preferredColumnWidths, preferredTableWidth, gridColumnCount, rows } = args;
   if (layoutMode !== 'autofit') return false;
   if (preferredTableWidth != null) return false;
   if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return false;
+  // A single-column grid with no concrete cell width anywhere is not a Word layout
+  // cache: Word recomputes and content-sizes the table on open (verified against
+  // Word renders of single-cell auto tables with a stale w:tblGrid, SD-3308). Let
+  // the content-size path claim it. With a tcW present the grid IS a cache: keep it.
+  if (preferredColumnWidths.length === 1 && !hasConcreteCellWidthRequest(rows)) return false;
   if (!hasNonUniformGrid(preferredColumnWidths)) return false;
   return true;
 }
@@ -348,6 +355,13 @@ function isAutoOrNilTableWidth(tableWidth: TableWidthAttr | undefined): boolean 
  * Vertical border band widths owed per column on the content-size path. Table-level
  * borders only (left edge, insideV dividers, right edge); cell-level vertical
  * variation is rare in pure-auto tables and at most under-reserves slightly.
+ *
+ * Word-measured rule (band-scaling probes, SD-3308): each vertical gridline grants
+ * HALF its band width to each adjacent column. The painted band then sits fully
+ * inside the cell box, eating the other half back from the content area, so the
+ * content span shrinks by exactly the band delta while the column grows by half a
+ * band per edge. A single-column table therefore widens by ONE band (half left +
+ * half right), matching Word's measured column = text + margins + band.
  */
 function resolveColumnBandAllowances(
   borders: TableBorders | null | undefined,
@@ -359,9 +373,9 @@ function resolveColumnBandAllowances(
   const right = getBorderBandWidthPx(borders?.right);
   const allowances: number[] = [];
   for (let i = 0; i < gridColumnCount; i++) {
-    let allowance = i === 0 ? left : insideV;
-    if (i === gridColumnCount - 1) allowance += right;
-    allowances.push(allowance);
+    const edgeLeft = i === 0 ? left : insideV;
+    const edgeRight = i === gridColumnCount - 1 ? right : insideV;
+    allowances.push((edgeLeft + edgeRight) / 2);
   }
   return allowances.some((a) => a > 0) ? allowances : undefined;
 }

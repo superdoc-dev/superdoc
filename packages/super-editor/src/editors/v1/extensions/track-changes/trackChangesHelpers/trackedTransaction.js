@@ -460,9 +460,12 @@ export const trackedTransaction = ({ tr, state, user, replacements = 'paired' })
     // Block-level tracked-change replay path: the inserted slice already
     // carries row-level tracked metadata via PM node attrs (see applyHunks).
     // Wrapping the inner cell content with inline trackInsert marks would
-    // double-track. Apply such steps as-is.
+    // double-track. Apply such steps as-is — but still append to `map` so
+    // subsequent steps in the same transaction map through this step's
+    // changes (matches the pass-through pattern in replaceStep.js).
     if (step instanceof ReplaceStep && sliceContainsPreMarkedBlockTrackedChange(step.slice)) {
       newTr.step(step);
+      map.appendMap(step.getMap());
       return;
     }
 

@@ -83,7 +83,11 @@ export const applyBorder = (
   const width = border.width ?? 1;
   const color = border.color ?? '#000000';
   const safeColor = isValidHexColor(color) ? color : '#000000';
-  const actualWidth = border.style === 'thick' ? Math.max(width * 2, 3) : width;
+  // CSS `double` only renders two distinct rules at >= 3px (1px rule + 1px gap + 1px rule);
+  // below that it collapses to a single solid-looking line. Word always shows two rules for
+  // w:val="double", so clamp the rendered width up (never shrink an authored width). (SD-3308)
+  const minStyleWidth = style === 'double' ? 3 : 0;
+  const actualWidth = border.style === 'thick' ? Math.max(width * 2, 3) : Math.max(width, minStyleWidth);
   element.style[`border${side}`] = `${actualWidth}px ${style} ${safeColor}`;
 };
 

@@ -78,7 +78,7 @@ import {
 import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
 import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
 import { toCssFontFamily } from '@superdoc/font-utils';
-import { resolvePhysicalFamily } from '@superdoc/font-system';
+import { DEFAULT_FONT_MEASURE_CONTEXT, type FaceKey, type FontMeasureContext } from '@superdoc/font-system';
 export { installNodeCanvasPolyfill } from './setup.js';
 import { clearMeasurementCache, getMeasuredTextWidth, setCacheSize } from './measurementCache.js';
 import { getFontMetrics, clearFontMetricsCache, type FontInfo } from './fontMetricsCache.js';
@@ -87,6 +87,7 @@ import { buildAutoFitWorkingGridInput, type WorkingTableGridInput } from './auto
 import { computeFixedTableColumnWidths } from './fixed-table-columns.js';
 import type { FixedLayoutResult } from './fixed-table-columns.js';
 import {
+  type AutoFitMeasureBlock,
   buildAutoFitTableResultCacheKey,
   buildTableCellContentMetricsCacheKey,
   clearTableAutoFitMeasurementCaches,
@@ -305,6 +306,11 @@ function getCanvasContext(): CanvasRenderingContext2D {
   return canvasContext;
 }
 
+/** The face (weight/style) a run renders at, for face-aware resolution. */
+function faceOf(run: { bold?: boolean; italic?: boolean }): FaceKey {
+  return { weight: run.bold ? '700' : '400', style: run.italic ? 'italic' : 'normal' };
+}
+
 /**
  * Build a CSS font string from Run styling properties
  *
@@ -314,7 +320,10 @@ function getCanvasContext(): CanvasRenderingContext2D {
  * // Returns: { font: "italic bold 16px Arial", fontFamily: "Arial" }
  * ```
  */
-function buildFontString(run: { fontFamily: string; fontSize: number; bold?: boolean; italic?: boolean }): {
+function buildFontString(
+  run: { fontFamily: string; fontSize: number; bold?: boolean; italic?: boolean },
+  fontContext: FontMeasureContext,
+): {
   font: string;
   fontFamily: string;
 } {
@@ -325,9 +334,10 @@ function buildFontString(run: { fontFamily: string; fontSize: number; bold?: boo
   parts.push(`${run.fontSize}px`);
 
   // Resolve the logical family (e.g. "Calibri") to the physical render family
-  // (e.g. "Carlito") so text is MEASURED in the same font it is painted with. The
-  // measure cache keys on this font string, so the physical family is in the key.
-  const physicalFamily = resolvePhysicalFamily(run.fontFamily);
+  // (e.g. "Carlito") so text is MEASURED in the same font it is painted with, using THIS
+  // document's resolver so a per-document `fonts.map` is honored. The measure cache keys
+  // on this font string, so the physical family is in the key.
+  const physicalFamily = fontContext.resolvePhysical(run.fontFamily, faceOf(run));
 
   if (measurementConfig.mode === 'deterministic') {
     // Deterministic mode still flattens to one family for reproducible server-side
@@ -568,10 +578,15 @@ function lineHeightFontSize(run: TextRun): number {
  * Extract FontInfo from a TextRun for typography metrics calculation.
  * Uses the line-height font size so that superscript/subscript runs
  * produce metrics based on their original (un-scaled) base font.
+ *
+ * Resolves to the PHYSICAL render family (via `fontContext.resolvePhysical`) the same way
+ * {@link buildFontString} does, so vertical metrics (ascent/descent from `getFontMetrics`)
+ * are taken against the same font that width measurement uses - never the logical family,
+ * which may have no loaded face and would yield fallback metrics.
  */
-function getFontInfoFromRun(run: TextRun): FontInfo {
+function getFontInfoFromRun(run: TextRun, fontContext: FontMeasureContext): FontInfo {
   return {
-    fontFamily: normalizeFontFamily(run.fontFamily),
+    fontFamily: normalizeFontFamily(fontContext.resolvePhysical(run.fontFamily, faceOf(run))),
     fontSize: normalizeFontSize(lineHeightFontSize(run)),
     bold: run.bold,
     italic: run.italic,
@@ -586,9 +601,10 @@ function updateMaxFontInfo(
   currentMaxSize: number,
   currentMaxInfo: FontInfo | undefined,
   newRun: TextRun,
+  fontContext: FontMeasureContext,
 ): FontInfo | undefined {
   if (lineHeightFontSize(newRun) >= currentMaxSize) {
-    return getFontInfoFromRun(newRun);
+    return getFontInfoFromRun(newRun, fontContext);
   }
   return currentMaxInfo;
 }
@@ -701,6 +717,7 @@ function measureTabAlignmentGroup(
   runs: Run[],
   ctx: CanvasRenderingContext2D,
   decimalSeparator: string = '.',
+  fontContext: FontMeasureContext,
 ): TabAlignmentGroupMeasure {
   const result: TabAlignmentGroupMeasure = {
     totalWidth: 0,
@@ -731,7 +748,7 @@ function measureTabAlignmentGroup(
       const text = textRun.text || '';
 
       if (text.length > 0) {
-        const { font } = buildFontString(textRun);
+        const { font } = buildFontString(textRun, fontContext);
         const width = measureRunWidth(text, font, ctx, textRun, 0);
 
         // For decimal alignment, find the decimal position
@@ -783,12 +800,15 @@ function measureTabAlignmentGroup(
     // Measure field annotation runs
     if (isFieldAnnotationRun(run)) {
       const fontSize = (run as { fontSize?: number }).fontSize ?? DEFAULT_FIELD_ANNOTATION_FONT_SIZE;
-      const { font } = buildFontString({
-        fontFamily: (run as { fontFamily?: string }).fontFamily ?? 'Arial',
-        fontSize,
-        bold: (run as { bold?: boolean }).bold,
-        italic: (run as { italic?: boolean }).italic,
-      });
+      const { font } = buildFontString(
+        {
+          fontFamily: (run as { fontFamily?: string }).fontFamily ?? 'Arial',
+          fontSize,
+          bold: (run as { bold?: boolean }).bold,
+          italic: (run as { italic?: boolean }).italic,
+        },
+        fontContext,
+      );
       const textWidth = run.displayLabel ? measureRunWidth(run.displayLabel, font, ctx, run, 0) : 0;
       const pillWidth = textWidth + FIELD_ANNOTATION_PILL_PADDING;
 
@@ -829,7 +849,11 @@ function measureTabAlignmentGroup(
  * // Result: { lines: [...], totalHeight: 19.2 }
  * ```
  */
-export async function measureBlock(block: FlowBlock, constraints: number | MeasureConstraints): Promise<Measure> {
+export async function measureBlock(
+  block: FlowBlock,
+  constraints: number | MeasureConstraints,
+  fontContext: FontMeasureContext = DEFAULT_FONT_MEASURE_CONTEXT,
+): Promise<Measure> {
   const normalized = normalizeConstraints(constraints);
 
   if (block.kind === 'drawing') {
@@ -841,11 +865,11 @@ export async function measureBlock(block: FlowBlock, constraints: number | Measu
   }
 
   if (block.kind === 'list') {
-    return measureListBlock(block, normalized);
+    return measureListBlock(block, normalized, fontContext);
   }
 
   if (block.kind === 'table') {
-    return measureTableBlock(block, normalized);
+    return measureTableBlock(block, normalized, fontContext);
   }
 
   // Break blocks (sectionBreak, pageBreak, columnBreak) are pass-through measures
@@ -861,10 +885,14 @@ export async function measureBlock(block: FlowBlock, constraints: number | Measu
   }
 
   // Paragraph/default
-  return measureParagraphBlock(block as ParagraphBlock, normalized.maxWidth);
+  return measureParagraphBlock(block as ParagraphBlock, normalized.maxWidth, fontContext);
 }
 
-async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): Promise<ParagraphMeasure> {
+async function measureParagraphBlock(
+  block: ParagraphBlock,
+  maxWidth: number,
+  fontContext: FontMeasureContext,
+): Promise<ParagraphMeasure> {
   const ctx = getCanvasContext();
   const wordLayout: WordParagraphLayoutOutput | undefined = block.attrs?.wordLayout as
     | WordParagraphLayoutOutput
@@ -907,7 +935,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           bold: wordLayout.marker.run.bold,
           italic: wordLayout.marker.run.italic,
         };
-        const { font: markerFont } = buildFontString(markerRun);
+        const { font: markerFont } = buildFontString(markerRun, fontContext);
         const markerText = wordLayout.marker.markerText ?? '';
         const glyphWidth = markerText ? measureText(markerText, markerFont, ctx) : 0;
         const gutter =
@@ -1021,7 +1049,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         bold: marker.run?.bold ?? false,
         italic: marker.run?.italic ?? false,
       };
-      const { font: markerFont } = buildFontString(markerRun);
+      const { font: markerFont } = buildFontString(markerRun, fontContext);
       return measureText(markerText, markerFont, ctx);
     },
   );
@@ -1070,7 +1098,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     if (!dropCapDescriptor.run || !dropCapDescriptor.run.text || !dropCapDescriptor.lines) {
       console.warn('Invalid drop cap descriptor - missing required fields:', dropCapDescriptor);
     } else {
-      const dropCapMeasured = measureDropCap(ctx, dropCapDescriptor, spacing);
+      const dropCapMeasured = measureDropCap(ctx, dropCapDescriptor, spacing, fontContext);
       dropCapMeasure = dropCapMeasured;
 
       // Update the descriptor with measured dimensions
@@ -1087,7 +1115,11 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       : null;
   if (emptyParagraphRun) {
     const fontSize = emptyParagraphRun.fontSize ?? DEFAULT_PARAGRAPH_FONT_SIZE;
-    const metrics = calculateEmptyParagraphMetrics(fontSize, spacing, getFontInfoFromRun(emptyParagraphRun));
+    const metrics = calculateEmptyParagraphMetrics(
+      fontSize,
+      spacing,
+      getFontInfoFromRun(emptyParagraphRun, fontContext),
+    );
     const emptyLine: Line = {
       fromRun: 0,
       fromChar: 0,
@@ -1129,7 +1161,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   }
 
   /** Fallback font info for accurate typography metrics on leading line breaks. */
-  const fallbackFontInfo = firstTextRunWithSize ? getFontInfoFromRun(firstTextRunWithSize) : undefined;
+  const fallbackFontInfo = firstTextRunWithSize ? getFontInfoFromRun(firstTextRunWithSize, fontContext) : undefined;
 
   let currentLine: {
     fromRun: number;
@@ -1434,6 +1466,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     const keptText = sliceText.slice(0, Math.max(0, sliceText.length - trimCount));
     const { font } = buildFontString(
       lastRun as { fontFamily: string; fontSize: number; bold?: boolean; italic?: boolean },
+      fontContext,
     );
     const fullWidth = measureRunWidth(sliceText, font, ctx, lastRun, sliceStart);
     const keptWidth = keptText.length > 0 ? measureRunWidth(keptText, font, ctx, lastRun, sliceStart) : 0;
@@ -1619,7 +1652,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           // font (it carries fontFamily/fontSize) so a tab-only underlined line gets the same
           // measured ascent/descent - hence underline offset and line height - as the equivalent
           // text line. getFontInfoFromRun reads only fontFamily/fontSize/bold/italic, all on a TabRun.
-          maxFontInfo: hasSeenTextRun ? undefined : (fallbackFontInfo ?? getFontInfoFromRun(run as unknown as TextRun)),
+          maxFontInfo: hasSeenTextRun
+            ? undefined
+            : (fallbackFontInfo ?? getFontInfoFromRun(run as unknown as TextRun, fontContext)),
           maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
           segments: [],
           spaceCount: 0,
@@ -1694,7 +1729,13 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         // to properly align ALL content until the next tab or end of line
         if (stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal') {
           // Measure all content from the next run until the next tab or end of paragraph
-          const groupMeasure = measureTabAlignmentGroup(runIndex + 1, runsToProcess, ctx, decimalSeparator);
+          const groupMeasure = measureTabAlignmentGroup(
+            runIndex + 1,
+            runsToProcess,
+            ctx,
+            decimalSeparator,
+            fontContext,
+          );
 
           if (groupMeasure.totalWidth > 0) {
             // Calculate the aligned starting X position based on total group width
@@ -1928,7 +1969,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           : typeof run.fontSize === 'string'
             ? parseFloat(run.fontSize) || DEFAULT_FIELD_ANNOTATION_FONT_SIZE
             : DEFAULT_FIELD_ANNOTATION_FONT_SIZE;
-      const annotationFontFamily = run.fontFamily || 'Arial, sans-serif';
+      // Resolve to the physical render family (a per-document fonts.map or the bundled substitute),
+      // the same family the pill paints, so the measured pill width matches the painted glyphs.
+      const annotationFontFamily = fontContext.resolvePhysical(run.fontFamily || 'Arial, sans-serif', faceOf(run));
 
       // Build font string for measurement
       const fontWeight = run.bold ? 'bold' : 'normal';
@@ -2070,7 +2113,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     }
 
     if (isEmptySdtPlaceholderRun(run)) {
-      const placeholderFont = buildFontString(run).font;
+      const placeholderFont = buildFontString(run, fontContext).font;
       const placeholderText = applyTextTransform(EMPTY_SDT_PLACEHOLDER_TEXT, run);
       const measuredPlaceholderWidth = getMeasuredTextWidth(
         placeholderText,
@@ -2094,7 +2137,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toChar: 0,
           width: placeholderWidth,
           maxFontSize: lineHeightFontSize(run),
-          maxFontInfo: getFontInfoFromRun(run),
+          maxFontInfo: getFontInfoFromRun(run, fontContext),
           maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
           segments: [{ runIndex, fromChar: 0, toChar: 0, width: placeholderWidth }],
           spaceCount: 0,
@@ -2126,7 +2169,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toChar: 0,
             width: placeholderWidth,
             maxFontSize: lineHeightFontSize(run),
-            maxFontInfo: getFontInfoFromRun(run),
+            maxFontInfo: getFontInfoFromRun(run, fontContext),
             maxWidth: getEffectiveWidth(bodyContentWidth),
             segments: [{ runIndex, fromChar: 0, toChar: 0, width: placeholderWidth }],
             spaceCount: 0,
@@ -2135,7 +2178,12 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           currentLine.toRun = runIndex;
           currentLine.toChar = 0;
           currentLine.width = roundValue(currentLine.width + boundarySpacing + placeholderWidth);
-          currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
+          currentLine.maxFontInfo = updateMaxFontInfo(
+            currentLine.maxFontSize,
+            currentLine.maxFontInfo,
+            run,
+            fontContext,
+          );
           currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
           appendSegment(currentLine.segments, runIndex, 0, 0, placeholderWidth);
         }
@@ -2150,7 +2198,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     // Handle text runs
     lastFontSize = run.fontSize;
     hasSeenTextRun = true;
-    const { font } = buildFontString(run);
+    const { font } = buildFontString(run, fontContext);
     const tabSegments = run.text.split('\t');
 
     let charPosInRun = 0;
@@ -2173,7 +2221,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toChar: spacesEndChar,
             width: spacesWidth,
             maxFontSize: lineHeightFontSize(run),
-            maxFontInfo: getFontInfoFromRun(run),
+            maxFontInfo: getFontInfoFromRun(run, fontContext),
             maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
             segments: [{ runIndex, fromChar: spacesStartChar, toChar: spacesEndChar, width: spacesWidth }],
             spaceCount: spacesLength,
@@ -2206,7 +2254,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               toChar: spacesEndChar,
               width: spacesWidth,
               maxFontSize: lineHeightFontSize(run),
-              maxFontInfo: getFontInfoFromRun(run),
+              maxFontInfo: getFontInfoFromRun(run, fontContext),
               maxWidth: getEffectiveWidth(bodyContentWidth),
               segments: [{ runIndex, fromChar: spacesStartChar, toChar: spacesEndChar, width: spacesWidth }],
               spaceCount: spacesLength,
@@ -2215,7 +2263,12 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             currentLine.toRun = runIndex;
             currentLine.toChar = spacesEndChar;
             currentLine.width = roundValue(currentLine.width + boundarySpacing + spacesWidth);
-            currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
+            currentLine.maxFontInfo = updateMaxFontInfo(
+              currentLine.maxFontSize,
+              currentLine.maxFontInfo,
+              run,
+              fontContext,
+            );
             currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
             appendSegment(currentLine.segments, runIndex, spacesStartChar, spacesEndChar, spacesWidth);
             currentLine.spaceCount += spacesLength;
@@ -2296,7 +2349,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               toChar: spaceEndChar,
               width: singleSpaceWidth,
               maxFontSize: lineHeightFontSize(run),
-              maxFontInfo: getFontInfoFromRun(run),
+              maxFontInfo: getFontInfoFromRun(run, fontContext),
               maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
               segments: [{ runIndex, fromChar: spaceStartChar, toChar: spaceEndChar, width: singleSpaceWidth }],
               spaceCount: 1,
@@ -2334,7 +2387,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 toChar: spaceEndChar,
                 width: singleSpaceWidth,
                 maxFontSize: lineHeightFontSize(run),
-                maxFontInfo: getFontInfoFromRun(run),
+                maxFontInfo: getFontInfoFromRun(run, fontContext),
                 maxWidth: getEffectiveWidth(bodyContentWidth),
                 segments: [{ runIndex, fromChar: spaceStartChar, toChar: spaceEndChar, width: singleSpaceWidth }],
                 spaceCount: 1,
@@ -2344,7 +2397,12 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               currentLine.toRun = runIndex;
               currentLine.toChar = spaceEndChar;
               currentLine.width = roundValue(currentLine.width + boundarySpacing + singleSpaceWidth);
-              currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
+              currentLine.maxFontInfo = updateMaxFontInfo(
+                currentLine.maxFontSize,
+                currentLine.maxFontInfo,
+                run,
+                fontContext,
+              );
               currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
               // If in an active tab alignment group, use explicit X positioning
               let spaceExplicitX: number | undefined;
@@ -2445,7 +2503,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               currentLine.toChar = chunkEndChar;
               currentLine.width = roundValue(currentLine.width + chunk.width);
               currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
-              currentLine.maxFontInfo = getFontInfoFromRun(run);
+              currentLine.maxFontInfo = getFontInfoFromRun(run, fontContext);
               currentLine.segments.push({
                 runIndex,
                 fromChar: chunkStartChar,
@@ -2493,7 +2551,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 toChar: chunkEndChar,
                 width: chunk.width,
                 maxFontSize: lineHeightFontSize(run),
-                maxFontInfo: getFontInfoFromRun(run),
+                maxFontInfo: getFontInfoFromRun(run, fontContext),
                 maxWidth: getEffectiveWidth(contentWidth),
                 segments: [{ runIndex, fromChar: chunkStartChar, toChar: chunkEndChar, width: chunk.width }],
                 spaceCount: 0,
@@ -2514,7 +2572,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             } else {
               // Not the last chunk - create a complete line
               const chunkLineMaxWidth = getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : contentWidth);
-              const metrics = calculateTypographyMetrics(run.fontSize, spacing, getFontInfoFromRun(run));
+              const metrics = calculateTypographyMetrics(run.fontSize, spacing, getFontInfoFromRun(run, fontContext));
               const chunkLine: Line = {
                 fromRun: runIndex,
                 fromChar: chunkStartChar,
@@ -2542,7 +2600,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toChar: wordEndNoSpace,
             width: wordOnlyWidth,
             maxFontSize: lineHeightFontSize(run),
-            maxFontInfo: getFontInfoFromRun(run),
+            maxFontInfo: getFontInfoFromRun(run, fontContext),
             maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
             segments: [{ runIndex, fromChar: wordStartChar, toChar: wordEndNoSpace, width: wordOnlyWidth }],
             spaceCount: 0,
@@ -2642,7 +2700,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toChar: wordEndNoSpace,
             width: wordOnlyWidth,
             maxFontSize: lineHeightFontSize(run),
-            maxFontInfo: getFontInfoFromRun(run),
+            maxFontInfo: getFontInfoFromRun(run, fontContext),
             maxWidth: getEffectiveWidth(bodyContentWidth),
             segments: [{ runIndex, fromChar: wordStartChar, toChar: wordEndNoSpace, width: wordOnlyWidth }],
             spaceCount: 0,
@@ -2673,7 +2731,12 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           ) {
             currentLine.toChar = wordEndNoSpace;
             currentLine.width = roundValue(currentLine.width + boundarySpacing + wordOnlyWidth);
-            currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
+            currentLine.maxFontInfo = updateMaxFontInfo(
+              currentLine.maxFontSize,
+              currentLine.maxFontInfo,
+              run,
+              fontContext,
+            );
             currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
             // Determine explicit X position:
             // - If in active tab group, use currentX from the group (for ALL words in group)
@@ -2733,7 +2796,12 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             (currentLine as any).naturalWidth = roundValue(totalWidthWithWord);
           }
           currentLine.width = roundValue(targetWidth);
-          currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
+          currentLine.maxFontInfo = updateMaxFontInfo(
+            currentLine.maxFontSize,
+            currentLine.maxFontInfo,
+            run,
+            fontContext,
+          );
           currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
           appendSegment(
             currentLine.segments,
@@ -2783,7 +2851,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             toChar: charPosInRun,
             width: 0,
             maxFontSize: lineHeightFontSize(run),
-            maxFontInfo: getFontInfoFromRun(run),
+            maxFontInfo: getFontInfoFromRun(run, fontContext),
             maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
             segments: [],
             spaceCount: 0,
@@ -2803,7 +2871,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           currentLine.hasExplicitTabStops = true;
         }
 
-        currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
+        currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run, fontContext);
         currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
         currentLine.toRun = runIndex;
         currentLine.toChar = charPosInRun;
@@ -2878,10 +2946,14 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   };
 }
 
-async function measureTableBlock(block: TableBlock, constraints: MeasureConstraints): Promise<TableMeasure> {
+async function measureTableBlock(
+  block: TableBlock,
+  constraints: MeasureConstraints,
+  fontContext: FontMeasureContext,
+): Promise<TableMeasure> {
   const maxWidth = typeof constraints === 'number' ? constraints : constraints.maxWidth;
   const workingInput = buildAutoFitWorkingGridInput(block, { maxWidth });
-  const columnWidths = await resolveRuntimeTableColumnWidths(block, workingInput);
+  const columnWidths = await resolveRuntimeTableColumnWidths(block, workingInput, fontContext);
 
   // Derive grid column count from computed columnWidths (handles both explicit tblGrid and fallback cases)
   const gridColumnCount = columnWidths.length;
@@ -2990,7 +3062,7 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
       for (let blockIndex = 0; blockIndex < cellBlocks.length; blockIndex++) {
         const block = cellBlocks[blockIndex];
-        const measure = await measureBlock(block, { maxWidth: contentWidth, maxHeight: Infinity });
+        const measure = await measureBlock(block, { maxWidth: contentWidth, maxHeight: Infinity }, fontContext);
         blockMeasures.push(measure);
         // Get height from different measure types
         const blockHeight = 'totalHeight' in measure ? measure.totalHeight : 'height' in measure ? measure.height : 0;
@@ -3135,16 +3207,23 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 async function resolveRuntimeTableColumnWidths(
   block: TableBlock,
   workingInput: WorkingTableGridInput,
+  fontContext: FontMeasureContext,
 ): Promise<number[]> {
   const fixedLayout = computeFixedTableColumnWidths(workingInput);
   if (workingInput.layoutMode === 'fixed') {
     return fixedLayout.columnWidths;
   }
 
-  const { contentMetrics, cellMetricKeys } = await buildMeasuredAutoFitContentMetrics(block, workingInput, fixedLayout);
+  const { contentMetrics, cellMetricKeys } = await buildMeasuredAutoFitContentMetrics(
+    block,
+    workingInput,
+    fixedLayout,
+    fontContext,
+  );
   const cacheKey = buildAutoFitTableResultCacheKey(block, {
     maxWidth: workingInput.maxTableWidth,
     cellMetricKeys,
+    fontSignature: fontContext.fontSignature,
     workingInput,
     fixedLayout,
   });
@@ -3179,11 +3258,23 @@ async function buildMeasuredAutoFitContentMetrics(
   block: TableBlock,
   workingInput: WorkingTableGridInput,
   fixedLayout: FixedLayoutResult,
+  fontContext: FontMeasureContext,
 ): Promise<{
   contentMetrics: TableAutoFitContentMetricsResult;
   cellMetricKeys: string[];
 }> {
-  const contentMetrics = await measureTableAutoFitContentMetrics(block, workingInput, fixedLayout, measureBlock);
+  // Forward this document's font context into every sub-measurement (paragraph
+  // max-line width, nested tables) so AutoFit honors a per-document `fonts.map`
+  // throughout, not only in the token min-width path.
+  const measureBlockWithFontContext: AutoFitMeasureBlock = (childBlock, childConstraints) =>
+    measureBlock(childBlock, childConstraints, fontContext);
+  const contentMetrics = await measureTableAutoFitContentMetrics(
+    block,
+    workingInput,
+    fixedLayout,
+    measureBlockWithFontContext,
+    fontContext,
+  );
   return {
     contentMetrics,
     cellMetricKeys: contentMetrics.cellMetricKeys,
@@ -3401,7 +3492,11 @@ function normalizeConstraints(constraints: number | MeasureConstraints): Measure
   return constraints;
 }
 
-async function measureListBlock(block: ListBlock, constraints: MeasureConstraints): Promise<ListMeasure> {
+async function measureListBlock(
+  block: ListBlock,
+  constraints: MeasureConstraints,
+  fontContext: FontMeasureContext,
+): Promise<ListMeasure> {
   const ctx = getCanvasContext();
   const items = [];
   let totalHeight = 0;
@@ -3427,14 +3522,14 @@ async function measureListBlock(block: ListBlock, constraints: MeasureConstraint
         italic: marker.run.italic,
         letterSpacing: marker.run.letterSpacing,
       };
-      const { font: markerFont } = buildFontString(markerFontRun);
+      const { font: markerFont } = buildFontString(markerFontRun, fontContext);
       markerTextWidth = marker.markerText ? measureText(marker.markerText, markerFont, ctx) : 0;
       markerWidth = 0;
       indentLeft = (wordLayout as WordParagraphLayoutOutput).indentLeftPx ?? 0;
     } else {
       // Fallback: legacy behavior for backwards compatibility
       const markerFontRun = getPrimaryRun(item.paragraph);
-      const { font: markerFont } = buildFontString(markerFontRun);
+      const { font: markerFont } = buildFontString(markerFontRun, fontContext);
       const markerText = item.marker.text ?? '';
       markerTextWidth = markerText ? measureText(markerText, markerFont, ctx) : 0;
       indentLeft = resolveIndentLeft(item);
@@ -3445,7 +3540,7 @@ async function measureListBlock(block: ListBlock, constraints: MeasureConstraint
     // Account for both indentLeft and marker width so paragraph text wraps correctly
     const paragraphWidth = Math.max(1, constraints.maxWidth - indentLeft - markerWidth);
 
-    const paragraphMeasure = await measureParagraphBlock(item.paragraph, paragraphWidth);
+    const paragraphMeasure = await measureParagraphBlock(item.paragraph, paragraphWidth, fontContext);
     totalHeight += paragraphMeasure.totalHeight;
 
     items.push({
@@ -3730,17 +3825,21 @@ const DROP_CAP_PADDING_PX = 4;
 const measureDropCap = (
   ctx: CanvasRenderingContext2D,
   descriptor: DropCapDescriptor,
-  spacing?: ParagraphSpacing,
+  spacing: ParagraphSpacing | undefined,
+  fontContext: FontMeasureContext,
 ): { width: number; height: number; lines: number; mode: 'drop' | 'margin' } => {
   const { run, lines, mode } = descriptor;
 
   // Build font string for the drop cap run
-  const { font } = buildFontString({
-    fontFamily: run.fontFamily,
-    fontSize: run.fontSize,
-    bold: run.bold,
-    italic: run.italic,
-  });
+  const { font } = buildFontString(
+    {
+      fontFamily: run.fontFamily,
+      fontSize: run.fontSize,
+      bold: run.bold,
+      italic: run.italic,
+    },
+    fontContext,
+  );
 
   // Measure the text width
   ctx.font = font;

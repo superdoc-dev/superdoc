@@ -441,6 +441,35 @@ describe('balanceSectionOnPage', () => {
     expect(result).toBeNull();
   });
 
+  it('balances explicit columns that declare EQUAL widths (equalWidth=0 with equal w:col widths)', () => {
+    // SD-2324: continuous newspaper sections commonly use `<w:cols w:num="N" w:equalWidth="0">`
+    // with explicit `<w:col w:w>` children that are all EQUAL (e.g. 4×2340). The unequal-width
+    // skip must NOT catch these — they balance like implicit equal columns. Genuinely-unequal
+    // widths (the test above, [200,376]) are still skipped.
+    const top = 96;
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(2, 6, 20, top);
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 2, gap: 48, width: 288, equalWidth: false, widths: [288, 288] },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: top,
+      columnWidth: 288,
+      availableHeight: 60,
+      measureMap,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.maxY).toBe(top + 60);
+    const col0 = fragments.filter((f) => f.x === 96).length;
+    const col1 = fragments.filter((f) => f.x === 96 + 288 + 48).length;
+    expect(col0).toBe(3);
+    expect(col1).toBe(3);
+  });
+
   it('only moves fragments of the target section when the page has mixed sections', () => {
     // Page has 3 fragments in section 1 (already positioned in col 0) and 6 in section 2.
     // Balancing section 2 must not touch section 1 fragments.

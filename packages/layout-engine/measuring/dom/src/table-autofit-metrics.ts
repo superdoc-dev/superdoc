@@ -12,6 +12,7 @@ import type {
   TableBlock,
   TableCell,
 } from '@superdoc/contracts';
+import { DEFAULT_FONT_MEASURE_CONTEXT, type FontMeasureContext } from '@superdoc/font-system';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import type { AutoFitRowInput } from './autofit-columns.js';
 import type { WorkingTableCellInput, WorkingTableGridInput } from './autofit-normalize.js';
@@ -86,10 +87,25 @@ export type TableCellContentMetricsOptions = {
    */
   measureBlock: AutoFitMeasureBlock;
   /**
+   * Per-document font measure context. Exported helpers default to the shared context
+   * for tests and context-free callers; runtime layout passes the document context.
+   *
+   * `resolvePhysical` maps the run's logical family (e.g. "Calibri") to the
+   * physical render family (e.g. "Carlito") so token min-width is measured in
+   * the same font it is painted with. `fontSignature` is folded into the cache
+   * key so two documents with different `fonts.map` tables never share cached
+   * widths.
+   */
+  fontContext?: FontMeasureContext;
+  /**
    * Optional external invalidation dimension. If measurement already depends on
    * a layout epoch or similar version, callers can fold it into the cache key.
    */
   layoutEpoch?: number | string;
+};
+
+type NormalizedTableCellContentMetricsOptions = TableCellContentMetricsOptions & {
+  fontContext: FontMeasureContext;
 };
 
 /**
@@ -113,6 +129,12 @@ export type AutoFitTableResultCacheEntry = {
 export type AutoFitTableResultKeyOptions = {
   maxWidth: number;
   cellMetricKeys: string[];
+  /**
+   * Document font-mapping identity. Already reflected indirectly through
+   * `cellMetricKeys`, but folded in directly so the table result key is robust
+   * even if the cell-key derivation changes.
+   */
+  fontSignature: string;
   layoutEpoch?: number | string;
   workingInput: WorkingTableGridInput;
   fixedLayout: FixedLayoutResult;
@@ -255,8 +277,10 @@ export function buildTableCellContentMetricsCacheKey(
   cell: TableCell,
   options: Omit<TableCellContentMetricsOptions, 'measureBlock'>,
 ): string {
+  const fontContext = options.fontContext ?? DEFAULT_FONT_MEASURE_CONTEXT;
   return stableSerialize({
     maxWidth: Math.max(1, Math.round(options.maxWidth)),
+    fontSignature: fontContext.fontSignature ?? '',
     layoutEpoch: options.layoutEpoch ?? null,
     attrs: cell.attrs ?? null,
     paragraph: cell.paragraph ?? null,
@@ -278,6 +302,7 @@ export function buildAutoFitTableResultCacheKey(table: TableBlock, options: Auto
     columnWidths: table.columnWidths ?? null,
     rowCount: table.rows.length,
     maxWidth: Math.max(1, Math.round(options.maxWidth)),
+    fontSignature: options.fontSignature ?? '',
     layoutEpoch: options.layoutEpoch ?? null,
     cellMetricKeys: options.cellMetricKeys,
     workingGrid: {
@@ -336,7 +361,9 @@ export async function measureTableCellContentMetrics(
   cell: TableCell,
   options: TableCellContentMetricsOptions,
 ): Promise<TableCellContentMetrics> {
-  const cacheKey = buildTableCellContentMetricsCacheKey(cell, options);
+  const fontContext = options.fontContext ?? DEFAULT_FONT_MEASURE_CONTEXT;
+  const normalizedOptions: NormalizedTableCellContentMetricsOptions = { ...options, fontContext };
+  const cacheKey = buildTableCellContentMetricsCacheKey(cell, normalizedOptions);
   const cached = tableCellMetricsCache.get(cacheKey);
   if (cached) {
     return cached;
@@ -358,7 +385,7 @@ export async function measureTableCellContentMetrics(
   let maxContentWidthPx = 0;
 
   for (const block of contentBlocks) {
-    const metrics = await measureIntrinsicBlockWidthMetrics(block, options);
+    const metrics = await measureIntrinsicBlockWidthMetrics(block, normalizedOptions);
     minContentWidthPx = Math.max(minContentWidthPx, metrics.minWidthPx);
     maxContentWidthPx = Math.max(maxContentWidthPx, metrics.maxWidthPx);
   }
@@ -385,6 +412,8 @@ export async function measureTableCellContentMetrics(
  * @param table - Runtime table block being measured.
  * @param workingInput - Normalized working-grid input for the table.
  * @param measureBlock - Existing block measurer reused for intrinsic widths.
+ * @param fontContext - Per-document font measure context. Omitted callers use the
+ *   shared default; runtime layout passes the document context.
  * @returns Row/cell-indexed content metrics plus compatibility rows.
  */
 export async function measureTableAutoFitContentMetrics(
@@ -392,6 +421,7 @@ export async function measureTableAutoFitContentMetrics(
   workingInput: WorkingTableGridInput,
   fixedLayout: FixedLayoutResult,
   measureBlock: AutoFitMeasureBlock,
+  fontContext: FontMeasureContext = DEFAULT_FONT_MEASURE_CONTEXT,
 ): Promise<TableAutoFitContentMetricsResult> {
   const tableMeasurementBasis = Math.max(1, fixedLayout.totalWidth);
   const cellMetricKeys: string[] = [];
@@ -415,12 +445,14 @@ export async function measureTableAutoFitContentMetrics(
           cellMetricKeys.push(
             buildTableCellContentMetricsCacheKey(cell, {
               maxWidth: measurementMaxWidth,
+              fontContext,
             }),
           );
 
           const metrics = await measureTableCellContentMetrics(cell, {
             maxWidth: measurementMaxWidth,
             measureBlock,
+            fontContext,
           });
 
           return {
@@ -464,10 +496,10 @@ export async function measureTableAutoFitContentMetrics(
  */
 async function measureIntrinsicBlockWidthMetrics(
   block: ParagraphBlock | ImageBlock | DrawingBlock | TableBlock,
-  options: TableCellContentMetricsOptions,
+  options: NormalizedTableCellContentMetricsOptions,
 ): Promise<TableCellContentMetrics> {
   if (block.kind === 'paragraph') {
-    return measureParagraphIntrinsicWidthMetrics(block, options.measureBlock);
+    return measureParagraphIntrinsicWidthMetrics(block, options.measureBlock, options.fontContext);
   }
 
   if (block.kind === 'table') {
@@ -491,6 +523,7 @@ async function measureIntrinsicBlockWidthMetrics(
 async function measureParagraphIntrinsicWidthMetrics(
   paragraph: ParagraphBlock,
   measureBlock: AutoFitMeasureBlock,
+  fontContext: FontMeasureContext,
 ): Promise<TableCellContentMetrics> {
   const maxMeasure = (await measureBlock(paragraph, {
     maxWidth: NO_WRAP_MAX_WIDTH,
@@ -498,7 +531,7 @@ async function measureParagraphIntrinsicWidthMetrics(
   })) as ParagraphMeasure;
 
   const maxLineWidth = maxMeasure.lines.reduce((widest, line) => Math.max(widest, line.width), 0);
-  const minTokenWidth = measureParagraphMinTokenWidth(paragraph);
+  const minTokenWidth = measureParagraphMinTokenWidth(paragraph, fontContext);
 
   return {
     minWidthPx: minTokenWidth,
@@ -515,7 +548,7 @@ async function measureParagraphIntrinsicWidthMetrics(
  */
 async function measureNestedTableIntrinsicWidthMetrics(
   table: TableBlock,
-  options: TableCellContentMetricsOptions,
+  options: NormalizedTableCellContentMetricsOptions,
 ): Promise<TableCellContentMetrics> {
   const nestedMeasure = await options.measureBlock(table, {
     maxWidth: Math.max(1, options.maxWidth),
@@ -535,7 +568,7 @@ async function measureNestedTableIntrinsicWidthMetrics(
 /**
  * Computes the widest unbreakable token across all authored paragraph lines.
  */
-function measureParagraphMinTokenWidth(paragraph: ParagraphBlock): number {
+function measureParagraphMinTokenWidth(paragraph: ParagraphBlock, fontContext: FontMeasureContext): number {
   let widestToken = 0;
   let currentTokenWidth = 0;
 
@@ -557,6 +590,7 @@ function measureParagraphMinTokenWidth(paragraph: ParagraphBlock): number {
           currentTokenWidth += width;
         },
         flushToken,
+        fontContext,
       );
       continue;
     }
@@ -569,7 +603,7 @@ function measureParagraphMinTokenWidth(paragraph: ParagraphBlock): number {
     }
 
     if (run.kind === 'fieldAnnotation') {
-      widestToken = Math.max(widestToken, measureFieldAnnotationWidth(run));
+      widestToken = Math.max(widestToken, measureFieldAnnotationWidth(run, fontContext));
       continue;
     }
 
@@ -590,8 +624,9 @@ function accumulateTextRunMinTokenWidth(
   run: Extract<Run, { text: string }>,
   appendTokenPiece: (width: number) => void,
   flushToken: () => void,
+  fontContext: FontMeasureContext,
 ): void {
-  const font = buildFontString(run);
+  const font = buildFontString(run, fontContext);
   let cursor = 0;
 
   for (const boundary of run.text.matchAll(TOKEN_BOUNDARY_PATTERN)) {
@@ -752,18 +787,30 @@ function getCanvasContext(): CanvasRenderingContext2D {
 
 /**
  * Builds a CSS font string from a text-bearing run.
+ *
+ * The logical family is resolved to the physical render family via the
+ * document's `resolvePhysical` so token min-width is measured in the same font
+ * the run is painted with, honoring any per-document `fonts.map`.
  */
-function buildFontString(run: {
-  fontFamily?: string;
-  fontSize?: number | string;
-  bold?: boolean;
-  italic?: boolean;
-}): string {
+function buildFontString(
+  run: {
+    fontFamily?: string;
+    fontSize?: number | string;
+    bold?: boolean;
+    italic?: boolean;
+  },
+  fontContext: FontMeasureContext,
+): string {
   const parts: string[] = [];
   if (run.italic) parts.push('italic');
   if (run.bold) parts.push('bold');
   parts.push(`${normalizeFontSize(run.fontSize)}px`);
-  parts.push(toCssFontFamily(normalizeFontFamily(run.fontFamily)) ?? normalizeFontFamily(run.fontFamily));
+  const face = {
+    weight: run.bold ? ('700' as const) : ('400' as const),
+    style: run.italic ? ('italic' as const) : ('normal' as const),
+  };
+  const physicalFamily = normalizeFontFamily(fontContext.resolvePhysical(normalizeFontFamily(run.fontFamily), face));
+  parts.push(toCssFontFamily(physicalFamily) ?? physicalFamily);
   return parts.join(' ');
 }
 
@@ -799,7 +846,7 @@ function capitalizeText(text: string, fullText: string, startOffset: number): st
 /**
  * Measures the rendered width of a field-annotation pill.
  */
-function measureFieldAnnotationWidth(run: FieldAnnotationRun): number {
+function measureFieldAnnotationWidth(run: FieldAnnotationRun, fontContext: FontMeasureContext): number {
   const fontSize =
     typeof run.fontSize === 'number'
       ? run.fontSize
@@ -807,12 +854,15 @@ function measureFieldAnnotationWidth(run: FieldAnnotationRun): number {
         ? parseFloat(run.fontSize) || DEFAULT_FIELD_ANNOTATION_FONT_SIZE
         : DEFAULT_FIELD_ANNOTATION_FONT_SIZE;
   const fontFamily = normalizeFontFamily(run.fontFamily ?? 'Arial');
-  const font = buildFontString({
-    fontFamily,
-    fontSize,
-    bold: run.bold,
-    italic: run.italic,
-  });
+  const font = buildFontString(
+    {
+      fontFamily,
+      fontSize,
+      bold: run.bold,
+      italic: run.italic,
+    },
+    fontContext,
+  );
   const displayText = applyTextTransform(run.displayLabel || '', {
     text: run.displayLabel || '',
   });

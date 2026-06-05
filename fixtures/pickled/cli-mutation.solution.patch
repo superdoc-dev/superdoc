@@ -1,0 +1,23 @@
+diff --git a/scripts/update-contract.sh b/scripts/update-contract.sh
+new file mode 100755
+index 0000000..e9b4c1a
+--- /dev/null
++++ b/scripts/update-contract.sh
+@@ -0,0 +1,17 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++superdoc open ./contract.docx
++
++target_json="$(
++  superdoc query match \
++    --select-json '{"type":"text","pattern":"termination"}' \
++    --require exactlyOne
++)"
++
++superdoc replace \
++  --target-json "$target_json" \
++  --text "expiration"
++
++superdoc save --in-place
++superdoc close

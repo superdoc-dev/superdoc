@@ -14,6 +14,7 @@ import {
   normalizeZIndex,
   resolveFloatingZIndex,
   readImageHyperlink,
+  mergeWrapDistancesFromPadding,
 } from '../utilities.js';
 
 // ============================================================================
@@ -254,6 +255,9 @@ export function imageNodeToBlock(
 
   const explicitDisplay = typeof attrs.display === 'string' ? (attrs.display as string) : undefined;
   const normalizedWrap = normalizeWrap(attrs.wrap);
+  if (normalizedWrap) {
+    mergeWrapDistancesFromPadding(normalizedWrap, toBoxSpacing(attrs.padding as Record<string, unknown> | undefined));
+  }
   let anchor = normalizeAnchorData(attrs.anchorData, attrs, normalizedWrap?.behindDoc);
   if (!anchor && normalizedWrap) {
     anchor = { isAnchored: true };

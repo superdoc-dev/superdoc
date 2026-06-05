@@ -30,14 +30,24 @@ export function normalizeColumnLayout(
   epsilon = 0.0001,
 ): NormalizedColumnLayout {
   const rawCount = input && Number.isFinite(input.count) ? Math.floor(input.count) : 1;
-  const count = Math.max(1, rawCount || 1);
+  let count = Math.max(1, rawCount || 1);
   const gap = Math.max(0, input?.gap ?? 0);
-  const totalGap = gap * (count - 1);
-  const availableWidth = contentWidth - totalGap;
+  // Honor per-column widths ONLY in explicit mode (`equalWidth === false`). In equal mode
+  // (true or omitted) Word ignores child widths and divides the content area evenly, so any
+  // widths that reach here are not authoritative and must not drive geometry. (SD-2324)
   const explicitWidths =
-    Array.isArray(input?.widths) && input.widths.length > 0
+    input?.equalWidth === false && Array.isArray(input?.widths) && input.widths.length > 0
       ? input.widths.filter((width) => typeof width === 'number' && Number.isFinite(width) && width > 0)
       : [];
+  // Explicit columns are defined by their <w:col> widths. When the section declares more
+  // columns than it supplies widths (e.g. w:num="4" with two <w:col>), the surplus columns
+  // have no width and previously padded to ~0px, rendering as 1px slivers of vertical text
+  // (SD-2324 F8). Clamp the count to the widths actually provided so every column renders.
+  if (explicitWidths.length > 0 && explicitWidths.length < count) {
+    count = explicitWidths.length;
+  }
+  const totalGap = gap * (count - 1);
+  const availableWidth = contentWidth - totalGap;
 
   let widths =
     explicitWidths.length > 0

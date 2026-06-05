@@ -273,7 +273,7 @@ function extractColumns(elements: SectionElement[]): ColumnLayout | undefined {
   const cols = elements.find((el) => el?.name === 'w:cols');
   if (!cols?.attributes) return undefined;
 
-  const count = parseColumnCount(cols.attributes['w:num'] as string | number | undefined);
+  let count = parseColumnCount(cols.attributes['w:num'] as string | number | undefined);
   const withSeparator = parseColumnSeparator(cols.attributes['w:sep'] as string | number | undefined);
   const equalWidthRaw = cols.attributes['w:equalWidth'];
   const equalWidth =
@@ -283,20 +283,43 @@ function extractColumns(elements: SectionElement[]): ColumnLayout | undefined {
         ? true
         : undefined;
   const columnChildren = Array.isArray(cols.elements) ? cols.elements.filter((child) => child?.name === 'w:col') : [];
-  const gapTwips =
-    cols.attributes['w:space'] ??
-    columnChildren.find((child) => child?.attributes?.['w:space'] != null)?.attributes?.['w:space'];
+  // ECMA-376 §17.6.4 column mode, validated against Word (MS Word 16 oracle):
+  //   Explicit mode (`w:equalWidth="0"`): widths and inter-column spacing come from the child
+  //   `<w:col>` elements (`w:w` + `w:space`, default 0); the section `w:cols/@w:space` is
+  //   ignored. (Per-column distinct spacing is SD-2629; today the first child's space is
+  //   projected as the single gap.)
+  //   Equal mode (`w:equalWidth="1"` or omitted): Word ignores all child `<w:col>` data. The
+  //   gap comes from `w:cols/@w:space` (default 720); a child `w:space` is NOT consulted, and
+  //   child widths are dropped so the columns divide evenly. Count comes from `w:num`
+  //   (default 1) in equal mode, and is capped to the valid child-width count in explicit
+  //   mode (Word renders min(num, count of <w:col> with a usable w:w)). (SD-2324)
+  const isExplicit = equalWidth === false;
+  const firstChildSpace = columnChildren.find((child) => child?.attributes?.['w:space'] != null)?.attributes?.[
+    'w:space'
+  ];
+  const gapTwips = isExplicit ? (firstChildSpace ?? 0) : cols.attributes['w:space'];
   const gapInches = parseColumnGap(gapTwips as string | number | undefined);
   const widths = columnChildren
     .map((child) => Number(child.attributes?.['w:w']))
     .filter((widthTwips) => Number.isFinite(widthTwips) && widthTwips > 0)
     .map((widthTwips) => (widthTwips / 1440) * PX_PER_INCH);
 
+  // Explicit mode: w:num is capped to the valid child-width count (widths.length), i.e. the
+  // number of <w:col> that supplied a usable w:w. Word renders min(num, that count) (e.g.
+  // w:num="4" with two <w:col> => 2 columns, verified vs Word). This is the authoritative
+  // count both the fill loop and width math read; the matching clamp in normalizeColumnLayout
+  // is a defensive net for any other producer. (SD-2324 F8)
+  if (isExplicit && widths.length > 0) {
+    count = Math.min(count, widths.length);
+  }
+
   const result: ColumnLayout = {
     count,
     gap: gapInches * PX_PER_INCH,
     withSeparator,
-    ...(widths.length > 0 ? { widths } : {}),
+    // Only explicit columns carry per-column widths; equal mode divides evenly (Word ignores
+    // child `w:w` when equalWidth is "1" or omitted).
+    ...(isExplicit && widths.length > 0 ? { widths } : {}),
     ...(equalWidth !== undefined ? { equalWidth } : {}),
   };
 

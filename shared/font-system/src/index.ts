@@ -18,6 +18,7 @@ export type {
   FontFaceSource,
   FontFaceDescriptor,
   RegisteredFace,
+  RegisterFaceResult,
   FontLoadResult,
   FontLoadSummary,
   FontFaceRequest,
@@ -28,12 +29,22 @@ export type {
 } from './types';
 export { SETTLED_STATUSES, isSettled } from './types';
 
-export type { FontResolution, FontResolutionReason } from './resolver';
+export type {
+  FontResolution,
+  FontResolutionReason,
+  FaceKey,
+  HasFace,
+  FontMeasureContext,
+  ResolvePhysicalFamily,
+} from './resolver';
+export { FontResolver, createFontResolver } from './resolver';
 export {
   resolveFontFamily,
   resolvePhysicalFamily,
   resolvePrimaryPhysicalFamily,
   resolvePhysicalFamilies,
+  resolveFace,
+  DEFAULT_FONT_MEASURE_CONTEXT,
 } from './resolver';
 
 export { getFontConfigVersion, bumpFontConfigVersion, __resetFontConfigVersion } from './epoch';
@@ -42,8 +53,8 @@ export { getFontConfigVersion, bumpFontConfigVersion, __resetFontConfigVersion }
 // the CDN entry can resolve it through the bare `@superdoc/font-system` specifier.
 export { setBundledFontAssetBase, getBundledFontAssetBase, DEFAULT_BUNDLED_FONT_BASE } from './bundled';
 
-export type { FontResolutionRecord } from './report';
-export { buildFontReport } from './report';
+export type { FontResolutionRecord, UsedFace } from './report';
+export { buildFontReport, buildFaceReport } from './report';
 
 export type { FontSetLike, FontFaceLike, FontFaceCtor, FontRegistryOptions } from './registry';
 export {

@@ -248,6 +248,8 @@ type PainterOptions = {
   showFormattingMarks?: boolean;
   /** Built-in SDT chrome rendering mode. */
   contentControlsChrome?: 'default' | 'none';
+  /** Per-document logical->physical font resolver (face-aware); see DomPainterOptions.resolvePhysical. */
+  resolvePhysical?: (cssFontFamily: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }) => string;
 };
 
 type FragmentDomState = {
@@ -2693,6 +2695,9 @@ export class DomPainter {
         this.applyFragmentFrame(el, paraFragment, context.section, context.story),
       applySdtDataset,
       applyContainerSdtDataset,
+      // Per-document font resolver so list markers and drop caps paint the same physical family
+      // they were measured in (undefined => the renderers fall back to the global default).
+      resolvePhysical: this.options.resolvePhysical,
       renderLine: ({
         block,
         line,
@@ -3911,6 +3916,9 @@ export class DomPainter {
         applySdtDataset,
         applyContainerSdtDataset,
         applyStyles,
+        // Per-document font resolver so in-cell list markers and drop caps paint the same physical
+        // family they were measured in (undefined => the renderers fall back to the global default).
+        resolvePhysical: this.options.resolvePhysical,
       });
 
       // Override outer wrapper positioning with resolved data when available.
@@ -3972,6 +3980,8 @@ export class DomPainter {
       layoutEpoch: this.layoutEpoch,
       showFormattingMarks: this.showFormattingMarks,
       contentControlsChrome: this.contentControlsChrome,
+      // Per-document font resolver (undefined => applyRunStyles falls back to the global default).
+      resolvePhysical: this.options.resolvePhysical,
       pendingTooltips: this.pendingTooltips,
       getNextLinkId: () => `superdoc-link-${++this.linkIdCounter}`,
       applySdtDataset,

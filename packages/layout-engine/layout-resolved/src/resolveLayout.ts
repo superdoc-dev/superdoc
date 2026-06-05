@@ -41,6 +41,12 @@ export type ResolveLayoutInput = {
   flowMode: FlowMode;
   blocks: FlowBlock[];
   measures: Measure[];
+  /**
+   * The document's font-mapping signature, folded into each block's paint-reuse version so a
+   * runtime `fonts.map` change repaints (the same way a font load busts reuse via the global
+   * epoch). Omitted/'' for default documents, leaving the version unchanged from before.
+   */
+  fontSignature?: string;
 };
 
 export function buildBlockMap(blocks: FlowBlock[], measures: Measure[]): Map<string, BlockMapEntry> {
@@ -183,6 +189,7 @@ function computeBlockVersion(
   blockId: string,
   blockMap: Map<string, BlockMapEntry>,
   cache: Map<string, string>,
+  fontSignature = '',
 ): string {
   const cached = cache.get(blockId);
   if (cached !== undefined) return cached;
@@ -191,9 +198,13 @@ function computeBlockVersion(
     cache.set(blockId, 'missing');
     return 'missing';
   }
+  // Prepend the document's font-mapping signature so a `fonts.map` change busts paint reuse the
+  // same way a font load (getFontConfigVersion, folded inside deriveBlockVersion) does. The cache
+  // is per resolveLayout pass, so the signature is constant here; '' leaves the version unchanged.
   const version = deriveBlockVersion(entry.block);
-  cache.set(blockId, version);
-  return version;
+  const versioned = fontSignature ? `${fontSignature}|${version}` : version;
+  cache.set(blockId, versioned);
+  return versioned;
 }
 
 function applyPaintVersions(item: Extract<ResolvedPaintItem, { kind: 'fragment' }>, visualVersion: string): void {
@@ -214,9 +225,10 @@ export function resolveFragmentItem(
   blockMap: Map<string, BlockMapEntry>,
   blockVersionCache: Map<string, string>,
   story?: LayoutStoryLocator,
+  fontSignature = '',
 ): ResolvedPaintItem {
   const sdtContainerKey = resolveFragmentSdtContainerKey(fragment, blockMap);
-  const blockVer = computeBlockVersion(fragment.blockId, blockMap, blockVersionCache);
+  const blockVer = computeBlockVersion(fragment.blockId, blockMap, blockVersionCache, fontSignature);
   const version = fragmentSignature(fragment, blockVer);
   const layoutSourceIdentity = resolveFragmentLayoutIdentity(fragment, story);
 
@@ -314,6 +326,7 @@ export function resolveFragmentItem(
 
 export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
   const { layout, flowMode, blocks, measures } = input;
+  const fontSignature = input.fontSignature ?? '';
   const blockMap = buildBlockMap(blocks, measures);
   const blockVersionCache = new Map<string, string>();
 
@@ -326,7 +339,7 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
     width: page.size?.w ?? layout.pageSize.w,
     height: page.size?.h ?? layout.pageSize.h,
     items: page.fragments.map((fragment, fragmentIndex) =>
-      resolveFragmentItem(fragment, fragmentIndex, pageIndex, blockMap, blockVersionCache),
+      resolveFragmentItem(fragment, fragmentIndex, pageIndex, blockMap, blockVersionCache, undefined, fontSignature),
     ),
     margins: page.margins,
     footnoteReserved: page.footnoteReserved,
@@ -353,7 +366,7 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
 
   if (blocks.length > 0) {
     resolved.blockVersions = Object.fromEntries(
-      blocks.map((block) => [block.id, computeBlockVersion(block.id, blockMap, blockVersionCache)]),
+      blocks.map((block) => [block.id, computeBlockVersion(block.id, blockMap, blockVersionCache, fontSignature)]),
     );
   }
   if (layout.layoutEpoch != null) {

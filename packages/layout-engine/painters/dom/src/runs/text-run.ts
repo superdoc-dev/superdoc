@@ -80,7 +80,15 @@ const applyRunVerticalPositioning = (element: HTMLElement, run: TextRun): void =
  *                  inline colors are now applied to all runs (including links) to
  *                  ensure OOXML hyperlink character styles appear correctly.
  */
-export const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void => {
+export const applyRunStyles = (
+  element: HTMLElement,
+  run: Run,
+  _isLink = false,
+  resolvePhysical: (
+    cssFontFamily: string,
+    face: { weight: '400' | '700'; style: 'normal' | 'italic' },
+  ) => string = resolvePhysicalFamily,
+): void => {
   if (
     run.kind === 'tab' ||
     run.kind === 'image' ||
@@ -94,8 +102,13 @@ export const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false):
   }
 
   // Paint the physical render family (e.g. Carlito for Calibri) - the same family the
-  // text was measured in, so glyph advances match the laid-out positions.
-  element.style.fontFamily = resolvePhysicalFamily(run.fontFamily);
+  // text was measured in, so glyph advances match the laid-out positions. The resolver is the
+  // per-document one (passed by the caller from the render context), so two editors that map a
+  // logical family differently paint different physical families. Defaults to the global bundled.
+  element.style.fontFamily = resolvePhysical(run.fontFamily, {
+    weight: run.bold ? '700' : '400',
+    style: run.italic ? 'italic' : 'normal',
+  });
   element.style.fontSize = `${run.fontSize}px`;
   if (run.bold) element.style.fontWeight = 'bold';
   if (run.italic) element.style.fontStyle = 'italic';
@@ -256,7 +269,7 @@ export const renderTextRun = (
   }
 
   // Pass isLink flag to skip applying inline color/decoration styles for links
-  applyRunStyles(elem as HTMLElement, run, isActiveLink);
+  applyRunStyles(elem as HTMLElement, run, isActiveLink, renderContext.resolvePhysical);
   const dirAttr = resolveRunDirectionAttribute({
     runText: run.text,
     effectiveText,

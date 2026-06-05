@@ -643,10 +643,9 @@ describe('layoutDocument', () => {
     expect(paraFragment.kind).toBe('para');
 
     // The image is positioned at left margin (50px)
-    // Exclusion boundary: imageX + imageWidth + distLeft + distRight
-    // = 50 + 200 + 5 + 10 = 265px
+    // Exclusion boundary: imageX + imageWidth + distRight = 50 + 200 + 10 = 260px
     const imageX = DEFAULT_OPTIONS.margins!.left;
-    const exclusionBoundary = imageX + 200 + 5 + 10;
+    const exclusionBoundary = imageX + 200 + 10;
 
     // Paragraph should start after the exclusion boundary
     expect(paraFragment.x).toBe(exclusionBoundary);
@@ -5823,6 +5822,68 @@ describe('requirePageBoundary edge cases', () => {
       // Heading and body should start on same page (chain fits using first line optimization)
       expect(pageContainsBlock(layout.pages[0], 'heading')).toBe(true);
       expect(pageContainsBlock(layout.pages[0], 'body')).toBe(true);
+    });
+
+    it('uses first ROW height (not full table) for a splittable table anchor so the chain starts and the table splits (SD-3345)', () => {
+      // A heading (keepNext) immediately followed by a tall splittable table. The
+      // heading + table FIRST ROW fits in the remaining space, but heading + the WHOLE
+      // table does not. Word starts the table here and splits it; reserving the full
+      // table height would push the heading + table wholly to the next page (large gap).
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'filler', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+      const heading: FlowBlock = {
+        kind: 'paragraph',
+        id: 'heading',
+        runs: [{ text: 'Heading', fontFamily: 'Arial', fontSize: 24 }],
+        attrs: { keepNext: true },
+      };
+      const table = {
+        kind: 'table',
+        id: 'tbl',
+        rows: Array.from({ length: 4 }, (_unused, i) => ({
+          id: `r${i}`,
+          cells: [
+            {
+              id: `c${i}`,
+              blocks: [{ kind: 'paragraph', id: `p${i}`, runs: [{ text: 'x', fontFamily: 'Arial', fontSize: 10 }] }],
+            },
+          ],
+        })),
+      } as unknown as TableBlock;
+
+      const fillerMeasure: ParagraphMeasure = { kind: 'paragraph', lines: [makeLine(50)], totalHeight: 50 };
+      const headingMeasure: ParagraphMeasure = { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 };
+      // 4 rows × 15px = 60px total; first row 15px. Cells carry a single measured line
+      // so the table-start preflight can render at least one row on the current page.
+      const tableMeasure = {
+        kind: 'table',
+        rows: Array.from({ length: 4 }, () => ({
+          cells: [{ paragraph: { kind: 'paragraph', lines: [makeLine(15)], totalHeight: 15 }, width: 100, height: 15 }],
+          height: 15,
+        })),
+        columnWidths: [100],
+        totalWidth: 100,
+        totalHeight: 60,
+      } as unknown as TableMeasure;
+
+      // Content area = 100px. After filler(50), 50px remain.
+      // - heading(20) + firstRow(15) = 35 <= 50  → chain fits → start on this page.
+      // - heading(20) + fullTable(60) = 80 > 50  → would advance without the fix.
+      //   (80 <= 100 content height, so the blank-page guard does not suppress the advance.)
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 160 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 },
+      };
+
+      const layout = layoutDocument([filler, heading, table], [fillerMeasure, headingMeasure, tableMeasure], options);
+
+      // Heading and the table both start on page 0 (the table then splits across pages).
+      expect(pageContainsBlock(layout.pages[0], 'heading')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'tbl')).toBe(true);
     });
 
     it('reclaims trailing spacing when both filler and chain starter have contextualSpacing', () => {

@@ -1,22 +1,22 @@
 # SD-3212 A1 — root classification
 
 Generated: 2026-05-25T00:00:00.000Z
-Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (219 names, locked baseline)
+Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (229 names, locked baseline)
 
 ## Summary
 
 | Bucket | Count |
 |---|---|
-| supported-root | 154 |
+| supported-root | 158 |
 | legacy-root | 60 |
 | move-to-subpath | 0 |
 | internal-candidate | 8 |
 | NEEDS-REVIEW | 0 |
-| **total** | **222** |
+| **total** | **226** |
 
-Confidence: high=119, medium=101, needs-review=0.
+Confidence: high=123, medium=101, needs-review=0.
 
-## supported-root (154)
+## supported-root (158)
 
 | Name | Confidence | Source | Rationale |
 |---|---|---|---|
@@ -69,9 +69,11 @@ Confidence: high=119, medium=101, needs-review=0.
 | `FontAssetUrlContext` | high | config-supported | Context passed to the public FontsConfig.resolveAssetUrl resolver. |
 | `FontAssetUrlResolver` | high | config-supported | Type of the public FontsConfig.resolveAssetUrl hook. |
 | `FontConfig` | medium | config-supported | Configuration type for a supported feature. |
+| `FontFaceConfig` | high | config-supported | Public URL-backed font-face shape used by FontsConfig.families and superdoc.fonts.add. |
+| `FontFamilyConfig` | high | config-supported | Public font-family shape used by FontsConfig.families and superdoc.fonts.add. |
 | `FontResolutionRecord` | high | locked | Per-font logical-to-physical resolution record returned by superdoc.fonts.getReport(). |
 | `FontsChangedPayload` | high | locked | Payload of the public fonts-changed event / onFontsChanged callback and fonts.onReport. |
-| `FontsConfig` | high | config-supported | Consumer fonts configuration (assetBaseUrl/resolveAssetUrl); part of the public SuperDoc Config. |
+| `FontsConfig` | high | config-supported | Consumer fonts configuration (custom families, logical mappings, and bundled asset URL hooks); part of the public SuperDoc Config. |
 | `FontsResolvedPayload` | high | locked | Types the documented onFontsResolved callback (apps/docs/editor/superdoc/events.mdx) and appears in core/types/index.ts. Public callback payload despite originating in layout-internal code. |
 | `HTML` | high | locked | Content-format constant. Heavily used (85 docs, 204 demos). Customer-facing. |
 | `ImageDeselectedEvent` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
@@ -125,7 +127,9 @@ Confidence: high=119, medium=101, needs-review=0.
 | `SuperDocAwarenessUpdatePayload` | high | core | Payload emitted with the awareness-update event and passed to Config.onAwarenessUpdate; promoted to a named public type so callback signatures stop using inline shapes. |
 | `SuperDocCommentsUpdatePayload` | high | core | Payload emitted with the comments-update event and passed to Config.onCommentsUpdate; promoted to a named public type so callback signatures stop using inline shapes. |
 | `SuperDocEditorPayload` | high | core | Wrapper payload emitted with editorBeforeCreate / editorCreate / collaboration-ready events; promoted to a named public type so callback signatures match the runtime wrapper instead of a bare Editor. |
-| `SuperDocFontsApi` | high | locked | Return type of the public superdoc.fonts read surface (getReport/getMissingFonts/getDocumentFonts/onReport). |
+| `SuperDocFontFace` | high | locked | Public font-face shape for superdoc.fonts.add (URL source + optional weight/style). |
+| `SuperDocFontFamily` | high | locked | Public font-family shape for superdoc.fonts.add (family name + faces). |
+| `SuperDocFontsApi` | high | locked | Return type of the public superdoc.fonts read + write surface (getReport/getMissingFonts/getDocumentFonts/onReport + map/unmap/add/preload). |
 | `SuperDocLayoutEngineOptions` | high | locked | Types Config.layoutEngineOptions at core/types/index.ts:1350,1505. Documented Config field. |
 | `SuperDocLockedPayload` | high | core | Payload emitted with the locked event and passed to Config.onLocked; promoted to a named public type so the lockedBy: User \| null contract is consumer-typable. |
 | `SuperDocReadyPayload` | high | core | Payload emitted with the ready event and passed to Config.onReady; promoted to a named public type for consistency with the other event payloads. |

@@ -92,6 +92,13 @@ export {
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
 
+export {
+  resolveAnchoredGraphicY,
+  resolveAnchoredGraphicX,
+  type ColumnLayoutForAnchor,
+  type ResolveAnchoredGraphicYInput,
+} from './graphic-placement.js';
+
 // Editor-neutral layout identity primitives (prep-001).
 // Additive only — `pmStart`/`pmEnd` and PM-shaped fields remain available
 // alongside these on every fragment/run.
@@ -807,6 +814,14 @@ export type TableRowAttrs = {
    * `color` is stamped downstream by {@link stampTrackedChangeColors}.
    */
   trackedChange?: TrackedChangeMeta;
+  /**
+   * Row-level border override from OOXML `w:tblPrEx/w:tblBorders` (§17.4.61).
+   * Table property exceptions override the table-level borders for this row
+   * only. Rows without a `tblPrEx` border block leave this undefined and fall
+   * through to the table's borders. Resolved (eighth-points → px) by the v1
+   * layout-adapter; the painter merges it over the table borders per edge.
+   */
+  borders?: TableBorders;
 };
 
 export type TableRow = {

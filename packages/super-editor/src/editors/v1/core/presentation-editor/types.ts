@@ -210,9 +210,9 @@ export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] 
    */
   layoutEngineOptions?: LayoutEngineOptions;
   /**
-   * Font system configuration (the SuperDoc-level `fonts` config). Currently the served
-   * location of the bundled substitute pack: `assetBaseUrl` / `resolveAssetUrl`. Threaded
-   * here (not the legacy untyped `EditorConfig.fonts`) so the asset config is typed.
+   * SuperDoc-level font system configuration: custom physical families, logical mappings, and
+   * bundled substitute asset URL hooks. Threaded here (not the legacy untyped `EditorConfig.fonts`)
+   * so the config-time font surface is typed.
    */
   fontAssets?: FontsConfig;
   /**

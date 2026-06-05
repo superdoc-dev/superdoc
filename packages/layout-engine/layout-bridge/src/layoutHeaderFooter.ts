@@ -426,10 +426,14 @@ export class HeaderFooterLayoutCache {
     blocks: FlowBlock[],
     constraints: { width: number; height: number },
     measureBlock: MeasureResolver,
+    // The document resolver's mapping signature. This cache is a cross-document singleton, so the
+    // signature must key it - otherwise two documents that map the same logical header font
+    // differently would share one measure. Defaults to '' (no overrides => all default docs share).
+    fontSignature: string = '',
   ): Promise<Measure[]> {
     const measures: Measure[] = [];
     for (const block of blocks) {
-      const cached = this.cache.get(block, constraints.width, constraints.height);
+      const cached = this.cache.get(block, constraints.width, constraints.height, fontSignature);
       if (cached) {
         measures.push(cached);
         continue;
@@ -438,7 +442,7 @@ export class HeaderFooterLayoutCache {
         maxWidth: constraints.width,
         maxHeight: constraints.height,
       });
-      this.cache.set(block, constraints.width, constraints.height, measurement);
+      this.cache.set(block, constraints.width, constraints.height, measurement, fontSignature);
       measures.push(measurement);
     }
     return measures;
@@ -492,6 +496,9 @@ export async function layoutHeaderFooterWithCache(
   totalPages?: number,
   pageResolver?: PageResolver,
   kind?: 'header' | 'footer',
+  // The calling document's font-mapping signature, forwarded to the (cross-document) measure cache
+  // so header/footer measures cannot leak between documents with different mappings. '' = default.
+  fontSignature: string = '',
 ): Promise<HeaderFooterBatchResult> {
   const result: HeaderFooterBatchResult = {};
 
@@ -508,7 +515,7 @@ export async function layoutHeaderFooterWithCache(
       // Resolve page number tokens BEFORE measurement
       resolveHeaderFooterTokens(clonedBlocks, 1, numPages);
 
-      const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock);
+      const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock, fontSignature);
       const layout = layoutHeaderFooter(clonedBlocks, measures, constraints, kind);
 
       result[type] = { blocks: clonedBlocks, measures, layout };
@@ -531,7 +538,7 @@ export async function layoutHeaderFooterWithCache(
     // Fast path: if variant has no page tokens, create one layout for all pages
     const hasTokens = hasPageTokens(blocks);
     if (!hasTokens) {
-      const measures = await cache.measureBlocks(blocks, constraints, measureBlock);
+      const measures = await cache.measureBlocks(blocks, constraints, measureBlock, fontSignature);
       const layout = layoutHeaderFooter(blocks, measures, constraints, kind);
       result[type] = { blocks, measures, layout };
       continue;
@@ -607,7 +614,7 @@ export async function layoutHeaderFooterWithCache(
       );
 
       // Measure and layout
-      const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock);
+      const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock, fontSignature);
       const pageLayout = layoutHeaderFooter(clonedBlocks, measures, constraints, kind);
       const measuresById = new Map<string, Measure>();
       for (let i = 0; i < clonedBlocks.length; i += 1) {

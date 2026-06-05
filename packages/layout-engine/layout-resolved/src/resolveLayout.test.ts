@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createFontResolver } from '@superdoc/font-system';
 import { resolveLayout } from './resolveLayout.js';
 import type {
   Layout,
@@ -156,6 +157,54 @@ describe('resolveLayout', () => {
     expect(result.blockVersions).toHaveProperty('p1');
     expect(result.blockVersions).toHaveProperty('p2');
     expect(result.blockVersions?.p1).not.toBe(result.blockVersions?.p2);
+  });
+
+  describe('per-document font-mapping isolation (paint reuse versions)', () => {
+    const layout: Layout = {
+      pageSize: { w: 800, h: 1000 },
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 1, x: 72, y: 0, width: 468 }],
+        },
+      ],
+    } as any;
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'p1', runs: [{ text: 'visible', fontFamily: 'Georgia', fontSize: 12 }] } as any,
+    ];
+    const measures: Measure[] = [{ kind: 'paragraph', lines: [{ lineHeight: 20 }] } as any];
+
+    it('two documents mapping the same family differently get different paint-reuse versions', () => {
+      // Two real per-document resolvers, same logical family mapped to different physical fonts.
+      const docA = createFontResolver();
+      docA.map('Georgia', 'Gelasio');
+      const docB = createFontResolver();
+      docB.map('Georgia', 'Tinos');
+
+      const rA = resolveLayout({ layout, flowMode: 'paginated', blocks, measures, fontSignature: docA.signature });
+      const rB = resolveLayout({ layout, flowMode: 'paginated', blocks, measures, fontSignature: docB.signature });
+
+      // Identical logical content; different mappings must not reuse each other's painted DOM.
+      expect(rA.blockVersions?.p1).not.toBe(rB.blockVersions?.p1);
+    });
+
+    it('an empty signature is byte-identical to omitting it (default documents share paint reuse)', () => {
+      const omitted = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const empty = resolveLayout({ layout, flowMode: 'paginated', blocks, measures, fontSignature: '' });
+      expect(empty.blockVersions?.p1).toBe(omitted.blockVersions?.p1);
+    });
+
+    it('identical mappings yield identical versions (cache-shareable across same-mapping documents)', () => {
+      const docA = createFontResolver();
+      docA.map('Georgia', 'Gelasio');
+      const docB = createFontResolver();
+      docB.map('Georgia', 'Gelasio');
+      expect(docA.signature).toBe(docB.signature);
+
+      const rA = resolveLayout({ layout, flowMode: 'paginated', blocks, measures, fontSignature: docA.signature });
+      const rB = resolveLayout({ layout, flowMode: 'paginated', blocks, measures, fontSignature: docB.signature });
+      expect(rA.blockVersions?.p1).toBe(rB.blockVersions?.p1);
+    });
   });
 
   it('defaults pageGap to 0 when layout.pageGap is undefined', () => {

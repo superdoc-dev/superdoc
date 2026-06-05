@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-05-19T11:33:50.546Z",
   "summary": {
-    "total": 222,
+    "total": 226,
     "byBucket": {
       "legacy-root": 60,
       "internal-candidate": 8,
-      "supported-root": 154
+      "supported-root": 158
     },
     "byConfidence": {
-      "high": 119,
+      "high": 123,
       "medium": 101,
       "low": 2
     }
@@ -840,6 +840,28 @@
       "inCjs": false
     },
     {
+      "name": "FontFaceConfig",
+      "bucket": "supported-root",
+      "rationale": "Public URL-backed font-face shape used by FontsConfig.families and superdoc.fonts.add.",
+      "confidence": "high",
+      "source": "config-supported",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "FontFamilyConfig",
+      "bucket": "supported-root",
+      "rationale": "Public font-family shape used by FontsConfig.families and superdoc.fonts.add.",
+      "confidence": "high",
+      "source": "config-supported",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
       "name": "FontResolutionRecord",
       "bucket": "supported-root",
       "rationale": "Per-font logical-to-physical resolution record returned by superdoc.fonts.getReport().",
@@ -864,7 +886,7 @@
     {
       "name": "FontsConfig",
       "bucket": "supported-root",
-      "rationale": "Consumer fonts configuration (assetBaseUrl/resolveAssetUrl); part of the public SuperDoc Config.",
+      "rationale": "Consumer fonts configuration (custom families, logical mappings, and bundled asset URL hooks); part of the public SuperDoc Config.",
       "confidence": "high",
       "source": "config-supported",
       "inDts": true,
@@ -1819,9 +1841,31 @@
       "inCjs": false
     },
     {
+      "name": "SuperDocFontFace",
+      "bucket": "supported-root",
+      "rationale": "Public font-face shape for superdoc.fonts.add (URL source + optional weight/style).",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocFontFamily",
+      "bucket": "supported-root",
+      "rationale": "Public font-family shape for superdoc.fonts.add (family name + faces).",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
       "name": "SuperDocFontsApi",
       "bucket": "supported-root",
-      "rationale": "Return type of the public superdoc.fonts read surface (getReport/getMissingFonts/getDocumentFonts/onReport).",
+      "rationale": "Return type of the public superdoc.fonts read + write surface (getReport/getMissingFonts/getDocumentFonts/onReport + map/unmap/add/preload).",
       "confidence": "high",
       "source": "locked",
       "inDts": true,

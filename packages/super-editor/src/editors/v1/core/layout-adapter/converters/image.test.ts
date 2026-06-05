@@ -241,6 +241,27 @@ describe('image converter', () => {
       });
     });
 
+    it('fills wrap distances from padding when wrap attrs omit them', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.jpg',
+          padding: { top: 0, bottom: 0, left: 12, right: 15 },
+          wrap: {
+            type: 'Square',
+            attrs: {
+              wrapText: 'bothSides',
+            },
+          },
+        },
+      };
+
+      const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+      expect(result.wrap?.distLeft).toBe(12);
+      expect(result.wrap?.distRight).toBe(15);
+    });
+
     it('handles wrap configuration', () => {
       const node: PMNode = {
         type: 'image',

@@ -28,6 +28,8 @@ import type {
   CollaborationProvider as SuperEditorCollaborationProvider,
   Comment,
   FontConfig,
+  FontFaceConfig,
+  FontFamilyConfig,
   FontsConfig,
   FontsResolvedPayload,
   FontsChangedPayload,
@@ -72,6 +74,8 @@ export type NavigableAddress = SuperEditorNavigableAddress;
  */
 export type { User } from '@superdoc/super-editor';
 export type {
+  FontFaceConfig,
+  FontFamilyConfig,
   FontResolutionRecord,
   FontsChangedPayload,
   FontsConfig,
@@ -80,14 +84,20 @@ export type {
 } from '@superdoc/super-editor';
 
 /**
- * Read-only font surface on a SuperDoc instance (`superdoc.fonts`). The authoritative,
- * substitution- and load-aware answer to "what fonts does this document use and did
- * SuperDoc render them faithfully", pulled on demand. The same report streams via the
- * `fonts-changed` event / `onFontsChanged`. All three reflect the active editor; they
- * return empty arrays when no editor is active. The write surface (add/map/preload) is
- * deferred. {@link getReport} and {@link getDocumentFonts} cover the document's DECLARED
- * fonts (font table + theme + defaults), not only fonts visible on screen.
+ * Font surface on a SuperDoc instance (`superdoc.fonts`). The substitution- and load-aware
+ * answer to "what fonts does this document use and did SuperDoc render them faithfully" -
+ * pulled on demand and streamed via the `fonts-changed` event - plus a per-document write
+ * surface: {@link map}/{@link unmap} override resolution, {@link add} registers custom faces,
+ * {@link preload} loads them. All reflect the ACTIVE editor: reads return empty arrays when no
+ * editor is active; writes throw. {@link getReport} and {@link getDocumentFonts} cover the
+ * document's DECLARED fonts (font table + theme + defaults), not only fonts visible on screen.
  */
+/** Public SuperDoc alias for the canonical font face config. */
+export type SuperDocFontFace = FontFaceConfig;
+
+/** Public SuperDoc alias for the canonical font family config. */
+export type SuperDocFontFamily = FontFamilyConfig;
+
 export interface SuperDocFontsApi {
   /** Per-font report: requested logical family -> physical render family, reason, load status, export family, missing. */
   getReport(): FontResolutionRecord[];
@@ -103,6 +113,43 @@ export interface SuperDocFontsApi {
    * delivered until it does (no stale prior-document report). Returns an unsubscribe function.
    */
   onReport(callback: (payload: FontsChangedPayload) => void): () => void;
+  /**
+   * Map logical families to physical render families for the ACTIVE document, overriding bundled
+   * defaults: `map({ Georgia: 'Gelasio', Arial: 'Liberation Sans' })`. Applies all entries, then
+   * re-measures and repaints once (a redundant map - a self-map, or a mapping identical to an
+   * already-stored override - does neither); observe via {@link onReport} / `fonts-changed` (`source:
+   * 'config-change'`). Mapping a family to its bundled clone (`map({ Calibri: 'Carlito' })`) is honored
+   * as an explicit PIN - stored so it outranks a registered real face for that family - not treated as
+   * a no-op. Each physical family must be loadable - a bundled substitute, or a face added via `add`.
+   * Per document: other editors on the page are unaffected. Render-only - export keeps the logical
+   * family name.
+   * @throws Error if no editor is active (a write needs a document; this fails loudly, not silently).
+   */
+  map(mappings: Record<string, string>): void;
+  /**
+   * Remove runtime mappings for the ACTIVE document; each family reverts to its bundled default
+   * (or its logical name). Accepts one family or several. Re-measures and repaints if anything
+   * changed.
+   * @throws Error if no editor is active.
+   */
+  unmap(families: string | string[]): void;
+  /**
+   * Register custom physical font faces (URL sources) for the ACTIVE document so they can be mapped
+   * to and loaded - e.g.
+   * `add({ family: 'Gelasio', faces: [{ source: '/fonts/Gelasio-Regular.woff2', weight: 400 }] })`.
+   * Registering does NOT map; pair with {@link map}. Re-adding the same source for a face is
+   * idempotent; a DIFFERENT source for the same family/weight/style throws. Reflows once if a
+   * registered face is one the document already uses.
+   * @throws Error if no editor is active, or if a conflicting source is registered.
+   */
+  add(families: SuperDocFontFamily | SuperDocFontFamily[]): void;
+  /**
+   * Proactively load the physical faces for the given LOGICAL families (resolved through the active
+   * document's mappings) so they are ready before use, avoiding a late-load reflow. Awaits the
+   * regular (400/normal) face via the registry.
+   * @throws Error if no editor is active.
+   */
+  preload(families: string[]): Promise<void>;
 }
 
 /**

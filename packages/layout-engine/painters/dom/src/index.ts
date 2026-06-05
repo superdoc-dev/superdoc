@@ -104,6 +104,13 @@ export type DomPainterOptions = {
   showFormattingMarks?: boolean;
   /** Built-in SDT chrome rendering mode. */
   contentControlsChrome?: 'default' | 'none';
+  /**
+   * Per-document logical->physical font resolver (a CSS-stack resolver). The painter paints each
+   * run in the family this returns - e.g. Carlito for Calibri - the SAME family measurement used,
+   * so glyph advances match the laid-out positions. Set per painter instance (per document) so two
+   * editors can map one logical family differently. Defaults to the global bundled resolver.
+   */
+  resolvePhysical?: (cssFontFamily: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }) => string;
 };
 
 export type DomPainterHandle = {

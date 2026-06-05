@@ -791,8 +791,14 @@ const applyTrackedDelete = (
         change: getChangeAuthorIdentity(segmentAtPos?.attrs ?? insertMark.attrs),
       });
       const ownership = isSameUserHighConfidence(classification) ? 'same-user' : 'different-user';
+      // Deleting inside your own pending insertion must shrink that insertion,
+      // not stack a deletion on top of your own suggestion (SD-3352). Use the
+      // same permissive same-author gate as typing, so this also holds for
+      // users without an id/email (anonymous sessions).
+      const sameUserForRefinement =
+        ownership === 'same-user' || isSameUserForRefinement(ctx, segmentAtPos ?? { attrs: insertMark.attrs });
       const shouldCollapseOwnInsertion =
-        !ctx.intent.preserveExistingReviewState && (ownership === 'same-user' || isImportedOwnInsertion(insertMark));
+        !ctx.intent.preserveExistingReviewState && (sameUserForRefinement || isImportedOwnInsertion(insertMark));
       if (shouldCollapseOwnInsertion) {
         // Own insertion → collapse (remove proposed content).
         ops.push({ kind: 'collapse', from: segFrom, to: segTo, changeId: insertMark.attrs.id });

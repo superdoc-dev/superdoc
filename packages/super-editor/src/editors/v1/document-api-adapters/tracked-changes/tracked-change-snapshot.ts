@@ -8,11 +8,10 @@ import type {
   StoryLocator,
   TrackedChangeAddress,
   TrackChangeProvenanceOrigin,
-  TrackChangeType,
-  TrackChangeSubtype,
   TrackChangeOverlapInfo,
   TrackChangeWordRevisionIds,
 } from '@superdoc/document-api';
+import type { InternalTrackChangeSubtype, InternalTrackChangeType } from '../helpers/tracked-change-type-utils.js';
 import type { TrackedChangeRuntimeRef } from '../helpers/tracked-change-runtime-ref.js';
 
 export interface TrackedChangeSnapshot {
@@ -23,9 +22,9 @@ export interface TrackedChangeSnapshot {
   /** Story locator for this snapshot. */
   story: StoryLocator;
   /** Tracked-change kind. */
-  type: TrackChangeType;
+  type: InternalTrackChangeType;
   /** Finer classification for structural changes (e.g. `table-insert`). */
-  subtype?: TrackChangeSubtype;
+  subtype?: InternalTrackChangeSubtype;
   /** Author display name, if captured on the mark. */
   author?: string;
   /** Author email, if captured. */

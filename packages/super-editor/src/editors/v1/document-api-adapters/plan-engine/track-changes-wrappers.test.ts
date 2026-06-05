@@ -184,7 +184,7 @@ describe('track-changes-wrappers revision guard', () => {
     });
   });
 
-  it('projects subtype for structural changes in list and get', () => {
+  it('projects structural table changes back to legacy public types in list and get', () => {
     const hostEditor = makeEditor();
     const structuralSnapshot = {
       address: { kind: 'entity', entityType: 'trackedChange', entityId: 'word:structural:2' },
@@ -219,10 +219,16 @@ describe('track-changes-wrappers revision guard', () => {
     });
 
     const listResult = trackChangesListWrapper(hostEditor, {});
-    expect(listResult.items[0]).toMatchObject({ type: 'structural', subtype: 'table-insert' });
+    expect(listResult.items[0]).toMatchObject({ type: 'insert' });
+    expect(listResult.items[0]).not.toHaveProperty('subtype');
+
+    const filteredListResult = trackChangesListWrapper(hostEditor, { type: 'insert' });
+    expect(filteredListResult.items).toHaveLength(1);
+    expect(filteredListResult.items[0]).toMatchObject({ id: 'word:structural:2', type: 'insert' });
 
     const getResult = trackChangesGetWrapper(hostEditor, { id: 'word:structural:2' });
-    expect(getResult).toMatchObject({ type: 'structural', subtype: 'table-insert' });
+    expect(getResult).toMatchObject({ id: 'word:structural:2', type: 'insert' });
+    expect(getResult).not.toHaveProperty('subtype');
   });
 
   it('checks expectedRevision on the host editor before accepting a non-body tracked change', () => {

@@ -262,13 +262,32 @@ function numAttr(el: XmlElement, attr: string): string | undefined {
   return el.attributes?.[attr];
 }
 
+function reorderNumberingChildren(numberingEl: XmlElement): void {
+  if (!numberingEl.elements) return;
+
+  const other: XmlElement[] = [];
+  const abstracts: XmlElement[] = [];
+  const nums: XmlElement[] = [];
+
+  for (const el of numberingEl.elements) {
+    const ln = localName(el);
+    if (ln === 'abstractNum') abstracts.push(el);
+    else if (ln === 'num') nums.push(el);
+    else other.push(el);
+  }
+
+  numberingEl.elements = [...other, ...abstracts, ...nums];
+}
+
 /**
  * Reconcile source numbering into the current numbering as a dependency graph.
  *
  * Imports the source `w:abstractNum` / `w:num` graph, remapping ids that collide
  * with the target's existing ids, and rewires each imported `w:num`'s
  * `w:abstractNumId` to the (possibly remapped) abstract. IDs are preserved when
- * free, remapped only on collision. Target numbering is retained untouched.
+ * free, remapped only on collision. Existing target definitions are retained,
+ * and the merged child list is normalized so non-definition children stay ahead
+ * of `w:abstractNum` / `w:num` entries.
  */
 export function mergeNumberingGraph(currentRoot: XmlElement, sourceRoot: XmlElement): NumberingMergeResult {
   const result: NumberingMergeResult = { numRemap: new Map(), abstractRemap: new Map(), mappings: [] };
@@ -344,6 +363,8 @@ export function mergeNumberingGraph(currentRoot: XmlElement, sourceRoot: XmlElem
     }
     cur.elements.push(next);
   }
+
+  reorderNumberingChildren(cur);
 
   return result;
 }

@@ -36,8 +36,9 @@ export const CanonicalChangeType = Object.freeze({
   Formatting: 'formatting',
   // Structural revisions (whole-object insert/delete) live on node attrs, not
   // marks. This is used for whole-table insert/delete. The public
-  // document-api projection maps `structural` straight through to the `kind`
-  // shape demanded by the §14 structural conformance contract.
+  // document-api projection keeps the legacy `insert | delete | replacement |
+  // format` union and maps structural table revisions back to insert/delete at
+  // the adapter boundary.
   Structural: 'structural',
 });
 

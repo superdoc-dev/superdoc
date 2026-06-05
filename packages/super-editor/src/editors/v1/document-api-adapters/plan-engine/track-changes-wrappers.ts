@@ -48,6 +48,7 @@ import {
   resolveTrackedChangeType,
   splitProjectedTrackedChangeId,
 } from '../helpers/tracked-change-resolver.js';
+import { projectInternalTrackChangeType } from '../helpers/tracked-change-type-utils.js';
 import { getTrackedChangeIndex } from '../tracked-changes/tracked-change-index.js';
 import type { TrackedChangeSnapshot } from '../tracked-changes/tracked-change-snapshot.js';
 import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
@@ -107,7 +108,7 @@ function buildProjectedInfo(
   } = {},
 ): ProjectedTrackChange {
   const id = options.id ?? snapshot.address.entityId;
-  const type = options.type ?? snapshot.type;
+  const type = options.type ?? projectInternalTrackChangeType(snapshot.type, { subtype: snapshot.subtype });
   return {
     info: {
       address: {
@@ -116,7 +117,6 @@ function buildProjectedInfo(
       },
       id,
       type,
-      ...(type === 'structural' && snapshot.subtype ? { subtype: snapshot.subtype } : {}),
       grouping: options.grouping,
       pairedWithChangeId: options.pairedWithChangeId ?? undefined,
       wordRevisionIds: normalizeWordRevisionIds(snapshot.wordRevisionIds),
@@ -151,7 +151,9 @@ function replacementPairKey(snapshot: TrackedChangeSnapshot): string | null {
 }
 
 function projectedSnapshotType(snapshot: TrackedChangeSnapshot): TrackChangeType {
-  return isCombinedReplacementSnapshot(snapshot) ? 'replacement' : snapshot.type;
+  return isCombinedReplacementSnapshot(snapshot)
+    ? 'replacement'
+    : projectInternalTrackChangeType(snapshot.type, { subtype: snapshot.subtype });
 }
 
 function snapshotGrouping(snapshot: TrackedChangeSnapshot): TrackChangeInfo['grouping'] {
@@ -463,7 +465,6 @@ export function trackChangesListWrapper(editor: Editor, input?: TrackChangesList
     const {
       address,
       type,
-      subtype,
       grouping,
       pairedWithChangeId,
       wordRevisionIds,
@@ -481,7 +482,6 @@ export function trackChangesListWrapper(editor: Editor, input?: TrackChangesList
     return buildDiscoveryItem(info.id, handle, {
       address,
       type,
-      ...(subtype ? { subtype } : {}),
       grouping,
       pairedWithChangeId,
       wordRevisionIds,
@@ -533,7 +533,8 @@ export function trackChangesGetWrapper(editor: Editor, input: TrackChangesGetInp
 
   if (snapshot) return snapshotToInfo(snapshot);
 
-  const type = resolveTrackedChangeType(resolved.change);
+  const internalType = resolveTrackedChangeType(resolved.change);
+  const type = projectInternalTrackChangeType(internalType, resolved.change.structural);
   const excerpt =
     (resolved.change.excerpt !== undefined ? resolved.change.excerpt : undefined) ??
     normalizeExcerpt(resolved.editor.state.doc.textBetween(resolved.change.from, resolved.change.to, ' ', '\ufffc'));
@@ -551,9 +552,6 @@ export function trackChangesGetWrapper(editor: Editor, input: TrackChangesGetInp
     },
     id: resolved.change.id,
     type,
-    ...(type === 'structural' && resolved.change.structural
-      ? { subtype: resolved.change.structural.subtype as TrackChangeInfo['subtype'] }
-      : {}),
     grouping,
     wordRevisionIds: normalizeWordRevisionIds(resolved.change.wordRevisionIds),
     overlap: resolved.change.overlap,

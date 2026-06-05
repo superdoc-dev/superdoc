@@ -187,7 +187,7 @@ import {
 } from '@superdoc/font-system';
 import { installBundledSubstitutes } from '@superdoc/font-system/bundled';
 import { FontReadinessGate } from './fonts/FontReadinessGate';
-import { DocumentFontController } from './fonts/DocumentFontController';
+import { DocumentFontController, type EmbeddedFontFace } from './fonts/DocumentFontController';
 import { planFontFaces, type FontPlan } from './fonts/font-load-planner';
 import type { FontsChangedPayload } from '../types/EditorEvents';
 import type { FontFamilyConfig } from '../types/EditorConfig';
@@ -1057,6 +1057,7 @@ export class PresentationEditor extends EventEmitter {
         },
       });
       this.#fontController.applyInitialConfig(this.#options.fontAssets);
+      this.#applyEmbeddedDocumentFonts();
       if (typeof this.#options.disableContextMenu === 'boolean') {
         this.setContextMenuDisabled(this.#options.disableContextMenu);
       }
@@ -3165,6 +3166,20 @@ export class PresentationEditor extends EventEmitter {
    */
   async preloadFonts(families: string[]): Promise<void> {
     await this.#fontController.preload(families);
+  }
+
+  /**
+   * Register the current document's embedded fonts (from the converter) as document-owned registry
+   * faces, so the resolver's `registered_face` rung renders the real embedded font instead of the
+   * bundled substitute. Runs at config time - initial load and after a document swap - BEFORE the
+   * first font plan; the controller skips non-embeddable faces and releases these on the next swap
+   * (`reset`) / teardown (`dispose`). `getEmbeddedFontFaces` is not on the converter's typed surface,
+   * so it is read through a narrow structural cast (same pattern as `getDocumentFonts`).
+   */
+  #applyEmbeddedDocumentFonts(): void {
+    const converter = (this.#editor as Editor & { converter?: { getEmbeddedFontFaces?: () => EmbeddedFontFace[] } })
+      .converter;
+    this.#fontController.applyEmbeddedFaces(converter?.getEmbeddedFontFaces?.());
   }
 
   /**
@@ -5338,6 +5353,9 @@ export class PresentationEditor extends EventEmitter {
       // here states the intent and starts the swap from a clean signature.
       this.#layoutFontSignature = '';
       this.#fontController.applyInitialConfig(this.#options.fontAssets);
+      // Register the NEW document's embedded fonts (the swap's `reset()` released the old ones), before
+      // the rerender below runs the first font plan for this document.
+      this.#applyEmbeddedDocumentFonts();
       this.#resetFontReportStateForDocumentChange();
       this.#refreshHeaderFooterStructureThenRerender({ purgeCachedEditors: true });
     };

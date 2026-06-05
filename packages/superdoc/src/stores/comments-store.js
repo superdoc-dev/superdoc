@@ -1999,14 +1999,32 @@ export const useCommentsStore = defineStore('comments', () => {
     }
   };
 
+  const getStoryTrackedChangeDisplayType = (snapshot) => {
+    if (snapshot?.type !== 'structural') return snapshot?.type ?? null;
+    return snapshot?.subtype === 'table-delete' ? 'tableDelete' : 'tableInsert';
+  };
+
+  const getStoryTrackedChangeType = (snapshot) => {
+    if (snapshot?.type !== 'structural') return snapshot?.type ?? null;
+    return snapshot?.subtype === 'table-delete' ? 'trackDelete' : 'trackInsert';
+  };
+
+  const isStoryTrackedChangeDeletion = (snapshot) => {
+    if (!snapshot) return false;
+    if (snapshot.type === 'delete') return true;
+    return snapshot.type === 'structural' && snapshot.subtype === 'table-delete';
+  };
+
   const buildStoryTrackedChangeParams = ({ editor, snapshot, documentId, event }) => {
+    const trackedChangeType = getStoryTrackedChangeType(snapshot);
+    const trackedChangeDisplayType = getStoryTrackedChangeDisplayType(snapshot);
     const fallbackParams = {
       event,
       changeId: snapshot.runtimeRef.rawId,
-      trackedChangeText: snapshot.type === 'insert' || snapshot.type === 'format' ? (snapshot.excerpt ?? '') : '',
-      trackedChangeType: snapshot.type,
-      trackedChangeDisplayType: snapshot.type,
-      deletedText: snapshot.type === 'delete' ? (snapshot.excerpt ?? '') : null,
+      trackedChangeText: isStoryTrackedChangeDeletion(snapshot) ? '' : (snapshot.excerpt ?? ''),
+      trackedChangeType,
+      trackedChangeDisplayType,
+      deletedText: isStoryTrackedChangeDeletion(snapshot) ? (snapshot.excerpt ?? '') : null,
       authorId: snapshot.authorId,
       authorEmail: snapshot.authorEmail,
       authorImage: snapshot.authorImage,

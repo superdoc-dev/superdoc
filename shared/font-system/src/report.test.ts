@@ -228,6 +228,28 @@ describe('buildFaceReport (face-level)', () => {
     expect(bold?.missing).toBe(true); // the bold face failed - reported missing, regular unaffected
   });
 
+  it('hides the internal embedded alias: reports the logical family, but reads status via the alias', () => {
+    const reg = new FaceRegistry();
+    const PHYS = '__superdoc_embedded_3__0_Calibri';
+    reg.setFace(PHYS, '400', 'normal', 'loaded'); // the embedded face is registered under the alias
+    const resolver = createFontResolver();
+    resolver.mapEmbedded('Calibri', PHYS);
+    const [row] = buildFaceReport(
+      [{ logicalFamily: 'Calibri', weight: '400', style: 'normal' }],
+      reg.asRegistry(),
+      resolver,
+    );
+    expect(row).toEqual({
+      logicalFamily: 'Calibri',
+      physicalFamily: 'Calibri', // the real name, NOT __superdoc_embedded_*
+      reason: 'registered_face',
+      loadStatus: 'loaded', // proves the status was looked up via the alias (where the face lives)
+      exportFamily: 'Calibri',
+      missing: false,
+      face: { weight: '400', style: 'normal' },
+    });
+  });
+
   it('Calibri Light face resolves to Carlito (category_fallback) and stays missing though the face loaded', () => {
     const reg = new FaceRegistry();
     reg.setFace('Carlito', '400', 'normal', 'loaded'); // Carlito Regular registered + loaded

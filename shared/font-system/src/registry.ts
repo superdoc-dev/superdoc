@@ -26,6 +26,8 @@ const DEFAULT_PROBE_SIZE = '16px';
  */
 export interface FontSetLike {
   add(face: FontFaceLike): void;
+  /** Remove a managed face (DOM `FontFaceSet.delete`). Optional: some sets (domless/tests) omit it. */
+  delete?(face: FontFaceLike): boolean;
   load(font: string, text?: string): Promise<FontFaceLike[]>;
   check(font: string, text?: string): boolean;
 }
@@ -43,6 +45,19 @@ export type FontFaceCtor = new (
   source: string | ArrayBuffer | ArrayBufferView,
   descriptors?: FontFaceDescriptors,
 ) => FontFaceLike;
+
+/**
+ * A document-owned font face registered from raw bytes (a deobfuscated DOCX-embedded font), the input
+ * to {@link FontRegistry.registerOwnedFace}. Carries the bytes plus the OS/2-derived face axis so the
+ * face registers under the document's family name with the correct weight/style and flows through the
+ * resolver's `registered_face` rung. `weight`/`style` are already canonical (no normalization needed).
+ */
+export interface OwnedFaceDescriptor {
+  family: string;
+  source: ArrayBuffer | ArrayBufferView;
+  weight: '400' | '700';
+  style: 'normal' | 'italic';
+}
 
 export interface FontRegistryOptions {
   /** The font set to drive. Defaults to the ambient `document.fonts`. */
@@ -140,8 +155,17 @@ export class FontRegistry {
   readonly #scheduleTimeout: (cb: () => void, ms: number) => unknown;
   readonly #cancelTimeout: (handle: unknown) => void;
 
-  /** Faces the registry created, keyed by family. */
+  /** Faces the registry created, keyed by family. Probed only via `isManaged` (the VALUE is never
+   *  read), so a stale entry between multi-owner releases is harmless. */
   readonly #managed = new Map<string, FontFaceLike>();
+  /**
+   * Every managed FontFace object, grouped by face key (family|weight|style). A SET because the
+   * registry is shared per FontFaceSet across editors, so two documents can each register their own
+   * embedded face for the same key; `hasFace` stays true while >=1 remains. A document-owned face is
+   * released by its exact handle ({@link registerOwnedFace}), and the key collapses only when its
+   * last face is gone - so one document's swap never drops another's (or a `fonts.add`) face.
+   */
+  readonly #facesByKey = new Map<string, Set<FontFaceLike>>();
   /** Last known load status per family. */
   readonly #status = new Map<string, FontLoadStatus>();
   /** Registered `url(...)` source(s) per family, to name the failing URL on a load error. */
@@ -222,7 +246,7 @@ export class FontRegistry {
       // rendered face to the same bucket. Other descriptors (stretch, unicodeRange, display) pass through.
       const face = new this.#FontFaceCtor(family, source, { ...descriptors, weight, style });
       this.#fontSet.add(face);
-      this.#managed.set(family, face);
+      this.#addManagedFace(family, key, face);
     }
     if (typeof source === 'string') {
       const list = this.#sources.get(family) ?? [];
@@ -250,6 +274,85 @@ export class FontRegistry {
   /** True if this registry created a managed face for the family. */
   isManaged(family: string): boolean {
     return this.#managed.has(family);
+  }
+
+  /**
+   * Register a DOCUMENT-OWNED face from raw bytes (a deobfuscated DOCX-embedded font) and return a
+   * disposer that releases EXACTLY this face. Unlike {@link register} - the shared registrar for
+   * bundled and `fonts.add` faces, idempotent by URL source - every call here creates a distinct
+   * managed face, because the registry is shared per FontFaceSet across editors and two documents can
+   * embed the same family|weight|style with different (subset) bytes. Calling the returned disposer
+   * (on a document swap or editor teardown) removes only this face; the key's `hasFace` stays true
+   * while any other owner's face remains, so one document's cleanup never drops another document's or
+   * a customer's face. The face participates in `hasFace`/await like any managed face while it lives.
+   *
+   * Returns null where there is no DOM `FontFace` constructor / font set: embedded bytes cannot render
+   * without one, so the resolver correctly falls through to the bundled substitute. The disposer is
+   * idempotent (a second call returns false).
+   */
+  registerOwnedFace(descriptor: OwnedFaceDescriptor): (() => boolean) | null {
+    const { family, source, weight, style } = descriptor;
+    if (!this.#FontFaceCtor || !this.#fontSet) return null;
+    const key = faceKeyOf(family, weight, style);
+    const face = new this.#FontFaceCtor(family, source, { weight, style });
+    this.#fontSet.add(face);
+    this.#addManagedFace(family, key, face);
+    // Seed provider and status state so the resolver can see this face and the gate can await it.
+    // Binary faces have no `#faceSources`, but otherwise mirror the bookkeeping `register` does.
+    this.#providerFaceKeys.add(key);
+    if (!this.#status.has(family)) this.#status.set(family, 'unloaded');
+    this.#trackFace(family, key);
+    if (!this.#faceStatus.has(key)) this.#faceStatus.set(key, 'unloaded');
+    let released = false;
+    return () => {
+      if (released) return false;
+      released = true;
+      return this.#removeManagedFace(family, key, face);
+    };
+  }
+
+  /** Track a created FontFace under its family (`#managed`, last-wins) and its face key
+   *  (`#facesByKey`, all owners). Shared by {@link register} and {@link registerOwnedFace}. */
+  #addManagedFace(family: string, key: string, face: FontFaceLike): void {
+    this.#managed.set(family, face);
+    let set = this.#facesByKey.get(key);
+    if (!set) {
+      set = new Set<FontFaceLike>();
+      this.#facesByKey.set(key, set);
+    }
+    set.add(face);
+  }
+
+  /**
+   * Remove one specific managed face. Drops it from the FontFaceSet and its face-key group; when that
+   * was the LAST face for the key, clears the key's per-face state and removes the key from its
+   * family - and when the family then has no keys left, clears its family-level state too. Returns
+   * false if the face was not tracked under that key (already released / never ours), leaving
+   * everything untouched.
+   */
+  #removeManagedFace(family: string, key: string, face: FontFaceLike): boolean {
+    const set = this.#facesByKey.get(key);
+    if (!set || !set.delete(face)) return false;
+    if (typeof this.#fontSet?.delete === 'function') this.#fontSet.delete(face);
+    if (set.size > 0) return true; // another owner still provides this face; keep key/family state
+    this.#facesByKey.delete(key);
+    this.#providerFaceKeys.delete(key);
+    this.#faceStatus.delete(key);
+    this.#faceSources.delete(key);
+    const fam = normalizeFamilyKey(family);
+    const keys = this.#facesByFamily.get(fam);
+    if (keys) {
+      keys.delete(key);
+      if (keys.size === 0) {
+        // The family has no managed faces left: drop its family-level state and the `#managed` entry
+        // so `isManaged`/`getStatus` no longer report a now-removed family.
+        this.#facesByFamily.delete(fam);
+        this.#managed.delete(family);
+        this.#status.delete(family);
+        this.#sources.delete(family);
+      }
+    }
+    return true;
   }
 
   /**

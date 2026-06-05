@@ -23,8 +23,10 @@
  *                assets, with `.rels` + transitive media closure; collisions
  *                reallocated and references rewritten.
  * - `sectionDefaults` — source page-1 governing `w:sectPr` adopted via the
- *                section mutation path; intermediate source sections are not
- *                imported.
+ *                section mutation path as the active/final section defaults;
+ *                its header/footer visibility model is also projected across
+ *                earlier target sections without overwriting their own page
+ *                geometry. Intermediate source sections are not imported.
  *
  * `customXml` and other out-of-scope content is reported, never applied.
  *
@@ -659,7 +661,7 @@ async function applyTemplateAsync(
         'word/document.xml',
         sec.warnings.length > 0
           ? 'Source page-1 section defaults could not be applied.'
-          : 'Source page-1 section defaults already match the active section defaults.',
+          : "Source page-1 section defaults already match the current document's active section defaults and section header/footer visibility model.",
       );
     }
   }

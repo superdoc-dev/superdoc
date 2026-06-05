@@ -25,11 +25,47 @@ export interface DocumentFontControllerDeps {
 }
 
 /**
+ * A document's embedded font face, as extracted by the converter (`SuperConverter.getEmbeddedFontFaces`):
+ * the deobfuscated bytes plus the OS/2-derived face axis and raw `fsType` licensing. The controller
+ * registers each {@link embeddable} face under a document-unique physical family (binding the logical
+ * family to it in the resolver) so the `registered_face` rung renders the document's real font instead
+ * of the bundled substitute; it skips faces that are not embeddable (Restricted-License, or an
+ * unreadable OS/2 table - no proof the license permits embedding).
+ */
+export interface EmbeddedFontFace {
+  family: string;
+  /** Deobfuscated SFNT bytes (an ArrayBuffer from `deobfuscateFont`). */
+  source: ArrayBuffer | ArrayBufferView;
+  weight: '400' | '700';
+  style: 'normal' | 'italic';
+  /** Raw OS/2 `fsType`, or null when the table was unreadable. Preserved for diagnostics/policy. */
+  fsType: number | null;
+  embeddable: boolean;
+  relationshipId: string;
+}
+
+/**
  * Normalize a public font source (a plain URL like '/fonts/Gelasio.woff2') to the CSS `url(...)`
  * source the FontFace constructor expects. An already-`url(...)` value is left unchanged.
  */
 function toCssFontSource(url: string): string {
   return /^\s*url\(/i.test(url) ? url : `url(${JSON.stringify(url)})`;
+}
+
+/**
+ * Monotonic per-page counter giving each document controller a distinct embedded-font namespace, so
+ * the document-unique physical families two controllers mint never collide in the shared FontFaceSet.
+ */
+let embeddedDocumentCounter = 0;
+function nextEmbeddedNamespace(): string {
+  embeddedDocumentCounter += 1;
+  return `__superdoc_embedded_${embeddedDocumentCounter}__`;
+}
+
+/** Reduce a family name to a CSS-identifier-safe token (no spaces/punctuation) for use inside a
+ *  physical family name, so the painted `font-family` is a single valid unquoted token. */
+function sanitizeFamilyToken(family: string): string {
+  return family.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'font';
 }
 
 /**
@@ -58,6 +94,30 @@ export class DocumentFontController {
    * the caches would otherwise keep stale fallback widths for a now-loadable family.
    */
   #runtimeAvailabilityChanged = false;
+  /**
+   * Release handles for THIS document's embedded faces, in registration order. The registry is shared
+   * per FontFaceSet across editors, so cleanup must release exactly the faces this document registered
+   * (each disposer removes one specific face); a document swap / teardown calls them all. Emptied on
+   * release; replaced wholesale on each {@link applyEmbeddedFaces}.
+   */
+  readonly #embeddedDisposers: Array<() => void> = [];
+  /**
+   * This document's embedded-font namespace, unique per controller, so its physical families never
+   * collide with another editor's in the shared FontFaceSet.
+   */
+  readonly #embeddedNamespace = nextEmbeddedNamespace();
+  /**
+   * Normalized logical family -> this document's unique physical family for it. Dedupes the faces of
+   * one embedded family (e.g. Calibri regular + bold) onto a single physical family. Cleared on release.
+   */
+  readonly #embeddedPhysical = new Map<string, string>();
+  /**
+   * Per-apply generation, bumped on each {@link applyEmbeddedFaces} that registers a set. Folded into
+   * the physical family name: a document swap clears {@link #embeddedPhysical} (resetting the index), so
+   * without the generation the next document's first embedded family would re-mint the previous one's
+   * physical name and collide on the shared registry's in-flight load/status key.
+   */
+  #embeddedGeneration = 0;
 
   constructor(deps: DocumentFontControllerDeps) {
     this.#resolver = deps.resolver;
@@ -92,12 +152,14 @@ export class DocumentFontController {
    */
   reset(): void {
     this.#cancelPendingRuntimeReflow();
+    this.#releaseEmbeddedFaces();
     this.#resolver.reset();
   }
 
-  /** Cancel pending runtime font work on editor teardown. */
+  /** Cancel pending runtime font work and release this document's embedded faces on editor teardown. */
   dispose(): void {
     this.#cancelPendingRuntimeReflow();
+    this.#releaseEmbeddedFaces();
   }
 
   /**
@@ -116,6 +178,70 @@ export class DocumentFontController {
     // registration does not, so clear the shared measure caches. No reflow/event: first layout runs
     // against the cleared cache, and other editors are corrected when the face loads.
     if (registered) this.#getGate()?.invalidateCachesForConfigRegistration();
+  }
+
+  /**
+   * Register the document's embedded fonts (from `SuperConverter.getEmbeddedFontFaces`) as first-class
+   * registry faces, BEFORE the first layout measure. Each {@link EmbeddedFontFace.embeddable} face is
+   * registered under a DOCUMENT-UNIQUE physical family (e.g. `__superdoc_embedded_3__1_0_Calibri`), and the
+   * logical family is bound to it in this document's resolver, so the `registered_face` rung renders the
+   * document's real font instead of the bundled substitute (Carlito) - with no resolver special-casing.
+   * The FontFaceSet is shared per page, so registering under the logical name would let another document
+   * render these bytes; the unique physical name keeps render ownership document-scoped while export and
+   * the font report keep the logical name. Non-embeddable faces (Restricted-License, or an unreadable
+   * OS/2 table) are skipped: the bundled substitute renders them.
+   *
+   * Document-scoped: the controller holds a release handle per registered face and frees them on
+   * {@link reset} (document swap) / {@link dispose} (teardown), so this document's fonts never leak into
+   * the next or into another editor sharing the FontFaceSet. Re-applying replaces the prior embedded
+   * set. Like a config-time registration it invalidates the shared measure caches (a registration does
+   * not move the resolver signature that would otherwise bust them) but does NOT reflow or emit - the
+   * first/next render measures fresh against the now-registered face.
+   */
+  applyEmbeddedFaces(faces: EmbeddedFontFace[] | null | undefined): void {
+    // Replace any prior embedded set (idempotent re-apply): release before re-registering so a repeated
+    // call cannot double-register or strand handles.
+    this.#releaseEmbeddedFaces();
+    if (!faces?.length) return;
+    // No registry (no DOM / headless): the document still renders with bundled substitutes. Don't throw
+    // here - unlike the user-invoked `fonts.add`, this runs automatically on every document load.
+    const registry = this.#getGate()?.resolveRegistry();
+    if (!registry) return;
+    // New generation per registering apply, so this document's physical families never reuse the prior
+    // document's names (which would alias the shared registry's in-flight load/status on a swap).
+    this.#embeddedGeneration += 1;
+    let registered = false;
+    for (const face of faces) {
+      if (!face?.embeddable) continue;
+      const physicalFamily = this.#physicalFamilyFor(face.family);
+      const release = registry.registerOwnedFace({
+        family: physicalFamily,
+        source: face.source,
+        weight: face.weight,
+        style: face.style,
+      });
+      if (release) {
+        this.#embeddedDisposers.push(release);
+        // Bind logical -> this document's unique physical family so the resolver renders THIS document's
+        // bytes (registered_face). Idempotent across the family's faces (regular + bold share it).
+        this.#resolver.mapEmbedded(face.family, physicalFamily);
+        registered = true;
+      }
+    }
+    if (registered) this.#getGate()?.invalidateCachesForConfigRegistration();
+  }
+
+  /** This document's unique physical family for a logical embedded family, assigned once per family
+   *  (its faces share it). The per-apply generation + per-family index keep it unique across BOTH a
+   *  document swap (generation) and names that sanitize alike within one document (index). */
+  #physicalFamilyFor(logicalFamily: string): string {
+    const key = logicalFamily.trim().toLowerCase();
+    let physical = this.#embeddedPhysical.get(key);
+    if (!physical) {
+      physical = `${this.#embeddedNamespace}${this.#embeddedGeneration}_${this.#embeddedPhysical.size}_${sanitizeFamilyToken(logicalFamily)}`;
+      this.#embeddedPhysical.set(key, physical);
+    }
+    return physical;
   }
 
   /**
@@ -243,6 +369,16 @@ export class DocumentFontController {
     if (!this.#runtimeReflowQueued) return;
     this.#runtimeReflowQueued = false;
     this.#runtimeReflowToken += 1;
+  }
+
+  /** Release every embedded face this document registered (each disposer removes one specific face) and
+   *  drop the resolver bindings, so neither the FontFaceSet nor the resolver retains this document's
+   *  embedded fonts. Safe to call repeatedly; the disposers are idempotent. */
+  #releaseEmbeddedFaces(): void {
+    for (const release of this.#embeddedDisposers) release();
+    this.#embeddedDisposers.length = 0;
+    this.#embeddedPhysical.clear();
+    this.#resolver.clearEmbedded();
   }
 }
 

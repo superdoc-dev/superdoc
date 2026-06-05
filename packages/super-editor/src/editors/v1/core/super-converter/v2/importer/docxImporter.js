@@ -18,6 +18,7 @@ import { autoPageHandlerEntity, autoTotalPageCountEntity, sectionPageCountEntity
 import { documentStatFieldHandlerEntity } from './documentStatFieldImporter.js';
 import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { crossReferenceEntity } from './crossReferenceImporter.js';
+import { sequenceFieldEntity } from './sequenceFieldImporter.js';
 import { pictNodeHandlerEntity } from './pictNodeImporter.js';
 import { importCommentData } from './documentCommentsImporter.js';
 import { buildTrackedChangeIdMap, buildTrackedChangeIdMapsByPart } from './trackedChangeIdMapper.js';
@@ -376,6 +377,7 @@ export const defaultNodeListHandler = () => {
     documentStatFieldHandlerEntity,
     pageReferenceEntity,
     crossReferenceEntity,
+    sequenceFieldEntity,
     permStartHandlerEntity,
     permEndHandlerEntity,
     mathNodeHandlerEntity,

@@ -30,6 +30,7 @@ import type {
   NormalizedColumnLayout,
   DocumentBackground,
   HeaderFooterResolutionSection,
+  PageNumberFormat,
 } from '@superdoc/contracts';
 import {
   buildLayoutSourceIdentityForFragment,
@@ -1427,8 +1428,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Paginator encapsulation for page/column helpers
   let pageCount = 0;
   // Page numbering state
-  let activeNumberFormat: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash' =
-    'decimal';
+  let activeNumberFormat: PageNumberFormat = 'decimal';
   let activePageCounter = 1;
   let activeSectionPageCounterStart = activePageCounter;
   let pendingNumbering: SectionNumbering | null = null;

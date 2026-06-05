@@ -986,9 +986,11 @@ export interface TotalPageCountAttrs extends InlineNodeAttributes {
   /** @internal Original NUMPAGES field instruction when switched */
   instruction?: string | null;
   /** @internal Normalized field switch format */
-  pageNumberFormat?: string | null;
+  pageNumberFormat?: PageNumberFormat | null;
   /** @internal Zero-padding width from numeric picture switch */
   pageNumberZeroPadding?: number | null;
+  /** @internal Raw numeric picture switch */
+  pageNumberNumericPicture?: string | null;
 }
 
 /** Section page count node attributes */

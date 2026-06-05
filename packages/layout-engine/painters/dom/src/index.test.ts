@@ -6946,6 +6946,31 @@ describe('DomPainter', () => {
       resolvePartText({ text: '3', fieldType: 'SECTIONPAGES' }, { pageNumber: 1, totalPages: 9, section: 'body' }),
     ).toBe('3');
   });
+
+  it('formats NUMPAGES drawing text with supported pageNumberFormat', () => {
+    const painter = new DomPainter();
+    const resolvePartText = (
+      painter as unknown as {
+        resolveShapeTextPartText: (
+          part: { text: string; fieldType: string; pageNumberFormat?: string },
+          context: { pageNumber: number; totalPages: number; section: 'body' },
+        ) => string;
+      }
+    ).resolveShapeTextPartText.bind(painter);
+
+    expect(
+      resolvePartText(
+        { text: '9', fieldType: 'NUMPAGES', pageNumberFormat: 'upperRoman' },
+        { pageNumber: 1, totalPages: 9, section: 'body' },
+      ),
+    ).toBe('IX');
+    expect(
+      resolvePartText(
+        { text: '9', fieldType: 'NUMPAGES', pageNumberFormat: 'ordinal' },
+        { pageNumber: 1, totalPages: 12, section: 'body' },
+      ),
+    ).toBe('12th');
+  });
   describe('resolved paragraph rendering', () => {
     it('renders resolved paragraph lines with precomputed indent styles', () => {
       const paragraphBlock: FlowBlock = {

@@ -311,6 +311,28 @@ describe('HeaderFooterEditorManager', () => {
     expect(sectionPages.textContent).toBe('IV');
   });
 
+  it('refreshes total page count DOM text with node numeric picture format', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host });
+    expect(sectionEditor).toBeDefined();
+    const totalPages = document.createElement('span');
+    totalPages.dataset.id = 'auto-total-pages';
+    totalPages.textContent = '1';
+    sectionEditor!.view.dom.appendChild(totalPages);
+    (sectionEditor!.view as unknown as { posAtDOM: ReturnType<typeof vi.fn> }).posAtDOM = vi.fn(() => 0);
+    (sectionEditor as unknown as { state: { doc: { nodeAt: ReturnType<typeof vi.fn> } } }).state = {
+      doc: { nodeAt: vi.fn(() => ({ attrs: { pageNumberNumericPicture: '000' } })) },
+    };
+
+    manager.ensureEditorSync(descriptor, { editorHost: host, totalPageCount: 12 });
+
+    expect(totalPages.textContent).toBe('012');
+  });
+
   it('refreshes chapter-prefixed page number DOM text with node pageNumberFormat', () => {
     const editor = createMockEditor();
     const manager = new HeaderFooterEditorManager(editor);

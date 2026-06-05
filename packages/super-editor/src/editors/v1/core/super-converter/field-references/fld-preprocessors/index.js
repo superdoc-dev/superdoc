@@ -39,9 +39,6 @@ import { extractFieldKeyword } from '../field-keyword.js';
  * @returns {InstructionPreProcessor | null} The pre-processor function or null if not found.
  */
 export const getInstructionPreProcessor = (instruction) => {
-  const rawInstructionType = String(instruction ?? '')
-    .trim()
-    .split(/\s+/)[0];
   const instructionType = extractFieldKeyword(instruction);
   switch (instructionType) {
     case 'PAGE':
@@ -72,7 +69,6 @@ export const getInstructionPreProcessor = (instruction) => {
     case 'STYLEREF':
       return preProcessStylerefInstruction;
     case 'SEQ':
-      if (rawInstructionType !== 'SEQ') return null;
       return preProcessSeqInstruction;
     case 'CITATION':
       return preProcessCitationInstruction;

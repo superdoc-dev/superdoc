@@ -300,11 +300,21 @@ const tryStructuralTableInsert = ({ newTr, step, map, user, date }) => {
   // Only the no-real-content insert/replace is safe to fast-path here — e.g.
   // inserting a table at the caret in an empty paragraph (the common toolbar
   // shape: ReplaceStep from=0 to=2 replacing the empty leading paragraph). If
-  // the replaced range holds real text, applying the step directly would delete
-  // that content WITHOUT a tracked deletion (data loss). Bail so it is handled
-  // by the normal tracked path instead of silently dropping live content.
-  if (step.from !== step.to && newTr.doc.textBetween(step.from, step.to).length > 0) {
-    return { handled: false };
+  // the replaced range holds real content, applying the step directly would
+  // delete that content WITHOUT a tracked deletion (data loss). Bail so it is
+  // handled by the normal tracked path instead of silently dropping live
+  // content. Real content is text OR a non-text leaf/atom (image, hardBreak, …)
+  // — `textBetween` alone misses atoms, so an image-only selection would slip
+  // through and be dropped untracked. Empty structural nodes (an empty
+  // paragraph) are not leaves, so the legit fast-path still applies.
+  if (step.from !== step.to) {
+    let hasRealContent = false;
+    newTr.doc.nodesBetween(step.from, step.to, (node) => {
+      if (hasRealContent) return false;
+      if ((node.isText && node.text) || (node.isLeaf && !node.isText)) hasRealContent = true;
+      return !hasRealContent;
+    });
+    if (hasRealContent) return { handled: false };
   }
 
   // 1. Apply the original step (insert slice, replacing [from, to)).

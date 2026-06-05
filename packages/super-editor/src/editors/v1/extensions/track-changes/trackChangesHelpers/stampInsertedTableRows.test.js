@@ -137,6 +137,30 @@ describe('authoring: tracked whole-table insertion stamps row revisions', () => 
     expect(editor.state.doc.textContent).toContain('existing');
   });
 
+  it('does NOT delete a selected image untracked when a table insert replaces it (atom selection)', () => {
+    // Regression: `textBetween()` is blind to atoms, so an image-only selection
+    // contributes zero length and previously slipped past the no-real-content
+    // guard — the raw ReplaceStep applied and the image was dropped with no
+    // tracked deletion (silent data loss in suggesting mode). The guard now
+    // detects non-text leaves and bails so the image is preserved.
+    const countImages = (ed) => {
+      let n = 0;
+      ed.state.doc.descendants((node) => {
+        if (node.type.name === 'image') n += 1;
+      });
+      return n;
+    };
+
+    editor = setup({ track: true, content: '<p><img src="test.png" /></p>' });
+    expect(countImages(editor)).toBe(1);
+
+    editor.commands.selectAll();
+    editor.commands.insertTable({ rows: 2, cols: 2 });
+
+    // The image must survive — it was not removed without a tracked deletion.
+    expect(countImages(editor)).toBe(1);
+  });
+
   it('tracks the table in an EMPTY doc (toolbar from=0,to=2 replace of the initial empty paragraph)', () => {
     // This is the exact layout-engine playground shape: an empty document holds
     // a single empty paragraph; the toolbar insertTable dispatches one

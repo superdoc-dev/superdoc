@@ -110,4 +110,25 @@ describe('determineColumn (SD-2629: resolved per-column boundaries)', () => {
     // would wrongly return col 1.
     expect(determineColumn(layout, 540, page)).toBe(2);
   });
+
+  it('maps a hit to its mid-page column region, not the page-start columns (SD-2629)', () => {
+    // A continuous section break splits the page: region 0 (y 96-300) is single-column; region 1
+    // (y 300-700) is two-column. page.columns is only the page-START config (single column), so a
+    // fragment in region 1 must be resolved with the region's two-column geometry, by its y.
+    const page = {
+      columns: { count: 1, gap: 0 },
+      columnRegions: [
+        { yStart: 96, yEnd: 300, columns: { count: 1, gap: 0 } },
+        { yStart: 300, yEnd: 700, columns: { count: 2, gap: 24 } },
+      ],
+      margins: { left: 96, right: 96 },
+      size: { w: 816, h: 1056 },
+    } as unknown as Page;
+    const layout = { pageSize: { w: 816, h: 1056 }, columns: page.columns, pages: [page] } as unknown as Layout;
+    // y=400 is in the two-column region; x=450 is past col1's start (96 + 300 + 24 = 420) -> column 1.
+    expect(determineColumn(layout, 450, page, 400)).toBe(1);
+    // y=200 is in the single-column region -> column 0 at the same x (page.columns alone would always
+    // say 0; the region lookup is what makes the y=400 case return 1).
+    expect(determineColumn(layout, 450, page, 200)).toBe(0);
+  });
 });

@@ -39,10 +39,19 @@ describe('applyBorder', () => {
     expect(element.style.borderTop).toMatch(/2px solid (#FF0000|rgb\(255,\s*0,\s*0\))/i);
   });
 
-  it('should apply border with double style', () => {
+  // SD-3308: CSS `double` only renders two distinct rules at >= 3px (1px rule + 1px gap +
+  // 1px rule); below that it collapses to a single solid-looking line, while Word always
+  // shows two rules for w:val="double". The painter clamps the width up, never down.
+  it('clamps a double border below 3px up so both rules render', () => {
     const border: BorderSpec = { style: 'double', width: 2, color: '#FF0000' };
     applyBorder(element, 'Top', border);
-    expect(element.style.borderTop).toMatch(/2px double (#FF0000|rgb\(255,\s*0,\s*0\))/i);
+    expect(element.style.borderTop).toMatch(/3px double (#FF0000|rgb\(255,\s*0,\s*0\))/i);
+  });
+
+  it('keeps an authored double width that is already >= 3px', () => {
+    const border: BorderSpec = { style: 'double', width: 4, color: '#FF0000' };
+    applyBorder(element, 'Top', border);
+    expect(element.style.borderTop).toMatch(/4px double (#FF0000|rgb\(255,\s*0,\s*0\))/i);
   });
 
   it('should apply border with dashed style', () => {

@@ -887,6 +887,92 @@ describe('ooxml - resolveTableCellProperties basedOn tblStylePr inheritance', ()
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Style base-level tcPr as the wholeTable layer (ECMA-376 17.7.6, SD-3035)
+// A table style's base-level <w:tcPr><w:shd/></w:tcPr> is stored on the style
+// def's own tableCellProperties (sibling of tableStyleProperties) and IS the
+// wholeTable conditional layer. Word paints it on every cell.
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('ooxml - style base-level tcPr surfaces as wholeTable (SD-3035)', () => {
+  const interiorCell = (styleId: string) => ({
+    tableProperties: { tableStyleId: styleId, tblLook: { noHBand: true, noVBand: true } },
+    rowIndex: 1,
+    cellIndex: 1,
+    numRows: 3,
+    numCells: 3,
+  });
+
+  it('resolves a base-level shading with no explicit wholeTable region', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        CondStyle: {
+          type: 'table',
+          tableProperties: {},
+          tableCellProperties: { shading: { val: 'clear', color: 'auto', fill: 'F2F2F2' } },
+        },
+      },
+    };
+    const result = resolveTableCellProperties(null, interiorCell('CondStyle'), styles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: 'F2F2F2' });
+  });
+
+  it('leaf base-level shading beats an ancestor base-level shading via basedOn', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        BaseStyle: {
+          type: 'table',
+          tableProperties: {},
+          tableCellProperties: { shading: { fill: 'AAAAAA' } },
+        },
+        LeafStyle: {
+          type: 'table',
+          basedOn: 'BaseStyle',
+          tableProperties: {},
+          tableCellProperties: { shading: { fill: 'F2F2F2' } },
+        },
+      },
+    };
+    const result = resolveTableCellProperties(null, interiorCell('LeafStyle'), styles);
+    expect(result.shading).toEqual({ fill: 'F2F2F2' });
+  });
+
+  it('an explicit tableStyleProperties.wholeTable entry beats the base-level tcPr', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        CondStyle: {
+          type: 'table',
+          tableProperties: {},
+          tableCellProperties: { shading: { fill: 'BASE99' } },
+          tableStyleProperties: {
+            wholeTable: { tableCellProperties: { shading: { fill: 'EXPL77' } } },
+          },
+        },
+      },
+    };
+    const result = resolveTableCellProperties(null, interiorCell('CondStyle'), styles);
+    expect(result.shading).toEqual({ fill: 'EXPL77' });
+  });
+
+  it('inline cell shading still wins over the base-level wholeTable fill', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        CondStyle: {
+          type: 'table',
+          tableProperties: {},
+          tableCellProperties: { shading: { fill: 'F2F2F2' } },
+        },
+      },
+    };
+    const result = resolveTableCellProperties({ shading: { fill: '4472C4' } }, interiorCell('CondStyle'), styles);
+    expect(result.shading).toEqual({ fill: '4472C4' });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 // cnfStyle supplementing index-based conditional type detection
 // ──────────────────────────────────────────────────────────────────────────────
 

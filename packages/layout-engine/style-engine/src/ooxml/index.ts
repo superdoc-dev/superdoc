@@ -483,6 +483,15 @@ function resolveConditionalProps<T extends PropertyObject>(
     const def: StyleDefinition | undefined = translatedLinkedStyles.styles?.[currentId];
     const props = def?.tableStyleProperties?.[styleType]?.[propertyType] as T | undefined;
     if (props) chain.push(props);
+    // ECMA-376 17.7.6: a table style's BASE-LEVEL <w:tcPr> (stored on the def's own
+    // tableCellProperties, a sibling of tableStyleProperties) IS the wholeTable
+    // conditional layer; Word paints e.g. its w:shd on every cell. Pushed after the
+    // explicit wholeTable entry so, post-reverse, the explicit entry still wins within
+    // one def while a leaf's base props beat any ancestor's. (SD-3035)
+    if (styleType === 'wholeTable' && propertyType === 'tableCellProperties') {
+      const baseProps = def?.tableCellProperties as T | undefined;
+      if (baseProps) chain.push(baseProps);
+    }
     currentId = def?.basedOn;
   }
   if (chain.length === 0) return undefined;

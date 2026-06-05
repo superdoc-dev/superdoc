@@ -13,6 +13,7 @@ import { translator as sd_authorityEntry_translator } from './sd/authorityEntry/
 import { translator as sd_tableOfAuthorities_translator } from './sd/tableOfAuthorities/tableOfAuthorities-translator.js';
 import { translator as sd_autoPageNumber_translator } from './sd/autoPageNumber/autoPageNumber-translator.js';
 import { translator as sd_totalPageNumber_translator } from './sd/totalPageNumber/totalPageNumber-translator.js';
+import { translator as sd_sectionPageCount_translator } from './sd/sectionPageCount/sectionPageCount-translator.js';
 import { translator as sd_documentStatField_translator } from './sd/documentStatField/documentStatField-translator.js';
 import { translator as w_abstractNum_translator } from './w/abstractNum/abstractNum-translator.js';
 import { translator as w_abstractNumId_translator } from './w/abstractNumId/abstractNumId-translator.js';
@@ -226,6 +227,7 @@ const translatorList = Array.from(
     sd_tableOfAuthorities_translator,
     sd_autoPageNumber_translator,
     sd_totalPageNumber_translator,
+    sd_sectionPageCount_translator,
     sd_documentStatField_translator,
     w_abstractNum_translator,
     w_abstractNumId_translator,

@@ -294,6 +294,20 @@ const mixedSchema = new Schema({
       },
       toDOM: (n) => ['span', n.attrs.resolvedText ?? ''],
     },
+    'section-page-count': {
+      group: 'inline',
+      inline: true,
+      atom: true,
+      content: 'text*',
+      attrs: {
+        instruction: { default: null },
+        importedCachedText: { default: null },
+        resolvedText: { default: null },
+        pageNumberFormat: { default: null },
+        pageNumberZeroPadding: { default: null },
+      },
+      toDOM: () => ['span', 0],
+    },
     text: { group: 'inline' },
   },
 });
@@ -337,6 +351,118 @@ describe('updateFieldsInSelection — TOC + stat fields combined (regression)', 
     // Stat-field path also ran — the early-return regression would skip it.
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(result).toBe(true);
+  });
+
+  it('updates SECTIONPAGES fields from the current header/footer section page count', () => {
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const sectionPageCountField = mixedSchema.nodes['section-page-count'].create(
+      {
+        instruction: 'SECTIONPAGES',
+        resolvedText: '1',
+      },
+      mixedSchema.text('1'),
+    );
+    const doc = mixedSchema.nodes.doc.create({}, [para([sectionPageCountField])]);
+    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      options: { sectionPageCount: 4 },
+      state: editorState,
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const outerTr = editorState.tr;
+    const dispatch = vi.fn();
+    const state = {
+      doc,
+      selection: { from: 0, to: doc.content.size },
+      schema: mixedSchema,
+      tr: outerTr,
+    };
+
+    const result = command({ editor, state, tr: outerTr, dispatch });
+
+    expect(result).toBe(true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    const updatedDoc = dispatch.mock.calls[0][0].doc;
+    const updatedField = updatedDoc.nodeAt(1);
+    expect(updatedField.type.name).toBe('section-page-count');
+    expect(updatedField.attrs.resolvedText).toBe('4');
+    expect(updatedField.textContent).toBe('4');
+  });
+
+  it('updates SECTIONPAGES zero-padded fields from the current header/footer section page count', () => {
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const sectionPageCountField = mixedSchema.nodes['section-page-count'].create(
+      {
+        instruction: 'SECTIONPAGES \\# "000"',
+        pageNumberFormat: 'decimal',
+        pageNumberZeroPadding: 3,
+        resolvedText: '001',
+      },
+      mixedSchema.text('001'),
+    );
+    const doc = mixedSchema.nodes.doc.create({}, [para([sectionPageCountField])]);
+    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      options: { sectionPageCount: 4 },
+      state: editorState,
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const outerTr = editorState.tr;
+    const dispatch = vi.fn();
+    const state = {
+      doc,
+      selection: { from: 0, to: doc.content.size },
+      schema: mixedSchema,
+      tr: outerTr,
+    };
+
+    const result = command({ editor, state, tr: outerTr, dispatch });
+
+    expect(result).toBe(true);
+    const updatedDoc = dispatch.mock.calls[0][0].doc;
+    const updatedField = updatedDoc.nodeAt(1);
+    expect(updatedField.attrs.resolvedText).toBe('004');
+    expect(updatedField.textContent).toBe('004');
+  });
+
+  it('leaves SECTIONPAGES fields unchanged when section page context is unavailable', () => {
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const sectionPageCountField = mixedSchema.nodes['section-page-count'].create(
+      {
+        instruction: 'SECTIONPAGES',
+        resolvedText: '3',
+      },
+      mixedSchema.text('3'),
+    );
+    const doc = mixedSchema.nodes.doc.create({}, [para([sectionPageCountField])]);
+    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      options: {},
+      state: editorState,
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const outerTr = editorState.tr;
+    const dispatch = vi.fn();
+    const state = {
+      doc,
+      selection: { from: 0, to: doc.content.size },
+      schema: mixedSchema,
+      tr: outerTr,
+    };
+
+    const result = command({ editor, state, tr: outerTr, dispatch });
+
+    expect(result).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+    const unchangedField = editorState.doc.nodeAt(1);
+    expect(unchangedField.attrs.resolvedText).toBe('3');
+    expect(unchangedField.textContent).toBe('3');
   });
 });
 

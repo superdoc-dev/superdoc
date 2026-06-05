@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { exportSchemaToJson } from '../../../../exporter.js';
 import { translator as runTranslator } from '../../w/r/r-translator.js';
+import { translator as sequenceFieldTranslator } from './sequenceField-translator.js';
 
 const SEQUENCE_FIELD_INSTRUCTION = 'SEQ Figure \\* ARABIC';
 
@@ -30,6 +31,28 @@ function hasFieldCharType(node, fieldType) {
 }
 
 describe('sequenceField export routing', () => {
+  it('extracts cached result text from run-wrapped field content', () => {
+    const encoded = sequenceFieldTranslator.encode({
+      nodes: [
+        {
+          name: 'sd:sequenceField',
+          attributes: { instruction: 'seq level2 \\*arabic' },
+          elements: [
+            {
+              type: 'run',
+              content: [{ type: 'text', text: '1', marks: [] }],
+            },
+          ],
+        },
+      ],
+      nodeListHandler: {
+        handler: () => [{ type: 'run', content: [{ type: 'text', text: '1', marks: [] }] }],
+      },
+    });
+
+    expect(encoded.attrs.resolvedNumber).toBe('1');
+  });
+
   it('exports sequenceField nodes as fldChar + instrText runs', () => {
     const exported = exportSchemaToJson({
       node: buildSequenceFieldNode(),

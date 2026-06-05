@@ -89,6 +89,23 @@ const makePageTokenBlock = (id: string): FlowBlock => ({
   ],
 });
 
+const makeFormattedPageTokenBlock = (
+  id: string,
+  pageNumberFieldFormat: NonNullable<TextRun['pageNumberFieldFormat']>,
+): FlowBlock => ({
+  kind: 'paragraph',
+  id,
+  runs: [
+    {
+      text: '0',
+      token: 'pageNumber',
+      pageNumberFieldFormat,
+      fontFamily: 'Arial',
+      fontSize: 12,
+    } as TextRun,
+  ],
+});
+
 describe('getBucketForPageNumber', () => {
   it('should return d1 for single-digit page numbers (1-9)', () => {
     expect(getBucketForPageNumber(1)).toBe('d1');
@@ -389,6 +406,199 @@ describe('layoutHeaderFooterWithCache - Digit Bucketing (Large Docs)', () => {
     expect(pageNumbers).toContain(500); // d3
     expect(pageNumbers).not.toContain(5000); // d4 not needed
   });
+
+  it('should not digit-bucket explicitly formatted page-number tokens', async () => {
+    const block = makePageTokenBlock('header-formatted-page');
+    const pageNumberRun = (block as ParagraphBlock).runs[1] as TextRun;
+    pageNumberRun.pageNumberFieldFormat = { format: 'lowerRoman' };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: String(pageNum),
+      displayNumber: pageNum,
+      totalPages: 150,
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      { default: [block] },
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(150);
+    expect(measureBlock).toHaveBeenCalledTimes(150);
+  });
+
+  it('should digit-bucket zero-padded decimal page-number tokens', async () => {
+    const block = makePageTokenBlock('header-zero-padded-page');
+    const pageNumberRun = (block as ParagraphBlock).runs[1] as TextRun;
+    pageNumberRun.pageNumberFieldFormat = { format: 'decimal', zeroPadding: 3 };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: String(pageNum),
+      displayNumber: pageNum,
+      totalPages: 150,
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      { default: [block] },
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(3);
+    expect(measureBlock).toHaveBeenCalledTimes(3);
+    expect((result.default?.layout.pages[0].blocks?.[0] as ParagraphBlock).runs[1].text).toBe('005');
+  });
+
+  it('should disable bucketing for chapter-prefixed page number text', async () => {
+    const sections = {
+      default: [makePageTokenBlock('header-chapter-page')],
+    };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: pageNum < 75 ? `1-${pageNum}` : `12-${pageNum}`,
+      displayNumber: pageNum,
+      totalPages: 150,
+      pageFormat: 'decimal',
+      chapterNumberText: pageNum < 75 ? '1' : '12',
+      chapterSeparator: 'hyphen',
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(150);
+    expect(measureBlock).toHaveBeenCalledTimes(150);
+    expect(result.default?.layout.pages[0].numberText).toBe('1-1');
+    expect(result.default?.layout.pages[100].numberText).toBe('12-101');
+  });
+
+  it('should disable bucketing for section-restarted page number text', async () => {
+    const sections = {
+      default: [makePageTokenBlock('header-section-restart')],
+    };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: String(pageNum >= 100 ? pageNum - 99 : pageNum),
+      displayNumber: pageNum >= 100 ? pageNum - 99 : pageNum,
+      totalPages: 150,
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(150);
+    expect(measureBlock.mock.calls.length).toBeGreaterThan(3);
+    expect(result.default?.layout.pages[99].numberText).toBe('1');
+  });
+
+  it('should keep bucketing for total-page-count tokens with chapter-prefixed page number text', async () => {
+    const sections = {
+      default: [makeBlock('header-numpages-only', '0', 'totalPageCount')],
+    };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: pageNum < 75 ? `1-${pageNum}` : `12-${pageNum}`,
+      displayNumber: pageNum,
+      totalPages: 150,
+      pageFormat: 'decimal',
+      chapterNumberText: pageNum < 75 ? '1' : '12',
+      chapterSeparator: 'hyphen',
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(3);
+    expect(measureBlock).toHaveBeenCalledTimes(1);
+    expect((result.default?.layout.pages[0].blocks?.[0] as ParagraphBlock).runs[0].text).toBe('150');
+  });
+  it.each([
+    ['decimal', { format: 'decimal' }],
+    ['numberInDash', { format: 'numberInDash' }],
+  ] as const)('should keep bucketing for %s run-local page number format', async (_name, pageNumberFieldFormat) => {
+    const sections = {
+      default: [makeFormattedPageTokenBlock(`header-${pageNumberFieldFormat.format}`, pageNumberFieldFormat)],
+    };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: String(pageNum),
+      displayNumber: pageNum,
+      totalPages: 150,
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(3);
+    expect(measureBlock).toHaveBeenCalledTimes(3);
+  });
+
+  it('should disable bucketing for chapter-prefixed run-local page number formats', async () => {
+    const sections = {
+      default: [makeFormattedPageTokenBlock('header-decimal-chapter', { format: 'decimal' })],
+    };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: pageNum < 75 ? `1-${pageNum}` : `12-${pageNum}`,
+      displayNumber: pageNum,
+      totalPages: 150,
+      pageFormat: 'decimal',
+      chapterNumberText: pageNum < 75 ? '1' : '12',
+      chapterSeparator: 'hyphen',
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(150);
+    expect(measureBlock).toHaveBeenCalledTimes(150);
+    expect(result.default?.layout.pages[0].numberText).toBe('1-1');
+    expect(result.default?.layout.pages[100].numberText).toBe('12-101');
+  });
 });
 
 describe('layoutHeaderFooterWithCache - Section-Aware Token Resolution', () => {
@@ -453,6 +663,37 @@ describe('layoutHeaderFooterWithCache - Section-Aware Token Resolution', () => {
 
     expect(result.default).toBeDefined();
     expect(result.default?.layout.pages).toHaveLength(26);
+  });
+
+  it('falls back to per-page layouts when section-aware display text escapes the physical digit bucket', async () => {
+    const sections = {
+      default: [makePageTokenBlock('header-section-restart')],
+    };
+    const cache = new HeaderFooterLayoutCache();
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: pageNum <= 150 ? (pageNum < 100 ? String(pageNum) : String(900 + pageNum)) : String(pageNum),
+      displayNumber: pageNum <= 150 ? (pageNum < 100 ? pageNum : 900 + pageNum) : pageNum,
+      totalPages: 150,
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 400, height: 80 },
+      measureBlock,
+      cache,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(150);
+    expect(measureBlock).toHaveBeenCalledTimes(150);
+    expect(result.default?.layout.pages[99]).toMatchObject({
+      number: 100,
+      displayNumber: 1000,
+      numberText: '1000',
+    });
   });
 });
 

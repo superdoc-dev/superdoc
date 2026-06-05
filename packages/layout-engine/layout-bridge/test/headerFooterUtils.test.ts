@@ -5,6 +5,7 @@ import {
   extractIdentifierFromConverter,
   getHeaderFooterType,
   getHeaderFooterTypeForSection,
+  getHeaderFooterIdForPage,
   resolveHeaderFooterForPage,
   resolveHeaderFooterForPageAndSection,
   buildMultiSectionIdentifier,
@@ -90,6 +91,49 @@ describe('headerFooterUtils', () => {
     expect(getHeaderFooterType(1, identifier, { parityPageNumber: -1 })).toBe('odd');
   });
 
+  it('keeps section-aware header selection when the effective page number is zero', () => {
+    const identifier = buildMultiSectionIdentifier(
+      [{ sectionIndex: 0, headerRefs: { default: 'rIdDefault', even: 'rIdEven' } }],
+      { alternateHeaders: true },
+    );
+
+    expect(
+      getHeaderFooterTypeForSection(0, 0, identifier, {
+        kind: 'header',
+        sectionPageNumber: 1,
+        parityPageNumber: 0,
+      }),
+    ).toBe('even');
+  });
+
+  it('resolves section-aware header/footer pages when the effective page number is zero', () => {
+    const identifier = buildMultiSectionIdentifier(
+      [{ sectionIndex: 0, headerRefs: { default: 'rIdDefault', even: 'rIdEven' } }],
+      { alternateHeaders: true },
+    );
+    const layout: Layout = {
+      pageSize: { w: 600, h: 800 },
+      pages: [
+        {
+          number: 1,
+          fragments: [],
+          sectionIndex: 0,
+          displayNumber: 0,
+          effectivePageNumber: 0,
+          sectionRefs: { headerRefs: { default: 'rIdDefault', even: 'rIdEven' }, footerRefs: {} },
+        },
+      ],
+      headerFooter: {
+        default: { height: 36, pages: [{ number: 1, fragments: [] }] },
+        even: { height: 36, pages: [{ number: 1, fragments: [] }] },
+      },
+    };
+
+    expect(resolveHeaderFooterForPageAndSection(layout, 0, identifier, { kind: 'header' })).toMatchObject({
+      type: 'even',
+      contentId: 'rIdEven',
+    });
+  });
   it('uses default only for odd pages when alternating slots are missing', () => {
     const identifier = extractIdentifierFromConverter({
       headerIds: { default: 'rId1' },
@@ -394,6 +438,95 @@ describe('headerFooterUtils', () => {
       expect(identifier.footerIds.even).toBe('converter-f-even');
     });
 
+    it('keeps converter fallbacks on legacy fields without exposing them through section-aware resolution', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: null },
+          footerRefs: { default: null },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, undefined, {
+        headerIds: { default: 'converter-h-default' },
+        footerIds: { default: 'converter-f-default' },
+      });
+
+      expect(identifier.headerIds.default).toBe('converter-h-default');
+      expect(identifier.footerIds.default).toBe('converter-f-default');
+      expect(getHeaderFooterTypeForSection(1, 0, identifier, { kind: 'header' })).toBeNull();
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'header' }),
+      ).toBeNull();
+      expect(getHeaderFooterTypeForSection(1, 0, identifier, { kind: 'footer' })).toBeNull();
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'footer' }),
+      ).toBeNull();
+    });
+
+    it('does not apply a legacy converter default footer to a footerless first section', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          titlePg: false,
+        },
+        {
+          sectionIndex: 15,
+          footerRefs: { default: 'rId22' },
+          titlePg: false,
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, undefined, {
+        footerIds: { default: 'rId22' },
+      });
+
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'footer' }),
+      ).toBeNull();
+      expect(
+        getHeaderFooterIdForPage({ number: 2, fragments: [], sectionIndex: 15 }, identifier, { kind: 'footer' }),
+      ).toBe('rId22');
+    });
+
+    it('keeps converter titlePg fallback on legacy fields without exposing first refs through section-aware resolution', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { first: null },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, undefined, {
+        headerIds: { first: 'converter-h-first', titlePg: true },
+      });
+
+      expect(identifier.titlePg).toBe(true);
+      expect(identifier.headerIds.first).toBe('converter-h-first');
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'header' }),
+      ).toBeNull();
+    });
+
+    it('does not apply legacy converter titlePg to section-aware variant selection when titlePg is omitted', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default' },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, undefined, {
+        headerIds: { first: 'legacy-first', titlePg: true },
+      });
+
+      expect(identifier.titlePg).toBe(true);
+      expect(getHeaderFooterTypeForSection(1, 0, identifier, { kind: 'header', sectionPageNumber: 1 })).toBe('default');
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'header' }),
+      ).toBe('h0-default');
+    });
+
     it('should NOT override existing section metadata with converter IDs', () => {
       const sectionMetadata: SectionMetadata[] = [
         {
@@ -417,6 +550,28 @@ describe('headerFooterUtils', () => {
       expect(identifier.headerIds.even).toBe('converter-h-even');
       expect(identifier.footerIds.default).toBe('section-f-default');
       expect(identifier.footerIds.odd).toBe('converter-f-odd');
+    });
+
+    it('should prefer non-null section refs over converter fallbacks in section-aware resolution', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'section-h-default' },
+          footerRefs: { default: 'section-f-default' },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, undefined, {
+        headerIds: { default: 'converter-h-default' },
+        footerIds: { default: 'converter-f-default' },
+      });
+
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'header' }),
+      ).toBe('section-h-default');
+      expect(
+        getHeaderFooterIdForPage({ number: 1, fragments: [], sectionIndex: 0 }, identifier, { kind: 'footer' }),
+      ).toBe('section-f-default');
     });
 
     it('should handle missing converterIds parameter gracefully', () => {
@@ -602,9 +757,7 @@ describe('headerFooterUtils', () => {
       expect(firstPage).toBeNull();
     });
 
-    it('returns "first" when titlePg enabled and only default header exists', () => {
-      // Even if only 'default' header exists, return 'first' for first page when titlePg enabled
-      // This supports inheritance - previous section might have a 'first' header to inherit
+    it('returns null when titlePg selects first but only default header exists', () => {
       const sectionMetadata: SectionMetadata[] = [
         {
           sectionIndex: 0,
@@ -619,8 +772,7 @@ describe('headerFooterUtils', () => {
         kind: 'header',
         sectionPageNumber: 1,
       });
-      // Returns 'first' to support inheritance; rendering layer handles the actual rId resolution
-      expect(firstPage).toBe('first');
+      expect(firstPage).toBeNull();
     });
 
     it('applies same inheritance logic to footers', () => {
@@ -645,6 +797,86 @@ describe('headerFooterUtils', () => {
         sectionPageNumber: 1,
       });
       expect(section1FirstPage).toBe('first');
+    });
+
+    it('resolves first-page header refs through intermediate sections that omit first refs', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default', first: 'h0-first' },
+          titlePg: true,
+        },
+        {
+          sectionIndex: 1,
+          headerRefs: { default: 'h1-default' },
+          titlePg: true,
+        },
+        {
+          sectionIndex: 2,
+          headerRefs: { default: 'h2-default' },
+          titlePg: true,
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          { number: 1, fragments: [], sectionIndex: 0 },
+          { number: 2, fragments: [], sectionIndex: 1 },
+          {
+            number: 3,
+            fragments: [],
+            sectionIndex: 2,
+            sectionRefs: { headerRefs: { default: 'h2-default' } },
+          },
+        ],
+        headerFooter: {
+          first: { pages: [{ number: 1, fragments: [] }] },
+        },
+      };
+
+      const resolved = resolveHeaderFooterForPageAndSection(layout, 2, identifier, { kind: 'header' });
+
+      expect(resolved?.type).toBe('first');
+      expect(resolved?.contentId).toBe('h0-first');
+    });
+
+    it('inherits from the nearest prior section when the current section has no explicit refs map', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default', first: 'h0-first' },
+          titlePg: true,
+        },
+        {
+          sectionIndex: 1,
+          headerRefs: { default: 'h1-default', first: 'h1-first' },
+          titlePg: true,
+        },
+        {
+          sectionIndex: 2,
+          titlePg: true,
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          { number: 1, fragments: [], sectionIndex: 0 },
+          { number: 2, fragments: [], sectionIndex: 1 },
+          { number: 3, fragments: [], sectionIndex: 2 },
+        ],
+        headerFooter: {
+          first: { pages: [{ number: 1, fragments: [] }] },
+        },
+      };
+
+      const resolved = resolveHeaderFooterForPageAndSection(layout, 2, identifier, { kind: 'header' });
+
+      expect(resolved?.type).toBe('first');
+      expect(resolved?.contentId).toBe('h1-first');
     });
 
     it('returns even/odd variants for alternate headers even when section defines only default', () => {
@@ -696,7 +928,7 @@ describe('headerFooterUtils', () => {
           },
         ],
         headerFooter: {
-          odd: { pages: [{ number: 1, fragments: [] }] },
+          default: { pages: [{ number: 1, fragments: [] }] },
         },
       };
 
@@ -775,7 +1007,7 @@ describe('headerFooterUtils', () => {
       expect(evenPageHeader?.contentId).toBe('h0-even');
     });
 
-    it('does not use section default content id for even pages when alternate header even ref is missing', () => {
+    it('does not resolve a header for even pages when alternate header even ref is missing', () => {
       const sectionMetadata: SectionMetadata[] = [
         {
           sectionIndex: 0,
@@ -801,11 +1033,10 @@ describe('headerFooterUtils', () => {
       };
 
       const evenPageHeader = resolveHeaderFooterForPageAndSection(layout, 1, identifier, { kind: 'header' });
-      expect(evenPageHeader?.type).toBe('even');
-      expect(evenPageHeader?.contentId).toBeNull();
+      expect(evenPageHeader).toBeNull();
     });
 
-    it('keeps parity variant but does not infer default content id for missing alternate refs', () => {
+    it('does not resolve a footer for even pages when alternate footer even ref is missing', () => {
       const sectionMetadata: SectionMetadata[] = [
         {
           sectionIndex: 0,
@@ -835,8 +1066,7 @@ describe('headerFooterUtils', () => {
       };
 
       const evenPageFooterId = resolveHeaderFooterForPageAndSection(layout, 1, identifier, { kind: 'footer' });
-      expect(evenPageFooterId?.type).toBe('even');
-      expect(evenPageFooterId?.contentId).toBeNull();
+      expect(evenPageFooterId).toBeNull();
     });
 
     it('keeps inherited parity selection when the current section has no explicit refs', () => {
@@ -860,7 +1090,7 @@ describe('headerFooterUtils', () => {
       expect(evenPageType).toBe('even');
     });
 
-    it('returns null when a later section has no explicit default ref', () => {
+    it('inherits default when a later section has no explicit default ref', () => {
       const sectionMetadata: SectionMetadata[] = [
         {
           sectionIndex: 0,
@@ -877,7 +1107,134 @@ describe('headerFooterUtils', () => {
         kind: 'header',
         sectionPageNumber: 1,
       });
-      expect(inheritedDefaultType).toBeNull();
+      expect(inheritedDefaultType).toBe('default');
+    });
+
+    it('uses inherited default refs when alternate headers are disabled', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default' },
+        },
+        {
+          sectionIndex: 1,
+          headerRefs: { even: 'h1-even' },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          { number: 1, fragments: [], sectionIndex: 0 },
+          { number: 2, fragments: [], sectionIndex: 1, sectionRefs: { headerRefs: { even: 'h1-even' } } },
+        ],
+        headerFooter: {
+          default: { pages: [{ number: 2, fragments: [] }] },
+        },
+      };
+
+      const resolved = resolveHeaderFooterForPageAndSection(layout, 1, identifier, { kind: 'header' });
+
+      expect(resolved?.type).toBe('default');
+      expect(resolved?.contentId).toBe('h0-default');
+    });
+
+    it('does not use converter fallback refs when section metadata has no explicit refs', () => {
+      const identifier = buildMultiSectionIdentifier([{ sectionIndex: 0 }], undefined, {
+        headerIds: { default: 'converter-default' },
+      });
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [{ number: 1, fragments: [], sectionIndex: 0 }],
+        headerFooter: {
+          default: { pages: [{ number: 1, fragments: [] }] },
+        },
+      };
+
+      const resolved = resolveHeaderFooterForPageAndSection(layout, 0, identifier, { kind: 'header' });
+
+      expect(resolved).toBeNull();
+    });
+
+    it('does not use converter fallback refs when only later sections define refs', () => {
+      const identifier = buildMultiSectionIdentifier(
+        [{ sectionIndex: 0 }, { sectionIndex: 1, headerRefs: { default: 'section-1-default' } }],
+        undefined,
+        { headerIds: { default: 'converter-default' } },
+      );
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [{ number: 1, fragments: [], sectionIndex: 0 }],
+        headerFooter: {
+          default: { pages: [{ number: 1, fragments: [] }] },
+        },
+      };
+
+      const resolved = resolveHeaderFooterForPageAndSection(layout, 0, identifier, { kind: 'header' });
+
+      expect(resolved).toBeNull();
+    });
+
+    it('does not inherit converter fallback refs into later sections with partial refs', () => {
+      const identifier = buildMultiSectionIdentifier(
+        [{ sectionIndex: 0 }, { sectionIndex: 1, headerRefs: { even: 'section-1-even' } }],
+        undefined,
+        { headerIds: { default: 'converter-default' } },
+      );
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          { number: 1, fragments: [], sectionIndex: 0 },
+          { number: 2, fragments: [], sectionIndex: 1, sectionRefs: { headerRefs: { even: 'section-1-even' } } },
+        ],
+        headerFooter: {
+          default: { pages: [{ number: 2, fragments: [] }] },
+        },
+      };
+
+      const resolved = resolveHeaderFooterForPageAndSection(layout, 1, identifier, { kind: 'header' });
+
+      expect(resolved).toBeNull();
+    });
+
+    it('gets an inherited first content id from section 0 when section 1 omits it', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        { sectionIndex: 0, headerRefs: { first: 'h0-first' }, titlePg: true },
+        { sectionIndex: 1, headerRefs: { default: 'h1-default' }, titlePg: true },
+        { sectionIndex: 2, headerRefs: {}, titlePg: true },
+      ];
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+      const page = { number: 5, fragments: [], sectionIndex: 2 };
+
+      expect(getHeaderFooterIdForPage(page, identifier, { kind: 'header', sectionPageNumber: 1 })).toBe('h0-first');
+    });
+
+    it('returns no first content when first section has only default and titlePg', () => {
+      const identifier = buildMultiSectionIdentifier([
+        { sectionIndex: 0, headerRefs: { default: 'h0-default' }, titlePg: true },
+      ]);
+      const page = { number: 1, fragments: [], sectionIndex: 0 };
+
+      expect(getHeaderFooterIdForPage(page, identifier, { kind: 'header', sectionPageNumber: 1 })).toBeNull();
+    });
+
+    it('returns no even content when even page has only default', () => {
+      const identifier = buildMultiSectionIdentifier([{ sectionIndex: 0, headerRefs: { default: 'h0-default' } }], {
+        alternateHeaders: true,
+      });
+      const page = { number: 2, fragments: [], sectionIndex: 0 };
+
+      expect(getHeaderFooterIdForPage(page, identifier, { kind: 'header', sectionPageNumber: 2 })).toBeNull();
+    });
+
+    it('resolves odd page content from default', () => {
+      const identifier = buildMultiSectionIdentifier([{ sectionIndex: 0, headerRefs: { default: 'h0-default' } }], {
+        alternateHeaders: true,
+      });
+      const page = { number: 3, fragments: [], sectionIndex: 0 };
+
+      expect(getHeaderFooterIdForPage(page, identifier, { kind: 'header', sectionPageNumber: 3 })).toBe('h0-default');
     });
   });
 });

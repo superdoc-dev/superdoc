@@ -22,7 +22,9 @@ import type {
   TableMeasure,
   TableAnchor,
   TableWrap,
+  ColumnLayoutForAnchor,
 } from '@superdoc/contracts';
+import { resolveAnchoredGraphicX } from '@superdoc/contracts';
 
 type FloatBlock = ImageBlock | DrawingBlock;
 type FloatMeasure = ImageMeasure | DrawingMeasure;
@@ -31,11 +33,14 @@ export type FloatingObjectManager = {
   /**
    * Register an anchored drawing as an exclusion zone.
    * Should be called before laying out paragraphs.
+   *
+   * @param resolvedAnchorY — Fully resolved paint Y from {@link resolveAnchoredGraphicY}
+   *   (already includes `offsetV`). Must not add vertical offset again.
    */
   registerDrawing(
     drawingBlock: FloatBlock,
     measure: FloatMeasure,
-    anchorParagraphY: number,
+    resolvedAnchorY: number,
     columnIndex: number,
     pageNumber: number,
   ): void;
@@ -44,10 +49,13 @@ export type FloatingObjectManager = {
    * Register an anchored/floating table as an exclusion zone.
    * Should be called during Layout Pass 1 before laying out paragraphs.
    */
+  /**
+   * @param resolvedAnchorY — Fully resolved paint Y (already includes `offsetV`).
+   */
   registerTable(
     tableBlock: TableBlock,
     measure: TableMeasure,
-    anchorParagraphY: number,
+    resolvedAnchorY: number,
     columnIndex: number,
     pageNumber: number,
   ): void;
@@ -86,11 +94,7 @@ export type FloatingObjectManager = {
   setLayoutContext(columns: ColumnLayout, margins?: { left?: number; right?: number }, pageWidth?: number): void;
 };
 
-type ColumnLayout = {
-  width: number;
-  gap: number;
-  count: number;
-};
+type ColumnLayout = ColumnLayoutForAnchor;
 
 export function createFloatingObjectManager(
   columns: ColumnLayout,
@@ -104,7 +108,7 @@ export function createFloatingObjectManager(
   let marginLeft = Math.max(0, currentMargins?.left ?? 0);
 
   return {
-    registerDrawing(drawingBlock, measure, anchorY, columnIndex, pageNumber) {
+    registerDrawing(drawingBlock, measure, resolvedAnchorY, columnIndex, pageNumber) {
       if (!drawingBlock.anchor?.isAnchored) {
         return; // Not anchored, no exclusion
       }
@@ -124,16 +128,13 @@ export function createFloatingObjectManager(
 
       const x = computeAnchorX(anchor, columnIndex, currentColumns, objectWidth, currentMargins, currentPageWidth);
 
-      // Compute image Y position (anchor Y + vertical offset)
-      const y = anchorY + (anchor.offsetV ?? 0);
-
       const zone: ExclusionZone = {
         imageBlockId: drawingBlock.id,
         pageNumber,
         columnIndex,
         bounds: {
           x,
-          y,
+          y: resolvedAnchorY,
           width: objectWidth,
           height: objectHeight,
         },
@@ -150,7 +151,7 @@ export function createFloatingObjectManager(
       zones.push(zone);
     },
 
-    registerTable(tableBlock, measure, anchorY, columnIndex, pageNumber) {
+    registerTable(tableBlock, measure, resolvedAnchorY, columnIndex, pageNumber) {
       if (!tableBlock.anchor?.isAnchored) {
         return; // Not anchored, no exclusion
       }
@@ -171,16 +172,13 @@ export function createFloatingObjectManager(
       // Compute table X position based on anchor alignment
       const x = computeTableAnchorX(anchor, columnIndex, currentColumns, tableWidth, currentMargins, currentPageWidth);
 
-      // Compute table Y position (anchor Y + vertical offset)
-      const y = anchorY + (anchor.offsetV ?? 0);
-
       const zone: ExclusionZone = {
         imageBlockId: tableBlock.id, // Reusing imageBlockId field for table id
         pageNumber,
         columnIndex,
         bounds: {
           x,
-          y,
+          y: resolvedAnchorY,
           width: tableWidth,
           height: tableHeight,
         },
@@ -261,24 +259,20 @@ export function createFloatingObjectManager(
       }
 
       // Find the rightmost boundary from left floats (most intrusive on left)
-      // The total exclusion width includes all wrap distances: distLeft + width + distRight
-      // For left floats, text should start after this exclusion zone
+      // distRight is the gap between the image's right edge and text wrapping on its right.
       let leftBoundary = 0;
       for (const zone of leftFloats) {
-        // Text starts after: image position + width + all distances
-        const boundary = zone.bounds.x + zone.bounds.width + zone.distances.left + zone.distances.right;
+        const boundary = zone.bounds.x + zone.bounds.width + zone.distances.right;
         leftBoundary = Math.max(leftBoundary, boundary);
       }
 
       const columnRightEdge = columnOrigin + baseWidth;
 
       // Find the leftmost boundary from right floats (most intrusive on right)
-      // For right floats, text should end before the full exclusion zone
+      // distLeft is the gap between the image's left edge and text wrapping on its left.
       let rightBoundary = columnRightEdge;
       for (const zone of rightFloats) {
-        // Text ends before: image position - all distances
-        // This maintains symmetry with left floats (full exclusion width)
-        const boundary = zone.bounds.x - zone.distances.left - zone.distances.right;
+        const boundary = zone.bounds.x - zone.distances.left;
         rightBoundary = Math.min(rightBoundary, boundary);
       }
 
@@ -324,9 +318,7 @@ export function createFloatingObjectManager(
   };
 }
 
-/**
- * Compute horizontal position of anchored image based on alignment and offsets.
- */
+/** @deprecated Use {@link resolveAnchoredGraphicX} from `@superdoc/contracts`. */
 export function computeAnchorX(
   anchor: NonNullable<ImageBlock['anchor']>,
   columnIndex: number,
@@ -335,49 +327,7 @@ export function computeAnchorX(
   margins?: { left?: number; right?: number },
   pageWidth?: number,
 ): number {
-  const alignH = anchor.alignH ?? 'left';
-  const offsetH = anchor.offsetH ?? 0;
-
-  const marginLeft = Math.max(0, margins?.left ?? 0);
-  const marginRight = Math.max(0, margins?.right ?? 0);
-  const contentWidth = pageWidth != null ? Math.max(1, pageWidth - (marginLeft + marginRight)) : columns.width;
-
-  // Column origin is the content box in Word semantics. In single-column docs,
-  // this equals the left margin. For multi-column, each column starts at
-  // content-left + columnIndex * (columnWidth + gap).
-  const contentLeft = marginLeft;
-  const columnLeft = contentLeft + columnIndex * (columns.width + columns.gap);
-
-  const relativeFrom = anchor.hRelativeFrom ?? 'column';
-
-  // Base origin and available width based on relativeFrom
-  let baseX: number;
-  let availableWidth: number;
-  if (relativeFrom === 'page') {
-    // Word's page-relative origin is always the physical page edge (x=0).
-    // Even for single-column layouts we honor the true page coordinate so
-    // anchors can extend into the margins (e.g., full-bleed covers).
-    baseX = 0;
-    availableWidth = pageWidth != null ? pageWidth : contentWidth + marginLeft + marginRight;
-  } else if (relativeFrom === 'margin') {
-    baseX = contentLeft;
-    availableWidth = contentWidth;
-  } else {
-    // 'column' (default)
-    baseX = columnLeft;
-    availableWidth = columns.width;
-  }
-
-  const result =
-    alignH === 'left'
-      ? baseX + offsetH
-      : alignH === 'right'
-        ? baseX + availableWidth - imageWidth - offsetH
-        : alignH === 'center'
-          ? baseX + (availableWidth - imageWidth) / 2 + offsetH
-          : baseX;
-
-  return result;
+  return resolveAnchoredGraphicX(anchor, columnIndex, columns, imageWidth, margins, pageWidth);
 }
 
 /**

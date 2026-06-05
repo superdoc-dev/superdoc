@@ -40,8 +40,11 @@ interface ExampleGenerationOptions {
   preferNullForNullable?: boolean;
 }
 
-function formatMemberPath(memberPath: string): string {
-  return `editor.doc.${memberPath}${memberPath === 'capabilities' ? '()' : '(...)'}`;
+function formatMemberPath(memberPath: string, returnsPromise = false): string {
+  const call = `editor.doc.${memberPath}${memberPath === 'capabilities' ? '()' : '(...)'}`;
+  // Async operations (returnsPromise) must be awaited; render the call with the
+  // `await` keyword so generated docs show the required usage explicitly.
+  return returnsPromise ? `await ${call}` : call;
 }
 
 function toOperationDocPath(operationId: ContractOperationSnapshot['operationId']): string {
@@ -1191,11 +1194,13 @@ ${GENERATED_MARKER}
 ${escapedDescription}
 
 - Operation ID: \`${operation.operationId}\`
-- API member path: \`${formatMemberPath(operation.memberPath)}\`
+- API member path: \`${formatMemberPath(operation.memberPath, metadata.returnsPromise)}\`
 - Mutates document: \`${metadata.mutates ? 'yes' : 'no'}\`
 - Idempotency: \`${metadata.idempotency}\`
 - Supports tracked mode: \`${metadata.supportsTrackedMode ? 'yes' : 'no'}\`
-- Supports dry run: \`${metadata.supportsDryRun ? 'yes' : 'no'}\`
+- Supports dry run: \`${metadata.supportsDryRun ? 'yes' : 'no'}\`${
+    metadata.returnsPromise ? '\n- Returns a promise (must be awaited): `yes`' : ''
+  }
 - Deterministic target resolution: \`${metadata.deterministicTargetResolution ? 'yes' : 'no'}\`
 
 ## Expected result
@@ -1313,7 +1318,7 @@ function renderReferenceIndex(groups: OperationGroup[]): string {
       const operationRows = group.operations
         .map((operation) => {
           const operationHref = toPublicDocHref(toOperationDocPath(operation.operationId));
-          return `| ${renderNoWrapLinkCode(operation.operationId, operationHref)} | ${renderNoWrapCode(formatMemberPath(operation.memberPath))} | ${escapeCell(OPERATION_DESCRIPTION_MAP[operation.operationId] ?? '')} |`;
+          return `| ${renderNoWrapLinkCode(operation.operationId, operationHref)} | ${renderNoWrapCode(formatMemberPath(operation.memberPath, operation.metadata.returnsPromise))} | ${escapeCell(OPERATION_DESCRIPTION_MAP[operation.operationId] ?? '')} |`;
         })
         .join('\n');
 
@@ -1381,7 +1386,7 @@ function renderOverviewApiSurfaceSection(groups: OperationGroup[]): string {
     .flatMap((group) => {
       const canonicalRows = group.operations.map(
         (operation) =>
-          `| ${renderNoWrapCode(formatMemberPath(operation.memberPath))} | [\`${operation.operationId}\`](${toPublicDocHref(toOperationDocPath(operation.operationId))}) |`,
+          `| ${renderNoWrapCode(formatMemberPath(operation.memberPath, operation.metadata.returnsPromise))} | [\`${operation.operationId}\`](${toPublicDocHref(toOperationDocPath(operation.operationId))}) |`,
       );
 
       const aliasRows = group.aliases.map((alias) => {

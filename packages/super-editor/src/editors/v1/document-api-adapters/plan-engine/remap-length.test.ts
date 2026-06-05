@@ -227,7 +227,11 @@ describe('remap correctness: mapping.map called with compiled positions', () => 
 
     expect(tr.mapping.map).toHaveBeenCalledWith(3);
     expect(tr.mapping.map).toHaveBeenCalledWith(10);
-    expect(tr.replaceWith).toHaveBeenCalledWith(5, 12, expect.anything());
+    // An empty replacement collapses to a pure deletion: it must use tr.delete,
+    // not tr.replaceWith with an empty text node (ProseMirror rejects empty
+    // text nodes — the mocked schema previously hid that crash).
+    expect(tr.delete).toHaveBeenCalledWith(5, 12);
+    expect(tr.replaceWith).not.toHaveBeenCalled();
   });
 
   it('equal length replacement: maps positions through mapping', () => {

@@ -6,9 +6,10 @@ import {
   resolveDocumentStatFieldValue,
   resolveMainBodyEditor,
 } from '../../document-api-adapters/helpers/word-statistics.js';
+import { resolveSectionPageCountFieldValue } from '../../document-api-adapters/helpers/section-page-count.js';
 
 /** Stat-field types refreshed by F9 when the doc has no TOCs. */
-const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES']);
+const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES', 'SECTIONPAGES']);
 
 /**
  * @module FieldUpdate
@@ -99,14 +100,17 @@ export const FieldUpdate = Extension.create({
           const sorted = [...updatable].sort((a, b) => b.pos - a.pos);
 
           for (const field of sorted) {
-            const freshValue = resolveDocumentStatFieldValue(field.fieldType, stats);
-            if (freshValue == null) continue;
-
             const node = tr.doc.nodeAt(field.pos);
             if (!node) continue;
 
-            if (node.type.name === 'total-page-number') {
-              // total-page-number stores its display value as a text child,
+            const freshValue =
+              field.fieldType === 'SECTIONPAGES'
+                ? resolveSectionPageCountFieldValue(editor, node)
+                : resolveDocumentStatFieldValue(field.fieldType, stats);
+            if (freshValue == null) continue;
+
+            if (node.type.name === 'total-page-number' || node.type.name === 'section-page-count') {
+              // Page-count fields store their display value as a text child,
               // not just an attr. Replace the entire node so both the text
               // content and resolvedText stay in sync.
               const textChild = freshValue ? state.schema.text(freshValue) : null;

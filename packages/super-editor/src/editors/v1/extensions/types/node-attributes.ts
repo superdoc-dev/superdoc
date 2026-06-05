@@ -14,7 +14,7 @@ import type {
   InlineNodeAttributes,
   ShapeNodeAttributes,
 } from '../../core/types/NodeCategories.js';
-import type { ImageHyperlink, StructuredContentLockMode } from '@superdoc/contracts';
+import type { ImageHyperlink, PageNumberFormat, StructuredContentLockMode } from '@superdoc/contracts';
 
 // ============================================
 // SHARED TYPES
@@ -948,12 +948,38 @@ export interface PageReferenceAttrs extends InlineNodeAttributes {
 export interface PageNumberAttrs extends InlineNodeAttributes {
   /** @internal Marks stored as attributes */
   marksAsAttrs?: unknown[] | null;
+  /** @internal Original PAGE field instruction when switched */
+  instruction?: string | null;
+  /** @internal Normalized field switch format */
+  pageNumberFormat?: PageNumberFormat | null;
+  /** @internal Zero-padding width from numeric picture switch */
+  pageNumberZeroPadding?: number | null;
 }
 
 /** Total page count node attributes */
 export interface TotalPageCountAttrs extends InlineNodeAttributes {
   /** @internal Marks stored as attributes */
   marksAsAttrs?: unknown[] | null;
+  /** @internal Original NUMPAGES field instruction when switched */
+  instruction?: string | null;
+  /** @internal Normalized field switch format */
+  pageNumberFormat?: string | null;
+  /** @internal Zero-padding width from numeric picture switch */
+  pageNumberZeroPadding?: number | null;
+}
+
+/** Section page count node attributes */
+export interface SectionPageCountAttrs extends InlineNodeAttributes {
+  /** @internal Marks stored as attributes */
+  marksAsAttrs?: unknown[] | null;
+  /** Imported cached field result */
+  importedCachedText?: string | null;
+  /** Cached display value set by an explicit field update */
+  resolvedText?: string | null;
+  /** Imported or synthesized SECTIONPAGES field instruction */
+  instruction?: string | null;
+  /** PAGE/SECTIONPAGES field-local value formatting override */
+  pageNumberFormat?: PageNumberFormat | null;
 }
 
 // ============================================
@@ -1279,6 +1305,7 @@ declare module '../../core/types/NodeAttributesMap.js' {
     pageReference: PageReferenceAttrs;
     'page-number': PageNumberAttrs;
     'total-page-number': TotalPageCountAttrs;
+    'section-page-count': SectionPageCountAttrs;
 
     // Field annotations
     fieldAnnotation: FieldAnnotationAttrs;

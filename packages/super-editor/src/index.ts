@@ -88,6 +88,8 @@ export type {
   EditorOptions,
   User,
   FontConfig,
+  FontFaceConfig,
+  FontFamilyConfig,
   FontsConfig,
   FieldValue,
   DocxFileEntry,

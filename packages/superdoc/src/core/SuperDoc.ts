@@ -1633,8 +1633,12 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       this.#fontsApi = {
         getReport: () => this.activeEditor?.presentationEditor?.getFontReport() ?? [],
         getMissingFonts: () => this.activeEditor?.presentationEditor?.getMissingFonts() ?? [],
-        getDocumentFonts: () =>
-          (this.activeEditor?.presentationEditor?.getFontReport() ?? []).map((record) => record.logicalFamily),
+        getDocumentFonts: () => [
+          // Deduped by logical family: the report can now carry multiple FACE rows per family.
+          ...new Set(
+            (this.activeEditor?.presentationEditor?.getFontReport() ?? []).map((record) => record.logicalFamily),
+          ),
+        ],
         onReport: (callback) => {
           // Snapshot-then-subscribe: the report may already have resolved (it fires during
           // load, before a consumer subscribes - and a document swap creates a fresh editor),
@@ -1652,6 +1656,28 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
           if (current) callback(current);
           this.on('fonts-changed', callback);
           return () => this.off('fonts-changed', callback);
+        },
+        // Active-editor scoped like the read methods, but these are WRITES. Route through the
+        // document font controller; with no active editor, fail loudly rather than silently no-op.
+        map: (mappings) => {
+          const pe = this.activeEditor?.presentationEditor;
+          if (!pe) throw new Error('superdoc.fonts.map requires an active editor');
+          pe.mapFonts(mappings);
+        },
+        unmap: (families) => {
+          const pe = this.activeEditor?.presentationEditor;
+          if (!pe) throw new Error('superdoc.fonts.unmap requires an active editor');
+          pe.unmapFonts(families);
+        },
+        add: (families) => {
+          const pe = this.activeEditor?.presentationEditor;
+          if (!pe) throw new Error('superdoc.fonts.add requires an active editor');
+          pe.addFonts(Array.isArray(families) ? families : [families]);
+        },
+        preload: (families) => {
+          const pe = this.activeEditor?.presentationEditor;
+          if (!pe) throw new Error('superdoc.fonts.preload requires an active editor');
+          return pe.preloadFonts(families);
         },
       };
     }

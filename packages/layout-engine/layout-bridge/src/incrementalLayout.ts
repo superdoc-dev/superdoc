@@ -9,16 +9,26 @@ import type {
   ColumnLayout,
   SectionBreakBlock,
   NormalizedColumnLayout,
+  PageNumberChapterSeparator,
+  PageNumberFormat,
 } from '@superdoc/contracts';
-import { cloneColumnLayout, normalizeColumnLayout, rescaleColumnWidths } from '@superdoc/contracts';
+import {
+  cloneColumnLayout,
+  formatSectionPageNumberText,
+  normalizeColumnLayout,
+  rescaleColumnWidths,
+} from '@superdoc/contracts';
+import type { FontMeasureContext } from '@superdoc/font-system';
 import {
   layoutDocument,
-  layoutHeaderFooter,
   type LayoutOptions,
   type HeaderFooterConstraints,
   computeDisplayPageNumber,
   resolvePageNumberTokens,
   type NumberingContext,
+  buildChapterContextByPage,
+  type ChapterPageInfo,
+  normalizeChapterMarkerText,
   SEMANTIC_PAGE_HEIGHT_PX,
   SINGLE_COLUMN_DEFAULT,
   resolveTableFrame,
@@ -26,7 +36,12 @@ import {
 import { remeasureParagraph } from './remeasure';
 import { computeDirtyRegions } from './diff';
 import { MeasureCache } from './cache';
-import { layoutHeaderFooterWithCache, HeaderFooterLayoutCache, type HeaderFooterBatch } from './layoutHeaderFooter';
+import {
+  layoutHeaderFooterWithCache,
+  HeaderFooterLayoutCache,
+  type HeaderFooterBatch,
+  type PageResolver,
+} from './layoutHeaderFooter';
 import {
   buildSectionAwareHeaderFooterLayoutKey,
   buildSectionAwareHeaderFooterMeasurementGroups,
@@ -808,7 +823,17 @@ export async function incrementalLayout(
     measure?: HeaderFooterMeasureFn;
   },
   previousMeasures?: Measure[] | null,
+  // Narrow runtime context (deliberately NOT on LayoutOptions): the per-document FontMeasureContext -
+  // the SAME object whose `resolvePhysical` is bound into the measureBlock callback - plus the
+  // signature the previous measures were taken with. Only `fontContext.fontSignature` is read here:
+  // for the measure-cache keys (so two documents with different `fonts.map` cannot share a measure)
+  // and to invalidate previous-measure reuse when this document's mapping changed since the prior
+  // render. Passing the whole context rather than a separate signature string keys every cache off
+  // the same object that supplies the resolver, so signature and resolver can never drift apart.
+  fontRuntime?: { fontContext?: FontMeasureContext; previousFontSignature?: string },
 ): Promise<IncrementalLayoutResult> {
+  const fontSignature = fontRuntime?.fontContext?.fontSignature ?? '';
+  const previousFontSignature = fontRuntime?.previousFontSignature ?? '';
   const isSemanticFlow = options.flowMode === 'semantic';
 
   // In semantic mode, neutralize paginated-only inputs so downstream code
@@ -852,6 +877,9 @@ export async function incrementalLayout(
     hasPreviousMeasures && !isSemanticFlow ? resolveMeasurementConstraints(options, previousBlocks) : null;
   const canReusePreviousMeasures =
     hasPreviousMeasures &&
+    // A mapping change (different signature) makes the prior measures stale even for unchanged
+    // blocks; this reuse path bypasses the measure-cache key, so it must check the signature too.
+    fontSignature === previousFontSignature &&
     previousConstraints?.measurementWidth === measurementWidth &&
     previousConstraints?.measurementHeight === measurementHeight;
   const previousPerSectionConstraints = canReusePreviousMeasures
@@ -900,7 +928,7 @@ export async function incrementalLayout(
 
     // Time the cache lookup (includes hashRuns computation)
     const lookupStart = performance.now();
-    const cached = measureCache.get(block, blockMeasureWidth, blockMeasureHeight);
+    const cached = measureCache.get(block, blockMeasureWidth, blockMeasureHeight, fontSignature);
     cacheLookupTime += performance.now() - lookupStart;
 
     if (cached) {
@@ -914,7 +942,7 @@ export async function incrementalLayout(
     const measurement = await measureBlock(block, sectionConstraints);
     actualMeasureTime += performance.now() - measureBlockStart;
 
-    measureCache.set(block, blockMeasureWidth, blockMeasureHeight, measurement);
+    measureCache.set(block, blockMeasureWidth, blockMeasureHeight, measurement, fontSignature);
     measures.push(measurement);
     cacheMisses++;
   }
@@ -955,6 +983,7 @@ export async function incrementalLayout(
     blocksByRId: Map<string, FlowBlock[]> | undefined,
     constraints: HeaderFooterConstraints,
     measureFn: HeaderFooterMeasureFn,
+    pageResolver?: PageResolver,
   ): Promise<{
     heightsByRId?: Map<string, number>;
     heightsBySectionRef?: Map<string, number>;
@@ -977,13 +1006,17 @@ export async function incrementalLayout(
         const blocks = blocksByRId.get(group.rId);
         if (!blocks || blocks.length === 0) continue;
 
-        const measureConstraints = {
-          maxWidth: group.sectionConstraints.width,
-          maxHeight: group.sectionConstraints.height,
-        };
-        const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-        const layout = layoutHeaderFooter(blocks, measures, group.sectionConstraints, kind);
-        if (!(layout.height > 0)) continue;
+        const layouts = await layoutHeaderFooterWithCache(
+          { default: blocks },
+          group.sectionConstraints,
+          measureFn,
+          headerMeasureCache,
+          1,
+          pageResolver,
+          kind,
+        );
+        const layout = layouts.default?.layout;
+        if (!layout || !(layout.height > 0)) continue;
 
         const nextHeight = Math.max(0, layout.height);
         const currentHeight = heightsByRId.get(group.rId) ?? 0;
@@ -1005,13 +1038,17 @@ export async function incrementalLayout(
     for (const [rId, blocks] of blocksByRId) {
       if (!blocks || blocks.length === 0) continue;
 
-      const measureConstraints = {
-        maxWidth: constraints.width,
-        maxHeight: constraints.height,
-      };
-      const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-      const layout = layoutHeaderFooter(blocks, measures, constraints, kind);
-      if (layout.height > 0) {
+      const layouts = await layoutHeaderFooterWithCache(
+        { default: blocks },
+        constraints,
+        measureFn,
+        headerMeasureCache,
+        1,
+        pageResolver,
+        kind,
+      );
+      const layout = layouts.default?.layout;
+      if (layout && layout.height > 0) {
         heightsByRId.set(rId, layout.height);
       }
     }
@@ -1041,6 +1078,7 @@ export async function incrementalLayout(
      * header height calculations. A value of 1 is sufficient as a placeholder.
      */
     const HEADER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT = 1;
+    const prelayoutPageResolver = buildConservativePrelayoutPageResolver(nextBlocks, sectionMetadata);
 
     /**
      * Type guard to check if a key is a valid header variant type.
@@ -1064,8 +1102,9 @@ export async function incrementalLayout(
         measureFn,
         headerMeasureCache,
         HEADER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT,
-        undefined, // No page resolver needed for height calculation
+        prelayoutPageResolver,
         'header',
+        fontSignature,
       );
 
       // Extract actual content heights from each variant
@@ -1088,6 +1127,7 @@ export async function incrementalLayout(
         headerFooter.headerBlocksByRId,
         headerFooter.constraints,
         measureFn,
+        prelayoutPageResolver,
       );
       headerContentHeightsByRId = measuredHeights.heightsByRId;
       headerContentHeightsBySectionRef = measuredHeights.heightsBySectionRef;
@@ -1144,6 +1184,7 @@ export async function incrementalLayout(
      * footer height calculations. A value of 1 is sufficient as a placeholder.
      */
     const FOOTER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT = 1;
+    const prelayoutPageResolver = buildConservativePrelayoutPageResolver(nextBlocks, sectionMetadata);
 
     /**
      * Type guard to check if a key is a valid footer variant type.
@@ -1168,8 +1209,9 @@ export async function incrementalLayout(
           measureFn,
           headerMeasureCache,
           FOOTER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT,
-          undefined, // No page resolver needed for height calculation
+          prelayoutPageResolver,
           'footer',
+          fontSignature,
         );
 
         // Extract actual content heights from each variant
@@ -1192,6 +1234,7 @@ export async function incrementalLayout(
           headerFooter.footerBlocksByRId,
           headerFooter.constraints,
           measureFn,
+          prelayoutPageResolver,
         );
         footerContentHeightsByRId = measuredHeights.heightsByRId;
         footerContentHeightsBySectionRef = measuredHeights.heightsBySectionRef;
@@ -1228,6 +1271,10 @@ export async function incrementalLayout(
   let currentBlocks = nextBlocks;
   let currentMeasures = measures;
   let iteration = 0;
+  // Chapter context only reads stable paragraph style/marker metadata; PAGE
+  // token convergence clones run text but does not change those block attrs.
+  const chapterBlockById = buildBlockById(currentBlocks);
+  const chapterContextCache: ChapterContextCache = {};
 
   const pageTokenStart = performance.now();
   let totalAffectedBlocks = 0;
@@ -1240,7 +1287,7 @@ export async function incrementalLayout(
     while (iteration < maxIterations) {
       // Build numbering context from current layout
       const sections = options.sectionMetadata ?? [];
-      const numberingCtx = buildNumberingContext(layout, sections);
+      const numberingCtx = buildNumberingContext(layout, sections, chapterBlockById, chapterContextCache);
 
       // Log iteration start
       PageTokenLogger.logIterationStart(iteration, layout.pages.length);
@@ -1277,6 +1324,7 @@ export async function incrementalLayout(
         tokenResult.affectedBlockIds,
         currentPerSectionConstraints,
         measureBlock,
+        fontSignature,
         measureCache,
       );
       const remeasureEnd = performance.now();
@@ -1284,9 +1332,6 @@ export async function incrementalLayout(
       totalRemeasureTime += remeasureTime;
       perfLog(`[Perf] 4.3.${iteration + 1}.1 Re-measure: ${remeasureTime.toFixed(2)}ms`);
       PageTokenLogger.logRemeasure(tokenResult.affectedBlockIds.size, remeasureTime);
-
-      // Check if page count has stabilized
-      const oldPageCount = layout.pages.length;
 
       // Re-run pagination with updated measures
       const relayoutStart = performance.now();
@@ -1305,14 +1350,6 @@ export async function incrementalLayout(
       const relayoutTime = relayoutEnd - relayoutStart;
       totalRelayoutTime += relayoutTime;
       perfLog(`[Perf] 4.3.${iteration + 1}.2 Re-layout: ${relayoutTime.toFixed(2)}ms`);
-
-      const newPageCount = layout.pages.length;
-
-      // Early exit if page count is stable (common case: no change or minor text adjustment)
-      if (newPageCount === oldPageCount && iteration > 0) {
-        perfLog(`[Perf] 4.3 Page count stable at ${newPageCount} - breaking convergence loop`);
-        break;
-      }
 
       iteration++;
     }
@@ -1399,13 +1436,24 @@ export async function incrementalLayout(
         const measuresById = new Map<string, Measure>();
         await Promise.all(
           blocks.map(async (block) => {
-            const cached = measureCache.get(block, footnoteConstraints.maxWidth, footnoteConstraints.maxHeight);
+            const cached = measureCache.get(
+              block,
+              footnoteConstraints.maxWidth,
+              footnoteConstraints.maxHeight,
+              fontSignature,
+            );
             if (cached) {
               measuresById.set(block.id, cached);
               return;
             }
             const measurement = await measureBlock(block, footnoteConstraints);
-            measureCache.set(block, footnoteConstraints.maxWidth, footnoteConstraints.maxHeight, measurement);
+            measureCache.set(
+              block,
+              footnoteConstraints.maxWidth,
+              footnoteConstraints.maxHeight,
+              measurement,
+              fontSignature,
+            );
             measuresById.set(block.id, measurement);
           }),
         );
@@ -2677,6 +2725,9 @@ export async function incrementalLayout(
 
   let headers: HeaderFooterLayoutResult[] | undefined;
   let footers: HeaderFooterLayoutResult[] | undefined;
+  const sections = options.sectionMetadata ?? [];
+  const numberingCtx = buildNumberingContext(layout, sections, chapterBlockById, chapterContextCache);
+  applyNumberingContextToLayout(layout, numberingCtx);
 
   if (headerFooter?.constraints && (headerFooter.headerBlocks || headerFooter.footerBlocks)) {
     const hfStart = performance.now();
@@ -2693,19 +2744,30 @@ export async function incrementalLayout(
       options.sectionMetadata,
     );
 
-    // Build numbering context from final layout for header/footer token resolution
-    const sections = options.sectionMetadata ?? [];
-    const numberingCtx = buildNumberingContext(layout, sections);
-
     // Create page resolver for section-aware header/footer numbering
     // Only use page resolver if feature flag is enabled
     const pageResolver = FeatureFlags.HEADER_FOOTER_PAGE_TOKENS
-      ? (pageNumber: number): { displayText: string; totalPages: number } => {
+      ? (
+          pageNumber: number,
+        ): {
+          displayText: string;
+          displayNumber: number;
+          totalPages: number;
+          sectionPageCount: number;
+          pageFormat?: PageNumberFormat;
+          chapterNumberText?: string;
+          chapterSeparator?: PageNumberChapterSeparator;
+        } => {
           const pageIndex = pageNumber - 1;
           const displayInfo = numberingCtx.displayPages[pageIndex];
           return {
             displayText: displayInfo?.displayText ?? String(pageNumber),
+            displayNumber: displayInfo?.displayNumber ?? pageNumber,
             totalPages: numberingCtx.totalPages,
+            sectionPageCount: displayInfo?.sectionPageCount ?? numberingCtx.totalPages ?? 1,
+            pageFormat: displayInfo?.pageFormat,
+            chapterNumberText: displayInfo?.chapterNumberText,
+            chapterSeparator: displayInfo?.chapterSeparator,
           };
         }
       : undefined;
@@ -2719,6 +2781,7 @@ export async function incrementalLayout(
         FeatureFlags.HEADER_FOOTER_PAGE_TOKENS ? undefined : numberingCtx.totalPages, // Fallback for backward compat
         pageResolver, // Use page resolver for section-aware numbering
         'header',
+        fontSignature,
       );
       headers = serializeHeaderFooterResults('header', headerLayouts);
     }
@@ -2731,6 +2794,7 @@ export async function incrementalLayout(
         FeatureFlags.HEADER_FOOTER_PAGE_TOKENS ? undefined : numberingCtx.totalPages, // Fallback for backward compat
         pageResolver, // Use page resolver for section-aware numbering
         'footer',
+        fontSignature,
       );
       footers = serializeHeaderFooterResults('footer', footerLayouts);
     }
@@ -3005,6 +3069,215 @@ const serializeHeaderFooterResults = (
   return results;
 };
 
+type ChapterContextCache = {
+  signature?: string;
+  context?: Map<number, ChapterPageInfo>;
+};
+
+function buildBlockById(blocks: FlowBlock[]): ReadonlyMap<string, FlowBlock> {
+  const blockById = new Map<string, FlowBlock>();
+  for (const block of blocks) {
+    blockById.set(block.id, block);
+  }
+  return blockById;
+}
+
+function getFragmentBlockId(fragment: unknown): string {
+  if (
+    typeof fragment === 'object' &&
+    fragment !== null &&
+    'blockId' in fragment &&
+    typeof (fragment as { blockId?: unknown }).blockId === 'string'
+  ) {
+    return (fragment as { blockId: string }).blockId;
+  }
+  return '';
+}
+
+function buildChapterContextSignature(layout: Layout): string {
+  return layout.pages
+    .map((page) => {
+      return [
+        page.number,
+        page.sectionIndex ?? 0,
+        page.fragments.length,
+        page.fragments.map((fragment) => getFragmentBlockId(fragment)).join(','),
+      ].join(':');
+    })
+    .join('|');
+}
+
+function sectionsHaveChapterNumbering(sections: SectionMetadata[]): boolean {
+  return sections.some((section) => {
+    const chapterStyle = section.numbering?.chapterStyle;
+    return typeof chapterStyle === 'number' && Number.isInteger(chapterStyle) && chapterStyle > 0;
+  });
+}
+
+const PRELAYOUT_CHAPTER_MARKER_SEPARATOR_RE = /[.\-:\u2013\u2014]/;
+const PRELAYOUT_MIN_PAGE_COMPONENT = 10;
+
+function getPrelayoutHeadingLevel(block: FlowBlock): number | undefined {
+  if (block.kind !== 'paragraph') {
+    return undefined;
+  }
+
+  const attrs = (block as ParagraphBlock).attrs;
+  const headingLevel = attrs?.headingLevel;
+  if (typeof headingLevel === 'number' && Number.isInteger(headingLevel) && headingLevel > 0) {
+    return headingLevel;
+  }
+
+  const styleId = attrs?.styleId;
+  if (typeof styleId !== 'string') {
+    return undefined;
+  }
+
+  const normalizedStyleId = styleId.replace(/[\s_-]+/g, '').toLowerCase();
+  const match = /^heading(\d+)$/.exec(normalizedStyleId);
+  if (!match) {
+    return undefined;
+  }
+
+  const level = Number(match[1]);
+  return Number.isInteger(level) && level > 0 ? level : undefined;
+}
+
+function getPrelayoutChapterMarkerText(block: FlowBlock, chapterStyle: number): string | undefined {
+  const headingLevel = getPrelayoutHeadingLevel(block);
+  if (!headingLevel || headingLevel > chapterStyle || block.kind !== 'paragraph') {
+    return undefined;
+  }
+
+  const attrs = (block as ParagraphBlock).attrs;
+  const markerText = normalizeChapterMarkerText(attrs?.wordLayout?.marker?.markerText);
+  if (!markerText) {
+    const listLevelOrdinal = attrs?.listLevelOrdinal;
+    return headingLevel === 1 &&
+      typeof listLevelOrdinal === 'number' &&
+      Number.isInteger(listLevelOrdinal) &&
+      listLevelOrdinal > 0
+      ? String(listLevelOrdinal)
+      : undefined;
+  }
+
+  return markerText.split(PRELAYOUT_CHAPTER_MARKER_SEPARATOR_RE).length <= chapterStyle ? markerText : undefined;
+}
+
+function buildConservativePrelayoutPageResolver(
+  blocks: FlowBlock[],
+  sections: SectionMetadata[],
+): PageResolver | undefined {
+  if (sections.length === 0) {
+    return undefined;
+  }
+
+  type PrelayoutDisplay = {
+    displayText: string;
+    displayNumber: number;
+    totalPages: number;
+    sectionPageCount: number;
+    pageFormat: PageNumberFormat;
+    chapterNumberText?: string;
+    chapterSeparator?: PageNumberChapterSeparator;
+  };
+
+  let longestDisplay: PrelayoutDisplay | undefined;
+  const considerDisplay = (display: PrelayoutDisplay): void => {
+    if (!longestDisplay || display.displayText.length > longestDisplay.displayText.length) {
+      longestDisplay = display;
+    }
+  };
+
+  for (const section of sections) {
+    const sectionStart =
+      typeof section.numbering?.start === 'number' && Number.isFinite(section.numbering.start)
+        ? section.numbering.start
+        : 1;
+    const displayNumber = Math.max(sectionStart, PRELAYOUT_MIN_PAGE_COMPONENT);
+    const pageFormat = section.numbering?.format ?? 'decimal';
+
+    considerDisplay({
+      displayText: formatSectionPageNumberText({ displayNumber, pageFormat }),
+      displayNumber,
+      totalPages: PRELAYOUT_MIN_PAGE_COMPONENT,
+      sectionPageCount: PRELAYOUT_MIN_PAGE_COMPONENT,
+      pageFormat,
+    });
+
+    const chapterStyle = section.numbering?.chapterStyle;
+    if (!(typeof chapterStyle === 'number' && Number.isInteger(chapterStyle) && chapterStyle > 0)) {
+      continue;
+    }
+
+    for (const block of blocks) {
+      const chapterNumberText = getPrelayoutChapterMarkerText(block, chapterStyle);
+      if (!chapterNumberText) {
+        continue;
+      }
+
+      const chapterSeparator = section.numbering?.chapterSeparator ?? 'hyphen';
+      considerDisplay({
+        displayText: formatSectionPageNumberText({
+          displayNumber,
+          pageFormat,
+          chapterNumberText,
+          chapterSeparator,
+        }),
+        displayNumber,
+        totalPages: PRELAYOUT_MIN_PAGE_COMPONENT,
+        sectionPageCount: PRELAYOUT_MIN_PAGE_COMPONENT,
+        pageFormat,
+        chapterNumberText,
+        chapterSeparator,
+      });
+    }
+  }
+
+  if (!longestDisplay) {
+    return undefined;
+  }
+
+  const resolvedDisplay = longestDisplay;
+  return () => resolvedDisplay;
+}
+
+function getChapterContextByPage(
+  layout: Layout,
+  sections: SectionMetadata[],
+  blockById: ReadonlyMap<string, FlowBlock>,
+  cache: ChapterContextCache,
+): Map<number, ChapterPageInfo> | undefined {
+  if (!sectionsHaveChapterNumbering(sections)) {
+    return undefined;
+  }
+
+  const signature = buildChapterContextSignature(layout);
+  if (cache.signature === signature && cache.context) {
+    return cache.context;
+  }
+
+  const context = buildChapterContextByPage(layout, blockById, sections);
+  cache.signature = signature;
+  cache.context = context;
+  return context;
+}
+
+function applyNumberingContextToLayout(layout: Layout, numberingCtx: NumberingContext): void {
+  const displayInfoByPage = new Map(numberingCtx.displayPages.map((page) => [page.physicalPage, page]));
+  for (const page of layout.pages) {
+    const displayInfo = displayInfoByPage.get(page.number);
+    if (!displayInfo) {
+      continue;
+    }
+    page.numberText = displayInfo.displayText;
+    page.displayNumber = displayInfo.displayNumber;
+    page.pageNumberFormat = displayInfo.pageFormat;
+    page.pageNumberChapterText = displayInfo.chapterNumberText;
+    page.pageNumberChapterSeparator = displayInfo.chapterSeparator;
+  }
+}
+
 /**
  * Builds numbering context from layout and section metadata.
  *
@@ -3015,9 +3288,19 @@ const serializeHeaderFooterResults = (
  * @param sections - Section metadata array
  * @returns Numbering context with total pages and display page info
  */
-function buildNumberingContext(layout: Layout, sections: SectionMetadata[]): NumberingContext {
+function buildNumberingContext(
+  layout: Layout,
+  sections: SectionMetadata[],
+  blockById: ReadonlyMap<string, FlowBlock>,
+  chapterContextCache: ChapterContextCache,
+): NumberingContext {
   const totalPages = layout.pages.length;
-  const displayPages = computeDisplayPageNumber(layout.pages, sections);
+  const chapterInfoByPage = getChapterContextByPage(layout, sections, blockById, chapterContextCache);
+  const sectionByIndex = new Map(sections.map((section) => [section.sectionIndex, section]));
+  const displayPages = computeDisplayPageNumber(layout.pages, sections, chapterInfoByPage).map((displayPage) => ({
+    ...displayPage,
+    pageFormat: sectionByIndex.get(displayPage.sectionIndex)?.numbering?.format ?? 'decimal',
+  }));
 
   return {
     totalPages,
@@ -3044,6 +3327,7 @@ async function remeasureAffectedBlocks(
   affectedBlockIds: Set<string>,
   perBlockConstraints: Array<{ maxWidth: number; maxHeight: number }>,
   measureBlock: (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => Promise<Measure>,
+  fontSignature: string,
   measureCache?: MeasureCache<Measure>,
 ): Promise<Measure[]> {
   const updatedMeasures: Measure[] = [...measures];
@@ -3063,9 +3347,12 @@ async function remeasureAffectedBlocks(
       // Update in the measures array
       updatedMeasures[i] = newMeasure;
 
-      // Cache the new measurement using per-block section constraints
+      // Cache the new measurement using per-block section constraints. Key it with the document's
+      // font signature like every other measure-cache write: a page-token re-measure carries
+      // per-document mapped metrics, so writing it under the empty signature would let a default
+      // document read it and force this document to recompute every render (signature-keyed miss).
       const blockConstraints = perBlockConstraints[i];
-      measureCache?.set(block, blockConstraints.maxWidth, blockConstraints.maxHeight, newMeasure);
+      measureCache?.set(block, blockConstraints.maxWidth, blockConstraints.maxHeight, newMeasure, fontSignature);
     } catch (error) {
       // Error handling per plan: log warning, keep prior layout for block
       console.warn(`[incrementalLayout] Failed to re-measure block ${block.id} after token resolution:`, error);

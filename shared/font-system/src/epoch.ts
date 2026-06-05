@@ -2,10 +2,11 @@
  * Global font-configuration epoch.
  *
  * Increments whenever the available-font picture changes: a bundled/customer face
- * finishes loading, or a mapping is added/removed. Reuse signatures (measure and paint)
- * fold this value in so a font change busts stale reuse - a fragment measured or painted
- * before a font loaded carries the old epoch, so once the epoch bumps its signature no
- * longer matches and it is re-measured / repainted with the now-available font.
+ * finishes loading, or a mapping is added/removed. PAINT reuse signatures fold this value
+ * in (see versionSignature), so a fragment painted before a font loaded carries the old
+ * epoch and repaints once it bumps. Measurement caches are NOT keyed by the epoch
+ * (fontMetricsCache keys on `family|size|bold|italic`); the readiness gate instead clears
+ * them explicitly when a font loads, so a stale measurement never survives a font change.
  *
  * It is deliberately a single global, not per-document: font changes are rare and a
  * cross-document repaint is cheap and never wrong. A per-document epoch is a future

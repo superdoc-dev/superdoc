@@ -679,8 +679,32 @@ describe('handleImageNode', () => {
       expect(result.attrs.wrap.attrs.distRight).toBe(4);
     });
 
+    it('uses anchor distL/distR when wrapSquare omits distance attributes', () => {
+      const node = makeNode({
+        attributes: {
+          distT: '0',
+          distB: '0',
+          distL: '12000',
+          distR: '15130',
+        },
+      });
+      node.elements.push({
+        name: 'wp:wrapSquare',
+        attributes: { wrapText: 'bothSides' },
+      });
+
+      const result = handleImageNode(node, makeParams(), true);
+
+      expect(result.attrs.wrap.type).toBe('Square');
+      expect(result.attrs.wrap.attrs.wrapText).toBe('bothSides');
+      expect(result.attrs.wrap.attrs.distLeft).toBeCloseTo(12, 0);
+      expect(result.attrs.wrap.attrs.distRight).toBeCloseTo(15.13, 1);
+    });
+
     it('handles wrap type TopAndBottom without distance attributes', () => {
-      const node = makeNode();
+      const node = makeNode({
+        attributes: { distT: '0', distB: '0', distL: '0', distR: '0' },
+      });
       node.elements.push({ name: 'wp:wrapTopAndBottom' });
 
       const result = handleImageNode(node, makeParams(), true);
@@ -1758,6 +1782,33 @@ describe('getVectorShape', () => {
       });
 
       expect(result.attrs.textContent.parts[0].text).toBe('Hello World');
+    });
+
+    it('preserves cached SECTIONPAGES text in textbox field parts', () => {
+      const graphicData = makeGraphicDataWithTextbox('');
+      const paragraph = graphicData.elements[0].elements.find((el) => el.name === 'wps:txbx').elements[0].elements[0];
+      paragraph.elements = [
+        {
+          name: 'sd:sectionPageCount',
+          attributes: {
+            importedCachedText: '3',
+            resolvedText: '4',
+          },
+        },
+      ];
+
+      const result = getVectorShape({
+        params: makeParams(),
+        node: {},
+        graphicData,
+        size: { width: 100, height: 100 },
+      });
+
+      expect(result.attrs.textContent.parts).toHaveLength(1);
+      expect(result.attrs.textContent.parts[0]).toMatchObject({
+        text: '4',
+        fieldType: 'SECTIONPAGES',
+      });
     });
 
     it('handles [[sdspace]] at the beginning of text', () => {

@@ -61,13 +61,88 @@ describe('validateValueAgainstTypeSpec – oneOf with mixed schemas', () => {
     oneOf: [{ const: 'block' }, { type: 'object', properties: { kind: { const: 'inline' } }, required: ['kind'] }],
   };
 
-  test('falls back to generic message when variants are not all const', () => {
+  test('enumerates the accepted variant shapes when nothing matches', () => {
     try {
       validateValueAgainstTypeSpec('nope', mixedSchema, 'target');
       throw new Error('Expected CliError to be thrown');
     } catch (error) {
       const cliError = error as CliError;
-      expect(cliError.message).toBe('target must match one of the allowed schema variants.');
+      expect(cliError.message).toBe(
+        'target must match one of: "block" | { kind: "inline" }. Received a string ("nope").',
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tagged-union (target/at) actionable errors — the dominant LLM failure class.
+// These exercise the REAL contract schemas so the assertions track what an
+// agent actually sees. See customer error pivot: "insert:target …" and
+// "create paragraph:at must match one of the allowed schema variants."
+// ---------------------------------------------------------------------------
+
+describe('validateValueAgainstTypeSpec – tagged-union actionable errors (real schemas)', () => {
+  const atSchema = CLI_OPERATION_METADATA['doc.create.paragraph'].params.find((p) => p.name === 'at')?.schema;
+  const insertTargetSchema = CLI_OPERATION_METADATA['doc.insert'].params.find((p) => p.name === 'target')?.schema;
+
+  if (!atSchema || !insertTargetSchema) {
+    throw new Error('metadata missing create.paragraph:at or insert:target schema');
+  }
+
+  test('flattened "at" (nodeId hoisted out of target) names the missing field', () => {
+    try {
+      validateValueAgainstTypeSpec({ kind: 'after', nodeId: 'ABC123' }, atSchema, 'at');
+      throw new Error('Expected CliError to be thrown');
+    } catch (error) {
+      // Was the misleading "at.nodeId is not allowed by schema."
+      expect((error as CliError).message).toBe('at.target is required.');
+    }
+  });
+
+  test('unknown "at" kind enumerates the valid kinds and echoes what was sent', () => {
+    try {
+      validateValueAgainstTypeSpec({ kind: 'sidebar' }, atSchema, 'at');
+      throw new Error('Expected CliError to be thrown');
+    } catch (error) {
+      // Was the misleading "at.target is required."
+      expect((error as CliError).message).toBe(
+        'at.kind must be one of: "documentStart", "documentEnd", "before", "after" (received "sidebar").',
+      );
+    }
+  });
+
+  test('bare string "at" enumerates the accepted shapes instead of the opaque union error', () => {
+    try {
+      validateValueAgainstTypeSpec('ABC123', atSchema, 'at');
+      throw new Error('Expected CliError to be thrown');
+    } catch (error) {
+      const message = (error as CliError).message;
+      expect(message).not.toContain('allowed schema variants');
+      expect(message).toContain('at must match one of:');
+      expect(message).toContain('kind: "before"');
+      expect(message).toContain('Received a string ("ABC123")');
+    }
+  });
+
+  test('insert target missing nodeType names the missing field', () => {
+    try {
+      validateValueAgainstTypeSpec({ kind: 'block', nodeId: 'ABC123' }, insertTargetSchema, 'target');
+      throw new Error('Expected CliError to be thrown');
+    } catch (error) {
+      const message = (error as CliError).message;
+      expect(message).not.toContain('allowed schema variants');
+      expect(message).toContain('nodeType');
+    }
+  });
+
+  test('bare string insert target enumerates the accepted shapes', () => {
+    try {
+      validateValueAgainstTypeSpec('ABC123', insertTargetSchema, 'target');
+      throw new Error('Expected CliError to be thrown');
+    } catch (error) {
+      const message = (error as CliError).message;
+      expect(message).not.toContain('allowed schema variants');
+      expect(message).toContain('target must match one of:');
     }
   });
 });
@@ -104,6 +179,44 @@ describe('validateValueAgainstTypeSpec – repeated actionable oneOf errors', ()
       expect((cliError.details as { selectedError?: string }).selectedError).toBe(
         'steps[0].},{ is not allowed by schema.',
       );
+    }
+  });
+});
+
+// Without a shared const discriminator across object variants, the
+// discriminator path cannot intercept — a repeated error must therefore surface
+// through `selectRepeatedActionableOneOfError`. Pins that fallback so a future
+// change to the discriminator gate can't silently make it unreachable.
+describe('validateValueAgainstTypeSpec – repeated actionable oneOf errors (no discriminator)', () => {
+  const repeatedRequiredSchema: CliTypeSpec = {
+    oneOf: [
+      {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+        },
+        required: ['id'],
+      },
+      {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          label: { type: 'string' },
+        },
+        required: ['id'],
+      },
+    ],
+  };
+
+  test('surfaces the repeated required-field error when no discriminator exists', () => {
+    try {
+      validateValueAgainstTypeSpec({ name: 'x' }, repeatedRequiredSchema, 'target');
+      throw new Error('Expected CliError to be thrown');
+    } catch (error) {
+      const cliError = error as CliError;
+      expect(cliError.message).toBe('target.id is required.');
+      expect((cliError.details as { selectedError?: string }).selectedError).toBe('target.id is required.');
     }
   });
 });

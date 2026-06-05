@@ -5,6 +5,7 @@ import type { Editor as EditorInstance } from '../../Editor.js';
 import { Editor } from '../../Editor.js';
 import { HeaderFooterEditorManager, HeaderFooterLayoutAdapter } from '../../header-footer/HeaderFooterRegistry.js';
 import { buildMultiSectionIdentifier } from '@superdoc/layout-bridge';
+import type { FlowBlock } from '@superdoc/contracts';
 import { NodeSelection } from 'prosemirror-state';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
@@ -231,65 +232,73 @@ vi.mock('../input/PositionHitResolver.js', () => ({
 // Mock Editor class
 vi.mock('../../Editor', () => {
   return {
-    Editor: vi.fn().mockImplementation(() => ({
-      setDocumentMode: vi.fn(),
-      setOptions: vi.fn(),
-      on: vi.fn(),
-      off: vi.fn(),
-      destroy: vi.fn(),
-      getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
-      isEditable: true,
-      state: {
-        selection: {
-          from: 0,
-          to: 0,
-          $from: {
-            depth: 0,
-            node: vi.fn(),
+    Editor: vi.fn().mockImplementation((options: { content?: unknown } = {}) => {
+      const contentAttrs =
+        options.content && typeof options.content === 'object' && !Array.isArray(options.content)
+          ? (((options.content as { attrs?: Record<string, unknown> }).attrs ?? {}) as Record<string, unknown>)
+          : {};
+
+      return {
+        setDocumentMode: vi.fn(),
+        setOptions: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        destroy: vi.fn(),
+        getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
+        isEditable: true,
+        state: {
+          selection: {
+            from: 0,
+            to: 0,
+            $from: {
+              depth: 0,
+              node: vi.fn(),
+            },
+          },
+          doc: {
+            attrs: contentAttrs,
+            nodeSize: 100,
+            content: {
+              size: 100,
+            },
+            descendants: vi.fn(),
+            nodesBetween: vi.fn((_from: number, _to: number, callback: (node: unknown, pos: number) => void) => {
+              // Simulate a simple document with one text block at position 0.
+              callback({ isTextblock: true }, 0);
+            }),
+            resolve: vi.fn((pos: number) => ({
+              pos,
+              depth: 0,
+              parent: { inlineContent: true },
+              node: vi.fn(),
+              min: vi.fn((other: { pos: number }) => Math.min(pos, other.pos)),
+              max: vi.fn((other: { pos: number }) => Math.max(pos, other.pos)),
+            })),
+          },
+          tr: {
+            setSelection: vi.fn().mockReturnThis(),
           },
         },
-        doc: {
-          nodeSize: 100,
-          content: {
-            size: 100,
+        view: {
+          dom: {
+            dispatchEvent: vi.fn(() => true),
+            focus: vi.fn(),
           },
-          descendants: vi.fn(),
-          nodesBetween: vi.fn((_from: number, _to: number, callback: (node: unknown, pos: number) => void) => {
-            // Simulate a simple document with one text block at position 0.
-            callback({ isTextblock: true }, 0);
-          }),
-          resolve: vi.fn((pos: number) => ({
-            pos,
-            depth: 0,
-            parent: { inlineContent: true },
-            node: vi.fn(),
-            min: vi.fn((other: { pos: number }) => Math.min(pos, other.pos)),
-            max: vi.fn((other: { pos: number }) => Math.max(pos, other.pos)),
-          })),
-        },
-        tr: {
-          setSelection: vi.fn().mockReturnThis(),
-        },
-      },
-      view: {
-        dom: {
-          dispatchEvent: vi.fn(() => true),
           focus: vi.fn(),
+          dispatch: vi.fn(),
         },
-        focus: vi.fn(),
-        dispatch: vi.fn(),
-      },
-      options: {
-        documentId: 'test-doc',
-        element: document.createElement('div'),
-      },
-      converter: mockEditorConverterStore.current,
-      storage: {
-        image: {
-          media: mockEditorConverterStore.mediaFiles,
+        options: {
+          documentId: 'test-doc',
+          element: document.createElement('div'),
         },
-      },
-    })),
+        converter: mockEditorConverterStore.current,
+        storage: {
+          image: {
+            media: mockEditorConverterStore.mediaFiles,
+          },
+        },
+      };
+    }),
   };
 });
 
@@ -304,6 +313,7 @@ vi.mock('@core/layout-adapter', async (importOriginal) => {
 // Mock layout-bridge functions
 vi.mock('@superdoc/layout-bridge', () => ({
   incrementalLayout: mockIncrementalLayout,
+  measureCache: { clear: vi.fn() },
   normalizeMargin: (value: number | undefined, fallback: number) =>
     Number.isFinite(value) ? (value as number) : fallback,
   selectionToRects: mockSelectionToRects,
@@ -362,6 +372,7 @@ vi.mock('@superdoc/painter-dom', () => ({
 // Mock measuring-dom
 vi.mock('@superdoc/measuring-dom', () => ({
   measureBlock: mockMeasureBlock,
+  clearTextMeasurementCaches: vi.fn(),
 }));
 
 vi.mock('@superdoc/layout-resolved', () => ({
@@ -490,6 +501,79 @@ describe('PresentationEditor', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(editor.historyCoordinator).toBeNull();
+    });
+  });
+
+  describe('document font config', () => {
+    it('registers configured families and maps before the first measure callback', async () => {
+      const order: string[] = [];
+      const originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts');
+      const originalFontFace = Object.getOwnPropertyDescriptor(window, 'FontFace');
+
+      class TestFontFace {
+        readonly status = 'unloaded';
+
+        constructor(public readonly family: string) {}
+
+        load(): Promise<TestFontFace> {
+          return Promise.resolve(this);
+        }
+      }
+
+      const fontSet = {
+        add: vi.fn((face: { family: string }) => {
+          if (face.family === 'Gelasio') order.push('custom-font-add');
+        }),
+        load: vi.fn(async () => [new TestFontFace('loaded')]),
+        check: vi.fn(() => true),
+      };
+
+      Object.defineProperty(document, 'fonts', { configurable: true, value: fontSet });
+      Object.defineProperty(window, 'FontFace', { configurable: true, value: TestFontFace });
+
+      try {
+        const block = {
+          kind: 'paragraph',
+          id: 'p-font-config',
+          runs: [{ kind: 'text', text: 'Hello', fontFamily: 'Georgia', fontSize: 12 }],
+        } as FlowBlock;
+
+        mockToFlowBlocks.mockReturnValueOnce({ blocks: [block], bookmarks: new Map() });
+        mockIncrementalLayout.mockImplementationOnce(
+          async (_previousBlocks, _previousLayout, blocks, _layoutOptions, measureBlock) => {
+            order.push('layout');
+            await (measureBlock as (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => unknown)(
+              blocks[0] as FlowBlock,
+              { maxWidth: 500, maxHeight: 700 },
+            );
+            return { layout: { pages: [] }, measures: [] };
+          },
+        );
+
+        editor = new PresentationEditor({
+          element: container,
+          fontAssets: {
+            families: [{ family: 'Gelasio', faces: [{ source: '/fonts/Gelasio-Regular.woff2' }] }],
+            map: { Georgia: 'Gelasio' },
+          },
+        });
+
+        await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+        expect(order).toContain('custom-font-add');
+        expect(order.indexOf('custom-font-add')).toBeLessThan(order.indexOf('layout'));
+        const fontContext = mockMeasureBlock.mock.calls[0]?.[2] as
+          | {
+              resolvePhysical?: (family: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }) => string;
+            }
+          | undefined;
+        expect(fontContext?.resolvePhysical?.('Georgia', { weight: '400', style: 'normal' })).toBe('Gelasio');
+      } finally {
+        if (originalFonts) Object.defineProperty(document, 'fonts', originalFonts);
+        else Reflect.deleteProperty(document, 'fonts');
+        if (originalFontFace) Object.defineProperty(window, 'FontFace', originalFontFace);
+        else Reflect.deleteProperty(window, 'FontFace');
+      }
     });
   });
 
@@ -1097,6 +1181,56 @@ describe('PresentationEditor', () => {
         alternateHeaders?: boolean;
       };
       expect(layoutOptions.alternateHeaders).toBe(false);
+    });
+  });
+
+  describe('documentBackground resolution', () => {
+    it('forwards configured documentBackground when the document has no imported background', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'doc-background-config-doc',
+        mode: 'docx',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        layoutEngineOptions: {
+          documentBackground: { color: '#EEEEEE' },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.getLayoutOptions().documentBackground).toEqual({ color: '#EEEEEE' });
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        documentBackground?: { color?: string };
+      };
+      expect(layoutOptions.documentBackground).toEqual({ color: '#EEEEEE' });
+    });
+
+    it('prefers imported documentBackground over the configured fallback', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'doc-background-import-doc',
+        mode: 'docx',
+        content: {
+          type: 'doc',
+          attrs: {
+            documentBackground: { color: '#DDDDDD' },
+          },
+          content: [{ type: 'paragraph' }],
+        },
+        layoutEngineOptions: {
+          documentBackground: { color: '#EEEEEE' },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.getLayoutOptions().documentBackground).toEqual({ color: '#DDDDDD' });
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        documentBackground?: { color?: string };
+      };
+      expect(layoutOptions.documentBackground).toEqual({ color: '#DDDDDD' });
     });
   });
 

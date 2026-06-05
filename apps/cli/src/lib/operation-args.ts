@@ -146,6 +146,85 @@ function selectRepeatedActionableOneOfError(path: string, errors: string[]): str
   return bestMessage;
 }
 
+/**
+ * Render a variant's shape compactly so a oneOf failure can name the accepted
+ * forms (e.g. `{ kind: "before", target }`) instead of an opaque "must match
+ * one of the allowed schema variants". Object properties show their `const`
+ * discriminator when present, and a trailing `?` when optional.
+ */
+function describeVariant(variant: CliTypeSpec): string {
+  if ('const' in variant) return JSON.stringify(variant.const);
+  if ('oneOf' in variant) return (variant.oneOf as CliTypeSpec[]).map(describeVariant).join(' | ');
+  if (variant.enum) return variant.enum.map((entry) => JSON.stringify(entry)).join(' | ');
+  if (variant.type === 'object') {
+    const properties = variant.properties ?? {};
+    const required = new Set(variant.required ?? []);
+    const keys = Object.keys(properties);
+    if (keys.length === 0) return 'object';
+    const parts = keys.map((key) => {
+      const prop = properties[key];
+      if (prop && 'const' in prop) return `${key}: ${JSON.stringify(prop.const)}`;
+      return required.has(key) ? key : `${key}?`;
+    });
+    return `{ ${parts.join(', ')} }`;
+  }
+  if (variant.type === 'array') return 'array';
+  if (variant.type === 'json') return 'object';
+  return variant.type ?? 'value';
+}
+
+/**
+ * The property key that carries a `const` in every object variant — the
+ * discriminator of a tagged union (e.g. `kind` for target/at, `op` for
+ * mutation steps). Returns null when there is no such shared key. Non-object
+ * variants (e.g. a bare string ref) are ignored so mixed unions still resolve.
+ */
+function getOneOfDiscriminator(variants: readonly CliTypeSpec[]): string | null {
+  const objectVariants = variants.filter(
+    (variant): variant is Extract<CliTypeSpec, { type: 'object' }> =>
+      !('const' in variant) && !('oneOf' in variant) && variant.type === 'object' && isRecord(variant.properties),
+  );
+  if (objectVariants.length < 2) return null;
+  for (const key of Object.keys(objectVariants[0].properties)) {
+    const sharedByAll = objectVariants.every((variant) => {
+      const prop = variant.properties[key];
+      return prop != null && 'const' in prop;
+    });
+    if (sharedByAll) return key;
+  }
+  return null;
+}
+
+/** The const value a variant pins for `key`, if any (its discriminator tag). */
+function variantConstFor(variant: CliTypeSpec, key: string): unknown {
+  if ('const' in variant || 'oneOf' in variant || variant.type !== 'object') return undefined;
+  const prop = variant.properties?.[key];
+  return prop && 'const' in prop ? prop.const : undefined;
+}
+
+/**
+ * Truncate a serialized value to keep oneOf error messages bounded — a caller
+ * accidentally passing a multi-MB string as `target`/`at` shouldn't inflate
+ * logs or the LLM context window. Matches the truncation pattern used by the
+ * REPAIR_BLOCKED preview.
+ */
+function truncateForError(serialized: string, max = 64): string {
+  return serialized.length > max ? `${serialized.slice(0, max)}…` : serialized;
+}
+
+/** Human description of a received value, for oneOf error messages. */
+function describeReceived(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'an array';
+  const valueType = typeof value;
+  if (valueType === 'object') {
+    const keys = Object.keys(value as Record<string, unknown>);
+    return keys.length > 0 ? `an object with keys [${keys.join(', ')}]` : 'an empty object';
+  }
+  if (valueType === 'string') return `a string (${truncateForError(JSON.stringify(value))})`;
+  return `a ${valueType} (${truncateForError(JSON.stringify(value))})`;
+}
+
 export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec, path: string): void {
   if ('const' in schema) {
     if (value !== schema.const) {
@@ -166,12 +245,44 @@ export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec
       }
     }
 
+    // Tagged-union path (target/at keyed by `kind`, mutation steps keyed by
+    // `op`): when the value carries the discriminator, surface the matching
+    // variant's specific failure ("at.target is required.") or the set of
+    // valid tags. This lets an LLM self-correct instead of retrying the same
+    // malformed shape against an opaque union error.
+    const discriminator = getOneOfDiscriminator(variants);
+    if (discriminator && isRecord(value) && value[discriminator] !== undefined) {
+      const received = value[discriminator];
+      const matched = variants.find((variant) => variantConstFor(variant, discriminator) === received);
+      if (matched) {
+        try {
+          validateValueAgainstTypeSpec(value, matched, path);
+          // Unreachable in practice: `matched` already failed in the outer
+          // variant loop above (deterministic same-input revalidation must
+          // throw again). Explicit return so a future fast-path refactor on
+          // this function can't silently let control fall through to the
+          // unmatched-tag throw below with a falsely-matched value.
+          return;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new CliError('VALIDATION_ERROR', message, { errors, selectedError: message });
+        }
+      }
+      const allowedTags = variants
+        .map((variant) => variantConstFor(variant, discriminator))
+        .filter((tag) => tag !== undefined)
+        .map((tag) => JSON.stringify(tag));
+      const unmatchedTagMessage = `${path}.${discriminator} must be one of: ${allowedTags.join(', ')} (received ${truncateForError(JSON.stringify(received))}).`;
+      throw new CliError('VALIDATION_ERROR', unmatchedTagMessage, { errors, selectedError: unmatchedTagMessage });
+    }
+
     const allowedValues = extractConstValues(variants);
     const selectedError = selectRepeatedActionableOneOfError(path, errors);
     const message =
       allowedValues.length > 0
         ? `${path} must be one of: ${allowedValues.join(', ')}.`
-        : (selectedError ?? `${path} must match one of the allowed schema variants.`);
+        : (selectedError ??
+          `${path} must match one of: ${variants.map(describeVariant).join(' | ')}. Received ${describeReceived(value)}.`);
     throw new CliError('VALIDATION_ERROR', message, { errors, selectedError });
   }
 

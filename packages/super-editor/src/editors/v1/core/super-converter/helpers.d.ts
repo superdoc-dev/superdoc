@@ -41,6 +41,9 @@ export function getDocxHighlightKeywordFromHex(hexColor: any): any;
 export function normalizeHexColor(hex: any): any;
 export function isValidHexColor(color: any): boolean;
 export function rgbToHex(rgb: any): string;
+export function resolveShadingFillColor(
+  shading: { val?: string; color?: string; fill?: string } | null | undefined,
+): string | null;
 export function ptToTwips(pt: any): number;
 export function twipsToPt(twips: any): number;
 export function getLineHeightValueString(

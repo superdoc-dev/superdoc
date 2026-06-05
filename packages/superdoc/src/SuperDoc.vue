@@ -1352,6 +1352,7 @@ const onEditorTransaction = (payload = {}) => {
   // and collaboration replay modes.
   if (shouldResyncTrackedChangeThreads(transaction, ySyncMeta)) {
     const documentId = editor?.options?.documentId;
+    commentsStore.syncResolvedCommentsWithDocument?.({ documentId, editor });
     syncTrackedChangePositionsWithDocument({ documentId, editor });
     queueTrackedChangeCommentResync({
       editor,

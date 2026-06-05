@@ -1281,6 +1281,8 @@ const sectionLineNumberingSchema = objectSchema(
 const sectionPageNumberingSchema = objectSchema({
   start: { type: 'integer', minimum: 1 },
   format: sectionPageNumberFormatSchema,
+  chapterStyle: { type: 'integer', minimum: 1 },
+  chapterSeparator: { type: 'string', enum: ['hyphen', 'period', 'colon', 'emDash', 'enDash'] },
 });
 
 const sectionHeaderFooterRefsSchema = objectSchema({
@@ -3787,6 +3789,134 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       failure: stylesFailureSchema,
     };
   })(),
+  'templates.apply': (() => {
+    const templatesReceiptFailureCodes = [...COMMAND_CATALOG['templates.apply'].possibleFailureCodes];
+    const pathSourceSchema = objectSchema({ kind: { const: 'path' }, path: { type: 'string' } }, ['kind', 'path']);
+    const base64SourceSchema = objectSchema(
+      { kind: { const: 'base64' }, data: { type: 'string' }, filename: { type: 'string' } },
+      ['kind', 'data'],
+    );
+    const inputSchema = objectSchema(
+      {
+        source: { oneOf: [pathSourceSchema, base64SourceSchema] },
+        bodyPolicy: { const: 'preserve' },
+      },
+      ['source'],
+    );
+
+    const scopeEnum = {
+      enum: [
+        'styles',
+        'numbering',
+        'settings',
+        'theme',
+        'fontTable',
+        'webSettings',
+        'headersFooters',
+        'sectionDefaults',
+      ],
+    };
+    const scopeReportSchema = objectSchema({ scope: scopeEnum, part: { type: 'string' }, detail: { type: 'string' } }, [
+      'scope',
+      'part',
+    ]);
+    const scopeSkipSchema = objectSchema(
+      {
+        scope: { type: 'string' },
+        part: { type: 'string' },
+        reason: { enum: ['NOT_PRESENT_IN_SOURCE', 'OUT_OF_SCOPE', 'NO_CHANGE', 'CAPABILITY_UNAVAILABLE'] },
+        message: { type: 'string' },
+      },
+      ['scope', 'reason', 'message'],
+    );
+    const unsupportedItemSchema = objectSchema(
+      { part: { type: 'string' }, category: { type: 'string' }, reason: { type: 'string' } },
+      ['part', 'category', 'reason'],
+    );
+    const changedPartSchema = objectSchema(
+      {
+        part: { type: 'string' },
+        scope: {
+          enum: [
+            'styles',
+            'numbering',
+            'settings',
+            'theme',
+            'fontTable',
+            'webSettings',
+            'headersFooters',
+            'sectionDefaults',
+            'package',
+          ],
+        },
+        change: { enum: ['created', 'replaced', 'merged', 'imported'] },
+      },
+      ['part', 'scope', 'change'],
+    );
+    const idMappingSchema = objectSchema(
+      { kind: { enum: ['style', 'numbering', 'relationship'] }, from: { type: 'string' }, to: { type: 'string' } },
+      ['kind', 'from', 'to'],
+    );
+    const sourceInfoSchema = objectSchema(
+      { kind: { enum: ['path', 'base64'] }, fingerprint: { type: 'string' }, partCount: { type: 'integer' } },
+      ['kind', 'fingerprint', 'partCount'],
+    );
+    const warningSchema = objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']);
+
+    const templatesSuccessSchema = objectSchema(
+      {
+        success: { const: true },
+        changed: { type: 'boolean' },
+        dryRun: { type: 'boolean' },
+        bodyPolicy: { const: 'preserve' },
+        source: sourceInfoSchema,
+        detectedScopes: arraySchema(scopeReportSchema),
+        appliedScopes: arraySchema(scopeReportSchema),
+        skippedScopes: arraySchema(scopeSkipSchema),
+        unsupportedItems: arraySchema(unsupportedItemSchema),
+        changedParts: arraySchema(changedPartSchema),
+        idMappings: objectSchema({
+          styles: arraySchema(idMappingSchema),
+          numbering: arraySchema(idMappingSchema),
+          relationships: arraySchema(idMappingSchema),
+        }),
+        warnings: arraySchema(warningSchema),
+      },
+      [
+        'success',
+        'changed',
+        'dryRun',
+        'bodyPolicy',
+        'source',
+        'detectedScopes',
+        'appliedScopes',
+        'skippedScopes',
+        'unsupportedItems',
+        'changedParts',
+        'idMappings',
+        'warnings',
+      ],
+    );
+    const templatesFailureSchema = objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema(
+          {
+            code: { enum: templatesReceiptFailureCodes },
+            message: { type: 'string' },
+          },
+          ['code', 'message'],
+        ),
+      },
+      ['success', 'failure'],
+    );
+    return {
+      input: inputSchema,
+      output: { oneOf: [templatesSuccessSchema, templatesFailureSchema] },
+      success: templatesSuccessSchema,
+      failure: templatesFailureSchema,
+    };
+  })(),
   'create.paragraph': {
     input: objectSchema({
       in: storyLocatorSchema,
@@ -4018,10 +4148,17 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           target: sectionAddressSchema,
           start: { type: 'integer', minimum: 1 },
           format: sectionPageNumberFormatSchema,
+          chapterStyle: { type: 'integer', minimum: 1 },
+          chapterSeparator: { type: 'string', enum: ['hyphen', 'period', 'colon', 'emDash', 'enDash'] },
         },
         ['target'],
       ),
-      oneOf: [{ required: ['target', 'start'] }, { required: ['target', 'format'] }],
+      anyOf: [
+        { required: ['target', 'start'] },
+        { required: ['target', 'format'] },
+        { required: ['target', 'chapterStyle'] },
+        { required: ['target', 'chapterSeparator'] },
+      ],
     },
     output: sectionMutationResultSchemaFor('sections.setPageNumbering'),
     success: sectionMutationSuccessSchema,

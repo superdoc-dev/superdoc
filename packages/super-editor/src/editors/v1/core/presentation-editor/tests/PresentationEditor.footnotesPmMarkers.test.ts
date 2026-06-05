@@ -326,5 +326,11 @@ describe('PresentationEditor - footnote number marker PM position', () => {
       expect.arrayContaining(['footnote-body-1', 'footnote-separator-page-1-col-0']),
     );
     expect(lastResolveInput.measures).toHaveLength(lastResolveInput.blocks.length);
+
+    const resolveSnapshot = editor.getLayoutResolveSnapshot();
+    expect(resolveSnapshot.blocks.map((block) => block.id)).toEqual(
+      expect.arrayContaining(['footnote-body-1', 'footnote-separator-page-1-col-0']),
+    );
+    expect(resolveSnapshot.measures).toHaveLength(resolveSnapshot.blocks.length);
   });
 });

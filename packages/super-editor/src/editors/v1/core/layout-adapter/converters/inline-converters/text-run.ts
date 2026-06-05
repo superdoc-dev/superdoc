@@ -12,6 +12,7 @@ import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette } 
 import { applyMarksToRun } from '../../marks/index.js';
 import { DEFAULT_HYPERLINK_CONFIG } from '../../constants.js';
 import { applyInlineRunProperties, type InlineConverterParams } from './common.js';
+import { getPageNumberFieldFormat } from './page-number-field-format.js';
 
 /**
  * Converts a text PM node to a TextRun.
@@ -101,6 +102,10 @@ export function tokenNodeToRun(
     fontFamily: defaultFont,
     fontSize: defaultSize,
   };
+  const pageNumberFieldFormat = getPageNumberFieldFormat(node.attrs);
+  if (pageNumberFieldFormat) {
+    run.pageNumberFieldFormat = pageNumberFieldFormat;
+  }
 
   // Attach PM position tracking
   const pos = positions.get(node);

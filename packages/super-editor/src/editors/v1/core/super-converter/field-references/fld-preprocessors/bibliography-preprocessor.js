@@ -7,10 +7,16 @@ import { buildBlockFieldNode } from './build-block-field-node.js';
  *
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine The nodes to combine.
  * @param {string} instrText The instruction text.
- * @param {import('../../v2/docxHelper').ParsedDocx} [_docx] The docx object (unused).
- * @param {Array<{type: string, text?: string}>} [instructionTokens] Raw instruction tokens.
+ * @param {{ instructionTokens?: Array<{type: string, text?: string}> | null }} [options]
+ * @param {Array<{type: string, text?: string}>} [legacyInstructionTokens] Legacy raw instruction tokens.
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  */
-export function preProcessBibliographyInstruction(nodesToCombine, instrText, _docx, instructionTokens = null) {
+export function preProcessBibliographyInstruction(
+  nodesToCombine,
+  instrText,
+  options = {},
+  legacyInstructionTokens = null,
+) {
+  const instructionTokens = options?.instructionTokens ?? legacyInstructionTokens;
   return buildBlockFieldNode('sd:bibliography', nodesToCombine, instrText, instructionTokens);
 }

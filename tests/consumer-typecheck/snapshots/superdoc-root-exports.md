@@ -7,11 +7,11 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 
 | Source | Path | Count |
 |---|---|---|
-| types.import | `./dist/superdoc/src/public/index.d.ts` | 225 |
-| types.require | `./dist/superdoc/src/public/index.d.cts` | 225 |
+| types.import | `./dist/superdoc/src/public/index.d.ts` | 229 |
+| types.require | `./dist/superdoc/src/public/index.d.cts` | 229 |
 | import | `./dist/superdoc.es.js` | 41 |
 | require | `./dist/superdoc.cjs` | 41 |
-| **union** |  | **225** |
+| **union** |  | **229** |
 
 ## Divergences
 
@@ -19,7 +19,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - types.require only (not in types.import): 0
 - ESM only (not in CJS): 0
 - CJS only (not in ESM): 0
-- typed but no runtime export (phantom risk): 184
+- typed but no runtime export (phantom risk): 188
 - runtime export but not typed (silent shadow on root): 0
 
 ### Type-only names (no runtime)
@@ -92,6 +92,8 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - `FontAssetUrlContext`
 - `FontAssetUrlResolver`
 - `FontConfig`
+- `FontFaceConfig`
+- `FontFamilyConfig`
 - `FontResolutionRecord`
 - `FontsChangedPayload`
 - `FontsConfig`
@@ -175,6 +177,8 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - `SuperDocExceptionPayload`
 - `SuperDocExceptionRestorePayload`
 - `SuperDocExceptionStorePayload`
+- `SuperDocFontFace`
+- `SuperDocFontFamily`
 - `SuperDocFontsApi`
 - `SuperDocLayoutEngineOptions`
 - `SuperDocLockedPayload`
@@ -290,6 +294,8 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `FontAssetUrlContext` | ✓ | ✓ |   |   | 0 |   | 0 | 0 | 0 |   |
 | `FontAssetUrlResolver` | ✓ | ✓ |   |   | 0 |   | 0 | 0 | 0 |   |
 | `FontConfig` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
+| `FontFaceConfig` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
+| `FontFamilyConfig` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `FontResolutionRecord` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |   |
 | `FontsChangedPayload` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |   |
 | `FontsConfig` | ✓ | ✓ |   |   | 0 |   | 0 | 0 | 0 |   |
@@ -380,6 +386,8 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `SuperDocExceptionPayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocExceptionRestorePayload` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |   |
 | `SuperDocExceptionStorePayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
+| `SuperDocFontFace` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
+| `SuperDocFontFamily` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocFontsApi` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |   |
 | `SuperDocLayoutEngineOptions` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
 | `SuperDocLockedPayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |

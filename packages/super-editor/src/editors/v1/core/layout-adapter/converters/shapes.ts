@@ -37,6 +37,7 @@ import {
   normalizeTextInsets,
   normalizeZIndex,
   resolveFloatingZIndex,
+  mergeWrapDistancesFromPadding,
 } from '../utilities.js';
 
 // ============================================================================
@@ -338,6 +339,12 @@ export const buildDrawingBlock = (
   },
 ): ShapeDrawingBlock => {
   const normalizedWrap = normalizeWrap(rawAttrs.wrap);
+  if (normalizedWrap) {
+    mergeWrapDistancesFromPadding(
+      normalizedWrap,
+      toBoxSpacing(rawAttrs.padding as Record<string, unknown> | undefined),
+    );
+  }
   const sourceAnchor = isPlainObject(rawAttrs.sourceAnchor) ? (rawAttrs.sourceAnchor as SourceAnchor) : undefined;
   const baseAnchor = normalizeAnchorData(rawAttrs.anchorData, rawAttrs, normalizedWrap?.behindDoc);
   const pos = positions.get(node);

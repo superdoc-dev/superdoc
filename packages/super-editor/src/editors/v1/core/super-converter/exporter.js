@@ -35,6 +35,7 @@ import { translator as sdIndexTranslator } from '@converter/v3/handlers/sd/index
 import { translator as sdIndexEntryTranslator } from '@converter/v3/handlers/sd/indexEntry';
 import { translator as sdAutoPageNumberTranslator } from '@converter/v3/handlers/sd/autoPageNumber';
 import { translator as sdTotalPageNumberTranslator } from '@converter/v3/handlers/sd/totalPageNumber';
+import { translator as sdSectionPageCountTranslator } from '@converter/v3/handlers/sd/sectionPageCount';
 import { translator as sdDocumentStatFieldTranslator } from '@converter/v3/handlers/sd/documentStatField/documentStatField-translator.js';
 import { translator as pictTranslator } from './v3/handlers/w/pict/pict-translator';
 import { translateVectorShape, translateShapeGroup } from '@converter/v3/handlers/wp/helpers/decode-image-node-helpers';
@@ -242,6 +243,7 @@ export function exportSchemaToJson(params) {
     documentSection: wSdtNodeTranslator,
     'page-number': sdAutoPageNumberTranslator,
     'total-page-number': sdTotalPageNumberTranslator,
+    'section-page-count': sdSectionPageCountTranslator,
     pageReference: sdPageReferenceTranslator,
     crossReference: sdCrossReferenceTranslator,
     citation: sdCitationTranslator,
@@ -409,6 +411,33 @@ function mergeMcIgnorable(defaultIgnorable = '', originalIgnorable = '') {
   return merged.join(' ');
 }
 
+function normalizeDocumentBackgroundColorForExport(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  const hex = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
+  return hex.toUpperCase();
+}
+
+function translateDocumentBackgroundNode(params) {
+  const background = params?.node?.attrs?.documentBackground;
+  if (!background || typeof background !== 'object') return null;
+
+  if (background.originalXml && typeof background.originalXml === 'object') {
+    return carbonCopy(background.originalXml);
+  }
+
+  const color = normalizeDocumentBackgroundColorForExport(background.color);
+  if (!color) return null;
+
+  return {
+    type: 'element',
+    name: 'w:background',
+    attributes: { 'w:color': color },
+    elements: [],
+  };
+}
+
 /**
  * Translate a document node
  *
@@ -421,6 +450,7 @@ function translateDocumentNode(params) {
     content: params.node.content,
   };
 
+  const translatedBackgroundNode = translateDocumentBackgroundNode(params);
   const translatedBodyNode = exportSchemaToJson({ ...params, node: bodyNode });
 
   // Merge original document attributes with defaults to preserve custom namespaces
@@ -438,7 +468,7 @@ function translateDocumentNode(params) {
 
   const node = {
     name: 'w:document',
-    elements: [translatedBodyNode],
+    elements: translatedBackgroundNode ? [translatedBackgroundNode, translatedBodyNode] : [translatedBodyNode],
     attributes,
   };
 

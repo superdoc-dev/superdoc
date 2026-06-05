@@ -91,6 +91,114 @@ afterAll(() => {
   }
 });
 
+const DATA_FIXTURES_DIR = resolve(__dirname, '../data');
+
+const mountPresentationFromData = async (filename: string) => {
+  const buffer = await readFile(resolve(DATA_FIXTURES_DIR, filename));
+  const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const presentation = new PresentationEditor({
+    element: host,
+    documentId: `data-${filename}`,
+    content: docx,
+    media,
+    mediaFiles,
+    fonts,
+    mode: 'docx',
+    documentMode: 'viewing',
+    extensions: getStarterExtensions(),
+    layoutEngineOptions: {
+      pageSize: { w: 816, h: 1056 },
+      margins: { top: 96, right: 96, bottom: 96, left: 96 },
+      zoom: 1,
+      flowMode: 'paginated',
+      layoutMode: 'vertical',
+      virtualization: { enabled: false },
+    },
+  });
+
+  const layout = await waitForLayout(presentation);
+  return { presentation, host, layout };
+};
+
+describe('PresentationEditor header/footer layout snapshot (real editor path)', () => {
+  it('returns an empty snapshot when the document has no header/footer stories', async () => {
+    const { presentation, host } = await mountPresentationFromData('basic-paragraph.docx');
+    try {
+      expect(presentation.getHeaderFooterLayoutSnapshot()).toEqual({
+        pageBindings: [],
+        storyLayouts: { headers: [], footers: [] },
+      });
+    } finally {
+      presentation.destroy();
+      host.remove();
+    }
+  }, 20000);
+
+  // h_f-normal-odd-even-firstpg.docx declares first/even/default header variants
+  // (titlePg enabled), so the live editor must surface them as queryable stories
+  // and bind the first-page variant to page 1.
+  it('exposes story-part bindings and layouts from getHeaderFooterLayoutSnapshot()', async () => {
+    const { presentation, host } = await mountPresentationFromData('h_f-normal-odd-even-firstpg.docx');
+    try {
+      const snapshot = presentation.getHeaderFooterLayoutSnapshot();
+
+      // Well-formed top-level shape with deterministic, JSON-safe data.
+      expect(snapshot).toHaveProperty('pageBindings');
+      expect(Array.isArray(snapshot.pageBindings)).toBe(true);
+      expect(snapshot.storyLayouts).toHaveProperty('headers');
+      expect(snapshot.storyLayouts).toHaveProperty('footers');
+      expect(JSON.parse(JSON.stringify(snapshot))).toEqual(snapshot);
+
+      // The three declared header variants (first/even/default) are all surfaced
+      // as distinct stories, each with a populated raw layout.
+      expect(snapshot.storyLayouts.headers.length).toBeGreaterThanOrEqual(3);
+      const headerRefIds = new Set(snapshot.storyLayouts.headers.map((story) => story.refId));
+      expect(headerRefIds.size).toBeGreaterThanOrEqual(3);
+      for (const story of snapshot.storyLayouts.headers) {
+        expect(typeof story.storyKey).toBe('string');
+        expect(story.kind).toBe('header');
+        expect(story.rawLayout).not.toBeNull();
+      }
+
+      // Page 1 binds to the first-page header variant.
+      expect(snapshot.pageBindings.length).toBeGreaterThanOrEqual(1);
+      const firstPage = snapshot.pageBindings[0]!;
+      expect(firstPage.pageIndex).toBe(0);
+      expect(firstPage.header).not.toBeNull();
+      expect(firstPage.header!.variant).toBe('first');
+      expect(firstPage.header!.refId).not.toBeNull();
+      expect(firstPage.header!.region).not.toBeNull();
+      expect(firstPage.header!.region!.contentHeight).not.toBeNull();
+      expect(firstPage.header!.region!.contentHeight!).toBeGreaterThan(0);
+      // Binding joins back to a surfaced story entry.
+      expect(snapshot.storyLayouts.headers.some((story) => story.storyKey === firstPage.header!.storyKey)).toBe(true);
+    } finally {
+      presentation.destroy();
+      host.remove();
+    }
+  }, 20000);
+
+  it('getLayoutResolveSnapshot() returns aligned resolve/paint inputs from the live path', async () => {
+    const { presentation, host } = await mountPresentationFromData('h_f-normal-odd-even-firstpg.docx');
+    try {
+      const resolveSnapshot = presentation.getLayoutResolveSnapshot();
+      expect(resolveSnapshot).toHaveProperty('layout');
+      expect(Array.isArray(resolveSnapshot.blocks)).toBe(true);
+      expect(Array.isArray(resolveSnapshot.measures)).toBe(true);
+      expect(Array.isArray(resolveSnapshot.sectionMetadata)).toBe(true);
+      // resolveLayout requires one measure per lookup block.
+      expect(resolveSnapshot.blocks.length).toBe(resolveSnapshot.measures.length);
+      expect(resolveSnapshot.blocks.length).toBeGreaterThan(0);
+    } finally {
+      presentation.destroy();
+      host.remove();
+    }
+  }, 20000);
+});
+
 describe('PresentationEditor DOCX shape fixtures', () => {
   SHAPE_FIXTURES.forEach(({ name, description }) => {
     it(`lays out drawings for ${description}`, async () => {

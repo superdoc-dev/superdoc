@@ -49,20 +49,23 @@ function deriveCommandName(operationId: CliExposedOperationId): string {
   return cliCommandTokens(`doc.${operationId}` as `doc.${CliExposedOperationId}`).join(' ');
 }
 
-function invokeOperation(
+async function invokeOperation(
   editor: EditorWithDoc,
   operationId: CliExposedOperationId,
   input: Record<string, unknown>,
   options?: Record<string, unknown>,
   commandName?: string,
-): unknown {
+): Promise<unknown> {
   const apiInput = extractInvokeInput(operationId, input);
   const preHook = PRE_INVOKE_HOOKS[operationId];
   const transformedInput = preHook ? preHook(apiInput as Record<string, unknown>, { editor }) : apiInput;
 
   let result: unknown;
   try {
-    result = editor.doc.invoke({
+    // Await so both synchronous throws and async rejections (e.g. the async
+    // templates.apply path) are translated by mapInvokeError. Awaiting a
+    // non-Promise result is a no-op for the synchronous operations.
+    result = await editor.doc.invoke({
       operationId,
       input: transformedInput,
       options,
@@ -153,7 +156,7 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
     const source = doc === '-' ? 'stdin' : 'path';
     const opened = await openDocument(doc, context.io);
     try {
-      const result = invokeOperation(opened.editor, operationId, input, invokeOptions, commandName);
+      const result = await invokeOperation(opened.editor, operationId, input, invokeOptions, commandName);
       const document: DocumentPayload = {
         path: source === 'path' ? doc : undefined,
         source,
@@ -205,7 +208,7 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
       });
 
       try {
-        const result = invokeOperation(opened.editor, operationId, input, invokeOptions, commandName);
+        const result = await invokeOperation(opened.editor, operationId, input, invokeOptions, commandName);
 
         if (dryRun) {
           const document: DocumentPayload = {

@@ -16,6 +16,7 @@ export default defineConfig({
     projects: [
       './packages/super-editor',
       './packages/superdoc',
+      './shared/font-system',
       './packages/ai',
       './packages/collaboration-yjs',
       './packages/layout-engine/contracts',

@@ -1,0 +1,337 @@
+# yaml-language-server: $schema=https://pickled.dev/schema/pickled.schema.json
+
+schemaVersion: 2
+
+product:
+  name: SuperDoc
+  description: Document engine for rendering, editing, and automating DOCX files.
+
+sources:
+  public_llms: { path: ./apps/docs/llms.txt }
+  public_full: { path: ./apps/docs/llms-full.txt }
+  root_agents: { path: ./AGENTS.md }
+  superdoc_readme: { path: ./packages/superdoc/README.md }
+  react_readme: { path: ./packages/react/README.md }
+  document_api_readme: { path: ./packages/document-api/README.md }
+  mcp_readme: { path: ./apps/mcp/README.md }
+  cli_readme: { path: ./apps/cli/README.md }
+
+agents:
+  quick:
+    provider: claude-code
+    model: claude-haiku-4-5
+    maxTurns: 5
+  builder:
+    provider: claude-code
+    model: claude-sonnet-4-5
+    maxTurns: 30
+
+contexts:
+  memory: { mode: memory }
+  given_public: { mode: inject, source: public_llms }
+  given_public_full: { mode: inject, source: public_full }
+  given_agents: { mode: inject, source: root_agents }
+  given_superdoc_readme: { mode: inject, source: superdoc_readme }
+  given_react: { mode: inject, source: react_readme }
+  given_document_api: { mode: inject, source: document_api_readme }
+  given_mcp: { mode: inject, source: mcp_readme }
+  given_cli: { mode: inject, source: cli_readme }
+
+facts:
+  react_install:
+    statement: React apps install @superdoc-dev/react, which includes superdoc.
+    match:
+      allOf: ["@superdoc-dev/react"]
+      anyOf: ["included as a dependency", "includes superdoc", "includes `superdoc`", "no need to install it separately"]
+  react_embed:
+    statement: React embedding uses SuperDocEditor, the React stylesheet, document, and documentMode.
+    match:
+      allOf: ["SuperDocEditor", "@superdoc-dev/react/style.css", "document", "documentMode"]
+  vanilla_embed:
+    statement: Vanilla embedding uses superdoc, SuperDoc, the core stylesheet, selector, and document.
+    match:
+      allOf: ["superdoc", "SuperDoc", "superdoc/style.css", "selector", "document"]
+  document_modes:
+    statement: Names the supported document modes.
+    match:
+      allOf: ["editing", "viewing", "suggesting"]
+  create_agents:
+    statement: The create package writes app-specific AGENTS.md.
+    match:
+      allOf: ["npx @superdoc-dev/create", "AGENTS.md"]
+  mcp_setup:
+    statement: Claude Code MCP setup uses the SuperDoc MCP package.
+    match:
+      allOf: ["claude mcp add superdoc -- npx @superdoc-dev/mcp"]
+  mcp_workflow:
+    statement: MCP work opens a session, reads or searches, applies intent tools, saves, and closes.
+    match:
+      allOf: ["superdoc_open", "superdoc_save", "superdoc_close"]
+      anyOf: ["superdoc_get_content", "superdoc_search"]
+  mcp_local:
+    statement: MCP runs locally over stdio.
+    match:
+      allOf: ["stdio"]
+      anyOf: ["local", "subprocess"]
+  docapi_four_files:
+    statement: Adding a Document API operation touches the contract definition, registry, invoke table, and implementation.
+    match:
+      allOf: ["operation-definitions.ts", "operation-registry.ts", "invoke.ts"]
+      anyOf: ["src/index.ts", "DocumentApi", "implementation"]
+  docapi_generate:
+    statement: Document API contract changes require generated outputs.
+    match:
+      anyOf: ["pnpm run generate:all", "pnpm run docapi:sync", "pnpm run docapi:sync:check"]
+  docapi_generated:
+    statement: Derived maps and reference docs must not be hand-edited.
+    match:
+      allOf: ["COMMAND_CATALOG", "OPERATION_MEMBER_PATH_MAP", "OPERATION_REFERENCE_DOC_PATH_MAP"]
+      anyOf: ["do not edit", "Do not hand-edit", "derived"]
+  rendering_pipeline:
+    statement: Describes the SuperDoc rendering pipeline.
+    match:
+      allOf: ["super-converter", "layout-adapter", "FlowBlock", "layout-engine", "ResolvedLayout", "DomPainter"]
+  style_boundary:
+    statement: Converter stores raw OOXML and style-engine resolves formatting at render time.
+    match:
+      allOf: ["raw OOXML", "style-engine"]
+      anyOf: ["render time", "resolves"]
+  painter_boundary:
+    statement: DomPainter owns final DOM rendering and static visuals should not use PM decorations.
+    match:
+      allOf: ["DomPainter"]
+      anyOf: ["Do not style static document content with ProseMirror decorations", "PM decorations"]
+  document_api_layer:
+    statement: Programmatic document mutations use the Document API.
+    match:
+      allOf: ["Document API", "editor.doc"]
+      anyOf: ["programmatic", "mutations", "document mutation"]
+  custom_ui_layer:
+    statement: Custom React UI uses superdoc/ui/react hooks.
+    match:
+      allOf: ["superdoc/ui/react"]
+      anyOf: ["custom React UI", "useSuperDocCommand", "useSuperDocComments", "useSuperDocTrackChanges", "useSuperDocSelection"]
+  built_in_modules:
+    statement: Built-in modules are for SuperDoc-rendered UI.
+    match:
+      allOf: ["modules"]
+      anyOf: ["built-in", "SuperDoc renders the UI", "built-in UI"]
+  cli_open_save_close:
+    statement: CLI document workflows open a file, save changes, and close the session.
+    match:
+      allOf: ["superdoc open", "superdoc save", "superdoc close"]
+  cli_query_match:
+    statement: CLI mutations should use query match with JSON selectors and explicit match requirements.
+    match:
+      allOf: ["superdoc query match", "--select-json", "--require exactlyOne"]
+  cli_find_discovery:
+    statement: CLI find is discovery-grade and query match returns mutation-grade addresses.
+    match:
+      allOf: ["find", "discovery", "query match"]
+      anyOf: ["mutation-grade", "target"]
+
+misstatements:
+  wrong_modes:
+    statement: Uses unsupported document mode names.
+    match:
+      anyOf: ["documentMode: 'edit'", "documentMode: 'view'", "documentMode: 'suggest'"]
+  mcp_cloud:
+    statement: Claims MCP uploads documents to a SuperDoc cloud service.
+    match:
+      anyOf: ["uploads documents to SuperDoc cloud before editing", "upload the document to SuperDoc cloud before editing"]
+  edit_generated_docapi:
+    statement: Tells agents to hand-edit generated Document API maps or docs.
+    match:
+      anyOf: ["edit COMMAND_CATALOG", "hand-edit COMMAND_CATALOG", "hand-editing COMMAND_CATALOG", "edit OPERATION_MEMBER_PATH_MAP", "edit OPERATION_REFERENCE_DOC_PATH_MAP"]
+  pm_visuals:
+    statement: Tells agents to render static document visuals with ProseMirror decorations.
+    match:
+      anyOf: ["use ProseMirror decorations for static document visuals", "render static document content with PM decorations"]
+  legacy_mutation_commands:
+    statement: Recommends legacy editor commands or ProseMirror transactions for new programmatic mutations.
+    match:
+      anyOf:
+        - "use superdoc.activeEditor.commands instead of editor.doc"
+        - "use activeEditor.commands instead of editor.doc"
+        - "use editor.commands instead of editor.doc"
+        - "use activeEditor.commands for new programmatic mutations"
+        - "use editor.commands for new programmatic mutations"
+        - "use ProseMirror transactions for document mutations"
+        - "use prosemirror.transactions for document mutations"
+        - "default to editor.commands"
+        - "default to ProseMirror transactions"
+  find_for_mutation:
+    statement: Uses find output directly as a mutation target.
+    match:
+      anyOf: ["use find output for mutations", "pass find results to replace", "find returns mutation targets"]
+
+questions:
+  - id: react_embed
+    question: How should I embed SuperDoc in a React app, and what package and CSS imports matter?
+    agents: [quick]
+    contexts: [given_react]
+    expects: [react_install, react_embed, document_modes]
+    rejects: [wrong_modes]
+    examples:
+      pass:
+        - "For React, install `@superdoc-dev/react`; `superdoc` is included as a dependency. Import `SuperDocEditor` and `@superdoc-dev/react/style.css`, then pass `document` and `documentMode`. Modes are editing, viewing, and suggesting."
+      fail:
+        - "Use `documentMode: 'edit'` and skip the stylesheet."
+
+  - id: vanilla_embed
+    question: How should I embed SuperDoc in a vanilla JavaScript app?
+    agents: [quick]
+    contexts: [given_public_full, given_superdoc_readme]
+    expects: [vanilla_embed, document_modes]
+    rejects: [wrong_modes]
+    examples:
+      pass:
+        - "Install `superdoc`, import `SuperDoc` from `superdoc`, import `superdoc/style.css`, then create `new SuperDoc({ selector: '#editor', document: file, documentMode: 'editing' })`. Modes are editing, viewing, and suggesting."
+      fail:
+        - "Use `documentMode: 'view'` and leave out the CSS import."
+
+  - id: mcp_session_workflow
+    question: How do I set up SuperDoc MCP for an AI coding agent, and what is the session workflow?
+    agents: [quick]
+    contexts: [given_mcp]
+    expects: [mcp_setup, mcp_workflow, mcp_local]
+    rejects: [mcp_cloud]
+    examples:
+      pass:
+        - "For Claude Code, run `claude mcp add superdoc -- npx @superdoc-dev/mcp`. The MCP server runs locally over stdio as a subprocess. Workflows open with `superdoc_open`, read with `superdoc_get_content` or `superdoc_search`, then save with `superdoc_save` and close with `superdoc_close`."
+      fail:
+        - "The MCP server uploads documents to SuperDoc cloud before editing."
+
+  - id: agent_instructions_setup
+    question: How should I prepare a consuming app so AI coding agents have SuperDoc-specific instructions?
+    agents: [quick]
+    contexts: [given_superdoc_readme]
+    expects: [create_agents, mcp_setup]
+    rejects: [mcp_cloud]
+    examples:
+      pass:
+        - "Run `npx @superdoc-dev/create` to generate app-specific AGENTS.md, then add the Claude Code MCP server with `claude mcp add superdoc -- npx @superdoc-dev/mcp`."
+      fail:
+        - "Generate instructions by uploading files elsewhere, then upload the document to SuperDoc cloud before editing."
+
+  - id: cli_mutation_workflow
+    question: How should an agent safely mutate a DOCX file with the SuperDoc CLI?
+    agents: [quick]
+    contexts: [given_cli]
+    expects: [cli_open_save_close, cli_query_match, cli_find_discovery]
+    rejects: [find_for_mutation]
+    examples:
+      pass:
+        - "Open the document with `superdoc open ./contract.docx`, use `superdoc query match --select-json ... --require exactlyOne` to get a mutation-grade target, apply the edit, then run `superdoc save --in-place` and `superdoc close`. Treat `find` as discovery, not as a mutation target."
+      fail:
+        - "Use find output for mutations and pass find results to replace."
+
+  - id: document_api_operation
+    question: If I add a Document API operation, which files change, what should I regenerate, and what must not be hand-edited?
+    agents: [quick]
+    contexts: [given_agents, given_document_api]
+    expects: [docapi_four_files, docapi_generate, docapi_generated]
+    rejects: [edit_generated_docapi]
+    examples:
+      pass:
+        - "Add the operation in `operation-definitions.ts`, add the registry entry in `operation-registry.ts`, wire `invoke.ts`, and implement it on `DocumentApi` in `src/index.ts` plus the adapter. Run `pnpm run generate:all` and `pnpm check:public:docapi`. Do not hand-edit derived outputs such as COMMAND_CATALOG, OPERATION_MEMBER_PATH_MAP, or OPERATION_REFERENCE_DOC_PATH_MAP."
+      fail:
+        - "Add a command by hand-editing COMMAND_CATALOG and OPERATION_REFERENCE_DOC_PATH_MAP."
+
+  - id: rendering_boundaries
+    question: Where should DOCX import, style resolution, layout projection, and final rendering changes live?
+    agents: [quick]
+    contexts: [given_agents]
+    expects: [rendering_pipeline, style_boundary, painter_boundary]
+    rejects: [pm_visuals]
+    examples:
+      pass:
+        - "The pipeline is super-converter to layout-adapter to FlowBlock to layout-engine to ResolvedLayout to DomPainter. The converter stores raw OOXML, while style-engine resolves formatting at render time. DomPainter owns final DOM rendering. Do not style static document content with ProseMirror decorations."
+      fail:
+        - "Use ProseMirror decorations for static document visuals."
+
+  - id: layer_choice
+    question: When should I use Document API, superdoc/ui/react, or built-in modules?
+    agents: [quick]
+    contexts: [given_public, given_public_full]
+    expects: [document_api_layer, custom_ui_layer, built_in_modules]
+    rejects: [legacy_mutation_commands]
+    examples:
+      pass:
+        - "Use the Document API (`editor.doc.*`) for programmatic document mutations. Use `superdoc/ui/react` hooks such as `useSuperDocCommand`, `useSuperDocComments`, `useSuperDocTrackChanges`, and `useSuperDocSelection` for custom React UI. Use `modules.*` when the built-in SuperDoc-rendered UI is enough."
+      fail:
+        - "For new programmatic mutations, use editor.commands instead of editor.doc, or use ProseMirror transactions for document mutations."
+
+builds:
+  - id: build_react_editor_component
+    goal: >-
+      This is a file-editing task. Complete `src/ContractEditor.tsx` before
+      your final response. A response without file changes fails. The file
+      must export a React component that embeds SuperDoc for a `file: File`
+      prop. It must import
+      `SuperDocEditor` from `@superdoc-dev/react`, import
+      `@superdoc-dev/react/style.css`, render `<SuperDocEditor document={file}
+      documentMode="editing" ... />`, and include an `onReady` callback. Do
+      not import from `superdoc` directly and do not use unsupported document
+      modes such as "edit".
+    agents: [builder]
+    contexts: [given_react]
+    trials: 2
+    workspace:
+      path: ./fixtures/pickled/react-editor
+    verifier:
+      failToPass:
+        - { name: react editor component, run: ./tests/verify-react-editor.sh }
+      passToPass:
+        - { name: fixture readme remains, run: test -f README.md }
+    referenceSolution:
+      patch: ./fixtures/pickled/react-editor.solution.patch
+
+  - id: build_vanilla_editor_embed
+    goal: >-
+      This is a file-editing task. Complete `src/embed-superdoc.js` before
+      your final response. A response without file changes fails. The file
+      must import `SuperDoc` from `superdoc`, import `superdoc/style.css`,
+      export an `embedSuperDoc({ file })` function, and return `new SuperDoc`
+      configured with `selector: '#editor'`, `documentMode: 'editing'`, and a
+      DOCX document entry whose `data` is the incoming `file`. Do not use
+      unsupported document modes such as "edit".
+    agents: [builder]
+    contexts: [given_superdoc_readme]
+    trials: 2
+    workspace:
+      path: ./fixtures/pickled/vanilla-editor
+    verifier:
+      failToPass:
+        - { name: vanilla editor embed, run: ./tests/verify-vanilla-editor.sh }
+      passToPass:
+        - { name: fixture readme remains, run: test -f README.md }
+    referenceSolution:
+      patch: ./fixtures/pickled/vanilla-editor.solution.patch
+
+  - id: build_cli_mutation_script
+    goal: >-
+      This is a file-editing task. Create `scripts/update-contract.sh` before
+      your final response. A response without file changes fails. Create the
+      `scripts` directory if needed. Make the script executable. The script
+      must use `set -euo pipefail`, open `./contract.docx` with `superdoc
+      open`, use `superdoc query match --select-json ... --require exactlyOne`
+      to get a mutation-grade target, mutate with `superdoc replace`, save
+      with `superdoc save --in-place`, and close with `superdoc close`. Do not
+      use `superdoc find` as a mutation target and do not use `replace-legacy`.
+    agents: [builder]
+    contexts: [given_cli]
+    trials: 2
+    workspace:
+      path: ./fixtures/pickled/cli-mutation
+    verifier:
+      failToPass:
+        - { name: cli mutation script, run: ./tests/verify-cli-mutation.sh }
+      passToPass:
+        - { name: fixture readme remains, run: test -f README.md }
+    referenceSolution:
+      patch: ./fixtures/pickled/cli-mutation.solution.patch
+
+thresholds:
+  questions: 80
+  builds: 80

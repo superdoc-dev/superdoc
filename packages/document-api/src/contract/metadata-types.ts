@@ -66,4 +66,11 @@ export interface CommandStaticMetadata {
   remediationHints?: readonly string[];
   /** When true, this operation bypasses PM transaction history (out-of-band XML mutation). */
   historyUnsafe?: boolean;
+  /**
+   * When true, the operation's successful/receipt-returning path resolves a
+   * Promise and callers must `await` it. Synchronous `throws.preApply` guards
+   * still throw before the Promise is created. Defaults to `false` (the
+   * operation returns its receipt synchronously).
+   */
+  returnsPromise?: boolean;
 }

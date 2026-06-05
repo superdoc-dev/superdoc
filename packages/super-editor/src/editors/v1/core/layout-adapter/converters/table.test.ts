@@ -179,6 +179,64 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0].paragraph.kind).toBe('paragraph');
     });
 
+    it('resolves w:tblPrEx row borders onto the row attrs, leaving rows without them untouched', () => {
+      // FWC form pattern (SD-3345): the table declares tblBorders=none, but form
+      // rows carry a w:tblPrEx/w:tblBorders override (#D9D9D9). The converter stores
+      // it raw (eighth-points) under tableRowProperties.tblPrExBorders; the adapter
+      // must resolve it to typed row.attrs.borders. The callout row has no override.
+      const D9 = { val: 'single', color: '#D9D9D9', themeColor: 'background1', themeShade: 'D9', size: 4, space: 0 };
+      const node: PMNode = {
+        type: 'table',
+        attrs: { borders: {} }, // table-level borders are none/empty
+        content: [
+          {
+            type: 'tableRow',
+            attrs: { tableRowProperties: { someFlag: true } }, // callout row: no tblPrExBorders
+            content: [
+              { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'callout' }] }] },
+            ],
+          },
+          {
+            type: 'tableRow',
+            attrs: {
+              tableRowProperties: {
+                tblPrExBorders: { top: D9, left: D9, bottom: D9, right: D9, insideH: D9, insideV: D9 },
+              },
+            },
+            content: [
+              {
+                type: 'tableCell',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'First name(s)' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      // Callout row: no tblPrEx → no resolved row borders (falls through to table).
+      expect(result.rows[0].attrs?.borders).toBeUndefined();
+
+      // Form row: tblPrEx resolved to typed borders (#D9D9D9, eighth-points → px).
+      const rowBorders = result.rows[1].attrs?.borders;
+      expect(rowBorders).toBeDefined();
+      expect(rowBorders?.top).toMatchObject({ style: 'single', color: '#D9D9D9' });
+      expect((rowBorders?.top as { width: number }).width).toBeGreaterThan(0);
+      expect(rowBorders?.insideH).toMatchObject({ style: 'single', color: '#D9D9D9' });
+    });
+
     it('does not emit imported gridBefore/gridAfter placeholder cells into TableBlock rows', () => {
       const node: PMNode = {
         type: 'table',

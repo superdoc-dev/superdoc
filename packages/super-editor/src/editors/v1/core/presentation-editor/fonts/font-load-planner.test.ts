@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { planRequiredFontFaces } from './font-load-planner';
+import { planRequiredFontFaces, planFontFaces } from './font-load-planner';
+import { createFontResolver } from '@superdoc/font-system';
 import type { FlowBlock } from '@superdoc/contracts';
 
 const text = (fontFamily: string, opts: { bold?: boolean; italic?: boolean } = {}) => ({
@@ -129,5 +130,80 @@ describe('planRequiredFontFaces', () => {
     expect(planRequiredFontFaces(null)).toEqual([]);
     const reqs = planRequiredFontFaces([para('p', [{ kind: 'text', text: 'x', fontSize: 12 } as never])]);
     expect(reqs).toEqual([]);
+  });
+});
+
+describe('planFontFaces (face-aware single plan)', () => {
+  const keyset = (reqs: { family: string; weight: string; style: string }[]) =>
+    new Set(reqs.map((r) => `${r.family}|${r.weight}|${r.style}`));
+
+  it('single-face substitute: Bold queues the LOGICAL family (no phantom substitute-bold), and usedFaces keeps both', () => {
+    const resolver = createFontResolver();
+    resolver.map('Georgia', 'Gelasio'); // single-face clone, Regular-only registered
+    const hasFace = (_f: string, w: '400' | '700', s: 'normal' | 'italic') => w === '400' && s === 'normal';
+    const blocks = [para('p', [text('Georgia'), text('Georgia', { bold: true })])];
+    const plan = planFontFaces(blocks, resolver, hasFace);
+    // Gate awaits: Gelasio Regular (substituted) + Georgia Bold (passed through - NOT Gelasio Bold).
+    expect(keyset(plan.requiredFaces)).toEqual(new Set(['Gelasio|400|normal', 'Georgia|700|normal']));
+    // Report inputs keep the logical family + face for both.
+    expect(plan.usedFaces).toEqual([
+      { logicalFamily: 'Georgia', weight: '400', style: 'normal' },
+      { logicalFamily: 'Georgia', weight: '700', style: 'normal' },
+    ]);
+    // effectiveSignature records each face's resolution (incl. reason), excluding load status, as
+    // collision-safe JSON tuples [logicalLower, weight, style, physicalLower, reason].
+    expect(plan.effectiveSignature).toContain('["georgia","400","normal","gelasio","custom_mapping"]');
+    expect(plan.effectiveSignature).toContain('["georgia","700","normal","georgia","fallback_face_absent"]');
+  });
+
+  it('treats a quoted primary family as the same used face as its bare form', () => {
+    const resolver = createFontResolver();
+    // '"Calibri"' (quoted) and 'Calibri' (bare) are ONE logical family: primaryFamily strips
+    // surrounding quotes like the resolver, so they collapse to a single used face / signature
+    // entry instead of two divergent rows.
+    const plan = planFontFaces([para('p', [text('"Calibri"'), text('Calibri')])], resolver);
+    expect(plan.usedFaces).toEqual([{ logicalFamily: 'Calibri', weight: '400', style: 'normal' }]);
+  });
+
+  it('effectiveSignature changes when face availability changes for the SAME family map', () => {
+    const resolver = createFontResolver();
+    resolver.map('Georgia', 'Gelasio');
+    const blocks = [para('p', [text('Georgia', { bold: true })])];
+    const regularOnly = (_f: string, w: '400' | '700') => w === '400';
+    const allFaces = () => true;
+    // Same blocks + same map, but a fonts.add() makes Bold available -> resolution flips ->
+    // the cache identity MUST differ (resolver.signature alone would not capture this).
+    const sigBefore = planFontFaces(blocks, resolver, regularOnly).effectiveSignature;
+    const sigAfter = planFontFaces(blocks, resolver, allFaces).effectiveSignature;
+    expect(sigBefore).not.toBe(sigAfter);
+  });
+
+  it('four-face clone: all faces resolve to the substitute (requiredFaces unchanged vs family-level)', () => {
+    const resolver = createFontResolver();
+    // Only the bundled CLONE (Carlito) is registered - the normal substitute case. An all-true oracle
+    // would mark Calibri itself registered, so provider precedence would (correctly) resolve it to
+    // `registered_face` (Calibri) instead of the clone - which is a different scenario.
+    const cloneFaces = (f: string) => f.replace(/^["']|["']$/g, '').toLowerCase() === 'carlito';
+    const blocks = [
+      para('p', [
+        text('Calibri'),
+        text('Calibri', { bold: true }),
+        text('Calibri', { italic: true }),
+        text('Calibri', { bold: true, italic: true }),
+      ]),
+    ];
+    expect(keyset(planFontFaces(blocks, resolver, cloneFaces).requiredFaces)).toEqual(
+      new Set(['Carlito|400|normal', 'Carlito|700|normal', 'Carlito|400|italic', 'Carlito|700|italic']),
+    );
+  });
+
+  it('a quoted registered family produces a BARE required face (Calibri|..., not "Calibri"|...)', () => {
+    const resolver = createFontResolver();
+    // A run whose CSS family is quoted (`"Calibri"`) and whose real face is registered. The required
+    // face the gate awaits must be the bare `Calibri|400|normal`; a quoted `"Calibri"|400|normal` would
+    // re-quote in the probe and never match the registered face.
+    const registeredCalibri = (f: string) => f.replace(/^["']|["']$/g, '').toLowerCase() === 'calibri';
+    const reqs = planFontFaces([para('p', [text('"Calibri"')])], resolver, registeredCalibri).requiredFaces;
+    expect(keyset(reqs)).toEqual(new Set(['Calibri|400|normal']));
   });
 });

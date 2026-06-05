@@ -3989,6 +3989,31 @@ export class Editor extends EventEmitter<EditorEventMap> {
         }
       }
 
+      // templates.apply: serialize substrate parts copied from a source package
+      // (theme, fontTable, webSettings) so they survive save/export. These parts
+      // have no dedicated serialization above; mirror the customXml passthrough.
+      // Also re-serialize [Content_Types].xml and word/_rels/document.xml.rels
+      // from convertedXml when the adapter added Overrides/Relationships there,
+      // so the copied parts are registered in the package.
+      const templateSubstratePaths = Object.keys(this.converter.convertedXml).filter(
+        (path) =>
+          /^word\/theme\/[^/]+\.xml$/.test(path) || path === 'word/fontTable.xml' || path === 'word/webSettings.xml',
+      );
+      for (const path of templateSubstratePaths) {
+        if (Object.prototype.hasOwnProperty.call(updatedDocs, path)) continue;
+        const partData = this.converter.convertedXml[path] as { elements?: unknown[] } | undefined;
+        if (partData?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+      for (const path of ['[Content_Types].xml', 'word/_rels/document.xml.rels']) {
+        if (Object.prototype.hasOwnProperty.call(updatedDocs, path)) continue;
+        const partData = this.converter.convertedXml[path] as { elements?: unknown[] } | undefined;
+        if (partData?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+
       // Emit ZIP tombstones for custom XML parts that were removed via the
       // Document API but originated in the imported DOCX. Without this,
       // the exporter would copy the original zip entry through, and the

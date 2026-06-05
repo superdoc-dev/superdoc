@@ -1,6 +1,7 @@
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
 import { isHeadless } from '@utils/headless-helpers.js';
+import { formatPageNumberFieldValue, formatSectionPageNumberText } from '@superdoc/contracts';
 /**
  * Configuration options for PageNumber
  * @typedef {Object} PageNumberOptions
@@ -13,6 +14,9 @@ import { isHeadless } from '@utils/headless-helpers.js';
  * @typedef {Object} PageNumberAttributes
  * @category Attributes
  * @property {Array} [marksAsAttrs=null] @internal - Internal marks storage
+ * @property {string|null} [instruction=null] @internal - Original PAGE field instruction when switched
+ * @property {string|null} [pageNumberFormat=null] @internal - Normalized field switch format
+ * @property {number|null} [pageNumberZeroPadding=null] @internal - Zero-padding width from numeric picture switch
  */
 
 /**
@@ -48,6 +52,18 @@ export const PageNumber = Node.create({
         default: null,
         rendered: false,
       },
+      instruction: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberFormat: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberZeroPadding: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 
@@ -59,7 +75,7 @@ export const PageNumber = Node.create({
   },
 
   parseDOM() {
-    return [{ tag: 'span[data-id="auto-page-number"' }];
+    return [{ tag: 'span[data-id="auto-page-number"]' }];
   },
 
   renderDOM({ htmlAttributes }) {
@@ -120,6 +136,9 @@ export const PageNumber = Node.create({
  * @typedef {Object} TotalPageCountAttributes
  * @category Attributes
  * @property {Array} [marksAsAttrs=null] @internal - Internal marks storage
+ * @property {string|null} [instruction=null] @internal - Original NUMPAGES field instruction when switched
+ * @property {string|null} [pageNumberFormat=null] @internal - Normalized field switch format
+ * @property {number|null} [pageNumberZeroPadding=null] @internal - Zero-padding width from numeric picture switch
  */
 
 /**
@@ -155,6 +174,18 @@ export const TotalPageCount = Node.create({
         default: null,
         rendered: false,
       },
+      instruction: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberFormat: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberZeroPadding: {
+        default: null,
+        rendered: false,
+      },
       /**
        * Preserves the imported OOXML cached field result for NUMPAGES.
        * Used as a fallback when pagination is unavailable (headless context)
@@ -185,7 +216,7 @@ export const TotalPageCount = Node.create({
   },
 
   parseDOM() {
-    return [{ tag: 'span[data-id="auto-total-pages"' }];
+    return [{ tag: 'span[data-id="auto-total-pages"]' }];
   },
 
   renderDOM({ htmlAttributes }) {
@@ -233,15 +264,126 @@ export const TotalPageCount = Node.create({
   },
 });
 
-const getNodeAttributes = (nodeName, editor) => {
+/**
+ * @module SectionPageCount
+ * @sidebarTitle Section Page Count
+ */
+export const SectionPageCount = Node.create({
+  name: 'section-page-count',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  draggable: false,
+  selectable: false,
+
+  content: 'text*',
+
+  addOptions() {
+    return {
+      htmlAttributes: {
+        contenteditable: false,
+        'data-id': 'auto-section-pages',
+        'aria-label': 'Section page count node',
+        class: 'sd-editor-auto-section-pages',
+      },
+    };
+  },
+
+  addAttributes() {
+    return {
+      marksAsAttrs: {
+        default: null,
+        rendered: false,
+      },
+      importedCachedText: {
+        default: null,
+        rendered: false,
+      },
+      resolvedText: {
+        default: null,
+        rendered: false,
+      },
+      instruction: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberFormat: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberZeroPadding: {
+        default: null,
+        rendered: false,
+      },
+    };
+  },
+
+  addNodeView() {
+    return ({ node, editor, getPos, decorations }) => {
+      const htmlAttributes = this.options.htmlAttributes;
+      return new AutoPageNumberNodeView(node, getPos, decorations, editor, htmlAttributes);
+    };
+  },
+
+  parseDOM() {
+    return [{ tag: 'span[data-id="auto-section-pages"]' }];
+  },
+
+  renderDOM({ htmlAttributes }) {
+    return ['span', Attribute.mergeAttributes(this.options.htmlAttributes, htmlAttributes), 0];
+  },
+
+  addCommands() {
+    return {
+      addSectionPageCount:
+        () =>
+        ({ tr, dispatch, state, editor }) => {
+          const { options } = editor;
+          if (!options.isHeaderOrFooter) return false;
+
+          const { schema } = state;
+          const sectionPageCountType = schema.nodes?.['section-page-count'];
+          if (!sectionPageCountType) return false;
+
+          const sectionPageCount = editor?.options?.sectionPageCount || 1;
+          const sectionPageCountNode = {
+            type: 'section-page-count',
+            content: [{ type: 'text', text: String(sectionPageCount) }],
+          };
+          const pageNode = schema.nodeFromJSON(sectionPageCountNode);
+          if (dispatch) {
+            tr.replaceSelectionWith(pageNode, false);
+          }
+          return true;
+        },
+    };
+  },
+});
+
+const getNodeAttributes = (nodeName, editor, node = null) => {
   switch (nodeName) {
-    case 'page-number':
+    case 'page-number': {
+      const currentPageNumber = editor.options.currentPageNumber || 1;
+      const currentPageDisplayNumber = editor.options.currentPageDisplayNumber || currentPageNumber;
+      const chapterNumberText =
+        typeof editor.options.currentPageChapterNumberText === 'string'
+          ? editor.options.currentPageChapterNumberText
+          : undefined;
+      const text = node?.attrs?.pageNumberFormat
+        ? formatSectionPageNumberText({
+            displayNumber: Number(currentPageDisplayNumber) || 1,
+            pageFormat: node.attrs.pageNumberFormat,
+            chapterNumberText,
+            chapterSeparator: editor.options.currentPageChapterSeparator,
+          })
+        : editor.options.currentPageNumberText || currentPageNumber;
       return {
-        text: editor.options.currentPageNumber || '1',
+        text,
         className: 'sd-editor-auto-page-number',
         dataId: 'auto-page-number',
         ariaLabel: 'Page number node',
       };
+    }
     case 'total-page-number':
       return {
         text: editor.options.totalPageCount || editor.options.parentEditor?.currentTotalPages || '1',
@@ -249,6 +391,31 @@ const getNodeAttributes = (nodeName, editor) => {
         dataId: 'auto-total-pages',
         ariaLabel: 'Total page count node',
       };
+    case 'section-page-count': {
+      const sectionPageCount = editor.options.sectionPageCount;
+      const cachedText = node?.attrs?.resolvedText ?? node?.attrs?.importedCachedText ?? node?.textContent ?? '1';
+      const pageNumberFormat =
+        typeof node?.attrs?.pageNumberFormat === 'string' ? node.attrs.pageNumberFormat : undefined;
+      const pageNumberZeroPadding =
+        typeof node?.attrs?.pageNumberZeroPadding === 'number' && Number.isFinite(node.attrs.pageNumberZeroPadding)
+          ? node.attrs.pageNumberZeroPadding
+          : undefined;
+      const text =
+        sectionPageCount != null
+          ? pageNumberFormat || pageNumberZeroPadding != null
+            ? formatPageNumberFieldValue(Number(sectionPageCount) || 1, {
+                ...(pageNumberFormat ? { format: pageNumberFormat } : {}),
+                ...(pageNumberZeroPadding != null ? { zeroPadding: pageNumberZeroPadding } : {}),
+              })
+            : sectionPageCount
+          : cachedText;
+      return {
+        text,
+        className: 'sd-editor-auto-section-pages',
+        dataId: 'auto-section-pages',
+        ariaLabel: 'Section page count node',
+      };
+    }
     default:
       return {};
   }
@@ -266,7 +433,7 @@ export class AutoPageNumberNodeView {
   }
 
   #renderDom(node, htmlAttributes) {
-    const attrs = getNodeAttributes(this.node.type.name, this.editor);
+    const attrs = getNodeAttributes(this.node.type.name, this.editor, this.node);
     const content = document.createTextNode(String(attrs.text));
 
     const nodeContent = document.createElement('span');
@@ -324,7 +491,7 @@ export class AutoPageNumberNodeView {
     this.node = node;
 
     // Refresh displayed text when editor options change (e.g. currentPageNumber)
-    const attrs = getNodeAttributes(this.node.type.name, this.editor);
+    const attrs = getNodeAttributes(this.node.type.name, this.editor, this.node);
     const newText = String(attrs.text);
     if (this.dom.textContent !== newText) {
       this.dom.textContent = newText;

@@ -658,14 +658,14 @@ export class MeasureCache<T> {
    * @param height - The height dimension for cache key
    * @returns The cached value or undefined
    */
-  public get(block: FlowBlock | null | undefined, width: number, height: number): T | undefined {
+  public get(block: FlowBlock | null | undefined, width: number, height: number, fontSignature = ''): T | undefined {
     // Safety: Validate block exists and has required properties before accessing
     // This prevents invalid cache keys from null/undefined blocks
     if (!block || !block.id) {
       return undefined;
     }
 
-    const key = this.composeKey(block, width, height);
+    const key = this.composeKey(block, width, height, fontSignature);
     const value = this.cache.get(key);
 
     if (value !== undefined) {
@@ -692,14 +692,14 @@ export class MeasureCache<T> {
    * @param height - The height dimension for cache key
    * @param value - The value to cache
    */
-  public set(block: FlowBlock | null | undefined, width: number, height: number, value: T): void {
+  public set(block: FlowBlock | null | undefined, width: number, height: number, value: T, fontSignature = ''): void {
     // Safety: Validate block exists and has required properties before caching
     // This prevents invalid cache keys and silent failures
     if (!block || !block.id) {
       return;
     }
 
-    const key = this.composeKey(block, width, height);
+    const key = this.composeKey(block, width, height, fontSignature);
 
     // If key already exists, delete it first (will be re-added at end)
     if (this.cache.has(key)) {
@@ -819,10 +819,13 @@ export class MeasureCache<T> {
    * @param height - Height dimension (will be clamped to [0, MAX_DIMENSION])
    * @returns Cache key string
    */
-  private composeKey(block: FlowBlock, width: number, height: number): string {
+  private composeKey(block: FlowBlock, width: number, height: number, fontSignature: string): string {
     const safeWidth = Number.isFinite(width) ? Math.max(0, Math.min(Math.floor(width), MAX_DIMENSION)) : 0;
     const safeHeight = Number.isFinite(height) ? Math.max(0, Math.min(Math.floor(height), MAX_DIMENSION)) : 0;
     const hash = hashRuns(block);
-    return `${block.id}@${safeWidth}x${safeHeight}:${hash}`;
+    // The font signature (the document resolver's mapping identity) is part of the key so two
+    // documents with identical block content but different `fonts.map` cannot reuse each other's
+    // measure. Appended AFTER the block.id prefix so invalidate(blockIds) prefix-matching holds.
+    return `${block.id}@${safeWidth}x${safeHeight}:${hash}#${fontSignature}`;
   }
 }

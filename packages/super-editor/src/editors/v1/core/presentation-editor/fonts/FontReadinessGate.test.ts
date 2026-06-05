@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { getFontConfigVersion, __resetFontConfigVersion } from '@superdoc/font-system';
 import type {
   FontFaceLoadResult,
   FontFaceRequest,
@@ -77,17 +78,48 @@ class FakeFontSet {
 
 const calibriToCarlito = (families: string[]) => families.map((f) => (f === 'Calibri' ? 'Carlito' : f));
 
+/** Virtual clock so tests can advance past the late-load scheduler's quiet/cooldown windows. */
+function makeClock() {
+  let nowMs = 0;
+  let seq = 0;
+  const timers = new Map<number, { due: number; cb: () => void }>();
+  return {
+    scheduleTimeout: (cb: () => void, ms: number) => {
+      const id = ++seq;
+      timers.set(id, { due: nowMs + ms, cb });
+      return id;
+    },
+    cancelTimeout: (handle: unknown) => {
+      timers.delete(handle as number);
+    },
+    advance: (ms: number) => {
+      const target = nowMs + ms;
+      for (;;) {
+        const due = [...timers.entries()].filter(([, t]) => t.due <= target).sort((a, b) => a[1].due - b[1].due);
+        if (due.length === 0) break;
+        const [id, t] = due[0];
+        timers.delete(id);
+        nowMs = t.due;
+        t.cb();
+      }
+      nowMs = target;
+    },
+  };
+}
+
 describe('FontReadinessGate', () => {
   let registry: FakeRegistry;
   let fontSet: FakeFontSet;
   let requestReflow: ReturnType<typeof vi.fn>;
   let invalidateCaches: ReturnType<typeof vi.fn>;
+  let clock: ReturnType<typeof makeClock>;
 
   beforeEach(() => {
     registry = new FakeRegistry();
     fontSet = new FakeFontSet();
     requestReflow = vi.fn();
     invalidateCaches = vi.fn();
+    clock = makeClock();
   });
 
   function makeGate(documentFonts: string[]) {
@@ -99,8 +131,33 @@ describe('FontReadinessGate', () => {
       invalidateCaches,
       getFontEnvironment: () => ({ fontSet: fontSet.asFontSet(), FontFaceCtor: fakeCtor }),
       timeoutMs: 1000,
+      scheduleTimeout: clock.scheduleTimeout,
+      cancelTimeout: clock.cancelTimeout,
     });
   }
+
+  it('installs the bundled pack even with NO font set, so bundled substitutes are not disabled', () => {
+    // A document with no `document.fonts` (SSR/jsdom, some iframe/embedded timings) still needs the
+    // bundled face METADATA so `hasFace` is true and a substitute (e.g. Calibri -> Carlito) applies;
+    // loading needs a font set, availability must not.
+    const onRegistryResolved = vi.fn();
+    const gate = new FontReadinessGate({
+      registry: registry.asRegistry(),
+      getDocumentFonts: () => [],
+      requestReflow,
+      invalidateCaches,
+      getFontEnvironment: () => null, // no font set
+      onRegistryResolved,
+      timeoutMs: 1000,
+      scheduleTimeout: clock.scheduleTimeout,
+      cancelTimeout: clock.cancelTimeout,
+    });
+
+    gate.resolveRegistry();
+    expect(onRegistryResolved).toHaveBeenCalledTimes(1); // installed despite no font set
+    gate.resolveRegistry();
+    expect(onRegistryResolved).toHaveBeenCalledTimes(1); // idempotent per registry instance
+  });
 
   it('awaits the resolved physical family, not the logical one', async () => {
     registry.statuses.set('Carlito', 'loaded');
@@ -144,9 +201,33 @@ describe('FontReadinessGate', () => {
     registry.available.add('Carlito');
     fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito' }] });
 
+    // Reflow is batched: nothing until the scheduler's quiet window elapses.
+    expect(requestReflow).not.toHaveBeenCalled();
+    clock.advance(300);
     expect(invalidateCaches).toHaveBeenCalledTimes(1);
     expect(requestReflow).toHaveBeenCalledTimes(1);
     expect(gate.fontConfigVersion).toBe(1);
+  });
+
+  it('batches several late faces into one reflow within the quiet window', async () => {
+    registry.statuses.set('Carlito', 'timed_out');
+    registry.statuses.set('Caladea', 'timed_out');
+    const gate = makeGate(['Carlito', 'Caladea']);
+    await gate.ensureReadyForMeasure();
+
+    registry.statuses.set('Carlito', 'loaded');
+    registry.statuses.set('Caladea', 'loaded');
+    fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito' }] });
+    clock.advance(100); // still within the quiet window
+    fontSet.fire('loadingdone', { fontfaces: [{ family: 'Caladea' }] });
+    expect(requestReflow).not.toHaveBeenCalled();
+    // Caches + epoch are cleared immediately as each face arrives (measure caches are not
+    // epoch-keyed), so a re-measure in the quiet window already sees the loaded font.
+    expect(invalidateCaches).toHaveBeenCalledTimes(2);
+    expect(gate.fontConfigVersion).toBe(2);
+
+    clock.advance(300);
+    expect(requestReflow).toHaveBeenCalledTimes(1); // but only ONE (expensive) reflow for both
   });
 
   it('does not reflow again on a second loadingdone for the same face (no loop)', async () => {
@@ -158,6 +239,7 @@ describe('FontReadinessGate', () => {
     registry.available.add('Carlito');
     fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito' }] });
     fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito' }] });
+    clock.advance(300);
 
     expect(invalidateCaches).toHaveBeenCalledTimes(1);
     expect(requestReflow).toHaveBeenCalledTimes(1);
@@ -170,17 +252,78 @@ describe('FontReadinessGate', () => {
     await gate.ensureReadyForMeasure();
 
     fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito' }] });
+    clock.advance(300);
 
     expect(requestReflow).not.toHaveBeenCalled();
   });
 
-  it('notifyFontConfigChanged bumps the epoch, invalidates, and reflows', () => {
+  it('dispose cancels a pending batched reflow (no reflow after teardown)', async () => {
+    registry.statuses.set('Carlito', 'timed_out');
+    const gate = makeGate(['Calibri']);
+    await gate.ensureReadyForMeasure();
+
+    registry.statuses.set('Carlito', 'loaded');
+    fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito' }] }); // invalidates now; schedules the reflow
+    gate.dispose();
+    clock.advance(5000);
+
+    // The cache clear is immediate (on load, before dispose); dispose cancels the pending reflow.
+    expect(invalidateCaches).toHaveBeenCalledTimes(1);
+    expect(requestReflow).not.toHaveBeenCalled();
+  });
+
+  it('notifyDocumentFontConfigChanged (mapping change) bumps the LOCAL version and reflows, without the global epoch', () => {
+    __resetFontConfigVersion();
     const gate = makeGate(['Calibri']);
 
-    gate.notifyFontConfigChanged();
+    gate.notifyDocumentFontConfigChanged();
 
-    expect(gate.fontConfigVersion).toBe(1);
-    expect(invalidateCaches).toHaveBeenCalledTimes(1);
+    expect(gate.fontConfigVersion).toBe(1); // local version bumped so fonts-changed re-emits
+    expect(getFontConfigVersion()).toBe(0); // a mapping is document-local: NO global epoch bump
+    expect(invalidateCaches).not.toHaveBeenCalled(); // the per-document signature busts the cache
+    expect(requestReflow).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifyDocumentFontConfigChanged (availabilityChanged) invalidates caches and bumps the global epoch', () => {
+    // A `fonts.add` registers a face for a family the document may already render with fallback
+    // metrics. The resolver signature is unchanged, so it cannot bust the measure caches; the gate
+    // must clear them and bump the global epoch (like a late load) or the reflow keeps stale widths.
+    __resetFontConfigVersion();
+    const gate = makeGate(['Calibri']);
+
+    gate.notifyDocumentFontConfigChanged({ availabilityChanged: true });
+
+    expect(gate.fontConfigVersion).toBe(1); // local version bumped so fonts-changed re-emits
+    expect(getFontConfigVersion()).toBe(1); // a registration is a GLOBAL availability change
+    expect(invalidateCaches).toHaveBeenCalledTimes(1); // signature is unchanged, so clear explicitly
+    expect(requestReflow).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidateCachesForConfigRegistration clears caches without reflow, event, or epoch bump', () => {
+    // Config-time registration (before first layout) has the same unchanged-signature risk, but must
+    // not reflow/emit/bump - the first layout measures fresh against the cleared cache.
+    __resetFontConfigVersion();
+    const gate = makeGate(['Calibri']);
+
+    gate.invalidateCachesForConfigRegistration();
+
+    expect(invalidateCaches).toHaveBeenCalledTimes(1); // so the first measure can't reuse stale widths
+    expect(requestReflow).not.toHaveBeenCalled(); // nothing has rendered yet
+    expect(gate.fontConfigVersion).toBe(0); // no event
+    expect(getFontConfigVersion()).toBe(0); // no global epoch bump at config time
+  });
+
+  it('notifyDocumentFontConfigChanged cancels a pending batched late-load (no double reflow)', async () => {
+    registry.statuses.set('Carlito', 'timed_out');
+    const gate = makeGate(['Calibri']);
+    await gate.ensureReadyForMeasure();
+
+    registry.statuses.set('Carlito', 'loaded');
+    fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito' }] }); // schedules a batched reflow
+    gate.notifyDocumentFontConfigChanged(); // immediate reflow; must also cancel the pending batch
+    expect(requestReflow).toHaveBeenCalledTimes(1);
+
+    clock.advance(300); // the cancelled quiet timer must NOT fire a second reflow
     expect(requestReflow).toHaveBeenCalledTimes(1);
   });
 
@@ -220,6 +363,8 @@ describe('FontReadinessGate', () => {
         invalidateCaches,
         getFontEnvironment: () => ({ fontSet: fontSet.asFontSet(), FontFaceCtor: fakeCtor }),
         timeoutMs: 1000,
+        scheduleTimeout: clock.scheduleTimeout,
+        cancelTimeout: clock.cancelTimeout,
       });
     }
 
@@ -255,6 +400,26 @@ describe('FontReadinessGate', () => {
       expect(summary.results).toEqual([{ family: 'Carlito', status: 'failed' }]);
     });
 
+    it('replans once when a required face terminally FAILS, so it can demote to the clone (Fix 2b)', async () => {
+      registry.faceStatuses.set(faceKey(BOLD), 'failed');
+      const gate = makeFaceGate(() => [BOLD]);
+
+      await gate.ensureReadyForMeasure();
+      // The failed required face triggers a demotion replan: caches invalidated synchronously, the
+      // (batched) reflow flushes after the scheduler window. The next render re-resolves to the clone.
+      expect(invalidateCaches).toHaveBeenCalledTimes(1);
+      expect(requestReflow).not.toHaveBeenCalled();
+      clock.advance(300);
+      expect(requestReflow).toHaveBeenCalledTimes(1);
+
+      // A second measure pass with the SAME face still failed must NOT replan again - fire-once, so it
+      // cannot loop when the bundled clone it steps down to also fails. Drain the full cooldown.
+      await gate.ensureReadyForMeasure();
+      clock.advance(2500);
+      expect(invalidateCaches).toHaveBeenCalledTimes(1);
+      expect(requestReflow).toHaveBeenCalledTimes(1);
+    });
+
     it('reflows once when the required bold face loads after a timed-out first paint', async () => {
       registry.faceStatuses.set(faceKey(BOLD), 'timed_out');
       const gate = makeFaceGate(() => [BOLD]);
@@ -263,17 +428,24 @@ describe('FontReadinessGate', () => {
 
       // A REGULAR Carlito face finishing must NOT reflow - it is not a required face.
       fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito', weight: 'normal', style: 'normal' }] });
+      clock.advance(300);
       expect(requestReflow).not.toHaveBeenCalled();
 
-      // The required BOLD face finishing DOES reflow, exactly once.
+      // The required BOLD face finishing DOES reflow (batched), exactly once after the window.
       registry.faceStatuses.set(faceKey(BOLD), 'loaded');
       fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito', weight: 'bold', style: 'normal' }] });
+      expect(requestReflow).not.toHaveBeenCalled(); // batched, not yet flushed
+      clock.advance(300);
       expect(requestReflow).toHaveBeenCalledTimes(1);
       expect(invalidateCaches).toHaveBeenCalledTimes(1);
 
-      // A second loadingdone for the same face does not reflow again (no loop).
+      // A second loadingdone for the SAME face must not reflow again. Drain the full cooldown:
+      // a broken dedup would re-invalidate immediately AND flush a trailing reflow at cooldown
+      // end, so advancing past it (not just 300ms inside it) is what makes this assertion real.
       fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito', weight: 'bold', style: 'normal' }] });
+      clock.advance(2500); // past the post-flush cooldown (2000ms)
       expect(requestReflow).toHaveBeenCalledTimes(1);
+      expect(invalidateCaches).toHaveBeenCalledTimes(1);
     });
 
     it('falls back to the family path when face planning throws', async () => {
@@ -299,6 +471,34 @@ describe('FontReadinessGate', () => {
       expect(registry.faceAwaitCalls).toEqual([]);
       expect(registry.awaitCalls).toEqual([['Carlito']]);
       expect(summary.loaded).toBe(1);
+    });
+
+    it('resetForDocumentChange clears the cached summary so an empty new document does not reuse it', async () => {
+      const REGULAR: FontFaceRequest = { family: 'Carlito', weight: '400', style: 'normal' };
+      registry.faceStatuses.set(faceKey(REGULAR), 'loaded');
+      let faces: FontFaceRequest[] = [REGULAR];
+      const gate = new FontReadinessGate({
+        registry: registry.asRegistry(),
+        getDocumentFonts: () => [],
+        getRequiredFaces: () => faces,
+        requestReflow,
+        invalidateCaches,
+        getFontEnvironment: () => ({ fontSet: fontSet.asFontSet(), FontFaceCtor: fakeCtor }),
+        timeoutMs: 1000,
+        scheduleTimeout: clock.scheduleTimeout,
+        cancelTimeout: clock.cancelTimeout,
+      });
+
+      const first = await gate.ensureReadyForMeasure();
+      expect(first.loaded).toBe(1); // Carlito loaded for the first document
+
+      // Swap to a document with no required faces. With #lastSummary uncleared, the empty
+      // plan short-circuits to the prior summary; the reset must prevent that.
+      gate.resetForDocumentChange();
+      faces = [];
+      const second = await gate.ensureReadyForMeasure();
+      expect(second.loaded).toBe(0);
+      expect(second.results).toEqual([]);
     });
   });
 });

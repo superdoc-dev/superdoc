@@ -94,10 +94,41 @@ describe('FontRegistry skeleton contract', () => {
     const { registry } = makeRegistry(fontSet);
     const result = registry.register({ family: 'Carlito', source: 'url(carlito.woff2)' });
 
-    expect(result).toEqual({ family: 'Carlito', status: 'unloaded' });
+    expect(result).toEqual({ family: 'Carlito', status: 'unloaded', changed: true });
     expect(registry.isManaged('Carlito')).toBe(true);
     expect(fontSet.added.map((f) => f.family)).toContain('Carlito');
     expect(registry.getStatus('Carlito')).toBe('unloaded');
+  });
+
+  it('re-registering the same face + same source is idempotent (changed:false, no duplicate face)', () => {
+    const { registry } = makeRegistry(fontSet);
+    registry.register({ family: 'Carlito', source: 'url(carlito.woff2)' });
+    const again = registry.register({ family: 'Carlito', source: 'url(carlito.woff2)' });
+
+    expect(again.changed).toBe(false);
+    expect(fontSet.added.filter((f) => f.family === 'Carlito')).toHaveLength(1); // not added twice
+  });
+
+  it('treats url() quote variants of the same file as one source (idempotent, not a conflict)', () => {
+    // The bundled pack registers `url(/x.woff2)` (unquoted) while `fonts.add` quotes to
+    // `url("/x.woff2")`. They name the same file, so re-adding must be idempotent, not throw.
+    const { registry } = makeRegistry(fontSet);
+    registry.register({ family: 'Carlito', source: 'url(/fonts/Carlito.woff2)' });
+    const again = registry.register({ family: 'Carlito', source: 'url("/fonts/Carlito.woff2")' });
+    const singleQuoted = registry.register({ family: 'Carlito', source: "url('/fonts/Carlito.woff2')" });
+
+    expect(again.changed).toBe(false);
+    expect(singleQuoted.changed).toBe(false);
+    expect(fontSet.added.filter((f) => f.family === 'Carlito')).toHaveLength(1); // not added per-variant
+  });
+
+  it('re-registering the same face with a DIFFERENT source throws (no silent overwrite)', () => {
+    const { registry } = makeRegistry(fontSet);
+    registry.register({ family: 'Carlito', source: 'url(carlito.woff2)' });
+
+    expect(() => registry.register({ family: 'Carlito', source: 'url(other.woff2)' })).toThrow(
+      /already registered from a different source/,
+    );
   });
 
   it('reports `loaded` when a real face loads', async () => {
@@ -274,5 +305,50 @@ describe('FontRegistry face-aware APIs', () => {
     const res = await registry.awaitFaceRequest({ family: 'Broken', weight: '400', style: 'normal' }, 1000);
     expect(res.status).toBe('failed');
     expect(registry.getStatus('Broken')).toBe('failed');
+  });
+});
+
+describe('hasFace oracle (provider-only, failure-aware, weight-bucketed)', () => {
+  it('a REGISTERED face answers hasFace; a merely-AWAITED unregistered family does NOT (Fix A)', async () => {
+    const fontSet = new FakeFontSet();
+    const { registry } = makeRegistry(fontSet);
+    registry.register({ family: 'Real', source: 'url(real.woff2)' });
+    expect(registry.hasFace('Real', '400', 'normal')).toBe(true);
+
+    // Awaiting an unregistered family tracks it for the status rollup, but it must NOT become a
+    // provider face - else an as_requested family would flip to registered_face after the first await.
+    await registry.awaitFaceRequest({ family: 'Ghost', weight: '400', style: 'normal' }, 1000);
+    expect(registry.hasFace('Ghost', '400', 'normal')).toBe(false);
+  });
+
+  it('a terminally FAILED registered face drops out of hasFace; a TIMED_OUT one does not (Fix 2a)', async () => {
+    const fontSet = new FakeFontSet();
+    const { registry, timer } = makeRegistry(fontSet);
+    registry.register({ family: 'Broken', source: 'url(broken.woff2)' });
+    registry.register({ family: 'Slow', source: 'url(slow.woff2)' });
+    expect(registry.hasFace('Broken', '400', 'normal')).toBe(true); // unloaded != failed
+    expect(registry.hasFace('Slow', '400', 'normal')).toBe(true);
+
+    fontSet.behaviors.set('Broken', 'reject');
+    await registry.awaitFaceRequest({ family: 'Broken', weight: '400', style: 'normal' }, 1000);
+    expect(registry.hasFace('Broken', '400', 'normal')).toBe(false); // failed -> ladder steps down to the clone
+
+    fontSet.behaviors.set('Slow', 'never');
+    const slow = registry.awaitFaceRequest({ family: 'Slow', weight: '400', style: 'normal' }, 1000);
+    timer.fire(); // -> timed_out
+    await slow;
+    expect(registry.hasFace('Slow', '400', 'normal')).toBe(true); // timed_out stays available (late-load recovers)
+  });
+
+  it('an off-bucket registered weight answers the bucket key AND builds the FontFace at that weight (Fix 4)', () => {
+    const fontSet = new FakeFontSet();
+    const { registry } = makeRegistry(fontSet);
+    registry.register({ family: 'Heavy', source: 'url(heavy.woff2)', descriptors: { weight: '500' } });
+    // 500 buckets to 400: it answers the 400 query, not 700.
+    expect(registry.hasFace('Heavy', '400', 'normal')).toBe(true);
+    expect(registry.hasFace('Heavy', '700', 'normal')).toBe(false);
+    // ...and the FontFace is built at the bucketed weight, so it renders 400 (not its true 500).
+    const face = fontSet.added.find((f) => f.family === 'Heavy') as unknown as { descriptors?: { weight?: string } };
+    expect(face?.descriptors?.weight).toBe('400');
   });
 });

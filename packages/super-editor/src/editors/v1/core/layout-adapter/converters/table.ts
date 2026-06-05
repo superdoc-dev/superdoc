@@ -45,6 +45,7 @@ import {
 } from '../attributes/index.js';
 import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
+import { resolveShadingFillColor } from '@converter/helpers.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
 import { annotateBlockWithTrackedChange, shouldHideTrackedNode } from '../tracked-changes.js';
 import {
@@ -308,18 +309,21 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       }
     }
   }
-  // Fall back to resolved style shading if no inline background
+  // Fall back to resolved style shading if no inline background. Resolve the fill
+  // base (explicit hex → theme fill), then apply the OOXML shading pattern
+  // (pctNN/solid) via the shared resolver so a table style's `pct10`/`auto` shading
+  // (e.g. a tblStylePr firstRow band) becomes the gray Word paints, instead of being
+  // dropped. (SD-2969)
   if (!cellBackgroundColor && resolvedTcProps?.shading) {
-    const { fill, themeFill, themeFillTint, themeFillShade } = resolvedTcProps.shading;
-    const normalizedFill = normalizeShadingColor(fill);
-    if (normalizedFill) {
-      cellBackgroundColor = normalizedFill;
-    } else if (themeFill && context.themeColors) {
-      const resolved = resolveThemeColorValue(themeFill, themeFillTint, themeFillShade, context.themeColors);
-      const normalizedTheme = normalizeShadingColor(resolved);
-      if (normalizedTheme) {
-        cellBackgroundColor = normalizedTheme;
-      }
+    const { fill, color, val, themeFill, themeFillTint, themeFillShade } = resolvedTcProps.shading;
+    let fillBase = normalizeShadingColor(fill);
+    if (!fillBase && themeFill && context.themeColors) {
+      const resolvedTheme = resolveThemeColorValue(themeFill, themeFillTint, themeFillShade, context.themeColors);
+      fillBase = normalizeShadingColor(resolvedTheme);
+    }
+    const resolved = resolveShadingFillColor({ val, color, fill: fillBase ?? fill });
+    if (resolved) {
+      cellBackgroundColor = resolved.startsWith('#') ? resolved : `#${resolved}`;
     }
   }
 
@@ -716,11 +720,23 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
 
   const rowProps = rowNode.attrs?.tableRowProperties;
   const rowHeight = normalizeRowHeight(rowProps as Record<string, unknown> | undefined);
+
+  // Row-level border override from w:tblPrEx/w:tblBorders (ECMA-376 §17.4.61).
+  // The converter stores these raw (eighth-points) under tableRowProperties.tblPrExBorders.
+  // tblPrEx overrides the table's borders for this row only; rows without it fall
+  // through to the table borders (callout rows in FWC forms stay borderless this way).
+  const tblPrExBordersRaw = (rowProps as Record<string, unknown> | undefined)?.tblPrExBorders;
+  const rowBorders =
+    tblPrExBordersRaw && typeof tblPrExBordersRaw === 'object'
+      ? extractTableBorders(tblPrExBordersRaw as Record<string, unknown>, { unit: 'eighthPoints' })
+      : undefined;
+
   const attrs: TableRowAttrs | undefined =
     rowProps && typeof rowProps === 'object'
       ? {
           tableRowProperties: rowProps as Record<string, unknown>,
           ...(rowHeight ? { rowHeight } : {}),
+          ...(rowBorders ? { borders: rowBorders } : {}),
         }
       : rowHeight
         ? { rowHeight }

@@ -119,7 +119,7 @@ Use document-api-backed text assertions from the fixture, not DOM inspection:
 ```ts
 // Good — text-targeted assertions (document-api only)
 await superdoc.assertTextHasMarks('target text', ['bold', 'italic']);
-await superdoc.assertTextMarkAttrs('target text', 'textStyle', { fontFamily: 'Georgia' });
+await superdoc.assertTextMarkAttrs('target text', 'textStyle', { fontFamily: 'Times New Roman' });
 await superdoc.assertTextMarkAttrs('target text', 'link', { href: 'https://example.com' });
 
 // Bad — fragile, depends on DomPainter's rendering implementation
@@ -147,7 +147,7 @@ superdoc.page.locator('[data-item="btn-tableActions"]')
 superdoc.page.locator('[data-item="btn-documentMode"]')
 
 // Dropdown options: append "-option" to the button's data-item
-superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Georgia' })
+superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Times New Roman' })
 superdoc.page.locator('[data-item="btn-fontSize-option"]').filter({ hasText: '18' })
 
 // Color swatches

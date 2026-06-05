@@ -6,6 +6,8 @@
  * matching Microsoft Word's behavior.
  */
 
+import { getColumnGeometry, getColumnX } from '@superdoc/contracts';
+
 // ============================================================================
 // Types and Interfaces
 // ============================================================================
@@ -628,6 +630,11 @@ export interface SectionColumnLayout {
   gap: number;
   width?: number;
   widths?: number[];
+  /**
+   * Per-column gaps (px), length count-1; explicit mode only. Drives geometry so equal-width
+   * sections with non-uniform gaps (e.g. F9) balance with correct column positions. (SD-2629)
+   */
+  gaps?: number[];
   equalWidth?: boolean;
 }
 
@@ -803,7 +810,17 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
     DEFAULT_BALANCING_CONFIG,
   );
 
-  const columnX = (columnIndex: number): number => args.margins.left + columnIndex * (columnWidth + columnGap);
+  // Per-column x from the resolved geometry, not a uniform stride. SD-2629's core case is equal
+  // widths with NON-uniform gaps (e.g. F9), which the equal-width guard above still admits, so
+  // columnIndex * (width + gap) would mis-place later columns. Equal gaps reduce to the old stride.
+  const balancedGeometry = getColumnGeometry({
+    count: columnCount,
+    gap: columnGap,
+    width: columnWidth,
+    ...(Array.isArray(sectionColumns.widths) ? { widths: sectionColumns.widths } : {}),
+    ...(Array.isArray(sectionColumns.gaps) ? { gaps: sectionColumns.gaps } : {}),
+  });
+  const columnX = (columnIndex: number): number => getColumnX(balancedGeometry, columnIndex, args.margins.left);
 
   const colCursors = new Array<number>(columnCount).fill(sectionTopY);
   let maxY = sectionTopY;

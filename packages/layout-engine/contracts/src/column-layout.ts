@@ -87,8 +87,23 @@ export function resolveColumnLayout(input: ColumnLayout): ColumnLayout {
   const resolved = cloneColumnLayout(input);
   resolved.count = count;
   if (resolveColumnMode(input) === 'explicit') {
-    if (Array.isArray(resolved.widths)) resolved.widths = resolved.widths.slice(0, count);
-    if (Array.isArray(resolved.gaps)) resolved.gaps = resolved.gaps.slice(0, Math.max(0, count - 1));
+    // Select widths the SAME way resolveColumnCount counts them: pair each width with the gap that
+    // follows it, keep only usable-width records (finite, > 0), then slice to the resolved count.
+    // A positional `widths.slice(0, count)` would keep an unusable leading entry and drop a usable
+    // later one (e.g. [0,192,384] -> count 2 -> [0,192]), producing metadata whose own usable-width
+    // count re-resolves smaller than the fill used (non-idempotent; fill and paint disagree).
+    if (Array.isArray(resolved.widths)) {
+      const rawGaps = Array.isArray(resolved.gaps) ? resolved.gaps : [];
+      const usable = resolved.widths
+        .map((width, i) => ({ width, gapAfter: rawGaps[i] }))
+        .filter((record) => typeof record.width === 'number' && Number.isFinite(record.width) && record.width > 0)
+        .slice(0, count);
+      resolved.widths = usable.map((record) => record.width);
+      // gaps[i] is the gap AFTER column i; the last surviving column has none, so keep count-1.
+      if (Array.isArray(resolved.gaps)) {
+        resolved.gaps = usable.slice(0, Math.max(0, count - 1)).map((record) => record.gapAfter ?? 0);
+      }
+    }
   } else {
     delete resolved.widths;
     delete resolved.gaps;
@@ -97,19 +112,19 @@ export function resolveColumnLayout(input: ColumnLayout): ColumnLayout {
 }
 
 /**
- * Build resolved per-column geometry from already-resolved widths and the uniform scalar gap.
- * SD-2629 step 1 keeps this behavior-preserving: it mirrors today's normalized output (scaled
- * widths, uniform gap). Per-column `gaps` do NOT drive geometry until the semantic flip (step 4).
+ * Build resolved per-column geometry from already-resolved widths. The gap after each column is its
+ * own `gaps[i]` when provided (SD-2629 step 4), falling back to the uniform scalar gap; the last
+ * column has no following gap. The separator sits at the midpoint of that column's own gap.
  */
-function buildColumnGeometry(widths: number[], gap: number, withSeparator: boolean): ColumnGeometry[] {
+function buildColumnGeometry(widths: number[], gap: number, withSeparator: boolean, gaps?: number[]): ColumnGeometry[] {
   const geometry: ColumnGeometry[] = [];
   let x = 0;
   for (let i = 0; i < widths.length; i += 1) {
     const width = widths[i];
     const isLast = i === widths.length - 1;
-    const gapAfter = isLast ? 0 : gap;
+    const gapAfter = isLast ? 0 : (gaps?.[i] ?? gap);
     const col: ColumnGeometry = { index: i, x, width, gapAfter };
-    if (withSeparator && !isLast) col.separatorX = x + width + gap / 2;
+    if (withSeparator && !isLast) col.separatorX = x + width + gapAfter / 2;
     geometry.push(col);
     x += width + gapAfter;
   }
@@ -141,11 +156,17 @@ export function normalizeColumnLayout(
     widths.push(...Array.from({ length: count - widths.length }, () => fallbackWidth));
   }
 
-  const totalExplicitWidth = widths.reduce((sum, width) => sum + width, 0);
-  if (availableWidth > 0 && totalExplicitWidth > 0) {
-    const scale = availableWidth / totalExplicitWidth;
-    widths = widths.map((width) => Math.max(1, width * scale));
+  // Floor each column to >= 1px. Explicit widths are NOT scaled to fill the content area: Word
+  // renders authored widths as-is (a 2880tw column stays 2880tw, leaving trailing space when the
+  // columns underfill), so scaling them up would distort the document. Equal-mode widths already
+  // divide availableWidth evenly. (SD-2629 step 4)
+  if (availableWidth > 0) {
+    widths = widths.map((value) => Math.max(1, value));
   }
+
+  // Per-column gaps drive geometry in explicit mode (step 4); equal mode uses the uniform gap.
+  const gaps =
+    explicitWidths.length > 0 && Array.isArray(input?.gaps) ? input.gaps.slice(0, Math.max(0, count - 1)) : undefined;
 
   const width = widths.reduce((max, value) => Math.max(max, value), 0);
 
@@ -162,6 +183,7 @@ export function normalizeColumnLayout(
     count,
     gap,
     ...(widths.length > 0 ? { widths } : {}),
+    ...(gaps && gaps.length > 0 ? { gaps } : {}),
     ...(input?.equalWidth !== undefined ? { equalWidth: input.equalWidth } : {}),
     ...(input?.withSeparator !== undefined ? { withSeparator: input.withSeparator } : {}),
     width,
@@ -171,13 +193,21 @@ export function normalizeColumnLayout(
 /**
  * Resolve per-column geometry for an already-normalized layout. This is the SD-2629 consumer API:
  * fill/positioning/separators/hit-testing/footnotes/floating anchors/balancing should read this
- * single source rather than re-deriving from `widths`/`gap`. Behavior-preserving in step 1: it
- * mirrors today's normalized widths + scalar gap; per-column `gaps` drive it only after the flip.
+ * single source rather than re-deriving from `widths`/`gap`. Geometry uses the resolved (unscaled)
+ * widths and per-column `gaps`, falling back to the uniform gap when no per-column gaps exist.
  */
 export function getColumnGeometry(normalized: NormalizedColumnLayout): ColumnGeometry[] {
+  // A geometry must have exactly `count` columns. normalizeColumnLayout always emits one width per
+  // column, but a hand-built equal-mode layout may carry only the scalar `width` with no widths array
+  // (e.g. column-balancing constructs its input directly). Expand that to `count` equal columns
+  // instead of collapsing to a single [width] column, which would map every column index past 0 onto
+  // column 0's x and stack later columns on the left margin. (SD-2629)
+  const count = Number.isFinite(normalized.count) ? Math.max(1, Math.floor(normalized.count)) : 1;
   const widths =
-    Array.isArray(normalized.widths) && normalized.widths.length > 0 ? normalized.widths : [normalized.width];
-  return buildColumnGeometry(widths, normalized.gap, Boolean(normalized.withSeparator));
+    Array.isArray(normalized.widths) && normalized.widths.length > 0
+      ? normalized.widths
+      : new Array(count).fill(normalized.width);
+  return buildColumnGeometry(widths, normalized.gap, Boolean(normalized.withSeparator), normalized.gaps);
 }
 
 // ---------------------------------------------------------------------------

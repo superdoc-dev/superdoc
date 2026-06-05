@@ -6,6 +6,7 @@ import {
   TrackInsertMarkName,
 } from '../../extensions/track-changes/constants.js';
 import { getTrackChanges } from '../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
+import { enumerateStructuralRowChanges } from '../../extensions/track-changes/trackChangesHelpers/structuralRowChanges.js';
 import {
   buildTrackedChangeCanonicalIdMap,
   groupTrackedChanges,
@@ -16,6 +17,10 @@ import {
 
 vi.mock('../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js', () => ({
   getTrackChanges: vi.fn(),
+}));
+
+vi.mock('../../extensions/track-changes/trackChangesHelpers/structuralRowChanges.js', () => ({
+  enumerateStructuralRowChanges: vi.fn(() => []),
 }));
 
 function makeEditor(options: Record<string, unknown> = { trackedChanges: {} }): Editor {
@@ -293,6 +298,69 @@ describe('groupTrackedChanges', () => {
 
     const grouped = groupTrackedChanges(makeEditor());
     expect(grouped[0]?.from).toBeLessThan(grouped[1]?.from ?? 0);
+  });
+
+  // A whole inserted/deleted table is ONE logical change. Inline cell marks
+  // inside its range (native authoring stamps these, and imported-with-text
+  // tables carry them) must be subsumed by the structural change, not returned
+  // as separate review items.
+  const wholeTableInsert = (overrides: Record<string, unknown> = {}) =>
+    ({
+      id: 'logical-1',
+      side: 'insertion',
+      subtype: 'table-insert',
+      tableFrom: 10,
+      tableTo: 40,
+      tablePos: 10,
+      wholeTable: true,
+      decidable: true,
+      rows: [],
+      author: 'Alice',
+      sourceId: '7',
+      ...overrides,
+    }) as never;
+
+  it('subsumes inline cell marks inside a decidable whole-table change', () => {
+    const cell = makeTrackMark(TrackInsertMarkName, 'inline-cell', { author: 'Alice' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...cell, node: { text: 'Hi', marks: [cell.mark] }, from: 20, to: 25 },
+    ] as never);
+    vi.mocked(enumerateStructuralRowChanges).mockReturnValueOnce([wholeTableInsert()]);
+
+    const grouped = groupTrackedChanges(makeEditor());
+
+    // Only the structural change remains; the inline cell mark is owned by it.
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.id).toBe('word:structural:7');
+    expect(grouped.find((change) => change.rawId === 'inline-cell')).toBeUndefined();
+  });
+
+  it('does NOT subsume an inline change outside the whole-table range', () => {
+    const outside = makeTrackMark(TrackInsertMarkName, 'inline-outside', { author: 'Alice' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...outside, node: { text: 'Out', marks: [outside.mark] }, from: 50, to: 55 },
+    ] as never);
+    vi.mocked(enumerateStructuralRowChanges).mockReturnValueOnce([wholeTableInsert()]);
+
+    const grouped = groupTrackedChanges(makeEditor());
+
+    // The structural change AND the unrelated inline change both surface.
+    expect(grouped.find((change) => change.id === 'word:structural:7')).toBeDefined();
+    expect(grouped.find((change) => change.rawId === 'inline-outside')).toBeDefined();
+  });
+
+  it('does NOT subsume inline marks for a NON-decidable (partial) structural shape', () => {
+    const cell = makeTrackMark(TrackInsertMarkName, 'inline-partial', { author: 'Alice' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...cell, node: { text: 'Hi', marks: [cell.mark] }, from: 20, to: 25 },
+    ] as never);
+    // Partial / undecidable structural shape is not one logical change.
+    vi.mocked(enumerateStructuralRowChanges).mockReturnValueOnce([
+      wholeTableInsert({ wholeTable: false, decidable: false }),
+    ]);
+
+    const grouped = groupTrackedChanges(makeEditor());
+    expect(grouped.find((change) => change.rawId === 'inline-partial')).toBeDefined();
   });
 });
 

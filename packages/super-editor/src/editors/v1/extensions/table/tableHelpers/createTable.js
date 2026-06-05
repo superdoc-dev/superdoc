@@ -41,8 +41,22 @@ export const createTable = (
   const headerCells = [];
   const cells = [];
 
+  // Twips per CSS pixel at 96 DPI (1440 twips/inch / 96 px/inch).
+  const TWIPS_PER_PX = 15;
+
   for (let index = 0; index < colsCount; index++) {
-    const cellAttrs = columnWidths ? { colwidth: [columnWidths[index]] } : null;
+    // Word writes w:tcW on every cell it inserts; the concrete cell width marks
+    // the grid as a real layout cache so the measuring pass preserves the
+    // requested column widths instead of content-sizing the table as pure-auto.
+    // (SD-3308)
+    const cellAttrs = columnWidths
+      ? {
+          colwidth: [columnWidths[index]],
+          tableCellProperties: {
+            cellWidth: { value: columnWidths[index] * TWIPS_PER_PX, type: 'dxa' },
+          },
+        }
+      : null;
     const cell = createCell(types.tableCell, cellContent, cellAttrs);
     if (cell) cells.push(cell);
     if (withHeaderRow) {

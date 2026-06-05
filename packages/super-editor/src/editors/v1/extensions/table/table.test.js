@@ -1142,6 +1142,29 @@ describe('Table commands', async () => {
 
       editor.converter = originalConverter;
     });
+
+    // SD-3308: Word writes w:tcW on every cell it inserts, which marks the grid
+    // as a real layout cache. Without it the measuring pass classifies the table
+    // as pure-auto and content-sizes it (shrinking a freshly inserted table to
+    // its empty-cell width instead of keeping the requested column widths).
+    it('insertTable cells carry a concrete cellWidth like Word tcW', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      const didInsert = editor.commands.insertTable({ rows: 2, cols: 3, columnWidths: [100, 200, 300] });
+      expect(didInsert).toBe(true);
+
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+
+      table.forEach((row) => {
+        // twips = px * 15 at 96dpi
+        expect(row.child(0).attrs.tableCellProperties?.cellWidth).toEqual({ value: 1500, type: 'dxa' });
+        expect(row.child(1).attrs.tableCellProperties?.cellWidth).toEqual({ value: 3000, type: 'dxa' });
+        expect(row.child(2).attrs.tableCellProperties?.cellWidth).toEqual({ value: 4500, type: 'dxa' });
+      });
+    });
   });
 
   describe('insertTableAt trailing separator paragraph', () => {

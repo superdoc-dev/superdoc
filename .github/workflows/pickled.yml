@@ -49,6 +49,9 @@ jobs:
       - name: Plan build cells
         run: bunx @pickled-dev/cli build . --plan
 
+      - name: Prove build verifiers
+        run: bunx @pickled-dev/cli build . --verify-only
+
   real-agent:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest

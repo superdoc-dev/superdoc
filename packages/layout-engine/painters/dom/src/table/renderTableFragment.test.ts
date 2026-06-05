@@ -170,6 +170,112 @@ describe('renderTableFragment', () => {
     expect(element.style.borderRightWidth).toBe('3px');
   });
 
+  // SD-3308: Word paints the MIDDLE rule of table-level 3-rule bands as a continuous
+  // grid (measured: the divider's middle rule runs unbroken through the row band and
+  // meets the boundary band's middle ring). The fragment paints one ring inset by
+  // outer rule + gap plus full-length center strips per interior gridline.
+  it('paints a continuous middle grid for table-level triple borders', () => {
+    const para = (id: string): ParagraphBlock => ({ kind: 'paragraph', id: id as BlockId, runs: [] });
+    const block: TableBlock = {
+      kind: 'table',
+      id: 'triple-grid' as BlockId,
+      attrs: {
+        borders: {
+          top: { style: 'triple', width: 2, color: '#000000' },
+          bottom: { style: 'triple', width: 2, color: '#000000' },
+          left: { style: 'triple', width: 2, color: '#000000' },
+          right: { style: 'triple', width: 2, color: '#000000' },
+          insideH: { style: 'triple', width: 2, color: '#000000' },
+          insideV: { style: 'triple', width: 2, color: '#000000' },
+        },
+      },
+      rows: [
+        {
+          id: 'r0' as BlockId,
+          cells: [
+            { id: 'c00' as BlockId, blocks: [para('p00')] },
+            { id: 'c01' as BlockId, blocks: [para('p01')] },
+          ],
+        },
+        {
+          id: 'r1' as BlockId,
+          cells: [
+            { id: 'c10' as BlockId, blocks: [para('p10')] },
+            { id: 'c11' as BlockId, blocks: [para('p11')] },
+          ],
+        },
+      ],
+    };
+    const cellMeasure = {
+      blocks: [{ kind: 'paragraph' as const, lines: [], totalHeight: 20 }],
+      width: 100,
+      height: 20,
+    };
+    const measure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        { cells: [cellMeasure, cellMeasure], height: 20 },
+        { cells: [cellMeasure, cellMeasure], height: 20 },
+      ],
+      columnWidths: [100, 100],
+      totalWidth: 200,
+      totalHeight: 40,
+    };
+    const fragment: TableFragment = {
+      kind: 'table',
+      blockId: 'triple-grid' as BlockId,
+      fromRow: 0,
+      toRow: 2,
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 40,
+    };
+
+    const element = renderTableFragment({
+      doc,
+      fragment,
+      context,
+      block,
+      measure,
+      cellSpacingPx: 0,
+      effectiveColumnWidths: measure.columnWidths,
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {},
+      applySdtDataset: () => {},
+      applyStyles: () => {},
+    });
+
+    // Per-cell mids are suppressed (table-level provides the grid).
+    expect(element.querySelectorAll('.superdoc-compound-border-mid').length).toBe(0);
+
+    // Ring inset by outer rule + gap = 4, borders 2px.
+    const ring = element.querySelector('.superdoc-compound-border-midring') as HTMLElement;
+    expect(ring).toBeTruthy();
+    expect(ring.style.left).toBe('4px');
+    expect(ring.style.top).toBe('4px');
+    expect(ring.style.borderTop).toMatch(/2px solid/);
+    expect(ring.style.borderLeft).toMatch(/2px solid/);
+
+    // Interior vertical center strip: centered on the gridline (x=100), spanning
+    // between the ring's middle rules (continuous through the row band).
+    const verticals = [...element.querySelectorAll('.superdoc-compound-border-midv')] as HTMLElement[];
+    expect(verticals.length).toBe(1);
+    expect(verticals[0].style.left).toBe('99px');
+    expect(verticals[0].style.width).toBe('2px');
+    expect(verticals[0].style.top).toBe('4px');
+    expect(verticals[0].style.height).toBe(`${40 - 8}px`);
+
+    // Interior horizontal center strip: at row boundary + midOffset, full width
+    // between the ring's middle rules.
+    const horizontals = [...element.querySelectorAll('.superdoc-compound-border-midh')] as HTMLElement[];
+    expect(horizontals.length).toBe(1);
+    expect(horizontals[0].style.top).toBe('24px');
+    expect(horizontals[0].style.height).toBe('2px');
+    expect(horizontals[0].style.left).toBe('4px');
+    expect(horizontals[0].style.width).toBe(`${200 - 8}px`);
+  });
+
   it('suppresses child chrome when table containerSdt shares id-less metadata', () => {
     const sharedSdt: SdtMetadata = {
       type: 'structuredContent',

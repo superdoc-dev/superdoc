@@ -634,9 +634,13 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   }
 
   // Render body rows (fromRow to toRow)
+  // Interior row boundary Ys, collected for the fragment-level compound middle grid.
+  const interiorRowBoundaries: number[] = [];
   for (let r = fragment.fromRow; r < fragment.toRow; r += 1) {
     const rowMeasure = measure.rows[r];
     if (!rowMeasure) break;
+
+    if (r > fragment.fromRow) interiorRowBoundaries.push(y);
 
     const isFirstRenderedBodyRow = r === fragment.fromRow;
     const isLastRenderedBodyRow = r === fragment.toRow - 1;
@@ -720,6 +724,112 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       }
       const cssSide = side[0].toUpperCase() + side.slice(1);
       outlineEl.style[`border${cssSide}` as 'borderTop'] = `${rule}px solid ${color}`;
+    }
+  }
+
+  // Middle layer of table-level 3-rule bands (triple, thinThickThin*): Word paints
+  // it as a CONTINUOUS grid, measured from 300dpi probes: a ring inset by
+  // outer rule + gap from the table boundary, plus full-length center strips per
+  // interior gridline that run unbroken through perpendicular band crossings and
+  // meet the ring squarely. Per-cell middle rectangles are suppressed for these
+  // sides (see renderTableRow). Interior vertical strips sit centered on the
+  // gridline (the band straddles it); interior horizontal strips sit at the
+  // band's middle inside the lower row. (SD-3308)
+  {
+    const midProfileOf = (value: unknown) => {
+      if (value == null || typeof value !== 'object') return null;
+      const profile = getBorderBandProfile(value as never);
+      return profile && profile.segments.length === 5 ? profile : null;
+    };
+    const colorOf = (value: unknown): string => {
+      const c = (value as { color?: string } | null)?.color;
+      return c && /^#[0-9A-Fa-f]{6}$/.test(c) ? c : '#000000';
+    };
+    const midOffsetOf = (profile: { segments: number[] }): number =>
+      Math.round(profile.segments[0] + profile.segments[1]);
+    const midRuleOf = (profile: { segments: number[] }): number => Math.max(1, Math.round(profile.segments[2]));
+
+    const topBorder = tableBorders?.top;
+    const bottomBorder = tableBorders?.bottom;
+    const leftBorder = isRtl ? tableBorders?.right : tableBorders?.left;
+    const rightBorder = isRtl ? tableBorders?.left : tableBorders?.right;
+    const topMid = fragment.continuesFromPrev !== true ? midProfileOf(topBorder) : null;
+    const bottomMid = fragment.continuesOnNext !== true ? midProfileOf(bottomBorder) : null;
+    const leftMid = midProfileOf(leftBorder);
+    const rightMid = midProfileOf(rightBorder);
+    const insideHMid = midProfileOf(tableBorders?.insideH);
+    const insideVMid = midProfileOf(tableBorders?.insideV);
+
+    const fragmentWidth = fragment.width;
+    const fragmentHeight = fragment.height;
+    const ringTopInset = topMid ? midOffsetOf(topMid) : 0;
+    const ringBottomInset = bottomMid ? midOffsetOf(bottomMid) : 0;
+    const ringLeftInset = leftMid ? midOffsetOf(leftMid) : 0;
+    const ringRightInset = rightMid ? midOffsetOf(rightMid) : 0;
+
+    if (topMid || bottomMid || leftMid || rightMid) {
+      const ring = doc.createElement('div');
+      ring.className = 'superdoc-compound-border-midring';
+      const rs = ring.style;
+      rs.position = 'absolute';
+      rs.boxSizing = 'border-box';
+      rs.pointerEvents = 'none';
+      rs.left = `${ringLeftInset}px`;
+      rs.top = `${ringTopInset}px`;
+      rs.width = `${fragmentWidth - ringLeftInset - ringRightInset}px`;
+      rs.height = `${fragmentHeight - ringTopInset - ringBottomInset}px`;
+      if (topMid) rs.borderTop = `${midRuleOf(topMid)}px solid ${colorOf(topBorder)}`;
+      if (bottomMid) rs.borderBottom = `${midRuleOf(bottomMid)}px solid ${colorOf(bottomBorder)}`;
+      if (leftMid) rs.borderLeft = `${midRuleOf(leftMid)}px solid ${colorOf(leftBorder)}`;
+      if (rightMid) rs.borderRight = `${midRuleOf(rightMid)}px solid ${colorOf(rightBorder)}`;
+      container.appendChild(ring);
+    }
+
+    const appendStrip = (className: string, l: number, t: number, w: number, h: number, color: string): void => {
+      const strip = doc.createElement('div');
+      strip.className = className;
+      const ss = strip.style;
+      ss.position = 'absolute';
+      ss.pointerEvents = 'none';
+      ss.left = `${l}px`;
+      ss.top = `${t}px`;
+      ss.width = `${w}px`;
+      ss.height = `${h}px`;
+      ss.background = color;
+      container.appendChild(strip);
+    };
+
+    if (insideVMid && effectiveColumnWidths.length > 1) {
+      const rule = midRuleOf(insideVMid);
+      const color = colorOf(tableBorders?.insideV);
+      let cum = 0;
+      for (let i = 0; i < effectiveColumnWidths.length - 1; i += 1) {
+        cum += effectiveColumnWidths[i];
+        const gx = isRtl ? fragmentWidth - cum : cum;
+        appendStrip(
+          'superdoc-compound-border-midv',
+          Math.round(gx - rule / 2),
+          ringTopInset,
+          rule,
+          fragmentHeight - ringTopInset - ringBottomInset,
+          color,
+        );
+      }
+    }
+
+    if (insideHMid && interiorRowBoundaries.length > 0) {
+      const rule = midRuleOf(insideHMid);
+      const color = colorOf(tableBorders?.insideH);
+      for (const gy of interiorRowBoundaries) {
+        appendStrip(
+          'superdoc-compound-border-midh',
+          ringLeftInset,
+          Math.round(gy + midOffsetOf(insideHMid)),
+          fragmentWidth - ringLeftInset - ringRightInset,
+          rule,
+          color,
+        );
+      }
     }
   }
 

@@ -555,6 +555,12 @@ type TableCellRenderDependencies = {
   cell?: TableBlock['rows'][number]['cells'][number];
   /** Resolved borders for this cell */
   borders?: CellBorders;
+  /**
+   * Per-side CSS band width overrides in px. Interior compound bands straddle the
+   * gridline (Word model, SD-3308): each adjacent cell carries HALF the band as its
+   * transparent border instead of the owner carrying it all.
+   */
+  borderBandOverridesPx?: { left?: number; right?: number };
   /** Whether to apply default border if no borders specified */
   useDefaultBorder?: boolean;
   /** Function to render a line of paragraph content */
@@ -704,6 +710,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     fromLine,
     toLine,
     resolvePhysical,
+    borderBandOverridesPx,
   } = deps;
 
   const attrs = cell?.attrs;
@@ -720,18 +727,24 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   // at 0). Scoped to compound bands (double, triple, thinThick*): for single-rule
   // borders the difference is sub-pixel and not worth disturbing existing layouts.
   // The matching column growth lives in measuring resolveColumnBandAllowances. (SD-3308)
-  const compoundBandEats = (border: BorderSpec | undefined): number => {
+  // The eaten amount is the painted band in THIS cell minus the half-band the
+  // column was granted: a boundary band (fully inside) eats band/2; a straddled
+  // interior band (half inside, see borderBandOverridesPx) eats nothing.
+  const compoundBandEats = (border: BorderSpec | undefined, bandInCellPx?: number): number => {
     const profile = border ? getBorderBandProfile(border) : null;
-    return profile ? profile.band / 2 : 0;
+    if (!profile) return 0;
+    const bandInCell = bandInCellPx ?? profile.band;
+    return Math.max(0, bandInCell - profile.band / 2);
   };
   const paddingLeft = Math.max(
     0,
-    (isRtl ? (padding.right ?? 4) : (padding.left ?? 4)) - compoundBandEats(borders?.left),
+    (isRtl ? (padding.right ?? 4) : (padding.left ?? 4)) - compoundBandEats(borders?.left, borderBandOverridesPx?.left),
   );
   const paddingTop = padding.top ?? 0;
   const paddingRight = Math.max(
     0,
-    (isRtl ? (padding.left ?? 4) : (padding.right ?? 4)) - compoundBandEats(borders?.right),
+    (isRtl ? (padding.left ?? 4) : (padding.right ?? 4)) -
+      compoundBandEats(borders?.right, borderBandOverridesPx?.right),
   );
   const paddingBottom = padding.bottom ?? 0;
 
@@ -751,7 +764,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   cellEl.style.paddingBottom = `${paddingBottom}px`;
 
   if (borders) {
-    applyCellBorders(cellEl, borders);
+    applyCellBorders(cellEl, borders, borderBandOverridesPx);
   } else if (useDefaultBorder) {
     cellEl.style.border = '1px solid rgba(0,0,0,0.6)';
   }

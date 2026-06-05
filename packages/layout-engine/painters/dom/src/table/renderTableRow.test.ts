@@ -352,17 +352,31 @@ describe('renderTableRow', () => {
   // SD-3308: 3-rule bands (triple = [w, w, w, w, w]) add a middle RECTANGLE between
   // the outline and the inner rectangle (Word's 300dpi corner crops show three clean
   // nested boxes; full-edge strips would protrude across the outer and inner rings).
+  // Cell-level borders here: table-level 3-rule borders paint their middle layer as
+  // a continuous fragment-level grid instead (see renderTableFragment).
   it('paints triple borders as inner rectangle plus a middle rectangle on owned edges', () => {
     renderTableRow(
       createDeps({
         rowIndex: 0,
         totalRows: 1,
         cellSpacingPx: 0,
-        tableBorders: {
-          top: { style: 'triple', width: 2, color: '#000000' },
-          bottom: { style: 'triple', width: 2, color: '#000000' },
-          left: { style: 'triple', width: 2, color: '#000000' },
-          right: { style: 'triple', width: 2, color: '#000000' },
+        tableBorders: undefined,
+        row: {
+          id: 'row-1',
+          cells: [
+            {
+              id: 'cell-1',
+              attrs: {
+                borders: {
+                  top: { style: 'triple', width: 2, color: '#000000' },
+                  bottom: { style: 'triple', width: 2, color: '#000000' },
+                  left: { style: 'triple', width: 2, color: '#000000' },
+                  right: { style: 'triple', width: 2, color: '#000000' },
+                },
+              },
+              blocks: [{ kind: 'paragraph', id: 'p1', runs: [] }],
+            },
+          ],
         },
       }) as never,
     );
@@ -389,6 +403,91 @@ describe('renderTableRow', () => {
     expect(mid.style.borderBottom).toMatch(/2px solid/);
     expect(mid.style.borderLeft).toMatch(/2px solid/);
     expect(mid.style.borderRight).toMatch(/2px solid/);
+  });
+
+  // SD-3308: table-level 3-rule borders paint their middle layer at the FRAGMENT
+  // level (continuous grid through band intersections, measured from Word), so the
+  // per-cell middle rectangle must not double-paint it.
+  it('suppresses the per-cell middle rectangle when table-level borders provide the grid', () => {
+    renderTableRow(
+      createDeps({
+        rowIndex: 0,
+        totalRows: 1,
+        cellSpacingPx: 0,
+        tableBorders: {
+          top: { style: 'triple', width: 2, color: '#000000' },
+          bottom: { style: 'triple', width: 2, color: '#000000' },
+          left: { style: 'triple', width: 2, color: '#000000' },
+          right: { style: 'triple', width: 2, color: '#000000' },
+        },
+      }) as never,
+    );
+
+    expect(container.querySelectorAll('.superdoc-compound-border-rect').length).toBe(1);
+    expect(container.querySelectorAll('.superdoc-compound-border-mid').length).toBe(0);
+  });
+
+  // SD-3308: Word centers an interior compound band ON the gridline (measured from
+  // the triple probe: the divider spans gridline -band/2 .. +band/2 and both cells
+  // keep equal content widths). Each adjacent cell carries HALF the band as its
+  // transparent CSS border, and the inner rectangles place their divider-facing
+  // rules at the straddled band's faces.
+  it('straddles an interior vertical compound band across the gridline', () => {
+    renderTableRow(
+      createDeps({
+        rowIndex: 0,
+        totalRows: 1,
+        cellSpacingPx: 0,
+        columnWidths: [100, 100],
+        rowMeasure: {
+          height: 20,
+          cells: [
+            { width: 100, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 1 },
+            { width: 100, height: 20, gridColumnStart: 1, colSpan: 1, rowSpan: 1 },
+          ],
+        },
+        row: {
+          id: 'row-1',
+          cells: [
+            { id: 'cell-1', blocks: [{ kind: 'paragraph', id: 'p1', runs: [] }] },
+            { id: 'cell-2', blocks: [{ kind: 'paragraph', id: 'p2', runs: [] }] },
+          ],
+        },
+        tableBorders: {
+          top: { style: 'double', width: 2, color: '#000000' },
+          bottom: { style: 'double', width: 2, color: '#000000' },
+          left: { style: 'double', width: 2, color: '#000000' },
+          right: { style: 'double', width: 2, color: '#000000' },
+          insideV: { style: 'double', width: 2, color: '#000000' },
+        },
+      }) as never,
+    );
+
+    // Both cells carry half the divider band (6/2 = 3px) as their CSS border.
+    const callA = renderTableCellMock.mock.calls[0][0] as {
+      borders?: { right?: unknown };
+      borderBandOverridesPx?: { left?: number; right?: number };
+    };
+    const callB = renderTableCellMock.mock.calls[1][0] as {
+      borders?: { left?: unknown };
+      borderBandOverridesPx?: { left?: number; right?: number };
+    };
+    expect(callA.borders?.right).toBeDefined();
+    expect(callA.borderBandOverridesPx?.right).toBe(3);
+    expect(callB.borders?.left).toBeDefined();
+    expect(callB.borderBandOverridesPx?.left).toBe(3);
+
+    // Inner rectangles: divider-facing rules sit at the straddled band's faces.
+    const rects = container.querySelectorAll('.superdoc-compound-border-rect');
+    expect(rects.length).toBe(2);
+    const rectA = rects[0] as HTMLElement;
+    const rectB = rects[1] as HTMLElement;
+    // A: left boundary inset band - rule = 4; right inset band/2 - outerRule = 1.
+    expect(rectA.style.left).toBe('4px');
+    expect(rectA.style.width).toBe('95px');
+    // B starts at gridline 100 + (band/2 - innerRule) = 101; right boundary inset 4.
+    expect(rectB.style.left).toBe('101px');
+    expect(rectB.style.width).toBe('95px');
   });
 
   // SD-1797: a single row's measure only lists cells that START in it, so on a w:vMerge

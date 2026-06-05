@@ -96,6 +96,7 @@ export const applyBorder = (
   element: HTMLElement,
   side: 'Top' | 'Right' | 'Bottom' | 'Left',
   border?: BorderSpec,
+  widthOverridePx?: number,
 ): void => {
   if (!border) return;
   if (border.style === 'none' || border.width === 0) {
@@ -109,8 +110,10 @@ export const applyBorder = (
   // Band width comes from the shared contracts helper so the painted width and the
   // measuring engine's row-height reservation can never disagree. Word semantics:
   // thick = 2x (min 3px); double = 3x the per-rule w:sz (min 3px so CSS renders both
-  // rules); everything else = authored width. (SD-3308)
-  const actualWidth = getBorderBandWidthPx(border);
+  // rules); everything else = authored width. `widthOverridePx` carries the
+  // straddled half-band for interior compound edges (Word centers those bands on
+  // the gridline, half in each adjacent cell). (SD-3308)
+  const actualWidth = widthOverridePx ?? getBorderBandWidthPx(border);
   element.style[`border${side}`] = `${actualWidth}px ${style} ${safeColor}`;
 };
 
@@ -133,12 +136,16 @@ export const applyBorder = (
  * });
  * ```
  */
-export const applyCellBorders = (element: HTMLElement, borders?: CellBorders): void => {
+export const applyCellBorders = (
+  element: HTMLElement,
+  borders?: CellBorders,
+  widthOverridesPx?: { left?: number; right?: number },
+): void => {
   if (!borders) return;
   applyBorder(element, 'Top', borders.top);
-  applyBorder(element, 'Right', borders.right);
+  applyBorder(element, 'Right', borders.right, widthOverridesPx?.right);
   applyBorder(element, 'Bottom', borders.bottom);
-  applyBorder(element, 'Left', borders.left);
+  applyBorder(element, 'Left', borders.left, widthOverridesPx?.left);
 };
 
 /**

@@ -390,10 +390,18 @@ const appendCompoundBorderRects = (
   cellElement: HTMLElement,
   borders: CellBorders | undefined,
   rect: { x: number; y: number; width: number; height: number },
-  ownsBottomBand: boolean,
-  ownsRightBand: boolean,
+  edges: {
+    ownsBottomBand: boolean;
+    /** Visual right side is the table boundary (band fully inside this cell). */
+    rightIsBoundary: boolean;
+    /** Visual left side is the table boundary (band fully inside this cell). */
+    leftIsBoundary: boolean;
+    /** Sides whose 3-rule middle layer is painted by the fragment grid instead. */
+    suppressMid?: { top?: boolean; right?: boolean; bottom?: boolean; left?: boolean };
+  },
 ): void => {
   if (!borders) return;
+  const { ownsBottomBand, rightIsBoundary, leftIsBoundary, suppressMid } = edges;
   const sideInfo = (['top', 'right', 'bottom', 'left'] as const).map((side) => {
     const spec = borders[side];
     const profile = spec ? getBorderBandProfile(spec) : null;
@@ -429,13 +437,26 @@ const appendCompoundBorderRects = (
   st.position = 'absolute';
   st.boxSizing = 'border-box';
   st.pointerEvents = 'none';
-  // Inner-face placement per side. Owned band: the inner rule sits band-rule inside
-  // the box. Neighbor-owned band (interior bottom/right): this cell contributes the
-  // band's OUTER-face rule, which sits just past this cell's box inside the neighbor.
+  // Inner-face placement per side. Boundary band (fully inside the cell): the inner
+  // rule sits band - rule inside the box. Interior VERTICAL bands straddle the
+  // gridline (half in each cell, Word model): this cell's divider-facing rule sits
+  // at the straddled band's near face, band/2 - rule from the gridline (negative
+  // when the rule is wider than the half-band, extending past the gridline).
+  // Interior horizontal bands keep the owner-cell placement: the band lives in the
+  // lower cell's top (the row reservation already centers it visually), and the
+  // upper cell contributes the band's outer-face rule just past its box.
   const topInset = top ? top.band - top.innerRule : 0;
-  const leftInset = left ? left.band - left.innerRule : 0;
+  const leftInset = left
+    ? leftIsBoundary
+      ? left.band - left.innerRule
+      : Math.round(left.band / 2) - left.innerRule
+    : 0;
   const bottomInset = bottom ? (ownsBottomBand ? bottom.band - bottom.innerRule : -bottom.outerRule) : 0;
-  const rightInset = right ? (ownsRightBand ? right.band - right.innerRule : -right.outerRule) : 0;
+  const rightInset = right
+    ? rightIsBoundary
+      ? right.band - right.innerRule
+      : Math.round(right.band / 2) - right.outerRule
+    : 0;
   st.left = `${x0 + leftInset}px`;
   st.top = `${y0 + topInset}px`;
   st.width = `${x1 - x0 - leftInset - rightInset}px`;
@@ -443,7 +464,7 @@ const appendCompoundBorderRects = (
   if (top) st.borderTop = `${top.innerRule}px solid ${top.color}`;
   if (bottom) st.borderBottom = `${ownsBottomBand ? bottom.innerRule : bottom.outerRule}px solid ${bottom.color}`;
   if (left) st.borderLeft = `${left.innerRule}px solid ${left.color}`;
-  if (right) st.borderRight = `${ownsRightBand ? right.innerRule : right.outerRule}px solid ${right.color}`;
+  if (right) st.borderRight = `${rightIsBoundary ? right.innerRule : right.outerRule}px solid ${right.color}`;
   container.appendChild(rectEl);
 
   // Middle rule of 3-rule bands: ONE bordered rectangle inset to the middle rule's
@@ -451,10 +472,10 @@ const appendCompoundBorderRects = (
   // cleanly at corners, matching Word's middle rectangle; full-edge strips would
   // protrude across the outer and inner rings. Neighbor-owned interior sides are
   // painted by the owning cell's own middle rectangle.
-  const midTop = top && top.midRule > 0 ? top : null;
-  const midLeft = left && left.midRule > 0 ? left : null;
-  const midBottom = bottom && bottom.midRule > 0 && ownsBottomBand ? bottom : null;
-  const midRight = right && right.midRule > 0 && ownsRightBand ? right : null;
+  const midTop = top && top.midRule > 0 && !suppressMid?.top ? top : null;
+  const midLeft = left && left.midRule > 0 && !suppressMid?.left ? left : null;
+  const midBottom = bottom && bottom.midRule > 0 && ownsBottomBand && !suppressMid?.bottom ? bottom : null;
+  const midRight = right && right.midRule > 0 && rightIsBoundary && !suppressMid?.right ? right : null;
   if (midTop || midLeft || midBottom || midRight) {
     const mid = doc.createElement('div');
     mid.className = 'superdoc-compound-border-mid';
@@ -771,37 +792,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       x = tableContentWidth - x - computedCellWidth;
     }
 
-    // Never use default borders - cells are either explicitly styled or borderless
-    // This prevents gray borders on cells with borders={} (intentionally borderless)
-    const { cellElement } = renderTableCell({
-      doc,
-      x,
-      y,
-      rowHeight: cellHeight,
-      cellMeasure,
-      cell,
-      borders: finalBorders,
-      useDefaultBorder: false,
-      renderLine,
-      captureLineSnapshot,
-      renderDrawingContent,
-      context,
-      applySdtDataset,
-      ancestorContainerKey,
-      ancestorContainerSdt,
-      ancestorContainerKeys,
-      ancestorContainerSdts,
-      onSdtContainerChrome,
-      fromLine,
-      toLine,
-      tableIndent,
-      isRtl,
-      cellWidth: computedCellWidth > 0 ? computedCellWidth : undefined,
-      chrome,
-      resolvePhysical,
-    });
-
-    container.appendChild(cellElement);
     const cellGridBounds = getTableCellGridBounds(cellPosition);
     // Word's double model needs the EFFECTIVE border of every side of this cell,
     // not the single-owner-suppressed set: ownership picks which band face the rule
@@ -827,6 +817,100 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
           borderValueToSpec(effectiveTableBorders?.insideV)),
     };
     const rectBorders = isRtl ? swapCellBordersLR(effectiveSideSpecs) : effectiveSideSpecs;
+
+    // Visual (post-RTL-swap) boundary flags matching rectBorders sides.
+    const visualTouchesLeft = isRtl ? cellGridBounds.touchesRightEdge : cellGridBounds.touchesLeftEdge;
+    const visualTouchesRight = isRtl ? cellGridBounds.touchesLeftEdge : cellGridBounds.touchesRightEdge;
+
+    // Interior vertical compound bands straddle the gridline (Word model, measured
+    // from the triple probes: the divider spans gridline -band/2 .. +band/2 and both
+    // cells keep equal content widths). Each adjacent cell carries HALF the band as
+    // its transparent CSS border, so the painted geometry and the column's half-band
+    // allowance agree. Boundary bands stay fully inside the cell. (SD-3308)
+    const leftStraddleProfile = !visualTouchesLeft && rectBorders.left ? getBorderBandProfile(rectBorders.left) : null;
+    const rightStraddleProfile =
+      !visualTouchesRight && rectBorders.right ? getBorderBandProfile(rectBorders.right) : null;
+    let paintBorders = finalBorders;
+    let borderBandOverridesPx: { left?: number; right?: number } | undefined;
+    if (leftStraddleProfile || rightStraddleProfile) {
+      paintBorders = { ...(finalBorders ?? {}) };
+      borderBandOverridesPx = {};
+      if (leftStraddleProfile) {
+        paintBorders.left = rectBorders.left;
+        borderBandOverridesPx.left = leftStraddleProfile.band / 2;
+      }
+      if (rightStraddleProfile) {
+        paintBorders.right = rectBorders.right;
+        borderBandOverridesPx.right = rightStraddleProfile.band / 2;
+      }
+    }
+
+    // Never use default borders - cells are either explicitly styled or borderless
+    // This prevents gray borders on cells with borders={} (intentionally borderless)
+    const { cellElement } = renderTableCell({
+      doc,
+      x,
+      y,
+      rowHeight: cellHeight,
+      cellMeasure,
+      cell,
+      borders: paintBorders,
+      borderBandOverridesPx,
+      useDefaultBorder: false,
+      renderLine,
+      captureLineSnapshot,
+      renderDrawingContent,
+      context,
+      applySdtDataset,
+      ancestorContainerKey,
+      ancestorContainerSdt,
+      ancestorContainerKeys,
+      ancestorContainerSdts,
+      onSdtContainerChrome,
+      fromLine,
+      toLine,
+      tableIndent,
+      isRtl,
+      cellWidth: computedCellWidth > 0 ? computedCellWidth : undefined,
+      chrome,
+      resolvePhysical,
+    });
+
+    container.appendChild(cellElement);
+
+    // Table-level 3-rule bands paint their middle layer as a continuous fragment
+    // grid (see renderTableFragment); suppress the per-cell middle rectangle there.
+    const tableProvidesMid = (value: unknown): boolean => {
+      const profile = value != null && typeof value === 'object' ? getBorderBandProfile(value as never) : null;
+      return profile != null && profile.segments.length === 5;
+    };
+    const suppressMid = {
+      top: tableProvidesMid(
+        cellGridBounds.touchesTopEdge || continuesFromPrev === true
+          ? effectiveTableBorders?.top
+          : effectiveTableBorders?.insideH,
+      ),
+      bottom: tableProvidesMid(
+        cellGridBounds.touchesBottomEdge || continuesOnNext === true
+          ? effectiveTableBorders?.bottom
+          : effectiveTableBorders?.insideH,
+      ),
+      left: tableProvidesMid(
+        visualTouchesLeft
+          ? isRtl
+            ? effectiveTableBorders?.right
+            : effectiveTableBorders?.left
+          : effectiveTableBorders?.insideV,
+      ),
+      right: tableProvidesMid(
+        visualTouchesRight
+          ? isRtl
+            ? effectiveTableBorders?.left
+            : effectiveTableBorders?.right
+          : effectiveTableBorders?.insideV,
+      ),
+    };
+
     appendCompoundBorderRects(
       doc,
       container,
@@ -838,8 +922,12 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
         width: computedCellWidth > 0 ? computedCellWidth : (cellMeasure.width ?? 0),
         height: cellHeight,
       },
-      cellGridBounds.touchesBottomEdge || continuesOnNext === true,
-      cellGridBounds.touchesRightEdge,
+      {
+        ownsBottomBand: cellGridBounds.touchesBottomEdge || continuesOnNext === true,
+        rightIsBoundary: visualTouchesRight,
+        leftIsBoundary: visualTouchesLeft,
+        suppressMid,
+      },
     );
   }
 };

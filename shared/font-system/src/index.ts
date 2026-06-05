@@ -64,3 +64,12 @@ export {
   DEFAULT_FONT_LOAD_TIMEOUT_MS,
   __resetDefaultFontRegistry,
 } from './registry';
+
+export type { FontOffering, OfferingClass, FontGeneric } from './font-offerings';
+export {
+  FONT_OFFERINGS,
+  getDefaultFontOfferings,
+  getDefaultFontFamilyOptions,
+  fontOfferingStack,
+  fontOfferingRenderStack,
+} from './font-offerings';

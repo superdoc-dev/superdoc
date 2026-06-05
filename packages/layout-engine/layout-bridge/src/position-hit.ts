@@ -11,6 +11,8 @@
 import type {
   FlowBlock,
   Layout,
+  Page,
+  ColumnLayout,
   Measure,
   Fragment,
   DrawingFragment,
@@ -26,8 +28,11 @@ import type {
 import {
   adjustAvailableWidthForTextIndent,
   computeLinePmRange,
+  getColumnAtX,
+  getColumnGeometry,
   getFirstLineIndentOffset,
   getParagraphInlineDirection,
+  normalizeColumnLayout,
 } from '@superdoc/contracts';
 import { charOffsetToPm, findCharacterAtX } from './text-measurement.js';
 import type { PageGeometryHelper } from './page-geometry-helper.js';
@@ -130,23 +135,52 @@ export const isRtlBlock = (block: FlowBlock): boolean => {
   return getParagraphInlineDirection(block.attrs) === 'rtl';
 };
 
-export const determineColumn = (layout: Layout, fragmentX: number): number => {
-  const columns = layout.columns;
+// Columns governing a hit at this page-relative y: prefer the mid-page column REGION it falls in (a
+// continuous section break can change columns within a page; page.columns is only the page-START
+// config, so the contract carries per-region geometry in page.columnRegions, whose yStart/yEnd are
+// page-relative like fragment.y). Otherwise the page's own page.columns. layout.columns (the
+// document-wide / final-active config) is consulted ONLY when no page is supplied: a supplied page is
+// authoritative, and a page with no page.columns is single-column (the engine leaves it unset for
+// single-column pages; callers treat the undefined result as column 0). Deliberately NOT
+// `page.columns ?? layout.columns`: falling back to the document-wide columns for an existing
+// single-column page would reintroduce the cross-section mis-mapping this resolves. Shared by
+// determineColumn and determineTableColumn. (SD-2629)
+function resolveColumnsForHit(layout: Layout, page: Page | undefined, fragmentY?: number): ColumnLayout | undefined {
+  if (page === undefined) return layout.columns;
+  if (page.columnRegions && typeof fragmentY === 'number') {
+    const region = page.columnRegions.find((r) => fragmentY >= r.yStart && fragmentY < r.yEnd);
+    if (region) return region.columns;
+  }
+  return page.columns;
+}
+
+export const determineColumn = (layout: Layout, fragmentX: number, page?: Page, fragmentY?: number): number => {
+  const columns = resolveColumnsForHit(layout, page, fragmentY);
   if (!columns || columns.count <= 1) return 0;
-  const usableWidth = layout.pageSize.w - columns.gap * (columns.count - 1);
-  const columnWidth = usableWidth / columns.count;
-  const span = columnWidth + columns.gap;
-  const relative = fragmentX;
-  const raw = Math.floor(relative / Math.max(span, 1));
-  return Math.max(0, Math.min(columns.count - 1, raw));
+  // Mirror the engine's placement coordinates: fragments sit at marginLeft + content-relative column
+  // x over the CONTENT width (page width minus side margins), NOT the full page width from origin 0 -
+  // the latter mis-classifies clicks near boundaries once margins are non-zero (and for 3+ or
+  // asymmetric-margin layouts). Use the fragment's own page so multi-section docs with varying margins
+  // stay correct, falling back to the first page's margins when no page is supplied. getColumnAtX maps
+  // a gap to the preceding column.
+  const pageWidth = page?.size?.w ?? layout.pageSize.w;
+  const margins = page?.margins ?? layout.pages[0]?.margins;
+  const marginLeft = Math.max(0, margins?.left ?? 0);
+  const marginRight = Math.max(0, margins?.right ?? 0);
+  const contentWidth = Math.max(1, pageWidth - (marginLeft + marginRight));
+  const geometry = getColumnGeometry(normalizeColumnLayout(columns, contentWidth));
+  return getColumnAtX(geometry, fragmentX, marginLeft);
 };
 
-const determineTableColumn = (layout: Layout, fragment: TableFragment): number => {
+export const determineTableColumn = (layout: Layout, fragment: TableFragment, page?: Page): number => {
   if (typeof fragment.columnIndex === 'number') {
-    const count = layout.columns?.count ?? 1;
+    // Clamp against the count of the region the table sits in (by its y), not the page-START
+    // page.columns: a table laid out in a mid-page two-column region carries columnIndex 1 that the
+    // single-column page-start count would wrongly snap to 0. (SD-2629)
+    const count = resolveColumnsForHit(layout, page, fragment.y)?.count ?? 1;
     return Math.max(0, Math.min(Math.max(0, count - 1), fragment.columnIndex));
   }
-  return determineColumn(layout, fragment.x);
+  return determineColumn(layout, fragment.x, page, fragment.y);
 };
 
 // ---------------------------------------------------------------------------
@@ -695,7 +729,7 @@ export function resolvePositionHitFromDomPosition(
         if (domPos >= fragment.pmStart && domPos <= fragment.pmEnd) {
           blockId = fragment.blockId;
           pageIndex = pi;
-          column = determineColumn(layout, fragment.x);
+          column = determineColumn(layout, fragment.x, page, fragment.y);
           const blockIndex = findBlockIndexByFragmentId(blocks, fragment.blockId);
           if (blockIndex !== -1) {
             const measure = measures[blockIndex];
@@ -856,7 +890,7 @@ export function clickToPositionGeometry(
         return null;
       }
 
-      const column = determineColumn(layout, fragment.x);
+      const column = determineColumn(layout, fragment.x, layout.pages[pageIndex], fragment.y);
 
       return {
         pos,
@@ -881,7 +915,7 @@ export function clickToPositionGeometry(
         layoutEpoch,
         blockId: fragment.blockId,
         pageIndex,
-        column: determineColumn(layout, fragment.x),
+        column: determineColumn(layout, fragment.x, layout.pages[pageIndex], fragment.y),
         lineIndex: -1,
       };
     }
@@ -941,7 +975,7 @@ export function clickToPositionGeometry(
           layoutEpoch,
           blockId: tableHit.fragment.blockId,
           pageIndex,
-          column: determineTableColumn(layout, tableHit.fragment),
+          column: determineTableColumn(layout, tableHit.fragment, layout.pages[pageIndex]),
           lineIndex,
         };
       }
@@ -955,7 +989,7 @@ export function clickToPositionGeometry(
         layoutEpoch,
         blockId: tableHit.fragment.blockId,
         pageIndex,
-        column: determineTableColumn(layout, tableHit.fragment),
+        column: determineTableColumn(layout, tableHit.fragment, layout.pages[pageIndex]),
         lineIndex: 0,
       };
     }
@@ -976,7 +1010,7 @@ export function clickToPositionGeometry(
       layoutEpoch,
       blockId: fragment.blockId,
       pageIndex,
-      column: determineColumn(layout, fragment.x),
+      column: determineColumn(layout, fragment.x, layout.pages[pageIndex], fragment.y),
       lineIndex: -1,
     };
   }

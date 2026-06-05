@@ -106,9 +106,9 @@ test('font family and size in a table cell', async ({ superdoc }) => {
   // Change font family
   await superdoc.page.locator('[data-item="btn-fontFamily"]').click();
   await superdoc.waitForStable();
-  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Georgia' }).click();
+  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Times New Roman' }).click();
   await superdoc.waitForStable();
-  await superdoc.snapshot('Georgia font applied');
+  await superdoc.snapshot('Times New Roman font applied');
 
   // Change font size
   await superdoc.page.locator('[data-item="btn-fontSize"]').click();
@@ -117,12 +117,12 @@ test('font family and size in a table cell', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   // Assert toolbar
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText('Georgia');
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText('Times New Roman');
   await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('24');
-  await superdoc.snapshot('Georgia 24pt applied in cell');
+  await superdoc.snapshot('Times New Roman 24pt applied in cell');
 
   // Assert text style
-  await superdoc.assertTextMarkAttrs('fancy text', 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('fancy text', 'textStyle', { fontFamily: 'Times New Roman' });
   await superdoc.assertTextMarkAttrs('fancy text', 'textStyle', { fontSize: '24pt' });
 });
 

@@ -58,7 +58,7 @@ import {
 import { layoutParagraphBlock, type FootnoteAnchorRef } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
 import { layoutDrawingBlock } from './layout-drawing.js';
-import { layoutTableBlock, createAnchoredTableFragment, ANCHORED_TABLE_FULL_WIDTH_RATIO } from './layout-table.js';
+import { layoutTableBlock, createAnchoredTableFragment, isAnchoredTableFullWidth } from './layout-table.js';
 import {
   collectAnchoredDrawings,
   collectAnchoredTables,
@@ -69,7 +69,12 @@ import { normalizeFragmentsForRegion } from './normalize-header-footer-fragments
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
 import { formatPageNumber } from './pageNumbering.js';
 import { shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
-import { balanceSectionOnPage, type BalancingFragment, type MeasureData } from './column-balancing.js';
+import {
+  balanceSectionOnPage,
+  type BalancingFragment,
+  type MeasureData,
+  type SectionColumnLayout,
+} from './column-balancing.js';
 import { cloneColumnLayout } from './column-utils.js';
 
 type PageSize = { w: number; h: number };
@@ -1976,7 +1981,6 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const anchoredTablesByParagraph = anchoredTables.byParagraph;
   const paragraphlessAnchoredTables = anchoredTables.withoutParagraph;
   const placedAnchoredIds = new Set<string>();
-  const placedAnchoredTableIds = new Set<string>();
 
   // Pre-register page/margin-relative anchored images before the layout loop.
   // These images position themselves relative to the page, not a paragraph, so they
@@ -2297,13 +2301,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           balanceResult = balanceSectionOnPage({
             fragments: state.page.fragments as BalancingFragment[],
             sectionIndex: endingSectionIndex!,
-            sectionColumns: {
-              count: normalized.count,
-              gap: normalized.gap,
-              width: normalized.width,
-              widths: endingSectionColumns!.widths,
-              equalWidth: endingSectionColumns!.equalWidth,
-            },
+            sectionColumns: toBalancingColumns(normalized),
             sectionHasExplicitColumnBreak: false,
             blockSectionMap,
             margins: { left: activeLeftMargin },
@@ -2579,9 +2577,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           getFootnoteBandOverhead,
           getFootnoteAnchorsForBlockId,
         },
-        anchorsForPara
+        anchorsForPara || tablesForPara
           ? {
               anchoredDrawings: anchorsForPara,
+              anchoredTables: tablesForPara,
+              columnWidth: getCurrentColumnWidth(),
               pageWidth: activePageSize.w,
               pageMargins: {
                 top: activeTopMargin,
@@ -2595,51 +2595,21 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           : undefined,
       );
 
-      // Register and place anchored tables after the paragraph. Anchor base is paragraph-relative
-      // (OOXML-style), clamped to paragraph bottom to avoid overlap, then offsetV is applied.
-      // Full-width floating tables are treated as inline and laid out when we hit the table block.
-      // Only vRelativeFrom=paragraph is supported.
+      // Advance body cursor below wrapping anchored tables (placed before paragraph layout).
       if (tablesForPara) {
         const state = paginator.ensurePage();
-        const columnWidthForTable = getCurrentColumnWidth();
-
-        // Paragraph top after layout (first fragment on this page). Pre-layout cursorY can still
-        // sit on the previous page when the anchor paragraph breaks across pages.
-        let anchorParagraphTopY = state.cursorY;
-        for (const fragment of state.page.fragments) {
-          if (fragment.kind === 'para' && fragment.blockId === block.id) {
-            anchorParagraphTopY = Math.min(anchorParagraphTopY, fragment.y);
-          }
-        }
-
         let tableBottomY = state.cursorY;
-        let nextStackY = state.cursorY;
         for (const { block: tableBlock, measure: tableMeasure } of tablesForPara) {
-          if (placedAnchoredTableIds.has(tableBlock.id)) continue;
-          const totalWidth = tableMeasure.totalWidth ?? 0;
-          if (columnWidthForTable > 0 && totalWidth >= columnWidthForTable * ANCHORED_TABLE_FULL_WIDTH_RATIO) continue;
-
-          // OOXML anchor base is paragraph-relative. Clamp below laid-out paragraph text, then offsetV.
-          const offsetV = tableBlock.anchor?.offsetV ?? 0;
-          const anchorBaseY = Math.max(anchorParagraphTopY, nextStackY);
-          const anchorY = anchorBaseY + offsetV;
-          floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
-
-          const anchorX = tableBlock.anchor?.offsetH ?? columnX(state);
-
-          const tableFragment = createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY);
-          state.page.fragments.push(tableFragment);
-          placedAnchoredTableIds.add(tableBlock.id);
-
-          // Only advance cursor for tables that affect flow (wrap type other than 'None').
-          // wrap.type === 'None' is absolute overlay with no exclusion zone; pushing cursor would add unwanted whitespace.
+          if (!placedAnchoredIds.has(tableBlock.id)) continue;
           const wrapType = tableBlock.wrap?.type ?? 'None';
-          if (wrapType !== 'None') {
-            const bottom = anchorY + (tableMeasure.totalHeight ?? 0);
-            const distBottom = tableBlock.wrap?.distBottom ?? 0;
-            if (bottom > tableBottomY) tableBottomY = bottom;
-            nextStackY = bottom + distBottom;
-          }
+          if (wrapType === 'None') continue;
+          const tableFragment = state.page.fragments.find(
+            (fragment) => fragment.kind === 'table' && fragment.blockId === tableBlock.id,
+          );
+          if (!tableFragment || tableFragment.kind !== 'table') continue;
+          const bottom = tableFragment.y + (tableMeasure.totalHeight ?? 0);
+          const distBottom = tableBlock.wrap?.distBottom ?? 0;
+          if (bottom + distBottom > tableBottomY) tableBottomY = bottom + distBottom;
         }
         state.cursorY = tableBottomY;
         state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
@@ -2845,8 +2815,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     for (const { block: tableBlock, measure: tableMeasure } of paragraphlessAnchoredTables) {
       const columnWidthForTable = getCurrentColumnWidth();
       const totalWidth = tableMeasure.totalWidth ?? 0;
-      const shouldFlowInline =
-        columnWidthForTable > 0 && totalWidth >= columnWidthForTable * ANCHORED_TABLE_FULL_WIDTH_RATIO;
+      const shouldFlowInline = isAnchoredTableFullWidth(tableBlock, tableMeasure, columnWidthForTable);
 
       if (shouldFlowInline) {
         continue;
@@ -2857,7 +2826,6 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
       state.page.fragments.push(createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY));
-      placedAnchoredTableIds.add(tableBlock.id);
     }
   }
 
@@ -3117,13 +3085,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     balanceSectionOnPage({
       fragments: lastPageForSection.fragments as BalancingFragment[],
       sectionIndex: sectionIdx,
-      sectionColumns: {
-        count: normalized.count,
-        gap: normalized.gap,
-        width: normalized.width,
-        widths: sectionCols.widths,
-        equalWidth: sectionCols.equalWidth,
-      },
+      sectionColumns: toBalancingColumns(normalized),
       sectionHasExplicitColumnBreak: false, // already filtered above
       blockSectionMap,
       margins: { left: sectionLeftMargin },
@@ -3501,6 +3463,22 @@ export function layoutHeaderFooter(
  */
 function normalizeColumns(input: ColumnLayout | undefined, contentWidth: number): NormalizedColumns {
   return normalizeColumnLayout(input, contentWidth, COLUMN_EPSILON);
+}
+
+// Build balanceSectionOnPage's column input from the RESOLVED (normalized) layout. Both balancing
+// call sites must source widths/gaps from `normalized` (sliced to the resolved count), never the raw
+// config: raw widths can be longer than the count, which makes the equal-width balancing guard read
+// surplus entries (vetoing balancing of columns that render equal) and builds phantom geometry
+// columns. Single builder so the two call sites cannot drift apart. (SD-2629)
+function toBalancingColumns(normalized: NormalizedColumns): SectionColumnLayout {
+  return {
+    count: normalized.count,
+    gap: normalized.gap,
+    width: normalized.width,
+    ...(Array.isArray(normalized.widths) ? { widths: normalized.widths } : {}),
+    ...(Array.isArray(normalized.gaps) ? { gaps: normalized.gaps } : {}),
+    ...(normalized.equalWidth !== undefined ? { equalWidth: normalized.equalWidth } : {}),
+  };
 }
 
 const _buildMeasureMap = (blocks: FlowBlock[], measures: Measure[]): Map<string, Measure> => {

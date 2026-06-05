@@ -103,16 +103,16 @@ test('bold + font family + font size', async ({ superdoc }) => {
   await superdoc.snapshot('text selected');
 
   await clickToolbarButton(superdoc, 'bold');
-  await selectDropdownOption(superdoc, 'fontFamily', 'Georgia');
+  await selectDropdownOption(superdoc, 'fontFamily', 'Times New Roman');
   await selectDropdownOption(superdoc, 'fontSize', '24');
 
   await expect(superdoc.page.locator('[data-item="btn-bold"]')).toHaveClass(/sd-active/);
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText('Georgia');
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText('Times New Roman');
   await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('24');
-  await superdoc.snapshot('bold + Georgia 24pt applied');
+  await superdoc.snapshot('bold + Times New Roman 24pt applied');
 
   await superdoc.assertTextHasMarks('is a sentence', ['bold']);
-  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontFamily: 'Times New Roman' });
   await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontSize: '24pt' });
 });
 
@@ -138,17 +138,17 @@ test('font family + font size + color', async ({ superdoc }) => {
   await typeAndSelect(superdoc);
   await superdoc.snapshot('text selected');
 
-  await selectDropdownOption(superdoc, 'fontFamily', 'Georgia');
+  await selectDropdownOption(superdoc, 'fontFamily', 'Times New Roman');
   await selectDropdownOption(superdoc, 'fontSize', '18');
   await selectColorSwatch(superdoc, 'color', 'dark red');
 
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText('Georgia');
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"] .sd-button-label')).toHaveText('Times New Roman');
   await expect(superdoc.page.locator('#inlineTextInput-fontSize')).toHaveValue('18');
   const colorBar = superdoc.page.locator('[data-item="btn-color"] .color-bar');
   await expect(colorBar).toHaveCSS('background-color', 'rgb(134, 0, 40)');
-  await superdoc.snapshot('Georgia 18pt dark red applied');
+  await superdoc.snapshot('Times New Roman 18pt dark red applied');
 
-  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontFamily: 'Times New Roman' });
   await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontSize: '18pt' });
   await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { color: '#860028' });
 });
@@ -198,16 +198,16 @@ test('textStyle attr checks require one run to satisfy all attrs', async ({ supe
 
   const splitPos = await superdoc.findTextPos('Split');
   await superdoc.setTextSelection(splitPos, splitPos + 'Split'.length);
-  await selectDropdownOption(superdoc, 'fontFamily', 'Georgia');
+  await selectDropdownOption(superdoc, 'fontFamily', 'Times New Roman');
 
   const attrsPos = await superdoc.findTextPos('attrs');
   await superdoc.setTextSelection(attrsPos, attrsPos + 'attrs'.length);
   await selectColorSwatch(superdoc, 'color', 'red');
 
-  await superdoc.assertTextMarkAttrs('Split', 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('Split', 'textStyle', { fontFamily: 'Times New Roman' });
   await superdoc.assertTextMarkAttrs('attrs', 'textStyle', { color: '#D2003F' });
 
   await expect(
-    superdoc.assertTextMarkAttrs('Split attrs', 'textStyle', { fontFamily: 'Georgia', color: '#D2003F' }),
+    superdoc.assertTextMarkAttrs('Split attrs', 'textStyle', { fontFamily: 'Times New Roman', color: '#D2003F' }),
   ).rejects.toThrow();
 });

@@ -100,8 +100,24 @@ describe('normalizeColumnLayout', () => {
     });
   });
 
-  it('scales explicit widths to the available width', () => {
+  it('does not scale explicit widths; authored widths are preserved (SD-2629 step 4)', () => {
+    // Word renders authored column widths as-is and leaves trailing space when they underfill, so
+    // [100, 200] in a 600px content area stays [100, 200] rather than stretching to [200, 400].
     expect(normalizeColumnLayout({ count: 2, gap: 24, widths: [100, 200], equalWidth: false }, 624)).toEqual({
+      count: 2,
+      gap: 24,
+      widths: [100, 200],
+      equalWidth: false,
+      width: 200,
+    });
+  });
+
+  it('does not scale DOWN overfull explicit widths either; authored widths overflow (SD-2629, Word-verified)', () => {
+    // Word keeps authored explicit widths even when they EXCEED the content area: a Word probe of two
+    // 360pt columns + 36pt gap in a 468pt content box renders both at 360pt, with column 2 overflowing
+    // off the page edge (Word re-saves the w:cols unchanged). So normalize must not scale down either -
+    // [200, 400] in a 300px content box stays [200, 400] (overfull), matching Word's overflow.
+    expect(normalizeColumnLayout({ count: 2, gap: 24, widths: [200, 400], equalWidth: false }, 300)).toEqual({
       count: 2,
       gap: 24,
       widths: [200, 400],
@@ -151,7 +167,7 @@ describe('normalizeColumnLayout', () => {
   });
 });
 
-describe('getColumnGeometry + geometry helpers (SD-2629, behavior-preserving)', () => {
+describe('getColumnGeometry + geometry helpers (SD-2629)', () => {
   it('mirrors equal-width normalized output (uniform gap, content-relative x)', () => {
     const geom = getColumnGeometry(normalizeColumnLayout({ count: 2, gap: 24 }, 624));
     expect(geom).toEqual([
@@ -160,13 +176,13 @@ describe('getColumnGeometry + geometry helpers (SD-2629, behavior-preserving)', 
     ]);
   });
 
-  it('mirrors explicit (scaled) widths', () => {
+  it('mirrors explicit widths without scaling (SD-2629 step 4)', () => {
     const geom = getColumnGeometry(
       normalizeColumnLayout({ count: 2, gap: 24, widths: [100, 200], equalWidth: false }, 624),
     );
     expect(geom).toEqual([
-      { index: 0, x: 0, width: 200, gapAfter: 24 },
-      { index: 1, x: 224, width: 400, gapAfter: 0 },
+      { index: 0, x: 0, width: 100, gapAfter: 24 },
+      { index: 1, x: 124, width: 200, gapAfter: 0 },
     ]);
   });
 
@@ -195,10 +211,23 @@ describe('getColumnGeometry + geometry helpers (SD-2629, behavior-preserving)', 
     expect(getColumnAtX(geom, 96 + 100, 96)).toBe(0);
   });
 
-  it('does NOT let per-column gaps drive geometry yet (step 1 is behavior-preserving)', () => {
-    // `gaps` is raw explicit-mode input; geometry still uses the scalar gap until the step-4 flip.
+  it('lets per-column gaps drive geometry (SD-2629 step 4)', () => {
+    // gaps[i] is the gap after column i; geometry uses it instead of the uniform scalar gap.
     const geom = getColumnGeometry({ count: 2, gap: 24, widths: [300, 300], gaps: [999], width: 300 });
-    expect(geom[0].gapAfter).toBe(24);
+    expect(geom[0].gapAfter).toBe(999);
+    expect(geom[1].x).toBe(300 + 999);
+  });
+
+  it('expands an equal-mode layout with no widths array to `count` columns (SD-2629 regression)', () => {
+    // A hand-built equal-mode layout (column-balancing) carries only the scalar `width`, no widths
+    // array. Geometry must still yield `count` columns; collapsing to a single column mapped every
+    // index past 0 onto column 0's x, stacking balanced multi-column content on the left margin.
+    const geom = getColumnGeometry({ count: 2, gap: 48, width: 288 });
+    expect(geom).toEqual([
+      { index: 0, x: 0, width: 288, gapAfter: 48 },
+      { index: 1, x: 336, width: 288, gapAfter: 0 },
+    ]);
+    expect(getColumnX(geom, 1, 96)).toBe(432);
   });
 });
 
@@ -299,6 +328,24 @@ describe('resolveColumnLayout (SD-2629)', () => {
     });
     // Omitted equalWidth is equal mode too.
     expect(resolveColumnLayout({ count: 2, gap: 20, widths: [100, 200] })).toEqual({ count: 2, gap: 20 });
+  });
+
+  it('drops unusable widths by record, not by position, and stays idempotent (SD-2629)', () => {
+    // resolveColumnCount counts usable widths ([192, 384] -> 2). A positional slice would keep the
+    // leading 0 and drop the valid 384 ([0, 192]); that metadata re-resolves to count 1, so the
+    // fill (count 2) and the render metadata disagree. Record-filtering keeps [192, 384].
+    const resolved = resolveColumnLayout({ count: 3, gap: 20, widths: [0, 192, 384], equalWidth: false });
+    expect(resolved).toEqual({ count: 2, gap: 20, widths: [192, 384], equalWidth: false });
+    // Resolving the resolved metadata is a no-op (idempotent), which the positional slice was not.
+    expect(resolveColumnLayout(resolved)).toEqual(resolved);
+  });
+
+  it('keeps the gap following each surviving column when an unusable width is dropped (SD-2629)', () => {
+    // gaps[i] is the gap after column i. Dropping the leading 0-width column must keep the gap that
+    // sits between the surviving columns (after col 1 = 30), not the dropped column's gap (10).
+    expect(
+      resolveColumnLayout({ count: 3, gap: 20, widths: [0, 192, 384], gaps: [10, 30], equalWidth: false }),
+    ).toEqual({ count: 2, gap: 20, widths: [192, 384], gaps: [30], equalWidth: false });
   });
 });
 

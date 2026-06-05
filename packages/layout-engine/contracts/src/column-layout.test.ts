@@ -300,6 +300,24 @@ describe('resolveColumnLayout (SD-2629)', () => {
     // Omitted equalWidth is equal mode too.
     expect(resolveColumnLayout({ count: 2, gap: 20, widths: [100, 200] })).toEqual({ count: 2, gap: 20 });
   });
+
+  it('drops unusable widths by record, not by position, and stays idempotent (SD-2629)', () => {
+    // resolveColumnCount counts usable widths ([192, 384] -> 2). A positional slice would keep the
+    // leading 0 and drop the valid 384 ([0, 192]); that metadata re-resolves to count 1, so the
+    // fill (count 2) and the render metadata disagree. Record-filtering keeps [192, 384].
+    const resolved = resolveColumnLayout({ count: 3, gap: 20, widths: [0, 192, 384], equalWidth: false });
+    expect(resolved).toEqual({ count: 2, gap: 20, widths: [192, 384], equalWidth: false });
+    // Resolving the resolved metadata is a no-op (idempotent), which the positional slice was not.
+    expect(resolveColumnLayout(resolved)).toEqual(resolved);
+  });
+
+  it('keeps the gap following each surviving column when an unusable width is dropped (SD-2629)', () => {
+    // gaps[i] is the gap after column i. Dropping the leading 0-width column must keep the gap that
+    // sits between the surviving columns (after col 1 = 30), not the dropped column's gap (10).
+    expect(
+      resolveColumnLayout({ count: 3, gap: 20, widths: [0, 192, 384], gaps: [10, 30], equalWidth: false }),
+    ).toEqual({ count: 2, gap: 20, widths: [192, 384], gaps: [30], equalWidth: false });
+  });
 });
 
 describe('columnRenderLayoutsEqual (SD-2629)', () => {

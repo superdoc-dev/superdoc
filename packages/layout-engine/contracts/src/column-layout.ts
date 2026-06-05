@@ -87,8 +87,23 @@ export function resolveColumnLayout(input: ColumnLayout): ColumnLayout {
   const resolved = cloneColumnLayout(input);
   resolved.count = count;
   if (resolveColumnMode(input) === 'explicit') {
-    if (Array.isArray(resolved.widths)) resolved.widths = resolved.widths.slice(0, count);
-    if (Array.isArray(resolved.gaps)) resolved.gaps = resolved.gaps.slice(0, Math.max(0, count - 1));
+    // Select widths the SAME way resolveColumnCount counts them: pair each width with the gap that
+    // follows it, keep only usable-width records (finite, > 0), then slice to the resolved count.
+    // A positional `widths.slice(0, count)` would keep an unusable leading entry and drop a usable
+    // later one (e.g. [0,192,384] -> count 2 -> [0,192]), producing metadata whose own usable-width
+    // count re-resolves smaller than the fill used (non-idempotent; fill and paint disagree).
+    if (Array.isArray(resolved.widths)) {
+      const rawGaps = Array.isArray(resolved.gaps) ? resolved.gaps : [];
+      const usable = resolved.widths
+        .map((width, i) => ({ width, gapAfter: rawGaps[i] }))
+        .filter((record) => typeof record.width === 'number' && Number.isFinite(record.width) && record.width > 0)
+        .slice(0, count);
+      resolved.widths = usable.map((record) => record.width);
+      // gaps[i] is the gap AFTER column i; the last surviving column has none, so keep count-1.
+      if (Array.isArray(resolved.gaps)) {
+        resolved.gaps = usable.slice(0, Math.max(0, count - 1)).map((record) => record.gapAfter ?? 0);
+      }
+    }
   } else {
     delete resolved.widths;
     delete resolved.gaps;

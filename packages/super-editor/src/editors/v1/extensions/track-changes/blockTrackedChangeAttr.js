@@ -12,9 +12,17 @@ export const blockTrackedChangeAttrSpec = {
     parseDOM: (el) => {
       const kind = el.getAttribute('data-track-change');
       if (kind !== 'insert' && kind !== 'delete') return null;
+      // Without an id, the entry can never be resolved by
+      // applyRowTrackedChangeResolution (which matches by id) and would just
+      // sit on the row as a no-op attr. getBlockTrackedChanges already
+      // filters these out; reject them at parse time so the doc never holds
+      // a half-formed trackChange shape (also keeps the runtime type
+      // consistent with the documented `id: string`).
+      const id = el.getAttribute('data-track-change-id');
+      if (!id) return null;
       return {
         kind,
-        id: el.getAttribute('data-track-change-id') ?? null,
+        id,
         operationId: el.getAttribute('data-track-change-operation') ?? undefined,
       };
     },

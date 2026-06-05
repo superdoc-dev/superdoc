@@ -22,8 +22,8 @@ export type DrawingLayoutContext = {
   ensurePage: () => PageState;
   /** Advances to the next column or page, returning the new page state */
   advanceColumn: (state: PageState) => PageState;
-  /** Computes the X coordinate for a given column index */
-  columnX: (columnIndex: number) => number;
+  /** Computes the X coordinate for a column in the given page state (SD-2629). */
+  columnX: (state: PageState, columnIndex?: number) => number;
 };
 
 /**
@@ -113,7 +113,7 @@ export function layoutDrawingBlock({
   }
 
   const pmRange = extractBlockPmRange(block);
-  let x = columnX(state.columnIndex) + marginLeft + indentLeft;
+  let x = columnX(state) + marginLeft + indentLeft;
   if (isInlineShapeGroup && inlineParagraphAlignment) {
     const pIndentLeft = typeof attrs?.paragraphIndentLeft === 'number' ? attrs.paragraphIndentLeft : 0;
     const pIndentRight = typeof attrs?.paragraphIndentRight === 'number' ? attrs.paragraphIndentRight : 0;

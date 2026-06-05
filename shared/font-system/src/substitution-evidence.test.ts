@@ -24,9 +24,7 @@ describe('substitution evidence -> resolver derivation', () => {
       expect(resolver.resolvePrimaryPhysicalFamily(logical)).toBe(physical);
     }
     // The derivation input is exactly six rows: policyAction 'substitute' with a physical target.
-    const substituteRows = SUBSTITUTION_EVIDENCE.filter(
-      (r) => r.policyAction === 'substitute' && r.physicalFamily,
-    );
+    const substituteRows = SUBSTITUTION_EVIDENCE.filter((r) => r.policyAction === 'substitute' && r.physicalFamily);
     expect(substituteRows).toHaveLength(EXPECTED_SUBSTITUTES.length);
   });
 

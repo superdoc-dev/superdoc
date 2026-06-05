@@ -279,6 +279,61 @@ describe('layoutDocument', () => {
     });
   });
 
+  it('caps the fill at the resolved column count when w:num exceeds the supplied widths (SD-2629)', () => {
+    // count:4 but only two explicit widths -> the resolved count is 2 (Word renders min(num,
+    // widths)). The fill loop must advance through 2 columns then start a new page, NOT into
+    // phantom columns 3-4. Before SD-2629, advanceColumn read the raw count (4) while width math
+    // read the clamped count (2): two answers for "how many columns exist".
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 4, gap: 20, widths: [192, 384], equalWidth: false },
+    };
+
+    // Eight 350px lines: each 720px column fits two, so a 2-column page holds four lines -> exactly
+    // two pages. Under the bug (4 columns), all eight fit on one page across four column positions.
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350, 350, 350, 350, 350, 350])], options);
+
+    const columnXs = new Set(layout.pages.flatMap((page) => page.fragments.map((fragment) => Math.round(fragment.x))));
+    expect(columnXs.size).toBe(2);
+    expect(layout.pages).toHaveLength(2);
+  });
+
+  it('resolves page/document column metadata to the rendered count, not the raw w:num (SD-2629)', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 4, gap: 20, widths: [192, 384], equalWidth: false },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350])], options);
+    // count:4 with two widths renders two columns; metadata must not advertise four.
+    expect(layout.columns).toEqual({ count: 2, gap: 20, widths: [192, 384], equalWidth: false });
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, widths: [192, 384], equalWidth: false });
+  });
+
+  it('places explicit columns at authored widths driven by per-column gaps (SD-2629 step 4)', () => {
+    // The step-4 flip: explicit widths are no longer scaled to fill the content box, and each
+    // column is positioned by its own gap. Three authored 192px columns (sum 576) sit in a 720px
+    // content box with per-column gaps [0, 48]; total 624 < 720 leaves trailing space (Word does
+    // not stretch authored widths). Per-column geometry:
+    //   col0 @ 40                                  (left margin)
+    //   col1 @ 40 + 192 + gaps[0]=0          = 232
+    //   col2 @ 40 + 192 + 0 + 192 + gaps[1]=48 = 472
+    // Before the flip, normalize scaled the widths to ~240px and applied the scalar gap (0),
+    // placing the columns at 40 / 280 / 520. This test fails on the pre-flip engine.
+    const options: LayoutOptions = {
+      pageSize: { w: 800, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 3, gap: 0, widths: [192, 192, 192], gaps: [0, 48], equalWidth: false },
+    };
+    // One 700px line per column: each 720px-tall column holds exactly one, filling all three.
+    const layout = layoutDocument([block], [makeMeasure([700, 700, 700])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    const xs = layout.pages[0].fragments.map((fragment) => Math.round(fragment.x)).sort((a, b) => a - b);
+    expect(xs).toEqual([40, 232, 472]);
+  });
+
   it('does not set "page.columns" on single column layout', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },
@@ -302,6 +357,34 @@ describe('layoutDocument', () => {
     expect(layout.pages).toHaveLength(1);
     expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: false });
     expect(layout.columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+  });
+
+  it('resolves mid-page region column metadata to the rendered count (SD-2629)', () => {
+    // A continuous break to count:4 with two widths must surface as a 2-column region, not 4 - the
+    // renderer prefers columnRegions over page.columns and reads the config raw.
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'intro', runs: [] },
+      {
+        kind: 'sectionBreak',
+        id: 'sb-continuous',
+        type: 'continuous',
+        columns: { count: 4, gap: 20, widths: [192, 384], equalWidth: false },
+      },
+      { kind: 'paragraph', id: 'body', runs: [] },
+    ];
+    const measures: Measure[] = [makeMeasure([30]), { kind: 'sectionBreak' }, makeMeasure([30, 30, 30])];
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20 },
+    };
+
+    const layout = layoutDocument(blocks, measures, options);
+    const regions = layout.pages[0].columnRegions;
+    expect(regions).toBeDefined();
+    const last = regions![regions!.length - 1];
+    expect(last.columns.count).toBe(2);
+    expect(last.columns.widths).toEqual([192, 384]);
   });
 
   it('emits page.columnRegions for continuous section breaks that change column config mid-page', () => {
@@ -817,6 +900,33 @@ describe('layoutDocument', () => {
 
     expect(para2Fragment.x).toBe(DEFAULT_OPTIONS.margins!.left);
     expect(para2Fragment.width).toBe(contentWidth);
+  });
+
+  it('positions anchored tables from paragraph top plus offsetV (form-field row)', () => {
+    const paragraphBlock: FlowBlock = { kind: 'paragraph', id: 'para-1', runs: [] };
+    const paragraphMeasure = makeMeasure([18, 18, 18]);
+
+    const tableBlock = makeTableBlock('table-field', 1, {
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 280,
+        offsetV: 2,
+      },
+      wrap: { type: 'None' },
+    });
+    const tableMeasure = makeTableMeasure([120], [14]);
+
+    const layout = layoutDocument([paragraphBlock, tableBlock], [paragraphMeasure, tableMeasure], DEFAULT_OPTIONS);
+
+    const tableFragment = layout.pages[0].fragments.find(
+      (fragment) => fragment.kind === 'table' && fragment.blockId === 'table-field',
+    ) as { y: number; x: number } | undefined;
+
+    expect(tableFragment).toBeTruthy();
+    expect(tableFragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 2);
+    expect(tableFragment?.x).toBe(DEFAULT_OPTIONS.margins!.left + 280);
   });
 
   it('treats 99% width floating tables as inline but anchors narrower tables', () => {
@@ -2152,6 +2262,32 @@ describe('layoutDocument', () => {
       expect(p1.x).toBeCloseTo(options.margins!.left);
       // p2 should begin at top of second column after the column break
       expect(p2.x).toBeCloseTo(options.margins!.left + columnWidth + options.columns!.gap);
+      expect(p2.y).toBe(options.margins!.top);
+    });
+
+    it('treats the last resolved column as last for column breaks when w:num exceeds widths (SD-2629)', () => {
+      // count:4 but two explicit widths -> resolved count 2. The first break moves to column 1 (the
+      // last resolved column); the second must start a new page, NOT advance into a phantom column
+      // 2. Mirror of the advanceColumn fix for explicit <w:br w:type="column"> handling.
+      const blocks: FlowBlock[] = [
+        { kind: 'columnBreak', id: 'br-1' } as ColumnBreakBlock,
+        { kind: 'columnBreak', id: 'br-2' } as ColumnBreakBlock,
+        { kind: 'paragraph', id: 'p2', runs: [] },
+      ];
+
+      const measures: Measure[] = [{ kind: 'columnBreak' }, { kind: 'columnBreak' }, makeMeasure([40])];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+        columns: { count: 4, gap: 48, widths: [192, 384], equalWidth: false },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+
+      expect(layout.pages.length).toBe(2);
+      const p2 = layout.pages[1].fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+      expect(p2.x).toBeCloseTo(options.margins!.left);
       expect(p2.y).toBe(options.margins!.top);
     });
 
@@ -4447,6 +4583,70 @@ describe('requirePageBoundary edge cases', () => {
       expect(p3.x).toBeCloseTo(200);
       expect(p3.y).toBeCloseTo(regionTop);
       expect(p3.width).toBeCloseTo(550);
+    });
+
+    it('keeps the current explicit column after a manual column break when only later per-column gaps differ', () => {
+      const toExplicitColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-explicit',
+        type: 'continuous',
+        columns: { count: 3, gap: 48, widths: [100, 100, 300], gaps: [48, 48], equalWidth: false },
+        margins: {},
+      };
+      const laterGapsOnlyDelta: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-gaps-only',
+        type: 'continuous',
+        columns: { count: 3, gap: 48, widths: [100, 100, 300], gaps: [48, 96], equalWidth: false },
+        margins: {},
+      };
+
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        toExplicitColumns,
+        { kind: 'paragraph', id: 'p2', runs: [] },
+        { kind: 'columnBreak', id: 'br-1' } as ColumnBreakBlock,
+        { kind: 'paragraph', id: 'p3', runs: [] },
+        laterGapsOnlyDelta,
+        { kind: 'paragraph', id: 'p4', runs: [] },
+      ];
+
+      const measures: Measure[] = [
+        makeMeasure([40]),
+        { kind: 'sectionBreak' },
+        makeMeasure([40]),
+        { kind: 'columnBreak' },
+        makeMeasure([40]),
+        { kind: 'sectionBreak' },
+        makeMeasure([40]),
+      ];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 700, h: 792 },
+        margins: { top: 72, right: 50, bottom: 72, left: 50 },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+      const page = layout.pages[0];
+      const contentWidth = options.pageSize!.w - options.margins!.left - options.margins!.right;
+      const totalGap = 48 * 2;
+      const expectedSecondColumnX = 50 + (100 * (contentWidth - totalGap)) / (100 + 100 + 300) + 48;
+
+      const p2 = page.fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+      const p3 = page.fragments.find((f) => f.blockId === 'p3') as ParaFragment;
+      const p4 = page.fragments.find((f) => f.blockId === 'p4') as ParaFragment;
+
+      expect(p2.x).toBeCloseTo(50);
+      expect(p3.x).toBeCloseTo(expectedSecondColumnX);
+      expect(p4.x).toBeCloseTo(expectedSecondColumnX);
+      expect(page.columnRegions).toHaveLength(2);
+      expect(page.columnRegions?.[1]?.columns).toEqual({
+        count: 3,
+        gap: 48,
+        widths: [100, 100, 300],
+        gaps: [48, 48],
+        equalWidth: false,
+      });
     });
 
     it('does not balance the final page for explicit custom-width columns', () => {

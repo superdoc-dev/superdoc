@@ -22,6 +22,8 @@ import {
   swapCellBordersLR,
 } from './border-utils.js';
 import { getTableCellGridBounds, type TableCellGridPosition } from './grid-geometry.js';
+import { resolveTrackedChangesConfig, applyRowTrackedChangeToCell } from '../runs/tracked-changes.js';
+import type { TrackedChangesRenderConfig } from '../runs/types.js';
 import type { FragmentRenderContext } from '../renderer.js';
 import type { SdtAncestorOptions } from '../sdt/container.js';
 
@@ -403,6 +405,29 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
 
   const totalCols = columnWidths.length;
 
+  // Structural row-level tracked change (inserted/deleted whole row). Reuses the
+  // exact same metadata + painter helpers as inline tracked changes. The
+  // tracked-changes MODE is threaded the same way inline runs get it: from a
+  // ParagraphBlock's attrs (trackedChangesMode/trackedChangesEnabled) via
+  // resolveTrackedChangesConfig. FragmentRenderContext carries no mode field, so
+  // we resolve from a representative paragraph in this row's cells.
+  const rowTrackedChange = row?.attrs?.trackedChange;
+  let rowTrackedChangeConfig: TrackedChangesRenderConfig | undefined;
+  if (rowTrackedChange) {
+    let representativeParagraph: ParagraphBlock | undefined;
+    for (const cell of row?.cells ?? []) {
+      const candidate =
+        cell.paragraph ?? (cell.blocks?.find((block) => block.kind === 'paragraph') as ParagraphBlock | undefined);
+      if (candidate) {
+        representativeParagraph = candidate;
+        break;
+      }
+    }
+    rowTrackedChangeConfig = representativeParagraph
+      ? resolveTrackedChangesConfig(representativeParagraph)
+      : { mode: 'review', enabled: true };
+  }
+
   // Effective right grid edge for THIS row's border ownership. A row with a
   // trailing w:gridAfter reserves empty columns past its last cell (FWC forms do
   // this), so the rightmost real cell never reaches `totalCols` and the
@@ -685,6 +710,12 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       chrome,
       resolvePhysical,
     });
+
+    // Paint the structural row-level tracked change onto each cell element of
+    // the row (no <tr> exists in the painted DOM), reusing the inline helpers.
+    if (rowTrackedChange && rowTrackedChangeConfig) {
+      applyRowTrackedChangeToCell(cellElement, rowTrackedChange, rowTrackedChangeConfig);
+    }
 
     container.appendChild(cellElement);
   }

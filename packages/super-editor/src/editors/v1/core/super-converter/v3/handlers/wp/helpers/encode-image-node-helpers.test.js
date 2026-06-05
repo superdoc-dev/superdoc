@@ -713,6 +713,49 @@ describe('handleImageNode', () => {
       expect(result.attrs.wrap.attrs).toEqual({});
     });
 
+    it('does not merge anchor distL/distR onto TopAndBottom wrap', () => {
+      const node = makeNode({
+        attributes: {
+          distT: '5000',
+          distB: '6000',
+          distL: '12000',
+          distR: '9000',
+        },
+      });
+      node.elements.push({ name: 'wp:wrapTopAndBottom' });
+
+      const result = handleImageNode(node, makeParams(), true);
+
+      expect(result.attrs.wrap.type).toBe('TopAndBottom');
+      expect(result.attrs.wrap.attrs.distTop).toBe(5);
+      expect(result.attrs.wrap.attrs.distBottom).toBe(6);
+      expect(result.attrs.wrap.attrs.distLeft).toBeUndefined();
+      expect(result.attrs.wrap.attrs.distRight).toBeUndefined();
+    });
+
+    it('does not merge anchor distT/distB onto Tight wrap', () => {
+      const node = makeNode({
+        attributes: {
+          distT: '8000',
+          distB: '7000',
+          distL: '2000',
+          distR: '3000',
+        },
+      });
+      node.elements.push({
+        name: 'wp:wrapTight',
+        attributes: { wrapText: 'bothSides' },
+      });
+
+      const result = handleImageNode(node, makeParams(), true);
+
+      expect(result.attrs.wrap.type).toBe('Tight');
+      expect(result.attrs.wrap.attrs.distLeft).toBe(2);
+      expect(result.attrs.wrap.attrs.distRight).toBe(3);
+      expect(result.attrs.wrap.attrs.distTop).toBeUndefined();
+      expect(result.attrs.wrap.attrs.distBottom).toBeUndefined();
+    });
+
     it('handles wrap type TopAndBottom with distance attributes', () => {
       const node = makeNode();
       node.elements.push({

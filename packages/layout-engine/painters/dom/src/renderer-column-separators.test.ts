@@ -97,18 +97,20 @@ describe('DomPainter renderColumnSeparators', () => {
       expect(seps.map((s) => s.style.left)).toEqual(['296px', '520px']);
     });
 
-    it('uses explicit column widths when drawing separators for page.columns', () => {
+    it('uses authored explicit column widths (unscaled) when drawing separators (SD-2629)', () => {
+      // Explicit widths are NOT scaled to fill: [200, 300] in a 576px available area stay [200, 300]
+      // (trailing space), so the separator sits after the authored 200px column, not a scaled one.
+      // (Old behavior scaled them up to [230.4, 345.6] and placed the separator near 350.)
       const page = buildPage({
-        columns: { count: 2, gap: 48, widths: [200, 952], equalWidth: false, withSeparator: true },
-        fragments: [fragAt(96), fragAt(244)],
+        columns: { count: 2, gap: 48, widths: [200, 300], equalWidth: false, withSeparator: true },
+        fragments: [fragAt(96), fragAt(360)],
       });
       paintOnce(buildLayout(page), mount);
 
       const seps = querySeparators(mount);
       expect(seps).toHaveLength(1);
-      // contentWidth=624, availableWidth=576. Explicit widths [200, 952] are
-      // normalized to [100, 476], so the separator belongs at 96 + 100 + 24 = 220.
-      expect(seps[0].style.left).toBe('220px');
+      // separator = leftMargin + authored width[0] + gap/2 = 96 + 200 + 24 = 320.
+      expect(seps[0].style.left).toBe('320px');
     });
 
     it('renders nothing when withSeparator is false', () => {
@@ -155,6 +157,22 @@ describe('DomPainter renderColumnSeparators', () => {
       });
       paintOnce(buildLayout(page, { w: 110, h: 200 }), mount);
       // contentWidth=90, columnWidth=(90-100)/2=-5 → guard fires.
+      expect(querySeparators(mount)).toHaveLength(0);
+    });
+
+    it('renders nothing for equal columns whose gap overflows the content area (SD-2629 legacy guard)', () => {
+      // count:3 with a gap so large the evenly-divided column width goes negative. normalize floors
+      // fabricated widths at the full content width, so the geometry width alone would not reveal the
+      // overflow; the pre-geometry equalWidth<=1 guard must still suppress the separators. The far
+      // fragment sits past where the phantom separators would land, so only the guard (not the
+      // content-past-separator gate) can suppress them.
+      const page = buildPage({
+        columns: { count: 3, gap: 400, withSeparator: true },
+        fragments: [fragAt(96), fragAt(2000)],
+      });
+      paintOnce(buildLayout(page), mount);
+
+      // contentWidth=624, equalWidth=(624-400*2)/3 < 0, so the guard fires.
       expect(querySeparators(mount)).toHaveLength(0);
     });
   });

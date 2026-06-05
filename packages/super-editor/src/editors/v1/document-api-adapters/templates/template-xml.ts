@@ -41,7 +41,10 @@ export function clone<T>(value: T): T {
 
 function mergeIgnorableValues(currentValue: string | undefined, sourceValue: string | undefined): string | undefined {
   const merged = [
-    ...new Set([...(currentValue ?? '').split(/\s+/).filter(Boolean), ...(sourceValue ?? '').split(/\s+/).filter(Boolean)]),
+    ...new Set([
+      ...(currentValue ?? '').split(/\s+/).filter(Boolean),
+      ...(sourceValue ?? '').split(/\s+/).filter(Boolean),
+    ]),
   ];
   return merged.length ? merged.join(' ') : undefined;
 }
@@ -128,8 +131,13 @@ function replaceSingleton(stylesEl: XmlElement, name: string, sourceNode: XmlEle
   if (!stylesEl.elements) stylesEl.elements = [];
   const existingSingletons = stylesEl.elements.filter((c) => localName(c) === name);
   const existingIndex = stylesEl.elements.findIndex((c) => localName(c) === name);
-  const desiredIndex = name === 'docDefaults' ? 0 : stylesEl.elements.some((c) => localName(c) === 'docDefaults') ? 1 : 0;
-  if (existingSingletons.length === 1 && existingIndex === desiredIndex && xmlDeepEqual(existingSingletons[0], sourceNode)) {
+  const desiredIndex =
+    name === 'docDefaults' ? 0 : stylesEl.elements.some((c) => localName(c) === 'docDefaults') ? 1 : 0;
+  if (
+    existingSingletons.length === 1 &&
+    existingIndex === desiredIndex &&
+    xmlDeepEqual(existingSingletons[0], sourceNode)
+  ) {
     return false;
   }
 
@@ -176,7 +184,11 @@ export function mergeStylesAuthoritative(currentRoot: XmlElement, sourceRoot: Xm
   if (!curStyles.elements) curStyles.elements = [];
 
   // Singletons.
-  result.docDefaultsAdopted = replaceSingleton(curStyles, 'docDefaults', firstChildByLocalName(srcStyles, 'docDefaults'));
+  result.docDefaultsAdopted = replaceSingleton(
+    curStyles,
+    'docDefaults',
+    firstChildByLocalName(srcStyles, 'docDefaults'),
+  );
   result.latentStylesAdopted = replaceSingleton(
     curStyles,
     'latentStyles',

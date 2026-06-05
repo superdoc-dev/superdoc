@@ -119,8 +119,23 @@ export type {
   LayoutStoryLocator,
 } from './layout-identity.js';
 import type { LayoutSourceIdentity } from './layout-identity.js';
-export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
-export type { NormalizedColumnLayout } from './column-layout.js';
+export {
+  cloneColumnLayout,
+  columnLayoutsEqual,
+  columnRenderLayoutsEqual,
+  getColumnAtX,
+  getColumnGapAfter,
+  getColumnGeometry,
+  getColumnSeparatorPositions,
+  getColumnWidth,
+  getColumnX,
+  normalizeColumnLayout,
+  resolveColumnCount,
+  resolveColumnLayout,
+  resolveColumnMode,
+  widthsEqual,
+} from './column-layout.js';
+export type { ColumnGeometry, NormalizedColumnLayout } from './column-layout.js';
 export {
   authorFromTrackedChangeMeta,
   authorIdentityKey,
@@ -851,6 +866,15 @@ export type TableRowAttrs = {
     value: number;
     rule?: 'auto' | 'atLeast' | 'exact' | string;
   };
+  /**
+   * Structural tracked change on the whole row (inserted/deleted row), imported
+   * from `<w:ins>`/`<w:del>` inside `<w:trPr>`. Reuses the same shared
+   * {@link TrackedChangeMeta} shape that inline runs carry, so one painter +
+   * color-stamping system handles both inline and structural tracked changes.
+   * `kind` is `'insert'` for an inserted row and `'delete'` for a deleted row.
+   * `color` is stamped downstream by {@link stampTrackedChangeColors}.
+   */
+  trackedChange?: TrackedChangeMeta;
   /**
    * Row-level border override from OOXML `w:tblPrEx/w:tblBorders` (§17.4.61).
    * Table property exceptions override the table-level borders for this row
@@ -1823,6 +1847,12 @@ export type ColumnLayout = {
   withSeparator?: boolean;
   widths?: number[];
   equalWidth?: boolean;
+  /**
+   * Per-column inter-column gaps in px, length `count - 1`: the gap after each column except the
+   * last. Explicit mode (`equalWidth === false`) only, derived from each `<w:col w:space>`; equal
+   * mode uses the scalar `gap`. When absent, consumers fall back to the uniform `gap`. (SD-2629)
+   */
+  gaps?: number[];
 };
 
 /**

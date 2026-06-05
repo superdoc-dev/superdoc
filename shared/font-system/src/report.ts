@@ -135,7 +135,12 @@ export function buildFaceReport(
       (isSettled(loadStatus) && loadStatus !== 'loaded');
     report.push({
       logicalFamily,
-      physicalFamily,
+      // For an embedded font, the resolved physical is a document-unique INTERNAL alias
+      // (`__superdoc_embedded_*`) used only to keep render ownership in the shared FontFaceSet - the
+      // load-status lookup above needs it, but the faithful physical the user sees is the real (logical)
+      // family. Report the logical name for `registered_face` so the alias never leaks into the public
+      // report. (`fonts.add` registered_face already has physical === logical, so this is a no-op there.)
+      physicalFamily: reason === 'registered_face' ? logicalFamily : physicalFamily,
       reason,
       loadStatus,
       exportFamily: logicalFamily,

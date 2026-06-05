@@ -573,7 +573,10 @@ export function resolveFragmentItem(
             )
           : null;
       const itemVersion = paragraphPageRefs?.changed
-        ? fragmentSignature(paragraphPageRefs.fragment, deriveFontAwareBlockVersion(paragraphPageRefs.block, fontSignature))
+        ? fragmentSignature(
+            paragraphPageRefs.fragment,
+            deriveFontAwareBlockVersion(paragraphPageRefs.block, fontSignature),
+          )
         : listPageRefs?.changed
           ? fragmentSignature(fragment, deriveFontAwareBlockVersion(listPageRefs.block, fontSignature))
           : version;

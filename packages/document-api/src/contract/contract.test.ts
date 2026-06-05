@@ -31,10 +31,8 @@ const TEMPLATES_APPLY_RECEIPT_FAILURE_CODES = [
 
 // Exhaustiveness: assigning the union to the array's element type (and vice
 // versa) guarantees the list above covers every TemplatesApplyFailureCode value.
-type _TemplatesFailureCoverageForward = TemplatesApplyFailureCode extends
-  (typeof TEMPLATES_APPLY_RECEIPT_FAILURE_CODES)[number]
-  ? true
-  : never;
+type _TemplatesFailureCoverageForward =
+  TemplatesApplyFailureCode extends (typeof TEMPLATES_APPLY_RECEIPT_FAILURE_CODES)[number] ? true : never;
 const _templatesFailureCoverage: _TemplatesFailureCoverageForward = true;
 void _templatesFailureCoverage;
 

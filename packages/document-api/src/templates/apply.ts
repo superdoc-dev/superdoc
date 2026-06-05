@@ -76,11 +76,7 @@ export interface TemplateScopeReport {
   detail?: string;
 }
 
-export type TemplateSkipReason =
-  | 'NOT_PRESENT_IN_SOURCE'
-  | 'OUT_OF_SCOPE'
-  | 'NO_CHANGE'
-  | 'CAPABILITY_UNAVAILABLE';
+export type TemplateSkipReason = 'NOT_PRESENT_IN_SOURCE' | 'OUT_OF_SCOPE' | 'NO_CHANGE' | 'CAPABILITY_UNAVAILABLE';
 
 export interface TemplateScopeSkip {
   scope: string;

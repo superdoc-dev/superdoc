@@ -214,9 +214,11 @@ interface FsLike {
 }
 
 function getBuiltinModule<T>(id: string): T | undefined {
-  const proc = (globalThis as unknown as {
-    process?: { getBuiltinModule?: (moduleId: string) => unknown };
-  }).process;
+  const proc = (
+    globalThis as unknown as {
+      process?: { getBuiltinModule?: (moduleId: string) => unknown };
+    }
+  ).process;
   if (typeof proc?.getBuiltinModule !== 'function') {
     return undefined;
   }
@@ -240,9 +242,7 @@ function getNodeRequire(): ((id: string) => unknown) | undefined {
   }
 
   try {
-    return Function('try { return require; } catch { return undefined; }')() as
-      | ((id: string) => unknown)
-      | undefined;
+    return Function('try { return require; } catch { return undefined; }')() as ((id: string) => unknown) | undefined;
   } catch {
     return undefined;
   }
@@ -298,7 +298,9 @@ function resolveSourceBytes(input: TemplatesApplyInput): ByteResult {
       bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     } else {
-      return { failure: { code: 'CAPABILITY_UNAVAILABLE', message: 'templates.apply base64 source requires Buffer or atob.' } };
+      return {
+        failure: { code: 'CAPABILITY_UNAVAILABLE', message: 'templates.apply base64 source requires Buffer or atob.' },
+      };
     }
     return { bytes };
   } catch {

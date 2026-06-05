@@ -135,9 +135,7 @@ export function importHeaderFooterAssets(
   // Detect every header/footer part present in the source (even if the page-1
   // governing section does not reference it), then attach a representative
   // source rel id when one exists so the selected sectPr can be rewired.
-  const hfPartNames = [...byName.keys()]
-    .filter((n) => /^word\/(header|footer)\d+\.xml$/.test(n))
-    .sort();
+  const hfPartNames = [...byName.keys()].filter((n) => /^word\/(header|footer)\d+\.xml$/.test(n)).sort();
   if (hfPartNames.length === 0) return result;
   result.detected = true;
   if (dryRun) {
@@ -331,7 +329,13 @@ export function importHeaderFooterAssets(
     }
 
     // Content-type override.
-    if (ensureContentTypeOverride(converter, targetPartName, kind === 'header' ? HEADER_CONTENT_TYPE : FOOTER_CONTENT_TYPE)) {
+    if (
+      ensureContentTypeOverride(
+        converter,
+        targetPartName,
+        kind === 'header' ? HEADER_CONTENT_TYPE : FOOTER_CONTENT_TYPE,
+      )
+    ) {
       contentTypesChanged = true;
     }
 
@@ -401,7 +405,13 @@ export function applyPageOneSectionDefaults(
   parseXml: (xml: string) => XmlElement,
   dryRun: boolean,
 ): SectionDefaultsResult {
-  const result: SectionDefaultsResult = { detected: false, applied: false, changed: false, changedParts: [], warnings: [] };
+  const result: SectionDefaultsResult = {
+    detected: false,
+    applied: false,
+    changed: false,
+    changedParts: [],
+    warnings: [],
+  };
 
   let parsedDoc: XmlElement;
   try {
@@ -427,7 +437,8 @@ export function applyPageOneSectionDefaults(
     });
     return result;
   }
-  const bodyProjection = [...projections].reverse().find((p) => p.target.kind === 'body') ?? projections[projections.length - 1];
+  const bodyProjection =
+    [...projections].reverse().find((p) => p.target.kind === 'body') ?? projections[projections.length - 1];
   if (!bodyProjection) {
     result.warnings.push({
       code: 'SECTION_DEFAULTS_UNAVAILABLE',

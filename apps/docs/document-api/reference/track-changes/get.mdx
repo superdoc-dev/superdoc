@@ -20,7 +20,7 @@ Retrieve a single tracked change by ID.
 
 ## Expected result
 
-Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `replacement`, `format`), author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available.
+Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `replacement`, `format`, `structural`), author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available. Structural changes (whole-table insert/delete) carry a `subtype` of `table-insert` or `table-delete`.
 
 ## Input fields
 
@@ -60,7 +60,8 @@ Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `repl
 | `id` | string | yes |  |
 | `insertedText` | string | no |  |
 | `pairedWithChangeId` | string \| null | no |  |
-| `type` | enum | yes | `"insert"`, `"delete"`, `"replacement"`, `"format"` |
+| `subtype` | enum | no | `"table-insert"`, `"table-delete"` |
+| `type` | enum | yes | `"insert"`, `"delete"`, `"replacement"`, `"format"`, `"structural"` |
 | `wordRevisionIds` | object | no |  |
 | `wordRevisionIds.delete` | string | no |  |
 | `wordRevisionIds.format` | string | no |  |
@@ -81,7 +82,7 @@ Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `repl
   },
   "grouping": "standalone",
   "id": "id-001",
-  "pairedWithChangeId": null,
+  "subtype": "table-insert",
   "type": "insert"
 }
 ```
@@ -161,12 +162,20 @@ Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `repl
         "null"
       ]
     },
+    "subtype": {
+      "description": "Finer classification for structural changes (type === 'structural').",
+      "enum": [
+        "table-insert",
+        "table-delete"
+      ]
+    },
     "type": {
       "enum": [
         "insert",
         "delete",
         "replacement",
-        "format"
+        "format",
+        "structural"
       ]
     },
     "wordRevisionIds": {

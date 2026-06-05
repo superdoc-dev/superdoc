@@ -19,6 +19,7 @@ import {
 } from './plan-engine/plan-wrappers.js';
 import { clearContentWrapper } from './plan-engine/clear-content-wrapper.js';
 import { stylesApplyAdapter } from './styles-adapter.js';
+import { templatesApplyAdapter } from './templates/templates-adapter.js';
 import {
   paragraphsSetStyleWrapper,
   paragraphsClearStyleWrapper,
@@ -413,6 +414,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     styles: {
       apply: (input, options) => stylesApplyAdapter(editor, input, options),
+    },
+    templates: {
+      apply: (input, options) => templatesApplyAdapter(editor, input, options),
     },
     paragraphs: {
       setStyle: (input, options) => paragraphsSetStyleWrapper(editor, input, options),

@@ -20,6 +20,7 @@ import {
 import type { PMNode, ParagraphFont } from '../types.js';
 import type { ResolvedRunProperties } from '@superdoc/word-layout';
 import { computeWordParagraphLayout } from '@superdoc/word-layout';
+import { getListOrdinalFromPath } from '@superdoc/common/list-rendering';
 import { pickNumber, twipsToPx, isFiniteNumber, ptToPx } from '../utilities.js';
 import { normalizeAlignment, normalizeParagraphSpacing } from './spacing-indent.js';
 import { normalizeOoxmlTabs } from './tabs.js';
@@ -31,16 +32,17 @@ import {
   resolveParagraphProperties,
   resolveRunProperties,
   resolveDocxFontFamily,
-  getNumberingProperties,
   type ParagraphFrameProperties,
   type ParagraphProperties,
   type RunProperties,
 } from '@superdoc/style-engine/ooxml';
 import { resolveSectionDirection, resolveParagraphDirection } from '../direction/index.js';
+import { numberingDefinesMarkerFontFamily } from '../numbering-marker-font.js';
 
 const DEFAULT_DECIMAL_SEPARATOR = '.';
 const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5 inch
 type ParagraphDirection = 'ltr' | 'rtl';
+const BUILT_IN_HEADING_NAME_RE = /^heading\s+([1-9])$/i;
 
 const normalizeColor = (value?: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -167,6 +169,38 @@ export const normalizeNumberingProperties = (
     return undefined;
   }
   return value;
+};
+
+const normalizeHeadingLevel = (value: unknown): number | undefined => {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 9) {
+    return undefined;
+  }
+  return value;
+};
+
+const resolveHeadingLevel = (
+  styleId: string | undefined,
+  resolvedParagraphProperties: ParagraphProperties,
+  converterContext?: ConverterContext,
+): number | undefined => {
+  const directOutlineLevel = resolvedParagraphProperties.outlineLvl;
+  if (typeof directOutlineLevel === 'number' && Number.isInteger(directOutlineLevel)) {
+    return normalizeHeadingLevel(directOutlineLevel + 1);
+  }
+
+  const styleDefinition = styleId ? converterContext?.translatedLinkedStyles?.styles?.[styleId] : undefined;
+  const styleNameLevel =
+    typeof styleDefinition?.name === 'string' ? BUILT_IN_HEADING_NAME_RE.exec(styleDefinition.name.trim()) : null;
+  if (styleNameLevel?.[1]) {
+    return normalizeHeadingLevel(Number(styleNameLevel[1]));
+  }
+
+  const styleOutlineLevel = styleDefinition?.paragraphProperties?.outlineLvl;
+  if (typeof styleOutlineLevel === 'number' && Number.isInteger(styleOutlineLevel)) {
+    return normalizeHeadingLevel(styleOutlineLevel + 1);
+  }
+
+  return undefined;
 };
 
 const TRACKED_CHANGE_KEYS = new Set(['trackInsert', 'trackDelete']);
@@ -379,6 +413,11 @@ export const computeParagraphAttrs = (
     dropCapDescriptor: dropCapDescriptor,
     frame: normalizedFramePr,
     numberingProperties: normalizedNumberingProperties,
+    headingLevel: resolveHeadingLevel(
+      resolvedParagraphProperties.styleId,
+      resolvedParagraphProperties,
+      converterContext,
+    ),
     borders: normalizedBorders,
     shading: normalizedShading,
     tabs: normalizedTabStops,
@@ -390,6 +429,11 @@ export const computeParagraphAttrs = (
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
     directionContext,
   };
+
+  const listLevelOrdinal = getListOrdinalFromPath(normalizedListRendering?.path);
+  if (listLevelOrdinal != null) {
+    paragraphAttrs.listLevelOrdinal = listLevelOrdinal;
+  }
 
   // SD-3269: w:vanish on the paragraph-mark rPr (w:pPr/w:rPr) suppresses the
   // visible paragraph break. Word 16.0 fuses the next paragraph forward when
@@ -421,20 +465,14 @@ export const computeParagraphAttrs = (
     // fully defines marker font.
     let markerFontFallback: Partial<ParagraphFont> | undefined;
     if (!hasExplicitParagraphRunProperties(paragraphProperties) && previousParagraphFont) {
-      // Detect whether numbering explicitly overrides the marker font family
-      // (e.g. Symbol/Wingdings). If it does, we must NOT overwrite it.
-      const numProps = paragraphProperties.numberingProperties;
-      const numId = numProps?.numId;
-      const ilvl = numProps?.ilvl ?? 0;
-      const numberingRunProps =
-        numId != null && numId !== 0
-          ? getNumberingProperties<RunProperties>('runProperties', converterContext!, ilvl, numId)
-          : ({} as RunProperties);
-      const numberingDefinesMarkerFontFamily = numberingRunProps.fontFamily != null;
+      const pinsMarkerFontFamily = numberingDefinesMarkerFontFamily(
+        paragraphProperties.numberingProperties,
+        converterContext,
+      );
 
       markerFontFallback = {
         // When numbering explicitly sets a marker font (Symbol/Wingdings), keep it.
-        fontFamily: numberingDefinesMarkerFontFamily ? undefined : previousParagraphFont.fontFamily,
+        fontFamily: pinsMarkerFontFamily ? undefined : previousParagraphFont.fontFamily,
         // Preserve existing behavior: if the paragraph has no explicit run props,
         // marker font size inherits from the previous paragraph.
         fontSize: previousParagraphFont.fontSize,

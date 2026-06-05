@@ -114,6 +114,14 @@ import type {
   StylesApplyReceipt,
 } from './styles/index.js';
 import { executeStylesApply } from './styles/index.js';
+import type {
+  TemplatesAdapter,
+  TemplatesApi,
+  TemplatesApplyInput,
+  TemplatesApplyOptions,
+  TemplatesApplyReceipt,
+} from './templates/index.js';
+import { executeTemplatesApply } from './templates/index.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGet, type GetAdapter } from './get/get.js';
@@ -1029,6 +1037,32 @@ export type {
   StylesApplyReceiptFailure,
   NormalizedStylesApplyOptions,
 } from './styles/index.js';
+export type {
+  TemplatesAdapter,
+  TemplatesApi,
+  TemplatesApplyInput,
+  TemplatesApplyOptions,
+  TemplatesApplyReceipt,
+  TemplatesApplySource,
+  TemplatesApplySourcePath,
+  TemplatesApplySourceBase64,
+  TemplateBodyPolicy,
+  TemplateScope,
+  NormalizedTemplatesApplyOptions,
+  TemplateScopeReport,
+  TemplateSkipReason,
+  TemplateScopeSkip,
+  TemplateUnsupportedItem,
+  TemplateChangeKind,
+  TemplateChangedPart,
+  TemplateIdMapping,
+  TemplateApplyWarning,
+  TemplatesApplySourceInfo,
+  TemplatesApplyReceiptSuccess,
+  TemplatesApplyFailureCode,
+  TemplatesApplyReceiptFailure,
+} from './templates/index.js';
+export { executeTemplatesApply } from './templates/index.js';
 export type { CreateAdapter } from './create/create.js';
 export type {
   TrackChangesAdapter,
@@ -1429,6 +1463,7 @@ export type {
   SectionPageBorders,
   SectionPageMargins,
   SectionPageNumbering,
+  SectionPageNumberingChapterSeparator,
   SectionPageNumberingFormat,
   SectionPageSetup,
   SectionRangeDomain,
@@ -1672,6 +1707,10 @@ export interface DocumentApi {
    */
   styles: StylesApi & { paragraph: ParagraphStylesApi };
   /**
+   * Template/substrate operations (apply detected DOCX substrate from a source package).
+   */
+  templates: TemplatesApi;
+  /**
    * Tracked-change operations (list, get, decide).
    */
   trackChanges: TrackChangesApi;
@@ -1830,6 +1869,7 @@ export interface DocumentApiAdapters {
   write: WriteAdapter;
   selectionMutation: SelectionMutationAdapter;
   styles: StylesAdapter;
+  templates: TemplatesAdapter;
   trackChanges: TrackChangesAdapter;
   create: CreateAdapter;
   blocks: BlocksAdapter;
@@ -2167,6 +2207,11 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         clearStyle(input: ParagraphsClearStyleInput, options?: MutationOptions): ParagraphMutationResult {
           return executeParagraphsClearStyle(adapters.paragraphs, input, options);
         },
+      },
+    },
+    templates: {
+      apply(input: TemplatesApplyInput, options?: TemplatesApplyOptions): Promise<TemplatesApplyReceipt> {
+        return executeTemplatesApply(adapters.templates, input, options);
       },
     },
     trackChanges: {

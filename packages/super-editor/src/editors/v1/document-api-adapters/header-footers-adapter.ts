@@ -198,7 +198,7 @@ export function headerFootersResolveAdapter(
   }
 
   // Walk previous sections via shared resolver
-  const resolved = resolveEffectiveRef(editor, sections, projection.range.sectionIndex, headerFooterKind, variant);
+  const resolved = resolveEffectiveRef(sections, projection.range.sectionIndex, headerFooterKind, variant);
   if (resolved) {
     return {
       status: 'inherited',

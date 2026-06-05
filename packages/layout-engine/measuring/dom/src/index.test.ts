@@ -83,6 +83,31 @@ describe('measureBlock', () => {
       expect(measure.totalHeight).toBe(measure.lines[0].lineHeight);
     });
 
+    // SD-3330: a line containing only tabs must be measured at the run's font size,
+    // not the 12px fallback, so it has the same height as a text line in the same
+    // paragraph font. Without this, tab-only lines render shorter than text lines.
+    it('measures a tab-only line at the run font size, not the 12px default', async () => {
+      const textBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'text',
+        runs: [{ text: 'x', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const tabBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tab',
+        runs: [{ kind: 'tab', text: '\t', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+
+      const textMeasure = expectParagraphMeasure(await measureBlock(textBlock, 1000));
+      const tabMeasure = expectParagraphMeasure(await measureBlock(tabBlock, 1000));
+
+      // The tab-only line height matches the text line (both 16px), not 12px × 1.15.
+      expect(tabMeasure.lines[0].lineHeight).toBeCloseTo(textMeasure.lines[0].lineHeight, 1);
+      expect(tabMeasure.lines[0].lineHeight).toBeGreaterThan(16);
+    });
+
     it('breaks lines when text exceeds maxWidth', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',

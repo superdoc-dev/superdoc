@@ -31,6 +31,7 @@ import { SuperDoc } from 'superdoc';
 
 const superdoc = new SuperDoc({
   selector: '#superdoc',
+  documentMode: 'editing',
   documents: [
     {
       id: 'my-doc-id',
@@ -40,6 +41,8 @@ const superdoc = new SuperDoc({
   ],
 });
 ```
+
+Supported document modes are `editing`, `viewing`, and `suggesting`. Do not use `edit`, `view`, or `suggest`.
 
 For React, Vue, and other frameworks, see the [documentation](https://docs.superdoc.dev).
 

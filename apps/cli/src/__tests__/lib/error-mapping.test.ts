@@ -343,3 +343,60 @@ describe('mapInvokeError: textMutation INVALID_INPUT ordering', () => {
     });
   });
 });
+
+describe('templates.apply error mapping', () => {
+  test('preserves thrown CAPABILITY_UNAVAILABLE for templates.apply', () => {
+    const error = Object.assign(new Error('converter missing'), {
+      code: 'CAPABILITY_UNAVAILABLE',
+      details: { backend: 'converter' },
+    });
+
+    const result = mapInvokeError('templates.apply' as any, error);
+
+    expect(result).toBeInstanceOf(CliError);
+    expect(result.code).toBe('CAPABILITY_UNAVAILABLE');
+    expect(result.details).toEqual({
+      operationId: 'templates.apply',
+      details: { backend: 'converter' },
+    });
+  });
+
+  test('preserves receipt INVALID_PACKAGE for templates.apply', () => {
+    const receipt = {
+      success: false,
+      failure: {
+        code: 'INVALID_PACKAGE',
+        message: 'bad zip',
+        details: { path: '/tmp/source.docx' },
+      },
+    };
+
+    const result = mapFailedReceipt('templates.apply' as any, receipt);
+
+    expect(result).toBeInstanceOf(CliError);
+    expect(result!.code).toBe('INVALID_PACKAGE');
+    expect(result!.details).toEqual({
+      operationId: 'templates.apply',
+      failure: {
+        code: 'INVALID_PACKAGE',
+        message: 'bad zip',
+        details: { path: '/tmp/source.docx' },
+      },
+    });
+  });
+
+  test('preserves receipt UNSUPPORTED_TEMPLATE_CONTENT for templates.apply', () => {
+    const receipt = {
+      success: false,
+      failure: {
+        code: 'UNSUPPORTED_TEMPLATE_CONTENT',
+        message: 'source part could not be parsed',
+      },
+    };
+
+    const result = mapFailedReceipt('templates.apply' as any, receipt);
+
+    expect(result).toBeInstanceOf(CliError);
+    expect(result!.code).toBe('UNSUPPORTED_TEMPLATE_CONTENT');
+  });
+});

@@ -3,14 +3,16 @@
  */
 import { preProcessPageInstruction } from './fld-preprocessors/page-preprocessor.js';
 import { preProcessNumPagesInstruction } from './fld-preprocessors/num-pages-preprocessor.js';
+import { preProcessSectionPagesInstruction } from './fld-preprocessors/section-pages-preprocessor.js';
 import { preProcessDocumentStatInstruction } from './fld-preprocessors/document-stat-preprocessor.js';
+import { extractFieldKeyword } from './field-keyword.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
 const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has(node?.name);
 
 /**
- * Pre-processes nodes to convert PAGE and NUMPAGES field codes for header/footer rendering.
+ * Pre-processes nodes to convert PAGE, NUMPAGES, and SECTIONPAGES field codes for header/footer rendering.
  *
  * NOTE: This function is used exclusively when constructing a standalone header/footer
  * editor for on-screen display/editing. It is NOT part of the DOCX import pipeline.
@@ -19,6 +21,7 @@ const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has
  * This function specifically handles:
  * - PAGE fields → sd:autoPageNumber (displays current page number)
  * - NUMPAGES fields → sd:totalPageNumber (displays total page count)
+ * - SECTIONPAGES fields → sd:sectionPageCount (displays current section page count)
  * - Unhandled fldSimple fields (FILENAME, DOCPROPERTY, etc.) → unwrapped to their
  *   cached display text (the value Word rendered when the document was last saved),
  *   so the header renders meaningful content rather than an empty box.
@@ -47,7 +50,7 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
     // fldSimple has the instruction in an attribute, not nested elements
     if (node.name === 'w:fldSimple') {
       const instrAttr = node.attributes?.['w:instr'] || '';
-      const fieldType = instrAttr.trim().split(/\s+/)[0];
+      const fieldType = extractFieldKeyword(instrAttr);
 
       const fldSimplePreprocessor = getHeaderFooterFieldPreprocessor(fieldType);
       if (fldSimplePreprocessor) {
@@ -62,7 +65,7 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
           }
         }
 
-        const processedField = fldSimplePreprocessor(contentNodes, instrAttr.trim(), fieldRunRPr);
+        const processedField = fldSimplePreprocessor(contentNodes, instrAttr.trim(), { fieldRunRPr });
         processedNodes.push(...processedField);
         i++;
         continue;
@@ -98,7 +101,9 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
         // Also pass the captured rPr from field sequence nodes (begin, instrText, separate)
         // which is where Word stores the styling for page number fields
         const contentNodes = fieldInfo.contentNodes;
-        const processedField = preprocessor(contentNodes, fieldInfo.instrText, fieldInfo.fieldRunRPr);
+        const processedField = preprocessor(contentNodes, fieldInfo.instrText, {
+          fieldRunRPr: fieldInfo.fieldRunRPr,
+        });
         processedNodes.push(...processedField);
 
         // Skip past the entire field sequence
@@ -127,7 +132,7 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
     // to a PAGE field by emitting sd:autoPageNumber.
     if (node.name === 'w:r' && node.elements?.some((el) => el.name === 'w:pgNum')) {
       const rPr = node.elements.find((el) => el.name === 'w:rPr') || null;
-      const processedField = preProcessPageInstruction([], '', rPr);
+      const processedField = preProcessPageInstruction([], '', { fieldRunRPr: rPr });
       processedNodes.push(...processedField);
       i++;
       continue;
@@ -204,7 +209,7 @@ function scanFieldSequence(nodes, beginIndex) {
     return null; // Incomplete field
   }
 
-  const fieldType = instrText.trim().split(' ')[0];
+  const fieldType = extractFieldKeyword(instrText);
 
   return {
     fieldType,
@@ -228,6 +233,8 @@ function getHeaderFooterFieldPreprocessor(fieldType) {
       return preProcessPageInstruction;
     case 'NUMPAGES':
       return preProcessNumPagesInstruction;
+    case 'SECTIONPAGES':
+      return preProcessSectionPagesInstruction;
     case 'NUMWORDS':
     case 'NUMCHARS':
       return preProcessDocumentStatInstruction;

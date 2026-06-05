@@ -5,7 +5,15 @@
 
 import { describe, it, expect } from 'bun:test';
 import type { ParagraphBlock, TextRun, ImageRun } from '@superdoc/contracts';
-import { isEmptyTextParagraph, shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
+import {
+  isEmptyTextParagraph,
+  shouldSuppressSpacingForEmpty,
+  shouldSuppressOwnSpacing,
+  collapseSpacingBefore,
+  rewindPreviousParagraphTrailing,
+  computeParagraphContentStartY,
+  computeParagraphLayoutStartY,
+} from './layout-utils.js';
 
 // ============================================================================
 // Empty Paragraph Detection Tests
@@ -185,5 +193,53 @@ describe('shouldSuppressOwnSpacing', () => {
     // The adjacent paragraph's contextualSpacing is irrelevant — each paragraph
     // independently decides whether to suppress its own spacing.
     expect(shouldSuppressOwnSpacing('Normal', true, 'Normal')).toBe(true);
+  });
+});
+
+describe('collapseSpacingBefore', () => {
+  it('subtracts trailing from spacing-before floored at zero', () => {
+    expect(collapseSpacingBefore(24, 8)).toBe(16);
+    expect(collapseSpacingBefore(10, 20)).toBe(0);
+  });
+});
+
+describe('rewindPreviousParagraphTrailing', () => {
+  it('moves cursor up by trailing when positive', () => {
+    expect(rewindPreviousParagraphTrailing(120, 12)).toBe(108);
+    expect(rewindPreviousParagraphTrailing(120, 0)).toBe(120);
+  });
+});
+
+describe('computeParagraphLayoutStartY', () => {
+  it('rewinds trailing then applies full spacing-before without double collapse', () => {
+    expect(
+      computeParagraphLayoutStartY({
+        cursorY: 120,
+        spacingBefore: 24,
+        trailingSpacing: 12,
+        rewindTrailingFromPrevious: true,
+      }),
+    ).toBe(132);
+  });
+
+  it('collapses spacing-before against trailing when previous after-spacing is kept', () => {
+    expect(
+      computeParagraphLayoutStartY({
+        cursorY: 100,
+        spacingBefore: 24,
+        trailingSpacing: 8,
+        rewindTrailingFromPrevious: false,
+      }),
+    ).toBe(116);
+  });
+});
+
+describe('computeParagraphContentStartY', () => {
+  it('adds spacing-before minus trailing collapse', () => {
+    expect(computeParagraphContentStartY(100, 24, false, 8)).toBe(116);
+  });
+
+  it('returns cursorY when spacing already applied', () => {
+    expect(computeParagraphContentStartY(100, 24, true, 0)).toBe(100);
   });
 });

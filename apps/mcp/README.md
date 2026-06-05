@@ -10,7 +10,7 @@ Works with Claude Code, Claude Desktop, Cursor, Windsurf, and any MCP-compatible
 npx @superdoc-dev/mcp
 ```
 
-The server communicates over stdio. You don't run it directly — your MCP client spawns it as a subprocess.
+The server runs locally over stdio as a subprocess. You don't run it directly; your MCP client spawns it.
 
 ## Setup
 

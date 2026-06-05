@@ -434,6 +434,54 @@ describe('doc.replace multi-paragraph integration', () => {
     expect(accepted).not.toContain('Smith  address');
   });
 
+  // Customer-reported crash ("Empty text nodes are not allowed"): a non-empty
+  // replacement whose new text is fully contained in the old text's prefix +
+  // suffix trims to an EMPTY delta. The single-change branch must delete the
+  // removed text rather than build schema.text('') (which ProseMirror rejects).
+  it('rewrites a replacement that trims to an empty delta as a deletion (executor)', () => {
+    editor = makeEditor(['the Company refers to: the following terms']);
+    const { step, target } = compileSingleRewrite(editor, 'refers to:', 'to:');
+    const tr = editor.state.tr;
+
+    const outcome = executeTextRewrite(editor, tr, target as any, step as any, tr.mapping as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.doc.textContent).toBe('the Company to: the following terms');
+  });
+
+  it('handles a tracked replace that trims to an empty delta (deletion only)', () => {
+    editor = makeEditor(['We will use our best endeavours to: deliver']);
+    const receipt = editor.doc.replace(
+      {
+        ref: getFirstMatchRef(editor, 'best endeavours to:'),
+        text: 'endeavours to:',
+      },
+      { changeMode: 'tracked' },
+    );
+
+    expect(receipt.success).toBe(true);
+
+    // Accepted view: drop trackDelete marks, keep everything else.
+    const acceptedParts: string[] = [];
+    editor.state.doc.descendants((node: any) => {
+      if (!node.isText || !node.text) return;
+      const isDeleted = node.marks.some((mark: any) => mark.type.name === TrackDeleteMarkName);
+      if (!isDeleted) acceptedParts.push(node.text);
+    });
+
+    expect(acceptedParts.join('')).toBe('We will use our endeavours to: deliver');
+
+    // The trimmed-away prefix "best " must be represented as a tracked deletion.
+    const deletedTexts: string[] = [];
+    editor.state.doc.descendants((node: any) => {
+      if (!node.isText || !node.text) return;
+      if (node.marks.some((mark: any) => mark.type.name === TrackDeleteMarkName)) {
+        deletedTexts.push(node.text);
+      }
+    });
+    expect(deletedTexts.join('')).toContain('best');
+  });
+
   it('SD-3044: tracked rewrite of long block preserves spacing across multiple equal anchors', () => {
     editor = makeEditor([
       '[insert] Pty Limited a company incorporated in Australia having its registered office at [insert] (ACN [insert])("Company")',

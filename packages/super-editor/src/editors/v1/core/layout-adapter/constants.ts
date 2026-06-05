@@ -86,7 +86,7 @@ export const DEFAULT_HYPERLINK_CONFIG: HyperlinkConfig = {
  * Node types with atom: true:
  * - image: Inline images
  * - hardBreak, lineBreak: Line breaks
- * - page-number, total-page-number: Document tokens
+ * - page-number, total-page-number, section-page-count: Document tokens
  * - indexEntry: Index entry field markers (see index-entry.js)
  * - tab: Tab stops (see tab.js)
  * - noBreakHyphen: Non-breaking hyphen (U+2011 from <w:noBreakHyphen/>; see no-break-hyphen.js)
@@ -102,6 +102,7 @@ export const ATOMIC_INLINE_TYPES = new Set([
   'lineBreak',
   'page-number',
   'total-page-number',
+  'section-page-count',
   'indexEntry',
   'tab',
   'noBreakHyphen',
@@ -119,4 +120,5 @@ export const ATOMIC_INLINE_TYPES = new Set([
 export const TOKEN_INLINE_TYPES = new Map<string, TextRun['token']>([
   ['page-number', 'pageNumber'],
   ['total-page-number', 'totalPageCount'],
+  ['section-page-count', 'sectionPageCount'],
 ]);

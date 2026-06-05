@@ -57,6 +57,8 @@ FlowMode
 FontAssetUrlContext
 FontAssetUrlResolver
 FontConfig
+FontFaceConfig
+FontFamilyConfig
 FontLoadStatus
 FontLoadSummary
 FontResolutionReason

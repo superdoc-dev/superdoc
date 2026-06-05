@@ -113,10 +113,17 @@ function parseSeqInstruction(instruction) {
  */
 function extractResolvedText(content) {
   if (!Array.isArray(content)) return '';
-  return content
-    .filter((n) => n.type === 'text')
-    .map((n) => n.text || '')
-    .join('');
+  let text = '';
+  for (const node of content) {
+    if (!node) continue;
+    if (node.type === 'text') {
+      text += node.text || '';
+    }
+    if (Array.isArray(node.content)) {
+      text += extractResolvedText(node.content);
+    }
+  }
+  return text;
 }
 
 /** @type {import('@translator').NodeTranslatorConfig} */

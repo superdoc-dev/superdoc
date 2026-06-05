@@ -4,21 +4,22 @@
  * `v1 layout-adapter/footnote-formatting.ts` deliberately inlines its number-format
  * switch instead of reusing layout-engine's `formatPageNumber` — the package
  * graph forbids the adapter from importing layout-engine at runtime (Guard C in
- * `architecture-boundaries.test.ts`). To keep the two implementations in sync
- * we assert here that they agree on every supported format for cardinals 1..100.
+ * `architecture-boundaries.test.ts`). To keep the shared semantics in sync we
+ * assert here that they agree on formats with the same expected rendering.
  *
- * If you add a new format to one helper, this test will fail until you add the
- * matching case in the other helper. That is the intended behavior.
+ * If you add a new shared-semantics format to one helper, this test should fail
+ * until you add the matching case in the other helper. Helper-specific formats
+ * are pinned by direct-string assertions below.
  */
 
 import { describe, it, expect } from 'vitest';
 import { formatPageNumber } from '@superdoc/layout-engine';
 import { formatFootnoteCardinal } from '@core/layout-adapter/footnote-formatting.js';
 
-const FORMATS = ['decimal', 'upperRoman', 'lowerRoman', 'upperLetter', 'lowerLetter', 'numberInDash'] as const;
+const SHARED_FORMATS = ['decimal', 'upperRoman', 'lowerRoman'] as const;
 
 describe('SD-2986/B1: footnote formatter parity with formatPageNumber', () => {
-  for (const fmt of FORMATS) {
+  for (const fmt of SHARED_FORMATS) {
     it(`agrees with formatPageNumber for ${fmt} on 1..100`, () => {
       for (let n = 1; n <= 100; n += 1) {
         expect(formatFootnoteCardinal(n, fmt)).toBe(formatPageNumber(n, fmt));
@@ -36,15 +37,10 @@ describe('SD-2986/B1: footnote formatter parity with formatPageNumber', () => {
     expect(formatFootnoteCardinal(-3, 'upperRoman')).toBe(formatPageNumber(-3, 'upperRoman'));
   });
 
-  // Direct-string assertions: parity-only tests close the loop only if both
-  // helpers are correct. Pin the expected output for the less-obvious formats
-  // so a regression in BOTH helpers (e.g. someone "fixing" the inlined
-  // numberInDash to ` ${num} ` style) fails here rather than silently passing.
-  it('formats numberInDash as -n- in both helpers', () => {
+  it('formats numberInDash according to each helper contract', () => {
     for (const n of [1, 5, 12, 99]) {
-      const expected = `-${n}-`;
-      expect(formatFootnoteCardinal(n, 'numberInDash')).toBe(expected);
-      expect(formatPageNumber(n, 'numberInDash')).toBe(expected);
+      expect(formatFootnoteCardinal(n, 'numberInDash')).toBe(`-${n}-`);
+      expect(formatPageNumber(n, 'numberInDash')).toBe(`- ${n} -`);
     }
   });
 
@@ -71,18 +67,25 @@ describe('SD-2986/B1: footnote formatter parity with formatPageNumber', () => {
     expect(formatPageNumber(9, 'lowerRoman')).toBe('ix');
   });
 
-  it('formats upperLetter / lowerLetter using base-26 cycle (a, b, ..., z, aa)', () => {
+  it('formats footnote upperLetter / lowerLetter using spreadsheet-style letters', () => {
     expect(formatFootnoteCardinal(1, 'upperLetter')).toBe('A');
     expect(formatFootnoteCardinal(26, 'upperLetter')).toBe('Z');
     expect(formatFootnoteCardinal(27, 'upperLetter')).toBe('AA');
+    expect(formatFootnoteCardinal(28, 'upperLetter')).toBe('AB');
     expect(formatFootnoteCardinal(1, 'lowerLetter')).toBe('a');
     expect(formatFootnoteCardinal(26, 'lowerLetter')).toBe('z');
     expect(formatFootnoteCardinal(27, 'lowerLetter')).toBe('aa');
+    expect(formatFootnoteCardinal(28, 'lowerLetter')).toBe('ab');
+  });
+
+  it('formats page upperLetter / lowerLetter using repeated letters', () => {
     expect(formatPageNumber(1, 'upperLetter')).toBe('A');
     expect(formatPageNumber(26, 'upperLetter')).toBe('Z');
     expect(formatPageNumber(27, 'upperLetter')).toBe('AA');
+    expect(formatPageNumber(28, 'upperLetter')).toBe('BB');
     expect(formatPageNumber(1, 'lowerLetter')).toBe('a');
     expect(formatPageNumber(26, 'lowerLetter')).toBe('z');
     expect(formatPageNumber(27, 'lowerLetter')).toBe('aa');
+    expect(formatPageNumber(28, 'lowerLetter')).toBe('bb');
   });
 });

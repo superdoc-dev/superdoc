@@ -27,7 +27,7 @@ const renderEmptySdtPlaceholderRun = (run: TextRun, renderContext: RunRenderCont
   if (run.pmStart != null) elem.dataset.pmStart = String(run.pmStart);
   if (run.pmEnd != null) elem.dataset.pmEnd = String(run.pmEnd);
   renderContext.applySdtDataset(elem, run.sdt);
-  applyRunStyles(elem, run);
+  applyRunStyles(elem, run, false, renderContext.resolvePhysical);
   return elem;
 };
 

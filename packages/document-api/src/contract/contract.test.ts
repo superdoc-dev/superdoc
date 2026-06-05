@@ -7,6 +7,7 @@ import { buildInternalContractSchemas } from './schemas.js';
 import { PUBLIC_MUTATION_STEP_OP_IDS, STEP_OP_CATALOG } from './step-op-catalog.js';
 import { OPERATION_IDS, PRE_APPLY_THROW_CODES, isValidOperationIdFormat } from './types.js';
 import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from '../images/z-order.js';
+import type { TemplatesApplyFailureCode } from '../templates/index.js';
 
 const TRACK_CHANGES_DECIDE_RECEIPT_FAILURE_CODES = [
   'NO_OP',
@@ -17,6 +18,25 @@ const TRACK_CHANGES_DECIDE_RECEIPT_FAILURE_CODES = [
   'PRECONDITION_FAILED',
   'COMMENT_CASCADE_PARTIAL',
 ] as const;
+
+// Every TemplatesApplyFailureCode that the adapter can surface in a returned
+// { success: false, failure } receipt. The satisfies guard below fails to
+// compile if the contract's failure-code union and this list ever diverge.
+const TEMPLATES_APPLY_RECEIPT_FAILURE_CODES = [
+  'UNSUPPORTED_SOURCE',
+  'INVALID_PACKAGE',
+  'CAPABILITY_UNAVAILABLE',
+  'UNSUPPORTED_TEMPLATE_CONTENT',
+] as const satisfies readonly TemplatesApplyFailureCode[];
+
+// Exhaustiveness: assigning the union to the array's element type (and vice
+// versa) guarantees the list above covers every TemplatesApplyFailureCode value.
+type _TemplatesFailureCoverageForward = TemplatesApplyFailureCode extends
+  (typeof TEMPLATES_APPLY_RECEIPT_FAILURE_CODES)[number]
+  ? true
+  : never;
+const _templatesFailureCoverage: _TemplatesFailureCoverageForward = true;
+void _templatesFailureCoverage;
 
 function expectArrayToIncludeValues(
   actual: readonly string[] | undefined,
@@ -332,6 +352,34 @@ describe('document-api contract catalog', () => {
     );
   });
 
+  it('declares every templates.apply receipt failure code in command metadata', () => {
+    expectArrayToIncludeValues(
+      COMMAND_CATALOG['templates.apply'].possibleFailureCodes,
+      TEMPLATES_APPLY_RECEIPT_FAILURE_CODES,
+      'templates.apply possibleFailureCodes',
+    );
+    // The contract must not over-declare codes the adapter cannot produce.
+    const declared = [...(COMMAND_CATALOG['templates.apply'].possibleFailureCodes ?? [])].sort();
+    expect(declared).toEqual([...TEMPLATES_APPLY_RECEIPT_FAILURE_CODES].sort());
+  });
+
+  it('includes every templates.apply receipt failure code in the generated failure schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const templatesFailureSchema = schemas.operations['templates.apply'].failure as {
+      properties?: {
+        failure?: {
+          properties?: {
+            code?: {
+              enum?: string[];
+            };
+          };
+        };
+      };
+    };
+    const enumCodes = templatesFailureSchema.properties?.failure?.properties?.code?.enum;
+    expectArrayToIncludeValues(enumCodes, TEMPLATES_APPLY_RECEIPT_FAILURE_CODES, 'templates.apply failure schema enum');
+  });
+
   it('includes every trackChanges.decide receipt failure code in the generated failure schema', () => {
     const schemas = buildInternalContractSchemas();
     const decideFailureSchema = schemas.operations['trackChanges.decide'].failure as {
@@ -578,6 +626,7 @@ describe('document-api contract catalog', () => {
       'format.paragraph',
       'styles',
       'styles.paragraph',
+      'templates',
       'lists',
       'comments',
       'trackChanges',
@@ -676,6 +725,7 @@ describe('document-api contract catalog', () => {
         id.startsWith('sections.') ||
           id.startsWith('headerFooters.') ||
           id === 'styles.apply' ||
+          id === 'templates.apply' ||
           id === 'tables.setDefaultStyle' ||
           id === 'tables.clearDefaultStyle' ||
           id === 'diff.apply',
@@ -693,6 +743,20 @@ describe('document-api contract catalog', () => {
     for (const id of OPERATION_IDS) {
       if (!COMMAND_CATALOG[id].mutates || historyUnsafeOps.includes(id)) continue;
       expect(COMMAND_CATALOG[id].historyUnsafe, `${id} should not be historyUnsafe`).toBeFalsy();
+    }
+  });
+
+  it('marks exactly templates.apply as the async (returnsPromise) operation', () => {
+    // SD-3247: templates.apply is the only async Document API operation. This
+    // guards the narrow returnsPromise metadata flag from drifting — any new
+    // async operation must update this list intentionally.
+    const asyncOps = OPERATION_IDS.filter((id) => COMMAND_CATALOG[id].returnsPromise === true).sort();
+    expect(asyncOps).toEqual(['templates.apply']);
+
+    // returnsPromise is a strict boolean signal: it is either true or absent.
+    for (const id of OPERATION_IDS) {
+      const value = COMMAND_CATALOG[id].returnsPromise;
+      expect(value === true || value === undefined, `${id} returnsPromise must be true or undefined`).toBe(true);
     }
   });
 });

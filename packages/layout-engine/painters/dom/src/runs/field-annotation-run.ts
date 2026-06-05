@@ -1,4 +1,5 @@
 import type { FieldAnnotationRun } from '@superdoc/contracts';
+import { resolvePhysicalFamily } from '@superdoc/font-system';
 import { sanitizeHref, isValidImageDataUrl } from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import { assertPmPositions } from '../pm-position-validation.js';
@@ -84,8 +85,18 @@ export const renderFieldAnnotationRun = (run: FieldAnnotationRun, context: RunRe
   // the line container (which zeroes it to eliminate the CSS strut). When the
   // run has no explicit fontSize, fall back to BROWSER_DEFAULT_FONT_SIZE (the
   // browser default that was previously inherited before the strut fix).
-  if (run.fontFamily) {
-    annotation.style.fontFamily = run.fontFamily;
+  {
+    // Paint the physical render family (a per-document fonts.map or the bundled substitute) - the
+    // same family measurement uses - so pill glyphs match the measured width. Set unconditionally:
+    // a fontless annotation falls back to the SAME 'Arial, sans-serif' default the measure path
+    // resolves (measuring/dom field-annotation measure), so the pill paints one deterministic family
+    // instead of inheriting host CSS and disagreeing with its measured width. Falls back to the
+    // global resolver when the render context has none (e.g. context-free paint in tests).
+    const resolvePhysical = context.resolvePhysical ?? resolvePhysicalFamily;
+    annotation.style.fontFamily = resolvePhysical(run.fontFamily || 'Arial, sans-serif', {
+      weight: run.bold ? '700' : '400',
+      style: run.italic ? 'italic' : 'normal',
+    });
   }
   {
     const fontSize = run.fontSize

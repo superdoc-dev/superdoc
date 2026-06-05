@@ -840,7 +840,7 @@ describe('analysis', () => {
           titlePg: false,
           headerRefs: { default: 'header1' },
           footerRefs: { default: 'footer1' },
-          numbering: { format: 'decimal' },
+          numbering: { format: 'decimal', chapterStyle: 1, chapterSeparator: 'hyphen' },
         },
       ];
       const metadata: Array<Record<string, unknown>> = [];
@@ -853,7 +853,7 @@ describe('analysis', () => {
         sectionIndex: 0,
         headerRefs: { default: 'header1' },
         footerRefs: { default: 'footer1' },
-        numbering: { format: 'decimal' },
+        numbering: { format: 'decimal', chapterStyle: 1, chapterSeparator: 'hyphen' },
         titlePg: false,
         margins: null,
         pageSize: null,

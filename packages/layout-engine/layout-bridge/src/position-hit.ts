@@ -137,9 +137,14 @@ export const isRtlBlock = (block: FlowBlock): boolean => {
 
 // Columns governing a hit at this page-relative y: prefer the mid-page column REGION it falls in (a
 // continuous section break can change columns within a page; page.columns is only the page-START
-// config, so the contract carries per-region geometry in page.columnRegions). columnRegions
-// yStart/yEnd are page-relative, the same frame as fragment.y. Falls back to page.columns, then the
-// document-wide layout.columns. Shared by determineColumn and determineTableColumn. (SD-2629)
+// config, so the contract carries per-region geometry in page.columnRegions, whose yStart/yEnd are
+// page-relative like fragment.y). Otherwise the page's own page.columns. layout.columns (the
+// document-wide / final-active config) is consulted ONLY when no page is supplied: a supplied page is
+// authoritative, and a page with no page.columns is single-column (the engine leaves it unset for
+// single-column pages; callers treat the undefined result as column 0). Deliberately NOT
+// `page.columns ?? layout.columns`: falling back to the document-wide columns for an existing
+// single-column page would reintroduce the cross-section mis-mapping this resolves. Shared by
+// determineColumn and determineTableColumn. (SD-2629)
 function resolveColumnsForHit(layout: Layout, page: Page | undefined, fragmentY?: number): ColumnLayout | undefined {
   if (page === undefined) return layout.columns;
   if (page.columnRegions && typeof fragmentY === 'number') {

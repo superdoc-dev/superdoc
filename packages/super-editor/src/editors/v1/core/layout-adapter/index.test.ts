@@ -930,6 +930,7 @@ describe('toFlowBlocks', () => {
         gap: 101.53333333333333,
         withSeparator: false,
         widths: [72, 497.26666666666665],
+        gaps: [101.53333333333333],
         equalWidth: false,
       });
     });

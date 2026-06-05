@@ -2975,7 +2975,8 @@ async function measureTableBlock(
   // Measure each cell paragraph with appropriate column width based on colspan
   const rows: TableRowMeasure[] = [];
   const rowBaseHeights: number[] = new Array(block.rows.length).fill(0);
-  const spanConstraints: Array<{ startRow: number; rowSpan: number; requiredHeight: number }> = [];
+  const spanConstraints: Array<{ startRow: number; rowSpan: number; requiredHeight: number; minRowHeight: number }> =
+    [];
   for (let rowIndex = 0; rowIndex < block.rows.length; rowIndex++) {
     const row = block.rows[rowIndex];
     const normalizedRow = workingInput.rows[rowIndex];
@@ -3103,7 +3104,23 @@ async function measureTableBlock(
       if (rowspan === 1) {
         rowBaseHeights[rowIndex] = Math.max(rowBaseHeights[rowIndex], totalCellHeight);
       } else {
-        spanConstraints.push({ startRow: rowIndex, rowSpan: rowspan, requiredHeight: totalCellHeight });
+        // A row whose cells are ALL row-spanning would otherwise measure 0: the
+        // OOXML vMerge continuation cells are real <w:tc> elements holding an empty
+        // paragraph and Word sizes rows from them, but the import merges those
+        // cells away. Approximate the lost empty-cell height with the spanning
+        // cell's first text line; non-text spans (e.g. a logo image) fall back to
+        // an even share so a spanning picture never doubles. Applied only to rows
+        // with no height of their own (see pass 1 below). (SD-3028)
+        const firstBlockMeasure = blockMeasures[0];
+        const firstLineHeight =
+          firstBlockMeasure?.kind === 'paragraph' && firstBlockMeasure.lines.length > 0
+            ? firstBlockMeasure.lines[0].lineHeight
+            : undefined;
+        const minRowHeight = Math.min(
+          totalCellHeight,
+          firstLineHeight != null ? firstLineHeight + paddingTop + paddingBottom : totalCellHeight / rowspan,
+        );
+        spanConstraints.push({ startRow: rowIndex, rowSpan: rowspan, requiredHeight: totalCellHeight, minRowHeight });
       }
 
       // Advance grid column position by colspan
@@ -3121,6 +3138,19 @@ async function measureTableBlock(
   }
 
   const rowHeights = [...rowBaseHeights];
+  // Pass 1: a spanned row with NO height of its own (all of its cells are vMerge
+  // starts/continuations) gets the spanning cell's one-line minimum instead of
+  // collapsing to zero. Rows that already have height from their own cells are
+  // left alone; Word sizes those from their own content.
+  for (const constraint of spanConstraints) {
+    const spanLength = Math.min(constraint.rowSpan, rowHeights.length - constraint.startRow);
+    for (let i = 0; i < spanLength; i++) {
+      if (rowBaseHeights[constraint.startRow + i] === 0) {
+        rowHeights[constraint.startRow + i] = Math.max(rowHeights[constraint.startRow + i], constraint.minRowHeight);
+      }
+    }
+  }
+  // Pass 2: the spanned rows together must fit the spanning cell's full content.
   for (const constraint of spanConstraints) {
     const { startRow, rowSpan, requiredHeight } = constraint;
     if (rowSpan <= 0) continue;

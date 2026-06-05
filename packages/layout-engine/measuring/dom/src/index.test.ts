@@ -4301,6 +4301,57 @@ describe('measureBlock', () => {
     });
   });
 
+  // SD-3308: a row whose cells are ALL row-spanning (vMerge start or continuation)
+  // must not collapse to zero height. In OOXML the continuation cells are real
+  // <w:tc> elements holding an empty paragraph, and Word sizes the row from them
+  // (one line high). The import merges those cells away, so the measurer grants
+  // every spanned row a minimum of the spanning cell's one-line height.
+  describe('rowspan-only rows (SD-3028 vMerge continuation)', () => {
+    it('keeps a row alive when all of its cells are row-spanning', async () => {
+      const para = (id: string, text: string) => ({
+        kind: 'paragraph' as const,
+        id,
+        runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
+      });
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'vmerge-rows',
+        rows: [
+          {
+            id: 'r0',
+            cells: [
+              { id: 'c00', blocks: [para('p00', 'head')] },
+              { id: 'c01', rowSpan: 2, colSpan: 2, blocks: [para('p01', 'span-down')] },
+              { id: 'c02', rowSpan: 2, blocks: [para('p02', 'right')] },
+            ],
+          },
+          {
+            id: 'r1',
+            cells: [{ id: 'c10', rowSpan: 2, blocks: [para('p10', 'only-real-cell')] }],
+          },
+          {
+            id: 'r2',
+            cells: [
+              { id: 'c20', colSpan: 2, blocks: [para('p20', 'new')] },
+              { id: 'c21', blocks: [para('p21', 'new2')] },
+            ],
+          },
+        ],
+        columnWidths: [120, 60, 60, 60],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 624 });
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+      expect(measure.rows).toHaveLength(3);
+      // Row 1 holds only the start of a 2-row span (its other columns are vMerge
+      // continuations merged away at import): one line high like Word, not zero.
+      expect(measure.rows[1].height).toBeGreaterThan(0);
+      expect(measure.rows[1].height).toBeCloseTo(measure.rows[0].height, 0);
+      expect(measure.rows[2].height).toBeCloseTo(measure.rows[0].height, 0);
+    });
+  });
+
   describe('border band row-height reservation (SD-3308)', () => {
     const makeTable = (borderStyle: string, width: number): FlowBlock =>
       ({

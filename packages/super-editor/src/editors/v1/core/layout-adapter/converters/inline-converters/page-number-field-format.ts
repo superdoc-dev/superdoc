@@ -9,9 +9,14 @@ export function getPageNumberFieldFormat(
     typeof attrs.pageNumberZeroPadding === 'number' && Number.isFinite(attrs.pageNumberZeroPadding)
       ? attrs.pageNumberZeroPadding
       : undefined;
-  if (!format && !zeroPadding) return undefined;
+  const numericPicture =
+    typeof attrs.pageNumberNumericPicture === 'string' && attrs.pageNumberNumericPicture.length > 0
+      ? attrs.pageNumberNumericPicture
+      : undefined;
+  if (!format && !zeroPadding && !numericPicture) return undefined;
   return {
     ...(format ? { format: format as NonNullable<TextRun['pageNumberFieldFormat']>['format'] } : {}),
-    ...(zeroPadding ? { zeroPadding } : {}),
+    ...(zeroPadding != null ? { zeroPadding } : {}),
+    ...(numericPicture ? { numericPicture } : {}),
   };
 }

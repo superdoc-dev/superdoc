@@ -2590,6 +2590,9 @@ importers:
       '@superdoc/dom-contract':
         specifier: workspace:*
         version: link:../dom-contract
+      '@superdoc/font-system':
+        specifier: workspace:*
+        version: link:../../../shared/font-system
       '@superdoc/layout-engine':
         specifier: workspace:*
         version: link:../layout-engine

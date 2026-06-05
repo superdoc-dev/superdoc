@@ -183,6 +183,102 @@ export const resolveTableBorderValue = (
   return borderValueToSpec(fallback);
 };
 
+// Border "number" per ECMA-376 §17.4.66 (only the realistic styles; unknown → 1).
+const BORDER_STYLE_NUMBER: Partial<Record<BorderStyle, number>> = {
+  single: 1,
+  thick: 2,
+  double: 3,
+  dotted: 4,
+  dashed: 5,
+  dotDash: 6,
+  dotDotDash: 7,
+  triple: 8,
+  wave: 18,
+  doubleWave: 19,
+};
+// Number of drawn lines per style (single=1, double=2, triple=3, …).
+const BORDER_STYLE_LINES: Partial<Record<BorderStyle, number>> = {
+  single: 1,
+  thick: 1,
+  double: 2,
+  dotted: 1,
+  dashed: 1,
+  dotDash: 1,
+  dotDotDash: 1,
+  triple: 3,
+  wave: 1,
+  doubleWave: 2,
+};
+
+export const isPresentBorder = (b?: BorderSpec): b is BorderSpec =>
+  !!b && b.style !== undefined && b.style !== 'none' && (b.width === undefined || b.width > 0);
+
+/**
+ * True when a border is EXPLICITLY set to none/nil (`w:val="nil"`/`"none"`), as opposed to
+ * simply unset/absent. The distinction matters for shared interior edges (§17.4.66): an
+ * explicit none on BOTH adjacent cells suppresses the divider, while an unset side inherits
+ * the table's insideH/insideV. Accepts either a CellBorders BorderSpec (`{style:'none'}`) or
+ * a TableBorderValue (`{none:true}`).
+ */
+export const isExplicitNoneBorder = (b?: unknown): boolean => {
+  if (!b || typeof b !== 'object') return false;
+  const r = b as Record<string, unknown>;
+  return r.style === 'none' || r.none === true;
+};
+
+const borderWeight = (b: BorderSpec): number =>
+  (BORDER_STYLE_LINES[b.style as BorderStyle] ?? 1) * (BORDER_STYLE_NUMBER[b.style as BorderStyle] ?? 1);
+
+const colorBrightness = (color: string | undefined, formula: (r: number, g: number, bl: number) => number): number => {
+  const hex = (color ?? '#000000').replace('#', '');
+  if (hex.length < 6) return 0;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const bl = parseInt(hex.slice(4, 6), 16);
+  return formula(r, g, bl);
+};
+
+/**
+ * OOXML cell-border conflict resolution (ECMA-376 §17.4.66).
+ *
+ * With zero cell spacing, two cells sharing an edge each specify a border; the spec
+ * collapses them to a SINGLE displayed border:
+ *  1. If either side is nil/none/absent, the opposing (present) border is displayed.
+ *  2. Otherwise the border with greater weight wins, where
+ *     weight = (#lines in the style) × (style number).
+ *  3. Equal weight → the style higher on the precedence list (single first) wins.
+ *  4. Identical style → the color with the smaller brightness (R+B+2G, then B+2G, then
+ *     G) wins; finally the first border (reading order) wins.
+ *
+ * @param a - One side's border (the owning cell's, e.g. the lower/right cell)
+ * @param b - The opposing side's border (e.g. the upper/left neighbor)
+ * @returns The single BorderSpec to display, or undefined if neither is present.
+ */
+export const resolveBorderConflict = (a?: BorderSpec, b?: BorderSpec): BorderSpec | undefined => {
+  const pa = isPresentBorder(a);
+  const pb = isPresentBorder(b);
+  if (!pa && !pb) return undefined;
+  if (!pa) return b;
+  if (!pb) return a;
+  const wa = borderWeight(a);
+  const wb = borderWeight(b);
+  if (wa !== wb) return wa > wb ? a : b;
+  const na = BORDER_STYLE_NUMBER[a.style as BorderStyle] ?? 99;
+  const nb = BORDER_STYLE_NUMBER[b.style as BorderStyle] ?? 99;
+  if (na !== nb) return na < nb ? a : b;
+  const formulas: Array<(r: number, g: number, bl: number) => number> = [
+    (r, g, bl) => r + bl + 2 * g,
+    (_r, g, bl) => bl + 2 * g,
+    (_r, g) => g,
+  ];
+  for (const f of formulas) {
+    const ba = colorBrightness(a.color, f);
+    const bb = colorBrightness(b.color, f);
+    if (ba !== bb) return ba < bb ? a : b;
+  }
+  return a;
+};
+
 /**
  * Creates a border overlay element for a table fragment.
  *

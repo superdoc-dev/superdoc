@@ -9,6 +9,7 @@ import type {
   TrackedChangeAddress,
   TrackChangeProvenanceOrigin,
   TrackChangeType,
+  TrackChangeSubtype,
   TrackChangeOverlapInfo,
   TrackChangeWordRevisionIds,
 } from '@superdoc/document-api';
@@ -23,6 +24,8 @@ export interface TrackedChangeSnapshot {
   story: StoryLocator;
   /** Tracked-change kind. */
   type: TrackChangeType;
+  /** Finer classification for structural changes (e.g. `table-insert`). */
+  subtype?: TrackChangeSubtype;
   /** Author display name, if captured on the mark. */
   author?: string;
   /** Author email, if captured. */

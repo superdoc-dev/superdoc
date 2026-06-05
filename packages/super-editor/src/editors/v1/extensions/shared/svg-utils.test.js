@@ -214,6 +214,30 @@ describe('svg-utils', () => {
         expect(span.textContent).toBe('10');
       });
 
+      it('should format NUMPAGES field type with pageNumberFormat', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'NUMPAGES', pageNumberFormat: 'upperRoman', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          totalPages: 9,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('IX');
+      });
+
+      it('should format NUMPAGES field type with ordinal pageNumberFormat', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'NUMPAGES', pageNumberFormat: 'ordinal', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          totalPages: 12,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('12th');
+      });
+
       it('should default PAGE to "1" when pageNumber not provided', () => {
         const textContent = {
           parts: [{ text: '', fieldType: 'PAGE', formatting: {} }],

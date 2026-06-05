@@ -18,6 +18,60 @@ export const prepareCommentParaIds = (comment) => {
   return newComment;
 };
 
+const getCommentIds = (comment) => {
+  if (!comment) return [];
+  return [comment.commentId, comment.importedId, comment.internalId].filter((id) => id != null).map((id) => String(id));
+};
+
+const buildCommentLookup = (comments = []) => {
+  const byId = new Map();
+  for (const comment of comments) {
+    getCommentIds(comment).forEach((id) => byId.set(id, comment));
+  }
+  return byId;
+};
+
+const findCommentById = (comments = [], id) => {
+  if (id == null) return null;
+  const lookup = buildCommentLookup(comments);
+  return lookup.get(String(id)) || null;
+};
+
+/**
+ * Resolve the thread-wide "done" state for a comment.
+ *
+ * Resolving a thread marks the whole *thread* resolved (CMTS-LIFE-002), but the
+ * runtime stamps `resolvedTime` only on the comment that was resolved — the
+ * thread root. Replies therefore carry no `resolvedTime`/`isDone` of their own.
+ * Word reads `w15:done` per-comment from `commentsExtended.xml`; a thread whose
+ * root is `done="1"` while a reply is `done="0"` is malformed, so Word drops the
+ * resolved root and shows only the still-open reply (SD-3355's "dangling
+ * comment"). A comment is therefore exported as done when it — or any ancestor
+ * in its thread — is resolved.
+ *
+ * @param {Object} comment The comment being exported
+ * @param {Object[]} [allComments] The full export comment list
+ * @returns {boolean} Whether the comment's thread is resolved
+ */
+export const isCommentResolvedInThread = (comment, allComments = []) => {
+  const isDone = (c) => Boolean(c?.resolvedTime || c?.isDone);
+  if (isDone(comment)) return true;
+  const byId = buildCommentLookup(allComments);
+  const seen = new Set();
+  let current = comment;
+  while (current) {
+    const parentId = current.threadingParentCommentId || current.parentCommentId;
+    const parentKey = parentId != null ? String(parentId) : null;
+    if (parentKey == null || seen.has(parentKey)) break;
+    seen.add(parentKey);
+    const parent = byId.get(parentKey);
+    if (!parent) break;
+    if (isDone(parent)) return true;
+    current = parent;
+  }
+  return false;
+};
+
 /**
  * Generate the w:comment node for a comment
  * This is stored in comments.xml
@@ -39,7 +93,7 @@ export const getCommentDefinition = (comment, commentId, allComments, editor) =>
     'w:author': comment.creatorName || comment.importedAuthor?.name,
     'w:date': toIsoNoFractional(comment.createdTime),
     'w:initials': getInitials(comment.creatorName),
-    'w:done': comment.resolvedTime ? '1' : '0',
+    'w:done': isCommentResolvedInThread(comment, allComments) ? '1' : '0',
     'w15:paraId': comment.commentParaId,
     'custom:internalId': comment.commentId || comment.internalId,
     'custom:trackedChange': comment.trackedChange,
@@ -54,7 +108,7 @@ export const getCommentDefinition = (comment, commentId, allComments, editor) =>
   // Note: If the parent is a tracked change (not a real Word comment), we don't set this attribute
   // because Word doesn't recognize tracked changes as comment parents
   if (comment?.parentCommentId) {
-    const parentComment = allComments.find((c) => c.commentId === comment.parentCommentId);
+    const parentComment = findCommentById(allComments, comment.parentCommentId);
     if (parentComment && !parentComment.trackedChange) {
       attributes['w15:paraIdParent'] = parentComment.commentParaId;
     }
@@ -214,8 +268,10 @@ export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, th
   const xmlCopy = carbonCopy(commentsExtendedXml);
 
   const commentsEx = comments.map((comment) => {
-    // Check both resolvedTime (runtime) and isDone (imported) for resolved status
-    const isResolved = comment.resolvedTime || comment.isDone;
+    // A resolved thread must mark every comment in it done. Resolving stamps
+    // resolvedTime on the root only, so a reply inherits the resolved state of
+    // its thread root (SD-3355) — otherwise Word drops the resolved root.
+    const isResolved = isCommentResolvedInThread(comment, comments);
     const attributes = {
       'w15:paraId': comment.commentParaId,
       'w15:done': isResolved ? '1' : '0',
@@ -227,7 +283,7 @@ export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, th
     const parentId = comment.threadingParentCommentId || comment.parentCommentId;
     const threadingStyle = resolveThreadingStyle(comment, profile);
     if (parentId && (threadingStyle === 'commentsExtended' || shouldIncludeForThreads)) {
-      const parentComment = comments.find((c) => c.commentId === parentId);
+      const parentComment = findCommentById(comments, parentId);
       const allowTrackedParent = profile?.defaultStyle === 'commentsExtended';
       if (parentComment && (allowTrackedParent || !parentComment.trackedChange)) {
         attributes['w15:paraIdParent'] = parentComment.commentParaId;

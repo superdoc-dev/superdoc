@@ -670,15 +670,33 @@ export interface BalanceSectionOnPageArgs {
  * Guards (skip balancing when):
  *   - Section has <= 1 column (nothing to balance)
  *   - Section contains an explicit column break (author intent wins)
- *   - Section uses unequal column widths (Word doesn't rebalance these)
+ *   - Section uses GENUINELY-unequal column widths (Word fills these column-by-column;
+ *     explicit widths that are all equal still balance — SD-2324)
  *   - No fragments on this page belong to the section
  */
+/** True when every explicit column width is equal within a sub-pixel tolerance. */
+function allColumnWidthsEqual(widths: number[]): boolean {
+  if (widths.length <= 1) return true;
+  const first = widths[0];
+  return widths.every((w) => Math.abs(w - first) <= 0.5);
+}
+
 export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: number } | null {
   const { sectionColumns, sectionHasExplicitColumnBreak, sectionIndex, blockSectionMap, fragments } = args;
 
   if (sectionColumns.count <= 1) return null;
   if (sectionHasExplicitColumnBreak) return null;
-  if (sectionColumns.equalWidth === false && Array.isArray(sectionColumns.widths) && sectionColumns.widths.length > 0) {
+  // Genuinely-unequal explicit widths: Word fills these column-by-column rather than
+  // rebalancing, and the height-balancer measures each fragment at a single width so it
+  // can't reflow per column. Explicit widths that are all EQUAL (equalWidth="0" with every
+  // <w:col w:w> equal — the common continuous newspaper case) DO balance like implicit
+  // equal columns. (SD-2324)
+  if (
+    sectionColumns.equalWidth === false &&
+    Array.isArray(sectionColumns.widths) &&
+    sectionColumns.widths.length > 0 &&
+    !allColumnWidthsEqual(sectionColumns.widths)
+  ) {
     return null;
   }
 

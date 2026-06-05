@@ -125,6 +125,10 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
             "id": {
               "type": "string"
             },
+            "range": {
+              "description": "Partial-range qualifier on an id target. Rejected with INVALID_INPUT for indivisible (e.g. structural) revisions.",
+              "type": "object"
+            },
             "story": {
               "$ref": "#/$defs/StoryLocator"
             }

@@ -126,6 +126,31 @@ describe('MeasureCache', () => {
     expect(cache.get(item, 400, 600)).toBeUndefined();
   });
 
+  it('does not share a measure between two documents that map the same block differently', () => {
+    const item = block('0-paragraph', 'hello');
+    // Document A measured this block under its font mapping (signature "docA").
+    cache.set(item, 400, 600, { totalHeight: 20 }, 'docA');
+    // Document B - identical block content, different mapping - must NOT reuse A's measure.
+    expect(cache.get(item, 400, 600, 'docB')).toBeUndefined();
+    // Document A still reuses its own measure.
+    expect(cache.get(item, 400, 600, 'docA')?.totalHeight).toBe(20);
+  });
+
+  it('shares a measure when signatures match (default documents use the empty signature)', () => {
+    const item = block('0-paragraph', 'hello');
+    cache.set(item, 400, 600, { totalHeight: 20 });
+    // Omitting the signature is the same as '' on both sides, so default documents share cache.
+    expect(cache.get(item, 400, 600)?.totalHeight).toBe(20);
+    expect(cache.get(item, 400, 600, '')?.totalHeight).toBe(20);
+  });
+
+  it('invalidates by block id even when a font signature is part of the key', () => {
+    const item = block('0-paragraph', 'hello');
+    cache.set(item, 400, 600, { totalHeight: 20 }, 'docA');
+    cache.invalidate(['0-paragraph']);
+    expect(cache.get(item, 400, 600, 'docA')).toBeUndefined();
+  });
+
   it('clears all entries', () => {
     const item = block('0-paragraph', 'hello');
     cache.set(item, 400, 600, { totalHeight: 20 });

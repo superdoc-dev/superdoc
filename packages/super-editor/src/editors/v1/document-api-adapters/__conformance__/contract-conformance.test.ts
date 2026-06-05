@@ -1234,7 +1234,8 @@ function buildStoredZipBase64(parts: Record<string, string>): string {
   const central: number[] = [];
   let offset = 0;
   const push16 = (arr: number[], v: number) => arr.push(v & 0xff, (v >>> 8) & 0xff);
-  const push32 = (arr: number[], v: number) => arr.push(v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff);
+  const push32 = (arr: number[], v: number) =>
+    arr.push(v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff);
 
   for (const f of files) {
     const nameBytes = enc.encode(f.name);
@@ -9834,8 +9835,9 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   'templates.apply': async () => {
     const editor = makeTemplatesEditor();
     initRevision(editor);
-    const cvt = (editor as unknown as { converter: { convertedXml: Record<string, unknown>; documentModified: boolean } })
-      .converter;
+    const cvt = (
+      editor as unknown as { converter: { convertedXml: Record<string, unknown>; documentModified: boolean } }
+    ).converter;
     const before = JSON.stringify(cvt.convertedXml['word/styles.xml']);
     // templates.apply is async: await the receipt before asserting no mutation
     // occurred (the async body resolves the source package before returning).

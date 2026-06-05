@@ -184,6 +184,47 @@ describe('track-changes-wrappers revision guard', () => {
     });
   });
 
+  it('projects subtype for structural changes in list and get', () => {
+    const hostEditor = makeEditor();
+    const structuralSnapshot = {
+      address: { kind: 'entity', entityType: 'trackedChange', entityId: 'word:structural:2' },
+      runtimeRef: { storyKey: 'body', rawId: 'word:structural:2' },
+      story: { kind: 'story', storyType: 'body' },
+      type: 'structural',
+      subtype: 'table-insert',
+      excerpt: 'Cell',
+      origin: 'word',
+      imported: true,
+      storyLabel: 'Body',
+      storyKind: 'body',
+      anchorKey: 'tc::body::word:structural:2',
+      hasInsert: false,
+      hasDelete: false,
+      hasFormat: false,
+      range: { from: 9, to: 30 },
+    };
+    mocks.getTrackedChangeIndex.mockReturnValue({
+      get: vi.fn(() => [structuralSnapshot]),
+      getAll: vi.fn(() => []),
+      invalidate: vi.fn(),
+      invalidateAll: vi.fn(),
+      subscribe: vi.fn(),
+      dispose: vi.fn(),
+    });
+    mocks.resolveTrackedChangeInStory.mockReturnValue({
+      editor: hostEditor,
+      story: { kind: 'story', storyType: 'body' },
+      runtimeRef: { storyKey: 'body', rawId: 'word:structural:2' },
+      change: { id: 'word:structural:2', rawId: 'word:structural:2', from: 9, to: 30, attrs: {} },
+    });
+
+    const listResult = trackChangesListWrapper(hostEditor, {});
+    expect(listResult.items[0]).toMatchObject({ type: 'structural', subtype: 'table-insert' });
+
+    const getResult = trackChangesGetWrapper(hostEditor, { id: 'word:structural:2' });
+    expect(getResult).toMatchObject({ type: 'structural', subtype: 'table-insert' });
+  });
+
   it('checks expectedRevision on the host editor before accepting a non-body tracked change', () => {
     const hostEditor = makeEditor();
     const storyEditor = makeEditor({ acceptTrackedChangeById: vi.fn(() => true) });

@@ -185,6 +185,11 @@ const stampBlockTrackedChangeColors = (
     }
     case 'table': {
       for (const row of block.rows) {
+        // Structural row-level tracked change (inserted/deleted row) reuses the
+        // same per-author color stamping as inline runs.
+        if (row.attrs?.trackedChange) {
+          applyColorToLayer(row.attrs.trackedChange, resolve);
+        }
         for (const cell of row.cells) {
           stampBlockTrackedChangeColors(cell.paragraph, resolve);
           if (Array.isArray(cell.blocks)) {

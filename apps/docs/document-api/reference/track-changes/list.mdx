@@ -20,7 +20,7 @@ List all tracked changes in the document.
 
 ## Expected result
 
-Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`, `replacement`, `format`), total count, and raw imported Word OOXML revision IDs (`w:id`) when available.
+Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`, `replacement`, `format`, `structural`), total count, and raw imported Word OOXML revision IDs (`w:id`) when available. Structural changes (whole-table insert/delete) carry a `subtype` of `table-insert` or `table-delete`.
 
 ## Input fields
 
@@ -29,7 +29,7 @@ Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`
 | `in` | StoryLocator \| `"all"` | no | One of: StoryLocator, `"all"` |
 | `limit` | integer | no |  |
 | `offset` | integer | no |  |
-| `type` | enum | no | `"insert"`, `"delete"`, `"replacement"`, `"format"` |
+| `type` | enum | no | `"insert"`, `"delete"`, `"replacement"`, `"format"`, `"structural"` |
 
 ### Example request
 
@@ -75,7 +75,7 @@ Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`
         "targetKind": "text"
       },
       "id": "id-001",
-      "pairedWithChangeId": null,
+      "subtype": "table-insert",
       "type": "insert"
     }
   ],
@@ -123,12 +123,13 @@ Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`
       "type": "integer"
     },
     "type": {
-      "description": "Filter by change type: 'insert', 'delete', 'replacement', or 'format'.",
+      "description": "Filter by change type: 'insert', 'delete', 'replacement', 'format', or 'structural'.",
       "enum": [
         "insert",
         "delete",
         "replacement",
-        "format"
+        "format",
+        "structural"
       ]
     }
   },
@@ -192,12 +193,20 @@ Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`
               "null"
             ]
           },
+          "subtype": {
+            "description": "Finer classification for structural changes (type === 'structural').",
+            "enum": [
+              "table-insert",
+              "table-delete"
+            ]
+          },
           "type": {
             "enum": [
               "insert",
               "delete",
               "replacement",
-              "format"
+              "format",
+              "structural"
             ]
           },
           "wordRevisionIds": {

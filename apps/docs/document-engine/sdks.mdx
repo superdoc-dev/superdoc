@@ -577,6 +577,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 | `doc.blocks.deleteRange` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
+| `doc.templates.apply` | `templates apply` | Apply detected DOCX template/substrate (styles, numbering, settings, theme, font table, web settings, headers/footers, section defaults) from a source package onto the current document, preserving body content. Scopes are auto-detected from source package evidence. |
 | `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
 | `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
 | `doc.selection.current` | `selection current` | Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals. |
@@ -837,7 +838,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.sections.setPageSetup` | `sections set-page-setup` | Set page size/orientation properties for a section. |
 | `doc.sections.setColumns` | `sections set-columns` | Set column configuration for a section. |
 | `doc.sections.setLineNumbering` | `sections set-line-numbering` | Enable or configure line numbering for a section. |
-| `doc.sections.setPageNumbering` | `sections set-page-numbering` | Set page numbering format/start for a section. |
+| `doc.sections.setPageNumbering` | `sections set-page-numbering` | Set page numbering format/start and chapter numbering settings for a section. |
 | `doc.sections.setTitlePage` | `sections set-title-page` | Enable or disable title-page behavior for a section. |
 | `doc.sections.setOddEvenHeadersFooters` | `sections set-odd-even-headers-footers` | Enable or disable odd/even header-footer mode in document settings. |
 | `doc.sections.setVerticalAlign` | `sections set-vertical-align` | Set vertical page alignment for a section. |
@@ -1056,6 +1057,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 | `doc.blocks.delete_range` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
+| `doc.templates.apply` | `templates apply` | Apply detected DOCX template/substrate (styles, numbering, settings, theme, font table, web settings, headers/footers, section defaults) from a source package onto the current document, preserving body content. Scopes are auto-detected from source package evidence. |
 | `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
 | `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
 | `doc.selection.current` | `selection current` | Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals. |
@@ -1316,7 +1318,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.sections.set_page_setup` | `sections set-page-setup` | Set page size/orientation properties for a section. |
 | `doc.sections.set_columns` | `sections set-columns` | Set column configuration for a section. |
 | `doc.sections.set_line_numbering` | `sections set-line-numbering` | Enable or configure line numbering for a section. |
-| `doc.sections.set_page_numbering` | `sections set-page-numbering` | Set page numbering format/start for a section. |
+| `doc.sections.set_page_numbering` | `sections set-page-numbering` | Set page numbering format/start and chapter numbering settings for a section. |
 | `doc.sections.set_title_page` | `sections set-title-page` | Enable or disable title-page behavior for a section. |
 | `doc.sections.set_odd_even_headers_footers` | `sections set-odd-even-headers-footers` | Enable or disable odd/even header-footer mode in document settings. |
 | `doc.sections.set_vertical_align` | `sections set-vertical-align` | Set vertical page alignment for a section. |

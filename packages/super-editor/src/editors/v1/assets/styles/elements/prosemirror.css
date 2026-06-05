@@ -283,6 +283,27 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
 .sd-editor-scoped .ProseMirror .track-delete-widget {
   visibility: hidden;
 }
+
+/* Structural row revisions (whole-table insert/delete). Applied to <tr> via
+   node decorations; reuse the same author-color variables as inline changes. */
+.sd-editor-scoped .ProseMirror tr.track-row-insert-dec.hidden,
+.sd-editor-scoped .ProseMirror tr.track-row-delete-dec.hidden {
+  display: none;
+}
+
+.sd-editor-scoped .ProseMirror tr.track-row-insert-dec.highlighted > td,
+.sd-editor-scoped .ProseMirror tr.track-row-insert-dec.highlighted > th {
+  background-color: var(--sd-tracked-changes-insert-background, #399c7222);
+  box-shadow: inset 3px 0 0 0 var(--sd-tracked-changes-insert-border, #00853d);
+}
+
+.sd-editor-scoped .ProseMirror tr.track-row-delete-dec.highlighted > td,
+.sd-editor-scoped .ProseMirror tr.track-row-delete-dec.highlighted > th {
+  background-color: var(--sd-tracked-changes-delete-background, #cb0e4722);
+  box-shadow: inset 3px 0 0 0 var(--sd-tracked-changes-delete-border, #cb0e47);
+  text-decoration: line-through solid var(--sd-tracked-changes-delete-text, currentColor)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px);
+}
 /* Track changes - end */
 
 /* Collaboration cursors */

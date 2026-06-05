@@ -18,7 +18,7 @@ import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from '../ima
 
 type JsonSchema = Record<string, unknown>;
 
-const trackChangeTypeValues = ['insert', 'delete', 'replacement', 'format'] as const;
+const trackChangeTypeValues = ['insert', 'delete', 'replacement', 'format', 'structural'] as const;
 
 /** JSON Schema descriptors for a single operation's input, output, and result variants. */
 export interface OperationSchemaSet {
@@ -1562,6 +1562,10 @@ const trackChangeInfoSchema = objectSchema(
     address: trackedChangeAddressSchema,
     id: { type: 'string' },
     type: { enum: [...trackChangeTypeValues] },
+    subtype: {
+      enum: ['table-insert', 'table-delete'],
+      description: "Finer classification for structural changes (type === 'structural').",
+    },
     grouping: { enum: ['standalone', 'replacement-pair', 'unknown'] },
     pairedWithChangeId: { type: ['string', 'null'] },
     wordRevisionIds: trackChangeWordRevisionIdsSchema,
@@ -1580,6 +1584,10 @@ const trackChangeDomainItemSchema = discoveryItemSchema(
   {
     address: trackedChangeAddressSchema,
     type: { enum: [...trackChangeTypeValues] },
+    subtype: {
+      enum: ['table-insert', 'table-delete'],
+      description: "Finer classification for structural changes (type === 'structural').",
+    },
     grouping: { enum: ['standalone', 'replacement-pair', 'unknown'] },
     pairedWithChangeId: { type: ['string', 'null'] },
     wordRevisionIds: trackChangeWordRevisionIdsSchema,
@@ -3816,10 +3824,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         'sectionDefaults',
       ],
     };
-    const scopeReportSchema = objectSchema(
-      { scope: scopeEnum, part: { type: 'string' }, detail: { type: 'string' } },
-      ['scope', 'part'],
-    );
+    const scopeReportSchema = objectSchema({ scope: scopeEnum, part: { type: 'string' }, detail: { type: 'string' } }, [
+      'scope',
+      'part',
+    ]);
     const scopeSkipSchema = objectSchema(
       {
         scope: { type: 'string' },
@@ -5165,7 +5173,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       offset: { type: 'integer', description: 'Number of tracked changes to skip for pagination.' },
       type: {
         enum: [...trackChangeTypeValues],
-        description: "Filter by change type: 'insert', 'delete', 'replacement', or 'format'.",
+        description: "Filter by change type: 'insert', 'delete', 'replacement', 'format', or 'structural'.",
       },
       in: {
         oneOf: [storyLocatorSchema, { const: 'all' }],
@@ -5186,7 +5194,22 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         decision: { enum: ['accept', 'reject'] },
         target: {
           oneOf: [
-            objectSchema({ id: { type: 'string' }, story: storyLocatorSchema }, ['id']),
+            objectSchema(
+              {
+                id: { type: 'string' },
+                story: storyLocatorSchema,
+                // A partial-range qualifier on an entity (id) target. Accepted by
+                // the schema so the executor can fail closed with INVALID_INPUT
+                // on indivisible (e.g. structural whole-object) revisions rather
+                // than the runtime rejecting it as a malformed target.
+                range: {
+                  type: 'object',
+                  description:
+                    'Partial-range qualifier on an id target. Rejected with INVALID_INPUT for indivisible (e.g. structural) revisions.',
+                },
+              },
+              ['id'],
+            ),
             objectSchema(
               {
                 kind: { const: 'range' },

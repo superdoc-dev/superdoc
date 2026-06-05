@@ -49,7 +49,10 @@ import {
   formatPageNumber,
   formatSectionPageNumberText,
   getCellSpacingPx,
+  getColumnGeometry,
+  getColumnSeparatorPositions as getColumnSeparatorPositionsFromGeometry,
   normalizeColumnLayout,
+  resolveColumnMode,
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
@@ -248,6 +251,8 @@ type PainterOptions = {
   showFormattingMarks?: boolean;
   /** Built-in SDT chrome rendering mode. */
   contentControlsChrome?: 'default' | 'none';
+  /** Per-document logical->physical font resolver (face-aware); see DomPainterOptions.resolvePhysical. */
+  resolvePhysical?: (cssFontFamily: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }) => string;
 };
 
 type FragmentDomState = {
@@ -1997,37 +2002,23 @@ export class DomPainter {
   }
 
   private getColumnSeparatorPositions(columns: ColumnLayout, leftMargin: number, contentWidth: number): number[] {
-    const hasExplicitWidths = Array.isArray(columns.widths) && columns.widths.length > 0;
-
-    if (!hasExplicitWidths) {
-      const equalWidth = (contentWidth - columns.gap * (columns.count - 1)) / columns.count;
+    // SD-2629: separator positions come from the one resolved column geometry (the same source as
+    // fill count and column widths), not a re-derivation here. The caller has already gated on
+    // withSeparator and count > 1.
+    const normalized = normalizeColumnLayout(columns, contentWidth);
+    // Equal mode: skip when the evenly-divided column is too narrow for a 1px line. This must be
+    // checked PRE-geometry because normalize floors fabricated widths at 1 (and falls back to the
+    // full content width when the gap overflows the content area), so the geometry width alone would
+    // not reveal the overflow. Keyed on resolveColumnMode (not the presence of a widths array) so a
+    // raw equalWidth:true config carrying stray widths still takes the equal-mode guard. Legacy guard.
+    if (resolveColumnMode(columns) === 'equal') {
+      const equalWidth = (contentWidth - columns.gap * (normalized.count - 1)) / normalized.count;
       if (equalWidth <= 1) return [];
-
-      const separatorPositions: number[] = [];
-      for (let index = 0; index < columns.count - 1; index += 1) {
-        separatorPositions.push(leftMargin + (index + 1) * equalWidth + index * columns.gap + columns.gap / 2);
-      }
-      return separatorPositions;
     }
-
-    const normalizedColumns = normalizeColumnLayout(columns, contentWidth);
-    if (normalizedColumns.count <= 1) return [];
-
-    const columnWidths =
-      normalizedColumns.widths ?? Array.from({ length: normalizedColumns.count }, () => normalizedColumns.width);
-    // A 1px separator only makes sense when every participating column is wider than the separator itself.
-    if (columnWidths.some((columnWidth) => columnWidth <= 1)) return [];
-
-    const separatorPositions: number[] = [];
-    let cursorX = leftMargin;
-
-    for (let index = 0; index < normalizedColumns.count - 1; index += 1) {
-      const currentColumnWidth = columnWidths[index] ?? normalizedColumns.width;
-      separatorPositions.push(cursorX + currentColumnWidth + normalizedColumns.gap / 2);
-      cursorX += currentColumnWidth + normalizedColumns.gap;
-    }
-
-    return separatorPositions;
+    const geometry = getColumnGeometry(normalized);
+    if (geometry.length <= 1) return [];
+    if (geometry.some((column) => column.width <= 1)) return [];
+    return getColumnSeparatorPositionsFromGeometry(geometry, leftMargin);
   }
   private renderDecorationsForPage(pageEl: HTMLElement, page: ResolvedPage, pageIndex: number): void {
     if (this.isSemanticFlow) return;
@@ -2693,6 +2684,9 @@ export class DomPainter {
         this.applyFragmentFrame(el, paraFragment, context.section, context.story),
       applySdtDataset,
       applyContainerSdtDataset,
+      // Per-document font resolver so list markers and drop caps paint the same physical family
+      // they were measured in (undefined => the renderers fall back to the global default).
+      resolvePhysical: this.options.resolvePhysical,
       renderLine: ({
         block,
         line,
@@ -3153,7 +3147,8 @@ export class DomPainter {
       return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
     }
     if (part.fieldType === 'NUMPAGES') {
-      return String(context?.totalPages ?? 1);
+      const totalPages = context?.totalPages ?? 1;
+      return part.pageNumberFormat ? formatPageNumber(totalPages, part.pageNumberFormat) : String(totalPages);
     }
     if (part.fieldType === 'SECTIONPAGES') {
       if (context?.sectionPageCount == null) return part.text ?? '1';
@@ -3911,6 +3906,9 @@ export class DomPainter {
         applySdtDataset,
         applyContainerSdtDataset,
         applyStyles,
+        // Per-document font resolver so in-cell list markers and drop caps paint the same physical
+        // family they were measured in (undefined => the renderers fall back to the global default).
+        resolvePhysical: this.options.resolvePhysical,
       });
 
       // Override outer wrapper positioning with resolved data when available.
@@ -3972,6 +3970,8 @@ export class DomPainter {
       layoutEpoch: this.layoutEpoch,
       showFormattingMarks: this.showFormattingMarks,
       contentControlsChrome: this.contentControlsChrome,
+      // Per-document font resolver (undefined => applyRunStyles falls back to the global default).
+      resolvePhysical: this.options.resolvePhysical,
       pendingTooltips: this.pendingTooltips,
       getNextLinkId: () => `superdoc-link-${++this.linkIdCounter}`,
       applySdtDataset,

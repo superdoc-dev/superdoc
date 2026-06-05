@@ -144,6 +144,30 @@ describe('shapes converter', () => {
       expect(result.wrap?.distTop).toBe(5);
     });
 
+    it('fills wrap distances from padding when wrap attrs omit them', () => {
+      const node: PMNode = {
+        type: 'vectorShape',
+        attrs: {
+          width: 100,
+          height: 100,
+          padding: { top: 4, bottom: 6, left: 12, right: 15 },
+          wrap: {
+            type: 'Square',
+            attrs: {
+              wrapText: 'bothSides',
+            },
+          },
+        },
+      };
+
+      const result = vectorShapeNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.wrap?.distTop).toBe(4);
+      expect(result.wrap?.distBottom).toBe(6);
+      expect(result.wrap?.distLeft).toBe(12);
+      expect(result.wrap?.distRight).toBe(15);
+    });
+
     it('handles anchor data', () => {
       const node: PMNode = {
         type: 'vectorShape',

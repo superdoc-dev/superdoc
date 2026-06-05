@@ -88,6 +88,22 @@ export type ResolveCommentOptions = {
   importedId?: string;
 };
 
+/** Comment identity used by resolveCommentThread */
+export type ResolveCommentThreadItem = {
+  /** The comment ID to resolve */
+  commentId: string;
+  /** The imported comment ID */
+  importedId?: string;
+  /** Whether resolving should preserve document-story anchor markers for this comment */
+  preserveAnchor?: boolean;
+};
+
+/** Options for resolveCommentThread command */
+export type ResolveCommentThreadOptions = {
+  /** The thread root and replies to resolve in one transaction */
+  comments: ResolveCommentThreadItem[];
+};
+
 /**
  * Options for the `reopenComment` command — symmetric inverse of
  * `resolveComment`. Restores the live `comment` mark across the
@@ -212,6 +228,12 @@ export interface CommentCommands {
    * editor.commands.resolveComment({ commentId: 'comment-123' })
    */
   resolveComment: (options: ResolveCommentOptions) => boolean;
+
+  /**
+   * Resolve multiple comments in a thread as one editor transaction.
+   * @param options - Object containing thread comment identities
+   */
+  resolveCommentThread: (options: ResolveCommentThreadOptions) => boolean;
 
   /**
    * Reopen a previously-resolved comment — the symmetric inverse of

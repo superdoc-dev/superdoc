@@ -180,6 +180,17 @@ export const pickNumber = (value: unknown): number | undefined => {
 };
 
 /**
+ * Apply wp:anchor dist* padding to wrap distances when wrap.attrs omitted them at import.
+ */
+export const mergeWrapDistancesFromPadding = (wrap: NonNullable<ImageBlock['wrap']>, padding?: BoxSpacing): void => {
+  if (!padding || wrap.type === 'None' || wrap.type === 'Inline') return;
+  if (wrap.distTop == null && padding.top != null) wrap.distTop = padding.top;
+  if (wrap.distBottom == null && padding.bottom != null) wrap.distBottom = padding.bottom;
+  if (wrap.distLeft == null && padding.left != null) wrap.distLeft = padding.left;
+  if (wrap.distRight == null && padding.right != null) wrap.distRight = padding.right;
+};
+
+/**
  * Normalizes a color string, ensuring it has a leading '#' symbol.
  *
  * Filters out special values like 'auto' and 'none'. Prepends '#' if not present.

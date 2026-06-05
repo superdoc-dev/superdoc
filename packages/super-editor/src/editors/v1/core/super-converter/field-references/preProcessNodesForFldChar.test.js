@@ -86,6 +86,44 @@ describe('preProcessNodesForFldChar', () => {
     },
   );
 
+  it('preserves complex NUMPAGES numeric picture switches', () => {
+    const { processedNodes } = preProcessNodesForFldChar(complexFieldNodes('NUMPAGES \\# "#,##0"', '1,234'), mockDocx);
+
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toMatchObject({
+      name: 'sd:totalPageNumber',
+      attributes: {
+        instruction: 'NUMPAGES \\# "#,##0"',
+        pageNumberNumericPicture: '#,##0',
+        importedCachedText: '1,234',
+      },
+    });
+  });
+
+  it('preserves fldSimple NUMPAGES zero-padding switches', () => {
+    const { processedNodes } = preProcessNodesForFldChar(
+      [
+        {
+          name: 'w:fldSimple',
+          attributes: { 'w:instr': 'NUMPAGES \\# "000"' },
+          elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '007' }] }] }],
+        },
+      ],
+      mockDocx,
+    );
+
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toMatchObject({
+      name: 'sd:totalPageNumber',
+      attributes: {
+        instruction: 'NUMPAGES \\# "000"',
+        pageNumberFormat: 'decimal',
+        pageNumberZeroPadding: 3,
+        importedCachedText: '007',
+      },
+    });
+  });
+
   it('preserves SECTIONPAGES field run properties when cached result has no run properties', () => {
     const fieldRunRPr = { name: 'w:rPr', elements: [{ name: 'w:i' }] };
     const { processedNodes } = preProcessNodesForFldChar(
@@ -143,15 +181,47 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
-  it('should preserve cached visible result runs for lowercase seq fields', () => {
-    const { processedNodes } = preProcessNodesForFldChar(complexFieldNodes('seq level2 \\*arabic', '1'), mockDocx);
+  it.each([
+    ['uppercase complex', complexFieldNodes('SEQ Figure \\* ARABIC', '7'), 'SEQ Figure \\* ARABIC', true],
+    ['lowercase complex', complexFieldNodes('seq Figure \\* arabic', '8'), 'seq Figure \\* arabic', true],
+    [
+      'uppercase fldSimple',
+      [
+        {
+          name: 'w:fldSimple',
+          attributes: { 'w:instr': 'SEQ Figure \\* ARABIC' },
+          elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '9' }] }] }],
+        },
+      ],
+      'SEQ Figure \\* ARABIC',
+      false,
+    ],
+    [
+      'lowercase fldSimple',
+      [
+        {
+          name: 'w:fldSimple',
+          attributes: { 'w:instr': 'seq Figure \\* arabic' },
+          elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '10' }] }] }],
+        },
+      ],
+      'seq Figure \\* arabic',
+      false,
+    ],
+  ])('processes %s SEQ fields and preserves cached result runs', (_name, nodes, instruction, hasInstructionTokens) => {
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
 
-    expect(processedNodes).toHaveLength(5);
-    expect(processedNodes.some((node) => node.name === 'sd:sequenceField')).toBe(false);
-    expect(processedNodes[3]).toEqual({
-      name: 'w:r',
-      elements: [{ name: 'w:t', elements: [{ type: 'text', text: '1' }] }],
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toMatchObject({
+      name: 'sd:sequenceField',
+      attributes: { instruction },
     });
+    expect(processedNodes[0].elements).toHaveLength(1);
+    expect(processedNodes[0].elements[0].name).toBe('w:r');
+    expect(processedNodes[0].elements[0].elements?.[0]?.name).toBe('w:t');
+    expect(processedNodes[0].attributes.instructionTokens).toEqual(
+      hasInstructionTokens ? [{ type: 'text', text: instruction }] : undefined,
+    );
   });
 
   it('should handle nested fields (PAGEREF within HYPERLINK)', () => {
@@ -183,7 +253,11 @@ describe('preProcessNodesForFldChar', () => {
           {
             name: 'sd:pageReference',
             type: 'element',
-            attributes: { instruction: 'PAGEREF bookmark' },
+            attributes: {
+              bookmarkId: 'bookmark',
+              instruction: 'PAGEREF bookmark',
+              instructionTokens: [{ type: 'text', text: 'PAGEREF bookmark' }],
+            },
             elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '5' }] }] }],
           },
         ],

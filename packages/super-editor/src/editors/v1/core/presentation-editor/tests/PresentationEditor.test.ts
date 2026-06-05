@@ -5,6 +5,7 @@ import type { Editor as EditorInstance } from '../../Editor.js';
 import { Editor } from '../../Editor.js';
 import { HeaderFooterEditorManager, HeaderFooterLayoutAdapter } from '../../header-footer/HeaderFooterRegistry.js';
 import { buildMultiSectionIdentifier } from '@superdoc/layout-bridge';
+import type { FlowBlock } from '@superdoc/contracts';
 import { NodeSelection } from 'prosemirror-state';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
@@ -312,6 +313,7 @@ vi.mock('@core/layout-adapter', async (importOriginal) => {
 // Mock layout-bridge functions
 vi.mock('@superdoc/layout-bridge', () => ({
   incrementalLayout: mockIncrementalLayout,
+  measureCache: { clear: vi.fn() },
   normalizeMargin: (value: number | undefined, fallback: number) =>
     Number.isFinite(value) ? (value as number) : fallback,
   selectionToRects: mockSelectionToRects,
@@ -330,6 +332,8 @@ vi.mock('@superdoc/layout-bridge', () => ({
     extractFooterId: vi.fn(() => 'rId-footer-default'),
   })),
   buildMultiSectionIdentifier: vi.fn(() => ({ sections: [] })),
+  buildEffectiveHeaderFooterRefsBySection: vi.fn(() => new Map()),
+  collectReferencedHeaderFooterRIds: vi.fn(() => new Set()),
   getHeaderFooterTypeForSection: vi.fn(() => 'default'),
   getHeaderFooterType: vi.fn((_pageNumber, _identifier, _options) => {
     // Returns the type of header/footer for a given page
@@ -370,6 +374,7 @@ vi.mock('@superdoc/painter-dom', () => ({
 // Mock measuring-dom
 vi.mock('@superdoc/measuring-dom', () => ({
   measureBlock: mockMeasureBlock,
+  clearTextMeasurementCaches: vi.fn(),
 }));
 
 vi.mock('@superdoc/layout-resolved', () => ({
@@ -402,6 +407,7 @@ vi.mock('../../header-footer/EditorOverlayManager', () => ({
 describe('PresentationEditor', () => {
   let container: HTMLElement;
   let editor: PresentationEditor;
+  let originalBodyPageTokens: string | undefined;
 
   const makeNodeSelection = (from: number, to: number, node: Record<string, unknown>) => {
     const selection = Object.create(NodeSelection.prototype);
@@ -434,12 +440,16 @@ describe('PresentationEditor', () => {
   };
 
   beforeEach(() => {
+    originalBodyPageTokens = process.env.SD_BODY_PAGE_TOKENS;
+
     // Create a container element for the presentation editor
     container = document.createElement('div');
     document.body.appendChild(container);
 
     // Clear all mocks
     vi.clearAllMocks();
+    mockToFlowBlocks.mockReset();
+    mockToFlowBlocks.mockReturnValue({ blocks: [], bookmarks: new Map() });
     // Reset mockIncrementalLayout to default implementation (clearAllMocks doesn't reset mockResolvedValue)
     mockIncrementalLayout.mockReset();
     mockIncrementalLayout.mockResolvedValue({ layout: { pages: [] }, measures: [] });
@@ -462,6 +472,12 @@ describe('PresentationEditor', () => {
   });
 
   afterEach(() => {
+    if (originalBodyPageTokens === undefined) {
+      delete process.env.SD_BODY_PAGE_TOKENS;
+    } else {
+      process.env.SD_BODY_PAGE_TOKENS = originalBodyPageTokens;
+    }
+
     if (editor) {
       editor.destroy();
     }
@@ -498,6 +514,163 @@ describe('PresentationEditor', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(editor.historyCoordinator).toBeNull();
+    });
+  });
+
+  describe('document font config', () => {
+    it('registers configured families and maps before the first measure callback', async () => {
+      const order: string[] = [];
+      const originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts');
+      const originalFontFace = Object.getOwnPropertyDescriptor(window, 'FontFace');
+
+      class TestFontFace {
+        readonly status = 'unloaded';
+
+        constructor(public readonly family: string) {}
+
+        load(): Promise<TestFontFace> {
+          return Promise.resolve(this);
+        }
+      }
+
+      const fontSet = {
+        add: vi.fn((face: { family: string }) => {
+          if (face.family === 'Gelasio') order.push('custom-font-add');
+        }),
+        load: vi.fn(async () => [new TestFontFace('loaded')]),
+        check: vi.fn(() => true),
+      };
+
+      Object.defineProperty(document, 'fonts', { configurable: true, value: fontSet });
+      Object.defineProperty(window, 'FontFace', { configurable: true, value: TestFontFace });
+
+      try {
+        const block = {
+          kind: 'paragraph',
+          id: 'p-font-config',
+          runs: [{ kind: 'text', text: 'Hello', fontFamily: 'Georgia', fontSize: 12 }],
+        } as FlowBlock;
+
+        mockToFlowBlocks.mockReturnValueOnce({ blocks: [block], bookmarks: new Map() });
+        mockIncrementalLayout.mockImplementationOnce(
+          async (_previousBlocks, _previousLayout, blocks, _layoutOptions, measureBlock) => {
+            order.push('layout');
+            await (measureBlock as (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => unknown)(
+              blocks[0] as FlowBlock,
+              { maxWidth: 500, maxHeight: 700 },
+            );
+            return { layout: { pages: [] }, measures: [] };
+          },
+        );
+
+        editor = new PresentationEditor({
+          element: container,
+          fontAssets: {
+            families: [{ family: 'Gelasio', faces: [{ source: '/fonts/Gelasio-Regular.woff2' }] }],
+            map: { Georgia: 'Gelasio' },
+          },
+        });
+
+        await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+        expect(order).toContain('custom-font-add');
+        expect(order.indexOf('custom-font-add')).toBeLessThan(order.indexOf('layout'));
+        const fontContext = mockMeasureBlock.mock.calls[0]?.[2] as
+          | {
+              resolvePhysical?: (family: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }) => string;
+            }
+          | undefined;
+        expect(fontContext?.resolvePhysical?.('Georgia', { weight: '400', style: 'normal' })).toBe('Gelasio');
+      } finally {
+        if (originalFonts) Object.defineProperty(document, 'fonts', originalFonts);
+        else Reflect.deleteProperty(document, 'fonts');
+        if (originalFontFace) Object.defineProperty(window, 'FontFace', originalFontFace);
+        else Reflect.deleteProperty(window, 'FontFace');
+      }
+    });
+  });
+
+  describe('formatting marks repaint', () => {
+    it('passes body bookmarks to initial layout resolution when body page tokens are disabled', async () => {
+      // Disabling PAGE/NUMPAGES convergence must not suppress PAGEREF bookmark resolution.
+      process.env.SD_BODY_PAGE_TOKENS = 'false';
+
+      const bookmarks = new Map([['target', 100]]);
+      const blocks = [
+        {
+          kind: 'paragraph',
+          id: 'source',
+          runs: [{ text: '5', fontFamily: 'Arial', fontSize: 12 }],
+        },
+      ];
+      const measures = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 }],
+        },
+      ];
+      mockToFlowBlocks.mockReturnValue({ blocks, bookmarks });
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 800, h: 1000 },
+          pages: [{ number: 1, fragments: [{ kind: 'para', blockId: 'source', fromLine: 0, toLine: 1 }] }],
+        },
+        measures,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'body-page-tokens-disabled-pageref-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      await vi.waitFor(() => expect(mockResolveLayout).toHaveBeenCalled());
+
+      expect(mockResolveLayout.mock.calls[0]?.[0]).toMatchObject({ bookmarks });
+    });
+
+    it('preserves body bookmarks when repainting the current layout', async () => {
+      // Disabling PAGE/NUMPAGES convergence must not suppress PAGEREF bookmark resolution.
+      process.env.SD_BODY_PAGE_TOKENS = 'false';
+
+      const bookmarks = new Map([['target', 100]]);
+      const blocks = [
+        {
+          kind: 'paragraph',
+          id: 'source',
+          runs: [{ text: '5', fontFamily: 'Arial', fontSize: 12 }],
+        },
+      ];
+      const measures = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 }],
+        },
+      ];
+      mockToFlowBlocks.mockReturnValue({ blocks, bookmarks });
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 800, h: 1000 },
+          pages: [{ number: 1, fragments: [{ kind: 'para', blockId: 'source', fromLine: 0, toLine: 1 }] }],
+        },
+        measures,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'formatting-marks-pageref-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      mockResolveLayout.mockClear();
+
+      editor.setShowFormattingMarks(true);
+
+      expect(mockResolveLayout).toHaveBeenCalledTimes(1);
+      expect(mockResolveLayout.mock.calls[0]?.[0]).toMatchObject({ bookmarks });
     });
   });
 

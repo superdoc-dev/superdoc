@@ -1,10 +1,11 @@
-import type { TextRun } from '@superdoc/contracts';
+import type { FieldResultFormat, NumericPictureFormat, PageNumberFieldFormat, TextRun } from '@superdoc/contracts';
 import { type InlineConverterParams } from './common';
 import { getNodeInstruction } from '../../sdt/index.js';
 import type { PMNode, PMMark } from '../../types.js';
 import { textNodeToRun } from './text-run.js';
 import { buildFlowRunLink } from '../../marks/links.js';
 import { type RunProperties, resolveRunProperties } from '@superdoc/style-engine/ooxml';
+import { parsePageRefInstruction } from '../../../super-converter/field-references/shared/pageref-instruction.js';
 
 export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun | void {
   const {
@@ -24,14 +25,26 @@ export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun
   const refMarks = Array.isArray(nodeAttrs.marksAsAttrs) ? (nodeAttrs.marksAsAttrs as PMMark[]) : [];
   const mergedMarks = [...refMarks, ...(inheritedMarks ?? [])];
 
-  // Extract bookmark ID from instruction, handling optional quotes
-  // Examples: "PAGEREF _Toc123 \h" or "PAGEREF "_Toc123" \h"
-  const bookmarkMatch = instruction.match(/PAGEREF\s+"?([^"\s\\]+)"?/i);
-  const bookmarkId = bookmarkMatch ? bookmarkMatch[1] : '';
+  const parsed = parsePageRefInstruction(instruction);
+  const bookmarkId = readStringAttr(nodeAttrs.bookmarkId) || parsed.bookmarkId;
+  const hasHyperlinkSwitch = readBooleanAttr(nodeAttrs.hasHyperlinkSwitch) || parsed.hasHyperlinkSwitch;
+  const hasRelativePositionSwitch =
+    readBooleanAttr(nodeAttrs.hasRelativePositionSwitch) || parsed.hasRelativePositionSwitch;
+  const pageNumberFieldFormat =
+    readObjectAttr<PageNumberFieldFormat>(nodeAttrs.pageNumberFieldFormat) ??
+    (parsed.pageNumberFieldFormat as PageNumberFieldFormat | undefined);
+  const numericPictureFormat =
+    readObjectAttr<NumericPictureFormat>(nodeAttrs.numericPictureFormat) ?? parsed.numericPictureFormat;
+  const attrFieldResultFormat = readStringAttr(nodeAttrs.fieldResultFormat);
+  const fieldResultFormat: FieldResultFormat | undefined =
+    attrFieldResultFormat === 'charformat' || attrFieldResultFormat === 'mergeformat'
+      ? attrFieldResultFormat
+      : parsed.fieldResultFormat;
 
   // If we have a bookmark ID, create a token run for dynamic resolution
   let runProperties: RunProperties = {};
   if (bookmarkId) {
+    const fieldRunProperties = readObjectAttr<RunProperties>(nodeAttrs.fieldRunProperties);
     // Check if there's materialized content (pre-baked page number from Word)
     let fallbackText = '??'; // Default placeholder if resolution fails
     if (Array.isArray(node.content) && node.content.length > 0) {
@@ -47,6 +60,11 @@ export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun
         return '';
       };
       fallbackText = node.content.map(extractText).join('').trim() || '??';
+    }
+    if (fieldResultFormat === 'charformat' && fieldRunProperties) {
+      runProperties = fieldRunProperties;
+    } else if (Object.keys(runProperties).length === 0 && fieldRunProperties) {
+      runProperties = fieldRunProperties;
     }
 
     // Create token run with pageReference metadata
@@ -81,10 +99,14 @@ export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun
     tokenRun.pageRefMetadata = {
       bookmarkId,
       instruction,
+      ...(hasRelativePositionSwitch ? { relativePosition: true } : {}),
+      ...(pageNumberFieldFormat ? { pageNumberFieldFormat } : {}),
+      ...(numericPictureFormat ? { numericPictureFormat } : {}),
+      ...(fieldResultFormat ? { fieldResultFormat } : {}),
     };
 
     // \h switch - case-insensitive per ECMA-376 §17.16.1.
-    if (/\\h\b/i.test(instruction)) {
+    if (hasHyperlinkSwitch) {
       const synthesized = buildFlowRunLink({ anchor: bookmarkId });
       if (synthesized) {
         tokenRun.link = tokenRun.link ? { ...tokenRun.link, ...synthesized, anchor: bookmarkId } : synthesized;
@@ -104,4 +126,16 @@ export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun
       visitNode(child, mergedMarks, sdtMetadata, runProperties, false, parentInlineRunProperties),
     );
   }
+}
+
+function readStringAttr(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function readBooleanAttr(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function readObjectAttr<T extends object>(value: unknown): T | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as T) : undefined;
 }

@@ -17,6 +17,7 @@ import {
 } from '@superdoc/layout-bridge';
 import type { HeaderFooterLayoutResult, HeaderFooterConstraints } from '@superdoc/layout-bridge';
 import { measureBlock } from '@superdoc/measuring-dom';
+import type { FontResolver, HasFace, FontMeasureContext } from '@superdoc/font-system';
 
 export type HeaderFooterPerRidLayoutInput = {
   headerBlocks?: unknown;
@@ -53,6 +54,13 @@ export async function layoutPerRIdHeaderFooters(
     headerLayoutsByRId: Map<string, HeaderFooterLayoutResult>;
     footerLayoutsByRId: Map<string, HeaderFooterLayoutResult>;
   },
+  // The calling document's resolver + its face-availability oracle (`hasFace`) and the render plan's
+  // `effectiveSignature`. Per-rId header/footer measurement resolves FACE-aware through them and keys
+  // the shared cache on effectiveSignature (NOT resolver.signature), so a single-face substitute is
+  // safe in headers/footers and a fonts.add() busts the cache. Omitted => global default + family-level.
+  fontResolver?: FontResolver,
+  hasFace?: HasFace,
+  effectiveSignature?: string,
 ): Promise<void> {
   deps.headerLayoutsByRId.clear();
   deps.footerLayoutsByRId.clear();
@@ -90,6 +98,9 @@ export async function layoutPerRIdHeaderFooters(
       constraints,
       pageResolver,
       deps.headerLayoutsByRId,
+      fontResolver,
+      hasFace,
+      effectiveSignature,
     );
     await layoutWithPerSectionConstraints(
       'footer',
@@ -98,6 +109,9 @@ export async function layoutPerRIdHeaderFooters(
       constraints,
       pageResolver,
       deps.footerLayoutsByRId,
+      fontResolver,
+      hasFace,
+      effectiveSignature,
     );
   } else {
     // Single-section or uniform margins: use original single-constraint path
@@ -110,6 +124,9 @@ export async function layoutPerRIdHeaderFooters(
       constraints,
       pageResolver,
       deps.headerLayoutsByRId,
+      fontResolver,
+      hasFace,
+      effectiveSignature,
     );
     await layoutBlocksByRId(
       'footer',
@@ -118,6 +135,9 @@ export async function layoutPerRIdHeaderFooters(
       constraints,
       pageResolver,
       deps.footerLayoutsByRId,
+      fontResolver,
+      hasFace,
+      effectiveSignature,
     );
   }
 }
@@ -133,8 +153,25 @@ async function layoutBlocksByRId(
   constraints: Constraints,
   pageResolver: PageResolver,
   layoutsByRId: Map<string, HeaderFooterLayoutResult>,
+  fontResolver?: FontResolver,
+  hasFace?: HasFace,
+  effectiveSignature?: string,
 ): Promise<void> {
   if (!blocksByRId || referencedRIds.size === 0) return;
+
+  // Face-aware per-document context for the measure callback; the (shared) header/footer cache keys
+  // on the render plan's effectiveSignature (face-aware), NOT resolver.signature - so a single-face
+  // substitute is safe here and a fonts.add() that changes a face's resolution busts the cache.
+  const fontSignature = effectiveSignature ?? '';
+  const fontMeasureContext: FontMeasureContext | undefined = fontResolver
+    ? {
+        resolvePhysical: (css, face) =>
+          hasFace
+            ? fontResolver.resolvePhysicalFamilyForFace(css, face, hasFace)
+            : fontResolver.resolvePhysicalFamily(css),
+        fontSignature,
+      }
+    : undefined;
 
   for (const [rId, blocks] of blocksByRId) {
     if (!referencedRIds.has(rId)) continue;
@@ -144,11 +181,12 @@ async function layoutBlocksByRId(
       const batchResult = await layoutHeaderFooterWithCache(
         { default: blocks },
         constraints,
-        (block: FlowBlock, c: { maxWidth: number; maxHeight: number }) => measureBlock(block, c),
+        (block: FlowBlock, c: { maxWidth: number; maxHeight: number }) => measureBlock(block, c, fontMeasureContext),
         undefined,
         undefined,
         pageResolver,
         kind,
+        fontSignature,
       );
 
       if (batchResult.default) {
@@ -233,8 +271,24 @@ async function layoutWithPerSectionConstraints(
   fallbackConstraints: Constraints,
   pageResolver: PageResolver,
   layoutsByRId: Map<string, HeaderFooterLayoutResult>,
+  fontResolver?: FontResolver,
+  hasFace?: HasFace,
+  effectiveSignature?: string,
 ): Promise<void> {
   if (!blocksByRId) return;
+
+  // See layoutBlocksByRId: face-aware per-document context + render-plan effectiveSignature as the cache key.
+  const fontSignature = effectiveSignature ?? '';
+  const fontMeasureContext: FontMeasureContext | undefined = fontResolver
+    ? {
+        resolvePhysical: (css, face) =>
+          hasFace
+            ? fontResolver.resolvePhysicalFamilyForFace(css, face, hasFace)
+            : fontResolver.resolvePhysicalFamily(css),
+        fontSignature,
+      }
+    : undefined;
+
   const groups = buildSectionAwareHeaderFooterMeasurementGroups(
     kind,
     blocksByRId,
@@ -251,11 +305,12 @@ async function layoutWithPerSectionConstraints(
       const batchResult = await layoutHeaderFooterWithCache(
         { default: blocks },
         group.sectionConstraints,
-        (block: FlowBlock, c: { maxWidth: number; maxHeight: number }) => measureBlock(block, c),
+        (block: FlowBlock, c: { maxWidth: number; maxHeight: number }) => measureBlock(block, c, fontMeasureContext),
         undefined,
         undefined,
         pageResolver,
         kind,
+        fontSignature,
       );
 
       if (batchResult.default) {

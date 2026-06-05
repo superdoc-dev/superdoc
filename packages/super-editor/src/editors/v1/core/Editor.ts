@@ -3996,7 +3996,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // from convertedXml when the adapter added Overrides/Relationships there,
       // so the copied parts are registered in the package.
       const templateSubstratePaths = Object.keys(this.converter.convertedXml).filter(
-        (path) => /^word\/theme\/[^/]+\.xml$/.test(path) || path === 'word/fontTable.xml' || path === 'word/webSettings.xml',
+        (path) =>
+          /^word\/theme\/[^/]+\.xml$/.test(path) || path === 'word/fontTable.xml' || path === 'word/webSettings.xml',
       );
       for (const path of templateSubstratePaths) {
         if (Object.prototype.hasOwnProperty.call(updatedDocs, path)) continue;

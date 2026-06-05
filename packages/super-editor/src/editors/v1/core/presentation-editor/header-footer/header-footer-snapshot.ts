@@ -13,10 +13,7 @@
  */
 
 import type { Fragment, ResolvedHeaderFooterLayout, ResolvedPaintItem } from '@superdoc/contracts';
-import {
-  buildSectionAwareHeaderFooterLayoutKey,
-  type HeaderFooterLayoutResult,
-} from '@superdoc/layout-bridge';
+import { buildSectionAwareHeaderFooterLayoutKey, type HeaderFooterLayoutResult } from '@superdoc/layout-bridge';
 
 import type {
   HeaderFooterFragmentSummary,
@@ -319,10 +316,7 @@ function buildStoryLayouts(
     }
 
     const resolved = resolvedByRId.get(layoutKey) ?? null;
-    entries.set(
-      storyKey,
-      makeStorySnapshot(kind, storyKey, refIdFromLayoutKey(layoutKey), sections, result, resolved),
-    );
+    entries.set(storyKey, makeStorySnapshot(kind, storyKey, refIdFromLayoutKey(layoutKey), sections, result, resolved));
   }
 
   const { rawByVariant, resolvedByVariant } = buildVariantResultMaps(layoutResults, resolvedLayouts);

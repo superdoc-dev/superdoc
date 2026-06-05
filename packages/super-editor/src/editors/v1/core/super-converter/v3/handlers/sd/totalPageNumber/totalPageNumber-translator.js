@@ -66,6 +66,9 @@ function getPageNumberFieldAttrs(node) {
   if (node.attributes?.pageNumberZeroPadding != null) {
     attrs.pageNumberZeroPadding = Number(node.attributes.pageNumberZeroPadding);
   }
+  if (node.attributes?.pageNumberNumericPicture) {
+    attrs.pageNumberNumericPicture = node.attributes.pageNumberNumericPicture;
+  }
   return attrs;
 }
 
@@ -82,7 +85,7 @@ function resolveCachedPageCount(params, node) {
   const cacheMap = params.statFieldCacheMap;
   if (cacheMap?.has?.('NUMPAGES')) {
     const pageCount = Number(cacheMap.get('NUMPAGES'));
-    if (node.attrs?.pageNumberFormat || node.attrs?.pageNumberZeroPadding) {
+    if (node.attrs?.pageNumberFormat || node.attrs?.pageNumberZeroPadding || node.attrs?.pageNumberNumericPicture) {
       return formatPageNumberFieldValue(pageCount, node.attrs);
     }
     return String(cacheMap.get('NUMPAGES'));

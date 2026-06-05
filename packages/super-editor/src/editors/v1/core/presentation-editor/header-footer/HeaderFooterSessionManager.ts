@@ -47,6 +47,7 @@ import {
 } from '../../header-footer/HeaderFooterRegistry.js';
 import { initHeaderFooterRegistry } from '../../header-footer/HeaderFooterRegistryInit.js';
 import { layoutPerRIdHeaderFooters } from '../../header-footer/HeaderFooterPerRidLayout.js';
+import type { FontResolver, HasFace } from '@superdoc/font-system';
 import {
   extractIdentifierFromConverter,
   getHeaderFooterType,
@@ -266,6 +267,11 @@ export type HeaderFooterSessionManagerOptions = {
     header?: number;
     footer?: number;
   };
+  /**
+   * Reads the owning document's current font-mapping signature, folded into header/footer
+   * paint-reuse versions so a runtime `fonts.map` change repaints them. Omitted => '' (default).
+   */
+  getFontSignature?: () => string;
 };
 
 /**
@@ -398,9 +404,13 @@ function refForVariant(
   return variant === 'odd' && refs?.default ? { refId: refs.default, matchedVariant: 'default' } : undefined;
 }
 
-function resolveResult(result: HeaderFooterLayoutResult, storyId?: string | null): ResolvedHeaderFooterLayout {
+function resolveResult(
+  result: HeaderFooterLayoutResult,
+  storyId?: string | null,
+  fontSignature = '',
+): ResolvedHeaderFooterLayout {
   const story = buildHeaderFooterStory(result.kind, storyId ?? String(result.type));
-  return resolveHeaderFooterLayout(result.layout, result.blocks, result.measures, story);
+  return resolveHeaderFooterLayout(result.layout, result.blocks, result.measures, story, fontSignature);
 }
 
 function shiftResolvedPaintItemY(item: ResolvedPaintItem, yOffset: number): ResolvedPaintItem {
@@ -628,7 +638,7 @@ export class HeaderFooterSessionManager {
   set headerLayoutResults(results: HeaderFooterLayoutResult[] | null) {
     this.#headerFooterLayoutSnapshotPending = true;
     this.#headerLayoutResults = results;
-    this.#resolvedHeaderLayouts = results ? results.map((result) => resolveResult(result)) : null;
+    this.#resolvedHeaderLayouts = results ? results.map((result) => this.#resolveResult(result)) : null;
   }
 
   /** Footer layout results */
@@ -640,7 +650,7 @@ export class HeaderFooterSessionManager {
   set footerLayoutResults(results: HeaderFooterLayoutResult[] | null) {
     this.#headerFooterLayoutSnapshotPending = true;
     this.#footerLayoutResults = results;
-    this.#resolvedFooterLayouts = results ? results.map((result) => resolveResult(result)) : null;
+    this.#resolvedFooterLayouts = results ? results.map((result) => this.#resolveResult(result)) : null;
   }
 
   /** Header layouts by rId */
@@ -789,8 +799,8 @@ export class HeaderFooterSessionManager {
     this.#headerFooterLayoutSnapshotPending = true;
     this.#headerLayoutResults = headerResults;
     this.#footerLayoutResults = footerResults;
-    this.#resolvedHeaderLayouts = headerResults ? headerResults.map((result) => resolveResult(result)) : null;
-    this.#resolvedFooterLayouts = footerResults ? footerResults.map((result) => resolveResult(result)) : null;
+    this.#resolvedHeaderLayouts = headerResults ? headerResults.map((result) => this.#resolveResult(result)) : null;
+    this.#resolvedFooterLayouts = footerResults ? footerResults.map((result) => this.#resolveResult(result)) : null;
   }
 
   /**
@@ -1766,6 +1776,11 @@ export class HeaderFooterSessionManager {
     };
   }
 
+  /** resolveResult, with this document's font signature folded into the paint-reuse versions. */
+  #resolveResult(result: HeaderFooterLayoutResult, storyId?: string | null): ResolvedHeaderFooterLayout {
+    return resolveResult(result, storyId, this.#options.getFontSignature?.() ?? '');
+  }
+
   /**
    * Layout per-rId header/footers for multi-section documents.
    */
@@ -1773,20 +1788,31 @@ export class HeaderFooterSessionManager {
     headerFooterInput: HeaderFooterInput,
     layout: Layout,
     sectionMetadata: SectionMetadata[],
+    fontResolver?: FontResolver,
+    hasFace?: HasFace,
+    effectiveSignature?: string,
   ): Promise<void> {
-    await layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata, {
-      headerLayoutsByRId: this.#headerLayoutsByRId,
-      footerLayoutsByRId: this.#footerLayoutsByRId,
-    });
+    await layoutPerRIdHeaderFooters(
+      headerFooterInput,
+      layout,
+      sectionMetadata,
+      {
+        headerLayoutsByRId: this.#headerLayoutsByRId,
+        footerLayoutsByRId: this.#footerLayoutsByRId,
+      },
+      fontResolver,
+      hasFace,
+      effectiveSignature,
+    );
 
     // Rebuild resolved maps aligned 1:1 with the raw rId maps.
     this.#resolvedHeaderByRId.clear();
     for (const [key, result] of this.#headerLayoutsByRId) {
-      this.#resolvedHeaderByRId.set(key, resolveResult(result, storyIdFromHeaderFooterLayoutKey(key)));
+      this.#resolvedHeaderByRId.set(key, this.#resolveResult(result, storyIdFromHeaderFooterLayoutKey(key)));
     }
     this.#resolvedFooterByRId.clear();
     for (const [key, result] of this.#footerLayoutsByRId) {
-      this.#resolvedFooterByRId.set(key, resolveResult(result, storyIdFromHeaderFooterLayoutKey(key)));
+      this.#resolvedFooterByRId.set(key, this.#resolveResult(result, storyIdFromHeaderFooterLayoutKey(key)));
     }
   }
 
@@ -2448,7 +2474,7 @@ export class HeaderFooterSessionManager {
       );
     }
 
-    const freshResolvedLayout = resolveResult(result, storyId);
+    const freshResolvedLayout = this.#resolveResult(result, storyId);
     const freshPage = freshResolvedLayout.pages.find((page) => page.number === slotPageNumber);
     const freshItems = freshPage?.items;
     if (freshItems && freshItems.length === fragments.length) {

@@ -18,6 +18,7 @@ import {
   normalizeColumnLayout,
   rescaleColumnWidths,
 } from '@superdoc/contracts';
+import type { FontMeasureContext } from '@superdoc/font-system';
 import {
   layoutDocument,
   type LayoutOptions,
@@ -822,7 +823,17 @@ export async function incrementalLayout(
     measure?: HeaderFooterMeasureFn;
   },
   previousMeasures?: Measure[] | null,
+  // Narrow runtime context (deliberately NOT on LayoutOptions): the per-document FontMeasureContext -
+  // the SAME object whose `resolvePhysical` is bound into the measureBlock callback - plus the
+  // signature the previous measures were taken with. Only `fontContext.fontSignature` is read here:
+  // for the measure-cache keys (so two documents with different `fonts.map` cannot share a measure)
+  // and to invalidate previous-measure reuse when this document's mapping changed since the prior
+  // render. Passing the whole context rather than a separate signature string keys every cache off
+  // the same object that supplies the resolver, so signature and resolver can never drift apart.
+  fontRuntime?: { fontContext?: FontMeasureContext; previousFontSignature?: string },
 ): Promise<IncrementalLayoutResult> {
+  const fontSignature = fontRuntime?.fontContext?.fontSignature ?? '';
+  const previousFontSignature = fontRuntime?.previousFontSignature ?? '';
   const isSemanticFlow = options.flowMode === 'semantic';
 
   // In semantic mode, neutralize paginated-only inputs so downstream code
@@ -866,6 +877,9 @@ export async function incrementalLayout(
     hasPreviousMeasures && !isSemanticFlow ? resolveMeasurementConstraints(options, previousBlocks) : null;
   const canReusePreviousMeasures =
     hasPreviousMeasures &&
+    // A mapping change (different signature) makes the prior measures stale even for unchanged
+    // blocks; this reuse path bypasses the measure-cache key, so it must check the signature too.
+    fontSignature === previousFontSignature &&
     previousConstraints?.measurementWidth === measurementWidth &&
     previousConstraints?.measurementHeight === measurementHeight;
   const previousPerSectionConstraints = canReusePreviousMeasures
@@ -914,7 +928,7 @@ export async function incrementalLayout(
 
     // Time the cache lookup (includes hashRuns computation)
     const lookupStart = performance.now();
-    const cached = measureCache.get(block, blockMeasureWidth, blockMeasureHeight);
+    const cached = measureCache.get(block, blockMeasureWidth, blockMeasureHeight, fontSignature);
     cacheLookupTime += performance.now() - lookupStart;
 
     if (cached) {
@@ -928,7 +942,7 @@ export async function incrementalLayout(
     const measurement = await measureBlock(block, sectionConstraints);
     actualMeasureTime += performance.now() - measureBlockStart;
 
-    measureCache.set(block, blockMeasureWidth, blockMeasureHeight, measurement);
+    measureCache.set(block, blockMeasureWidth, blockMeasureHeight, measurement, fontSignature);
     measures.push(measurement);
     cacheMisses++;
   }
@@ -1090,6 +1104,7 @@ export async function incrementalLayout(
         HEADER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT,
         prelayoutPageResolver,
         'header',
+        fontSignature,
       );
 
       // Extract actual content heights from each variant
@@ -1196,6 +1211,7 @@ export async function incrementalLayout(
           FOOTER_PRELAYOUT_PLACEHOLDER_PAGE_COUNT,
           prelayoutPageResolver,
           'footer',
+          fontSignature,
         );
 
         // Extract actual content heights from each variant
@@ -1308,6 +1324,7 @@ export async function incrementalLayout(
         tokenResult.affectedBlockIds,
         currentPerSectionConstraints,
         measureBlock,
+        fontSignature,
         measureCache,
       );
       const remeasureEnd = performance.now();
@@ -1419,13 +1436,24 @@ export async function incrementalLayout(
         const measuresById = new Map<string, Measure>();
         await Promise.all(
           blocks.map(async (block) => {
-            const cached = measureCache.get(block, footnoteConstraints.maxWidth, footnoteConstraints.maxHeight);
+            const cached = measureCache.get(
+              block,
+              footnoteConstraints.maxWidth,
+              footnoteConstraints.maxHeight,
+              fontSignature,
+            );
             if (cached) {
               measuresById.set(block.id, cached);
               return;
             }
             const measurement = await measureBlock(block, footnoteConstraints);
-            measureCache.set(block, footnoteConstraints.maxWidth, footnoteConstraints.maxHeight, measurement);
+            measureCache.set(
+              block,
+              footnoteConstraints.maxWidth,
+              footnoteConstraints.maxHeight,
+              measurement,
+              fontSignature,
+            );
             measuresById.set(block.id, measurement);
           }),
         );
@@ -2753,6 +2781,7 @@ export async function incrementalLayout(
         FeatureFlags.HEADER_FOOTER_PAGE_TOKENS ? undefined : numberingCtx.totalPages, // Fallback for backward compat
         pageResolver, // Use page resolver for section-aware numbering
         'header',
+        fontSignature,
       );
       headers = serializeHeaderFooterResults('header', headerLayouts);
     }
@@ -2765,6 +2794,7 @@ export async function incrementalLayout(
         FeatureFlags.HEADER_FOOTER_PAGE_TOKENS ? undefined : numberingCtx.totalPages, // Fallback for backward compat
         pageResolver, // Use page resolver for section-aware numbering
         'footer',
+        fontSignature,
       );
       footers = serializeHeaderFooterResults('footer', footerLayouts);
     }
@@ -3297,6 +3327,7 @@ async function remeasureAffectedBlocks(
   affectedBlockIds: Set<string>,
   perBlockConstraints: Array<{ maxWidth: number; maxHeight: number }>,
   measureBlock: (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => Promise<Measure>,
+  fontSignature: string,
   measureCache?: MeasureCache<Measure>,
 ): Promise<Measure[]> {
   const updatedMeasures: Measure[] = [...measures];
@@ -3316,9 +3347,12 @@ async function remeasureAffectedBlocks(
       // Update in the measures array
       updatedMeasures[i] = newMeasure;
 
-      // Cache the new measurement using per-block section constraints
+      // Cache the new measurement using per-block section constraints. Key it with the document's
+      // font signature like every other measure-cache write: a page-token re-measure carries
+      // per-document mapped metrics, so writing it under the empty signature would let a default
+      // document read it and force this document to recompute every render (signature-keyed miss).
       const blockConstraints = perBlockConstraints[i];
-      measureCache?.set(block, blockConstraints.maxWidth, blockConstraints.maxHeight, newMeasure);
+      measureCache?.set(block, blockConstraints.maxWidth, blockConstraints.maxHeight, newMeasure, fontSignature);
     } catch (error) {
       // Error handling per plan: log warning, keep prior layout for block
       console.warn(`[incrementalLayout] Failed to re-measure block ${block.id} after token resolution:`, error);

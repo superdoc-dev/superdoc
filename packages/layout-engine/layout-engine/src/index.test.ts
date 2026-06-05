@@ -279,6 +279,38 @@ describe('layoutDocument', () => {
     });
   });
 
+  it('caps the fill at the resolved column count when w:num exceeds the supplied widths (SD-2629)', () => {
+    // count:4 but only two explicit widths -> the resolved count is 2 (Word renders min(num,
+    // widths)). The fill loop must advance through 2 columns then start a new page, NOT into
+    // phantom columns 3-4. Before SD-2629, advanceColumn read the raw count (4) while width math
+    // read the clamped count (2): two answers for "how many columns exist".
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 4, gap: 20, widths: [192, 384], equalWidth: false },
+    };
+
+    // Eight 350px lines: each 720px column fits two, so a 2-column page holds four lines -> exactly
+    // two pages. Under the bug (4 columns), all eight fit on one page across four column positions.
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350, 350, 350, 350, 350, 350])], options);
+
+    const columnXs = new Set(layout.pages.flatMap((page) => page.fragments.map((fragment) => Math.round(fragment.x))));
+    expect(columnXs.size).toBe(2);
+    expect(layout.pages).toHaveLength(2);
+  });
+
+  it('resolves page/document column metadata to the rendered count, not the raw w:num (SD-2629)', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 4, gap: 20, widths: [192, 384], equalWidth: false },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350])], options);
+    // count:4 with two widths renders two columns; metadata must not advertise four.
+    expect(layout.columns).toEqual({ count: 2, gap: 20, widths: [192, 384], equalWidth: false });
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, widths: [192, 384], equalWidth: false });
+  });
+
   it('does not set "page.columns" on single column layout', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },
@@ -302,6 +334,34 @@ describe('layoutDocument', () => {
     expect(layout.pages).toHaveLength(1);
     expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: false });
     expect(layout.columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+  });
+
+  it('resolves mid-page region column metadata to the rendered count (SD-2629)', () => {
+    // A continuous break to count:4 with two widths must surface as a 2-column region, not 4 - the
+    // renderer prefers columnRegions over page.columns and reads the config raw.
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'intro', runs: [] },
+      {
+        kind: 'sectionBreak',
+        id: 'sb-continuous',
+        type: 'continuous',
+        columns: { count: 4, gap: 20, widths: [192, 384], equalWidth: false },
+      },
+      { kind: 'paragraph', id: 'body', runs: [] },
+    ];
+    const measures: Measure[] = [makeMeasure([30]), { kind: 'sectionBreak' }, makeMeasure([30, 30, 30])];
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20 },
+    };
+
+    const layout = layoutDocument(blocks, measures, options);
+    const regions = layout.pages[0].columnRegions;
+    expect(regions).toBeDefined();
+    const last = regions![regions!.length - 1];
+    expect(last.columns.count).toBe(2);
+    expect(last.columns.widths).toEqual([192, 384]);
   });
 
   it('emits page.columnRegions for continuous section breaks that change column config mid-page', () => {
@@ -643,10 +703,9 @@ describe('layoutDocument', () => {
     expect(paraFragment.kind).toBe('para');
 
     // The image is positioned at left margin (50px)
-    // Exclusion boundary: imageX + imageWidth + distLeft + distRight
-    // = 50 + 200 + 5 + 10 = 265px
+    // Exclusion boundary: imageX + imageWidth + distRight = 50 + 200 + 10 = 260px
     const imageX = DEFAULT_OPTIONS.margins!.left;
-    const exclusionBoundary = imageX + 200 + 5 + 10;
+    const exclusionBoundary = imageX + 200 + 10;
 
     // Paragraph should start after the exclusion boundary
     expect(paraFragment.x).toBe(exclusionBoundary);
@@ -2153,6 +2212,32 @@ describe('layoutDocument', () => {
       expect(p1.x).toBeCloseTo(options.margins!.left);
       // p2 should begin at top of second column after the column break
       expect(p2.x).toBeCloseTo(options.margins!.left + columnWidth + options.columns!.gap);
+      expect(p2.y).toBe(options.margins!.top);
+    });
+
+    it('treats the last resolved column as last for column breaks when w:num exceeds widths (SD-2629)', () => {
+      // count:4 but two explicit widths -> resolved count 2. The first break moves to column 1 (the
+      // last resolved column); the second must start a new page, NOT advance into a phantom column
+      // 2. Mirror of the advanceColumn fix for explicit <w:br w:type="column"> handling.
+      const blocks: FlowBlock[] = [
+        { kind: 'columnBreak', id: 'br-1' } as ColumnBreakBlock,
+        { kind: 'columnBreak', id: 'br-2' } as ColumnBreakBlock,
+        { kind: 'paragraph', id: 'p2', runs: [] },
+      ];
+
+      const measures: Measure[] = [{ kind: 'columnBreak' }, { kind: 'columnBreak' }, makeMeasure([40])];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+        columns: { count: 4, gap: 48, widths: [192, 384], equalWidth: false },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+
+      expect(layout.pages.length).toBe(2);
+      const p2 = layout.pages[1].fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+      expect(p2.x).toBeCloseTo(options.margins!.left);
       expect(p2.y).toBe(options.margins!.top);
     });
 
@@ -4450,6 +4535,70 @@ describe('requirePageBoundary edge cases', () => {
       expect(p3.width).toBeCloseTo(550);
     });
 
+    it('keeps the current explicit column after a manual column break when only later per-column gaps differ', () => {
+      const toExplicitColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-explicit',
+        type: 'continuous',
+        columns: { count: 3, gap: 48, widths: [100, 100, 300], gaps: [48, 48], equalWidth: false },
+        margins: {},
+      };
+      const laterGapsOnlyDelta: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-gaps-only',
+        type: 'continuous',
+        columns: { count: 3, gap: 48, widths: [100, 100, 300], gaps: [48, 96], equalWidth: false },
+        margins: {},
+      };
+
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        toExplicitColumns,
+        { kind: 'paragraph', id: 'p2', runs: [] },
+        { kind: 'columnBreak', id: 'br-1' } as ColumnBreakBlock,
+        { kind: 'paragraph', id: 'p3', runs: [] },
+        laterGapsOnlyDelta,
+        { kind: 'paragraph', id: 'p4', runs: [] },
+      ];
+
+      const measures: Measure[] = [
+        makeMeasure([40]),
+        { kind: 'sectionBreak' },
+        makeMeasure([40]),
+        { kind: 'columnBreak' },
+        makeMeasure([40]),
+        { kind: 'sectionBreak' },
+        makeMeasure([40]),
+      ];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 700, h: 792 },
+        margins: { top: 72, right: 50, bottom: 72, left: 50 },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+      const page = layout.pages[0];
+      const contentWidth = options.pageSize!.w - options.margins!.left - options.margins!.right;
+      const totalGap = 48 * 2;
+      const expectedSecondColumnX = 50 + (100 * (contentWidth - totalGap)) / (100 + 100 + 300) + 48;
+
+      const p2 = page.fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+      const p3 = page.fragments.find((f) => f.blockId === 'p3') as ParaFragment;
+      const p4 = page.fragments.find((f) => f.blockId === 'p4') as ParaFragment;
+
+      expect(p2.x).toBeCloseTo(50);
+      expect(p3.x).toBeCloseTo(expectedSecondColumnX);
+      expect(p4.x).toBeCloseTo(expectedSecondColumnX);
+      expect(page.columnRegions).toHaveLength(2);
+      expect(page.columnRegions?.[1]?.columns).toEqual({
+        count: 3,
+        gap: 48,
+        widths: [100, 100, 300],
+        gaps: [48, 48],
+        equalWidth: false,
+      });
+    });
+
     it('does not balance the final page for explicit custom-width columns', () => {
       const blocks: FlowBlock[] = [
         {
@@ -5823,6 +5972,68 @@ describe('requirePageBoundary edge cases', () => {
       // Heading and body should start on same page (chain fits using first line optimization)
       expect(pageContainsBlock(layout.pages[0], 'heading')).toBe(true);
       expect(pageContainsBlock(layout.pages[0], 'body')).toBe(true);
+    });
+
+    it('uses first ROW height (not full table) for a splittable table anchor so the chain starts and the table splits (SD-3345)', () => {
+      // A heading (keepNext) immediately followed by a tall splittable table. The
+      // heading + table FIRST ROW fits in the remaining space, but heading + the WHOLE
+      // table does not. Word starts the table here and splits it; reserving the full
+      // table height would push the heading + table wholly to the next page (large gap).
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'filler', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+      const heading: FlowBlock = {
+        kind: 'paragraph',
+        id: 'heading',
+        runs: [{ text: 'Heading', fontFamily: 'Arial', fontSize: 24 }],
+        attrs: { keepNext: true },
+      };
+      const table = {
+        kind: 'table',
+        id: 'tbl',
+        rows: Array.from({ length: 4 }, (_unused, i) => ({
+          id: `r${i}`,
+          cells: [
+            {
+              id: `c${i}`,
+              blocks: [{ kind: 'paragraph', id: `p${i}`, runs: [{ text: 'x', fontFamily: 'Arial', fontSize: 10 }] }],
+            },
+          ],
+        })),
+      } as unknown as TableBlock;
+
+      const fillerMeasure: ParagraphMeasure = { kind: 'paragraph', lines: [makeLine(50)], totalHeight: 50 };
+      const headingMeasure: ParagraphMeasure = { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 };
+      // 4 rows × 15px = 60px total; first row 15px. Cells carry a single measured line
+      // so the table-start preflight can render at least one row on the current page.
+      const tableMeasure = {
+        kind: 'table',
+        rows: Array.from({ length: 4 }, () => ({
+          cells: [{ paragraph: { kind: 'paragraph', lines: [makeLine(15)], totalHeight: 15 }, width: 100, height: 15 }],
+          height: 15,
+        })),
+        columnWidths: [100],
+        totalWidth: 100,
+        totalHeight: 60,
+      } as unknown as TableMeasure;
+
+      // Content area = 100px. After filler(50), 50px remain.
+      // - heading(20) + firstRow(15) = 35 <= 50  → chain fits → start on this page.
+      // - heading(20) + fullTable(60) = 80 > 50  → would advance without the fix.
+      //   (80 <= 100 content height, so the blank-page guard does not suppress the advance.)
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 160 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 },
+      };
+
+      const layout = layoutDocument([filler, heading, table], [fillerMeasure, headingMeasure, tableMeasure], options);
+
+      // Heading and the table both start on page 0 (the table then splits across pages).
+      expect(pageContainsBlock(layout.pages[0], 'heading')).toBe(true);
+      expect(pageContainsBlock(layout.pages[0], 'tbl')).toBe(true);
     });
 
     it('reclaims trailing spacing when both filler and chain starter have contextualSpacing', () => {

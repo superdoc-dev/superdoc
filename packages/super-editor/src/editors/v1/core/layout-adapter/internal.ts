@@ -21,6 +21,7 @@ import {
 } from './sections/index.js';
 import { normalizePrefix, buildPositionMap, createBlockIdGenerator } from './utilities.js';
 import { stampTrackedChangeColors } from '@superdoc/contracts';
+import { resolveSequenceFieldTokens } from './resolve-sequence-fields.js';
 import {
   paragraphToFlowBlocks,
   contentBlockNodeToDrawingBlock,
@@ -295,6 +296,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
   // read it directly without invoking app callbacks. Passing `undefined`
   // clears stale colors from cached blocks when the host disables the feature.
   stampTrackedChangeColors(mergedBlocks, options?.resolveTrackedChangeColor);
+  resolveSequenceFieldTokens(mergedBlocks);
 
   // Commit cache cycle - swaps next to previous, retaining only blocks seen this render
   flowBlockCache?.commit();

@@ -116,6 +116,7 @@ function buildProjectedInfo(
       },
       id,
       type,
+      ...(type === 'structural' && snapshot.subtype ? { subtype: snapshot.subtype } : {}),
       grouping: options.grouping,
       pairedWithChangeId: options.pairedWithChangeId ?? undefined,
       wordRevisionIds: normalizeWordRevisionIds(snapshot.wordRevisionIds),
@@ -462,6 +463,7 @@ export function trackChangesListWrapper(editor: Editor, input?: TrackChangesList
     const {
       address,
       type,
+      subtype,
       grouping,
       pairedWithChangeId,
       wordRevisionIds,
@@ -479,6 +481,7 @@ export function trackChangesListWrapper(editor: Editor, input?: TrackChangesList
     return buildDiscoveryItem(info.id, handle, {
       address,
       type,
+      ...(subtype ? { subtype } : {}),
       grouping,
       pairedWithChangeId,
       wordRevisionIds,
@@ -548,6 +551,9 @@ export function trackChangesGetWrapper(editor: Editor, input: TrackChangesGetInp
     },
     id: resolved.change.id,
     type,
+    ...(type === 'structural' && resolved.change.structural
+      ? { subtype: resolved.change.structural.subtype as TrackChangeInfo['subtype'] }
+      : {}),
     grouping,
     wordRevisionIds: normalizeWordRevisionIds(resolved.change.wordRevisionIds),
     overlap: resolved.change.overlap,

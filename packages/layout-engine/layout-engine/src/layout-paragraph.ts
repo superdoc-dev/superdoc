@@ -12,7 +12,9 @@ import type {
   DrawingBlock,
   DrawingMeasure,
   DrawingFragment,
-  ParagraphBorders, TableAnchor, TableWrap 
+  ParagraphBorders,
+  TableAnchor,
+  TableWrap,
 } from '@superdoc/contracts';
 import {
   computeFragmentPmRange,
@@ -56,6 +58,25 @@ function anchorForLineScopedFormField(
   if (anchor.alignV || firstLineHeight <= 0 || tableHeight <= firstLineHeight) return anchor;
   if (!isLineScopedTblpY(firstLineHeight, offsetV)) return anchor;
   return { ...anchor, vRelativeFrom: 'paragraph', alignV: 'center', offsetV: 0 };
+}
+
+type GraphicPlacementAnchorY = Parameters<typeof resolveAnchoredGraphicY>[0]['anchor'];
+
+function graphicAnchorY(anchor: TableAnchor | undefined): GraphicPlacementAnchorY {
+  if (!anchor) return undefined;
+  const alignV = anchor.alignV;
+  const mappedAlignV = alignV === 'top' || alignV === 'center' || alignV === 'bottom' ? alignV : undefined;
+  return { vRelativeFrom: anchor.vRelativeFrom, alignV: mappedAlignV, offsetV: anchor.offsetV };
+}
+
+function graphicAnchorH(anchor: TableAnchor): Parameters<typeof resolveAnchoredGraphicX>[0] {
+  const alignH = anchor.alignH;
+  const mappedAlignH = alignH === 'left' || alignH === 'center' || alignH === 'right' ? alignH : undefined;
+  return {
+    hRelativeFrom: anchor.hRelativeFrom,
+    alignH: mappedAlignH,
+    offsetH: anchor.offsetH,
+  };
 }
 
 /**
@@ -629,7 +650,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         wrapType,
       );
       const anchorY = resolveAnchoredGraphicY({
-        anchor: anchorForY,
+        anchor: graphicAnchorY(anchorForY),
         objectHeight: entry.measure.totalHeight ?? 0,
         contentTop,
         contentBottom,
@@ -642,14 +663,14 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
 
       const anchorX = entry.block.anchor
         ? resolveAnchoredGraphicX(
-            entry.block.anchor,
+            graphicAnchorH(entry.block.anchor),
             state.columnIndex,
             anchors!.columns,
             totalWidth,
             { left: anchors!.pageMargins.left, right: anchors!.pageMargins.right },
             anchors!.pageWidth,
           )
-        : columnX(state.columnIndex);
+        : columnX(state);
 
       state.page.fragments.push(createAnchoredTableFragment(entry.block, entry.measure, anchorX, anchorY));
       anchors!.placedAnchoredIds.add(entry.block.id);
@@ -666,11 +687,13 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   const totalLineHeight = lines.reduce((sum, line) => sum + (line.lineHeight ?? 0), 0);
   const remainingHeightOnStartPage = previewState.contentBottom - paragraphAnchorBaseY;
   const paragraphWillSpanPages = lines.length > 1 && totalLineHeight > remainingHeightOnStartPage;
-  const usePostLayoutSquareAnchors = paragraphWillSpanPages || emptyTextParagraph;
+  const shouldPreLayoutSquareTable = (entry: AnchoredTable) =>
+    entry.lineScopedOnAnchor === true && !paragraphWillSpanPages;
 
   const preLayoutAnchoredTables = anchoredTablesForPara.filter((entry) => {
     const wrapType = entry.block.wrap?.type ?? 'None';
-    return wrapType === 'None' || !usePostLayoutSquareAnchors;
+    if (wrapType === 'None') return true;
+    return shouldPreLayoutSquareTable(entry);
   });
   registerAnchoredTablesAt(paragraphAnchorBaseY, preLayoutAnchoredTables);
 
@@ -1274,10 +1297,17 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
 
   const postLayoutAnchoredTables = anchoredTablesForPara.filter((entry) => {
     const wrapType = entry.block.wrap?.type ?? 'None';
-    return wrapType !== 'None' && usePostLayoutSquareAnchors;
+    return wrapType !== 'None' && !shouldPreLayoutSquareTable(entry);
   });
   if (postLayoutAnchoredTables.length > 0) {
-    const postLayoutAnchorY = emptyTextParagraph ? paragraphAnchorBaseY : paragraphContentEndY;
+    const usesLineTopOnEmptyParagraph =
+      emptyTextParagraph &&
+      !paragraphWillSpanPages &&
+      postLayoutAnchoredTables.some((entry) => {
+        const offsetV = entry.layoutOffsetV ?? entry.block.anchor?.offsetV ?? 0;
+        return entry.lineScopedOnAnchor === false && offsetV > 0;
+      });
+    const postLayoutAnchorY = usesLineTopOnEmptyParagraph ? paragraphAnchorBaseY : paragraphContentEndY;
     registerAnchoredTablesAt(postLayoutAnchorY, postLayoutAnchoredTables);
   }
 }

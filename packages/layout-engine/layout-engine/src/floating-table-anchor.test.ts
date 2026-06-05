@@ -84,6 +84,29 @@ describe('floating-table-anchor', () => {
   describe('resolveFloatingTableAnchorResolution', () => {
     const paragraphIndexById = new Map<string, number>();
 
+    it('does not mark lineScopedOnAnchor for empty anchor paragraphs (square table after paragraph box)', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'para-1', runs: [] },
+        makeFloatingTable('table-98', 0, { type: 'Square' }),
+      ];
+      const measures: Measure[] = [
+        makeParaMeasure(20),
+        { kind: 'table', rows: [], columnWidths: [490], totalWidth: 490, totalHeight: 40 } as TableMeasure,
+      ];
+
+      const resolution = resolveFloatingTableAnchorResolution(
+        blocks,
+        measures,
+        blocks.length,
+        1,
+        blocks[1] as TableBlock,
+        new Map(),
+      );
+
+      expect(resolution?.paragraphIndex).toBe(0);
+      expect(resolution?.lineScopedOnAnchor).toBe(false);
+    });
+
     it('prefers explicit anchorParagraphId from import', () => {
       const blocks: FlowBlock[] = [
         { kind: 'paragraph', id: 'spacer', runs: [] },

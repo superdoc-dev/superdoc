@@ -3,6 +3,7 @@ import type {
   Measure,
   ParagraphBlock,
   ParagraphMeasure,
+  Run,
   TableBlock,
   TableMeasure,
   TableWrap,
@@ -28,8 +29,13 @@ export const ANCHORED_TABLE_FULL_WIDTH_RATIO = 0.99;
  * Otherwise this module applies OOXML tblpPr semantics using measured paragraph heights.
  */
 
+function runText(run: Run): string {
+  if (run.kind != null && run.kind !== 'text') return '';
+  return 'text' in run && typeof run.text === 'string' ? run.text : '';
+}
+
 function paragraphText(block: ParagraphBlock): string {
-  return block.runs?.map((run) => run.text ?? '').join('') ?? '';
+  return block.runs?.map(runText).join('') ?? '';
 }
 
 function paragraphMeasureAt(blocks: FlowBlock[], measures: Measure[], index: number): ParagraphMeasure | null {
@@ -166,7 +172,10 @@ function resolutionWithLineScopedFlag(
     paragraphIndex,
     offsetV,
     lineScopedOnAnchor:
-      !forwardResolved && offsetV === rawOffsetV && isLineScopedTblpY(blocks, measures, paragraphIndex, offsetV),
+      !forwardResolved &&
+      offsetV === rawOffsetV &&
+      isLineScopedTblpY(blocks, measures, paragraphIndex, offsetV) &&
+      !isTextEmptyParagraph(blocks, paragraphIndex),
   };
 }
 

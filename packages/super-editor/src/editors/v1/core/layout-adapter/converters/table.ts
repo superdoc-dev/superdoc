@@ -823,6 +823,26 @@ type FloatingTableProperties = {
   tblpYSpec?: 'inline' | 'top' | 'center' | 'bottom' | 'inside' | 'outside';
 };
 
+function countFloatingTableContentColumns(node: PMNode): number {
+  const grid = node.attrs?.grid;
+  if (Array.isArray(grid) && grid.length > 0) {
+    return grid.length;
+  }
+
+  const firstRow = node.content?.[0];
+  if (!firstRow || !isTableRowNode(firstRow) || !Array.isArray(firstRow.content)) {
+    return 0;
+  }
+
+  let columns = 0;
+  for (const cellNode of firstRow.content) {
+    if (!cellNode || !isTableCellNode(cellNode)) continue;
+    const colSpan = typeof cellNode.attrs?.colspan === 'number' ? cellNode.attrs.colspan : 1;
+    columns += colSpan > 0 ? colSpan : 1;
+  }
+  return columns;
+}
+
 /**
  * Extract floating table properties from node attrs and convert to TableAnchor and TableWrap.
  * Returns undefined values if the table is not floating (no tblpPr).
@@ -896,15 +916,18 @@ function extractFloatingTableAnchorWrap(node: PMNode): { anchor?: TableAnchor; w
   }
 
   // Build wrap properties from text distances
-  const hasDistances =
-    floatingProps.leftFromText !== undefined ||
-    floatingProps.rightFromText !== undefined ||
-    floatingProps.topFromText !== undefined ||
-    floatingProps.bottomFromText !== undefined;
+  const hasHorizontalDistances = floatingProps.leftFromText !== undefined || floatingProps.rightFromText !== undefined;
+  const hasVerticalDistances = floatingProps.topFromText !== undefined || floatingProps.bottomFromText !== undefined;
+  const hasDistances = hasHorizontalDistances || hasVerticalDistances;
+
+  const contentColumnCount = countFloatingTableContentColumns(node);
+  // Single-cell form fields (Fair Work F3) are absolute overlays. Multi-column tables with
+  // side distances (advanced-tables.docx) participate in square text wrapping.
+  const isSingleCellHorizontalOverlay = contentColumnCount <= 1 && hasHorizontalDistances && !hasVerticalDistances;
 
   const wrap: TableWrap = {
-    type: 'Square', // Floating tables with text distances use square wrapping
-    wrapText: 'bothSides', // Default to text on both sides
+    type: isSingleCellHorizontalOverlay ? 'None' : 'Square',
+    wrapText: 'bothSides',
   };
 
   if (hasDistances) {

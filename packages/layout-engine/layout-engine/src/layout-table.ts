@@ -20,12 +20,9 @@ import {
 import type { PageState } from './paginator.js';
 import { computeFragmentPmRange, extractBlockPmRange } from './layout-utils.js';
 import { describeCellRenderBlocks, createCellSliceCursor, computeFullCellContentHeight } from './table-cell-slice.js';
+import { isAnchoredTableFullWidth } from './floating-table-anchor.js';
 
-/**
- * Ratio of column width (0..1). An anchored table with totalWidth >= columnWidth * this value
- * is treated as full-width and laid out inline instead of as a floating fragment.
- */
-export const ANCHORED_TABLE_FULL_WIDTH_RATIO = 0.99;
+export { ANCHORED_TABLE_FULL_WIDTH_RATIO, isAnchoredTableFullWidth } from './floating-table-anchor.js';
 
 export type TableLayoutContext = {
   block: TableBlock;
@@ -1321,18 +1318,17 @@ export function layoutTableBlock({
   // don't create overlap or extra pages.
   let treatAsInline = false;
   if (block.anchor?.isAnchored) {
-    const totalWidth = measure.totalWidth ?? 0;
-    treatAsInline = columnWidth > 0 && totalWidth >= columnWidth * ANCHORED_TABLE_FULL_WIDTH_RATIO;
+    treatAsInline = isAnchoredTableFullWidth(block, measure, columnWidth);
     if (!treatAsInline) {
       return;
     }
   }
 
-  // 1. Detect floating tables - use monolithic layout so the table stays one unit (no split across pages).
-  // This applies even when treatAsInline (full-width anchored): we still flow the table here but render it as one fragment.
+  // Narrow floating tables (form fields) use monolithic layout. Full-width anchored tables flow
+  // inline and paginate at row boundaries even when tblpPr is present (exhibit schedules).
   const tableProps = block.attrs?.tableProperties as Record<string, unknown> | undefined;
   const floatingProps = tableProps?.floatingTableProperties as Record<string, unknown> | undefined;
-  if (floatingProps && Object.keys(floatingProps).length > 0) {
+  if (floatingProps && Object.keys(floatingProps).length > 0 && !treatAsInline) {
     layoutMonolithicTable({ block, measure, columnWidth, ensurePage, advanceColumn, columnX });
     return;
   }

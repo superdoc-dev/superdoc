@@ -89,6 +89,90 @@ describe('table converter', () => {
       ];
     });
 
+    it('uses square wrap for multi-column floating tables with horizontal text distances', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          grid: [{ col: 1275 }, { col: 1275 }, { col: 1275 }, { col: 1275 }],
+          tableProperties: {
+            floatingTableProperties: {
+              leftFromText: 180,
+              rightFromText: 180,
+              vertAnchor: 'text',
+              tblpY: 1,
+            },
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'a' }] }] },
+              { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'b' }] }] },
+              { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'c' }] }] },
+              { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'd' }] }] },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        12,
+        undefined,
+        undefined,
+        DEFAULT_HYPERLINK_CONFIG,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result?.wrap?.type).toBe('Square');
+      expect(result?.wrap?.distLeft).toBeGreaterThan(0);
+    });
+
+    it('uses none wrap for single-cell form-field floating tables with horizontal text distances', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          grid: [{ col: 3000 }],
+          tableProperties: {
+            floatingTableProperties: {
+              leftFromText: 180,
+              rightFromText: 180,
+              vertAnchor: 'text',
+              horzAnchor: 'page',
+              tblpX: 5248,
+              tblpY: 57,
+            },
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [{ type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: '' }] }] }],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        12,
+        undefined,
+        undefined,
+        DEFAULT_HYPERLINK_CONFIG,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result?.wrap?.type).toBe('None');
+    });
+
     it('returns null when node has no content', () => {
       const node: PMNode = {
         type: 'table',

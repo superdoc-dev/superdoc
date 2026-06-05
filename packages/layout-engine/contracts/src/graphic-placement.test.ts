@@ -167,4 +167,25 @@ describe('resolveAnchoredGraphicX', () => {
   it('defaults alignH to left and offsetH to zero', () => {
     expect(resolveAnchoredGraphicX({}, 0, columns, objectWidth, margins, pageWidth)).toBe(margins.left);
   });
+
+  describe('column-relative honors authored per-column geometry (SD-2629)', () => {
+    // Explicit unequal columns: col0 = 100px, gap-after-col0 = 40px, col1 = 300px. Column-relative
+    // anchors must follow the resolved geometry, not a uniform columnIndex * (width + gap) stride.
+    const unequal = { width: 300, gap: 20, count: 2, widths: [100, 300], gaps: [40] };
+
+    it('places a column-1 anchor at the authored column origin, not the uniform stride', () => {
+      // Geometry col1 x = 100 + 40 = 140; + left margin 72 = 212. The uniform stride would place it
+      // at 72 + (300 + 20) = 392; ignoring per-column gaps (scalar 20) would give 192.
+      expect(resolveAnchoredGraphicX({ alignH: 'left', offsetH: 0 }, 1, unequal, objectWidth, margins, pageWidth)).toBe(
+        212,
+      );
+    });
+
+    it('right-aligns within the authored column width, not the max column width', () => {
+      // col0 is 100px wide: right edge = 72 + 100 - 80 = 92. Using columns.width (300) would give 292.
+      expect(
+        resolveAnchoredGraphicX({ alignH: 'right', offsetH: 0 }, 0, unequal, objectWidth, margins, pageWidth),
+      ).toBe(92);
+    });
+  });
 });

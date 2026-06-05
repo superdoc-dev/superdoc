@@ -9,7 +9,7 @@ import type {
   TableBorders,
   TableMeasure,
 } from '@superdoc/contracts';
-import { getBorderBandWidthPx } from '@superdoc/contracts';
+import { getBorderBandProfile } from '@superdoc/contracts';
 import type { ResolvePhysicalFamily } from '@superdoc/font-system';
 import { renderTableCell } from './renderTableCell.js';
 import {
@@ -365,22 +365,26 @@ type TableRowRenderDependencies = {
  * ```
  */
 /**
- * Paints a cell's double borders the way Word does: as a single-rule INNER RECTANGLE
- * per cell, connected with square L-joins at the corners (verified against 300dpi Word
- * renders of the same file). The band's two rules sit at its faces; the inner face rule
- * belongs to this cell's rectangle and the outer face rule belongs to the table outline
- * (outer edges) or to the neighboring cell's rectangle (interior edges). CSS double
- * borders cannot do this: they miter diagonally and their band hugs the owning cell, so
- * junctions render as crossings instead of closed boxes.
+ * Paints a cell's compound borders (double, triple, thinThick*) the way Word does:
+ * as a single-rule INNER RECTANGLE per cell, connected with square L-joins at the
+ * corners (verified against 300dpi Word renders). A band's rules sit at fixed
+ * positions measured from Word (see contracts getBorderBandProfile): the inner-face
+ * rule belongs to this cell's rectangle, the outer-face rule belongs to the table
+ * outline (outer edges) or to the neighboring cell's rectangle (interior edges),
+ * and a 3-rule band's middle rule is a centered strip per owned edge (strips span
+ * the full edge so they join squarely at corners, forming Word's middle rectangle).
+ * CSS compound borders cannot do this: they miter diagonally and their band hugs
+ * the owning cell, so junctions render as crossings instead of closed boxes.
  *
- * The cell keeps its CSS double border with a TRANSPARENT color so border-box layout
- * (content inset, band reservation) is unchanged. For each double side, the rectangle's
- * rule sits at the inner face of that side's band: inset (band - rule) on sides whose
- * band lives in this cell (top/left always, bottom/right at table boundaries), and
- * extended rule px past the box on interior bottom/right sides whose band lives in the
- * neighboring cell. The table outline rules are painted by renderTableFragment. (SD-3308)
+ * The cell keeps its CSS border with a TRANSPARENT color so border-box layout
+ * (content inset, band reservation) is unchanged. For each compound side, the
+ * rectangle's rule sits at the inner face of that side's band: inset (band - rule)
+ * on sides whose band lives in this cell (top/left always, bottom/right at table
+ * boundaries), and the OUTER-face rule extended past the box on interior
+ * bottom/right sides whose band lives in the neighboring cell. The table outline
+ * rules are painted by renderTableFragment. (SD-3308)
  */
-const appendDoubleBorderInnerRect = (
+const appendCompoundBorderRects = (
   doc: Document,
   container: HTMLElement,
   cellElement: HTMLElement,
@@ -392,11 +396,17 @@ const appendDoubleBorderInnerRect = (
   if (!borders) return;
   const sideInfo = (['top', 'right', 'bottom', 'left'] as const).map((side) => {
     const spec = borders[side];
-    if (!spec || spec.style !== 'double') return null;
-    const band = Math.max(3, Math.round(getBorderBandWidthPx(spec)));
-    const rule = Math.max(1, Math.round(band / 3));
+    const profile = spec ? getBorderBandProfile(spec) : null;
+    if (!spec || !profile) return null;
+    const { segments } = profile;
+    const band = Math.max(1, Math.round(profile.band));
+    const outerRule = Math.max(1, Math.round(segments[0]));
+    const innerRule = Math.max(1, Math.round(segments[segments.length - 1]));
+    // 5 segments = 3 rules: the middle rule sits outer rule + gap inside the band.
+    const midRule = segments.length === 5 ? Math.max(1, Math.round(segments[2])) : 0;
+    const midOffset = segments.length === 5 ? Math.round(segments[0] + segments[1]) : 0;
     const color = spec.color && /^#[0-9A-Fa-f]{6}$/.test(spec.color) ? spec.color : '#000000';
-    return { side, band, rule, color };
+    return { side, band, outerRule, innerRule, midRule, midOffset, color };
   });
   if (!sideInfo.some(Boolean)) return;
 
@@ -405,7 +415,7 @@ const appendDoubleBorderInnerRect = (
   const x1 = Math.round(rect.x + rect.width);
   const y1 = Math.round(rect.y + rect.height);
 
-  // Hide the CSS paint for double sides, keep the layout band.
+  // Hide the CSS paint for compound sides, keep the layout band.
   for (const info of sideInfo) {
     if (!info) continue;
     const cssSide = (info.side[0].toUpperCase() + info.side.slice(1)) as 'Top' | 'Right' | 'Bottom' | 'Left';
@@ -414,27 +424,58 @@ const appendDoubleBorderInnerRect = (
 
   const [top, right, bottom, left] = sideInfo;
   const rectEl = doc.createElement('div');
-  rectEl.className = 'superdoc-double-border-rect';
+  rectEl.className = 'superdoc-compound-border-rect';
   const st = rectEl.style;
   st.position = 'absolute';
   st.boxSizing = 'border-box';
   st.pointerEvents = 'none';
-  // Inner-face placement per side. Owned band: rule sits band-rule inside the box.
-  // Neighbor-owned band (interior bottom/right): rule sits at the band's near face,
-  // which is rule px past this cell's box inside the neighbor.
-  const topInset = top ? top.band - top.rule : 0;
-  const leftInset = left ? left.band - left.rule : 0;
-  const bottomInset = bottom ? (ownsBottomBand ? bottom.band - bottom.rule : -bottom.rule) : 0;
-  const rightInset = right ? (ownsRightBand ? right.band - right.rule : -right.rule) : 0;
+  // Inner-face placement per side. Owned band: the inner rule sits band-rule inside
+  // the box. Neighbor-owned band (interior bottom/right): this cell contributes the
+  // band's OUTER-face rule, which sits just past this cell's box inside the neighbor.
+  const topInset = top ? top.band - top.innerRule : 0;
+  const leftInset = left ? left.band - left.innerRule : 0;
+  const bottomInset = bottom ? (ownsBottomBand ? bottom.band - bottom.innerRule : -bottom.outerRule) : 0;
+  const rightInset = right ? (ownsRightBand ? right.band - right.innerRule : -right.outerRule) : 0;
   st.left = `${x0 + leftInset}px`;
   st.top = `${y0 + topInset}px`;
   st.width = `${x1 - x0 - leftInset - rightInset}px`;
   st.height = `${y1 - y0 - topInset - bottomInset}px`;
-  if (top) st.borderTop = `${top.rule}px solid ${top.color}`;
-  if (bottom) st.borderBottom = `${bottom.rule}px solid ${bottom.color}`;
-  if (left) st.borderLeft = `${left.rule}px solid ${left.color}`;
-  if (right) st.borderRight = `${right.rule}px solid ${right.color}`;
+  if (top) st.borderTop = `${top.innerRule}px solid ${top.color}`;
+  if (bottom) st.borderBottom = `${ownsBottomBand ? bottom.innerRule : bottom.outerRule}px solid ${bottom.color}`;
+  if (left) st.borderLeft = `${left.innerRule}px solid ${left.color}`;
+  if (right) st.borderRight = `${ownsRightBand ? right.innerRule : right.outerRule}px solid ${right.color}`;
   container.appendChild(rectEl);
+
+  // Middle rule of 3-rule bands: ONE bordered rectangle inset to the middle rule's
+  // position (outer rule + gap) on each OWNED 3-rule side. A box with borders joins
+  // cleanly at corners, matching Word's middle rectangle; full-edge strips would
+  // protrude across the outer and inner rings. Neighbor-owned interior sides are
+  // painted by the owning cell's own middle rectangle.
+  const midTop = top && top.midRule > 0 ? top : null;
+  const midLeft = left && left.midRule > 0 ? left : null;
+  const midBottom = bottom && bottom.midRule > 0 && ownsBottomBand ? bottom : null;
+  const midRight = right && right.midRule > 0 && ownsRightBand ? right : null;
+  if (midTop || midLeft || midBottom || midRight) {
+    const mid = doc.createElement('div');
+    mid.className = 'superdoc-compound-border-mid';
+    const ms = mid.style;
+    ms.position = 'absolute';
+    ms.boxSizing = 'border-box';
+    ms.pointerEvents = 'none';
+    const tIn = midTop ? midTop.midOffset : 0;
+    const lIn = midLeft ? midLeft.midOffset : 0;
+    const bIn = midBottom ? midBottom.midOffset : 0;
+    const rIn = midRight ? midRight.midOffset : 0;
+    ms.left = `${x0 + lIn}px`;
+    ms.top = `${y0 + tIn}px`;
+    ms.width = `${x1 - x0 - lIn - rIn}px`;
+    ms.height = `${y1 - y0 - tIn - bIn}px`;
+    if (midTop) ms.borderTop = `${midTop.midRule}px solid ${midTop.color}`;
+    if (midBottom) ms.borderBottom = `${midBottom.midRule}px solid ${midBottom.color}`;
+    if (midLeft) ms.borderLeft = `${midLeft.midRule}px solid ${midLeft.color}`;
+    if (midRight) ms.borderRight = `${midRight.midRule}px solid ${midRight.color}`;
+    container.appendChild(mid);
+  }
 };
 
 export const renderTableRow = (deps: TableRowRenderDependencies): void => {
@@ -786,7 +827,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
           borderValueToSpec(effectiveTableBorders?.insideV)),
     };
     const rectBorders = isRtl ? swapCellBordersLR(effectiveSideSpecs) : effectiveSideSpecs;
-    appendDoubleBorderInnerRect(
+    appendCompoundBorderRects(
       doc,
       container,
       cellElement,

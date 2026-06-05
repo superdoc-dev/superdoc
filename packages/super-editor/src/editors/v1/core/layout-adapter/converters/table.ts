@@ -159,6 +159,26 @@ function normalizeLegacyBorderStyle(value: string | undefined): string {
       return 'dotDash';
     case 'dotdotdash':
       return 'dotDotDash';
+    case 'dashsmallgap':
+      return 'dashSmallGap';
+    case 'thinthicksmallgap':
+      return 'thinThickSmallGap';
+    case 'thickthinsmallgap':
+      return 'thickThinSmallGap';
+    case 'thinthickthinsmallgap':
+      return 'thinThickThinSmallGap';
+    case 'thinthickmediumgap':
+      return 'thinThickMediumGap';
+    case 'thickthinmediumgap':
+      return 'thickThinMediumGap';
+    case 'thinthickthinmediumgap':
+      return 'thinThickThinMediumGap';
+    case 'thinthicklargegap':
+      return 'thinThickLargeGap';
+    case 'thickthinlargegap':
+      return 'thickThinLargeGap';
+    case 'thinthickthinlargegap':
+      return 'thinThickThinLargeGap';
     case 'wave':
       return 'wave';
     case 'doublewave':

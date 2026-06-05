@@ -303,7 +303,7 @@ describe('renderTableRow', () => {
       }) as never,
     );
 
-    const rects = container.querySelectorAll('.superdoc-double-border-rect');
+    const rects = container.querySelectorAll('.superdoc-compound-border-rect');
     expect(rects.length).toBe(1);
     const rect = rects[0] as HTMLElement;
     // band 6, rule 2: the inner-face rule sits band - rule = 4px inside the owned edges.
@@ -313,8 +313,82 @@ describe('renderTableRow', () => {
     expect(rect.style.borderBottom).toMatch(/2px solid/);
     expect(rect.style.borderLeft).toMatch(/2px solid/);
     expect(rect.style.borderRight).toMatch(/2px solid/);
+    // double is symmetric: no middle strips
+    expect(container.querySelectorAll('.superdoc-compound-border-mid').length).toBe(0);
     const cellArgs = renderTableCellMock.mock.calls[0][0] as { borders?: { top?: { style?: string } } };
     expect(cellArgs.borders?.top?.style).toBe('double');
+  });
+
+  // SD-3308: asymmetric 2-rule bands. thinThickSmallGap = [w, 0.75pt, 0.75pt] outer
+  // to inner (measured from Word 300dpi probes): the inner rectangle paints the
+  // INNER-face rule (1px), the outline paints the outer-face rule.
+  it('paints thinThickSmallGap with the inner-face rule width on the inner rectangle', () => {
+    renderTableRow(
+      createDeps({
+        rowIndex: 0,
+        totalRows: 1,
+        cellSpacingPx: 0,
+        tableBorders: {
+          top: { style: 'thinThickSmallGap', width: 4, color: '#000000' },
+          bottom: { style: 'thinThickSmallGap', width: 4, color: '#000000' },
+          left: { style: 'thinThickSmallGap', width: 4, color: '#000000' },
+          right: { style: 'thinThickSmallGap', width: 4, color: '#000000' },
+        },
+      }) as never,
+    );
+
+    const rects = container.querySelectorAll('.superdoc-compound-border-rect');
+    expect(rects.length).toBe(1);
+    const rect = rects[0] as HTMLElement;
+    // band 6 (4+1+1), inner rule 1: rule sits band - rule = 5px inside the owned edges.
+    expect(rect.style.left).toBe('5px');
+    expect(rect.style.top).toBe('5px');
+    expect(rect.style.borderTop).toMatch(/1px solid/);
+    expect(rect.style.borderLeft).toMatch(/1px solid/);
+    // 2-rule band: no middle strips
+    expect(container.querySelectorAll('.superdoc-compound-border-mid').length).toBe(0);
+  });
+
+  // SD-3308: 3-rule bands (triple = [w, w, w, w, w]) add a middle RECTANGLE between
+  // the outline and the inner rectangle (Word's 300dpi corner crops show three clean
+  // nested boxes; full-edge strips would protrude across the outer and inner rings).
+  it('paints triple borders as inner rectangle plus a middle rectangle on owned edges', () => {
+    renderTableRow(
+      createDeps({
+        rowIndex: 0,
+        totalRows: 1,
+        cellSpacingPx: 0,
+        tableBorders: {
+          top: { style: 'triple', width: 2, color: '#000000' },
+          bottom: { style: 'triple', width: 2, color: '#000000' },
+          left: { style: 'triple', width: 2, color: '#000000' },
+          right: { style: 'triple', width: 2, color: '#000000' },
+        },
+      }) as never,
+    );
+
+    const rects = container.querySelectorAll('.superdoc-compound-border-rect');
+    expect(rects.length).toBe(1);
+    const rect = rects[0] as HTMLElement;
+    // band 10 (2+2+2+2+2), inner rule 2: rule sits band - rule = 8px inside.
+    expect(rect.style.left).toBe('8px');
+    expect(rect.style.top).toBe('8px');
+    expect(rect.style.borderTop).toMatch(/2px solid/);
+
+    // The middle rule is ONE bordered rectangle inset by outer rule + gap = 4px,
+    // so its corners join cleanly instead of crossing the other rings.
+    const mids = container.querySelectorAll('.superdoc-compound-border-mid');
+    expect(mids.length).toBe(1);
+    const mid = mids[0] as HTMLElement;
+    expect(mid.style.left).toBe('4px');
+    expect(mid.style.top).toBe('4px');
+    // 100x20 cell inset 4px on each side
+    expect(mid.style.width).toBe('92px');
+    expect(mid.style.height).toBe('12px');
+    expect(mid.style.borderTop).toMatch(/2px solid/);
+    expect(mid.style.borderBottom).toMatch(/2px solid/);
+    expect(mid.style.borderLeft).toMatch(/2px solid/);
+    expect(mid.style.borderRight).toMatch(/2px solid/);
   });
 
   // SD-1797: a single row's measure only lists cells that START in it, so on a w:vMerge

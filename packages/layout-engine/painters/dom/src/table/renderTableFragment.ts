@@ -8,7 +8,7 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
-import { getTableVisualDirection, getBorderBandWidthPx  } from '@superdoc/contracts';
+import { getTableVisualDirection, getBorderBandProfile } from '@superdoc/contracts';
 import type { ResolvePhysicalFamily } from '@superdoc/font-system';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
@@ -689,10 +689,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     y += actualRowHeight + cellSpacingPx;
   }
 
-  // Word paints a double table border as an outer OUTLINE rule at the table boundary
-  // plus each cell's inner rectangle (see appendDoubleBorderInnerRect). Paint the
-  // outline here for table-level double outer borders; continuation fragments skip the
-  // broken edge. (SD-3308)
+  // Word paints a compound table border (double, triple, thinThick*) as an outer
+  // OUTLINE rule at the table boundary plus each cell's inner rectangle (see
+  // appendCompoundBorderRects). The outline rule is the band's OUTER-face rule
+  // (profile segments[0]). Continuation fragments skip the broken edge. (SD-3308)
   {
     const sides = [
       ['top', tableBorders?.top, fragment.continuesFromPrev !== true],
@@ -704,13 +704,13 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     for (const [side, value, enabled] of sides) {
       if (!enabled || value == null || typeof value !== 'object') continue;
       const spec = value as { style?: string; color?: string };
-      if (spec.style !== 'double') continue;
-      const band = Math.max(3, Math.round(getBorderBandWidthPx(value)));
-      const rule = Math.max(1, Math.round(band / 3));
+      const profile = getBorderBandProfile(value);
+      if (!profile) continue;
+      const rule = Math.max(1, Math.round(profile.segments[0]));
       const color = spec.color && /^#[0-9A-Fa-f]{6}$/.test(spec.color) ? spec.color : '#000000';
       if (!outlineEl) {
         outlineEl = doc.createElement('div');
-        outlineEl.className = 'superdoc-double-border-outline';
+        outlineEl.className = 'superdoc-compound-border-outline';
         const st = outlineEl.style;
         st.position = 'absolute';
         st.inset = '0';

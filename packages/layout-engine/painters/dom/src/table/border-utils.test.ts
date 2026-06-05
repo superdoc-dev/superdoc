@@ -73,10 +73,27 @@ describe('applyBorder', () => {
     expect(element.style.borderTop).toMatch(/1px dotted (#0000FF|rgb\(0,\s*0,\s*255\))/i);
   });
 
-  it('should convert triple to solid CSS', () => {
+  // SD-3308: compound styles carry their full measured band width so layout
+  // (content inset, row reservation) matches Word; the visible rules are painted
+  // by the compound nested-rectangle path, which makes this CSS border transparent.
+  it('renders a triple border at its full band width (5 segments of the authored width)', () => {
     const border: BorderSpec = { style: 'triple', width: 2, color: '#FF0000' };
     applyBorder(element, 'Top', border);
-    expect(element.style.borderTop).toMatch(/2px solid (#FF0000|rgb\(255,\s*0,\s*0\))/i);
+    expect(element.style.borderTop).toMatch(/10px solid (#FF0000|rgb\(255,\s*0,\s*0\))/i);
+  });
+
+  it('renders thinThickSmallGap at its full band width (w + 0.75pt gap + 0.75pt rule)', () => {
+    const border: BorderSpec = { style: 'thinThickSmallGap', width: 4, color: '#FF0000' };
+    applyBorder(element, 'Top', border);
+    expect(element.style.borderTop).toMatch(/6px solid (#FF0000|rgb\(255,\s*0,\s*0\))/i);
+  });
+
+  // SD-3308: dashSmallGap is a dash variant; CSS dashed is the accepted
+  // approximation (same as dotDash/dotDotDash).
+  it('renders dashSmallGap as CSS dashed at the authored width', () => {
+    const border: BorderSpec = { style: 'dashSmallGap', width: 2, color: '#00FF00' };
+    applyBorder(element, 'Top', border);
+    expect(element.style.borderTop).toMatch(/2px dashed (#00FF00|rgb\(0,\s*255,\s*0\))/i);
   });
 
   it('should handle thick border with width multiplier', () => {
@@ -576,5 +593,21 @@ describe('resolveBorderConflict (ECMA-376 §17.4.66)', () => {
     const light = { style: 'single' as const, width: 1, color: '#FFFFFF' };
     // brightness(R+B+2G): dark=0 < light=1020 → dark wins
     expect(resolveBorderConflict(light, dark)).toEqual(dark);
+  });
+
+  // SD-3308: the §17.4.66 weight tables must cover the compound styles so they
+  // win/lose conflicts the way Word resolves them.
+  it('compound thinThick styles outweigh single rules', () => {
+    const single = { style: 'single' as const, width: 1, color: '#000000' };
+    const compound = { style: 'thinThickSmallGap' as const, width: 1, color: '#000000' };
+    // weight: single = 1×1 = 1, thinThickSmallGap = 2 lines × number 9 = 18
+    expect(resolveBorderConflict(single, compound)).toEqual(compound);
+    expect(resolveBorderConflict(compound, single)).toEqual(compound);
+  });
+
+  it('dashSmallGap outweighs plain dashed (style number 20 vs 5)', () => {
+    const dashed = { style: 'dashed' as const, width: 1, color: '#000000' };
+    const dashSmallGap = { style: 'dashSmallGap' as const, width: 1, color: '#000000' };
+    expect(resolveBorderConflict(dashed, dashSmallGap)).toEqual(dashSmallGap);
   });
 });

@@ -14,11 +14,21 @@ const ALLOWED_BORDER_STYLES = new Set<BorderStyle>([
   'single',
   'double',
   'dashed',
+  'dashSmallGap',
   'dotted',
   'thick',
   'triple',
   'dotDash',
   'dotDotDash',
+  'thinThickSmallGap',
+  'thickThinSmallGap',
+  'thinThickThinSmallGap',
+  'thinThickMediumGap',
+  'thickThinMediumGap',
+  'thinThickThinMediumGap',
+  'thinThickLargeGap',
+  'thickThinLargeGap',
+  'thinThickThinLargeGap',
   'wave',
   'doubleWave',
 ]);
@@ -32,16 +42,29 @@ const borderStyleToCSS = (style?: BorderStyle): string => {
     return 'solid';
   }
 
+  // Compound styles (triple, thinThick*) map to 'solid' so the CSS border carries
+  // the full band width for layout; their visible rules are painted by the
+  // nested-rectangle compound path, which makes this CSS paint transparent. (SD-3308)
   const styleMap: Record<BorderStyle, string> = {
     none: 'none',
     single: 'solid',
     double: 'double',
     dashed: 'dashed',
+    dashSmallGap: 'dashed',
     dotted: 'dotted',
     thick: 'solid',
     triple: 'solid',
     dotDash: 'dashed',
     dotDotDash: 'dashed',
+    thinThickSmallGap: 'solid',
+    thickThinSmallGap: 'solid',
+    thinThickThinSmallGap: 'solid',
+    thinThickMediumGap: 'solid',
+    thickThinMediumGap: 'solid',
+    thinThickThinMediumGap: 'solid',
+    thinThickLargeGap: 'solid',
+    thickThinLargeGap: 'solid',
+    thinThickThinLargeGap: 'solid',
     wave: 'solid',
     doubleWave: 'solid',
   };
@@ -197,8 +220,18 @@ const BORDER_STYLE_NUMBER: Partial<Record<BorderStyle, number>> = {
   dotDash: 6,
   dotDotDash: 7,
   triple: 8,
+  thinThickSmallGap: 9,
+  thickThinSmallGap: 10,
+  thinThickThinSmallGap: 11,
+  thinThickMediumGap: 12,
+  thickThinMediumGap: 13,
+  thinThickThinMediumGap: 14,
+  thinThickLargeGap: 15,
+  thickThinLargeGap: 16,
+  thinThickThinLargeGap: 17,
   wave: 18,
   doubleWave: 19,
+  dashSmallGap: 20,
 };
 // Number of drawn lines per style (single=1, double=2, triple=3, …).
 const BORDER_STYLE_LINES: Partial<Record<BorderStyle, number>> = {
@@ -210,8 +243,18 @@ const BORDER_STYLE_LINES: Partial<Record<BorderStyle, number>> = {
   dotDash: 1,
   dotDotDash: 1,
   triple: 3,
+  thinThickSmallGap: 2,
+  thickThinSmallGap: 2,
+  thinThickThinSmallGap: 3,
+  thinThickMediumGap: 2,
+  thickThinMediumGap: 2,
+  thinThickThinMediumGap: 3,
+  thinThickLargeGap: 2,
+  thickThinLargeGap: 2,
+  thinThickThinLargeGap: 3,
   wave: 1,
   doubleWave: 2,
+  dashSmallGap: 1,
 };
 
 export const isPresentBorder = (b?: BorderSpec): b is BorderSpec =>

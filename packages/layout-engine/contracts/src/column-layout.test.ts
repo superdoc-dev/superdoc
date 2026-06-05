@@ -112,6 +112,20 @@ describe('normalizeColumnLayout', () => {
     });
   });
 
+  it('does not scale DOWN overfull explicit widths either; authored widths overflow (SD-2629, Word-verified)', () => {
+    // Word keeps authored explicit widths even when they EXCEED the content area: a Word probe of two
+    // 360pt columns + 36pt gap in a 468pt content box renders both at 360pt, with column 2 overflowing
+    // off the page edge (Word re-saves the w:cols unchanged). So normalize must not scale down either -
+    // [200, 400] in a 300px content box stays [200, 400] (overfull), matching Word's overflow.
+    expect(normalizeColumnLayout({ count: 2, gap: 24, widths: [200, 400], equalWidth: false }, 300)).toEqual({
+      count: 2,
+      gap: 24,
+      widths: [200, 400],
+      equalWidth: false,
+      width: 400,
+    });
+  });
+
   it('ignores widths when equalWidth is omitted and divides evenly (SD-2324: omitted = equal mode)', () => {
     // Omitted equalWidth is equal mode in Word; any widths present are not authoritative.
     expect(normalizeColumnLayout({ count: 2, gap: 24, widths: [100, 200] }, 624)).toEqual({

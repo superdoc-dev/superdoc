@@ -44,6 +44,29 @@ const superdoc = new SuperDoc({
 
 Supported document modes are `editing`, `viewing`, and `suggesting`. Do not use `edit`, `view`, or `suggest`.
 
+### Vanilla wrapper for a DOCX file
+
+When an agent needs to create a small vanilla JS wrapper around a DOCX `File`, use this shape:
+
+```javascript
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+export function embedSuperDoc({ file }) {
+  return new SuperDoc({
+    selector: '#editor',
+    documentMode: 'editing',
+    documents: [
+      {
+        id: 'contract',
+        type: 'docx',
+        data: file,
+      },
+    ],
+  });
+}
+```
+
 For React, Vue, and other frameworks, see the [documentation](https://docs.superdoc.dev).
 
 ### Using an AI coding agent?

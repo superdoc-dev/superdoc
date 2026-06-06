@@ -1508,3 +1508,51 @@ describe('grid-position conditional regions (SD-3028 G7)', () => {
     expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: '92D050' });
   });
 });
+
+/**
+ * SD-3028 G5 remainder, DISPROVEN and locked: a table STYLE's table-level
+ * shading (w:tblPr > w:shd) does NOT fill cells in Word. Measured from the
+ * nested_tables_with_styles.docx Word render (NestedSage style carries
+ * <w:tblPr><w:shd w:fill="C6E0B4"/> and no tcPr shading): the inner cells
+ * render pure white (zero C6E0B4 pixels); only the style's borders and run
+ * formatting apply. Cell fills come from the style's base tcPr (the
+ * wholeTable layer), conditional regions, or inline cell shading.
+ */
+describe('table style tblPr shading stays off cells (SD-3028 G5, Word-verified)', () => {
+  const tableInfo = {
+    tableProperties: { tableStyleId: 'NestedSage', tblLook: { noHBand: true, noVBand: true } },
+    rowIndex: 0,
+    cellIndex: 0,
+    numRows: 2,
+    numCells: 2,
+  };
+
+  it('does not paint the style table-level shading onto cells', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        NestedSage: {
+          type: 'table',
+          tableProperties: { shading: { val: 'clear', color: 'auto', fill: 'C6E0B4' } },
+        },
+      },
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    expect(result.shading).toBeUndefined();
+  });
+
+  it('still fills cells from the style base tcPr when both shadings exist', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        NestedSage: {
+          type: 'table',
+          tableProperties: { shading: { val: 'clear', color: 'auto', fill: 'C6E0B4' } },
+          tableCellProperties: { shading: { val: 'clear', color: 'auto', fill: 'F2F2F2' } },
+        },
+      },
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: 'F2F2F2' });
+  });
+});

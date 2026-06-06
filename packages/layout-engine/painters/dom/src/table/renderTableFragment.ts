@@ -24,6 +24,7 @@ import {
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
 import {
+  bevelToneSpec,
   applyBorder,
   borderValueToSpec,
   hasExplicitCellBorders,
@@ -433,11 +434,24 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   }
 
   const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
+  // Word's separate-borders model also applies at spacing 0: edges stack, cells paint all four
+  // sides, and outset/inset render as the legacy HTML bevel (SD-3028, 300dpi probes).
+  const separateBorders = borderCollapse === 'separate';
   if (borderCollapse === 'separate' && tableBorders) {
-    applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
-    applyBorder(container, 'Right', borderValueToSpec(isRtl ? tableBorders.left : tableBorders.right));
-    applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));
-    applyBorder(container, 'Left', borderValueToSpec(isRtl ? tableBorders.right : tableBorders.left));
+    // The table frame renders raised for outset (visual top/left light, bottom/right dark),
+    // the inverse of its cells; inset mirrors. Other styles pass through unchanged. (SD-3028)
+    applyBorder(container, 'Top', bevelToneSpec(borderValueToSpec(tableBorders.top), 'top', 'table'));
+    applyBorder(
+      container,
+      'Right',
+      bevelToneSpec(borderValueToSpec(isRtl ? tableBorders.left : tableBorders.right), 'right', 'table'),
+    );
+    applyBorder(container, 'Bottom', bevelToneSpec(borderValueToSpec(tableBorders.bottom), 'bottom', 'table'));
+    applyBorder(
+      container,
+      'Left',
+      bevelToneSpec(borderValueToSpec(isRtl ? tableBorders.right : tableBorders.left), 'left', 'table'),
+    );
   }
 
   // Pre-calculate all row heights for rowspan calculations
@@ -492,6 +506,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         prevRowMeasure: r > 0 ? measure.rows[r - 1] : undefined,
         nextRow: r < block.rows.length - 1 ? block.rows[r + 1] : undefined,
         rowOccupiedRightCol: rowOccupiedRightCols[r],
+        separateBorders,
         totalRows: block.rows.length,
         tableBorders,
         columnWidths: effectiveColumnWidths,
@@ -669,6 +684,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       prevRowMeasure: r > 0 ? measure.rows[r - 1] : undefined,
       nextRow: r < block.rows.length - 1 ? block.rows[r + 1] : undefined,
       rowOccupiedRightCol: rowOccupiedRightCols[r],
+      separateBorders,
       totalRows: block.rows.length,
       tableBorders,
       columnWidths: effectiveColumnWidths,
@@ -844,7 +860,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   // Cells in the row below own and paint their top across their own span; segments with a
   // cell above but none below are closed here as positioned strips, so the line never doubles
   // and never stops short of a wider row's edge. (SD-3028 / SD-1513)
-  if (cellSpacingPx === 0 && interiorRowBoundaries.length > 0 && block.rows?.length) {
+  if (cellSpacingPx === 0 && !separateBorders && interiorRowBoundaries.length > 0 && block.rows?.length) {
     const occupancy = buildColumnOccupancy(measure.rows, effectiveColumnWidths.length);
     const columnX: number[] = [0];
     for (const width of effectiveColumnWidths) columnX.push(columnX[columnX.length - 1] + width);

@@ -31,6 +31,8 @@ const ALLOWED_BORDER_STYLES = new Set<BorderStyle>([
   'thinThickThinLargeGap',
   'wave',
   'doubleWave',
+  'outset',
+  'inset',
 ]);
 
 const borderStyleToCSS = (style?: BorderStyle): string => {
@@ -67,6 +69,11 @@ const borderStyleToCSS = (style?: BorderStyle): string => {
     thinThickThinLargeGap: 'solid',
     wave: 'solid',
     doubleWave: 'solid',
+    // In the collapsed model Word paints outset/inset as plain solid lines at the
+    // authored width and color (300dpi probes, SD-3028); the bevel only exists in
+    // separate-borders mode where bevelToneSpec retones the sides.
+    outset: 'solid',
+    inset: 'solid',
   };
 
   return styleMap[style];
@@ -146,6 +153,47 @@ export const applyCellBorders = (
   applyBorder(element, 'Right', borders.right, widthOverridesPx?.right);
   applyBorder(element, 'Bottom', borders.bottom);
   applyBorder(element, 'Left', borders.left, widthOverridesPx?.left);
+};
+
+/** The two tones Word uses for outset/inset bevel sides (300dpi probes, SD-3028). */
+const BEVEL_LIGHT_AUTO = '#F0F0F0';
+const BEVEL_DARK_AUTO = '#A0A0A0';
+
+const bevelDarkColor = (color?: string): string => {
+  if (!color || !/^#[0-9A-Fa-f]{6}$/.test(color) || color.toLowerCase() === '#000000') return BEVEL_DARK_AUTO;
+  const half = (i: number) => Math.floor(parseInt(color.slice(i, i + 2), 16) / 2);
+  return `#${[1, 3, 5].map((i) => half(i).toString(16).padStart(2, '0')).join('')}`;
+};
+
+const bevelLightColor = (color?: string): string => {
+  if (!color || !/^#[0-9A-Fa-f]{6}$/.test(color) || color.toLowerCase() === '#000000') return BEVEL_LIGHT_AUTO;
+  return color;
+};
+
+/**
+ * Word's separate-borders bevel model for `outset`/`inset` (measured from 300dpi
+ * probes, SD-3028): the legacy HTML table look. With `outset` the TABLE frame is
+ * raised (visual top/left light, bottom/right dark) and each CELL is sunken (the
+ * inverse); `inset` mirrors both. Tones derive from the authored color: auto/black
+ * uses #F0F0F0 / #A0A0A0, an explicit color uses the color itself (light) and the
+ * color at half intensity (dark). All other styles pass through unchanged. Only
+ * separate-borders mode calls this; in the collapsed model Word paints these
+ * styles as plain solid lines.
+ */
+export const bevelToneSpec = (
+  spec: BorderSpec | undefined,
+  visualSide: 'top' | 'right' | 'bottom' | 'left',
+  owner: 'table' | 'cell',
+): BorderSpec | undefined => {
+  if (!spec || (spec.style !== 'outset' && spec.style !== 'inset')) return spec;
+  const raisedSide = visualSide === 'top' || visualSide === 'left';
+  const raisedOwner = (spec.style === 'outset') === (owner === 'table');
+  const light = raisedOwner === raisedSide;
+  return {
+    ...spec,
+    style: 'single',
+    color: light ? bevelLightColor(spec.color) : bevelDarkColor(spec.color),
+  };
 };
 
 /**
@@ -239,6 +287,8 @@ const BORDER_STYLE_NUMBER: Partial<Record<BorderStyle, number>> = {
   wave: 18,
   doubleWave: 19,
   dashSmallGap: 20,
+  outset: 24,
+  inset: 25,
 };
 // Number of drawn lines per style (single=1, double=2, triple=3, …).
 const BORDER_STYLE_LINES: Partial<Record<BorderStyle, number>> = {

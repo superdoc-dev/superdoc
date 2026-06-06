@@ -21,6 +21,7 @@ import {
   isPresentBorder,
   isExplicitNoneBorder,
   swapCellBordersLR,
+  bevelToneSpec,
 } from './border-utils.js';
 import { getTableCellGridBounds, type TableCellGridPosition } from './grid-geometry.js';
 import type { FragmentRenderContext } from '../renderer.js';
@@ -43,6 +44,13 @@ type CellBorderResolutionArgs = {
   leftCellBorders?: CellBorders;
   /** Borders of the cell directly to the right (same row, next grid column), for asymmetric-edge ownership. */
   rightCellBorders?: CellBorders;
+  /**
+   * True when the table authored `w:tblCellSpacing` (even 0), which switches Word to the
+   * separate-borders model: every cell paints all four edges from its own/table borders and
+   * adjacent edges STACK (300dpi probes render single sz=6 boundaries 2x wide, SD-3028).
+   * Single-owner suppression does not apply.
+   */
+  separateBorders?: boolean;
   /**
    * True when the row BELOW has a tblPrEx border override that suppresses its shared horizontal
    * edge (insideH none/nil). The lower cell owns that edge but won't draw it, so a present
@@ -73,6 +81,7 @@ const resolveRenderedCellBorders = ({
   aboveCellBorders,
   leftCellBorders,
   rightCellBorders,
+  separateBorders,
   nextRowSuppressesSharedTop,
 }: CellBorderResolutionArgs): CellBorders | undefined => {
   const hasExplicitBorders = hasExplicitCellBorders(cellBorders);
@@ -103,6 +112,23 @@ const resolveRenderedCellBorders = ({
   // (undefined, x) === x). Interior right/bottom are owned by the neighbor to the right/below;
   // outer edges use the cell border (which beats the table border), falling back to the table
   // border. Works whether or not table-level borders exist. (SD-3345, SD-2969)
+  // Authored `w:tblCellSpacing` (even 0) = Word's separate-borders model: each cell paints
+  // all four edges (own border, else the table outer/inside border for its position) and
+  // adjacent cell edges stack into a double-width line exactly like Word renders them.
+  // Spacing > 0 keeps the legacy branches below (visible gaps, probe-verified earlier).
+  if (separateBorders && cellSpacingPx === 0) {
+    const cb = (cellBorders ?? {}) as CellBorders;
+    return {
+      top: resolveTableBorderValue(cb.top, touchesTopBoundary ? tableBorders?.top : tableBorders?.insideH),
+      right: resolveTableBorderValue(
+        cb.right,
+        cellBounds.touchesRightEdge ? tableBorders?.right : tableBorders?.insideV,
+      ),
+      bottom: resolveTableBorderValue(cb.bottom, touchesBottomBoundary ? tableBorders?.bottom : tableBorders?.insideH),
+      left: resolveTableBorderValue(cb.left, cellBounds.touchesLeftEdge ? tableBorders?.left : tableBorders?.insideV),
+    };
+  }
+
   if (cellSpacingPx === 0 && (hasExplicitBorders || hasInteriorNeighborBorder)) {
     const cb = (cellBorders ?? {}) as CellBorders;
     return {
@@ -230,6 +256,8 @@ type TableRowRenderDependencies = {
    * column. (SD-1797)
    */
   rowOccupiedRightCol?: number;
+  /** Authored `w:tblCellSpacing` present (even 0): Word separate-borders model (SD-3028). */
+  separateBorders?: boolean;
   /** Total number of rows in the table (for border resolution) */
   totalRows: number;
   /** Table-level borders (for resolving cell borders) */
@@ -487,6 +515,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     prevRowMeasure,
     nextRow,
     rowOccupiedRightCol,
+    separateBorders,
     totalRows,
     tableBorders,
     columnWidths,
@@ -700,10 +729,23 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       aboveCellBorders,
       leftCellBorders,
       rightCellBorders,
+      separateBorders,
       nextRowSuppressesSharedTop,
     });
     // RTL: swap resolved left↔right so CSS properties match visual edges
     const finalBorders = isRtl && resolvedBorders ? swapCellBordersLR(resolvedBorders) : resolvedBorders;
+    // Separate-borders mode: outset/inset cells render sunken (the legacy HTML table look) —
+    // visual top/left dark, bottom/right light; inset mirrors. Toned after the RTL swap so the
+    // lighting follows VISUAL sides. Other styles pass through unchanged. (SD-3028, 300dpi probes)
+    const tonedBorders =
+      separateBorders && finalBorders
+        ? {
+            top: bevelToneSpec(finalBorders.top, 'top', 'cell'),
+            right: bevelToneSpec(finalBorders.right, 'right', 'cell'),
+            bottom: bevelToneSpec(finalBorders.bottom, 'bottom', 'cell'),
+            left: bevelToneSpec(finalBorders.left, 'left', 'cell'),
+          }
+        : finalBorders;
 
     // Calculate cell height - use rowspan height if cell spans multiple rows
     // For partial rows, use the partial height instead
@@ -769,10 +811,10 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     const leftStraddleProfile = !visualTouchesLeft && rectBorders.left ? getBorderBandProfile(rectBorders.left) : null;
     const rightStraddleProfile =
       !visualTouchesRight && rectBorders.right ? getBorderBandProfile(rectBorders.right) : null;
-    let paintBorders = finalBorders;
+    let paintBorders = tonedBorders;
     let borderBandOverridesPx: { left?: number; right?: number } | undefined;
     if (leftStraddleProfile || rightStraddleProfile) {
-      paintBorders = { ...(finalBorders ?? {}) };
+      paintBorders = { ...(tonedBorders ?? {}) };
       borderBandOverridesPx = {};
       if (leftStraddleProfile) {
         paintBorders.left = rectBorders.left;

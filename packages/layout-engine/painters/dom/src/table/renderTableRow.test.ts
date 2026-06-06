@@ -1060,4 +1060,58 @@ describe('renderTableRow', () => {
       expect(calls[1].x).toBe(4);
     });
   });
+  describe('separate-borders mode (authored tblCellSpacing, even 0) (SD-3028)', () => {
+    // Word probes (300dpi): with w:tblCellSpacing present every cell paints all four edges
+    // (own border, else the table border for its position) and adjacent edges STACK; outset
+    // cells render sunken: visual top/left dark #A0A0A0, bottom/right light #F0F0F0.
+    it('paints all four edges on an interior cell so adjacent edges stack like Word', () => {
+      renderTableRow(
+        createDeps({
+          rowIndex: 3,
+          totalRows: 10,
+          cellSpacingPx: 0,
+          separateBorders: true,
+        }) as never,
+      );
+
+      const call = getRenderedCellCall();
+      expect(call.borders?.top).toBeDefined();
+      expect(call.borders?.bottom).toBeDefined();
+      expect(call.borders?.left).toBeDefined();
+      expect(call.borders?.right).toBeDefined();
+    });
+
+    it('tones outset cell edges sunken: top dark, bottom light', () => {
+      renderTableRow(
+        createDeps({
+          rowIndex: 3,
+          totalRows: 10,
+          cellSpacingPx: 0,
+          separateBorders: true,
+          tableBorders: {
+            top: { style: 'outset', width: 1, color: '#000000' },
+            bottom: { style: 'outset', width: 1, color: '#000000' },
+            left: { style: 'outset', width: 1, color: '#000000' },
+            right: { style: 'outset', width: 1, color: '#000000' },
+            insideH: { style: 'outset', width: 1, color: '#000000' },
+            insideV: { style: 'outset', width: 1, color: '#000000' },
+          },
+        }) as never,
+      );
+
+      const call = getRenderedCellCall();
+      expect(call.borders?.top).toMatchObject({ style: 'single', color: '#A0A0A0' });
+      expect(call.borders?.bottom).toMatchObject({ style: 'single', color: '#F0F0F0' });
+      expect(call.borders?.left).toMatchObject({ color: '#A0A0A0' });
+      expect(call.borders?.right).toMatchObject({ color: '#F0F0F0' });
+    });
+
+    it('keeps collapsed single-owner behavior when no cell spacing is authored', () => {
+      renderTableRow(createDeps({ rowIndex: 3, totalRows: 10, cellSpacingPx: 0 }) as never);
+
+      const call = getRenderedCellCall();
+      // Interior bottom owned by the row below in the collapsed model.
+      expect(call.borders?.bottom).toBeUndefined();
+    });
+  });
 });

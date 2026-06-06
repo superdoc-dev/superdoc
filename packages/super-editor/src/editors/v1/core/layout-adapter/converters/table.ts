@@ -249,6 +249,10 @@ function normalizeLegacyBorderStyle(value: string | undefined): string {
       return 'wave';
     case 'doublewave':
       return 'doubleWave';
+    case 'outset':
+      return 'outset';
+    case 'inset':
+      return 'inset';
     case 'single':
     default:
       return 'single';

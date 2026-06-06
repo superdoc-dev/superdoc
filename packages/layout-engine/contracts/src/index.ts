@@ -724,7 +724,9 @@ export type BorderStyle =
   | 'thickThinLargeGap'
   | 'thinThickThinLargeGap'
   | 'wave'
-  | 'doubleWave';
+  | 'doubleWave'
+  | 'outset'
+  | 'inset';
 
 /** Border specification for table and cell borders. */
 export type BorderSpec = {

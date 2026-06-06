@@ -23,6 +23,7 @@ import {
   swapTableBordersLR,
   swapCellBordersLR,
   resolveBorderConflict,
+  bevelToneSpec,
 } from './border-utils.js';
 
 describe('applyBorder', () => {
@@ -609,5 +610,38 @@ describe('resolveBorderConflict (ECMA-376 §17.4.66)', () => {
     const dashed = { style: 'dashed' as const, width: 1, color: '#000000' };
     const dashSmallGap = { style: 'dashSmallGap' as const, width: 1, color: '#000000' };
     expect(resolveBorderConflict(dashed, dashSmallGap)).toEqual(dashSmallGap);
+  });
+});
+
+describe('bevelToneSpec (separate-borders outset/inset, SD-3028)', () => {
+  const outset = (color: string) => ({ style: 'outset' as const, width: 1, color });
+  const inset = (color: string) => ({ style: 'inset' as const, width: 1, color });
+
+  it('raises the table frame for outset: top/left light, bottom/right dark', () => {
+    expect(bevelToneSpec(outset('#000000'), 'top', 'table')).toMatchObject({ style: 'single', color: '#F0F0F0' });
+    expect(bevelToneSpec(outset('#000000'), 'left', 'table')).toMatchObject({ color: '#F0F0F0' });
+    expect(bevelToneSpec(outset('#000000'), 'bottom', 'table')).toMatchObject({ color: '#A0A0A0' });
+    expect(bevelToneSpec(outset('#000000'), 'right', 'table')).toMatchObject({ color: '#A0A0A0' });
+  });
+
+  it('sinks the cells for outset: top/left dark, bottom/right light (legacy HTML look)', () => {
+    expect(bevelToneSpec(outset('#000000'), 'top', 'cell')).toMatchObject({ color: '#A0A0A0' });
+    expect(bevelToneSpec(outset('#000000'), 'bottom', 'cell')).toMatchObject({ color: '#F0F0F0' });
+  });
+
+  it('inset mirrors both owners', () => {
+    expect(bevelToneSpec(inset('#000000'), 'top', 'table')).toMatchObject({ color: '#A0A0A0' });
+    expect(bevelToneSpec(inset('#000000'), 'top', 'cell')).toMatchObject({ color: '#F0F0F0' });
+  });
+
+  it('derives tones from an explicit color: light = the color, dark = half intensity', () => {
+    expect(bevelToneSpec(outset('#FF0000'), 'top', 'table')).toMatchObject({ color: '#FF0000' });
+    expect(bevelToneSpec(outset('#FF0000'), 'bottom', 'table')).toMatchObject({ color: '#7f0000' });
+  });
+
+  it('passes other styles through unchanged', () => {
+    const single = { style: 'single' as const, width: 1, color: '#123456' };
+    expect(bevelToneSpec(single, 'top', 'table')).toBe(single);
+    expect(bevelToneSpec(undefined, 'top', 'cell')).toBeUndefined();
   });
 });

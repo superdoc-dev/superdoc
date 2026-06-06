@@ -215,6 +215,8 @@ const BORDER_STYLES = new Set<BorderStyle>([
   'thinThickThinLargeGap',
   'wave',
   'doubleWave',
+  'outset',
+  'inset',
 ]);
 
 function isBorderStyle(value: unknown): value is BorderStyle {

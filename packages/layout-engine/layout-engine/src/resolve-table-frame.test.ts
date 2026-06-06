@@ -154,5 +154,20 @@ describe('resolveTableFrame', () => {
       expect(result.width).toBe(750);
       expect(result.x).toBe(-125);
     });
+
+    // SD-1513 overhang guard: a full-window (100% pct) table shifted left by a
+    // negative tblInd keeps its computed width, so it overhangs the LEFT margin
+    // only and ends short of the right margin (verified against Word; the old
+    // benchmark prediction of a right overhang was wrong).
+    it('shifts a full-window table left with negative indent, ending short of the right margin', () => {
+      const result = resolveTableFrame(0, 500, 480, {
+        tableWidth: { value: 5000, type: 'pct' },
+        tableIndent: { width: -24 },
+      } as TableAttrs);
+      expect(result.x).toBe(-24);
+      expect(result.width).toBe(524);
+      // right edge = x + width = 500, the column edge; the painted grid itself
+      // spans 500px starting at -24, so it ends 24px short of the right margin.
+    });
   });
 });

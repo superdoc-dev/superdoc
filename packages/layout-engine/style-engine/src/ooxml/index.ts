@@ -49,6 +49,17 @@ export interface TableInfo {
   numRows: number;
   rowCnfStyle?: ParagraphConditionalFormatting | null;
   cellCnfStyle?: ParagraphConditionalFormatting | null;
+  /**
+   * Grid position of the cell (SD-3028 G7). Word's firstCol/lastCol/banding
+   * regions are GRID columns, not display-cell indices: gridSpan, vMerge
+   * continuations (merged away at import), and gridBefore placeholders all
+   * shift display indices off the grid. When absent, display indices are used.
+   */
+  gridColumnStart?: number | null;
+  /** Grid columns covered by the cell. Defaults to 1. */
+  gridColumnSpan?: number | null;
+  /** Total grid columns in the table (w:tblGrid length). */
+  numGridCols?: number | null;
 }
 
 /**
@@ -520,6 +531,9 @@ export function resolveCellStyles<T extends PropertyObject>(
     colBandSize,
     tableInfo.rowCnfStyle,
     tableInfo.cellCnfStyle,
+    tableInfo.gridColumnStart,
+    tableInfo.gridColumnSpan,
+    tableInfo.numGridCols,
   );
   cellStyleTypes.forEach((styleType) => {
     const typeProps = resolveConditionalProps<T>(propertyType, styleType, tableStyleId, translatedLinkedStyles);
@@ -610,16 +624,26 @@ function determineCellStyleTypes(
   colBandSize = 1,
   rowCnfStyle?: ParagraphConditionalFormatting | null,
   cellCnfStyle?: ParagraphConditionalFormatting | null,
+  gridColumnStart?: number | null,
+  gridColumnSpan?: number | null,
+  numGridCols?: number | null,
 ): TableStyleType[] {
   const applicable = new Set<TableStyleType>(['wholeTable']);
 
   const normalizedRowBandSize = rowBandSize > 0 ? rowBandSize : 1;
   const normalizedColBandSize = colBandSize > 0 ? colBandSize : 1;
 
+  // Column position on the GRID when the caller provides it (SD-3028 G7);
+  // display indices otherwise. firstCol/lastCol and vertical banding follow
+  // grid columns in Word, so spans and merges must not shift them.
+  const columnStart = gridColumnStart ?? cellIndex;
+  const columnEnd = columnStart + (gridColumnSpan ?? 1);
+  const columnCount = numGridCols ?? numCells;
+
   // Per ECMA-376, banding excludes header/footer rows and first/last columns.
   // Offset the index so the first data row/column starts at band1.
   const bandRowIndex = Math.max(0, rowIndex - (tblLook?.firstRow ? 1 : 0));
-  const bandColIndex = Math.max(0, cellIndex - (tblLook?.firstColumn ? 1 : 0));
+  const bandColIndex = Math.max(0, columnStart - (tblLook?.firstColumn ? 1 : 0));
   const rowGroup = Math.floor(bandRowIndex / normalizedRowBandSize);
   const colGroup = Math.floor(bandColIndex / normalizedColBandSize);
 
@@ -634,8 +658,8 @@ function determineCellStyleTypes(
   // Row/column edge flags — reused for both row/col styles and corner gating.
   const isFirstRow = !!tblLook?.firstRow && rowIndex === 0;
   const isLastRow = !!tblLook?.lastRow && numRows != null && numRows > 0 && rowIndex === numRows - 1;
-  const isFirstCol = !!tblLook?.firstColumn && cellIndex === 0;
-  const isLastCol = !!tblLook?.lastColumn && numCells != null && numCells > 0 && cellIndex === numCells - 1;
+  const isFirstCol = !!tblLook?.firstColumn && columnStart === 0;
+  const isLastCol = !!tblLook?.lastColumn && columnCount != null && columnCount > 0 && columnEnd >= columnCount;
 
   if (isFirstRow) applicable.add('firstRow');
   if (isFirstCol) applicable.add('firstCol');

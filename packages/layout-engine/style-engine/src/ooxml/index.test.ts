@@ -1416,3 +1416,95 @@ describe('ooxml - corner cell gating matches Word behavior', () => {
     expect(fills).toContain('NE');
   });
 });
+
+/**
+ * SD-3028 G7: conditional firstCol/lastCol regions are GRID positions in Word,
+ * not display-cell indices. gridSpan, vMerge continuations (merged away at
+ * import), and gridBefore placeholders all shift display indices off the grid,
+ * landing edge styling one column early. TableInfo carries optional grid
+ * positions; display indices remain the fallback for legacy callers.
+ *
+ * Fixture evidence: merged_cells_with_styles.docx, Word render 2026-06-06
+ * (B3 stays unshaded; the lastCol green follows grid column 3 through the
+ * vMerge; the gridSpan firstRow cell keeps firstCol at grid start).
+ */
+describe('grid-position conditional regions (SD-3028 G7)', () => {
+  const condGridStyles = {
+    ...emptyStyles,
+    styles: {
+      CondGrid: {
+        type: 'table',
+        tableStyleProperties: {
+          firstCol: { tableCellProperties: { shading: { val: 'clear', color: 'auto', fill: 'FFFF00' } } },
+          lastCol: { tableCellProperties: { shading: { val: 'clear', color: 'auto', fill: '92D050' } } },
+        },
+      },
+    },
+  };
+
+  const tableInfoBase = {
+    tableProperties: {
+      tableStyleId: 'CondGrid',
+      tblLook: { firstRow: false, lastRow: false, firstColumn: true, lastColumn: true, noHBand: true, noVBand: true },
+    },
+    numRows: 3,
+  };
+
+  it('does not mark a middle cell lastCol when a vMerge hides the trailing display cell', () => {
+    // Row 3 of the fixture: display cells [A3, B3] because C3 is a vMerge
+    // continuation. B3 is display-last but sits at grid column 1 of 3.
+    const tableInfo = {
+      ...tableInfoBase,
+      rowIndex: 2,
+      cellIndex: 1,
+      numCells: 2,
+      gridColumnStart: 1,
+      gridColumnSpan: 1,
+      numGridCols: 3,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, condGridStyles);
+    expect(result.shading).toBeUndefined();
+  });
+
+  it('marks lastCol when the cell grid span reaches the last grid column', () => {
+    // The vMerge restart cell in column C: display index 2, grid columns 2..3.
+    const tableInfo = {
+      ...tableInfoBase,
+      rowIndex: 1,
+      cellIndex: 2,
+      numCells: 3,
+      gridColumnStart: 2,
+      gridColumnSpan: 1,
+      numGridCols: 3,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, condGridStyles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: '92D050' });
+  });
+
+  it('keeps firstCol by grid start when a placeholder shifts the display index', () => {
+    // A gridBefore placeholder makes the first REAL cell display index 1, but
+    // it still starts at grid column 0.
+    const tableInfo = {
+      ...tableInfoBase,
+      rowIndex: 1,
+      cellIndex: 1,
+      numCells: 3,
+      gridColumnStart: 0,
+      gridColumnSpan: 1,
+      numGridCols: 3,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, condGridStyles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: 'FFFF00' });
+  });
+
+  it('falls back to display indices when grid positions are absent', () => {
+    const tableInfo = {
+      ...tableInfoBase,
+      rowIndex: 1,
+      cellIndex: 2,
+      numCells: 3,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, condGridStyles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: '92D050' });
+  });
+});

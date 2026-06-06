@@ -816,7 +816,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
         : (resolveBorderConflict(cb.right, rightCellBorders?.left) ??
           borderValueToSpec(effectiveTableBorders?.insideV)),
     };
-    const rectBorders = isRtl ? swapCellBordersLR(effectiveSideSpecs) : effectiveSideSpecs;
+    const rectBorders = (isRtl ? swapCellBordersLR(effectiveSideSpecs) : effectiveSideSpecs) ?? effectiveSideSpecs;
 
     // Visual (post-RTL-swap) boundary flags matching rectBorders sides.
     const visualTouchesLeft = isRtl ? cellGridBounds.touchesRightEdge : cellGridBounds.touchesLeftEdge;

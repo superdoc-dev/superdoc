@@ -492,9 +492,8 @@ describe('renderTableRow', () => {
 
   // SD-1797: a single row's measure only lists cells that START in it, so on a w:vMerge
   // (rowspan) continuation row the columns held by a cell spanning from above look empty.
-  // `rowOccupiedRightCol` / `nextRowOccupiedRightCol` count that occupancy so the single-owner
-  // edge ownership doesn't misfire (a leftmost cell drawing a right border, or a covered column
-  // mistaken for a gridAfter gap) and double the shared edge.
+  // `rowOccupiedRightCol` counts that occupancy so the single-owner edge ownership doesn't
+  // misfire (a leftmost cell drawing a right border) and double the shared edge.
   const sparseRow = (overrides: Record<string, unknown> = {}) =>
     createDeps({
       rowIndex: 2,
@@ -516,32 +515,19 @@ describe('renderTableRow', () => {
     expect(call.borders?.left).toBeDefined();
   });
 
-  it('does not treat a rowspan-covered column below a spanning cell as a gridAfter gap', () => {
-    // A cell spanning all 4 columns; the row below is fully covered (occupancy 4) -> no gap,
-    // so the spanning cell does NOT draw its own bottom (the cell below owns the shared edge).
+  it('never paints an interior bottom on a spanning cell, even over a gridAfter gap below', () => {
+    // Interior bottoms are always owned by the row below; boundary segments the row below
+    // leaves uncovered (gridBefore/gridAfter slivers) are closed by fragment-level gap strips
+    // (row-boundary-gaps.ts), never by this cell painting its full-width bottom — that would
+    // double the covered part of the edge (this painter has no border-collapse). (SD-3028)
     renderTableRow(
       sparseRow({
         rowMeasure: { height: 20, cells: [{ width: 400, height: 20, gridColumnStart: 0, colSpan: 4, rowSpan: 1 }] },
-        nextRowOccupiedRightCol: 4,
       }) as never,
     );
 
     const call = getRenderedCellCall();
     expect(call.borders?.bottom).toBeUndefined();
-  });
-
-  it('still treats a genuine gridAfter gap as a bottom boundary (SD-3345 preserved)', () => {
-    // The cell spans all 4 columns but the row below only reaches column 2 (real gridAfter gap),
-    // so the spanning cell must draw its own bottom across the uncovered span.
-    renderTableRow(
-      sparseRow({
-        rowMeasure: { height: 20, cells: [{ width: 400, height: 20, gridColumnStart: 0, colSpan: 4, rowSpan: 1 }] },
-        nextRowOccupiedRightCol: 2,
-      }) as never,
-    );
-
-    const call = getRenderedCellCall();
-    expect(call.borders?.bottom).toBeDefined();
   });
 
   it('does not paint interior bottom border for explicit cell borders in collapsed mode on non-final row', () => {
@@ -884,12 +870,12 @@ describe('renderTableRow', () => {
       expect(cell.borders?.top).toMatchObject({ style: 'single', color: '#000000' });
     });
 
-    it('draws its own bottom border when the next row leaves a gridAfter gap under it (SD-3345 callout corner)', () => {
-      // SD-3345 23_notification: the callout cell spans the full grid (gridSpan), but the
-      // row below has a gridAfter so its real cells do not reach the callout's rightmost
-      // column. Single-owner would defer the callout's bottom to the row below, which then
-      // stops short of the right edge → a gap at the bottom-right corner. The callout must
-      // draw its own bottom across the uncovered span instead.
+    it('keeps the interior bottom on the spanning callout suppressed even over a gridAfter gap below (SD-3345)', () => {
+      // SD-3345 23_notification: the callout cell spans the full grid, the row below has a
+      // gridAfter. The covered span of the shared edge is painted by the row below (its top
+      // resolves to the §17.4.66 winner, the callout blue), and the uncovered sliver is
+      // closed by a fragment-level gap strip (row-boundary-gaps.ts) — never by the callout
+      // painting its full-width bottom, which would double the covered part. (SD-3028)
       const blue = { style: 'single' as const, width: 1, color: '#342D8C' };
       renderTableRow(
         createDeps({
@@ -910,21 +896,17 @@ describe('renderTableRow', () => {
               },
             ],
           },
-          // next row covers only col0 (col1 is a gridAfter spacer → not a real cell)
-          nextRowMeasure: {
-            height: 20,
-            cells: [{ width: 100, height: 20, gridColumnStart: 0, colSpan: 1, rowSpan: 1 }],
-          },
         }) as never,
       );
       const cell = renderTableCellMock.mock.calls[0][0] as { borders?: { bottom?: unknown } };
-      expect(cell.borders?.bottom).toMatchObject({ style: 'single', color: '#342D8C' });
+      expect(cell.borders?.bottom).toBeUndefined();
     });
 
-    it('suppresses this row top border when the cell above spans past it (gridAfter) so the edge is drawn once', () => {
-      // The companion to the case above: when the spanning cell owns the shared bottom edge,
-      // the narrower row below must NOT also draw its top, or the two adjacent cell divs stack
-      // into a doubled line (this painter has no border-collapse). (SD-3345 callout)
+    it('paints this row top as the conflict winner when the cell above spans past it (single line, below owns)', () => {
+      // The narrower row below a spanning bordered cell owns the covered span of the shared
+      // edge: its top resolves to the §17.4.66 winner of (own top, callout bottom) — the
+      // callout blue. The uncovered gridAfter sliver is closed by a fragment-level gap strip.
+      // Exactly one paint per segment: no doubling, no dropped corner. (SD-3028)
       const blue = { style: 'single' as const, width: 1, color: '#342D8C' };
       renderTableRow(
         createDeps({
@@ -939,7 +921,7 @@ describe('renderTableRow', () => {
             id: 'r1',
             cells: [{ id: 'opt', attrs: {}, blocks: [{ kind: 'paragraph', id: 'po', runs: [] }] }],
           },
-          // the cell above spans BOTH columns and has a bottom border (it owns the shared edge)
+          // the cell above spans BOTH columns and has a bottom border
           prevRow: {
             id: 'r0',
             cells: [
@@ -956,8 +938,8 @@ describe('renderTableRow', () => {
           },
         }) as never,
       );
-      const cell = renderTableCellMock.mock.calls[0][0] as { borders?: { top?: unknown } } | undefined;
-      expect(cell?.borders?.top).toBeUndefined();
+      const cell = renderTableCellMock.mock.calls[0][0] as { borders?: { top?: unknown } };
+      expect(cell.borders?.top).toMatchObject({ style: 'single', color: '#342D8C' });
     });
   });
 

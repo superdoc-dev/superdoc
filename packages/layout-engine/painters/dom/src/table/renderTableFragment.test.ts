@@ -2212,4 +2212,233 @@ describe('renderTableFragment', () => {
       expect(positions).toEqual([0, 100]);
     });
   });
+
+  describe('interior row boundary gap strips (SD-3028)', () => {
+    // Word paints the boundary between two rows as ONE continuous line across the UNION of
+    // both rows' extents (300dpi probes: gridBefore/gridAfter slivers render with insideH).
+    // Cells below own their own span; segments with a cell above but none below get a strip.
+    const para = (id: string) => ({ kind: 'paragraph' as const, id: id as BlockId, runs: [] });
+    const measuredCell = (gridColumnStart: number, colSpan: number, width: number, rowSpan = 1) => ({
+      paragraph: { kind: 'paragraph' as const, lines: [], totalHeight: 20 },
+      width,
+      height: 20,
+      gridColumnStart,
+      colSpan,
+      rowSpan,
+    });
+    const fragmentFor = (block: TableBlock, width: number, height: number, toRow: number): TableFragment => ({
+      kind: 'table',
+      blockId: block.id,
+      fromRow: 0,
+      toRow,
+      x: 0,
+      y: 0,
+      width,
+      height,
+    });
+    const render = (block: TableBlock, measure: TableMeasure, fragment: TableFragment) =>
+      renderTableFragment({
+        doc,
+        fragment,
+        context,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
+        renderLine: () => doc.createElement('div'),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+        applyStyles: () => {},
+      });
+    const gapStrips = (el: HTMLElement): HTMLElement[] =>
+      Array.from(el.querySelectorAll('.superdoc-row-boundary-gap')) as HTMLElement[];
+
+    it('paints insideH strips over gridBefore/gridAfter slivers of a narrower row (SD-1513)', () => {
+      // Grid [20, 100, 15]: row 0 spans all three columns; row 1 covers only col 1.
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'gap-table' as BlockId,
+        attrs: {
+          borders: {
+            top: { style: 'single', width: 1, color: '#000000' },
+            bottom: { style: 'single', width: 1, color: '#000000' },
+            left: { style: 'single', width: 1, color: '#000000' },
+            right: { style: 'single', width: 1, color: '#000000' },
+            insideH: { style: 'single', width: 1, color: '#FF0000' },
+            insideV: { style: 'single', width: 1, color: '#FF00FF' },
+          },
+        },
+        rows: [
+          { id: 'r0' as BlockId, cells: [{ id: 'c0' as BlockId, colSpan: 3, paragraph: para('p0') }] },
+          { id: 'r1' as BlockId, cells: [{ id: 'c1' as BlockId, paragraph: para('p1') }] },
+        ],
+      };
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          { cells: [measuredCell(0, 3, 135)], height: 20 },
+          { cells: [measuredCell(1, 1, 100)], height: 20 },
+        ],
+        columnWidths: [20, 100, 15],
+        totalWidth: 135,
+        totalHeight: 40,
+      };
+      const el = render(block, measure, fragmentFor(block, 135, 40, 2));
+
+      const strips = gapStrips(el);
+      expect(strips.length).toBe(2);
+      const lefts = strips.map((s) => parseFloat(s.style.left)).sort((a, b) => a - b);
+      const widths = strips.map((s) => parseFloat(s.style.width)).sort((a, b) => a - b);
+      expect(lefts).toEqual([0, 120]);
+      expect(widths).toEqual([15, 20]);
+      for (const strip of strips) {
+        expect(strip.style.top).toBe('20px');
+        expect(strip.style.borderTopStyle).toBe('solid');
+        expect(strip.style.borderTopColor.toLowerCase()).toBe('#ff0000');
+      }
+      // The wide cell above must NOT paint its own interior bottom (the strip + the cell
+      // below own the boundary); painting it too would double the line.
+      const aboveCell = el.children[0] as HTMLElement;
+      expect(aboveCell.style.borderBottomWidth).toBe('');
+    });
+
+    it('paints the uncovered span with the above cell own bottom border when there are no table borders (SD-3345 callout)', () => {
+      // The 23_notification shape: a full-width callout cell with its own borders above a
+      // narrower row (gridAfter). The strip closes the bottom-right corner in the callout color.
+      const blue = { style: 'single' as const, width: 1, color: '#342D8C' };
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'callout-table' as BlockId,
+        rows: [
+          {
+            id: 'r0' as BlockId,
+            cells: [
+              {
+                id: 'callout' as BlockId,
+                colSpan: 2,
+                attrs: { borders: { top: blue, left: blue, right: blue, bottom: blue } },
+                paragraph: para('p0'),
+              },
+            ],
+          },
+          { id: 'r1' as BlockId, cells: [{ id: 'opt' as BlockId, paragraph: para('p1') }] },
+        ],
+      };
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          { cells: [measuredCell(0, 2, 200)], height: 20 },
+          { cells: [measuredCell(0, 1, 100)], height: 20 },
+        ],
+        columnWidths: [100, 100],
+        totalWidth: 200,
+        totalHeight: 40,
+      };
+      const el = render(block, measure, fragmentFor(block, 200, 40, 2));
+
+      const strips = gapStrips(el);
+      expect(strips.length).toBe(1);
+      expect(strips[0].style.left).toBe('100px');
+      expect(strips[0].style.width).toBe('100px');
+      expect(strips[0].style.top).toBe('20px');
+      expect(strips[0].style.borderTopColor.toLowerCase()).toBe('#342d8c');
+      // The callout does not also paint its interior bottom (single line, no doubling).
+      const callout = el.children[0] as HTMLElement;
+      expect(callout.style.borderBottomWidth).toBe('');
+    });
+
+    it('does not paint a strip inside a rowspan crossing the boundary', () => {
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'span-table' as BlockId,
+        attrs: {
+          borders: {
+            insideH: { style: 'single', width: 1, color: '#FF0000' },
+          },
+        },
+        rows: [
+          {
+            id: 'r0' as BlockId,
+            cells: [
+              { id: 'tall' as BlockId, rowSpan: 2, paragraph: para('p0') },
+              { id: 'top' as BlockId, paragraph: para('p1') },
+            ],
+          },
+          { id: 'r1' as BlockId, cells: [{ id: 'under' as BlockId, paragraph: para('p2') }] },
+        ],
+      };
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          { cells: [measuredCell(0, 1, 100, 2), measuredCell(1, 1, 100)], height: 20 },
+          { cells: [measuredCell(1, 1, 100)], height: 20 },
+        ],
+        columnWidths: [100, 100],
+        totalWidth: 200,
+        totalHeight: 40,
+      };
+      const el = render(block, measure, fragmentFor(block, 200, 40, 2));
+
+      // Col 0 is a vMerge (no edge), col 1 is covered below (the cell paints its own top).
+      expect(gapStrips(el).length).toBe(0);
+    });
+
+    it('mirrors strip positions for RTL tables', () => {
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'rtl-gap-table' as BlockId,
+        attrs: {
+          tableProperties: { rightToLeft: true },
+          borders: {
+            insideH: { style: 'single', width: 1, color: '#FF0000' },
+          },
+        },
+        rows: [
+          { id: 'r0' as BlockId, cells: [{ id: 'c0' as BlockId, colSpan: 2, paragraph: para('p0') }] },
+          { id: 'r1' as BlockId, cells: [{ id: 'c1' as BlockId, paragraph: para('p1') }] },
+        ],
+      };
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          { cells: [measuredCell(0, 2, 150)], height: 20 },
+          { cells: [measuredCell(0, 1, 100)], height: 20 },
+        ],
+        columnWidths: [100, 50],
+        totalWidth: 150,
+        totalHeight: 40,
+      };
+      const el = render(block, measure, fragmentFor(block, 150, 40, 2));
+
+      const strips = gapStrips(el);
+      expect(strips.length).toBe(1);
+      // Logical gap is cols [1,2) = x 100..150; mirrored: left = 150 - 100 - 50 = 0.
+      expect(strips[0].style.left).toBe('0px');
+      expect(strips[0].style.width).toBe('50px');
+    });
+
+    it('paints no strip when neither the above cell nor the table defines a border for the edge', () => {
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'borderless-gap-table' as BlockId,
+        rows: [
+          { id: 'r0' as BlockId, cells: [{ id: 'c0' as BlockId, colSpan: 2, paragraph: para('p0') }] },
+          { id: 'r1' as BlockId, cells: [{ id: 'c1' as BlockId, paragraph: para('p1') }] },
+        ],
+      };
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          { cells: [measuredCell(0, 2, 200)], height: 20 },
+          { cells: [measuredCell(0, 1, 100)], height: 20 },
+        ],
+        columnWidths: [100, 100],
+        totalWidth: 200,
+        totalHeight: 40,
+      };
+      const el = render(block, measure, fragmentFor(block, 200, 40, 2));
+
+      expect(gapStrips(el).length).toBe(0);
+    });
+  });
 });

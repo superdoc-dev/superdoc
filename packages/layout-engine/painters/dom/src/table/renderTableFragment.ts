@@ -5,6 +5,7 @@ import type {
   ParagraphBlock,
   SdtMetadata,
   TableBlock,
+  TableBorders,
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
@@ -22,8 +23,16 @@ import {
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
-import { applyBorder, borderValueToSpec, hasExplicitCellBorders } from './border-utils.js';
+import {
+  applyBorder,
+  borderValueToSpec,
+  hasExplicitCellBorders,
+  isExplicitNoneBorder,
+  isPresentBorder,
+  resolveTableBorderValue,
+} from './border-utils.js';
 import { getTableCellGridBounds } from './grid-geometry.js';
+import { buildColumnOccupancy, computeBoundaryGapSegments } from './row-boundary-gaps.js';
 
 type ApplyStylesFn = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => void;
 /**
@@ -482,9 +491,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         prevRow: r > 0 ? block.rows[r - 1] : undefined,
         prevRowMeasure: r > 0 ? measure.rows[r - 1] : undefined,
         nextRow: r < block.rows.length - 1 ? block.rows[r + 1] : undefined,
-        nextRowMeasure: r < block.rows.length - 1 ? measure.rows[r + 1] : undefined,
         rowOccupiedRightCol: rowOccupiedRightCols[r],
-        nextRowOccupiedRightCol: rowOccupiedRightCols[r + 1],
         totalRows: block.rows.length,
         tableBorders,
         columnWidths: effectiveColumnWidths,
@@ -634,13 +641,14 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   }
 
   // Render body rows (fromRow to toRow)
-  // Interior row boundary Ys, collected for the fragment-level compound middle grid.
-  const interiorRowBoundaries: number[] = [];
+  // Interior row boundary Ys, collected for the fragment-level compound middle grid and
+  // the row-boundary gap strips.
+  const interiorRowBoundaries: Array<{ y: number; belowRowIndex: number }> = [];
   for (let r = fragment.fromRow; r < fragment.toRow; r += 1) {
     const rowMeasure = measure.rows[r];
     if (!rowMeasure) break;
 
-    if (r > fragment.fromRow) interiorRowBoundaries.push(y);
+    if (r > fragment.fromRow) interiorRowBoundaries.push({ y, belowRowIndex: r });
 
     const isFirstRenderedBodyRow = r === fragment.fromRow;
     const isLastRenderedBodyRow = r === fragment.toRow - 1;
@@ -660,9 +668,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       prevRow: r > 0 ? block.rows[r - 1] : undefined,
       prevRowMeasure: r > 0 ? measure.rows[r - 1] : undefined,
       nextRow: r < block.rows.length - 1 ? block.rows[r + 1] : undefined,
-      nextRowMeasure: r < block.rows.length - 1 ? measure.rows[r + 1] : undefined,
       rowOccupiedRightCol: rowOccupiedRightCols[r],
-      nextRowOccupiedRightCol: rowOccupiedRightCols[r + 1],
       totalRows: block.rows.length,
       tableBorders,
       columnWidths: effectiveColumnWidths,
@@ -820,7 +826,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     if (insideHMid && interiorRowBoundaries.length > 0) {
       const rule = midRuleOf(insideHMid);
       const color = colorOf(tableBorders?.insideH);
-      for (const gy of interiorRowBoundaries) {
+      for (const { y: gy } of interiorRowBoundaries) {
         appendStrip(
           'superdoc-compound-border-midh',
           ringLeftInset,
@@ -829,6 +835,52 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
           rule,
           color,
         );
+      }
+    }
+  }
+
+  // Word paints an interior row boundary as ONE continuous line across the UNION of the two
+  // adjacent rows' extents (300dpi probes: gridBefore/gridAfter slivers render with insideH).
+  // Cells in the row below own and paint their top across their own span; segments with a
+  // cell above but none below are closed here as positioned strips, so the line never doubles
+  // and never stops short of a wider row's edge. (SD-3028 / SD-1513)
+  if (cellSpacingPx === 0 && interiorRowBoundaries.length > 0 && block.rows?.length) {
+    const occupancy = buildColumnOccupancy(measure.rows, effectiveColumnWidths.length);
+    const columnX: number[] = [0];
+    for (const width of effectiveColumnWidths) columnX.push(columnX[columnX.length - 1] + width);
+
+    for (const { y: boundaryY, belowRowIndex } of interiorRowBoundaries) {
+      for (const segment of computeBoundaryGapSegments(occupancy, belowRowIndex)) {
+        // A rowspan cell that started before this fragment is rendered as a ghost cell,
+        // which already paints its own bottom edge.
+        if (segment.aboveCell.rowIndex < fragment.fromRow) continue;
+
+        const aboveCell = block.rows[segment.aboveCell.rowIndex]?.cells?.[segment.aboveCell.cellIndex];
+        const boundaryRowBorders = block.rows[belowRowIndex - 1]?.attrs?.borders;
+        const effectiveInsideH = boundaryRowBorders
+          ? ({ ...(tableBorders ?? {}), ...boundaryRowBorders } as TableBorders).insideH
+          : tableBorders?.insideH;
+        const cellBottom = aboveCell?.attrs?.borders?.bottom;
+        const spec = isExplicitNoneBorder(cellBottom)
+          ? undefined
+          : resolveTableBorderValue(cellBottom, effectiveInsideH);
+        if (!isPresentBorder(spec)) continue;
+
+        const x = columnX[segment.startCol];
+        const width = columnX[segment.endColExclusive] - x;
+        if (width <= 0) continue;
+
+        const strip = doc.createElement('div');
+        strip.className = 'superdoc-row-boundary-gap';
+        const ss = strip.style;
+        ss.position = 'absolute';
+        ss.pointerEvents = 'none';
+        ss.left = `${isRtl ? fragment.width - x - width : x}px`;
+        ss.top = `${boundaryY}px`;
+        ss.width = `${width}px`;
+        ss.height = '0';
+        applyBorder(strip, 'Top', spec);
+        container.appendChild(strip);
       }
     }
   }

@@ -44,19 +44,6 @@ type CellBorderResolutionArgs = {
   /** Borders of the cell directly to the right (same row, next grid column), for asymmetric-edge ownership. */
   rightCellBorders?: CellBorders;
   /**
-   * True when the next row's real cells do not reach this cell's right edge (e.g. the next
-   * row has a `w:gridAfter` spacer while this cell spans into it). The cell below then can't
-   * own the shared bottom edge across the uncovered span, so this cell must draw its own
-   * bottom border or the line stops short at the bottom-right corner. (SD-3345)
-   */
-  nextRowLeavesRightGap?: boolean;
-  /**
-   * True when the cell ABOVE spans past this cell's row right edge (this row has a gridAfter
-   * relative to it). The spanning cell owns the shared bottom edge and draws it, so this cell
-   * must suppress its top border to avoid a doubled line. (SD-3345)
-   */
-  deferTopToAboveCell?: boolean;
-  /**
    * True when the row BELOW has a tblPrEx border override that suppresses its shared horizontal
    * edge (insideH none/nil). The lower cell owns that edge but won't draw it, so a present
    * table/style border on THIS row must be drawn here to close the grid (§17.4.61/§17.4.66).
@@ -86,22 +73,18 @@ const resolveRenderedCellBorders = ({
   aboveCellBorders,
   leftCellBorders,
   rightCellBorders,
-  nextRowLeavesRightGap,
-  deferTopToAboveCell,
   nextRowSuppressesSharedTop,
 }: CellBorderResolutionArgs): CellBorders | undefined => {
   const hasExplicitBorders = hasExplicitCellBorders(cellBorders);
 
   const cellBounds = getTableCellGridBounds(cellPosition);
   const touchesTopBoundary = cellBounds.touchesTopEdge || continuesFromPrev;
-  // The bottom is a real boundary either when this is the last row / a fragment break, OR
-  // when the next row's real cells don't reach this cell's right edge (a gridAfter spacer
-  // under a spanning cell): the row below can't own the shared edge across the uncovered
-  // span, so this (spanning) cell owns and draws its full-width bottom. The row below then
-  // suppresses its top there (see `deferTopToAboveCell`) so the edge is drawn exactly once —
-  // this painter has no border-collapse, so two cells drawing it would stack into a doubled
-  // line, not overlap. (SD-3345)
-  const touchesBottomBoundary = cellBounds.touchesBottomEdge || continuesOnNext || nextRowLeavesRightGap === true;
+  // Interior bottoms are always owned by the row below: each cell there paints its own top,
+  // and boundary segments the row below leaves uncovered (gridBefore/gridAfter slivers) are
+  // closed by fragment-level gap strips (see row-boundary-gaps.ts), never by this cell
+  // painting its full-width bottom — this painter has no border-collapse, so two cells
+  // drawing one edge stack into a doubled line. (SD-3345, SD-3028)
+  const touchesBottomBoundary = cellBounds.touchesBottomEdge || continuesOnNext;
 
   // A shared interior edge in the collapsed model is owned by the lower/right cell, so a
   // border defined ONLY by the neighbor above/left must still be painted here — even when
@@ -109,7 +92,7 @@ const resolveRenderedCellBorders = ({
   // suppressed its own edge under single-owner). (SD-2969: a bordered clause-header row
   // above a fully borderless spacer row.)
   const hasInteriorNeighborBorder =
-    (!touchesTopBoundary && !deferTopToAboveCell && isPresentBorder(aboveCellBorders?.bottom)) ||
+    (!touchesTopBoundary && isPresentBorder(aboveCellBorders?.bottom)) ||
     (!cellBounds.touchesLeftEdge && isPresentBorder(leftCellBorders?.right));
 
   // Collapsed model (zero cell spacing): single-owner positioning, where the value at a
@@ -125,15 +108,13 @@ const resolveRenderedCellBorders = ({
     return {
       top: touchesTopBoundary
         ? resolveTableBorderValue(cb.top, tableBorders?.top)
-        : deferTopToAboveCell
-          ? undefined
-          : (resolveBorderConflict(cb.top, aboveCellBorders?.bottom) ??
-            // Both sides not present: an explicit nil on BOTH adjacent cells suppresses the
-            // shared horizontal edge (§17.4.66); only inherit the table insideH when at least
-            // one side is merely unset. (SD-3028)
-            (isExplicitNoneBorder(cb.top) && isExplicitNoneBorder(aboveCellBorders?.bottom)
-              ? undefined
-              : borderValueToSpec(tableBorders?.insideH))),
+        : (resolveBorderConflict(cb.top, aboveCellBorders?.bottom) ??
+          // Both sides not present: an explicit nil on BOTH adjacent cells suppresses the
+          // shared horizontal edge (§17.4.66); only inherit the table insideH when at least
+          // one side is merely unset. (SD-3028)
+          (isExplicitNoneBorder(cb.top) && isExplicitNoneBorder(aboveCellBorders?.bottom)
+            ? undefined
+            : borderValueToSpec(tableBorders?.insideH))),
       // Vertical interior edges: when BOTH adjacent cells declare a border, the right cell
       // owns it (draws its left as the §17.4.66 winner) so the edge is painted once (no
       // doubling). When only ONE side declares a border (asymmetric, no doubling risk) that
@@ -242,8 +223,6 @@ type TableRowRenderDependencies = {
   /** Next (below) row data, to detect a row-level border override that suppresses the shared
    * horizontal edge so the current row closes the grid itself (§17.4.61/§17.4.66). */
   nextRow?: TableRow;
-  /** Next (below) row measure, to detect a gridAfter gap under a spanning cell (SD-3345). */
-  nextRowMeasure?: TableRowMeasure;
   /**
    * Rightmost occupied grid column (exclusive) for THIS row, counting cells that span into it
    * via w:vMerge (rowspan) from an earlier row. Falls back to this row's own cells when absent.
@@ -251,9 +230,6 @@ type TableRowRenderDependencies = {
    * column. (SD-1797)
    */
   rowOccupiedRightCol?: number;
-  /** Same as {@link rowOccupiedRightCol} for the NEXT row, so a rowspan continuation below is
-   * not mistaken for a gridAfter gap (which would double the shared bottom edge). (SD-1797) */
-  nextRowOccupiedRightCol?: number;
   /** Total number of rows in the table (for border resolution) */
   totalRows: number;
   /** Table-level borders (for resolving cell borders) */
@@ -510,9 +486,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     prevRow,
     prevRowMeasure,
     nextRow,
-    nextRowMeasure,
     rowOccupiedRightCol,
-    nextRowOccupiedRightCol,
     totalRows,
     tableBorders,
     columnWidths,
@@ -675,32 +649,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     return undefined;
   };
 
-  // Right edge (exclusive grid column) of the cell occupying `gridCol` in `measureCells`.
-  const findCellRightEdgeAtColumn = (
-    measureCells: TableRowMeasure['cells'] | undefined,
-    gridCol: number,
-  ): number | undefined => {
-    if (!measureCells) return undefined;
-    for (let i = 0; i < measureCells.length; i++) {
-      const start = measureCells[i].gridColumnStart ?? i;
-      const span = measureCells[i].colSpan ?? 1;
-      if (gridCol >= start && gridCol < start + span) return start + span;
-    }
-    return undefined;
-  };
-
-  // Rightmost grid column (exclusive) covered by the next row's REAL cells. When a spanning
-  // cell's right edge exceeds this, the next row has a gridAfter spacer beneath it and can't
-  // own the shared bottom edge across the uncovered span. (SD-3345)
-  // Rowspan-aware occupied width of the next row (counts cells spanning into it); fall back to
-  // the next row's own cells. A covered column must not look like a gridAfter gap. (SD-1797)
-  const nextRowMaxCol =
-    nextRowOccupiedRightCol != null && nextRowOccupiedRightCol > 0
-      ? nextRowOccupiedRightCol
-      : nextRowMeasure?.cells?.length
-        ? Math.max(...nextRowMeasure.cells.map((c) => (c.gridColumnStart ?? 0) + (c.colSpan ?? 1)))
-        : Infinity;
-
   for (let cellIndex = 0; cellIndex < rowMeasure.cells.length; cellIndex += 1) {
     const cellMeasure = rowMeasure.cells[cellIndex];
     const cell = row?.cells?.[cellIndex];
@@ -736,13 +684,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     // The cell to the right (same row, the column just past this cell's span) — used to keep
     // an asymmetric vertical edge on the owning cell instead of moving it to the neighbor.
     const rightCellBorders = findCellBordersAtColumn(row?.cells, rowMeasure.cells, gridColumnStart + colSpan);
-    // This cell spans past the next row's real cells (gridAfter spacer beneath its right edge).
-    const nextRowLeavesRightGap = gridColumnStart + colSpan > nextRowMaxCol;
-    // Conversely, the cell ABOVE spans past THIS row's right edge (this row has a gridAfter
-    // relative to it). The spanning cell then owns the full shared edge and draws its own
-    // bottom, so this cell must NOT also draw its top, or the edge doubles. (SD-3345)
-    const aboveCellRightEdge = findCellRightEdgeAtColumn(prevRowMeasure?.cells, gridColumnStart);
-    const deferTopToAboveCell = aboveCellRightEdge !== undefined && aboveCellRightEdge > rowRightEdgeCol;
 
     // Resolve borders using logical positions, then swap output for RTL.
     // The resolver uses touchesLeftEdge/touchesRightEdge which are LOGICAL edges.
@@ -759,8 +700,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       aboveCellBorders,
       leftCellBorders,
       rightCellBorders,
-      nextRowLeavesRightGap,
-      deferTopToAboveCell,
       nextRowSuppressesSharedTop,
     });
     // RTL: swap resolved left↔right so CSS properties match visual edges

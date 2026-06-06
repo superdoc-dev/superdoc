@@ -27,4 +27,6 @@ export type {
   SuperDocTransactionEvent,
   SuperDocContentErrorEvent,
   SuperDocExceptionEvent,
+  SuperDocZoomChangeEvent,
+  SuperDocViewportChangeEvent,
 } from './types';

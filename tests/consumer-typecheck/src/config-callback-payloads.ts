@@ -46,6 +46,8 @@ import type {
   SuperDocEditorPayload,
   SuperDocLockedPayload,
   SuperDocReadyPayload,
+  SuperDocViewportChangePayload,
+  SuperDocZoomPayload,
 } from 'superdoc';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -103,6 +105,14 @@ const _onListDefinitionsChangeOk: AssertEqual<
 // (runtime payload builder always sets them, defaulting to null).
 const _onEditorUpdateOk: AssertEqual<ParamOf<Config['onEditorUpdate']>, EditorUpdateEvent> = true;
 
+// ─── onZoomChange ───────────────────────────────────────────────────
+// Fires for every zoom source: setZoom(), toolbar, fit-width mode.
+const _onZoomChangeOk: AssertEqual<ParamOf<Config['onZoomChange']>, SuperDocZoomPayload> = true;
+
+// ─── onViewportChange ───────────────────────────────────────────────
+// Pure measurements: fit policy options (min/max/padding) never affect them.
+const _onViewportChangeOk: AssertEqual<ParamOf<Config['onViewportChange']>, SuperDocViewportChangePayload> = true;
+
 void [
   _onReadyOk,
   _onEditorBeforeCreateOk,
@@ -113,4 +123,6 @@ void [
   _onAwarenessUpdateOk,
   _onListDefinitionsChangeOk,
   _onEditorUpdateOk,
+  _onZoomChangeOk,
+  _onViewportChangeOk,
 ];

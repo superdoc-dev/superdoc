@@ -54,6 +54,7 @@ but have separate script chains because the validation needs differ.
 | `check:public` | `check:public:superdoc` + `check:public:docapi` | Both public interfaces. The umbrella to run before merging. |
 | `check:public:superdoc` | `check:public-contract` (legacy alias) | SuperDoc package: vite build + postbuild chain, consumer typecheck matrix, deep-type audit. |
 | `check:public:docapi` | `docapi:check` (legacy alias) | Document API: contract parity, generated outputs are not stale, examples compile, overview alignment. Clean-checkout safe: gitignored outputs (`packages/document-api/generated/`) are built in memory; tracked outputs (`apps/docs/document-api/reference/`, overview block) are still compared byte-for-byte. |
+| `check:font-licenses` | `node shared/font-system/scripts/check-bundled-font-licenses.mjs` | Bundled font compliance: every shipped WOFF2 has legal metadata, stable hash, notices, and a runtime manifest entry. Also runs inside `check:public:superdoc`. |
 | `report:public:superdoc` | `report:public-contract` (legacy alias) | Read-only tier metadata (supported / legacy / legacy-raw / asset / deprecated). Not a gate. |
 
 ### TypeScript compiler
@@ -152,7 +153,9 @@ what an actual consumer would see — not the workspace source.
 Seven of these run as wrapper stages of `check:public:superdoc`.
 `public-method-coverage` runs alongside the cheap policy gates
 (`contract-tiers-test`, `contract-tiers`, `jsdoc-ratchet`,
-`jsdoc-hygiene-ts-test`, `jsdoc-hygiene-ts`) before `build`. The other
+`jsdoc-hygiene-ts-test`, `jsdoc-hygiene-ts`). `font-license-gate`
+runs after those cheap gates and before `build`, so a new bundled font
+without a legal manifest row or notices fails before packaging. The other
 six run after `build`:
 `consumer-typecheck-matrix`, `deep-type-audit-supported-root`,
 `package-shape`, `export-snapshots`, `root-classification-closure`,

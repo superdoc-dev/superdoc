@@ -1,26 +1,18 @@
 /**
- * Substitution EVIDENCE: per logical font, the measured docfonts verdict behind SuperDoc's
- * logical -> physical substitution. Pure data, no imports. The resolver derives its substitute map
- * from this (see `resolver.ts`), so this file is the single source of truth for WHICH logical family
- * maps to WHICH physical substitute and HOW faithful that substitution is.
+ * Substitution EVIDENCE for SuperDoc's logical -> physical font substitution: the measured docfonts
+ * verdict behind each row. The DATA is sourced from `@docfonts/fallbacks` (one upstream, measured,
+ * PR-reviewed registry); the TYPE shapes are SuperDoc's own, kept LOCAL so the public facade stays
+ * self-contained - re-exporting the package's types would leave `@docfonts/fallbacks` in superdoc's
+ * emitted `.d.ts`, which a consumer (who does not install that package) cannot resolve.
  *
- * Distinct from {@link ./bundled-manifest} (the PHYSICAL pack: which `.woff2` files ship). That is the
- * asset layer; this is the EVIDENCE layer - which proprietary font each substitute stands in for, the
- * docfonts verdict, per-face verdicts, and the worst-case advance delta that gates layout fidelity.
- *
- * VENDORED SNAPSHOT. docfonts (`@docfonts/core` + `@docfonts/registry`) is the upstream source of
- * truth: a measured, reviewed registry kept in a separate repo, not yet a build dependency of
- * SuperDoc. These rows are a hand-reviewed copy of the docfonts EvidenceRecords for the families
- * SuperDoc currently substitutes; `evidenceId` + `measurementRefs` point back to the source record. A
- * generator/import is deferred until docfonts is a dependency CI can reproduce - until then this is
- * reviewed evidence (committed, PR-reviewed), never an unsupervised generated truth source.
- *
- * Scope note: this is the DATA plus the resolver derivation only. Reports do NOT yet branch on
- * `verdict` - Cambria still resolves to Caladea and reports `bundled_substitute`; verdict-aware
- * diagnostics are a later pass. The richer fields ride along as data so that pass needs no reshape.
+ * The const assignment at the bottom pins the package's rows to SuperDoc's {@link SubstitutionEvidence}
+ * contract: if the registry's shape stops matching, this file fails to compile - a build-time drift
+ * guard. docfonts owns the evidence; SuperDoc owns WHICH rows activate (asset-gated in `resolver.ts`
+ * against `bundled-manifest`) and how they load, render, and report.
  */
+import { SUBSTITUTION_EVIDENCE as DOCFONTS_EVIDENCE } from '@docfonts/fallbacks';
 
-/** docfonts fidelity verdict, best to worst. Vendored from `@docfonts/core` `Verdict`. */
+/** docfonts fidelity verdict, best to worst. */
 export type SubstituteVerdict =
   | 'metric_safe' // advances within the DIRECT threshold (weighted-mean <= 0.5%, worst-case <= 1%)
   | 'near_metric' // LIKELY band: weighted-mean <= 1%, worst-case <= 2.5% - near-exact, a few glyphs drift
@@ -30,7 +22,7 @@ export type SubstituteVerdict =
   | 'preserve_only' // keep the original name, do not substitute (e.g. math / symbol fonts)
   | 'no_substitute'; // no open candidate qualifies
 
-/** docfonts renderer-neutral resolution action. Vendored from `@docfonts/core` `PolicyAction`. */
+/** docfonts renderer-neutral resolution action. */
 export type SubstitutePolicyAction =
   | 'substitute' // render the named physical candidate in place of the logical font
   | 'category_fallback' // no clean candidate; fall back to a generic category (serif / sans / mono)
@@ -87,7 +79,8 @@ export interface GlyphException {
 /**
  * One logical font's substitution evidence. Mirrors the renderer-relevant fields of a docfonts
  * EvidenceRecord and omits its prose (`notes`, `confidence`, measured dates): SuperDoc decides from
- * structured data, not free text.
+ * structured data, not free text. The {@link SUBSTITUTION_EVIDENCE} assignment enforces that the
+ * package's rows conform to this shape.
  */
 export interface SubstitutionEvidence {
   /** docfonts EvidenceRecord id - the provenance pointer back to the source record, e.g. "cambria". */
@@ -120,127 +113,9 @@ export interface SubstitutionEvidence {
 }
 
 /**
- * The substitution evidence for every family SuperDoc currently substitutes - six rows, vendored from
- * docfonts. The resolver maps the rows whose `policyAction` is `substitute`; the verdict / per-face /
- * glyph-exception fields are carried for the later verdict-aware reporting pass and are not yet read.
+ * The reviewed substitution evidence, sourced from `@docfonts/fallbacks` and pinned to SuperDoc's
+ * {@link SubstitutionEvidence} contract (the assignment is the drift guard - see the file header). The
+ * resolver activates the rows it can render (asset-gated); the verdict / per-face / glyph-exception
+ * fields ride along for the later verdict-aware reporting pass and are not read for inclusion.
  */
-export const SUBSTITUTION_EVIDENCE: readonly SubstitutionEvidence[] = Object.freeze([
-  {
-    evidenceId: 'calibri',
-    logicalFamily: 'Calibri',
-    physicalFamily: 'Carlito',
-    verdict: 'metric_safe',
-    faces: { regular: true, bold: true, italic: true, boldItalic: true },
-    advance: { meanDelta: 0, maxDelta: 0 },
-    gates: { static: 'pass', metric: 'pass', layout: 'pass', ship: 'pass' },
-    policyAction: 'substitute',
-    measurementRefs: ['calibri__carlito#analytic_advance#2026-06-03', 'calibri__carlito#face_aggregate#2026-06-03'],
-    candidateLicense: 'OFL-1.1',
-    exportRule: 'preserve_original_name',
-  },
-  {
-    // The QUALIFIED case. Regular/bold/italic are metric_safe, but Caladea's Bold Italic grave accent
-    // (U+0060) advance diverges ~23%, so a line containing it reflows. The worst face rolls the
-    // top-level verdict to `visual_only`; policyAction stays `substitute` (Caladea IS the recommended
-    // substitute), which is why the resolver still maps Cambria. faceVerdicts is authoritative.
-    evidenceId: 'cambria',
-    logicalFamily: 'Cambria',
-    physicalFamily: 'Caladea',
-    verdict: 'visual_only',
-    faceVerdicts: { regular: 'metric_safe', bold: 'metric_safe', italic: 'metric_safe', boldItalic: 'visual_only' },
-    glyphExceptions: [
-      {
-        slot: 'boldItalic',
-        codepoint: 0x60,
-        advanceDelta: 0.231,
-        note: 'Caladea Bold Italic grave accent (U+0060) advance diverges ~23% from Cambria; lines containing it reflow.',
-      },
-    ],
-    faces: { regular: true, bold: true, italic: true, boldItalic: true },
-    advance: { meanDelta: 0.0002378, maxDelta: 0.2310758 },
-    gates: { static: 'pass', metric: 'pass', layout: 'not_run', ship: 'pass' },
-    policyAction: 'substitute',
-    measurementRefs: [
-      'cambria_regular__caladea#regular#w400#d2f6cad3#analytic_advance#2026-06-04',
-      'cambria_bold__caladea#bold#w700#74eda4fc#analytic_advance#2026-06-04',
-      'cambria_italic__caladea#italic#w400#9c968bf6#analytic_advance#2026-06-04',
-      'cambria_boldItalic__caladea#boldItalic#w700#f47a35ad#analytic_advance#2026-06-04',
-    ],
-    candidateLicense: 'Apache-2.0',
-    exportRule: 'preserve_original_name',
-  },
-  {
-    evidenceId: 'arial',
-    logicalFamily: 'Arial',
-    physicalFamily: 'Liberation Sans',
-    verdict: 'metric_safe',
-    faces: { regular: true, bold: true, italic: true, boldItalic: true },
-    advance: { meanDelta: 0, maxDelta: 0 },
-    gates: { static: 'pass', metric: 'pass', layout: 'not_run', ship: 'pass' },
-    policyAction: 'substitute',
-    measurementRefs: ['arial__liberation-sans#analytic_advance#2026-06-03'],
-    candidateLicense: 'OFL-1.1',
-    exportRule: 'preserve_original_name',
-  },
-  {
-    evidenceId: 'times-new-roman',
-    logicalFamily: 'Times New Roman',
-    physicalFamily: 'Liberation Serif',
-    verdict: 'metric_safe',
-    faces: { regular: true, bold: true, italic: true, boldItalic: true },
-    advance: { meanDelta: 0, maxDelta: 0 },
-    gates: { static: 'pass', metric: 'pass', layout: 'not_run', ship: 'pass' },
-    policyAction: 'substitute',
-    measurementRefs: ['times-new-roman__liberation-serif#analytic_advance#2026-06-03'],
-    candidateLicense: 'OFL-1.1',
-    exportRule: 'preserve_original_name',
-  },
-  {
-    evidenceId: 'courier-new',
-    logicalFamily: 'Courier New',
-    physicalFamily: 'Liberation Mono',
-    verdict: 'metric_safe',
-    faces: { regular: true, bold: true, italic: true, boldItalic: true },
-    advance: { meanDelta: 0, maxDelta: 0 },
-    gates: { static: 'pass', metric: 'pass', layout: 'not_run', ship: 'pass' },
-    policyAction: 'substitute',
-    measurementRefs: ['courier-new__liberation-mono#analytic_advance#2026-06-03'],
-    candidateLicense: 'OFL-1.1',
-    exportRule: 'preserve_original_name',
-  },
-  {
-    // Same candidate and metric verdict as Arial. metric_safe from one Apple/macOS Helvetica
-    // analytic-advance measurement (0.000% delta). Its static + layout gates are `not_run`, and ship
-    // was `fail` in docfonts only because SuperDoc had not consumed the alias yet - a stale-until-
-    // shipped gate, NOT a fidelity signal, so it never gates inclusion here (policyAction does).
-    evidenceId: 'helvetica',
-    logicalFamily: 'Helvetica',
-    physicalFamily: 'Liberation Sans',
-    verdict: 'metric_safe',
-    faces: { regular: true, bold: true, italic: true, boldItalic: true },
-    advance: { meanDelta: 0, maxDelta: 0 },
-    gates: { static: 'not_run', metric: 'pass', layout: 'not_run', ship: 'fail' },
-    policyAction: 'substitute',
-    measurementRefs: ['helvetica__liberation-sans#analytic_advance#2026-06-03'],
-    candidateLicense: 'OFL-1.1',
-    exportRule: 'preserve_original_name',
-  },
-  {
-    // No open Calibri Light clone: Carlito carries the Calibri letterforms but has no Light face, so it
-    // renders at Regular (weight 400 vs Light 300) and reflows up to 6.6%. `category_fallback` (a family
-    // fallback, NOT a metric clone), verdict `visual_only`, metric gate fails. `faces` are all false:
-    // Carlito faithfully supplies none of Calibri Light's own faces - the runtime still renders Carlito
-    // Regular where it is loadable, but reports it non-metric.
-    evidenceId: 'calibri-light',
-    logicalFamily: 'Calibri Light',
-    physicalFamily: 'Carlito',
-    verdict: 'visual_only',
-    faces: { regular: false, bold: false, italic: false, boldItalic: false },
-    advance: { meanDelta: 0.0148, maxDelta: 0.066 },
-    gates: { static: 'not_run', metric: 'fail', layout: 'not_run', ship: 'fail' },
-    policyAction: 'category_fallback',
-    measurementRefs: ['calibri-light__carlito#analytic_advance#2026-06-05'],
-    candidateLicense: 'OFL-1.1',
-    exportRule: 'preserve_original_name',
-  },
-]);
+export const SUBSTITUTION_EVIDENCE: readonly SubstitutionEvidence[] = DOCFONTS_EVIDENCE;

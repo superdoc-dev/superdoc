@@ -8,6 +8,7 @@ import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import { DOCX, PDF, HTML, getActorIdentityKey, normalizeActorEmail } from '@superdoc/common';
 import { SuperToolbar, createZip, seedEditorStateToYDoc, onCollaborationProviderSynced } from '@superdoc/super-editor';
 import { SuperComments } from '../components/CommentsLayer/commentsList/super-comments-list.js';
+import { resolveFitWidthOptions } from '../composables/use-viewport-fit.js';
 import { createSuperdocVueApp } from './create-app.js';
 import { shuffleArray } from '@superdoc/common/collaboration/awareness';
 import { createDownload, cleanName } from './helpers/export.js';
@@ -85,10 +86,15 @@ import type {
   SuperDocEditorPayload,
   SuperDocExceptionPayload,
   SuperDocExceptionStorePayload,
+  SuperDocFontsApi,
   SuperDocLockedPayload,
   SuperDocReadyPayload,
   SuperDocState,
-  SuperDocFontsApi,
+  SuperDocViewportChangePayload,
+  SuperDocViewportMetrics,
+  SuperDocZoomMode,
+  SuperDocZoomPayload,
+  SuperDocZoomState,
   SurfaceHandle,
   SurfaceRequest,
   UpgradeToCollaborationOptions,
@@ -117,9 +123,6 @@ type ActiveEditor = Editor & {
 // exported from `core/types/index.ts` and imported above).
 interface SuperDocWhiteboardPayload {
   whiteboard: Whiteboard;
-}
-interface SuperDocZoomPayload {
-  zoom: number;
 }
 interface SuperDocFormattingMarksPayload {
   showFormattingMarks: boolean;
@@ -171,6 +174,7 @@ interface SuperDocEventMap {
   'whiteboard:enabled': [boolean];
   'whiteboard:tool': [string];
   exception: [SuperDocExceptionPayload];
+  'viewport-change': [SuperDocViewportChangePayload];
 }
 // Notes on the event map above:
 //
@@ -921,6 +925,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.#onConfig('pagination-update', this.config.onPaginationUpdate);
     this.#onConfig('fonts-resolved', this.config.onFontsResolved);
     this.#onConfig('fonts-changed', this.config.onFontsChanged);
+    this.#onConfig('zoomChange', this.config.onZoomChange);
+    this.#onConfig('viewport-change', this.config.onViewportChange);
   }
 
   /**
@@ -2367,12 +2373,14 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   }
 
   /**
-   * Set the zoom level for all documents.
+   * Set the zoom level for all documents and switch the zoom mode to
+   * `manual` (an explicit numeric zoom expresses intent to leave
+   * `fit-width`; use `setZoomMode('fit-width')` to re-enter fitting).
    * Updates the centralized activeZoom state, which propagates to all
    * presentation editors, PDF viewers, and whiteboard layers via the Vue watcher.
    * @param percent - The zoom level as a percentage (e.g., 100, 150, 200)
    * @example
-   * superdoc.setZoom(150); // Set zoom to 150%
+   * superdoc.setZoom(150); // Set zoom to 150%, mode becomes 'manual'
    * superdoc.setZoom(50);  // Set zoom to 50%
    */
   setZoom(percent: number) {
@@ -2380,14 +2388,86 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       console.warn('[SuperDoc] setZoom expects a positive number representing percentage');
       return;
     }
+    // Before async init attaches the store there is nothing to write, and
+    // emitting anyway would tell listeners about a zoom that never
+    // happened. Use config.zoom.initial for pre-init zoom instead.
+    if (!this.superdocStore) {
+      console.warn('[SuperDoc] setZoom called before initialization; use config.zoom.initial for the starting zoom');
+      return;
+    }
 
     // Update store — SuperDoc.vue's activeZoom watcher propagates the zoom
     // to all PresentationEditor instances via PresentationEditor.setGlobalZoom().
-    if (this.superdocStore) {
-      this.superdocStore.activeZoom = percent;
-    }
+    this.superdocStore.activeZoom = percent;
+    this.superdocStore.zoomMode = 'manual';
 
-    this.emit('zoomChange', { zoom: percent });
+    this.emit('zoomChange', { zoom: percent, mode: 'manual' });
+  }
+
+  /**
+   * Switch the zoom mode. `fit-width` continuously re-fits the
+   * document to the available container width (clamped by
+   * `config.zoom.fitWidth`); `manual` holds the current value.
+   * Switching to `fit-width` applies the fit immediately when
+   * viewport metrics are available. Emits `zoomChange` (with the
+   * current value) so zoom UIs observe mode-only transitions; a
+   * same-mode call is a no-op.
+   * @param mode - The zoom mode: `'manual'` or `'fit-width'`
+   * @example
+   * superdoc.setZoomMode('fit-width'); // start fitting to the container
+   * superdoc.setZoomMode('manual');    // hold the current zoom value
+   */
+  setZoomMode(mode: SuperDocZoomMode) {
+    if (mode !== 'manual' && mode !== 'fit-width') {
+      console.warn("[SuperDoc] setZoomMode expects 'manual' or 'fit-width'");
+      return;
+    }
+    // Before async init attaches the store the mode cannot persist, and
+    // emitting anyway would advertise a mode change that never happened.
+    // Use config.zoom.mode for the starting mode instead.
+    if (!this.superdocStore) {
+      console.warn('[SuperDoc] setZoomMode called before initialization; use config.zoom.mode for the starting mode');
+      return;
+    }
+    if (this.superdocStore.zoomMode === mode) return;
+    this.superdocStore.zoomMode = mode;
+    this.emit('zoomChange', { zoom: this.getZoom(), mode });
+  }
+
+  /**
+   * Get a snapshot of the current zoom state: mode, value, the latest
+   * computed fit zoom (null before the first viewport measurement),
+   * and the effective fit bounds.
+   * @returns The current zoom state snapshot
+   * @example
+   * const { mode, value, fitZoom } = superdoc.getZoomState();
+   */
+  getZoomState(): SuperDocZoomState {
+    // Same resolver the fit policy applies, so the reported bounds cannot
+    // drift from the clamping behavior.
+    const fit = resolveFitWidthOptions(this.config.zoom?.fitWidth);
+    return {
+      mode: this.superdocStore?.zoomMode ?? 'manual',
+      value: this.superdocStore?.activeZoom ?? 100,
+      fitZoom: this.superdocStore?.viewportMetrics?.fitZoom ?? null,
+      min: fit.min,
+      max: fit.max,
+    };
+  }
+
+  /**
+   * Get the latest viewport measurements: the width available to the
+   * document, the document's base page width at 100% zoom, and the
+   * unclamped fit zoom. Returns `null` until the first measurement
+   * (editors still mounting). Subscribe to `viewport-change` (or pass
+   * `Config.onViewportChange`) for updates.
+   * @returns The latest viewport metrics, or `null` before the first measurement
+   * @example
+   * const metrics = superdoc.getViewportMetrics();
+   * if (metrics) superdoc.setZoom(Math.min(100, metrics.fitZoom));
+   */
+  getViewportMetrics(): SuperDocViewportMetrics | null {
+    return this.superdocStore?.viewportMetrics ?? null;
   }
 
   /**

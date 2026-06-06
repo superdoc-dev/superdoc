@@ -29,6 +29,10 @@ function shouldSkipTextNode(node: ProseMirrorNode, options?: TextOffsetOptions):
   return isVisibleTextModel(options) && hasTrackDeleteMark(node);
 }
 
+function shouldSkipLeafNode(node: ProseMirrorNode, options?: TextOffsetOptions): boolean {
+  return isVisibleTextModel(options) && hasTrackDeleteMark(node);
+}
+
 function resolveSegmentPosition(
   targetOffset: number,
   segmentStart: number,
@@ -87,6 +91,10 @@ export function pmPositionToTextOffset(
 
     if (node.isLeaf) {
       const endPos = docPos + node.nodeSize;
+      if (shouldSkipLeafNode(node, options)) {
+        if (pmPos < endPos) done = true;
+        return;
+      }
       if (pmPos >= endPos) {
         offset += 1;
       } else {
@@ -141,6 +149,7 @@ export function computeTextContentLength(blockNode: ProseMirrorNode, options?: T
       return;
     }
     if (node.isLeaf) {
+      if (shouldSkipLeafNode(node, options)) return;
       length += 1;
       return;
     }
@@ -229,6 +238,7 @@ export function resolveTextRangeInBlock(
     }
 
     if (node.isLeaf) {
+      if (shouldSkipLeafNode(node, options)) return;
       advanceSegment(1, docPos, docPos + node.nodeSize);
       return;
     }
@@ -262,7 +272,14 @@ export function textContentInBlock(blockNode: ProseMirrorNode, options?: TextOff
     }
 
     if (node.isLeaf) {
-      text += '\ufffc';
+      if (shouldSkipLeafNode(node, options)) return;
+      // Honor a leaf's declared visible text (e.g. lineBreak -> '\n',
+      // noBreakHyphen -> U+2011) so this content model agrees with the visible
+      // document and with the offset model. All leafText values are one
+      // character, matching the 1-per-leaf length used by the offset helpers
+      // above; other leaves fall back to the U+FFFC placeholder.
+      const leafText = (node.type?.spec as { leafText?: (n: ProseMirrorNode) => string } | undefined)?.leafText;
+      text += typeof leafText === 'function' ? leafText(node) : '\ufffc';
       return;
     }
 

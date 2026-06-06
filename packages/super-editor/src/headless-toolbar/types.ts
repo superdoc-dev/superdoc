@@ -65,6 +65,7 @@ export const BUILT_IN_COMMAND_IDS = [
   'ruler',
   'formatting-marks',
   'zoom',
+  'zoom-fit-width',
   'document-mode',
   'clear-formatting',
   'copy-format',
@@ -119,6 +120,7 @@ export type ToolbarPayloadMap = {
   ruler: never;
   'formatting-marks': never;
   zoom: number;
+  'zoom-fit-width': never;
   'document-mode': 'editing' | 'suggesting' | 'viewing';
   'clear-formatting': never;
   'copy-format': never;
@@ -168,6 +170,7 @@ export type ToolbarValueMap = {
   ruler: undefined;
   'formatting-marks': undefined;
   zoom: number;
+  'zoom-fit-width': undefined;
   'document-mode': string;
   'clear-formatting': undefined;
   'copy-format': undefined;

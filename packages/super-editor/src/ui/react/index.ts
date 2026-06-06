@@ -38,4 +38,5 @@ export {
   useSuperDocToolbar,
   useSuperDocCommand,
   useSuperDocDocument,
+  useSuperDocZoom,
 } from './hooks.js';

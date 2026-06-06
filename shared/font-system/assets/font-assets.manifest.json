@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "spdxExpression": "OFL-1.1 AND Apache-2.0",
+  "generatedFrom": "Bundled font legal review, 2026-06-03",
+  "families": [
+    {
+      "family": "Carlito",
+      "replaces": ["Calibri"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "1.103",
+      "upstreamSource": "github.com/googlefonts/carlito",
+      "reservedFontName": "Carlito",
+      "copyrightNotice": "Copyright (c) 2010-2013 by tyPoland Lukasz Dziedzic with Reserved Font Name \"Carlito\". Licensed under the SIL Open Font License, Version 1.1.",
+      "trademarkNotice": "Carlito is a trademark of tyPoland Lukasz Dziedzic.",
+      "faces": [
+        {
+          "file": "Carlito-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "7d76ec686e1e4b4eb24be79a7b97bc5359860876c63aaf7142cdb6d0c8bc031b"
+        },
+        {
+          "file": "Carlito-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "9850d2d48b11067c4b9a8e09e94e9c9df25a41a68017e0e3ed8a011017cc55a6"
+        },
+        {
+          "file": "Carlito-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "5016317d757a507cda505b15bda5b44114d18ff8db260af71ce9021529639fb2"
+        },
+        {
+          "file": "Carlito-BoldItalic.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "d841c947dda8330f7dc55f1f3ceef5b22ca5f695ff41f18a23bcaedb876ae2b2"
+        }
+      ]
+    },
+    {
+      "family": "Caladea",
+      "replaces": ["Cambria"],
+      "license": "Apache-2.0",
+      "licenseFiles": ["Apache-2.0.txt"],
+      "version": "1.002",
+      "upstreamSource": "Google crosextra (via LibreOffice resources)",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright (c) 2012 Huerta Tipografia",
+      "trademarkNotice": "Caladea is a trademark of Huerta Tipografia",
+      "noticeFile": null,
+      "faces": [
+        {
+          "file": "Caladea-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "bc550d757aa2f91667c89fe99c576dd2592bb6aa4c03def6ee9d3b7278f8f503"
+        },
+        {
+          "file": "Caladea-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "750be3bdefd9c13b1a8c7227208387a01aad02c21c348698a43dbc908f5b5778"
+        },
+        {
+          "file": "Caladea-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "0b93e9951744c59a56895c98286e2ea546d04635d41992b1bb32770a1fe8aa15"
+        },
+        {
+          "file": "Caladea-BoldItalic.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "cd6f404e1e64c1c9ee40f0399fa9bd5be906131345a17325e3d28823289778bb"
+        }
+      ]
+    },
+    {
+      "family": "Liberation Sans",
+      "replaces": ["Arial", "Helvetica"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "2.1.5",
+      "upstreamSource": "github.com/liberationfonts/liberation-fonts 2.1.5",
+      "reservedFontName": null,
+      "copyrightNotice": "Digitized data copyright (c) 2010 Google Corporation. Copyright (c) 2012 Red Hat, Inc.",
+      "trademarkNotice": "Liberation is a trademark of Red Hat, Inc. registered in U.S. Patent and Trademark Office and certain other jurisdictions.",
+      "faces": [
+        {
+          "file": "LiberationSans-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "49cbcd4158fb720bf5dd65e6c37db02c58b22d0549d02c4224d8f44b66508c1a"
+        },
+        {
+          "file": "LiberationSans-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "abe2e50e207d9c74d078e0f5a1ec721169ccc7ce6151557ad79dfc8ba1404cdb"
+        },
+        {
+          "file": "LiberationSans-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "56db278b6106cca24670971c20575bdd1ab8e6a645d3608bad3bb02c9f651d9d"
+        },
+        {
+          "file": "LiberationSans-BoldItalic.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "75c36ae5502129079654a3f4670973facf496c65e20c010d74f7fbf33c6406ac"
+        }
+      ]
+    },
+    {
+      "family": "Liberation Serif",
+      "replaces": ["Times New Roman"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "2.1.5",
+      "upstreamSource": "github.com/liberationfonts/liberation-fonts 2.1.5",
+      "reservedFontName": null,
+      "copyrightNotice": "Digitized data copyright (c) 2010 Google Corporation. Copyright (c) 2012 Red Hat, Inc.",
+      "trademarkNotice": "Liberation is a trademark of Red Hat, Inc. registered in U.S. Patent and Trademark Office and certain other jurisdictions.",
+      "faces": [
+        {
+          "file": "LiberationSerif-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "95beb0058c4568d11a5752186b1de80325345dbdc09be665040a70229c4f7781"
+        },
+        {
+          "file": "LiberationSerif-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "d845a3481af5a79039ea6b02c346da8458538a7f0faa793ff2ab366a2fd34a09"
+        },
+        {
+          "file": "LiberationSerif-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "1ca64658f7f531e4f575c538e119b387ed67efd9663594d199282da1cda8b58c"
+        },
+        {
+          "file": "LiberationSerif-BoldItalic.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "55da32addec0a25f680ddf8a621ae79475dff5cb44c5699c05e7ff29ef591b1a"
+        }
+      ]
+    },
+    {
+      "family": "Liberation Mono",
+      "replaces": ["Courier New"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "2.1.5",
+      "upstreamSource": "github.com/liberationfonts/liberation-fonts 2.1.5",
+      "reservedFontName": null,
+      "copyrightNotice": "Digitized data copyright (c) 2010 Google Corporation. Copyright (c) 2012 Red Hat, Inc.",
+      "trademarkNotice": "Liberation is a trademark of Red Hat, Inc. registered in U.S. Patent and Trademark Office and certain other jurisdictions.",
+      "faces": [
+        {
+          "file": "LiberationMono-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "fcbbe76483956358837f9d76b88e7c05718b72ab51a44bc621691e6439884b4a"
+        },
+        {
+          "file": "LiberationMono-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "916ddb6c31087f916c10a298b8934e0cc9db0e99541ab20543a7996c0bf5f91a"
+        },
+        {
+          "file": "LiberationMono-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "42dfd49060760af285e0230846849394dd2f311299ec1a694c1cb34bf9be46fa"
+        },
+        {
+          "file": "LiberationMono-BoldItalic.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "0fce31aa9a25eb896122b309d86ebfd5541a12d917f2b94669b0e166302e29b9"
+        }
+      ]
+    }
+  ]
+}

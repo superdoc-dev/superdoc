@@ -1,9 +1,26 @@
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 
 This is the license text covering the OFL-1.1 fonts bundled in this directory
-(Carlito, Liberation Sans, Liberation Serif, Liberation Mono). Per-font copyright
-and Reserved Font Name statements are in LICENSES.md. Official text:
-https://openfontlicense.org/open-font-license-official-text/
+(Carlito, Liberation Sans, Liberation Serif, Liberation Mono). The copyright and
+Reserved Font Name statements for those fonts are reproduced verbatim below,
+taken from the fonts' own name tables, so they travel with this license text.
+LICENSES.md restates them for convenience.
+Official OFL text: https://openfontlicense.org/open-font-license-official-text/
+
+-----------------------------------------------------------
+COPYRIGHT NOTICES (the "above copyright notice" required by condition 2)
+
+Carlito:
+    Copyright (c) 2010-2013 by tyPoland Lukasz Dziedzic
+    (http://www.typoland.com/) with Reserved Font Name "Carlito".
+    Licensed under the SIL Open Font License, Version 1.1.
+
+Liberation Sans, Liberation Serif, Liberation Mono:
+    Digitized data copyright (c) 2010 Google Corporation.
+    Copyright (c) 2012 Red Hat, Inc.
+    Licensed under the SIL Open Font License, Version 1.1.
+    ("Liberation" is a registered trademark of Red Hat, Inc.; these v2.1.5
+    files declare no OFL Reserved Font Name.)
 
 -----------------------------------------------------------
 PREAMBLE

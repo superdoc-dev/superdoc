@@ -134,4 +134,80 @@ describe('getTextNodeForExport', () => {
     const runPropertiesChange = runProperties.elements.find((element) => element.name === 'w:rPrChange');
     expect(runPropertiesChange.attributes['w:id']).toBe('7');
   });
+
+  // SD-3278 export safety net: a raw newline left inside a PM text
+  // node (e.g. from an imported .docx that stored breaks as literal '\n') must
+  // export as a Word-native <w:br/>, not a collapsed newline inside <w:t>.
+  describe('raw newline export safety net', () => {
+    const contentElements = (result) => result.elements.filter((el) => el.name === 'w:t' || el.name === 'w:br');
+
+    it('exports a single newline as <w:t>/<w:br/>/<w:t> within one run', () => {
+      const result = getTextNodeForExport('Alpha\nBeta', [], buildParams());
+      expect(result.name).toBe('w:r');
+      const content = contentElements(result);
+      expect(content.map((el) => el.name)).toEqual(['w:t', 'w:br', 'w:t']);
+      expect(content[0].elements[0].text).toBe('Alpha');
+      expect(content[2].elements[0].text).toBe('Beta');
+    });
+
+    it('never leaves a raw newline inside a <w:t>', () => {
+      const result = getTextNodeForExport('Alpha\nBeta', [], buildParams());
+      const texts = result.elements.filter((el) => el.name === 'w:t');
+      expect(texts.some((el) => el.elements[0].text.includes('\n'))).toBe(false);
+    });
+
+    it('emits a soft break (no w:type="page") for the <w:br/>', () => {
+      const result = getTextNodeForExport('Alpha\nBeta', [], buildParams());
+      const br = result.elements.find((el) => el.name === 'w:br');
+      expect(br).toBeDefined();
+      expect(br.attributes?.['w:type']).toBeUndefined();
+    });
+
+    it('leaves newline-free text as a single <w:t> (unchanged)', () => {
+      const result = getTextNodeForExport('hello world', [], buildParams());
+      const content = contentElements(result);
+      expect(content).toHaveLength(1);
+      expect(content[0].name).toBe('w:t');
+      expect(content[0].elements[0].text).toBe('hello world');
+    });
+
+    it('emits a <w:br/> for each newline including leading, trailing, and consecutive newlines', () => {
+      const result = getTextNodeForExport('\nA\n\nB\n', [], buildParams());
+      const content = contentElements(result);
+      expect(content.map((el) => el.name)).toEqual(['w:br', 'w:t', 'w:br', 'w:br', 'w:t', 'w:br']);
+      const texts = content.filter((el) => el.name === 'w:t').map((el) => el.elements[0].text);
+      expect(texts).toEqual(['A', 'B']);
+    });
+
+    it('sets xml:space="preserve" only on segments with edge whitespace', () => {
+      const result = getTextNodeForExport('Alpha \n Beta', [], buildParams());
+      const texts = result.elements.filter((el) => el.name === 'w:t');
+      expect(texts[0].elements[0].text).toBe('Alpha ');
+      expect(texts[0].attributes).toEqual({ 'xml:space': 'preserve' });
+      expect(texts[1].elements[0].text).toBe(' Beta');
+      expect(texts[1].attributes).toEqual({ 'xml:space': 'preserve' });
+    });
+
+    it('does not set xml:space on segments without edge whitespace', () => {
+      const result = getTextNodeForExport('Alpha\nBeta', [], buildParams());
+      const texts = result.elements.filter((el) => el.name === 'w:t');
+      expect(texts[0].attributes).toBeNull();
+      expect(texts[1].attributes).toBeNull();
+    });
+
+    it('normalizes CRLF to a <w:br/> on export', () => {
+      const content = contentElements(getTextNodeForExport('Alpha\r\nBeta', [], buildParams()));
+      expect(content.map((el) => el.name)).toEqual(['w:t', 'w:br', 'w:t']);
+      expect(content[0].elements[0].text).toBe('Alpha');
+      expect(content[2].elements[0].text).toBe('Beta');
+    });
+
+    it('normalizes a bare CR to a <w:br/> without leaving a stray carriage return in <w:t>', () => {
+      const result = getTextNodeForExport('Alpha\rBeta', [], buildParams());
+      const content = contentElements(result);
+      expect(content.map((el) => el.name)).toEqual(['w:t', 'w:br', 'w:t']);
+      const texts = result.elements.filter((el) => el.name === 'w:t');
+      expect(texts.some((el) => el.elements[0].text.includes('\r'))).toBe(false);
+    });
+  });
 });

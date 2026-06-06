@@ -9,10 +9,12 @@ import { fileURLToPath } from 'node:url';
 // budget). The provider registers `url(/fonts/<file>)` faces against this same path.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ASSETS_DIR = path.resolve(here, '../../shared/font-system/assets');
+const THIRD_PARTY_LICENSES_PATH = path.resolve(here, '../../THIRD_PARTY_LICENSES.md');
 const URL_PREFIX = '/fonts/';
 
 const contentType = (file) => {
   if (file.endsWith('.woff2')) return 'font/woff2';
+  if (file.endsWith('.json')) return 'application/json; charset=utf-8';
   if (file.endsWith('.md')) return 'text/markdown; charset=utf-8';
   return 'text/plain; charset=utf-8';
 };
@@ -55,6 +57,13 @@ export default function bundledFontsPlugin() {
         const full = path.join(ASSETS_DIR, name);
         if (!fs.statSync(full).isFile()) continue;
         this.emitFile({ type: 'asset', fileName: `fonts/${name}`, source: fs.readFileSync(full) });
+      }
+      if (fs.existsSync(THIRD_PARTY_LICENSES_PATH)) {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'THIRD_PARTY_LICENSES.md',
+          source: fs.readFileSync(THIRD_PARTY_LICENSES_PATH),
+        });
       }
     },
   };

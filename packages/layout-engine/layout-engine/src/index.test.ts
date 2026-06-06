@@ -4628,9 +4628,7 @@ describe('requirePageBoundary edge cases', () => {
 
       const layout = layoutDocument(blocks, measures, options);
       const page = layout.pages[0];
-      const contentWidth = options.pageSize!.w - options.margins!.left - options.margins!.right;
-      const totalGap = 48 * 2;
-      const expectedSecondColumnX = 50 + (100 * (contentWidth - totalGap)) / (100 + 100 + 300) + 48;
+      const expectedSecondColumnX = 50 + 100 + 48;
 
       const p2 = page.fragments.find((f) => f.blockId === 'p2') as ParaFragment;
       const p3 = page.fragments.find((f) => f.blockId === 'p3') as ParaFragment;

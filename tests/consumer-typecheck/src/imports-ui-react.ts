@@ -21,6 +21,7 @@ import {
   useSuperDocToolbar,
   useSuperDocCommand,
   useSuperDocDocument,
+  useSuperDocZoom,
 } from 'superdoc/ui/react';
 import type { SuperDocHost } from 'superdoc/ui/react';
 
@@ -38,6 +39,7 @@ const _real_useSuperDocTrackChanges: AssertNotAny<typeof useSuperDocTrackChanges
 const _real_useSuperDocToolbar: AssertNotAny<typeof useSuperDocToolbar> = true;
 const _real_useSuperDocCommand: AssertNotAny<typeof useSuperDocCommand> = true;
 const _real_useSuperDocDocument: AssertNotAny<typeof useSuperDocDocument> = true;
+const _real_useSuperDocZoom: AssertNotAny<typeof useSuperDocZoom> = true;
 
 const _real_SuperDocHost: AssertNotAny<SuperDocHost> = true;
 
@@ -52,4 +54,5 @@ void _real_useSuperDocTrackChanges;
 void _real_useSuperDocToolbar;
 void _real_useSuperDocCommand;
 void _real_useSuperDocDocument;
+void _real_useSuperDocZoom;
 void _real_SuperDocHost;

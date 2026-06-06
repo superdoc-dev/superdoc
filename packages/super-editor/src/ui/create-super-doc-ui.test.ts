@@ -1046,3 +1046,143 @@ describe('createSuperDocUI', () => {
     expect(ok).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('ui.zoom', () => {
+  let teardown: Array<() => void> = [];
+
+  afterEach(() => {
+    teardown.forEach((fn) => fn());
+    teardown = [];
+  });
+
+  const attachZoomSurface = (superdoc: ReturnType<typeof makeSuperdocStub>) => {
+    const zoomHost = {
+      state: {
+        mode: 'manual' as 'manual' | 'fit-width',
+        value: 100,
+        fitZoom: null as number | null,
+        min: 10,
+        max: 100,
+      },
+      metrics: null as { availableWidth: number; documentWidth: number; fitZoom: number } | null,
+      setZoom: vi.fn(),
+      setZoomMode: vi.fn(),
+    };
+    superdoc.getZoomState = vi.fn(() => ({ ...zoomHost.state }));
+    superdoc.getViewportMetrics = vi.fn(() => zoomHost.metrics);
+    superdoc.setZoom = zoomHost.setZoom;
+    superdoc.setZoomMode = zoomHost.setZoomMode;
+    return zoomHost;
+  };
+
+  it('degrades to a static manual/100 snapshot when the host lacks the zoom surface', () => {
+    const superdoc = makeSuperdocStub();
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    expect(ui.zoom.getSnapshot()).toEqual({
+      mode: 'manual',
+      value: 100,
+      fitZoom: null,
+      min: 10,
+      max: 100,
+      metrics: null,
+    });
+    // Mutations are no-ops, not crashes.
+    expect(() => ui.zoom.set(150)).not.toThrow();
+    expect(() => ui.zoom.setMode('fit-width')).not.toThrow();
+  });
+
+  it('snapshots the host zoom state and metrics', () => {
+    const superdoc = makeSuperdocStub();
+    const zoomHost = attachZoomSurface(superdoc);
+    zoomHost.state = { mode: 'fit-width', value: 84, fitZoom: 84, min: 25, max: 100 };
+    zoomHost.metrics = { availableWidth: 685, documentWidth: 816, fitZoom: 84 };
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    expect(ui.zoom.getSnapshot()).toEqual({
+      mode: 'fit-width',
+      value: 84,
+      fitZoom: 84,
+      min: 25,
+      max: 100,
+      metrics: { availableWidth: 685, documentWidth: 816, fitZoom: 84 },
+    });
+  });
+
+  it('observes mode-only transitions via zoomChange', async () => {
+    const superdoc = makeSuperdocStub();
+    const zoomHost = attachZoomSurface(superdoc);
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const cb = vi.fn();
+    teardown.push(ui.zoom.observe(cb));
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(cb.mock.calls[0][0].mode).toBe('manual');
+
+    zoomHost.state = { ...zoomHost.state, mode: 'fit-width' };
+    superdoc.fireSuperdoc('zoomChange', { zoom: 100, mode: 'fit-width' });
+    await flushMicrotasks();
+
+    expect(cb).toHaveBeenCalledTimes(2);
+    expect(cb.mock.calls[1][0].mode).toBe('fit-width');
+    expect(cb.mock.calls[1][0].value).toBe(100);
+  });
+
+  it('observes viewport metric updates via viewport-change', async () => {
+    const superdoc = makeSuperdocStub();
+    const zoomHost = attachZoomSurface(superdoc);
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const cb = vi.fn();
+    teardown.push(ui.zoom.observe(cb));
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    zoomHost.state = { ...zoomHost.state, fitZoom: 74 };
+    zoomHost.metrics = { availableWidth: 600, documentWidth: 816, fitZoom: 74 };
+    superdoc.fireSuperdoc('viewport-change', zoomHost.metrics);
+    await flushMicrotasks();
+
+    expect(cb).toHaveBeenCalledTimes(2);
+    expect(cb.mock.calls[1][0].fitZoom).toBe(74);
+    expect(cb.mock.calls[1][0].metrics).toEqual({ availableWidth: 600, documentWidth: 816, fitZoom: 74 });
+  });
+
+  it('does not re-fire observers when zoom state is unchanged', async () => {
+    const superdoc = makeSuperdocStub();
+    attachZoomSurface(superdoc);
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const cb = vi.fn();
+    teardown.push(ui.zoom.observe(cb));
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    // Unrelated recompute trigger with identical zoom state.
+    superdoc.fireSuperdoc('document-mode-change', { documentMode: 'viewing' });
+    await flushMicrotasks();
+
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes set and setMode to the host zoom surface', () => {
+    const superdoc = makeSuperdocStub();
+    const zoomHost = attachZoomSurface(superdoc);
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    ui.zoom.set(125);
+    expect(zoomHost.setZoom).toHaveBeenCalledWith(125);
+
+    ui.zoom.setMode('fit-width');
+    expect(zoomHost.setZoomMode).toHaveBeenCalledWith('fit-width');
+  });
+});

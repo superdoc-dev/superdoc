@@ -49,11 +49,12 @@ const mapIndexMatchesToDocMatches = ({ searchIndex, indexMatches, doc, positionT
     if (ranges.length === 0) continue;
 
     const matchTexts = ranges.map((r) => doc.textBetween(r.from, r.to));
+    const matchText = typeof indexMatch.text === 'string' ? indexMatch.text : matchTexts.join('');
 
     const match = {
       from: ranges[0].from,
       to: ranges[ranges.length - 1].to,
-      text: matchTexts.join(''),
+      text: matchText,
       id: uuidv4(),
       ranges,
       trackerIds: [],

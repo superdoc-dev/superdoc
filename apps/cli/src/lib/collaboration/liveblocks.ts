@@ -285,7 +285,9 @@ export function createLiveblocksRuntime(profile: LiveblocksCollaborationProfile)
   return {
     ydoc,
     provider,
-    waitForSync: () => waitForLiveblocksSync(provider, room, syncTimeoutMs),
+    waitForInitialSync: () => waitForLiveblocksSync(provider, room, syncTimeoutMs),
+    // Liveblocks handles sync internally; no websocket buffer to flush.
+    waitForFinalFlush: () => Promise.resolve(),
     dispose() {
       // Order matters: unsubscribe → provider.destroy → leave → ydoc.destroy
       provider.destroy();

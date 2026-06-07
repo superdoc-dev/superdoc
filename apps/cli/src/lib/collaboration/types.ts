@@ -75,7 +75,10 @@ export type CollaborationSummary = {
 export type CollaborationRuntime = {
   ydoc: YDoc;
   provider: unknown;
-  waitForSync(): Promise<void>;
+  /** Wait for initial sync with server on connect. */
+  waitForInitialSync(): Promise<void>;
+  /** Wait for pending updates to be sent before disconnect. */
+  waitForFinalFlush(): Promise<void>;
   dispose(): void;
 };
 

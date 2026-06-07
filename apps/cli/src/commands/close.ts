@@ -32,7 +32,11 @@ export async function runClose(tokens: string[], context: CommandContext): Promi
     async ({ metadata, paths }) => {
       const effectiveMetadata = metadata;
 
-      if (effectiveMetadata.dirty && !mode.discard) {
+      // In collab-only sessions (no source path), "dirty" means not saved to a
+      // local file — but changes ARE persisted to the collaboration server.
+      // Allow close() without --discard since waitForFinalFlush ensures sync.
+      const isCollabOnly = effectiveMetadata.sessionType === 'collab' && !effectiveMetadata.sourcePath;
+      if (effectiveMetadata.dirty && !mode.discard && !isCollabOnly) {
         throw new CliError(
           'DIRTY_CLOSE_REQUIRES_DECISION',
           'Active document has unsaved changes. Run "superdoc save" first or close with --discard.',

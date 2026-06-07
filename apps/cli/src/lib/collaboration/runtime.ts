@@ -18,6 +18,8 @@ import type {
 
 export const DEFAULT_SYNC_TIMEOUT_MS = 10_000;
 const SYNC_POLL_INTERVAL_MS = 25;
+const FLUSH_POLL_INTERVAL_MS = 10;
+const FLUSH_TIMEOUT_MS = 5_000;
 
 // ---------------------------------------------------------------------------
 // Websocket sync helper
@@ -85,6 +87,42 @@ export function waitForProviderSync(
 }
 
 // ---------------------------------------------------------------------------
+// Websocket buffer flush helper
+// ---------------------------------------------------------------------------
+
+type ProviderWithWs = { ws?: { bufferedAmount?: number; readyState?: number } | null };
+
+/**
+ * Wait for the websocket send buffer to be empty.
+ * This ensures pending Y.js updates have been handed to the network layer.
+ */
+function waitForBufferFlush(provider: unknown, timeoutMs: number = FLUSH_TIMEOUT_MS): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const startedAt = Date.now();
+
+    const check = () => {
+      const ws = (provider as ProviderWithWs).ws;
+      const buffered = ws?.bufferedAmount ?? 0;
+      const readyState = ws?.readyState;
+
+      // Resolve if: no websocket, websocket closed, or buffer empty
+      if (!ws || readyState !== 1 || buffered === 0) {
+        resolve();
+        return;
+      }
+      if (Date.now() - startedAt > timeoutMs) {
+        // Timeout - resolve anyway to avoid blocking forever
+        resolve();
+        return;
+      }
+      setTimeout(check, FLUSH_POLL_INTERVAL_MS);
+    };
+
+    check();
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Websocket runtime factories
 // ---------------------------------------------------------------------------
 
@@ -132,7 +170,8 @@ function createWebSocketRuntime(profile: WebSocketCollaborationProfile): Collabo
   return {
     ydoc,
     provider,
-    waitForSync: () => waitForProviderSync(provider, syncTimeoutMs, diagnostics),
+    waitForInitialSync: () => waitForProviderSync(provider, syncTimeoutMs, diagnostics),
+    waitForFinalFlush: () => waitForBufferFlush(provider),
     dispose() {
       diagnostics?.detach();
       provider.disconnect?.();

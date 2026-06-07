@@ -40,7 +40,7 @@ export type EditorWithDoc = Editor & {
 export interface OpenedDocument {
   editor: EditorWithDoc;
   meta: DocumentSourceMeta;
-  dispose(): void;
+  dispose(): void | Promise<void>;
 }
 
 /** Content override options extracted before calling Editor.open(). */
@@ -312,7 +312,7 @@ export async function openCollaborativeDocument(
   const runtime = createCollaborationRuntime(profile);
 
   try {
-    await runtime.waitForSync();
+    await runtime.waitForInitialSync();
 
     // SD-2138: Some providers fire "synced" before Yjs updates are fully
     // applied to local shared types. Give a brief window for the XmlFragment
@@ -381,12 +381,11 @@ export async function openCollaborativeDocument(
       editor: opened.editor,
       meta: opened.meta,
       bootstrap,
-      dispose() {
-        try {
-          opened.dispose();
-        } finally {
-          runtime.dispose();
-        }
+      async dispose() {
+        // Wait for pending Y.js updates to be sent before disconnecting.
+        await runtime.waitForFinalFlush();
+        opened.dispose();
+        runtime.dispose();
       },
     };
   } catch (error) {

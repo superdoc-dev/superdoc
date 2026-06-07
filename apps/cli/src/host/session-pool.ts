@@ -390,7 +390,7 @@ export class InMemorySessionPool implements SessionPool {
 
   private async destroySession(session: PooledSession): Promise<void> {
     this.clearAutosaveTimer(session);
-    session.opened.dispose();
+    await session.opened.dispose();
   }
 
   // -------------------------------------------------------------------------

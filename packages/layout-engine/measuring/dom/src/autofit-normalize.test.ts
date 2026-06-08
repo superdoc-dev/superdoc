@@ -133,6 +133,52 @@ describe('buildAutoFitWorkingGridInput', () => {
     expect(result.gridColumnCount).toBe(3);
   });
 
+  // SD-3309: a pct-width table re-resolves its absolute width against the CURRENT available
+  // width, so the authored grid sum (from authoring-time twips) legitimately differs from the
+  // re-resolved table width while the grid PROPORTIONS stay authoritative. Word honors those
+  // proportions (300dpi probes: a tblW=pct table with grid 30/70 + short content renders 30/70,
+  // not content-sized). The grid sum must NOT have to equal the table width for a pct table.
+  it('preserves an explicit non-uniform grid for a pct-width table even when the grid sum differs from the resolved width', () => {
+    const block = createTableBlock({
+      attrs: {
+        // 100% of available; resolves to 624 at maxWidth 624, but the authored grid sums to 640.
+        tableWidth: { width: 5000, type: 'pct' },
+      },
+      columnWidths: [192, 448], // 30 / 70, authored twips->px, sum 640 != 624
+      rows: [
+        {
+          id: 'row-1',
+          cells: [{ id: 'cell-1' }, { id: 'cell-2' }],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 624 });
+
+    expect(result.layoutMode).toBe('autofit');
+    expect(result.preferredTableWidth).toBe(624);
+    expect(result.preserveExplicitAutoGrid).toBe(true);
+  });
+
+  it('does not preserve a uniform pct-width grid with no concrete cell widths (lets content size it)', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableWidth: { width: 5000, type: 'pct' },
+      },
+      columnWidths: [312, 312], // uniform, no cell width hints
+      rows: [
+        {
+          id: 'row-1',
+          cells: [{ id: 'cell-1' }, { id: 'cell-2' }],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 624 });
+
+    expect(result.preserveExplicitAutoGrid).toBeUndefined();
+  });
+
   it('does not mark complete fixed grids far under tblW as authoritative', () => {
     const block = createTableBlock({
       attrs: {

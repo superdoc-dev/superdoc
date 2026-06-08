@@ -196,6 +196,7 @@ export function buildAutoFitWorkingGridInput(
   });
   const preserveExplicitAutoGrid = shouldPreserveExplicitAutoGrid({
     layoutMode,
+    tableWidth,
     preferredColumnWidths,
     preferredTableWidth,
     gridColumnCount,
@@ -288,18 +289,36 @@ function shouldPreserveAutoGrid(args: {
 
 function shouldPreserveExplicitAutoGrid(args: {
   layoutMode: AutoFitLayoutMode;
+  tableWidth: TableWidthAttr | undefined;
   preferredColumnWidths: number[];
   preferredTableWidth: number | undefined;
   gridColumnCount: number;
   rows: WorkingTableRowInput[];
 }): boolean {
-  const { layoutMode, preferredColumnWidths, preferredTableWidth, gridColumnCount, rows } = args;
+  const { layoutMode, tableWidth, preferredColumnWidths, preferredTableWidth, gridColumnCount, rows } = args;
   if (layoutMode !== 'autofit') return false;
   if (preferredTableWidth == null || preferredTableWidth <= 0) return false;
   if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return false;
   if (!hasNonUniformGrid(preferredColumnWidths) && !hasConcreteCellWidthRequest(rows)) return false;
 
+  // A pct-width table re-resolves its absolute width against the CURRENT available width, so the
+  // authored grid sum (from authoring-time twips) legitimately differs from the resolved table
+  // width while the grid PROPORTIONS stay authoritative. Word honors those proportions (300dpi
+  // probes, SD-3309); the solver scales the preferred widths to preferredTableWidth. For dxa/px
+  // the grid sum already equals the table width, so the equality check below still gates those.
+  if (isPercentTableWidth(tableWidth)) return true;
+
   return approximatelyEqual(sumWidths(preferredColumnWidths), preferredTableWidth);
+}
+
+/** True when the table preferred width is percentage-based (`tblW type="pct"`). */
+function isPercentTableWidth(tableWidth: TableWidthAttr | undefined): boolean {
+  return (
+    typeof tableWidth === 'object' &&
+    tableWidth != null &&
+    typeof tableWidth.type === 'string' &&
+    tableWidth.type.toLowerCase() === 'pct'
+  );
 }
 
 /**

@@ -28,7 +28,7 @@ test('computeSdkFingerprint changes when a nested SDK dist file changes', () => 
   withTempDir((root) => {
     const sdkDistDir = resolve(root, 'sdk/dist');
     const promptFile = resolve(root, 'packages/sdk/tools/system-prompt.md');
-    const cliFile = resolve(root, 'apps/cli/dist/index.js');
+    const cliFile = resolve(root, 'apps/cli/dist/main.js');
 
     writeFile(resolve(sdkDistDir, 'index.js'), "export { run } from './runtime/process.js';\n");
     writeFile(resolve(sdkDistDir, 'runtime/process.js'), 'export const run = () => "v1";\n');
@@ -55,7 +55,7 @@ test('computeSdkFingerprint changes when a new SDK dist file is added', () => {
   withTempDir((root) => {
     const sdkDistDir = resolve(root, 'sdk/dist');
     const promptFile = resolve(root, 'packages/sdk/tools/system-prompt.md');
-    const cliFile = resolve(root, 'apps/cli/dist/index.js');
+    const cliFile = resolve(root, 'apps/cli/dist/main.js');
 
     writeFile(resolve(sdkDistDir, 'index.js'), "export { run } from './runtime/process.js';\n");
     writeFile(resolve(sdkDistDir, 'runtime/process.js'), 'export const run = () => "ready";\n');

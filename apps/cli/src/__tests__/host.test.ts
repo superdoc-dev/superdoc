@@ -8,7 +8,7 @@ import { validateOperationResponseData } from '../lib/operation-args';
 import { resolveSourceDocFixture } from './fixtures';
 
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../..');
-const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/src/index.ts');
+const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/src/main.ts');
 const CLI_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/cli/package.json');
 const HOST_TEST_TIMEOUT_MS = 20_000;
 

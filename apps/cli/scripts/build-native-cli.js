@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { cliRoot, ensureNoUnknownFlags, getOptionalFlagValue, isDirectExecution, repoRoot } from './utils.js';
 import { ensureSuperdocBuild } from './ensure-superdoc-build.js';
 
-const cliEntry = path.join(cliRoot, 'src/index.ts');
+const cliEntry = path.join(cliRoot, 'src/main.ts');
 const cliPackagePath = path.join(cliRoot, 'package.json');
 const artifactsRoot = path.join(cliRoot, 'artifacts');
 const manifestPath = path.join(artifactsRoot, 'manifest.json');

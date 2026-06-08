@@ -3,7 +3,7 @@
   "version": "0.16.0",
   "type": "module",
   "bin": {
-    "superdoc": "./dist/index.js"
+    "superdoc": "./dist/main.js"
   },
   "files": [
     "dist",
@@ -11,11 +11,11 @@
   ],
   "scripts": {
     "predev": "node scripts/ensure-superdoc-build.js",
-    "dev": "bun run src/index.ts",
+    "dev": "bun run src/main.ts",
     "prebuild": "node scripts/ensure-superdoc-build.js",
-    "build": "bun build src/index.ts --outdir dist --target node --format esm",
+    "build": "bun build src/main.ts --outdir dist --target node --format esm",
     "prebuild:native": "node scripts/ensure-superdoc-build.js",
-    "build:native": "bun build src/index.ts --compile --outfile dist/superdoc",
+    "build:native": "bun build src/main.ts --compile --outfile dist/superdoc",
     "build:native:all": "node scripts/build-native-cli.js --all",
     "build:native:host": "node scripts/build-native-cli.js",
     "build:stage": "node scripts/stage-artifacts.js",

@@ -24,7 +24,7 @@ const EVALS_ROOT = resolve(__dirname, '..');
 export const PATHS = {
   mcpServer: resolve(EVALS_ROOT, '../apps/mcp/dist/index.js'),
   mcpSystemPrompt: resolve(EVALS_ROOT, '../packages/sdk/tools/system-prompt-mcp.md'),
-  cli: resolve(EVALS_ROOT, '../apps/cli/dist/index.js'),
+  cli: resolve(EVALS_ROOT, '../apps/cli/dist/main.js'),
   vendorSkill: resolve(EVALS_ROOT, 'fixtures/vendor/vendor-docx-skill.md'),
   mcpWrapper: resolve(EVALS_ROOT, 'providers/mcp-stdio-wrapper.mjs'),
 };

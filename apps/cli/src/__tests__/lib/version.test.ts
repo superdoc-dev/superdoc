@@ -33,7 +33,7 @@ describe('resolveCliPackageVersion', () => {
 
   test('resolves the CLI package version from the published dist layout', async () => {
     const expectedVersion = await readCliPackageVersion();
-    const moduleUrl = pathToFileURL(join(CLI_ROOT, 'dist/index.js')).href;
+    const moduleUrl = pathToFileURL(join(CLI_ROOT, 'dist/main.js')).href;
 
     expect(resolveCliPackageVersionFromModuleUrl(moduleUrl)).toBe(expectedVersion);
   });
@@ -53,7 +53,7 @@ describe('resolveCliPackageVersion', () => {
         }),
       );
 
-      const moduleUrl = pathToFileURL(join(platformPackageDir, 'dist/index.js')).href;
+      const moduleUrl = pathToFileURL(join(platformPackageDir, 'dist/main.js')).href;
       expect(resolveCliPackageVersionFromModuleUrl(moduleUrl)).toBe(expectedVersion);
     } finally {
       await rm(tempDir, { recursive: true, force: true });

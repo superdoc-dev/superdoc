@@ -7,7 +7,7 @@ import { SuperDocCliError } from '../runtime/errors.js';
 
 // Repo root: packages/sdk/langs/node/src/__tests__ → ../../../../../../
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../../../..');
-const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/src/index.ts');
+const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/src/main.ts');
 const FIXTURE_DOC = path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/advanced-text.docx');
 
 const E2E_TIMEOUT_MS = 30_000;
@@ -18,7 +18,7 @@ describe('SDK requestTimeoutMs propagation (e2e)', () => {
   beforeAll(() => {
     // Sanity-check the workspace layout once so test failures are clear when
     // the fixture moves or the CLI source is renamed.
-    expect(CLI_BIN.endsWith('apps/cli/src/index.ts')).toBe(true);
+    expect(CLI_BIN.endsWith('apps/cli/src/main.ts')).toBe(true);
   });
 
   afterEach(async () => {

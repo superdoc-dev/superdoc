@@ -9,7 +9,7 @@ const __dirname = dirname(__filename);
 
 function resolveSkillSource(): string {
   // In compiled dist: __dirname is dist/, skill/ is at dist/../skill/
-  // In dev (bun run src/index.ts): __dirname is src/commands/, skill/ is at src/commands/../../skill/
+  // In dev (bun run src/main.ts): __dirname is src/commands/, skill/ is at src/commands/../../skill/
   const fromDist = join(__dirname, '..', 'skill');
   if (existsSync(fromDist)) return fromDist;
 

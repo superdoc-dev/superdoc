@@ -12,7 +12,7 @@ import path from 'node:path';
 import { resolveSourceDocFixture } from './fixtures';
 
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../..');
-const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/src/index.ts');
+const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/src/main.ts');
 const TIMEOUT_MS = 15_000;
 const TEST_TIMEOUT_MS = 20_000;
 

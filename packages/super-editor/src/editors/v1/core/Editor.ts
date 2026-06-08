@@ -955,7 +955,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
         licenseKey: resolvedLicenseKey,
         metadata: telemetryConfig.metadata,
       });
-      console.debug('[super-editor] Telemetry: enabled');
     } catch {
       // Fail silently - telemetry should never break the app
     }

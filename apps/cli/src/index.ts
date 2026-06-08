@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { parseGlobalArgs } from './lib/args';
 import { createFailureEnvelope, createSuccessEnvelope } from './lib/envelope';
 import { CliError, toCliError } from './lib/errors';
@@ -413,9 +411,4 @@ export async function run(
       return cliError.exitCode;
     }
   });
-}
-
-if (import.meta.main) {
-  const exitCode = await run(process.argv.slice(2));
-  process.exit(exitCode);
 }

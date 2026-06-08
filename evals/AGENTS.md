@@ -57,7 +57,7 @@ pnpm --filter @superdoc-testing/evals run eval:benchmark:codex     # Codex-* pro
 pnpm --filter @superdoc-testing/evals run eval:benchmark:report    # markdown + CSV report
 ```
 
-Prerequisites for Level 3: MCP server built (`pnpm --filter @superdoc-dev/mcp run build`) and CLI built (`apps/cli/dist/index.js`). The `prebuild:benchmark-deps` script handles both.
+Prerequisites for Level 3: MCP server built (`pnpm --filter @superdoc-dev/mcp run build`) and CLI built. The `prebuild:benchmark-deps` script handles both.
 
 ## Baselines
 

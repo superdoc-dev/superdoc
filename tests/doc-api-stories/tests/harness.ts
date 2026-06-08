@@ -7,8 +7,8 @@ import { createSuperDocClient, type SuperDocClient, type SuperDocClientOptions }
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 const STORIES_ROOT = path.resolve(import.meta.dirname, '..');
-const CLI_DIST_BIN = path.join(REPO_ROOT, 'apps/cli/dist/index.js');
-const CLI_SRC_BIN = path.join(REPO_ROOT, 'apps/cli/src/index.ts');
+const CLI_DIST_BIN = path.join(REPO_ROOT, 'apps/cli/dist/main.js');
+const CLI_SRC_BIN = path.join(REPO_ROOT, 'apps/cli/src/main.ts');
 const execFileAsync = promisify(execFile);
 
 interface CliInvocation {

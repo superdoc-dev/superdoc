@@ -41,7 +41,7 @@ type ListsGetEnvelope = {
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../../..');
 const RESULTS_DIR = path.resolve(import.meta.dirname, '../../results/lists/missing-paraid-address-stability');
-const CLI_SRC_BIN = path.join(REPO_ROOT, 'apps/cli/src/index.ts');
+const CLI_SRC_BIN = path.join(REPO_ROOT, 'apps/cli/src/main.ts');
 const LIST_FIXTURE_CANDIDATES = [
   path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/basic-list.docx'),
   path.join(REPO_ROOT, 'packages/super-editor/src/editors/v1/tests/data/list_with_indents.docx'),

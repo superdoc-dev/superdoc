@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { createSuperDocClient, type SuperDocClient, type SuperDocDocument } from '@superdoc-dev/sdk';
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL('../../..', import.meta.url)));
-const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/dist/index.js');
+const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/dist/main.js');
 
 function createSessionId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

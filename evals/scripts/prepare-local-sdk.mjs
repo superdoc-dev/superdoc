@@ -45,7 +45,7 @@ const SDK_TOOLS_DIR = resolve(REPO_ROOT, 'packages/sdk/tools');
 const OUTPUTS = {
   docApiContract: resolve(REPO_ROOT, 'packages/document-api/generated/schemas/document-api-contract.json'),
   sdkDist:      resolve(SDK_NODE_PKG, 'dist/index.js'),
-  cliDist:      resolve(REPO_ROOT, 'apps/cli/dist/index.js'),
+  cliDist:      resolve(REPO_ROOT, 'apps/cli/dist/main.js'),
   toolsVercel:  resolve(SDK_TOOLS_DIR, 'tools.vercel.json'),
   toolsOpenai:  resolve(SDK_TOOLS_DIR, 'tools.openai.json'),
   systemPrompt: resolve(SDK_TOOLS_DIR, 'system-prompt.md'),

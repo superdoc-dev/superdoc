@@ -3463,6 +3463,9 @@ export class DomPainter {
     // Degenerate: zero-dimension viewBox is invalid SVG — skip rendering.
     if (viewW === 0 || viewH === 0) return null;
 
+    const hasLargeCoordinateScale = viewW / width > 10 || viewH / height > 10;
+    const explicitStrokeEffect = hasLargeCoordinateScale ? ' vector-effect="non-scaling-stroke"' : '';
+
     // When the SVG viewBox maps to a non-uniform aspect ratio (common with group transforms),
     // thin fill borders can become sub-pixel on one axis. Add a hairline stroke matching the
     // fill color with vector-effect="non-scaling-stroke" so edges remain at least 0.5px visible.
@@ -3481,7 +3484,9 @@ export class DomPainter {
         const scaleY = viewH / pathH;
         const transform = needsTransform ? ` transform="scale(${scaleX}, ${scaleY})"` : '';
         const strokeAttr =
-          strokeColor !== 'none' ? ` stroke="${strokeColor}" stroke-width="${strokeWidth}"` : edgeStroke;
+          strokeColor !== 'none'
+            ? ` stroke="${strokeColor}" stroke-width="${strokeWidth}"${explicitStrokeEffect}`
+            : edgeStroke;
         return `<path d="${p.d}" fill="${fillColor}" fill-rule="evenodd"${strokeAttr}${transform} />`;
       })
       .join('\n  ');

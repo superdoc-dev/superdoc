@@ -2,6 +2,7 @@
 import { getNodeType } from '@core/helpers/getNodeType.js';
 import { createCell } from './createCell.js';
 import { generateDocxHexId } from '../../../utils/generateDocxHexId.js';
+import { cellWidthDxa } from './cellWidth.js';
 
 /**
  * Create a new table with specified dimensions
@@ -41,9 +42,6 @@ export const createTable = (
   const headerCells = [];
   const cells = [];
 
-  // Twips per CSS pixel at 96 DPI (1440 twips/inch / 96 px/inch).
-  const TWIPS_PER_PX = 15;
-
   for (let index = 0; index < colsCount; index++) {
     // Word writes w:tcW on every cell it inserts; the concrete cell width marks
     // the grid as a real layout cache so the measuring pass preserves the
@@ -53,7 +51,7 @@ export const createTable = (
       ? {
           colwidth: [columnWidths[index]],
           tableCellProperties: {
-            cellWidth: { value: columnWidths[index] * TWIPS_PER_PX, type: 'dxa' },
+            cellWidth: cellWidthDxa(columnWidths[index]),
           },
         }
       : null;

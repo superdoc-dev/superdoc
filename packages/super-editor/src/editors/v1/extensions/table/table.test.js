@@ -1071,9 +1071,12 @@ describe('Table commands', async () => {
       const table = editor.state.doc.nodeAt(tablePos);
 
       // Each cell should have colwidth [208] (= Math.floor((8.5 - 1 - 1) * 96 / 3))
+      // AND the matching w:tcW (208 * 15 twips/px = 3120 dxa) so the inserted grid is
+      // a real layout cache and the measuring pass does not content-size it. (SD-3308/SD-3309)
       table.forEach((row) => {
         row.forEach((cell) => {
           expect(cell.attrs.colwidth).toEqual([208]);
+          expect(cell.attrs.tableCellProperties).toEqual({ cellWidth: { value: 3120, type: 'dxa' } });
         });
       });
 

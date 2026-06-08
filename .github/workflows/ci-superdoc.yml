@@ -258,6 +258,45 @@ jobs:
       - name: Run CLI tests
         run: pnpm run test:cli
 
+  doc-api-stories:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build doc-api story runtime
+        run: |
+          pnpm --silent --prefix packages/sdk run generate
+          pnpm --silent --prefix packages/superdoc run build:es
+          pnpm --silent --prefix apps/cli run build
+          pnpm --silent --prefix packages/sdk/langs/node run build
+
+      - name: Run contract collaboration doc-api story
+        working-directory: tests/doc-api-stories
+        run: pnpm exec vitest run --config ./vitest.config.ts tests/contract-collaboration/customxml-cache-roundtrip.ts
+
+      - name: Upload contract collaboration story output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-collaboration-doc-api-story-results
+          path: tests/doc-api-stories/results/contract-collaboration/customxml-cache-roundtrip/*.docx
+          if-no-files-found: ignore
+
   coverage:
     needs: build
     runs-on: ubuntu-latest
@@ -286,7 +325,7 @@ jobs:
   validate:
     name: CI SuperDoc / validate
     if: always()
-    needs: [detect, build, unit-tests, cli-tests, coverage]
+    needs: [detect, build, unit-tests, cli-tests, doc-api-stories, coverage]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
@@ -303,6 +342,7 @@ jobs:
             "build:${{ needs.build.result }}" \
             "unit-tests:${{ needs.unit-tests.result }}" \
             "cli-tests:${{ needs.cli-tests.result }}" \
+            "doc-api-stories:${{ needs.doc-api-stories.result }}" \
             "coverage:${{ needs.coverage.result }}"; do
             name="${job_result%%:*}"
             result="${job_result##*:}"

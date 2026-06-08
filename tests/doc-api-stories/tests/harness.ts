@@ -3,7 +3,12 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach } from 'vitest';
-import { createSuperDocClient, type SuperDocClient, type SuperDocClientOptions } from '@superdoc-dev/sdk';
+import {
+  createSuperDocClient,
+  type DocDescribeCommandParams,
+  type SuperDocClient,
+  type SuperDocClientOptions,
+} from '@superdoc-dev/sdk';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 const STORIES_ROOT = path.resolve(import.meta.dirname, '..');
@@ -23,7 +28,7 @@ export interface LegacyStoryClient {
   connect(): Promise<void>;
   dispose(): Promise<void>;
   describe(params?: Record<string, unknown>): Promise<unknown>;
-  describeCommand(params: Record<string, unknown>): Promise<unknown>;
+  describeCommand(params: DocDescribeCommandParams): Promise<unknown>;
 }
 
 function resolveInvocation(cliBin: string): CliInvocation {
@@ -232,21 +237,20 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
     return ctx;
   };
 
-  const clientProxy = new Proxy({} as SuperDocClient, {
+  const clientProxy = new Proxy({} as LegacyStoryClient, {
     get: (_target, prop) => (requireCtx().client as any)[prop],
   });
 
-  const api = {
+  const api: StoryContext = {
     client: clientProxy,
+    get resultsDir() {
+      return requireCtx().resultsDir;
+    },
     copyDoc: (source: string, name?: string) => requireCtx().copyDoc(source, name),
     outPath: (name: string) => requireCtx().outPath(name),
     runCli: (args: string[], options?: { allowError?: boolean }) => requireCtx().runCli(args, options),
     createHandleClient: (clientOptions?: SuperDocClientOptions) => requireCtx().createHandleClient(clientOptions),
-  } as StoryContext;
-
-  Object.defineProperty(api, 'resultsDir', {
-    get: () => requireCtx().resultsDir,
-  });
+  };
 
   return api;
 }

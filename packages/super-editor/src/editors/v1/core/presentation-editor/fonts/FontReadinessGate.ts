@@ -3,6 +3,7 @@ import {
   bumpFontConfigVersion,
   buildFontReport,
   buildFaceReport,
+  buildDocumentFontOptions,
   DEFAULT_FONT_LOAD_TIMEOUT_MS,
   type FontRegistry,
   type FontLoadResult,
@@ -10,6 +11,7 @@ import {
   type FontFaceLoadResult,
   type FontLoadSummary,
   type UsedFace,
+  type DocumentFontOption,
   type FontLoadStatus,
   type FontResolutionRecord,
   type FontResolver,
@@ -208,6 +210,23 @@ export class FontReadinessGate {
     const declaredOnly = declared.filter((family) => family && !usedFamilies.has(family.toLowerCase()));
     const declaredRows = buildFontReport(declaredOnly, registry, resolver);
     return [...faceRows, ...declaredRows];
+  }
+
+  /**
+   * The document's own fonts for the toolbar's document-specific picker: one option per LOGICAL family
+   * the document RENDERS, each with the family to preview it in. These are DOCUMENT fonts only - the
+   * toolbar composes them with its defaults. Built through the same registry + resolver + used faces as
+   * {@link getReport}. Never throws (font UI must not break layout): returns [] before the plan exists.
+   */
+  getDocumentFontOptions(): DocumentFontOption[] {
+    try {
+      const usedFaces = this.#getUsedFaces?.() ?? [];
+      if (!usedFaces.length) return [];
+      const { registry } = this.#resolveContext();
+      return buildDocumentFontOptions(usedFaces, registry, this.#fontResolver ?? undefined);
+    } catch {
+      return [];
+    }
   }
 
   /**

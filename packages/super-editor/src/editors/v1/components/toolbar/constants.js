@@ -4,7 +4,7 @@ import { getDefaultFontOfferings, fontOfferingStack, fontOfferingRenderStack } f
  * Built-in toolbar font dropdown options, DERIVED from the shared font-offering registry
  * (`@superdoc/font-system`) instead of a hand-maintained list. Only metric-safe, bundled-backed fonts
  * are advertised as defaults; Cambria (qualified), Calibri Light (category fallback), and not-yet-
- * bundled candidates like Georgia are intentionally absent until they ship with a fidelity status.
+ * bundled candidates like Georgia are intentionally absent from the static defaults.
  *
  * Per `FontConfig`: `label` is the Word-facing logical name (stored on the selection + active-state
  * match), `key` is the logical CSS stack, and the row preview renders in the physical clone that
@@ -19,6 +19,55 @@ export const TOOLBAR_FONTS = getDefaultFontOfferings().map((offering) => ({
     'data-item': 'btn-fontFamily-option',
   },
 }));
+
+function normalizeToolbarFamily(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase();
+}
+
+function compareToolbarFontOptions(a, b) {
+  return String(a.label ?? '')
+    .trim()
+    .localeCompare(String(b.label ?? '').trim(), 'en', { sensitivity: 'base' });
+}
+
+/**
+ * The single seam that composes the font dropdown options: it turns the active document's
+ * {@link import('@superdoc/font-system').DocumentFontOption}s into toolbar font options and unions them
+ * with the bundled defaults. The toolbar only asks for the result; it does not know how a font previews.
+ *
+ * - A consumer-provided `configFonts` list is returned UNCHANGED (custom toolbars own their list).
+ * - With no document options, returns `undefined` so the caller keeps its fallback to {@link TOOLBAR_FONTS}.
+ * - Otherwise: bundled defaults and document fonts are deduped by normalized logical family, then sorted
+ *   alphabetically by the visible font name. `label`/`key` stay the pure logical family (active-state
+ *   matching + the stored value), and the preview renders in `previewFamily`.
+ *
+ * @param {ReadonlyArray<import('@superdoc/font-system').DocumentFontOption>} documentOptions
+ * @param {Array} [configFonts] - the consumer's `fonts` config, if any
+ * @returns {Array|undefined}
+ */
+export function composeToolbarFontOptions(documentOptions, configFonts) {
+  if (configFonts) return configFonts;
+  if (!documentOptions?.length) return undefined;
+  const seen = new Set(TOOLBAR_FONTS.map((option) => normalizeToolbarFamily(option.label)));
+  const merged = [...TOOLBAR_FONTS];
+  for (const option of documentOptions) {
+    const dedupeKey = normalizeToolbarFamily(option.logicalFamily);
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    merged.push({
+      label: option.logicalFamily,
+      key: option.logicalFamily,
+      fontWeight: 400,
+      props: {
+        style: { fontFamily: option.previewFamily || option.logicalFamily },
+        'data-item': 'btn-fontFamily-option',
+      },
+    });
+  }
+  return merged.length > TOOLBAR_FONTS.length ? merged.sort(compareToolbarFontOptions) : undefined;
+}
 
 export const TOOLBAR_FONT_SIZES = [
   { label: '8', key: '8pt', props: { 'data-item': 'btn-fontSize-option' } },

@@ -90,6 +90,7 @@ import type {
   FontConfig,
   FontFaceConfig,
   FontFamilyConfig,
+  DocumentFontOption,
   FontResolutionRecord,
   FontsChangedPayload,
   FontsConfig,
@@ -291,6 +292,7 @@ const _real_FontAssetUrlResolver: AssertNotAny<FontAssetUrlResolver> = true;
 const _real_FontConfig: AssertNotAny<FontConfig> = true;
 const _real_FontFaceConfig: AssertNotAny<FontFaceConfig> = true;
 const _real_FontFamilyConfig: AssertNotAny<FontFamilyConfig> = true;
+const _real_DocumentFontOption: AssertNotAny<DocumentFontOption> = true;
 const _real_FontResolutionRecord: AssertNotAny<FontResolutionRecord> = true;
 const _real_FontsChangedPayload: AssertNotAny<FontsChangedPayload> = true;
 const _real_FontsConfig: AssertNotAny<FontsConfig> = true;

@@ -21,6 +21,8 @@ import type {
 } from '@superdoc/document-api';
 import { composeAuthorColorResolver } from '@superdoc/contracts';
 import type { TrackChangeAuthorColorResolver } from '@superdoc/contracts';
+import { buildFontFamilyOptions } from '@superdoc/font-system';
+import type { FontFamilyOption } from '@superdoc/font-system';
 import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
 import { resolvePositionAt } from './position-at.js';
@@ -43,6 +45,7 @@ import type {
   DocumentSlice,
   DynamicCommandHandle,
   EqualityFn,
+  FontsHandle,
   MetadataHandle,
   TrackChangesHandle,
   TrackChangesItem,
@@ -569,6 +572,28 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
   refreshContentControlsListCache();
 
+  let fontOptionsCache: FontFamilyOption[] = buildFontFamilyOptions([]);
+  const fontOptionsSignatureFor = (options: readonly FontFamilyOption[]) =>
+    JSON.stringify(options.map((option) => [option.label, option.value, option.previewFamily]));
+  let fontOptionsSignature = fontOptionsSignatureFor(fontOptionsCache);
+  const refreshFontOptionsCache = () => {
+    let next: FontFamilyOption[];
+    try {
+      next = buildFontFamilyOptions(superdoc.fonts?.getDocumentFontOptions?.() ?? []);
+    } catch {
+      next = buildFontFamilyOptions([]);
+    }
+    const signature = fontOptionsSignatureFor(next);
+    if (signature === fontOptionsSignature) return false;
+    fontOptionsSignature = signature;
+    fontOptionsCache = next;
+    return true;
+  };
+  const refreshFontOptionsAndNotify = () => {
+    if (refreshFontOptionsCache()) scheduleNotify();
+  };
+  refreshFontOptionsCache();
+
   /**
    * Memoized content-controls slice. Items array reference stays
    * stable when neither the list cache nor the `activeIds` derived
@@ -999,6 +1024,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       document: documentSlice,
       selection: selectionSlice,
       zoom: computeZoomSlice(),
+      fonts: { options: fontOptionsCache },
       toolbar: { context: toolbarSnapshot.context, commands: builtInCommands } as ToolbarSnapshotSlice,
       comments: {
         total: commentsListCache.total,
@@ -1156,9 +1182,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // zoom drives geometry (post-paint, tagged via onGeometryLayout) — separate
     // from the slice recompute that SUPERDOC_EVENTS triggers.
     superdoc.on?.('zoomChange', onGeometryZoom);
+    superdoc.on?.('fonts-changed', refreshFontOptionsAndNotify);
     teardown.push(() => {
       SUPERDOC_EVENTS.forEach((name) => superdoc.off?.(name, scheduleNotify));
       superdoc.off?.('zoomChange', onGeometryZoom);
+      superdoc.off?.('fonts-changed', refreshFontOptionsAndNotify);
     });
   }
 
@@ -1211,7 +1239,10 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   const attachEditorListeners = () => {
     const next = resolveRoutedEditor(superdoc);
-    if (next === currentEditor) return;
+    if (next === currentEditor) {
+      refreshFontOptionsAndNotify();
+      return;
+    }
     currentEditorTeardown?.();
     currentEditorTeardown = null;
     currentEditor = next;
@@ -1248,11 +1279,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       next.off?.('transaction', onTransaction);
       next.off?.('transaction', onDocChangedForContentControls);
     };
-    // The set of source events changed and the routed editor swapped
-    // — refresh the comments + content-controls caches for the new
-    // editor and recompute state so subscribers see the new selection.
+    // The set of source events changed and the routed editor swapped.
+    // Refresh caches before recomputing state so subscribers see the
+    // new document's current data.
     refreshCommentsListCache();
     refreshContentControlsListCache();
+    refreshFontOptionsCache();
     scheduleNotify();
   };
 
@@ -2440,6 +2472,29 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
   };
 
+  const fonts: FontsHandle = {
+    getSnapshot: () => ({ options: fontOptionsCache }),
+    subscribe(listener) {
+      return select((state) => state.fonts, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener({ snapshot });
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    observe(listener) {
+      return select((state) => state.fonts, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener(snapshot);
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    getOptions: () => fontOptionsCache,
+  };
+
   // Live scopes created via `ui.createScope()`. The controller's
   // `destroy()` cascades into every entry before tearing down its own
   // resources, so consumers do not need to call `scope.destroy()`
@@ -2710,6 +2765,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     viewport,
     document,
     zoom,
+    fonts,
     createScope: createScopeFn,
     destroy,
   };

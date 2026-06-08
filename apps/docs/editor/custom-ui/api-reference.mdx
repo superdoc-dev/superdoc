@@ -86,6 +86,17 @@ const toolbar = useSuperDocToolbar();
 // { context, commands: Record<string, UIToolbarCommandState> }
 ```
 
+### `useSuperDocFontOptions()`
+
+Returns font-family picker options for custom toolbar UIs. The list includes the built-in defaults plus fonts used by the active document, sorted alphabetically.
+
+```ts
+const options = useSuperDocFontOptions();
+// [{ label: 'Calibri', value: 'Calibri', previewFamily: 'Carlito' }, ...]
+```
+
+Use `option.value` with `ui.toolbar.execute('font-family', option.value)`. Use `option.previewFamily` only to render the row preview.
+
 ### `useSuperDocSlice(picker, initial)`
 
 Subscribe to any slice from `ui.select(...)`. Use when the typed hooks above don't cover what you need.
@@ -243,6 +254,17 @@ ui.toolbar.execute(id, payload);         // built-ins that take a payload
 
 `payload` is optional. Pass it for built-ins like `font-size`, `font-family`, and `link` that accept a value; omit it for togglable built-ins like `bold` or `italic`.
 
+### `ui.fonts`
+
+Read-only font-family options for custom toolbar UIs.
+
+```ts
+ui.fonts.getOptions();
+ui.fonts.observe((snapshot) => {});
+```
+
+Each option has `{ label, value, previewFamily }`. Apply `value` through the `font-family` command.
+
 ### `ui.select(selector, equality?)`
 
 Raw selector substrate underlying every domain handle.
@@ -271,6 +293,9 @@ Imported from `superdoc/ui`.
 | `TrackChangesItem` | `{ id, change }`. |
 | `DocumentSlice` | `useSuperDocDocument()` return shape. |
 | `ToolbarSnapshotSlice` | `useSuperDocToolbar()` return shape. |
+| `FontsHandle` | `ui.fonts` handle shape. |
+| `FontsSlice` | `ui.fonts` snapshot shape. |
+| `FontFamilyOption` | `{ label, value, previewFamily }`. |
 | `UIToolbarCommandState` | Per-command state shape. |
 | `CustomCommandRegistration` | Input to `ui.commands.register`. |
 | `CustomCommandRegistrationResult` | Return from `ui.commands.register`. |

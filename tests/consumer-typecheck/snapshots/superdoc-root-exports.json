@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-05T18:14:02.432Z",
+  "generatedAt": "2026-06-08T11:16:20.709Z",
   "ticket": "SD-3212 PR A0",
   "package": "superdoc",
   "rootExport": {
@@ -55,6 +55,7 @@
         "DocRange",
         "Document",
         "DocumentApi",
+        "DocumentFontOption",
         "DocumentMode",
         "DocumentProtectionState",
         "DocxFileEntry",
@@ -297,6 +298,7 @@
         "DocRange",
         "Document",
         "DocumentApi",
+        "DocumentFontOption",
         "DocumentMode",
         "DocumentProtectionState",
         "DocxFileEntry",
@@ -591,11 +593,11 @@
     }
   },
   "counts": {
-    "types.import": 236,
-    "types.require": 236,
+    "types.import": 237,
+    "types.require": 237,
     "import": 41,
     "require": 41,
-    "union": 236
+    "union": 237
   },
   "divergences": {
     "typesImportVsRequire": {
@@ -643,6 +645,7 @@
         "DocRange",
         "Document",
         "DocumentApi",
+        "DocumentFontOption",
         "DocumentMode",
         "DocumentProtectionState",
         "DocxFileEntry",

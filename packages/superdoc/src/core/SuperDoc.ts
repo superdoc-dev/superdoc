@@ -1639,6 +1639,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       this.#fontsApi = {
         getReport: () => this.activeEditor?.presentationEditor?.getFontReport() ?? [],
         getMissingFonts: () => this.activeEditor?.presentationEditor?.getMissingFonts() ?? [],
+        getDocumentFontOptions: () => this.activeEditor?.presentationEditor?.getDocumentFontOptions() ?? [],
         getDocumentFonts: () => [
           // Deduped by logical family: the report can now carry multiple FACE rows per family.
           ...new Set(

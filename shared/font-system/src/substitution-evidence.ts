@@ -32,6 +32,9 @@ export type SubstitutePolicyAction =
 /** Derived public gate status. Diagnostic only - NOT a runtime inclusion input. */
 export type SubstituteGateStatus = 'pass' | 'not_run' | 'fail';
 
+/** CSS generic family for the logical font. */
+export type CssGeneric = 'serif' | 'sans-serif' | 'monospace';
+
 /**
  * RIBBI face slot - the four canonical faces docfonts scores. Deliberately NOT named `StyleKey` (its
  * docfonts name) or `FaceKey` (the runtime weight/style face in `resolver.ts`): an evidence slot is a
@@ -87,6 +90,8 @@ export interface SubstitutionEvidence {
   evidenceId: string;
   /** the proprietary family the document asks for (docfonts `originalFont`), e.g. "Cambria". */
   logicalFamily: string;
+  /** the logical font's broad CSS category, for a last-resort generic `font-family` keyword. */
+  generic: CssGeneric;
   /** the physical substitute rendered in its place; null when no candidate is recommended. */
   physicalFamily: string | null;
   /** worst-face fidelity verdict (the public summary; see `faceVerdicts` when faces disagree). */

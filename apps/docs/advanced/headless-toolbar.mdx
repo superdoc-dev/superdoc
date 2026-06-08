@@ -325,7 +325,11 @@ Snapshot values match the format you pass to `execute()`. What you read is what 
 
 ## Constants
 
-`headlessToolbarConstants` provides preset option arrays for dropdown-style controls. Each option has `{ label, value }` — use `value` when calling `execute()`.
+`headlessToolbarConstants` provides preset option arrays for dropdown-style controls. Each option has `{ label, value }`. Use `value` when calling `execute()`.
+
+For a font dropdown that also includes fonts used by the active document, use `useSuperDocFontOptions()` from `superdoc/ui/react` or `ui.fonts` from `superdoc/ui`.
+
+For font family, font size, and other commands that apply to selected text, prefer a button menu or popover that prevents `mousedown` from moving focus out of the editor. Native selects can visually clear the editor selection while their menu is open.
 
 <CodeGroup>
 
@@ -355,7 +359,7 @@ const {
 
 | Constant | Contents |
 |----------|----------|
-| `DEFAULT_FONT_FAMILY_OPTIONS` | Aptos, Georgia, Arial, Courier New, Times New Roman |
+| `DEFAULT_FONT_FAMILY_OPTIONS` | Arial, Calibri, Courier New, Helvetica, Times New Roman |
 | `DEFAULT_FONT_SIZE_OPTIONS` | 8pt through 96pt (14 sizes) |
 | `DEFAULT_TEXT_ALIGN_OPTIONS` | left, center, right, justify |
 | `DEFAULT_LINE_HEIGHT_OPTIONS` | 1.00, 1.15, 1.50, 2.00, 2.50, 3.00 |

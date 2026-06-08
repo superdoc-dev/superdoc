@@ -182,6 +182,7 @@ export type { FontConfig } from '@superdoc/super-editor';
 export type { FontFaceConfig } from '@superdoc/super-editor';
 export type { FontFamilyConfig } from '@superdoc/super-editor';
 export type { FontResolutionRecord } from '@superdoc/super-editor';
+export type { DocumentFontOption } from '@superdoc/super-editor';
 export type { FontsChangedPayload } from '@superdoc/super-editor';
 export type { FontsConfig } from '@superdoc/super-editor';
 export type { FontsResolvedPayload } from '@superdoc/super-editor';

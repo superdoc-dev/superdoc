@@ -76,17 +76,29 @@ const onWindowResized = async () => {
 };
 const onResizeThrottled = throttle(onWindowResized, 300);
 
-function teardownWindowListeners() {
+/**
+ * Force a re-render when the toolbar's item arrays are rebuilt. `toolbarItems` / `overflowItems` are plain
+ * fields on the SuperToolbar instance, not a reactive source this component tracks, so a rebuild (a new
+ * active editor, or document fonts resolving via `fonts-changed`) is invisible until the render key changes.
+ * SuperToolbar emits `toolbar-items-changed` on rebuild; bumping the key re-reads the new items into the DOM.
+ */
+const onToolbarItemsChanged = () => {
+  toolbarKey.value += 1;
+};
+
+function teardownListeners() {
   window.removeEventListener('resize', onResizeThrottled);
   window.removeEventListener('keydown', onKeyDown);
+  proxy.$toolbar.off?.('toolbar-items-changed', onToolbarItemsChanged);
   containerResizeObserver?.disconnect();
   containerResizeObserver = null;
 }
 
-function setupWindowListeners() {
-  teardownWindowListeners();
+function setupListeners() {
+  teardownListeners();
   window.addEventListener('resize', onResizeThrottled);
   window.addEventListener('keydown', onKeyDown);
+  proxy.$toolbar.on?.('toolbar-items-changed', onToolbarItemsChanged);
   if (
     typeof ResizeObserver !== 'undefined' &&
     proxy.$toolbar.config?.responsiveToContainer &&
@@ -100,10 +112,10 @@ function setupWindowListeners() {
   updateCompactSideGroups();
 }
 
-onMounted(setupWindowListeners);
-onActivated(setupWindowListeners);
-onDeactivated(teardownWindowListeners);
-onBeforeUnmount(teardownWindowListeners);
+onMounted(setupListeners);
+onActivated(setupListeners);
+onDeactivated(teardownListeners);
+onBeforeUnmount(teardownListeners);
 
 const handleCommand = ({ item, argument, option }) => {
   proxy.$toolbar.emitCommand({ item, argument, option });

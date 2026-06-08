@@ -4,7 +4,7 @@
  * The controller exposes a single observation pipeline (the **selector
  * substrate** at `ui.select(...)`) that the domain namespaces
  * (`ui.toolbar`, `ui.commands`, `ui.comments`, `ui.trackChanges`,
- * `ui.viewport`, `ui.selection`) are implemented on top of. Consumers
+ * `ui.viewport`, `ui.selection`, `ui.fonts`) are implemented on top of. Consumers
  * building their own UI typically reach for the domain handles
  * (`ui.comments.subscribe(...)`, `ui.commands.bold.observe(...)`)
  * and only drop down to `ui.select` for slices the domain handles
@@ -17,6 +17,8 @@
 export type EqualityFn<T> = (a: T, b: T) => boolean;
 
 export type SelectorFn<TState, TSlice> = (state: TState) => TSlice;
+
+export type { FontFamilyOption } from '@superdoc/font-system';
 
 /**
  * A read-only signal. `get()` is synchronous; `subscribe()` invokes the
@@ -38,10 +40,15 @@ export interface Subscribable<T> {
  * Event names the UI controller (`createSuperDocUI`) subscribes to on
  * a SuperDoc-like host. Differs from `HeadlessToolbarSuperdocHostEvent`
  * (which adds `formatting-marks-change` but not `viewport-change`); a
- * custom UI host stub only has to support the four events the UI
+ * custom UI host stub only has to support the events the UI
  * controller actually consumes.
  */
-export type SuperDocUIHostEvent = 'editorCreate' | 'document-mode-change' | 'zoomChange' | 'viewport-change';
+export type SuperDocUIHostEvent =
+  | 'editorCreate'
+  | 'document-mode-change'
+  | 'zoomChange'
+  | 'viewport-change'
+  | 'fonts-changed';
 
 /**
  * Structural typing for the SuperDoc instance. Keeps the UI controller
@@ -99,6 +106,9 @@ export interface SuperDocLike {
     max: number;
   };
   getViewportMetrics?(): ZoomViewportMetrics | null;
+  fonts?: {
+    getDocumentFontOptions?(): import('@superdoc/font-system').DocumentFontOption[];
+  };
 }
 
 /**
@@ -352,6 +362,13 @@ export interface SuperDocUIState {
    * manual/100 snapshot.
    */
   zoom: ZoomSlice;
+  /** Font-family picker options for custom UI. */
+  fonts: FontsSlice;
+}
+
+export interface FontsSlice {
+  /** Final font-family picker rows: bundled defaults plus active document fonts. */
+  options: import('@superdoc/font-system').FontFamilyOption[];
 }
 
 /**
@@ -886,6 +903,12 @@ export interface SuperDocUI {
   zoom: ZoomHandle;
 
   /**
+   * Font-family options domain for custom toolbar UIs. Read-only: apply a chosen
+   * option with `ui.toolbar.execute('font-family', option.value)`.
+   */
+  fonts: FontsHandle;
+
+  /**
    * Create a {@link SuperDocUIScope} for collecting subscriptions,
    * custom-command registrations, and DOM listeners under one
    * lifecycle. Calling `ui.destroy()` cascades into every live scope
@@ -1150,6 +1173,20 @@ export interface ZoomHandle {
    * are available.
    */
   setMode(mode: ZoomMode): void;
+}
+
+export interface FontsHandle {
+  /** Snapshot current font-family picker options synchronously. */
+  getSnapshot(): FontsSlice;
+  /**
+   * Subscribe to font-family picker option changes. Fires once with the current snapshot,
+   * then when document font options actually change.
+   */
+  subscribe(listener: (event: { snapshot: FontsSlice }) => void): () => void;
+  /** Value-shaped alias of {@link subscribe}. */
+  observe(listener: (snapshot: FontsSlice) => void): () => void;
+  /** Convenience read for `getSnapshot().options`. */
+  getOptions(): import('@superdoc/font-system').FontFamilyOption[];
 }
 
 /**

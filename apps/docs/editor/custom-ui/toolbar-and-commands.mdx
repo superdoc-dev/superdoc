@@ -93,6 +93,103 @@ function FontSizePicker() {
 }
 ```
 
+## Font family picker
+
+Use `useSuperDocFontOptions()` for a custom font dropdown. It returns the built-in defaults plus fonts used by the active document, sorted alphabetically.
+
+`label` is what you show. `value` is what you pass to the `font-family` command. `previewFamily` is only for rendering the option row.
+
+```tsx
+import { useEffect, useRef, useState } from 'react';
+import type { SelectionCapture } from 'superdoc/ui';
+import { useSuperDocCommand, useSuperDocFontOptions, useSuperDocUI } from 'superdoc/ui/react';
+
+function firstFontName(value: unknown) {
+  return typeof value === 'string' ? value.split(',')[0]?.trim().replace(/^["']|["']$/g, '') || '' : '';
+}
+
+function FontFamilyPicker() {
+  const ui = useSuperDocUI();
+  const font = useSuperDocCommand('font-family');
+  const options = useSuperDocFontOptions();
+  const capturedSelection = useRef<SelectionCapture | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const current = firstFontName(font.value).toLowerCase();
+  const selectedOption =
+    options.find((option) => {
+      return (
+        firstFontName(option.value).toLowerCase() === current ||
+        firstFontName(option.previewFamily).toLowerCase() === current
+      );
+    }) ?? null;
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node | null)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const rememberSelection = () => {
+    const capture = ui?.selection.capture();
+    if (capture) capturedSelection.current = capture;
+  };
+
+  const applyFont = (value: string) => {
+    if (!ui) return;
+    if (capturedSelection.current) {
+      ui.selection.restore(capturedSelection.current);
+      capturedSelection.current = null;
+    }
+    setOpen(false);
+    ui.toolbar.execute('font-family', value);
+  };
+
+  return (
+    <div ref={menuRef}>
+      <button
+        type="button"
+        disabled={font.disabled}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          rememberSelection();
+        }}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {selectedOption?.label ?? 'Font'}
+      </button>
+      {open && (
+        <div role="listbox">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="option"
+              aria-selected={option.value === selectedOption?.value}
+              style={{ fontFamily: option.previewFamily }}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                rememberSelection();
+              }}
+              onClick={() => applyFont(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+When a user picks Calibri, SuperDoc stores and exports Calibri. The preview can render with the bundled fallback that actually paints it.
+
+Avoid native selects for this control. They take browser focus and visually clear the editor selection while the menu is open.
+
 ## What the hook returns
 
 | Field | Type | Meaning |

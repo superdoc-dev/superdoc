@@ -5,12 +5,18 @@ import {
   useSuperDocCommand,
   useSuperDocComments,
   useSuperDocContentControls,
+  useSuperDocFontOptions,
   useSuperDocTrackChanges,
   useSuperDocSelection,
   useSuperDocToolbar,
 } from './hooks.js';
 
-function makeSuperdocStub(overrides: { selectionInfo?: unknown } = {}) {
+function makeSuperdocStub(
+  overrides: {
+    selectionInfo?: unknown;
+    documentFontOptions?: Array<{ logicalFamily: string; previewFamily: string }>;
+  } = {},
+) {
   const editorListeners = new Map<string, Set<(...args: unknown[]) => void>>();
   const superdocListeners = new Map<string, Set<(...args: unknown[]) => void>>();
 
@@ -52,6 +58,9 @@ function makeSuperdocStub(overrides: { selectionInfo?: unknown } = {}) {
     off: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       superdocListeners.get(event)?.delete(handler);
     }),
+    fonts: {
+      getDocumentFontOptions: vi.fn(() => overrides.documentFontOptions ?? []),
+    },
   };
 }
 
@@ -145,6 +154,47 @@ describe('domain hooks', () => {
     expect(trackChanges).toEqual({ items: [], total: 0, activeId: null, authors: [] });
     expect(contentControls).toEqual({ items: [], activeIds: [], activeId: null, total: 0 });
     expect(toolbar).toEqual({ context: null, commands: {} });
+  });
+
+  it('useSuperDocFontOptions returns defaults plus active document fonts', () => {
+    let options: ReturnType<typeof useSuperDocFontOptions> | undefined;
+    let setSuperDoc: ReturnType<typeof useSetSuperDoc> | undefined;
+
+    function Probe() {
+      options = useSuperDocFontOptions();
+      setSuperDoc = useSetSuperDoc();
+      return null;
+    }
+
+    render(
+      <SuperDocUIProvider>
+        <Probe />
+      </SuperDocUIProvider>,
+    );
+
+    expect(options).toEqual([]);
+
+    act(() => {
+      setSuperDoc!(
+        makeSuperdocStub({
+          documentFontOptions: [{ logicalFamily: 'Aptos', previewFamily: 'Aptos' }],
+        }),
+      );
+    });
+
+    expect(options?.map((option) => option.label)).toEqual([
+      'Aptos',
+      'Arial',
+      'Calibri',
+      'Courier New',
+      'Helvetica',
+      'Times New Roman',
+    ]);
+    expect(options?.find((option) => option.label === 'Aptos')).toEqual({
+      label: 'Aptos',
+      value: 'Aptos',
+      previewFamily: 'Aptos',
+    });
   });
 
   it('useSuperDocCommand returns the disabled fallback for unknown ids', () => {

@@ -5,6 +5,7 @@ import {
   type HeadlessToolbarController,
   type ToolbarSnapshot,
   type PublicToolbarItemId,
+  type ToolbarPayloadMap,
 } from 'superdoc/headless-toolbar';
 import 'superdoc/style.css';
 import './style.css';
@@ -38,16 +39,65 @@ function sep(): HTMLDivElement {
   return el;
 }
 
-function select(id: string, options: readonly { label: string; value: string }[]): HTMLSelectElement {
-  const el = document.createElement('select');
-  el.dataset.cmd = id;
+type MenuOption = { label: string; value: string };
+type ButtonToolbarItemId = {
+  [Id in PublicToolbarItemId]: ToolbarPayloadMap[Id] extends never ? Id : never;
+}[PublicToolbarItemId];
+
+function firstFontName(value: string): string {
+  return value.split(',')[0]?.trim().replace(/^["']|["']$/g, '') || value;
+}
+
+function normalizedMenuValue(value: string): string {
+  return firstFontName(value).toLowerCase();
+}
+
+function menu(id: string, options: readonly MenuOption[], placeholder: string): HTMLDivElement {
+  const el = document.createElement('div');
+  el.className = 'menu-control';
+  el.dataset.menuCmd = id;
+  el.dataset.placeholder = placeholder;
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'menu-trigger';
+  trigger.dataset.menuTrigger = 'true';
+  trigger.textContent = placeholder;
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+  el.appendChild(trigger);
+
+  const list = document.createElement('div');
+  list.className = 'menu-list';
+  list.hidden = true;
+  list.setAttribute('role', 'listbox');
+
   for (const opt of options) {
-    const o = document.createElement('option');
-    o.value = opt.value;
-    o.textContent = opt.label;
-    el.appendChild(o);
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'menu-option';
+    item.dataset.menuValue = opt.value;
+    item.textContent = opt.label;
+    item.setAttribute('role', 'option');
+    list.appendChild(item);
   }
+
+  el.appendChild(list);
   return el;
+}
+
+function setMenuOpen(control: HTMLElement, open: boolean) {
+  const list = control.querySelector<HTMLElement>('.menu-list');
+  const trigger = control.querySelector<HTMLButtonElement>('[data-menu-trigger]');
+  if (!list || !trigger) return;
+  list.hidden = !open;
+  trigger.setAttribute('aria-expanded', String(open));
+}
+
+function closeMenus(container: HTMLElement, except?: HTMLElement) {
+  container.querySelectorAll<HTMLElement>('[data-menu-cmd]').forEach((control) => {
+    if (control !== except) setMenuOpen(control, false);
+  });
 }
 
 // --- Build toolbar DOM ---
@@ -64,8 +114,8 @@ function buildToolbar(container: HTMLElement) {
 
   // Font family & size
   container.append(
-    select('font-family', DEFAULT_FONT_FAMILY_OPTIONS),
-    select('font-size', DEFAULT_FONT_SIZE_OPTIONS.map(o => ({ label: o.label, value: o.value }))),
+    menu('font-family', DEFAULT_FONT_FAMILY_OPTIONS, 'Font'),
+    menu('font-size', DEFAULT_FONT_SIZE_OPTIONS.map(o => ({ label: o.label, value: o.value })), 'Size'),
     sep(),
   );
 
@@ -80,20 +130,12 @@ function buildToolbar(container: HTMLElement) {
 
   // Text color
   container.append(
-    select('text-color', DEFAULT_TEXT_COLOR_OPTIONS.map(o => ({ label: o.label, value: o.value }))),
+    menu('text-color', DEFAULT_TEXT_COLOR_OPTIONS.map(o => ({ label: o.label, value: o.value })), 'Color'),
     sep(),
   );
 
   // Text align
-  const alignSelect = document.createElement('select');
-  alignSelect.dataset.cmd = 'text-align';
-  for (const opt of headlessToolbarConstants.DEFAULT_TEXT_ALIGN_OPTIONS) {
-    const o = document.createElement('option');
-    o.value = opt.value;
-    o.textContent = opt.label;
-    alignSelect.appendChild(o);
-  }
-  container.append(alignSelect, sep());
+  container.append(menu('text-align', headlessToolbarConstants.DEFAULT_TEXT_ALIGN_OPTIONS, 'Align'), sep());
 
   // Image
   container.append(btn('image', icon(Image)));
@@ -108,14 +150,32 @@ function bindEvents(
   container.addEventListener('click', (e) => {
     const target = (e.target as HTMLElement).closest<HTMLElement>('button[data-cmd]');
     if (!target) return;
-    const cmd = target.dataset.cmd as PublicToolbarItemId;
+    const cmd = target.dataset.cmd as ButtonToolbarItemId;
     toolbar.execute(cmd);
   });
 
-  container.querySelectorAll<HTMLSelectElement>('select[data-cmd]').forEach((sel) => {
-    sel.addEventListener('change', () => {
-      toolbar.execute(sel.dataset.cmd as PublicToolbarItemId, sel.value);
+  container.querySelectorAll<HTMLElement>('[data-menu-cmd]').forEach((control) => {
+    const trigger = control.querySelector<HTMLButtonElement>('[data-menu-trigger]');
+    trigger?.addEventListener('mousedown', (event) => event.preventDefault());
+    trigger?.addEventListener('click', () => {
+      const isOpen = control.querySelector<HTMLElement>('.menu-list')?.hidden === false;
+      closeMenus(container, control);
+      setMenuOpen(control, !isOpen);
     });
+
+    control.querySelectorAll<HTMLButtonElement>('[data-menu-value]').forEach((option) => {
+      option.addEventListener('mousedown', (event) => event.preventDefault());
+      option.addEventListener('click', () => {
+        const cmd = control.dataset.menuCmd as PublicToolbarItemId;
+        const value = option.dataset.menuValue ?? '';
+        toolbar.execute(cmd, value);
+        setMenuOpen(control, false);
+      });
+    });
+  });
+
+  document.addEventListener('mousedown', (event) => {
+    if (!container.contains(event.target as Node | null)) closeMenus(container);
   });
 }
 
@@ -142,18 +202,28 @@ function syncUI(container: HTMLElement, snapshot: ToolbarSnapshot) {
     el.disabled = snapshot.commands[id]?.disabled ?? true;
   }
 
-  // Selects
+  // Menus
   for (const id of ['font-family', 'font-size', 'text-color', 'text-align'] as PublicToolbarItemId[]) {
-    const sel = container.querySelector<HTMLSelectElement>(`select[data-cmd="${id}"]`);
-    if (!sel) continue;
+    const control = container.querySelector<HTMLElement>(`[data-menu-cmd="${id}"]`);
+    const trigger = control?.querySelector<HTMLButtonElement>('[data-menu-trigger]');
+    if (!control || !trigger) continue;
     const state = snapshot.commands[id];
-    sel.disabled = state?.disabled ?? true;
-    if (state?.value != null) {
-      const val = String(state.value);
-      // Only set if the value matches an existing option
-      const hasOption = Array.from(sel.options).some((o) => o.value === val);
-      if (hasOption) sel.value = val;
-    }
+    trigger.disabled = state?.disabled ?? true;
+    const value = state?.value == null ? '' : String(state.value);
+    const current = normalizedMenuValue(value);
+    const selected = Array.from(control.querySelectorAll<HTMLButtonElement>('[data-menu-value]')).find((option) => {
+      const optionValue = option.dataset.menuValue ?? '';
+      const optionLabel = option.textContent ?? '';
+      return (
+        optionValue === value ||
+        normalizedMenuValue(optionValue) === current ||
+        normalizedMenuValue(optionLabel) === current
+      );
+    });
+    trigger.textContent = selected?.textContent ?? (value ? firstFontName(value) : control.dataset.placeholder ?? '');
+    control.querySelectorAll<HTMLButtonElement>('[data-menu-value]').forEach((option) => {
+      option.setAttribute('aria-selected', String(option === selected));
+    });
   }
 }
 

@@ -13,6 +13,7 @@ function makeSuperdocStub(
   initial: {
     documentMode?: 'editing' | 'suggesting' | 'viewing';
     selection?: { empty: boolean; text?: string };
+    documentFontOptions?: Array<{ logicalFamily: string; previewFamily: string }>;
   } = {},
 ) {
   const editorListeners = new Map<string, Set<(...args: unknown[]) => void>>();
@@ -20,6 +21,7 @@ function makeSuperdocStub(
 
   let selectionEmpty = initial.selection?.empty ?? true;
   let selectionText = initial.selection?.text ?? '';
+  let documentFontOptions = initial.documentFontOptions ?? [];
 
   const editor = {
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
@@ -45,12 +47,16 @@ function makeSuperdocStub(
     fireSuperdoc(event: string, ...args: unknown[]): void;
     setSelection(empty: boolean, text?: string): void;
     setDocumentMode(mode: 'editing' | 'suggesting' | 'viewing'): void;
+    setDocumentFontOptions(options: Array<{ logicalFamily: string; previewFamily: string }>): void;
     swapEditor(next: typeof editor | null): void;
     editorListenerCount(event: string): number;
     superdocListenerCount(event: string): number;
   } = {
     activeEditor: editor,
     config: { documentMode: initial.documentMode ?? 'editing' },
+    fonts: {
+      getDocumentFontOptions: vi.fn(() => documentFontOptions),
+    },
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!superdocListeners.has(event)) superdocListeners.set(event, new Set());
       superdocListeners.get(event)!.add(handler);
@@ -80,6 +86,9 @@ function makeSuperdocStub(
     },
     setDocumentMode(mode) {
       this.config!.documentMode = mode;
+    },
+    setDocumentFontOptions(options) {
+      documentFontOptions = options;
     },
     swapEditor(next) {
       this.activeEditor = next as never;
@@ -125,6 +134,80 @@ describe('createSuperDocUI', () => {
 
     const slice = ui.select((state) => state.documentMode);
     expect(slice.get()).toBe('editing');
+  });
+
+  it('exposes final font-family options for custom UI', () => {
+    const superdoc = makeSuperdocStub({
+      documentFontOptions: [
+        { logicalFamily: 'Aptos', previewFamily: 'Aptos' },
+        { logicalFamily: 'Bangla MN', previewFamily: 'Bangla MN' },
+        { logicalFamily: 'Calibri', previewFamily: 'Carlito' },
+      ],
+    });
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const options = ui.fonts.getOptions();
+    expect(options.map((option) => option.label)).toEqual([
+      'Aptos',
+      'Arial',
+      'Bangla MN',
+      'Calibri',
+      'Courier New',
+      'Helvetica',
+      'Times New Roman',
+    ]);
+    expect(options.find((option) => option.label === 'Aptos')).toEqual({
+      label: 'Aptos',
+      value: 'Aptos',
+      previewFamily: 'Aptos',
+    });
+    expect(options.every((option) => !('status' in option))).toBe(true);
+  });
+
+  it('refreshes ui.fonts when fonts-changed fires', async () => {
+    const superdoc = makeSuperdocStub();
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const observed: string[][] = [];
+    ui.fonts.observe((snapshot) => {
+      observed.push(snapshot.options.map((option) => option.label));
+    });
+
+    superdoc.setDocumentFontOptions([{ logicalFamily: 'Aptos', previewFamily: 'Aptos' }]);
+    superdoc.fireSuperdoc('fonts-changed');
+    await flushMicrotasks();
+
+    expect(observed.at(0)).toEqual(['Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman']);
+    expect(observed.at(-1)).toEqual(['Aptos', 'Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman']);
+  });
+
+  it('refreshes ui.fonts for delimiter-colliding font names', async () => {
+    const superdoc = makeSuperdocStub();
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const observed: string[][] = [];
+    ui.fonts.observe((snapshot) => {
+      observed.push(snapshot.options.map((option) => option.label));
+    });
+
+    superdoc.setDocumentFontOptions([{ logicalFamily: 'Zulu', previewFamily: 'Preview:One|Zzz:Zzz:Two' }]);
+    superdoc.fireSuperdoc('fonts-changed');
+    await flushMicrotasks();
+    expect(observed.at(-1)).toContain('Zulu');
+    expect(observed.at(-1)).not.toContain('Zzz');
+
+    superdoc.setDocumentFontOptions([
+      { logicalFamily: 'Zulu', previewFamily: 'Preview:One' },
+      { logicalFamily: 'Zzz', previewFamily: 'Two' },
+    ]);
+    superdoc.fireSuperdoc('fonts-changed');
+    await flushMicrotasks();
+
+    expect(observed.at(-1)).toContain('Zulu');
+    expect(observed.at(-1)).toContain('Zzz');
   });
 
   it('does not re-fire the listener when the selected slice is unchanged', async () => {

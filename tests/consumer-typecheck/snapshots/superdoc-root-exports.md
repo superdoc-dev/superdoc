@@ -1,17 +1,17 @@
 # superdoc root export inventory (SD-3212 PR A0)
 
-Generated: 2026-06-05T18:14:02.432Z
+Generated: 2026-06-08T11:16:20.709Z
 Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 
 ## Counts
 
 | Source | Path | Count |
 |---|---|---|
-| types.import | `./dist/superdoc/src/public/index.d.ts` | 236 |
-| types.require | `./dist/superdoc/src/public/index.d.cts` | 236 |
+| types.import | `./dist/superdoc/src/public/index.d.ts` | 237 |
+| types.require | `./dist/superdoc/src/public/index.d.cts` | 237 |
 | import | `./dist/superdoc.es.js` | 41 |
 | require | `./dist/superdoc.cjs` | 41 |
-| **union** |  | **236** |
+| **union** |  | **237** |
 
 ## Divergences
 
@@ -19,7 +19,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - types.require only (not in types.import): 0
 - ESM only (not in CJS): 0
 - CJS only (not in ESM): 0
-- typed but no runtime export (phantom risk): 195
+- typed but no runtime export (phantom risk): 196
 - runtime export but not typed (silent shadow on root): 0
 
 ### Type-only names (no runtime)
@@ -59,6 +59,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - `DocRange`
 - `Document`
 - `DocumentApi`
+- `DocumentFontOption`
 - `DocumentMode`
 - `DocumentProtectionState`
 - `DocxFileEntry`
@@ -260,11 +261,12 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `ContextMenuItem` | ✓ | ✓ |   |   | 2 | ✓ | 4 | 0 | 5 |   |
 | `ContextMenuSection` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
 | `CoreCommandMap` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 | ✓ |
-| `DOCX` | ✓ | ✓ | ✓ | ✓ | 2 |   | 157 | 24 | 55 | ✓ |
+| `DOCX` | ✓ | ✓ | ✓ | ✓ | 2 |   | 160 | 25 | 55 | ✓ |
 | `DirectSurfaceRequest` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
 | `DocRange` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
 | `Document` | ✓ | ✓ |   |   | 2 |   | 291 | 56 | 110 | ✓ |
 | `DocumentApi` | ✓ | ✓ |   |   | 3 | ✓ | 0 | 11 | 4 | ✓ |
+| `DocumentFontOption` | ✓ | ✓ |   |   | 0 |   | 0 | 0 | 0 |   |
 | `DocumentMode` | ✓ | ✓ |   |   | 3 | ✓ | 2 | 16 | 3 |   |
 | `DocumentProtectionState` | ✓ | ✓ |   |   | 1 | ✓ | 1 | 0 | 1 |   |
 | `DocxFileEntry` | ✓ | ✓ |   |   | 3 | ✓ | 0 | 0 | 0 |   |
@@ -385,7 +387,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `SlashMenu` | ✓ | ✓ | ✓ | ✓ | 1 |   | 0 | 0 | 1 |   |
 | `StoryLocator` | ✓ | ✓ |   |   | 1 | ✓ | 123 | 0 | 3 |   |
 | `SuperConverter` | ✓ | ✓ | ✓ | ✓ | 1 |   | 0 | 0 | 3 | ✓ |
-| `SuperDoc` | ✓ | ✓ | ✓ | ✓ | 22 |   | 1046 | 187 | 250 | ✓ |
+| `SuperDoc` | ✓ | ✓ | ✓ | ✓ | 22 |   | 1046 | 190 | 250 | ✓ |
 | `SuperDocAwarenessUpdatePayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocCommentsUpdatePayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocEditorPayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |

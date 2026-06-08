@@ -33,6 +33,6 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@docfonts/fallbacks": "0.4.0"
+    "@docfonts/fallbacks": "0.6.0"
   }
 }

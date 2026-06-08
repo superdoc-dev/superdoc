@@ -34,6 +34,7 @@ import type {
   FontsResolvedPayload,
   FontsChangedPayload,
   FontResolutionRecord,
+  DocumentFontOption,
   FontAssetUrlContext,
   FontAssetUrlResolver,
   ListDefinitionsPayload,
@@ -105,6 +106,11 @@ export interface SuperDocFontsApi {
   getMissingFonts(): string[];
   /** The document's declared logical font families, deduped. */
   getDocumentFonts(): string[];
+  /**
+   * The document's own fonts as toolbar options: one per logical family the document renders, each with
+   * a preview family. Document fonts only - compose with the defaults.
+   */
+  getDocumentFontOptions(): DocumentFontOption[];
   /**
    * Observe the font report: replays the current report immediately if one has already
    * resolved, then invokes `callback` on every future change. Use this rather than

@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-05-19T11:33:50.546Z",
   "summary": {
-    "total": 233,
+    "total": 234,
     "byBucket": {
       "legacy-root": 60,
       "internal-candidate": 8,
-      "supported-root": 165
+      "supported-root": 166
     },
     "byConfidence": {
-      "high": 130,
+      "high": 131,
       "medium": 101,
       "low": 2
     }
@@ -427,6 +427,17 @@
       "rationale": "Customer-facing core API type or runtime export. Consumer-supplied document descriptor used in Config.documents and now SuperDocState.documents; the public counterpart to the internal RuntimeDocument (which carries runtime-only fields and stays internal).",
       "confidence": "high",
       "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "DocumentFontOption",
+      "bucket": "supported-root",
+      "rationale": "Document-scoped font picker option returned by superdoc.fonts.getDocumentFontOptions() and surfaced through ui.fonts / useSuperDocFontOptions for custom toolbar integrations.",
+      "confidence": "high",
+      "source": "font-api",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,

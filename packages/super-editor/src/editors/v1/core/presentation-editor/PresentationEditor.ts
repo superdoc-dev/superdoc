@@ -182,6 +182,7 @@ import { measureBlock } from '@superdoc/measuring-dom';
 import {
   createFontResolver,
   type FontResolutionRecord,
+  type DocumentFontOption,
   type FontLoadSummary,
   type ResolvePhysicalFamily,
 } from '@superdoc/font-system';
@@ -3112,6 +3113,15 @@ export class PresentationEditor extends EventEmitter {
    */
   getFontReport(): FontResolutionRecord[] {
     return this.#fontGate?.getReport() ?? [];
+  }
+
+  /**
+   * The document's own fonts for the toolbar's document-specific picker: one option per LOGICAL family
+   * the document renders, each with the family to preview it in. DOCUMENT fonts only - the toolbar
+   * composes them with its defaults. Surfaced publicly as `superdoc.fonts.getDocumentFontOptions()`.
+   */
+  getDocumentFontOptions(): DocumentFontOption[] {
+    return this.#fontGate?.getDocumentFontOptions() ?? [];
   }
 
   /**

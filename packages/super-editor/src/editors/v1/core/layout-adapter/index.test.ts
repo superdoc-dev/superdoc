@@ -1836,6 +1836,60 @@ describe('toFlowBlocks', () => {
       expect(blocks[2].runs[0].text).toContain('text after');
     });
 
+    it('propagates nested VML textbox content from shapeContainer into the drawing block', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'shapeContainer',
+                attrs: {
+                  width: 300,
+                  height: 120,
+                  kind: 'textbox',
+                },
+                content: [
+                  {
+                    type: 'shapeTextbox',
+                    attrs: {
+                      attributes: {
+                        inset: '0pt,0pt,0pt,0pt',
+                        style: 'v-text-anchor:middle',
+                      },
+                    },
+                    content: [
+                      {
+                        type: 'paragraph',
+                        attrs: {
+                          paragraphProperties: {
+                            justification: 'center',
+                          },
+                        },
+                        content: [{ type: 'text', text: 'Textbox from VML' }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+      const drawingBlock = blocks.find((block) => block.kind === 'drawing');
+
+      expect(drawingBlock?.drawingKind).toBe('vectorShape');
+      expect(drawingBlock?.textContent).toEqual({
+        horizontalAlign: 'center',
+        parts: [{ text: 'Textbox from VML' }],
+      });
+      expect(drawingBlock?.textVerticalAlign).toBe('center');
+      expect(drawingBlock?.textInsets).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
+    });
+
     it('handles shapeContainer and shapeTextbox in all conversion paths', () => {
       // Test documentToFlowBlocks path (top-level doc children)
       const docWithShapes = {

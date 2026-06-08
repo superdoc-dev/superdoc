@@ -25,9 +25,18 @@ export function handleShapeTextboxImport({ params, pict }) {
 
   const parsedStyle = parseInlineStyles(shapeAttrs.style);
   const shapeStyle = buildStyles(parsedStyle);
+  const positionData = extractPositionData(parsedStyle);
 
   if (shapeStyle) {
     schemaAttrs.style = shapeStyle;
+  }
+
+  if (positionData.anchorData) {
+    schemaAttrs.anchorData = positionData.anchorData;
+  }
+
+  if (positionData.marginOffset) {
+    schemaAttrs.marginOffset = positionData.marginOffset;
   }
 
   const textbox = shape.elements?.find((el) => el.name === 'v:textbox');
@@ -98,4 +107,57 @@ function buildStyles(styleObject) {
   }
 
   return style;
+}
+
+/**
+ * @param {Record<string, string>} styleObject
+ * @returns {{ anchorData?: Record<string, string>, marginOffset?: { horizontal?: number, top?: number } }}
+ */
+function extractPositionData(styleObject) {
+  const anchorData = {};
+  const marginOffset = {};
+
+  if (styleObject['mso-position-horizontal']) {
+    anchorData.alignH = styleObject['mso-position-horizontal'];
+  }
+
+  if (styleObject['mso-position-horizontal-relative']) {
+    anchorData.hRelativeFrom = styleObject['mso-position-horizontal-relative'];
+  }
+
+  if (styleObject['mso-position-vertical']) {
+    anchorData.alignV = styleObject['mso-position-vertical'];
+  }
+
+  if (styleObject['mso-position-vertical-relative']) {
+    anchorData.vRelativeFrom = styleObject['mso-position-vertical-relative'];
+  }
+
+  if (styleObject['margin-left'] != null) {
+    marginOffset.horizontal = convertToPixels(styleObject['margin-left']);
+  }
+
+  if (styleObject['margin-top'] != null) {
+    marginOffset.top = convertToPixels(styleObject['margin-top']);
+  }
+
+  return {
+    ...(Object.keys(anchorData).length > 0 ? { anchorData } : {}),
+    ...(Object.keys(marginOffset).length > 0 ? { marginOffset } : {}),
+  };
+}
+
+/**
+ * @param {string} value
+ * @returns {number}
+ */
+function convertToPixels(value) {
+  const num = parseFloat(value);
+  if (Number.isNaN(num)) return 0;
+
+  if (value.endsWith('pt')) return (num * 96) / 72;
+  if (value.endsWith('in')) return num * 96;
+  if (value.endsWith('px')) return num;
+
+  return num;
 }

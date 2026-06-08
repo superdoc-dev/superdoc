@@ -2442,9 +2442,9 @@ export const MCP_TOOL_CATALOG = {
               "Number of tracked changes to skip for pagination. Only for action 'list'. Omit for other actions.",
           },
           type: {
-            enum: ['insert', 'delete', 'replacement', 'format', 'structural'],
+            enum: ['insert', 'delete', 'replacement', 'format'],
             description:
-              "Filter by change type: 'insert', 'delete', 'replacement', 'format', or 'structural'. Only for action 'list'. Omit for other actions.",
+              "Filter by change type: 'insert', 'delete', 'replacement', or 'format'. Only for action 'list'. Omit for other actions.",
           },
           force: {
             type: 'boolean',

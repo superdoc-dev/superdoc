@@ -287,7 +287,7 @@ describe('DomPainter renderColumnSeparators', () => {
       expect(seps[0].style.height).toBe('864px');
     });
 
-    it('uses explicit column widths when drawing separators for columnRegions', () => {
+    it('uses authored explicit column widths when drawing separators for columnRegions (SD-2629)', () => {
       const page = buildPage({
         columnRegions: [
           {
@@ -296,7 +296,9 @@ describe('DomPainter renderColumnSeparators', () => {
             columns: { count: 2, gap: 48, widths: [200, 952], equalWidth: false, withSeparator: true },
           },
         ],
-        fragments: [fragAt(96, 200), fragAt(244, 200)],
+        // Under authored-width geometry the separator sits at 96 + 200 + 24 = 320,
+        // so the right-column fragment must sit past 320px for the content gate to draw it.
+        fragments: [fragAt(96, 200), fragAt(360, 200)],
       });
       paintOnce(buildLayout(page), mount);
 
@@ -304,7 +306,7 @@ describe('DomPainter renderColumnSeparators', () => {
       expect(seps).toHaveLength(1);
       expect(seps[0].style.top).toBe('96px');
       expect(seps[0].style.height).toBe('404px');
-      expect(seps[0].style.left).toBe('220px');
+      expect(seps[0].style.left).toBe('320px');
     });
   });
 

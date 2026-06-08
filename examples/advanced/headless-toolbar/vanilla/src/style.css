@@ -7,8 +7,8 @@
   --btn-hover: #f1f5f9;
   --btn-active: #e2e8f0;
   --btn-disabled: #94a3b8;
-  --select-bg: #f8fafc;
-  --select-border: #cbd5e1;
+  --menu-bg: #f8fafc;
+  --menu-border: #cbd5e1;
   --separator-color: #e2e8f0;
 }
 
@@ -77,25 +77,61 @@ html, body {
   height: 16px;
 }
 
-#toolbar select {
+.menu-control {
+  position: relative;
+}
+
+#toolbar .menu-trigger {
   height: var(--btn-size);
+  min-width: 72px;
   padding: 0 8px;
-  border: 1px solid var(--select-border);
+  border: 1px solid var(--menu-border);
   border-radius: var(--btn-radius);
-  background: var(--select-bg);
+  background: var(--menu-bg);
   color: #334155;
   font-size: 13px;
   cursor: pointer;
   outline: none;
+  width: auto;
+  justify-content: flex-start;
 }
 
-#toolbar select:focus {
+#toolbar .menu-trigger:focus {
   border-color: #3b82f6;
 }
 
-#toolbar select:disabled {
+#toolbar .menu-trigger:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.menu-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 150px;
+  padding: 4px;
+  border: 1px solid var(--menu-border);
+  border-radius: var(--btn-radius);
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+#toolbar .menu-option {
+  display: block;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+#toolbar .menu-option[aria-selected='true'],
+#toolbar .menu-option:hover {
+  background: var(--btn-hover);
+  color: #0f172a;
 }
 
 

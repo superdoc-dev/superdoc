@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-05-19T11:33:50.546Z",
   "summary": {
-    "total": 226,
+    "total": 234,
     "byBucket": {
       "legacy-root": 60,
       "internal-candidate": 8,
-      "supported-root": 158
+      "supported-root": 166
     },
     "byConfidence": {
-      "high": 123,
+      "high": 131,
       "medium": 101,
       "low": 2
     }
@@ -427,6 +427,17 @@
       "rationale": "Customer-facing core API type or runtime export. Consumer-supplied document descriptor used in Config.documents and now SuperDocState.documents; the public counterpart to the internal RuntimeDocument (which carries runtime-only fields and stays internal).",
       "confidence": "high",
       "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "DocumentFontOption",
+      "bucket": "supported-root",
+      "rationale": "Document-scoped font picker option returned by superdoc.fonts.getDocumentFontOptions() and surfaced through ui.fonts / useSuperDocFontOptions for custom toolbar integrations.",
+      "confidence": "high",
+      "source": "font-api",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,
@@ -1841,6 +1852,17 @@
       "inCjs": false
     },
     {
+      "name": "SuperDocFitWidthOptions",
+      "rationale": "Bounds and padding for the fit-width zoom policy (Config.zoom.fitWidth); named so consumers can type fit policies outside the inline config literal.",
+      "bucket": "supported-root",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
       "name": "SuperDocFontFace",
       "bucket": "supported-root",
       "rationale": "Public font-face shape for superdoc.fonts.add (URL source + optional weight/style).",
@@ -1923,6 +1945,72 @@
       "rationale": "Backs Config.telemetry; documented at apps/docs/resources/telemetry.mdx (enabled/endpoint/metadata/licenseKey).",
       "confidence": "high",
       "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocViewportChangePayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the viewport-change event and passed to Config.onViewportChange; named so custom fit-to-width consumers can type handlers.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocViewportMetrics",
+      "rationale": "Return type of getViewportMetrics(); alias of the viewport-change payload so reads and events share one shape.",
+      "bucket": "supported-root",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocZoomConfig",
+      "bucket": "supported-root",
+      "rationale": "Config.zoom domain object (initial + fitToContainer); named so consumers can build zoom configuration values with a public type.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocZoomMode",
+      "rationale": "Closed zoom mode union (manual | fit-width) used by Config.zoom.mode, setZoomMode, and the zoomChange payload.",
+      "bucket": "supported-root",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocZoomPayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the zoomChange event and passed to Config.onZoomChange; promoted from an internal interface when the config callback made it consumer-facing.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocZoomState",
+      "rationale": "Return type of getZoomState(); snapshot of mode, value, fit zoom, and effective bounds for zoom UI.",
+      "bucket": "supported-root",
+      "confidence": "high",
+      "source": "core",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,

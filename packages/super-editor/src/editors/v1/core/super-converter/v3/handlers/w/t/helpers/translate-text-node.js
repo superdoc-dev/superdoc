@@ -44,11 +44,38 @@ export function getTextNodeForExport(text, marks, params) {
     partPath: resolveExportPartPath(params),
   });
 
-  textNodes.push({
-    name: 'w:t',
-    elements: [{ text, type: 'text' }],
-    attributes: nodeAttrs,
-  });
+  const textValue = typeof text === 'string' ? text : '';
+  // Normalize CRLF/CR to LF so Windows line endings export Word-native breaks
+  // too, rather than leaving a stray carriage return inside <w:t>.
+  const normalizedText = textValue.includes('\r') ? textValue.replace(/\r\n?/g, '\n') : textValue;
+  if (normalizedText.includes('\n')) {
+    // Export safety net: a raw newline inside <w:t> is whitespace that Word
+    // collapses on open (it is not the OOXML representation of a line break),
+    // while SuperDoc still renders it as a break: the SD-3278
+    // divergence. Emit a Word-native <w:br/> between
+    // segments instead. Everything stays inside this single run so the
+    // surrounding <w:ins>/<w:del> wrappers keep wrapping exactly one run.
+    const segments = normalizedText.split('\n');
+    segments.forEach((segment, index) => {
+      if (segment.length > 0) {
+        const segmentNeedsSpace = /^\s|\s$/.test(segment);
+        textNodes.push({
+          name: 'w:t',
+          elements: [{ text: segment, type: 'text' }],
+          attributes: segmentNeedsSpace ? { 'xml:space': 'preserve' } : null,
+        });
+      }
+      if (index < segments.length - 1) {
+        textNodes.push({ name: 'w:br' });
+      }
+    });
+  } else {
+    textNodes.push({
+      name: 'w:t',
+      elements: [{ text: normalizedText, type: 'text' }],
+      attributes: nodeAttrs,
+    });
+  }
 
   // For custom mark export, we need to add a bookmark start and end tag
   // And store attributes in the bookmark name

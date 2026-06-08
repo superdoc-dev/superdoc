@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent, ref, KeepAlive } from 'vue';
+import { defineComponent, ref, nextTick, KeepAlive } from 'vue';
+import { EventEmitter } from 'eventemitter3';
 import Toolbar from './Toolbar.vue';
 
 const ToolbarKeepAliveHost = defineComponent({
@@ -12,8 +13,10 @@ const ToolbarKeepAliveHost = defineComponent({
   template: '<KeepAlive><Toolbar v-if="visible" /></KeepAlive>',
 });
 
+// The real SuperToolbar is an EventEmitter; model that so Toolbar.vue can subscribe to
+// `toolbar-items-changed` (and tests can dispatch it).
 function createMockToolbar() {
-  return {
+  return Object.assign(new EventEmitter(), {
     config: {
       toolbarGroups: ['left', 'center', 'right'],
       toolbarButtonsExclude: [],
@@ -26,7 +29,7 @@ function createMockToolbar() {
     emitCommand: vi.fn(),
     overflowItems: [],
     activeEditor: null,
-  };
+  });
 }
 
 describe('Toolbar', () => {
@@ -202,5 +205,44 @@ describe('Toolbar', () => {
     wrapper.unmount();
 
     expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-renders the toolbar DOM when SuperToolbar reports rebuilt items (toolbar-items-changed)', async () => {
+    // toolbarItems is a plain field SuperToolbar swaps on rebuild; only a re-render re-reads it. The mock
+    // returns whatever `center.items` currently holds, so a "rebuild" is just reassigning that array.
+    const center = { items: [{ name: { value: 'fontFamily' } }] };
+    const mockToolbar = createMockToolbar();
+    mockToolbar.config.toolbarGroups = ['center']; // render only the center group: one unambiguous ButtonGroup
+    mockToolbar.getToolbarItemByGroup = (position) => (position === 'center' ? center.items : []);
+
+    const ButtonGroupStub = defineComponent({
+      props: ['toolbarItems', 'overflowItems', 'compactSideGroups', 'uiFontFamily', 'position'],
+      template:
+        '<div><span class="bg-item" v-for="i in toolbarItems" :key="i.name.value">{{ i.name.value }}</span></div>',
+    });
+
+    const wrapper = mount(Toolbar, {
+      global: {
+        stubs: { ButtonGroup: ButtonGroupStub },
+        plugins: [
+          (app) => {
+            app.config.globalProperties.$toolbar = mockToolbar;
+          },
+        ],
+      },
+    });
+
+    const renderedItems = () => wrapper.findAll('.bg-item').map((w) => w.text());
+    expect(renderedItems()).toEqual(['fontFamily']);
+
+    // A rebuild swaps in a new array (e.g. a document font resolved).
+    center.items = [{ name: { value: 'fontFamily' } }, { name: { value: 'Aptos' } }];
+
+    // The notify event forces a re-render that re-reads the rebuilt array.
+    mockToolbar.emit('toolbar-items-changed');
+    await nextTick();
+    expect(renderedItems()).toEqual(['fontFamily', 'Aptos']);
+
+    wrapper.unmount();
   });
 });

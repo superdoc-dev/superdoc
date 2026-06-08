@@ -6,29 +6,16 @@ import {
   fontOfferingStack,
   fontOfferingRenderStack,
 } from './font-offerings';
-import { BUNDLED_MANIFEST } from './bundled-manifest';
+import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
 
-/**
- * The default toolbar set this PR ships, in explicit product order (metric-safe fonts SuperDoc
- * renders deterministically). Order is pinned, not evidence order; see DEFAULT_FONT_ORDER.
- */
-const EXPECTED_DEFAULTS = ['Calibri', 'Arial', 'Courier New', 'Times New Roman', 'Helvetica'];
+const EXPECTED_DEFAULTS = ['Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman'];
 
 /**
  * Must NOT appear as DEFAULT options yet. Aptos/Georgia/Baskerville/Arial Narrow are not bundled (or
- * have no clone); Cambria is qualified (visual_only); Calibri Light is a category fallback. They reach
- * the toolbar later as document-specific options with a fidelity status, never as silent defaults.
+ * have no clone); Cambria is qualified (visual_only); Calibri Light is a category fallback. They can
+ * reach the toolbar as document-specific options, never as silent defaults.
  */
 const NOT_DEFAULT_YET = ['Aptos', 'Georgia', 'Cambria', 'Calibri Light', 'Baskerville', 'Arial Narrow'];
-
-/** Pin the generic classifier: every bundled family maps to exactly this generic (deliberate, tested). */
-const EXPECTED_GENERIC: Record<string, string> = {
-  Carlito: 'sans-serif',
-  Caladea: 'serif',
-  'Liberation Sans': 'sans-serif',
-  'Liberation Serif': 'serif',
-  'Liberation Mono': 'monospace',
-};
 
 describe('font offerings', () => {
   it('default offerings are exactly the metric-safe bundled fonts', () => {
@@ -51,11 +38,11 @@ describe('font offerings', () => {
 
   it('getDefaultFontFamilyOptions returns logical label + logical stack', () => {
     expect(getDefaultFontFamilyOptions()).toEqual([
-      { label: 'Calibri', value: 'Calibri, sans-serif' },
       { label: 'Arial', value: 'Arial, sans-serif' },
+      { label: 'Calibri', value: 'Calibri, sans-serif' },
       { label: 'Courier New', value: 'Courier New, monospace' },
-      { label: 'Times New Roman', value: 'Times New Roman, serif' },
       { label: 'Helvetica', value: 'Helvetica, sans-serif' },
+      { label: 'Times New Roman', value: 'Times New Roman, serif' },
     ]);
   });
 
@@ -65,16 +52,10 @@ describe('font offerings', () => {
     expect(fontOfferingRenderStack(calibri)).toBe('Carlito, sans-serif'); // physical: dropdown preview
   });
 
-  it('generic classifier is complete and correct for every bundled family (deliberate, pinned)', () => {
-    // Completeness: every bundled physical family has a pinned generic - a new clone cannot ship without one.
-    for (const family of BUNDLED_MANIFEST.map((f) => f.family)) {
-      expect(EXPECTED_GENERIC[family]).toBeDefined();
-    }
-    // Correctness: each offering's generic matches the pinned generic for its physical family.
+  it('uses the CSS generic category supplied by DocFonts evidence', () => {
+    const evidenceGeneric = new Map(SUBSTITUTION_EVIDENCE.map((row) => [row.logicalFamily, row.generic]));
     for (const o of FONT_OFFERINGS) {
-      if (o.physicalFamily && EXPECTED_GENERIC[o.physicalFamily]) {
-        expect(o.generic).toBe(EXPECTED_GENERIC[o.physicalFamily]);
-      }
+      expect(o.generic).toBe(evidenceGeneric.get(o.logicalFamily));
     }
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { h, defineComponent, ref, shallowRef, reactive, nextTick } from 'vue';
-import { DOCX } from '@superdoc/common';
+import { DOCX, PDF } from '@superdoc/common';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { Mapping, StepMap } from 'prosemirror-transform';
@@ -104,6 +104,15 @@ const CommentsLayerStub = stubComponent('CommentsLayer');
 const HrbrFieldsLayerStub = stubComponent('HrbrFieldsLayer');
 const AiLayerStub = stubComponent('AiLayer');
 const HtmlViewerStub = stubComponent('HtmlViewer');
+const PdfViewerStub = defineComponent({
+  name: 'PdfViewer',
+  props: ['file', 'fileId', 'config', 'initialScale'],
+  emits: ['page-rendered', 'document-ready', 'selection-raw', 'bypass-selection'],
+  setup(_props, { expose }) {
+    expose({ updateScale: vi.fn() });
+    return () => h('div', { class: 'sd-pdf-viewer' });
+  },
+});
 
 const createTrackedChangeIndexStub = () => ({
   subscribe: vi.fn(() => () => {}),
@@ -143,6 +152,16 @@ vi.mock('@superdoc/super-editor', () => ({
 
 vi.mock('./components/HtmlViewer/HtmlViewer.vue', () => ({
   default: HtmlViewerStub,
+}));
+
+vi.mock('./components/PdfViewer/PdfViewer.vue', () => ({
+  // SuperDoc.vue loads PdfViewer through defineAsyncComponent, so Vue
+  // receives this module namespace and interop-probes it (__isTeleport
+  // etc.); vitest's strict mock proxy throws on undeclared exports. The
+  // __esModule flag makes Vue's resolver take `default` immediately,
+  // before any probing.
+  __esModule: true,
+  default: PdfViewerStub,
 }));
 
 vi.mock('@superdoc/components/CommentsLayer/CommentDialog.vue', () => ({
@@ -189,6 +208,8 @@ const buildSuperdocStore = () => {
     selectionPosition: ref(null),
     activeSelection: ref(null),
     activeZoom: ref(100),
+    zoomMode: ref('manual'),
+    viewportMetrics: ref(null),
     modules: reactive({ comments: { readOnly: false }, ai: {}, 'hrbr-fields': [] }),
     handlePageReady: vi.fn(),
     user: { name: 'Ada', email: 'ada@example.com' },
@@ -338,6 +359,7 @@ const mountComponent = async (
 const createSuperdocStub = () => {
   const toolbar = { config: { aiApiKey: 'abc' }, setActiveEditor: vi.fn(), updateToolbarState: vi.fn() };
   const runtimeMap = new Map();
+  const eventHandlers = new Map();
   return {
     config: {
       modules: { comments: {}, ai: {}, toolbar: {}, pdf: {} },
@@ -365,8 +387,24 @@ const createSuperdocStub = () => {
     getActiveRuntime: vi.fn(() => null),
     activateRuntimeFromEventTarget: vi.fn(() => false),
     lockSuperdoc: vi.fn(),
-    emit: vi.fn(),
-    listeners: vi.fn(),
+    on: vi.fn((eventName, handler) => {
+      const handlers = eventHandlers.get(eventName) ?? new Set();
+      handlers.add(handler);
+      eventHandlers.set(eventName, handlers);
+      return undefined;
+    }),
+    off: vi.fn((eventName, handler) => {
+      eventHandlers.get(eventName)?.delete(handler);
+      return undefined;
+    }),
+    emit: vi.fn((eventName, payload) => {
+      const handlers = eventHandlers.get(eventName);
+      if (handlers) {
+        for (const handler of [...handlers]) handler(payload);
+      }
+      return true;
+    }),
+    listeners: vi.fn((eventName) => [...(eventHandlers.get(eventName) ?? [])]),
     captureLayoutPipelineEvent: vi.fn(),
     canPerformPermission: vi.fn(() => true),
   };
@@ -2913,5 +2951,463 @@ describe('SuperDoc.vue', () => {
 
     const styleVars = wrapper.vm.superdocStyleVars;
     expect(styleVars['--sd-comments-highlight-hover']).toBe('#abcdef88');
+  });
+
+  describe('viewport-change + fit-to-container', () => {
+    // Letter page: 8.5in * 96 = 816px base width through the page-styles path.
+    const stubPageStylesEditor = (superdocStub) => {
+      superdocStub.activeEditor = {
+        getPageStyles: vi.fn(() => ({ pageSize: { width: 8.5, height: 11 } })),
+      };
+    };
+
+    const setContainerWidth = (wrapper, width) => {
+      const rootEl = wrapper.find('.superdoc').element;
+      const parentEl = rootEl.parentElement;
+      Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: width });
+      if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: width });
+    };
+
+    const viewportChangeCalls = (superdocStub) =>
+      superdocStub.emit.mock.calls.filter(([name]) => name === 'viewport-change');
+
+    it('does not emit viewport-change before isReady', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.isReady.value = false;
+      await nextTick();
+
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      await nextTick();
+
+      expect(viewportChangeCalls(superdocStub).length).toBe(0);
+    });
+
+    it('emits viewport-change with page-styles-derived widths when ready', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toEqual({
+        availableWidth: 1200,
+        documentWidth: 816,
+        fitZoom: 147,
+      });
+    });
+
+    it('keeps documentWidth zoom-independent (page styles win over scaled DOM)', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      // A zoom applied before the first measurement must not corrupt the base.
+      superdocStoreStub.activeZoom.value = 50;
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1].documentWidth).toBe(816);
+      expect(calls[0][1].fitZoom).toBe(147);
+    });
+
+    it('falls back to page styles when laid-out pages are unavailable', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.activeEditor = {
+        getPages: vi.fn(() => {
+          throw new Error('layout not ready');
+        }),
+        getPageStyles: vi.fn(() => ({ pageSize: { width: 8.5, height: 11 } })),
+      };
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toEqual({
+        availableWidth: 1200,
+        documentWidth: 816,
+        fitZoom: 147,
+      });
+    });
+
+    it('dedupes width changes that round to the same fit', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      // 1199 / 816 rounds to the same fitZoom (147) as 1200 / 816.
+      setContainerWidth(wrapper, 1199);
+      wrapper.vm.recalculateCompactCommentsMode();
+      await nextTick();
+      await nextTick();
+
+      expect(viewportChangeCalls(superdocStub).length).toBe(1);
+      // The event dedupes, but stored metrics stay latest: reads must see
+      // the 1199 measurement the deduped event skipped.
+      expect(superdocStoreStub.viewportMetrics.value.availableWidth).toBe(1199);
+
+      // A materially different width emits again.
+      setContainerWidth(wrapper, 600);
+      wrapper.vm.recalculateCompactCommentsMode();
+      await nextTick();
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(2);
+      expect(calls[1][1].fitZoom).toBe(74);
+    });
+
+    it('skips emission entirely while no document width is measurable', async () => {
+      const superdocStub = createSuperdocStub();
+      // No activeEditor and no laid-out DOM: base width unresolvable.
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(viewportChangeCalls(superdocStub).length).toBe(0);
+    });
+
+    it('does not scan PDF page DOM for DOCX-only documents', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      const rootEl = wrapper.find('.superdoc').element;
+      const querySelectorAllSpy = vi.spyOn(rootEl, 'querySelectorAll');
+
+      const pageEl = document.createElement('div');
+      pageEl.className = 'sd-pdf-viewer-page';
+      rootEl.appendChild(pageEl);
+
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(querySelectorAllSpy).not.toHaveBeenCalledWith('.sd-pdf-viewer-page');
+      expect(viewportChangeCalls(superdocStub)[0][1].documentWidth).toBe(816);
+    });
+
+    const zoomChangeCalls = (superdocStub) => superdocStub.emit.mock.calls.filter(([name]) => name === 'zoomChange');
+
+    it('stores the latest metrics for getViewportMetrics()', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(superdocStoreStub.viewportMetrics.value).toEqual({
+        availableWidth: 1200,
+        documentWidth: 816,
+        fitZoom: 147,
+      });
+    });
+
+    it('fit-width mode applies the fit with default clamping (max 100)', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = { mode: 'fit-width' };
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.zoomMode.value = 'fit-width';
+      setContainerWidth(wrapper, 600);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      // fitZoom = 600 / 816 = 74; within [10, 100] so applied as-is. The
+      // fit writes the store directly (setZoom would flip mode to manual).
+      expect(superdocStoreStub.activeZoom.value).toBe(74);
+      expect(zoomChangeCalls(superdocStub)).toEqual([['zoomChange', { zoom: 74, mode: 'fit-width' }]]);
+      expect(viewportChangeCalls(superdocStub)[0][1].fitZoom).toBe(74);
+    });
+
+    it('clamps the applied fit but emits the raw fitZoom', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = { mode: 'fit-width', fitWidth: { min: 80 } };
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.zoomMode.value = 'fit-width';
+      setContainerWidth(wrapper, 408);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      // Raw fit is 50 (408 / 816); applied value clamps to min 80.
+      expect(viewportChangeCalls(superdocStub)[0][1].fitZoom).toBe(50);
+      expect(superdocStoreStub.activeZoom.value).toBe(80);
+    });
+
+    it('padding shapes the applied fit only, never the metrics', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = { mode: 'fit-width', fitWidth: { padding: 96 } };
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.zoomMode.value = 'fit-width';
+      superdocStoreStub.activeZoom.value = 50;
+      setContainerWidth(wrapper, 912);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      // Metrics are policy-free: availableWidth stays 912 and fitZoom is
+      // the raw ratio. The applied fit reserves the padding: (912 - 96) /
+      // 816 = 100.
+      expect(viewportChangeCalls(superdocStub)[0][1]).toEqual({
+        availableWidth: 912,
+        documentWidth: 816,
+        fitZoom: 112,
+      });
+      expect(superdocStoreStub.activeZoom.value).toBe(100);
+    });
+
+    it('subtracts the comments sidebar width through the owned template ref', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      commentsStoreStub.pendingComment.value = { commentId: 'pending-1', selection: { selectionBounds: {} } };
+      await nextTick();
+
+      const sidebarEl = wrapper.find('.superdoc__right-sidebar').element;
+      Object.defineProperty(sidebarEl, 'offsetWidth', { configurable: true, value: 240 });
+
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toEqual({
+        availableWidth: 960,
+        documentWidth: 816,
+        fitZoom: 118,
+      });
+    });
+
+    it('does not re-apply zoom when the target equals the current zoom', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = { mode: 'fit-width' };
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.zoomMode.value = 'fit-width';
+      superdocStoreStub.activeZoom.value = 74;
+      setContainerWidth(wrapper, 600);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      // Same-value guard: target 74 equals current zoom, so no write and
+      // no zoomChange, while the viewport-change event still emits.
+      expect(superdocStoreStub.activeZoom.value).toBe(74);
+      expect(zoomChangeCalls(superdocStub).length).toBe(0);
+      expect(viewportChangeCalls(superdocStub).length).toBe(1);
+    });
+
+    it('manual mode never applies the fit (metrics still emit)', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = { fitWidth: { min: 25 } };
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 600);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(viewportChangeCalls(superdocStub).length).toBe(1);
+      expect(superdocStoreStub.activeZoom.value).toBe(100);
+      expect(zoomChangeCalls(superdocStub).length).toBe(0);
+    });
+
+    it('switching zoomMode to fit-width applies the fit immediately', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = {};
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 600);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(superdocStoreStub.activeZoom.value).toBe(100);
+
+      superdocStoreStub.zoomMode.value = 'fit-width';
+      await nextTick();
+
+      expect(superdocStoreStub.activeZoom.value).toBe(74);
+      expect(zoomChangeCalls(superdocStub)).toEqual([['zoomChange', { zoom: 74, mode: 'fit-width' }]]);
+    });
+
+    it('resolves documentWidth as the widest page across documents', async () => {
+      const superdocStub = createSuperdocStub();
+
+      const wrapper = await mountComponent(superdocStub);
+      // Two DOCX documents: portrait letter (8.5in) and landscape (11in).
+      // Zoom is global, so the fit must target the widest page.
+      superdocStoreStub.documents.value = [
+        {
+          id: 'doc-portrait',
+          type: DOCX,
+          editorMountNonce: ref(0),
+          getEditor: vi.fn(() => ({ getPageStyles: () => ({ pageSize: { width: 8.5, height: 11 } }) })),
+          setEditor: vi.fn(),
+        },
+        {
+          id: 'doc-landscape',
+          type: DOCX,
+          editorMountNonce: ref(0),
+          getEditor: vi.fn(() => ({ getPageStyles: () => ({ pageSize: { width: 11, height: 8.5 } }) })),
+          setEditor: vi.fn(),
+        },
+      ];
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      // 11in * 96 = 1056: the widest page wins over 816.
+      expect(calls[0][1].documentWidth).toBe(1056);
+      expect(calls[0][1].fitZoom).toBe(114);
+    });
+
+    it('prefers the widest laid-out page over body page styles (landscape sections)', async () => {
+      const superdocStub = createSuperdocStub();
+      // Portrait body section (8.5in) but a laid-out interior landscape
+      // page: the fit must target what the renderer paints (getPages max),
+      // exactly like SuperEditor's own container sizing.
+      superdocStub.activeEditor = {
+        getPages: vi.fn(() => [{ size: { w: 816 } }, { size: { w: 1056 } }]),
+        getPageStyles: vi.fn(() => ({ pageSize: { width: 8.5, height: 11 } })),
+      };
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1].documentWidth).toBe(1056);
+      expect(calls[0][1].fitZoom).toBe(114);
+    });
+
+    it('re-evaluates document width after pagination updates', async () => {
+      const superdocStub = createSuperdocStub();
+      let pages = [{ size: { w: 816 } }];
+      superdocStub.activeEditor = {
+        getPages: vi.fn(() => pages),
+        getPageStyles: vi.fn(() => ({ pageSize: { width: 8.5, height: 11 } })),
+      };
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(viewportChangeCalls(superdocStub)[0][1].documentWidth).toBe(816);
+
+      pages = [{ size: { w: 816 } }, { size: { w: 1056 } }];
+      superdocStub.emit.mockClear();
+      superdocStub.emit('pagination-update', { totalPages: 2, superdoc: superdocStub });
+
+      expect(viewportChangeCalls(superdocStub).length).toBe(0);
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toEqual({
+        availableWidth: 1200,
+        documentWidth: 1056,
+        fitZoom: 114,
+      });
+    });
+
+    it('resolves PDF page width scale-relatively (zoom-sync state cannot corrupt the base)', async () => {
+      const superdocStub = createSuperdocStub();
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.documents.value = [
+        {
+          id: 'pdf-1',
+          type: PDF,
+          data: { name: 'doc.pdf' },
+          editorMountNonce: ref(0),
+          setEditor: vi.fn(),
+          getEditor: vi.fn(() => null),
+        },
+      ];
+      await nextTick();
+
+      // A rendered 612pt PDF page at 50% viewer zoom measures 408px with
+      // --scale-factor 2/3 (zoom * 96/72). The store zoom claims 100% (a
+      // seeded zoom the viewer has not applied yet); the resolver must
+      // trust the page's actual scale factor and report 816 regardless.
+      const pageEl = document.createElement('div');
+      pageEl.className = 'sd-pdf-viewer-page';
+      Object.defineProperty(pageEl, 'clientWidth', { configurable: true, value: 408 });
+      wrapper.find('.superdoc').element.appendChild(pageEl);
+
+      const originalGetComputedStyle = window.getComputedStyle.bind(window);
+      const computedStyleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) => {
+        if (el === pageEl) {
+          return { getPropertyValue: (prop) => (prop === '--scale-factor' ? `${2 / 3}` : '') };
+        }
+        return originalGetComputedStyle(el, pseudo);
+      });
+
+      try {
+        setContainerWidth(wrapper, 1200);
+        wrapper.vm.recalculateCompactCommentsMode();
+        superdocStoreStub.isReady.value = true;
+        await nextTick();
+
+        const calls = viewportChangeCalls(superdocStub);
+        expect(calls.length).toBe(1);
+        expect(calls[0][1].documentWidth).toBeCloseTo(816, 6);
+        expect(calls[0][1].fitZoom).toBe(147);
+      } finally {
+        computedStyleSpy.mockRestore();
+      }
+    });
   });
 });

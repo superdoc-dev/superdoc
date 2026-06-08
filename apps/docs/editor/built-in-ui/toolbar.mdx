@@ -331,15 +331,19 @@ Icons should be 24x24 viewBox SVGs with `fill="currentColor"` for proper theming
 
 ## Font configuration
 
-The toolbar dropdown lists only what you register in `fonts`. Imported documents don't auto-populate the list: if a user opens a `.docx` that uses Cambria and Cambria isn't registered, the current-selection indicator shows "Cambria" but the user can't pick it from the dropdown.
+By default, the font dropdown lists SuperDoc's bundled defaults plus fonts used by the active document. The list is sorted alphabetically.
+
+Choosing a fallback-backed font keeps the Word-facing name in the document. For example, picking Calibri stores and exports Calibri, while the row preview can render with the bundled fallback that actually paints it.
+
+Use `fonts` only when you want to replace the default list with your own static options.
 
 <ParamField path="fonts" type="Array">
   <Expandable title="Font object properties">
     <ParamField path="label" type="string" required>
-      Display name shown in the dropdown, and the value applied to the selected text. Must match the first family name in `key`: otherwise the dropdown won't light up the current font when the cursor is inside a run that uses it.
+      Display name shown in the dropdown.
     </ParamField>
     <ParamField path="key" type="string" required>
-      Stable identity for the option. Also used as the row's preview `font-family` so each row renders in its own typeface. Typically a full CSS stack (e.g. `'Cambria, serif'`).
+      Value applied to the selected text. Usually the logical font name or a CSS font stack.
     </ParamField>
     <ParamField path="fontWeight" type="number">
       Font weight
@@ -359,7 +363,7 @@ fonts: [
 ```
 
 <Info>
-  Registering a font in `fonts` makes it **selectable**. It doesn't load any font files. To make the font actually render with its real glyphs, load it on your host page via `@font-face` or a `<link>` to a font service. Fonts the browser can't find fall back to the CSS generic.
+  A custom `fonts` list makes fonts selectable. It does not load font files. To make a custom font render with its real glyphs, load it on your host page via `@font-face` or a `<link>` to a font service.
 </Info>
 
 ### Loading web fonts
@@ -377,35 +381,6 @@ modules: {
   }
 }
 ```
-
-### Substituting Microsoft Office fonts
-
-Most `.docx` files use Cambria, Calibri, or Aptos: fonts bundled with Word on desktop but not present in browsers. Google hosts free metric-compatible replacements:
-
-| Office font | Free substitute | Notes |
-|---|---|---|
-| Calibri | [Carlito](https://fonts.google.com/specimen/Carlito) | Sans-serif, metric-identical: designed as a direct drop-in |
-| Cambria | [Tinos](https://fonts.google.com/specimen/Tinos) or [Gelasio](https://fonts.google.com/specimen/Gelasio) | Serif |
-| Aptos | [Carlito](https://fonts.google.com/specimen/Carlito) or [Inter](https://fonts.google.com/specimen/Inter) | Sans-serif: no free metric-identical match exists yet |
-
-Download the `.woff2` files from Google Fonts, host them with your app, and alias each substitute to the original Word name via `@font-face`. The browser will then render real Carlito/Tinos glyphs whenever the document asks for Calibri/Cambria: no document or SuperDoc changes needed.
-
-```html
-<style>
-  @font-face {
-    font-family: 'Calibri';
-    src: url('/fonts/Carlito-Regular.woff2') format('woff2');
-    font-display: swap;
-  }
-  @font-face {
-    font-family: 'Cambria';
-    src: url('/fonts/Tinos-Regular.woff2') format('woff2');
-    font-display: swap;
-  }
-</style>
-```
-
-Self-hosting the `.woff2` files is more reliable than linking to Google Fonts CDN URLs directly: those URLs change when Google updates a font version.
 
 ## Responsive behavior
 

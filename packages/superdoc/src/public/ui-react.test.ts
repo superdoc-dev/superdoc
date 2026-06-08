@@ -4,6 +4,7 @@ import {
   useSuperDocUI,
   useSuperDocSelection,
   useSuperDocComments,
+  useSuperDocZoom,
   useSetSuperDoc,
 } from './ui-react.js';
 
@@ -25,6 +26,7 @@ describe('public facade (ui-react)', () => {
   it('re-exports domain hooks as functions', () => {
     expect(typeof useSuperDocSelection).toBe('function');
     expect(typeof useSuperDocComments).toBe('function');
+    expect(typeof useSuperDocZoom).toBe('function');
     expect(typeof useSetSuperDoc).toBe('function');
   });
 });

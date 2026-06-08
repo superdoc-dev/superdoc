@@ -105,7 +105,7 @@ When documenting a customer-facing operation, name the right layer:
 - **Modules** (`modules/*`) — built-in SuperDoc-rendered UI. Use this when the customer is happy with the built-in look and just wants config.
 - **Core** (`core/*`) — low-level instance/reference surface. Lifecycle, refs, host events. Reach for it when the higher layers don't cover the case (rare).
 
-Recommend the highest layer that solves the problem. Mutate documents through the Document API. Build custom React UI through `superdoc/ui/react`. Reach `superdoc.activeEditor.*` only when documenting legacy compat or a known escape hatch (and call it out as such).
+Recommend the highest layer that solves the problem. Mutate documents through the Document API. Build custom React UI through `superdoc/ui/react`. For custom font-family dropdowns, document `useSuperDocFontOptions()` / `ui.fonts` for option data and `ui.toolbar.execute('font-family', option.value)` for applying the choice. Do not expose internal fallback or support-status wording to end users. Reach `superdoc.activeEditor.*` only when documenting legacy compat or a known escape hatch (and call it out as such).
 
 ## API naming
 

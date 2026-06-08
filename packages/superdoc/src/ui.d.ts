@@ -70,4 +70,8 @@ export {
   type ViewportPositionHit,
   type ViewportRect,
   type ViewportRectResult,
+  type ZoomHandle,
+  type ZoomMode,
+  type ZoomSlice,
+  type ZoomViewportMetrics,
 } from '@superdoc/super-editor/ui';

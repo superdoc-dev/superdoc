@@ -20,6 +20,8 @@ import type {
   SuperDocTransactionEvent,
   SuperDocContentErrorEvent,
   SuperDocExceptionEvent,
+  SuperDocZoomChangeEvent,
+  SuperDocViewportChangeEvent,
 } from './types';
 
 /**
@@ -50,6 +52,8 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     onTransaction,
     onContentError,
     onException,
+    onZoomChange,
+    onViewportChange,
     // Key props that trigger rebuild when changed
     document: documentProp,
     user: userProp,
@@ -90,6 +94,8 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     onTransaction,
     onContentError,
     onException,
+    onZoomChange,
+    onViewportChange,
   });
 
   // Update callback refs when props change
@@ -102,8 +108,20 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
       onTransaction,
       onContentError,
       onException,
+      onZoomChange,
+      onViewportChange,
     };
-  }, [onReady, onEditorCreate, onEditorDestroy, onEditorUpdate, onTransaction, onContentError, onException]);
+  }, [
+    onReady,
+    onEditorCreate,
+    onEditorDestroy,
+    onEditorUpdate,
+    onTransaction,
+    onContentError,
+    onException,
+    onZoomChange,
+    onViewportChange,
+  ]);
 
   // Queue mode changes that happen during init
   const pendingModeRef = useRef<DocumentMode | null>(null);
@@ -209,6 +227,16 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
           onException: (event: SuperDocExceptionEvent) => {
             if (!destroyed) {
               callbacksRef.current.onException?.(event);
+            }
+          },
+          onZoomChange: (event: SuperDocZoomChangeEvent) => {
+            if (!destroyed) {
+              callbacksRef.current.onZoomChange?.(event);
+            }
+          },
+          onViewportChange: (event: SuperDocViewportChangeEvent) => {
+            if (!destroyed) {
+              callbacksRef.current.onViewportChange?.(event);
             }
           },
         };

@@ -232,3 +232,84 @@ describe('SuperDoc Store - Blob Support', () => {
     });
   });
 });
+
+describe('SuperDoc Store - zoom.initial seeding', () => {
+  let store;
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    store = useSuperdocStore();
+  });
+
+  const configWithZoom = (zoom) =>
+    createTestConfig([{ data: new File(['x'], 'test.docx', { type: DOCX }), name: 'test.docx', type: DOCX }], {
+      zoom,
+    });
+
+  it('defaults activeZoom to 100 when zoom.initial is absent', async () => {
+    await store.init(configWithZoom(undefined));
+    expect(store.activeZoom).toBe(100);
+  });
+
+  it('seeds activeZoom from zoom.initial before documents initialize', async () => {
+    await store.init(configWithZoom({ initial: 50 }));
+    expect(store.activeZoom).toBe(50);
+  });
+
+  it('ignores invalid zoom.initial values with a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await store.init(configWithZoom({ initial: 0 }));
+    expect(store.activeZoom).toBe(100);
+
+    await store.init(configWithZoom({ initial: -25 }));
+    expect(store.activeZoom).toBe(100);
+
+    await store.init(configWithZoom({ initial: Number.NaN }));
+    expect(store.activeZoom).toBe(100);
+
+    await store.init(configWithZoom({ initial: '75' }));
+    expect(store.activeZoom).toBe(100);
+
+    expect(warn).toHaveBeenCalledTimes(4);
+    warn.mockRestore();
+  });
+});
+
+describe('SuperDoc Store - zoom.mode seeding', () => {
+  let store;
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    store = useSuperdocStore();
+  });
+
+  const configWithZoom = (zoom) =>
+    createTestConfig([{ data: new File(['x'], 'test.docx', { type: DOCX }), name: 'test.docx', type: DOCX }], {
+      zoom,
+    });
+
+  it('defaults zoomMode to manual', async () => {
+    await store.init(configWithZoom(undefined));
+    expect(store.zoomMode).toBe('manual');
+  });
+
+  it('seeds zoomMode from zoom.mode', async () => {
+    await store.init(configWithZoom({ mode: 'fit-width' }));
+    expect(store.zoomMode).toBe('fit-width');
+  });
+
+  it('ignores invalid zoom.mode values with a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await store.init(configWithZoom({ mode: 'fit-page' }));
+    expect(store.zoomMode).toBe('manual');
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('starts with null viewport metrics', async () => {
+    await store.init(configWithZoom(undefined));
+    expect(store.viewportMetrics).toBeNull();
+  });
+});

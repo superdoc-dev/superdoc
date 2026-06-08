@@ -1762,11 +1762,42 @@ describe('getVectorShape', () => {
   });
 
   describe('[[sdspace]] placeholder replacement', () => {
-    const makeGraphicDataWithTextbox = (text) => ({
+    const makeParagraph = ({ text = '', pPrElements = [], runElements } = {}) => ({
+      name: 'w:p',
+      elements: [
+        ...(pPrElements.length
+          ? [
+              {
+                name: 'w:pPr',
+                elements: pPrElements,
+              },
+            ]
+          : []),
+        {
+          name: 'w:r',
+          elements: runElements || [
+            {
+              name: 'w:t',
+              elements: [{ type: 'text', text }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const makeGraphicDataWithTextbox = (text, options = {}) => ({
       elements: [
         {
           name: 'wps:wsp',
           elements: [
+            ...(options.bodyPrAttributes
+              ? [
+                  {
+                    name: 'wps:bodyPr',
+                    attributes: options.bodyPrAttributes,
+                  },
+                ]
+              : []),
             {
               name: 'wps:spPr',
               elements: [
@@ -1795,21 +1826,12 @@ describe('getVectorShape', () => {
               elements: [
                 {
                   name: 'w:txbxContent',
-                  elements: [
-                    {
-                      name: 'w:p',
-                      elements: [
-                        {
-                          name: 'w:r',
-                          elements: [
-                            {
-                              name: 'w:t',
-                              elements: [{ type: 'text', text }],
-                            },
-                          ],
-                        },
-                      ],
-                    },
+                  elements: options.paragraphs || [
+                    makeParagraph({
+                      text,
+                      pPrElements: options.pPrElements || [],
+                      runElements: options.runElements,
+                    }),
                   ],
                 },
               ],
@@ -1954,6 +1976,89 @@ describe('getVectorShape', () => {
       });
 
       expect(result.attrs.textContent.parts[0].text).toBe('[[notspace]] [other]');
+    });
+
+    it('extracts textbox paragraph spacing in CSS pixels', () => {
+      const graphicData = makeGraphicDataWithTextbox('Hello', {
+        bodyPrAttributes: { spcFirstLastPara: '1' },
+        pPrElements: [{ name: 'w:spacing', attributes: { 'w:before': '360', 'w:after': '80' } }],
+      });
+
+      const result = getVectorShape({
+        params: makeParams(),
+        node: {},
+        graphicData,
+        size: { width: 100, height: 100 },
+      });
+
+      expect(result.attrs.textContent.paragraphs[0].spacing.before).toBe(24);
+      expect(result.attrs.textContent.paragraphs[0].spacing.after).toBeCloseTo(5.333, 3);
+    });
+
+    it('honors first and last paragraph spacing when spcFirstLastPara is absent', () => {
+      const graphicData = makeGraphicDataWithTextbox('Hello', {
+        pPrElements: [{ name: 'w:spacing', attributes: { 'w:before': '360', 'w:after': '80' } }],
+      });
+
+      const result = getVectorShape({
+        params: makeParams(),
+        node: {},
+        graphicData,
+        size: { width: 100, height: 100 },
+      });
+
+      expect(result.attrs.textContent.paragraphs[0].spacing.before).toBe(24);
+      expect(result.attrs.textContent.paragraphs[0].spacing.after).toBeCloseTo(5.333, 3);
+    });
+
+    it('marks paragraph separators without marking intra-paragraph line breaks', () => {
+      const graphicData = makeGraphicDataWithTextbox('', {
+        paragraphs: [
+          makeParagraph({
+            runElements: [
+              { name: 'w:t', elements: [{ type: 'text', text: 'First' }] },
+              { name: 'w:br' },
+              { name: 'w:t', elements: [{ type: 'text', text: 'line' }] },
+            ],
+          }),
+          makeParagraph({ text: 'Second' }),
+        ],
+      });
+
+      const result = getVectorShape({
+        params: makeParams(),
+        node: {},
+        graphicData,
+        size: { width: 100, height: 100 },
+      });
+
+      const lineBreakParts = result.attrs.textContent.parts.filter((part) => part.isLineBreak);
+      expect(lineBreakParts).toHaveLength(2);
+      expect(lineBreakParts[0].isParagraphBoundary).toBeUndefined();
+      expect(lineBreakParts[1].isParagraphBoundary).toBe(true);
+    });
+
+    it('suppresses first and last paragraph spacing when spcFirstLastPara is disabled', () => {
+      const spacing = { name: 'w:spacing', attributes: { 'w:before': '360', 'w:after': '80' } };
+      const graphicData = makeGraphicDataWithTextbox('', {
+        bodyPrAttributes: { spcFirstLastPara: '0' },
+        paragraphs: [
+          makeParagraph({ text: 'First', pPrElements: [spacing] }),
+          makeParagraph({ text: 'Second', pPrElements: [spacing] }),
+        ],
+      });
+
+      const result = getVectorShape({
+        params: makeParams(),
+        node: {},
+        graphicData,
+        size: { width: 100, height: 100 },
+      });
+
+      expect(result.attrs.textContent.paragraphs[0].spacing.after).toBeCloseTo(5.333, 3);
+      expect(result.attrs.textContent.paragraphs[0].spacing.before).toBeUndefined();
+      expect(result.attrs.textContent.paragraphs[1].spacing.before).toBe(24);
+      expect(result.attrs.textContent.paragraphs[1].spacing.after).toBeUndefined();
     });
   });
 

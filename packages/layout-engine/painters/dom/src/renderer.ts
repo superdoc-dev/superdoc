@@ -3323,26 +3323,53 @@ export class DomPainter {
       textDiv.style.textAlign = 'left';
     }
 
+    const paragraphSpacing = textContent.paragraphs;
+    const spacingBefore = (index: number) => paragraphSpacing?.[index]?.spacing?.before;
+    const spacingAfter = (index: number) => paragraphSpacing?.[index]?.spacing?.after;
+    const createParagraphElement = () => {
+      const paragraph = this.doc!.createElement('div');
+      // Set width to 100% to enable text wrapping within the shape bounds
+      paragraph.style.width = '100%';
+      // min-width: 0 prevents flex item from overflowing (flexbox default is min-width: auto)
+      paragraph.style.minWidth = '0';
+      // Override inherited white-space: pre from parent fragment to allow text wrapping
+      paragraph.style.whiteSpace = 'normal';
+      paragraph.style.marginLeft = '0';
+      paragraph.style.marginRight = '0';
+      return paragraph;
+    };
+
     // Create paragraphs by splitting on line breaks
-    let currentParagraph = this.doc!.createElement('div');
-    // Set width to 100% to enable text wrapping within the shape bounds
-    currentParagraph.style.width = '100%';
-    // min-width: 0 prevents flex item from overflowing (flexbox default is min-width: auto)
-    currentParagraph.style.minWidth = '0';
-    // Override inherited white-space: pre from parent fragment to allow text wrapping
-    currentParagraph.style.whiteSpace = 'normal';
+    let logicalParagraphIndex = 0;
+    let currentParagraph = createParagraphElement();
+    const firstParagraphBefore = spacingBefore(logicalParagraphIndex);
+    if (typeof firstParagraphBefore === 'number') {
+      currentParagraph.style.marginTop = `${firstParagraphBefore}px`;
+    }
 
     textContent.parts.forEach((part) => {
       if (part.isLineBreak) {
+        if (part.isParagraphBoundary) {
+          const currentParagraphAfter = spacingAfter(logicalParagraphIndex);
+          if (typeof currentParagraphAfter === 'number') {
+            currentParagraph.style.marginBottom = `${currentParagraphAfter}px`;
+          }
+        }
+
         // Finish current paragraph and start a new one
         textDiv.appendChild(currentParagraph);
-        currentParagraph = this.doc!.createElement('div');
-        currentParagraph.style.width = '100%';
-        currentParagraph.style.minWidth = '0';
-        currentParagraph.style.whiteSpace = 'normal';
+        currentParagraph = createParagraphElement();
         // Empty paragraphs create extra spacing (blank line)
         if (part.isEmptyParagraph) {
           currentParagraph.style.minHeight = '1em';
+        }
+
+        if (part.isParagraphBoundary) {
+          logicalParagraphIndex += 1;
+          const nextParagraphBefore = spacingBefore(logicalParagraphIndex);
+          if (typeof nextParagraphBefore === 'number') {
+            currentParagraph.style.marginTop = `${nextParagraphBefore}px`;
+          }
         }
       } else if (part.kind === 'image' && part.src) {
         currentParagraph.appendChild(createShapeTextImageElement(this.doc!, part));
@@ -3378,6 +3405,10 @@ export class DomPainter {
     });
 
     // Add the final paragraph
+    const finalParagraphAfter = spacingAfter(logicalParagraphIndex);
+    if (typeof finalParagraphAfter === 'number') {
+      currentParagraph.style.marginBottom = `${finalParagraphAfter}px`;
+    }
     textDiv.appendChild(currentParagraph);
 
     return textDiv;

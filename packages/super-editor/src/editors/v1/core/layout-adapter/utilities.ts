@@ -1465,6 +1465,27 @@ export function normalizeTextContent(value: unknown): import('@superdoc/contract
     result.horizontalAlign = value.horizontalAlign as 'left' | 'center' | 'right';
   }
 
+  if (Array.isArray(value.paragraphs)) {
+    const normalizedParagraphs = (value.paragraphs as unknown[]).map((paragraph) => {
+      if (!isPlainObject(paragraph)) return {};
+
+      const spacing = isPlainObject(paragraph.spacing) ? paragraph.spacing : undefined;
+      const before = Number.isFinite(spacing?.before) ? (spacing.before as number) : undefined;
+      const after = Number.isFinite(spacing?.after) ? (spacing.after as number) : undefined;
+
+      if (before === undefined && after === undefined) return {};
+
+      const out: { spacing: { before?: number; after?: number } } = { spacing: {} };
+      if (before !== undefined) out.spacing.before = before;
+      if (after !== undefined) out.spacing.after = after;
+      return out;
+    });
+
+    if (normalizedParagraphs.some((paragraph) => 'spacing' in paragraph)) {
+      result.paragraphs = normalizedParagraphs as import('@superdoc/contracts').ShapeTextParagraph[];
+    }
+  }
+
   return result;
 }
 

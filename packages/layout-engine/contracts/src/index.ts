@@ -1065,6 +1065,11 @@ export type TextPart = {
   /** Indicates this line break follows an empty paragraph (creates extra spacing). */
   isEmptyParagraph?: boolean;
   /**
+   * True only on the line-break part that separates two logical paragraphs.
+   * Intra-paragraph <w:br> line breaks do not set this flag.
+   */
+  isParagraphBoundary?: boolean;
+  /**
    * SD-2804: ECMA-376 §20.4.2.38 lets a textbox hold full body-level
    * content, including paragraphs whose runs carry inline w:drawing
    * images. When the importer encounters such a drawing it appends a
@@ -1082,12 +1087,23 @@ export type TextPart = {
   alt?: string;
 };
 
+export type ShapeTextParagraph = {
+  spacing?: {
+    /** CSS pixels. */
+    before?: number;
+    /** CSS pixels. */
+    after?: number;
+  };
+};
+
 /** Text content configuration for shapes. */
 export type ShapeTextContent = {
   /** Array of text parts with individual formatting. */
   parts: TextPart[];
   /** Horizontal text alignment within the shape. */
   horizontalAlign?: 'left' | 'center' | 'right';
+  /** Paragraph metadata aligned to the logical paragraphs in `parts`. */
+  paragraphs?: ShapeTextParagraph[];
 };
 
 export type LineEnd = {

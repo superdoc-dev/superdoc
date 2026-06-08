@@ -325,4 +325,100 @@ describe('DomPainter shape regressions', () => {
     expect(wordArtText?.getAttribute('lengthAdjust')).toBe('spacingAndGlyphs');
     expect(Number(wordArtText?.getAttribute('font-size'))).toBeGreaterThan(24);
   });
+
+  it('paints shape textbox paragraph spacing as wrapper margins', () => {
+    const geometry: DrawingGeometry = { width: 200, height: 80, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'textbox-spacing',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'rect',
+      fillColor: null,
+      strokeColor: null,
+      textContent: {
+        parts: [{ text: 'First' }, { text: '\n', isLineBreak: true, isParagraphBoundary: true }, { text: 'Second' }],
+        paragraphs: [{ spacing: { before: 24, after: 5.333 } }, {}],
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const textOverlay = mount.querySelector('.superdoc-vector-shape div[style*="display: flex"]') as HTMLElement | null;
+    expect(textOverlay).toBeTruthy();
+
+    const wrappers = Array.from(textOverlay!.children) as HTMLElement[];
+    expect(wrappers[0].style.marginTop).toBe('24px');
+    expect(wrappers[0].style.marginBottom).toBe('5.333px');
+  });
+
+  it('paints single-paragraph shape textbox spacing on the lone wrapper', () => {
+    const geometry: DrawingGeometry = { width: 200, height: 80, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'textbox-single-paragraph-spacing',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'rect',
+      fillColor: null,
+      strokeColor: null,
+      textContent: {
+        parts: [{ text: 'Only paragraph' }],
+        paragraphs: [{ spacing: { before: 24, after: 5.333 } }],
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const textOverlay = mount.querySelector('.superdoc-vector-shape div[style*="display: flex"]') as HTMLElement | null;
+    expect(textOverlay).toBeTruthy();
+
+    const wrappers = Array.from(textOverlay!.children) as HTMLElement[];
+    expect(wrappers).toHaveLength(1);
+    expect(wrappers[0].style.marginTop).toBe('24px');
+    expect(wrappers[0].style.marginBottom).toBe('5.333px');
+  });
+
+  it('does not advance shape textbox paragraph spacing for intra-paragraph line breaks', () => {
+    const geometry: DrawingGeometry = { width: 200, height: 100, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'textbox-spacing-line-break',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'rect',
+      fillColor: null,
+      strokeColor: null,
+      textContent: {
+        parts: [
+          { text: 'First' },
+          { text: '\n', isLineBreak: true },
+          { text: 'line' },
+          { text: '\n', isLineBreak: true, isParagraphBoundary: true },
+          { text: 'Second' },
+        ],
+        paragraphs: [{ spacing: { before: 24, after: 5.333 } }, { spacing: { before: 40, after: 7 } }],
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const textOverlay = mount.querySelector('.superdoc-vector-shape div[style*="display: flex"]') as HTMLElement | null;
+    expect(textOverlay).toBeTruthy();
+
+    const wrappers = Array.from(textOverlay!.children) as HTMLElement[];
+    expect(wrappers).toHaveLength(3);
+    expect(wrappers[0].style.marginTop).toBe('24px');
+    expect(wrappers[0].style.marginBottom).toBe('');
+    expect(wrappers[1].style.marginTop).toBe('');
+    expect(wrappers[1].style.marginBottom).toBe('5.333px');
+    expect(wrappers[2].style.marginTop).toBe('40px');
+    expect(wrappers[2].style.marginBottom).toBe('7px');
+  });
 });

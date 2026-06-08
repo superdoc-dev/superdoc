@@ -3038,7 +3038,7 @@ describe('layoutDocument', () => {
     const TWO_COL_RIGHT_X = LEFT_MARGIN + TWO_COL_WIDTH + COLUMN_GAP; // 330
 
     /** Build a 2-col section ending with a section break, surrounded by single-column context. */
-    function buildTwoColumnSection(paragraphCount: number, lineHeight = 20) {
+    function buildTwoColumnSection(paragraphCount: number, lineHeight = 20, endBreakType = 'continuous') {
       const blocks: FlowBlock[] = [
         {
           kind: 'sectionBreak',
@@ -3059,7 +3059,7 @@ describe('layoutDocument', () => {
       blocks.push({
         kind: 'sectionBreak',
         id: 'sb-end',
-        type: 'continuous',
+        type: endBreakType,
         columns: { count: 1, gap: 0 },
         margins: {},
         attrs: { source: 'sectPr', sectionIndex: 1 },
@@ -3110,6 +3110,88 @@ describe('layoutDocument', () => {
       // p-after's Y reflects a balanced 3-row column (3 × 20px) above it.
       const expectedBalancedBottom = firstSectionPara!.y + 3 * 20;
       expect(afterSectionPara!.y).toBe(expectedBalancedBottom);
+    });
+
+    it('splits a paragraph straddling the column boundary so the section balances (SD-3359)', () => {
+      // IT-1150 / SD-3359 repro shape: two 1-line paragraphs plus one 14-line
+      // paragraph (280px) in a 2-col continuous section followed by continuous
+      // single-column content. Atomic assignment can only reach 40 | 280;
+      // Word flows line-by-line, splitting the long paragraph at the boundary
+      // so both columns reach the minimum section height (§17.18.77):
+      // col0 = 20 + 20 + 6 lines (160), col1 = 8 lines (160).
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'sb-start',
+          type: 'continuous',
+          columns: { count: 2, gap: COLUMN_GAP },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 0, isFirstSection: true },
+        } as FlowBlock,
+        { kind: 'paragraph', id: 'p0', runs: [], attrs: { sectionIndex: 0 } } as FlowBlock,
+        { kind: 'paragraph', id: 'p1', runs: [], attrs: { sectionIndex: 0 } } as FlowBlock,
+        { kind: 'paragraph', id: 'p-long', runs: [], attrs: { sectionIndex: 0 } } as FlowBlock,
+        {
+          kind: 'sectionBreak',
+          id: 'sb-end',
+          type: 'continuous',
+          columns: { count: 1, gap: 0 },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 1 },
+        } as FlowBlock,
+        { kind: 'paragraph', id: 'p-after', runs: [], attrs: { sectionIndex: 1 } } as FlowBlock,
+      ];
+      const measures: Measure[] = [
+        { kind: 'sectionBreak' },
+        makeMeasure([20]),
+        makeMeasure([20]),
+        makeMeasure(Array(14).fill(20)),
+        { kind: 'sectionBreak' },
+        makeMeasure([20]),
+      ];
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      const longFrags = layout.pages[0].fragments
+        .filter((f): f is ParaFragment => f.kind === 'para' && f.blockId === 'p-long')
+        .sort((a, b) => a.fromLine - b.fromLine);
+      // The straddling paragraph split into two fragments partitioning its lines.
+      expect(longFrags).toHaveLength(2);
+      expect(longFrags[0].toLine).toBe(longFrags[1].fromLine);
+      expect(longFrags[1].toLine).toBe(14);
+      expect(longFrags[0].x).toBe(LEFT_MARGIN);
+      expect(longFrags[1].x).toBe(TWO_COL_RIGHT_X);
+      // Both columns reach the same minimum height (320 / 2 = 160).
+      const pAfter = layout.pages[0].fragments.find(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId === 'p-after',
+      );
+      expect(pAfter).toBeDefined();
+      expect(pAfter!.y).toBe(72 + 160);
+    });
+
+    it('does NOT balance a 2-col section whose END break is nextPage (§17.18.77, SD-3359)', () => {
+      // Per the §17.18.77 note only a CONTINUOUS break balances the previous
+      // section. A 2-col section that merely STARTS continuous but is ended by
+      // a nextPage break fills column-by-column instead (Word behavior), and
+      // the following section starts on a fresh page. Regression for the
+      // post-layout gate that previously keyed off the section's own begin
+      // type instead of the break that ends it.
+      const { blocks, measures } = buildTwoColumnSection(6, 20, 'nextPage');
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      const sectionFragments = layout.pages[0].fragments.filter(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId.startsWith('p') && f.blockId !== 'p-after',
+      );
+      // Unbalanced column-by-column fill: all 6 short paragraphs stay in col 0.
+      expect(sectionFragments.filter((f) => f.x === LEFT_MARGIN)).toHaveLength(6);
+      expect(sectionFragments.filter((f) => f.x === TWO_COL_RIGHT_X)).toHaveLength(0);
+      // The nextPage break pushes the following section to page 2.
+      expect(layout.pages.length).toBe(2);
+      const pAfter = layout.pages[1].fragments.find(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId === 'p-after',
+      );
+      expect(pAfter).toBeDefined();
     });
 
     it('fills BOTH columns on every page of a multi-page 2-col continuous section', () => {

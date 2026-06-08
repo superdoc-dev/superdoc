@@ -1875,13 +1875,13 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const blockSectionMap = new Map<string, number>();
   const sectionColumnsMap = new Map<number, ColumnLayout>();
   const sectionHasExplicitColumnBreak = new Set<number>();
-  // sectionIndex -> type of the section break that ENDS this section (per
-  // pm-adapter end-tagged semantics, ECMA-376 §17.6.17: a paragraph's sectPr
-  // describes the section ENDING at that paragraph, so SectionBreakBlock.type
-  // here is the type of the break that closes the section). Per ECMA-376
-  // §17.18.77 only `continuous` breaks trigger column balancing — `nextPage`,
-  // `evenPage`, `oddPage` do not. Tracked here so the post-layout pass can
-  // skip the wrong section types.
+  // sectionIndex -> the section's own sectPr `w:type` (ECMA-376 §17.6.22):
+  // how the section BEGINS relative to its predecessor — i.e. the type of the
+  // break that closes the PREVIOUS section. The break that ENDS section N is
+  // therefore `get(N + 1)`. Per ECMA-376 §17.18.77 only a `continuous` break
+  // balances the section BEFORE it — `nextPage`, `evenPage`, `oddPage` do
+  // not. (The earlier comment here claimed end-break semantics, which led the
+  // post-layout gate to key off the wrong section — SD-3359.)
   const sectionEndBreakType = new Map<number, string>();
   // sectionIndex -> whether `<w:type>` was EXPLICIT in the source sectPr.
   // Body sectPrs default to `continuous` when w:type is omitted; Word does
@@ -1906,6 +1906,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // the older `line.width === 0` heuristic, which incorrectly collapsed normal
   // blank paragraphs and caused overlap on the next paragraph.
   const sectPrMarkerBlockIds = new Set<string>();
+  // Block IDs of paragraphs with `w:keepLines` (ECMA-376 §17.3.1.14): the
+  // author asked Word not to split these, so column balancing must keep them
+  // atomic instead of breaking them at a line boundary. (SD-3359)
+  const keepLinesBlockIds = new Set<string>();
   // True if any block in the document is a column break. Used as a guard for
   // the document-wide balancing fallback (Nick comment 2): when callers use
   // LayoutOptions.columns without section metadata, we still want Word's
@@ -1969,6 +1973,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       (blockWithAttrs as { attrs?: { sectPrMarker?: boolean } }).attrs?.sectPrMarker === true
     ) {
       sectPrMarkerBlockIds.add(block.id);
+    }
+    if (
+      block.kind === 'paragraph' &&
+      (blockWithAttrs as { attrs?: { keepLines?: boolean } }).attrs?.keepLines === true
+    ) {
+      keepLinesBlockIds.add(block.id);
     }
   });
 
@@ -2310,6 +2320,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             availableHeight,
             measureMap: balancingMeasureMap,
             sectPrMarkerBlockIds,
+            keepLinesBlockIds,
           });
           if (balanceResult) {
             // Collapse both cursors to the balanced section bottom so the new
@@ -3046,7 +3057,19 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       // (two_column_two_page-arial 2 p17 keeps its 3+2 split).
       if (isMultiPage && !isLast) continue;
 
-      const allowedByMidDocContinuous = endBreakType === 'continuous' && !isLast;
+      // The per-section type is the type of the break that BEGINS the section
+      // (its own sectPr `w:type`, §17.6.22) — i.e. the break that closes the
+      // PREVIOUS section. The break that ends section N is therefore section
+      // N+1's begin type. Keying rule 1 off the section's OWN type balanced a
+      // 2-col section that merely STARTED continuous even when it ended at a
+      // nextPage break — Word only balances when the break AFTER the section
+      // is continuous (§17.18.77 note, SD-3359 V6 repro). The next-is-body
+      // case is excluded here: a body sectPr defaults to `continuous` when
+      // `<w:type>` is omitted and Word does NOT balance then (sd-1655) —
+      // rule 2 below owns that boundary and demands explicitness.
+      const nextSectionBeginType = sectionEndBreakType.get(sectionIdx + 1);
+      const nextIsBody = lastSectionIdx !== null && sectionIdx + 1 === lastSectionIdx;
+      const allowedByMidDocContinuous = !isLast && !nextIsBody && nextSectionBeginType === 'continuous';
       // Body-explicit-continuous balances the section IT ENDS, which is the
       // section immediately preceding the body. No doc-wide flag.
       const allowedByBodyExplicitContinuous =
@@ -3094,6 +3117,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       availableHeight: sectionAvailableHeight,
       measureMap: balancingMeasureMap,
       sectPrMarkerBlockIds,
+      keepLinesBlockIds,
     });
   }
 

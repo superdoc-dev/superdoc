@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createTestPainter as createDomPainter } from './_test-utils.js';
+import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import type { DrawingGeometry, FlowBlock, Layout, Measure, SolidFillWithAlpha } from '@superdoc/contracts';
 
 type DrawingFlowBlock = Extract<FlowBlock, { kind: 'drawing' }>;
@@ -84,6 +85,97 @@ describe('DomPainter shape regressions', () => {
 
     const renderedPath = mount.querySelector(`.superdoc-vector-shape svg path[d="${customPath}"]`);
     expect(renderedPath).toBeTruthy();
+    expect(renderedPath?.getAttribute('vector-effect')).toBeNull();
+  });
+
+  it('generates rightArrow preset geometry with Word-compatible default head proportions', () => {
+    const width = 773430;
+    const height = 394970;
+    const svgMarkup = getPresetShapeSvg({ preset: 'rightArrow', width, height });
+    const doc = new DOMParser().parseFromString(svgMarkup, 'image/svg+xml');
+    const path = doc.querySelector('path');
+
+    expect(doc.querySelector('svg')?.getAttribute('viewBox')).toBe(`0 0 ${width} ${height}`);
+    expect(path?.getAttribute('d')).toBe(
+      'M 0 98742.5 L 575945 98742.5 L 575945 0 L 773430 197485 L 575945 394970 L 575945 296227.5 L 0 296227.5 Z',
+    );
+  });
+
+  it.each([
+    {
+      preset: 'bentArrow',
+      width: 588010,
+      height: 648335,
+      expectedStart: 'M 0 648335 L 0 330756 C 0 188679 115177 73502 257254 73502',
+    },
+    {
+      preset: 'bentUpArrow',
+      width: 850265,
+      height: 731520,
+      expectedStart: 'M 0 548640 L 575945 548640 L 575945 182880',
+    },
+    {
+      preset: 'downArrow',
+      width: 394970,
+      height: 576580,
+      expectedStart: 'M 0 379095 L 98743 379095 L 98743 0',
+    },
+    {
+      preset: 'leftArrow',
+      width: 662549,
+      height: 367128,
+      expectedStart: 'M 0 183564 L 183564 0 L 183564 91782',
+    },
+    {
+      preset: 'leftRightArrow',
+      width: 985520,
+      height: 379730,
+      expectedStart: 'M 0 189865 L 189865 0 L 189865 94933',
+    },
+    {
+      preset: 'leftRightUpArrow',
+      width: 928370,
+      height: 634365,
+      expectedStart: 'M 0 475774 L 158591 317183 L 158591 396478',
+    },
+    {
+      preset: 'leftUpArrow',
+      width: 850265,
+      height: 850265,
+      expectedStart: 'M 0 637699 L 212566 425133 L 212566 531416',
+    },
+    {
+      preset: 'quadArrow',
+      width: 788670,
+      height: 831215,
+      expectedStart: 'M 0 415608 L 177451 238157 L 177451 326882',
+    },
+    {
+      preset: 'upArrow',
+      width: 367127,
+      height: 550008,
+      expectedStart: 'M 0 183564 L 183564 0 L 367127 183564',
+    },
+    {
+      preset: 'upDownArrow',
+      width: 296545,
+      height: 746760,
+      expectedStart: 'M 0 148273 L 148273 0 L 296545 148273',
+    },
+    {
+      preset: 'uturnArrow',
+      width: 886460,
+      height: 661035,
+      expectedStart: 'M 0 661035 L 0 289203 C 0 129481 129481 0 289203 0',
+    },
+  ])('uses Word-expanded XML geometry for $preset', ({ preset, width, height, expectedStart }) => {
+    const svgMarkup = getPresetShapeSvg({ preset, width, height });
+    const doc = new DOMParser().parseFromString(svgMarkup, 'image/svg+xml');
+    const svg = doc.querySelector('svg');
+    const path = doc.querySelector('path');
+
+    expect(svg?.getAttribute('viewBox')).toBe(`0 0 ${width} ${height}`);
+    expect(path?.getAttribute('d')).toContain(expectedStart);
   });
 
   it('keeps custom-geometry object fills paintable for solidWithAlpha fills', () => {
@@ -110,6 +202,37 @@ describe('DomPainter shape regressions', () => {
     expect(path).toBeTruthy();
     expect(path?.getAttribute('fill')).toBe(alphaFill.color);
     expect(path?.getAttribute('fill-opacity')).toBe(String(alphaFill.alpha));
+  });
+
+  it('keeps explicit custom-geometry strokes visible for EMU-sized coordinate spaces', () => {
+    const geometry: DrawingGeometry = { width: 84, height: 45, rotation: 0, flipH: false, flipV: false };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'custom-geometry-emu-stroke',
+      drawingKind: 'vectorShape',
+      geometry,
+      customGeometry: {
+        paths: [
+          {
+            d: 'M 0 98743 L 575945 98743 L 575945 0 L 773430 197485 L 575945 394970 L 575945 296228 L 0 296228 Z',
+            w: 773430,
+            h: 394970,
+          },
+        ],
+      },
+      fillColor: '#5B9BD5',
+      strokeColor: '#0E1720',
+      strokeWidth: 1,
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const path = mount.querySelector('.superdoc-vector-shape svg path') as SVGPathElement | null;
+    expect(path?.getAttribute('stroke-width')).toBe('1');
+    expect(path?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
   });
 
   it('does not inverse-scale shape-group text when child geometry is already pre-scaled', () => {

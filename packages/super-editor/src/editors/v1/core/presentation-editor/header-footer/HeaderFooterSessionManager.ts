@@ -428,8 +428,12 @@ function shiftResolvedPaintItemY(item: ResolvedPaintItem, yOffset: number): Reso
   };
 }
 
-function isExplicitBehindDocMediaFragment(fragment: Fragment): boolean {
-  return (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.behindDoc === true;
+function isExcludedFromDecorationNormalization(fragment: Fragment): boolean {
+  if (fragment.kind !== 'image' && fragment.kind !== 'drawing') {
+    return false;
+  }
+
+  return fragment.behindDoc === true || fragment.isAnchored === true || fragment.sourceAnchor != null;
 }
 
 function getDecorationNormalizationMinY(fragments: Fragment[], layoutMinY: number): number {
@@ -439,7 +443,7 @@ function getDecorationNormalizationMinY(fragments: Fragment[], layoutMinY: numbe
 
   let minY = Infinity;
   for (const fragment of fragments) {
-    if (isExplicitBehindDocMediaFragment(fragment)) {
+    if (isExcludedFromDecorationNormalization(fragment)) {
       continue;
     }
     if (Number.isFinite(fragment.y)) {

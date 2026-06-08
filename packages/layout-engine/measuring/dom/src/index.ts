@@ -3285,30 +3285,34 @@ async function buildMeasuredAutoFitContentMetrics(
   };
 }
 
+function isBehindDocOverlay(block: ImageBlock | DrawingBlock): boolean {
+  return block.anchor?.behindDoc === true || (block.wrap?.type === 'None' && block.wrap?.behindDoc === true);
+}
+
+function hasNegativeVerticalPosition(block: ImageBlock | DrawingBlock): boolean {
+  return (
+    block.anchor?.isAnchored === true &&
+    ((typeof block.anchor?.offsetV === 'number' && block.anchor.offsetV < 0) ||
+      (typeof block.margin?.top === 'number' && block.margin.top < 0))
+  );
+}
+
 async function measureImageBlock(block: ImageBlock, constraints: MeasureConstraints): Promise<ImageMeasure> {
   const intrinsic = getIntrinsicImageSize(block, constraints.maxWidth);
 
-  const isBlockBehindDoc = block.anchor?.behindDoc;
-  const isBlockWrapBehindDoc = block.wrap?.type === 'None' && block.wrap?.behindDoc;
   const isPageRelativeAnchor =
     block.anchor?.isAnchored && (block.anchor?.hRelativeFrom === 'page' || block.anchor?.hRelativeFrom === 'margin');
-  const bypassWidthConstraint = isBlockBehindDoc || isBlockWrapBehindDoc || isPageRelativeAnchor;
+  const bypassWidthConstraint = isBehindDocOverlay(block) || isPageRelativeAnchor;
   const isWidthConstraintBypassed = bypassWidthConstraint || constraints.maxWidth <= 0;
 
   const maxWidth = isWidthConstraintBypassed ? intrinsic.width : constraints.maxWidth;
 
-  // For anchored images with negative vertical positioning (designed to overflow their container),
-  // bypass the height constraint. This matches MS Word behavior where images in headers/footers
-  // with negative offsets are rendered at their full size regardless of region constraints.
-  const hasNegativeVerticalPosition =
-    block.anchor?.isAnchored &&
-    ((typeof block.anchor?.offsetV === 'number' && block.anchor.offsetV < 0) ||
-      (typeof block.margin?.top === 'number' && block.margin.top < 0));
-
   // Bypass height constraint when:
+  // - Image is a behind-doc overlay (positioned independently of the content region)
   // - Image has negative vertical positioning (designed to overflow container)
   // - objectFit is 'cover' (image should render at exact extent dimensions, CSS handles content scaling/clipping)
-  const shouldBypassHeightConstraint = hasNegativeVerticalPosition || block.objectFit === 'cover';
+  const shouldBypassHeightConstraint =
+    isBehindDocOverlay(block) || hasNegativeVerticalPosition(block) || block.objectFit === 'cover';
 
   const maxHeight =
     shouldBypassHeightConstraint || !constraints.maxHeight || constraints.maxHeight <= 0
@@ -3336,14 +3340,13 @@ async function measureImageBlock(block: ImageBlock, constraints: MeasureConstrai
  * This function handles:
  * - Rotation transformations and their effect on bounding box dimensions
  * - Proportional scaling to fit within maxWidth/maxHeight constraints
- * - Special case: negative vertical positioning bypass for anchored drawings
+ * - Behind-doc overlay and negative vertical positioning bypasses for anchored drawings
  *
- * Negative Positioning Bypass:
- * For anchored drawings with negative vertical positioning (offsetV < 0 or margin.top < 0),
- * the maxHeight constraint is bypassed. This is intentional for footer/header graphics
- * that are designed to overflow their nominal container region (e.g., decorative elements
- * positioned above a footer's top edge). The bypass only applies when the drawing is
- * anchored AND has at least one negative vertical offset value.
+ * Overlay Bypass:
+ * Behind-doc wrapNone drawings, including image drawings, are absolute overlays and preserve
+ * their authored extents. Anchored drawings with negative vertical positioning also bypass
+ * maxHeight for legacy header/footer graphics designed to overflow their nominal container.
+ * Normal foreground anchored drawings continue to respect measurement constraints.
  *
  * @param block - The drawing block to measure, containing geometry, anchor, and margin data
  * @param constraints - Measurement constraints with maxWidth and optional maxHeight
@@ -3355,20 +3358,29 @@ async function measureImageBlock(block: ImageBlock, constraints: MeasureConstrai
  *   kind: 'drawing',
  *   drawingKind: 'vectorShape',
  *   geometry: { width: 200, height: 100, rotation: 0 },
- *   anchor: { isAnchored: true, offsetV: -20 },
+ *   anchor: { isAnchored: true, behindDoc: true },
+ *   wrap: { type: 'None', behindDoc: true },
  * };
  *
  * const measure = await measureDrawingBlock(block, { maxWidth: 500, maxHeight: 80 });
  * // Result: { width: 200, height: 100, scale: 1 }
- * // (maxHeight bypassed due to negative offsetV)
+ * // (maxHeight bypassed because this is a behind-doc overlay)
  * ```
  */
 async function measureDrawingBlock(block: DrawingBlock, constraints: MeasureConstraints): Promise<DrawingMeasure> {
   if (block.drawingKind === 'image') {
     const intrinsic = getIntrinsicSizeFromDims(block.width, block.height, constraints.maxWidth);
 
-    const maxWidth = constraints.maxWidth > 0 ? constraints.maxWidth : intrinsic.width;
-    const maxHeight = constraints.maxHeight && constraints.maxHeight > 0 ? constraints.maxHeight : Infinity;
+    const isPageRelativeAnchor =
+      block.anchor?.isAnchored === true &&
+      (block.anchor.hRelativeFrom === 'page' || block.anchor.hRelativeFrom === 'margin');
+    const bypassWidthConstraint = isBehindDocOverlay(block) || isPageRelativeAnchor;
+    const maxWidth = bypassWidthConstraint || constraints.maxWidth <= 0 ? intrinsic.width : constraints.maxWidth;
+    const shouldBypassHeightConstraint = isBehindDocOverlay(block) || hasNegativeVerticalPosition(block);
+    const maxHeight =
+      shouldBypassHeightConstraint || !constraints.maxHeight || constraints.maxHeight <= 0
+        ? Infinity
+        : constraints.maxHeight;
 
     const widthScale = maxWidth / intrinsic.width;
     const heightScale = maxHeight / intrinsic.height;
@@ -3413,16 +3425,9 @@ async function measureDrawingBlock(block: DrawingBlock, constraints: MeasureCons
   const isFloating = block.wrap?.type === 'None';
   const maxWidth = fullWidthMax ?? (constraints.maxWidth > 0 && !isFloating ? constraints.maxWidth : naturalWidth);
 
-  // For anchored drawings with negative vertical positioning (designed to overflow their container),
-  // bypass the height constraint. This is common for footer/header graphics that extend beyond
-  // their nominal region (e.g., decorative elements with marginOffset.top < 0).
-  const hasNegativeVerticalPosition =
-    block.anchor?.isAnchored &&
-    ((typeof block.anchor?.offsetV === 'number' && block.anchor.offsetV < 0) ||
-      (typeof block.margin?.top === 'number' && block.margin.top < 0));
-
+  const shouldBypassHeightConstraint = isBehindDocOverlay(block) || hasNegativeVerticalPosition(block);
   const maxHeight =
-    hasNegativeVerticalPosition || !constraints.maxHeight || constraints.maxHeight <= 0
+    shouldBypassHeightConstraint || !constraints.maxHeight || constraints.maxHeight <= 0
       ? Infinity
       : constraints.maxHeight;
 

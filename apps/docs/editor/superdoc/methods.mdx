@@ -538,7 +538,7 @@ const superdoc = new SuperDoc({
 
 ### `setZoom`
 
-Set the zoom level for all documents. Propagates to all presentation editors, PDF viewers, and whiteboard layers.
+Set an explicit zoom level and switch zoom mode to `manual`. Use `setZoomMode('fit-width')` to turn automatic fitting back on.
 
 <ParamField path="percent" type="number" required>
   Zoom level as a percentage (e.g., `100`, `150`, `200`). Must be a positive finite number.
@@ -560,9 +560,100 @@ const superdoc = new SuperDoc({
   onReady: ({ superdoc }) => {
     superdoc.setZoom(150);
 
-    superdoc.on('zoomChange', ({ zoom }) => {
-      console.log(`Zoom changed to ${zoom}%`);
+    superdoc.on('zoomChange', ({ zoom, mode }) => {
+      console.log(`Zoom changed to ${zoom}% (${mode})`);
     });
+  },
+});
+```
+
+</CodeGroup>
+
+### `setZoomMode`
+
+Switch between manual zoom and automatic fit-width zoom. `'fit-width'` keeps DOCX and PDF documents fitted to the available container width, using the bounds from [`zoom.fitWidth`](/editor/superdoc/configuration#param-zoom). Calling `setZoom()` switches back to `'manual'`.
+
+<ParamField path="mode" type="'manual' | 'fit-width'" required>
+  The zoom mode to switch to.
+</ParamField>
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.setZoomMode('fit-width');
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: ({ superdoc }) => {
+    superdoc.setZoomMode('fit-width');
+
+    superdoc.on('zoomChange', ({ zoom, mode }) => {
+      console.log(`Zoom: ${zoom}% (${mode})`);
+    });
+  },
+});
+```
+
+</CodeGroup>
+
+### `getZoomState`
+
+Get the current zoom mode, value, latest fit calculation, and effective fit bounds.
+
+**Returns:** `SuperDocZoomState` - `{ mode, value, fitZoom, min, max }`. `fitZoom` is `null` before the first viewport measurement.
+
+<CodeGroup>
+
+```javascript Usage
+const { mode, value, fitZoom } = superdoc.getZoomState();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: ({ superdoc }) => {
+    const state = superdoc.getZoomState();
+    console.log(`Mode: ${state.mode}, value: ${state.value}%`);
+  },
+});
+```
+
+</CodeGroup>
+
+### `getViewportMetrics`
+
+Get the latest fit-width measurements. Use this when you need custom zoom behavior instead of `zoom.mode: 'fit-width'`.
+
+**Returns:** `SuperDocViewportMetrics | null` - `{ availableWidth, documentWidth, fitZoom }`, or `null` until the first measurement (editors still mounting).
+
+<CodeGroup>
+
+```javascript Usage
+const metrics = superdoc.getViewportMetrics();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: ({ superdoc }) => {
+    const metrics = superdoc.getViewportMetrics();
+    if (metrics) {
+      superdoc.setZoom(Math.min(100, metrics.fitZoom));
+    }
   },
 });
 ```

@@ -177,6 +177,37 @@ describe('w:del translator', () => {
       expect(result.elements[0].elements[0].name).toBe('w:delText');
     });
 
+    it('renames every <w:t> in a multi-segment run to <w:delText> (newline split)', () => {
+      const mockTrackedMark = {
+        type: 'trackDelete',
+        attrs: {
+          id: '789',
+          sourceId: '',
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          date: '2025-10-09T12:00:00Z',
+        },
+      };
+
+      // The newline export safety net produces one run with interleaved w:t/w:br;
+      // every w:t inside <w:del> must become w:delText, not just the first.
+      exportSchemaToJson.mockReturnValue({
+        name: 'w:r',
+        elements: [
+          { name: 'w:t', elements: [{ text: 'Alpha', type: 'text' }] },
+          { name: 'w:br' },
+          { name: 'w:t', elements: [{ text: 'Beta', type: 'text' }] },
+        ],
+      });
+
+      const node = { type: 'text', text: 'Alpha\nBeta', marks: [mockTrackedMark] };
+      const result = config.decode({ node });
+
+      const run = result.elements[0];
+      expect(run.elements.map((n) => n.name)).toEqual(['w:delText', 'w:br', 'w:delText']);
+      expect(run.elements.some((n) => n.name === 'w:t')).toBe(false);
+    });
+
     it('writes sourceId to w:id for round-trip fidelity', () => {
       const mockTrackedMark = {
         type: 'trackDelete',

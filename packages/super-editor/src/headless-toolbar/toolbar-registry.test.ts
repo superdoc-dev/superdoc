@@ -986,6 +986,75 @@ describe('createToolbarRegistry', () => {
     });
   });
 
+  it('derives zoom-fit-width active state from the host zoom mode', () => {
+    const registry = createToolbarRegistry();
+
+    const fitActive = registry['zoom-fit-width']?.state({
+      context: createContext(),
+      superdoc: {
+        getZoomState: vi.fn(() => ({ mode: 'fit-width', value: 84, fitZoom: 84, min: 10, max: 100 })),
+        setZoomMode: vi.fn(),
+      },
+    });
+    expect(fitActive).toEqual({ active: true, disabled: false });
+
+    const manual = registry['zoom-fit-width']?.state({
+      context: createContext(),
+      superdoc: {
+        getZoomState: vi.fn(() => ({ mode: 'manual', value: 100, fitZoom: null, min: 10, max: 100 })),
+        setZoomMode: vi.fn(),
+      },
+    });
+    expect(manual).toEqual({ active: false, disabled: false });
+  });
+
+  it('disables zoom-fit-width without a context or a setZoomMode host bridge', () => {
+    const registry = createToolbarRegistry();
+
+    const noContext = registry['zoom-fit-width']?.state({
+      context: null,
+      superdoc: { setZoomMode: vi.fn(), getZoomState: vi.fn(() => ({ mode: 'manual' })) },
+    });
+    expect(noContext?.disabled).toBe(true);
+
+    const noBridge = registry['zoom-fit-width']?.state({
+      context: createContext(),
+      superdoc: {},
+    });
+    expect(noBridge?.disabled).toBe(true);
+  });
+
+  it('zoom-fit-width execute toggles between fit-width and manual', () => {
+    const registry = createToolbarRegistry();
+
+    const setZoomMode = vi.fn();
+    const fromManual = registry['zoom-fit-width']?.execute?.({
+      context: createContext(),
+      superdoc: {
+        setZoomMode,
+        getZoomState: vi.fn(() => ({ mode: 'manual', value: 100, fitZoom: null, min: 10, max: 100 })),
+      },
+    });
+    expect(fromManual).toBe(true);
+    expect(setZoomMode).toHaveBeenCalledWith('fit-width');
+
+    const setZoomModeBack = vi.fn();
+    registry['zoom-fit-width']?.execute?.({
+      context: createContext(),
+      superdoc: {
+        setZoomMode: setZoomModeBack,
+        getZoomState: vi.fn(() => ({ mode: 'fit-width', value: 84, fitZoom: 84, min: 10, max: 100 })),
+      },
+    });
+    expect(setZoomModeBack).toHaveBeenCalledWith('manual');
+
+    const noBridge = registry['zoom-fit-width']?.execute?.({
+      context: createContext(),
+      superdoc: {},
+    });
+    expect(noBridge).toBe(false);
+  });
+
   it('enables track-changes accept-selection when selection contains tracked changes and action is allowed', () => {
     collectTrackedChangesMock.mockReturnValueOnce([{ id: 'tc-1' }]);
     isTrackedChangeActionAllowedMock.mockReturnValueOnce(true);

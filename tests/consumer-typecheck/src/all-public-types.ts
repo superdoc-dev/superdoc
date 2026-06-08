@@ -174,6 +174,7 @@ import type {
   SuperDocExceptionPayload,
   SuperDocExceptionRestorePayload,
   SuperDocExceptionStorePayload,
+  SuperDocFitWidthOptions,
   SuperDocFontFace,
   SuperDocFontFamily,
   SuperDocFontsApi,
@@ -182,6 +183,12 @@ import type {
   SuperDocReadyPayload,
   SuperDocState,
   SuperDocTelemetryConfig,
+  SuperDocViewportChangePayload,
+  SuperDocViewportMetrics,
+  SuperDocZoomConfig,
+  SuperDocZoomMode,
+  SuperDocZoomPayload,
+  SuperDocZoomState,
   SurfaceComponentProps,
   SurfaceFloatingPlacement,
   SurfaceHandle,
@@ -368,6 +375,7 @@ const _real_SuperDocExceptionEditorPayload: AssertNotAny<SuperDocExceptionEditor
 const _real_SuperDocExceptionPayload: AssertNotAny<SuperDocExceptionPayload> = true;
 const _real_SuperDocExceptionRestorePayload: AssertNotAny<SuperDocExceptionRestorePayload> = true;
 const _real_SuperDocExceptionStorePayload: AssertNotAny<SuperDocExceptionStorePayload> = true;
+const _real_SuperDocFitWidthOptions: AssertNotAny<SuperDocFitWidthOptions> = true;
 const _real_SuperDocFontFace: AssertNotAny<SuperDocFontFace> = true;
 const _real_SuperDocFontFamily: AssertNotAny<SuperDocFontFamily> = true;
 const _real_SuperDocFontsApi: AssertNotAny<SuperDocFontsApi> = true;
@@ -376,6 +384,12 @@ const _real_SuperDocLockedPayload: AssertNotAny<SuperDocLockedPayload> = true;
 const _real_SuperDocReadyPayload: AssertNotAny<SuperDocReadyPayload> = true;
 const _real_SuperDocState: AssertNotAny<SuperDocState> = true;
 const _real_SuperDocTelemetryConfig: AssertNotAny<SuperDocTelemetryConfig> = true;
+const _real_SuperDocViewportChangePayload: AssertNotAny<SuperDocViewportChangePayload> = true;
+const _real_SuperDocViewportMetrics: AssertNotAny<SuperDocViewportMetrics> = true;
+const _real_SuperDocZoomConfig: AssertNotAny<SuperDocZoomConfig> = true;
+const _real_SuperDocZoomMode: AssertNotAny<SuperDocZoomMode> = true;
+const _real_SuperDocZoomPayload: AssertNotAny<SuperDocZoomPayload> = true;
+const _real_SuperDocZoomState: AssertNotAny<SuperDocZoomState> = true;
 const _real_SurfaceComponentProps: AssertNotAny<SurfaceComponentProps> = true;
 const _real_SurfaceFloatingPlacement: AssertNotAny<SurfaceFloatingPlacement> = true;
 const _real_SurfaceHandle: AssertNotAny<SurfaceHandle> = true;

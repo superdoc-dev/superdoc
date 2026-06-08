@@ -36,12 +36,12 @@ export interface Subscribable<T> {
 
 /**
  * Event names the UI controller (`createSuperDocUI`) subscribes to on
- * a SuperDoc-like host. Narrower than
- * `HeadlessToolbarSuperdocHostEvent` (which adds
- * `formatting-marks-change`); a custom UI host stub only has to
- * support the three events the UI controller actually consumes.
+ * a SuperDoc-like host. Differs from `HeadlessToolbarSuperdocHostEvent`
+ * (which adds `formatting-marks-change` but not `viewport-change`); a
+ * custom UI host stub only has to support the four events the UI
+ * controller actually consumes.
  */
-export type SuperDocUIHostEvent = 'editorCreate' | 'document-mode-change' | 'zoomChange';
+export type SuperDocUIHostEvent = 'editorCreate' | 'document-mode-change' | 'zoomChange' | 'viewport-change';
 
 /**
  * Structural typing for the SuperDoc instance. Keeps the UI controller
@@ -82,6 +82,42 @@ export interface SuperDocLike {
    * browser test stubs stay valid without a host implementation.
    */
   export?(options?: DocumentExportInput): Promise<unknown>;
+  /**
+   * Optional zoom bridge consumed by `ui.zoom`. Mirrors the superdoc
+   * package's zoom surface (`setZoom` switches the mode to manual,
+   * `setZoomMode` toggles fitting, the getters snapshot state and
+   * viewport metrics). All optional so stubs and older hosts stay
+   * valid; `ui.zoom` degrades to a static manual/100 snapshot.
+   */
+  setZoom?(percent: number): unknown;
+  setZoomMode?(mode: ZoomMode): unknown;
+  getZoomState?(): {
+    mode: ZoomMode;
+    value: number;
+    fitZoom: number | null;
+    min: number;
+    max: number;
+  };
+  getViewportMetrics?(): ZoomViewportMetrics | null;
+}
+
+/**
+ * Zoom mode mirrored from the superdoc package: `manual` holds the
+ * last-set value, `fit-width` continuously re-fits to the container.
+ */
+export type ZoomMode = 'manual' | 'fit-width';
+
+/**
+ * Pure viewport measurements mirrored from the superdoc package's
+ * `viewport-change` payload / `getViewportMetrics()`.
+ */
+export interface ZoomViewportMetrics {
+  /** Width available to the document in pixels (container minus the comments sidebar). */
+  availableWidth: number;
+  /** Widest document page width in pixels at 100% zoom. */
+  documentWidth: number;
+  /** Unclamped zoom percentage that fits the document in the available width. */
+  fitZoom: number;
 }
 
 export interface SuperDocEditorLike {
@@ -309,6 +345,33 @@ export interface SuperDocUIState {
    * document transactions; `activeIds` derives from the selection.
    */
   contentControls: ContentControlsSlice;
+  /**
+   * Zoom slice. Sourced from the host's `getZoomState()` /
+   * `getViewportMetrics()` and recomputed on `zoomChange` /
+   * `viewport-change`. Hosts without the zoom surface yield a static
+   * manual/100 snapshot.
+   */
+  zoom: ZoomSlice;
+}
+
+/**
+ * Zoom snapshot exposed on `state.zoom` and through `ui.zoom`. Combines
+ * the host's zoom state (mode, value, fit bounds) with the latest
+ * viewport metrics so a zoom UI renders from one slice.
+ */
+export interface ZoomSlice {
+  /** Current zoom mode. */
+  mode: ZoomMode;
+  /** Current zoom value as a percentage. */
+  value: number;
+  /** Latest unclamped fit zoom, or `null` before the first viewport measurement. */
+  fitZoom: number | null;
+  /** Effective lower bound of the fit-width policy. */
+  min: number;
+  /** Effective upper bound of the fit-width policy. */
+  max: number;
+  /** Latest viewport measurements, or `null` before editors mount. */
+  metrics: ZoomViewportMetrics | null;
 }
 
 /**
@@ -812,6 +875,17 @@ export interface SuperDocUI {
   document: DocumentHandle;
 
   /**
+   * Zoom domain. One slice for zoom UIs (mode, value, fit zoom,
+   * bounds, viewport metrics) plus the two mutations: `set(percent)`
+   * (numeric zoom, switches the host to manual mode) and
+   * `setMode('fit-width' | 'manual')`. Sugar over `state.zoom` and
+   * passthroughs to the host's `setZoom` / `setZoomMode`; the slice
+   * recomputes on the host's `zoomChange` and `viewport-change`
+   * events, including mode-only transitions.
+   */
+  zoom: ZoomHandle;
+
+  /**
    * Create a {@link SuperDocUIScope} for collecting subscriptions,
    * custom-command registrations, and DOM listeners under one
    * lifecycle. Calling `ui.destroy()` cascades into every live scope
@@ -1046,6 +1120,36 @@ export interface DocumentHandle {
    * active editor or the engine swap throws.
    */
   replaceFile(file: File): Promise<void>;
+}
+
+/**
+ * Zoom domain handle (`ui.zoom`). Read / observe the {@link ZoomSlice}
+ * and mutate through the host's zoom surface. Hosts without zoom
+ * methods (older builds, minimal stubs) degrade gracefully: the slice
+ * is a static manual/100 snapshot and the mutations are no-ops.
+ */
+export interface ZoomHandle {
+  /** Current zoom snapshot. */
+  getSnapshot(): ZoomSlice;
+  /**
+   * Subscribe to zoom snapshots. Fires on value changes, mode-only
+   * transitions, and fit-relevant viewport metric updates (the host's
+   * deduped `viewport-change`); `getSnapshot()` always reads the
+   * latest stored metrics. Returns the unsubscribe function; pair
+   * with `scope.add(...)` for lifecycle handling.
+   */
+  observe(listener: (snapshot: ZoomSlice) => void): () => void;
+  /**
+   * Set a numeric zoom percentage. Routes through `superdoc.setZoom`,
+   * which switches the mode to `manual` by contract.
+   */
+  set(percent: number): void;
+  /**
+   * Switch the zoom mode. Routes through `superdoc.setZoomMode`;
+   * `'fit-width'` applies the fit immediately when viewport metrics
+   * are available.
+   */
+  setMode(mode: ZoomMode): void;
 }
 
 /**

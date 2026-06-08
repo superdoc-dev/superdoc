@@ -29,6 +29,7 @@ import {
 import { resolveAnchoredGraphicY, resolveAnchoredGraphicX, getFragmentZIndex } from '@superdoc/contracts';
 import { createAnchoredTableFragment, isAnchoredTableFullWidth } from './layout-table.js';
 import type { AnchoredTable } from './anchors.js';
+import { layoutTextboxContent } from './layout-textbox.js';
 
 /** Points → CSS pixels (96 dpi / 72 pt-per-inch). */
 const PX_PER_PT = 96 / 72;
@@ -595,6 +596,10 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         if (pmRange.pmEnd != null) fragment.pmEnd = pmRange.pmEnd;
         state.page.fragments.push(fragment);
       } else if (entry.block.kind === 'drawing' && entry.measure.kind === 'drawing') {
+        const contentMeasures =
+          entry.block.drawingKind === 'textboxShape' && typeof remeasureParagraph === 'function'
+            ? layoutTextboxContent(entry.block, remeasureParagraph)
+            : undefined;
         const fragment: DrawingFragment = {
           kind: 'drawing',
           blockId: entry.block.id,
@@ -609,6 +614,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
           behindDoc: entry.block.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(entry.block),
           drawingContentId: entry.block.drawingContentId,
+          contentMeasures,
           sourceAnchor: entry.block.sourceAnchor,
         };
         if (pmRange.pmStart != null) fragment.pmStart = pmRange.pmStart;

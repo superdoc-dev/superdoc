@@ -58,6 +58,7 @@ import {
 import { layoutParagraphBlock, type FootnoteAnchorRef } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
 import { layoutDrawingBlock } from './layout-drawing.js';
+import { layoutTextboxContent } from './layout-textbox.js';
 import { layoutTableBlock, createAnchoredTableFragment, isAnchoredTableFullWidth } from './layout-table.js';
 import {
   collectAnchoredDrawings,
@@ -2711,6 +2712,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const state = paginator.ensurePage();
         const drawBlock = block as DrawingBlock;
         const drawMeasure = measure as DrawingMeasure;
+        const contentMeasures =
+          drawBlock.drawingKind === 'textboxShape' && typeof options.remeasureParagraph === 'function'
+            ? layoutTextboxContent(drawBlock, options.remeasureParagraph)
+            : undefined;
 
         const fragment: DrawingFragment = {
           kind: 'drawing',
@@ -2726,6 +2731,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           behindDoc: drawBlock.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(drawBlock),
           drawingContentId: drawBlock.drawingContentId,
+          contentMeasures,
           sourceAnchor: drawBlock.sourceAnchor,
         };
 
@@ -2745,6 +2751,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         ensurePage: paginator.ensurePage,
         advanceColumn: paginator.advanceColumn,
         columnX,
+        textboxContentMeasures:
+          block.drawingKind === 'textboxShape' && typeof options.remeasureParagraph === 'function'
+            ? layoutTextboxContent(block, options.remeasureParagraph)
+            : undefined,
       });
       continue;
     }
@@ -3670,5 +3680,6 @@ export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTok
 // Table utilities consumed by layout-bridge and cross-package sync tests
 export { getCellLines, getEmbeddedRowLines, resolveTableFrame, resolveRenderedTableWidth } from './layout-table.js';
 export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';
+export { layoutTextboxContent } from './layout-textbox.js';
 
 export { SINGLE_COLUMN_DEFAULT } from './section-breaks.js';

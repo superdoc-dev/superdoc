@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clickToPosition, hitTestPage, hitTestTableFragment } from '../src/index.ts';
+import { clickToPosition, hitTestPage, hitTestTableFragment, hitTestTextboxFragment } from '../src/index.ts';
 import type {
   Layout,
   FlowBlock,
@@ -9,6 +9,8 @@ import type {
   TableBlock,
   TableMeasure,
   TableFragment,
+  DrawingFragment,
+  ParagraphMeasure,
 } from '@superdoc/contracts';
 import {
   simpleLayout,
@@ -29,6 +31,81 @@ import {
 } from './mock-data';
 
 describe('clickToPosition', () => {
+  it('hit-tests textboxShape content paragraphs with insets', () => {
+    const textboxParagraph: FlowBlock = {
+      kind: 'paragraph',
+      id: 'textbox-para',
+      runs: [{ text: 'Textbox text', fontFamily: 'Arial', fontSize: 16, pmStart: 50, pmEnd: 62 }],
+    };
+
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'textbox-0',
+      drawingKind: 'textboxShape',
+      geometry: { width: 140, height: 60, rotation: 0, flipH: false, flipV: false },
+      contentBlocks: [textboxParagraph],
+      textInsets: { top: 8, right: 10, bottom: 8, left: 12 },
+      attrs: { pmStart: 49, pmEnd: 63 },
+    };
+
+    const textboxParagraphMeasure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 12,
+          width: 96,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 140,
+      height: 60,
+      scale: 1,
+      naturalWidth: 140,
+      naturalHeight: 60,
+      geometry: { width: 140, height: 60, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const textboxFragment: DrawingFragment = {
+      kind: 'drawing',
+      blockId: 'textbox-0',
+      drawingKind: 'textboxShape',
+      x: 40,
+      y: 70,
+      width: 140,
+      height: 60,
+      geometry: { width: 140, height: 60, rotation: 0, flipH: false, flipV: false },
+      scale: 1,
+      pmStart: 49,
+      pmEnd: 63,
+      contentMeasures: [textboxParagraphMeasure],
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [{ number: 1, fragments: [textboxFragment] }],
+    };
+
+    const pageHit = hitTestPage(layout, { x: 64, y: 86 });
+    expect(pageHit).not.toBeNull();
+
+    const hit = hitTestTextboxFragment(pageHit!, [textboxBlock], [textboxMeasure], { x: 64, y: 86 });
+    expect(hit).not.toBeNull();
+    expect(hit?.contentBlock.id).toBe('textbox-para');
+    expect(hit?.localX).toBe(12);
+    expect(hit?.localY).toBe(8);
+  });
+
   it('maps point to PM position near start', () => {
     const result = clickToPosition(simpleLayout, blocks, measures, { x: 40, y: 60 });
     expect(result?.pos).toBeGreaterThanOrEqual(1);
@@ -50,6 +127,78 @@ describe('clickToPosition', () => {
     const result = clickToPosition(drawingLayout, [drawingBlock], [drawingMeasure], { x: 70, y: 90 });
     expect(result?.blockId).toBe('drawing-0');
     expect(result?.pos).toBe(20);
+  });
+
+  it('maps point inside textboxShape to paragraph PM position', () => {
+    const textboxParagraph: FlowBlock = {
+      kind: 'paragraph',
+      id: 'textbox-para-2',
+      runs: [{ text: 'Textbox text', fontFamily: 'Arial', fontSize: 16, pmStart: 80, pmEnd: 92 }],
+    };
+
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'textbox-1',
+      drawingKind: 'textboxShape',
+      geometry: { width: 160, height: 70, rotation: 0, flipH: false, flipV: false },
+      contentBlocks: [textboxParagraph],
+      textInsets: { top: 8, right: 10, bottom: 8, left: 12 },
+      attrs: { pmStart: 79, pmEnd: 93 },
+    };
+
+    const textboxParagraphMeasure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 12,
+          width: 96,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 160,
+      height: 70,
+      scale: 1,
+      naturalWidth: 160,
+      naturalHeight: 70,
+      geometry: { width: 160, height: 70, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const textboxFragment: DrawingFragment = {
+      kind: 'drawing',
+      blockId: 'textbox-1',
+      drawingKind: 'textboxShape',
+      x: 40,
+      y: 80,
+      width: 160,
+      height: 70,
+      geometry: { width: 160, height: 70, rotation: 0, flipH: false, flipV: false },
+      scale: 1,
+      pmStart: 79,
+      pmEnd: 93,
+      contentMeasures: [textboxParagraphMeasure],
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [{ number: 1, fragments: [textboxFragment] }],
+    };
+
+    const result = clickToPosition(layout, [textboxBlock], [textboxMeasure], { x: 76, y: 96 });
+    expect(result?.blockId).toBe('textbox-1');
+    expect(result?.lineIndex).toBe(0);
+    expect(result?.pos).toBeGreaterThanOrEqual(80);
+    expect(result?.pos).toBeLessThanOrEqual(92);
   });
 
   it('uses table fragment columnIndex instead of visual x for multi-column overflow tables', () => {

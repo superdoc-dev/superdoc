@@ -29,6 +29,7 @@ import type {
   TableBlock,
   TableFragment,
   TableMeasure,
+  TextboxDrawing,
   VectorShapeDrawing,
   VectorShapeStyle,
   ResolvedLayout,
@@ -134,7 +135,7 @@ type EffectExtent = {
   bottom: number;
 };
 
-type VectorShapeDrawingWithEffects = VectorShapeDrawing & {
+type ShapeTextDrawingWithEffects = (VectorShapeDrawing | TextboxDrawing) & {
   lineEnds?: LineEnds;
   effectExtent?: EffectExtent;
 };
@@ -336,7 +337,7 @@ function hasPageContextTokenInBlock(block: FlowBlock | undefined): boolean {
     }
   } else if (block.kind === 'drawing') {
     const drawing = block as DrawingBlock;
-    if (drawing.drawingKind === 'vectorShape') {
+    if (drawing.drawingKind === 'vectorShape' || drawing.drawingKind === 'textboxShape') {
       return hasPageContextTokenInShapeText(drawing.textContent);
     }
     if (drawing.drawingKind === 'shapeGroup') {
@@ -2869,8 +2870,8 @@ export class DomPainter {
     if (block.drawingKind === 'image') {
       return createDrawingImageElement(this.doc, block, this.buildImageHyperlinkAnchor.bind(this));
     }
-    if (block.drawingKind === 'vectorShape') {
-      return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context);
+    if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
+      return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context, fragment);
     }
     if (block.drawingKind === 'shapeGroup') {
       return this.createShapeGroupElement(block, context);
@@ -2882,12 +2883,13 @@ export class DomPainter {
   }
 
   private createVectorShapeElement(
-    block: VectorShapeDrawingWithEffects,
+    block: ShapeTextDrawingWithEffects,
     geometry?: DrawingGeometry,
     applyTransforms = false,
     groupScaleX = 1,
     groupScaleY = 1,
     context?: FragmentRenderContext,
+    fragment?: DrawingFragment,
   ): HTMLElement {
     const container = this.doc!.createElement('div');
     container.classList.add('superdoc-vector-shape');
@@ -2933,15 +2935,11 @@ export class DomPainter {
         this.applyLineEnds(svgElement, block);
         contentContainer.appendChild(svgElement);
 
-        if (this.hasShapeTextContent(block.textContent)) {
-          const textElement = this.createShapeTextElement(
-            block,
-            innerWidth,
-            innerHeight,
-            groupScaleX,
-            groupScaleY,
-            context,
-          );
+        if (block.drawingKind === 'textboxShape' || this.hasShapeTextContent(block.textContent)) {
+          const textElement =
+            block.drawingKind === 'textboxShape'
+              ? this.createTextboxContentElement(block, fragment, innerWidth, innerHeight, context)
+              : this.createShapeTextElement(block, innerWidth, innerHeight, groupScaleX, groupScaleY, context);
           contentContainer.appendChild(textElement);
         }
 
@@ -2953,15 +2951,11 @@ export class DomPainter {
     // Fallback rendering when no preset shape SVG is available
     this.applyFallbackShapeStyle(contentContainer, block);
 
-    if (this.hasShapeTextContent(block.textContent)) {
-      const textElement = this.createShapeTextElement(
-        block,
-        innerWidth,
-        innerHeight,
-        groupScaleX,
-        groupScaleY,
-        context,
-      );
+    if (block.drawingKind === 'textboxShape' || this.hasShapeTextContent(block.textContent)) {
+      const textElement =
+        block.drawingKind === 'textboxShape'
+          ? this.createTextboxContentElement(block, fragment, innerWidth, innerHeight, context)
+          : this.createShapeTextElement(block, innerWidth, innerHeight, groupScaleX, groupScaleY, context);
       contentContainer.appendChild(textElement);
     }
 
@@ -2972,7 +2966,7 @@ export class DomPainter {
   /**
    * Apply fill and stroke styles to a fallback shape container
    */
-  private applyFallbackShapeStyle(container: HTMLElement, block: VectorShapeDrawing): void {
+  private applyFallbackShapeStyle(container: HTMLElement, block: ShapeTextDrawingWithEffects): void {
     // Handle fill color
     if (block.fillColor === null) {
       container.style.background = 'none';
@@ -3041,6 +3035,58 @@ export class DomPainter {
       groupScaleY,
       context,
     );
+  }
+
+  private createTextboxContentElement(
+    block: TextboxDrawing,
+    fragment: DrawingFragment | undefined,
+    width: number,
+    height: number,
+    context?: FragmentRenderContext,
+  ): HTMLElement {
+    if (!Array.isArray(fragment?.contentMeasures) || fragment.contentMeasures.length === 0) {
+      return this.hasShapeTextContent(block.textContent)
+        ? this.createShapeTextElement(block, width, height, 1, 1, context)
+        : this.doc!.createElement('div');
+    }
+
+    const contentRoot = this.doc!.createElement('div');
+    contentRoot.style.position = 'absolute';
+    contentRoot.style.top = '0';
+    contentRoot.style.left = '0';
+    contentRoot.style.width = '100%';
+    contentRoot.style.height = '100%';
+    contentRoot.style.display = 'flex';
+    contentRoot.style.flexDirection = 'column';
+    contentRoot.style.boxSizing = 'border-box';
+    contentRoot.style.overflow = 'hidden';
+
+    const insets = block.textInsets ?? { top: 0, right: 0, bottom: 0, left: 0 };
+    contentRoot.style.padding = `${insets.top}px ${insets.right}px ${insets.bottom}px ${insets.left}px`;
+
+    const verticalAlign = block.textVerticalAlign ?? 'top';
+    contentRoot.style.justifyContent =
+      verticalAlign === 'bottom' ? 'flex-end' : verticalAlign === 'center' ? 'center' : 'flex-start';
+
+    const linesHost = this.doc!.createElement('div');
+    linesHost.style.display = 'flex';
+    linesHost.style.flexDirection = 'column';
+    linesHost.style.minWidth = '0';
+    linesHost.style.width = '100%';
+
+    const renderContext = context ?? this.defaultFragmentRenderContext();
+    const availableWidth = Math.max(1, width - insets.left - insets.right);
+
+    block.contentBlocks.forEach((paragraphBlock, paragraphIndex) => {
+      const measure = fragment.contentMeasures?.[paragraphIndex];
+      if (!measure) return;
+      measure.lines.forEach((line, lineIndex) => {
+        linesHost.appendChild(this.renderLine(paragraphBlock, line, renderContext, availableWidth, lineIndex));
+      });
+    });
+
+    contentRoot.appendChild(linesHost);
+    return contentRoot;
   }
 
   private shouldUseWordArtTextRenderer(block: VectorShapeDrawing): boolean {
@@ -3872,7 +3918,7 @@ export class DomPainter {
         if (block.drawingKind === 'shapeGroup') {
           return this.createShapeGroupElement(block, context);
         }
-        if (block.drawingKind === 'vectorShape') {
+        if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
           return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
         }
         if (block.drawingKind === 'chart') {
@@ -3986,6 +4032,14 @@ export class DomPainter {
       expandSdtWrapperPmRange,
     };
     return runContext;
+  }
+
+  private defaultFragmentRenderContext(): FragmentRenderContext {
+    return {
+      pageNumber: 1,
+      totalPages: 1,
+      section: 'body',
+    };
   }
 
   /**

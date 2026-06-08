@@ -6812,6 +6812,188 @@ describe('DomPainter', () => {
     expect(svgEl?.style.transform).toBe('');
   });
 
+  it('renders textboxShape contentMeasures as line-based DOM with pm datasets', () => {
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-textbox-lines',
+      drawingKind: 'textboxShape',
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      fillColor: '#ffffff',
+      strokeColor: '#000000',
+      strokeWidth: 1,
+      textInsets: { top: 4, right: 8, bottom: 4, left: 12 },
+      contentBlocks: [
+        {
+          kind: 'paragraph',
+          id: 'textbox-paragraph-lines',
+          runs: [{ text: 'Textbox line', fontFamily: 'Arial', fontSize: 16, pmStart: 10, pmEnd: 22 }],
+        },
+      ],
+      textContent: {
+        parts: [{ text: 'Fallback textbox line' }],
+      },
+    };
+
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 120,
+      height: 80,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 80,
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const textboxLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'drawing',
+              drawingKind: 'textboxShape',
+              blockId: 'drawing-textbox-lines',
+              x: 30,
+              y: 40,
+              width: 120,
+              height: 80,
+              geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+              scale: 1,
+              contentMeasures: [
+                {
+                  kind: 'paragraph',
+                  lines: [
+                    {
+                      fromRun: 0,
+                      fromChar: 0,
+                      toRun: 0,
+                      toChar: 12,
+                      width: 80,
+                      ascent: 12,
+                      descent: 4,
+                      lineHeight: 20,
+                    },
+                  ],
+                  totalHeight: 20,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [textboxBlock], measures: [textboxMeasure] });
+    painter.paint(textboxLayout, mount);
+
+    const shapeEl = mount.querySelector('.superdoc-vector-shape') as HTMLElement | null;
+    const lineEl = mount.querySelector('.superdoc-line') as HTMLElement | null;
+
+    expect(shapeEl).toBeTruthy();
+    expect(lineEl).toBeTruthy();
+    expect(lineEl?.dataset.pmStart).toBe('10');
+    expect(lineEl?.dataset.pmEnd).toBe('22');
+    expect(shapeEl?.textContent).toContain('Textbox line');
+    expect(shapeEl?.textContent).not.toContain('Fallback textbox line');
+  });
+
+  it('renders textboxShape fallback text inside table cells', () => {
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'table-textbox-drawing',
+      drawingKind: 'textboxShape',
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      fillColor: '#ffffff',
+      strokeColor: '#000000',
+      strokeWidth: 1,
+      textInsets: { top: 4, right: 8, bottom: 4, left: 12 },
+      textContent: {
+        parts: [{ text: 'Contract ACC' }],
+      },
+      contentBlocks: [],
+    };
+
+    const tableBlock: TableBlock = {
+      kind: 'table',
+      id: 'table-with-textbox',
+      rows: [
+        {
+          id: 'row-0',
+          cells: [
+            {
+              id: 'cell-0',
+              blocks: [textboxBlock],
+              attrs: {},
+            },
+          ],
+        },
+      ],
+    };
+
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 120,
+      height: 80,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 80,
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const tableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          height: 80,
+          cells: [
+            {
+              width: 140,
+              height: 80,
+              gridColumnStart: 0,
+              blocks: [textboxMeasure],
+            },
+          ],
+        },
+      ],
+      columnWidths: [140],
+      totalWidth: 140,
+      totalHeight: 80,
+    };
+
+    const tableLayout: Layout = {
+      pageSize: { w: 300, h: 300 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'table',
+              blockId: 'table-with-textbox',
+              x: 0,
+              y: 0,
+              width: 140,
+              height: 80,
+              fromRow: 0,
+              toRow: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tableBlock], measures: [tableMeasure] });
+    painter.paint(tableLayout, mount);
+
+    const shapeEl = mount.querySelector('.superdoc-vector-shape') as HTMLElement | null;
+    expect(shapeEl).toBeTruthy();
+    expect(shapeEl?.textContent).toContain('Contract ACC');
+  });
+
   it('rebuilds drawing text with PAGE fields when page context changes during patch rendering', () => {
     const vectorShapeBlock: FlowBlock = {
       kind: 'drawing',

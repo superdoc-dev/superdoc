@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { deriveBlockVersion, sourceAnchorSignature } from './versionSignature.js';
-import type { FlowBlock, ImageBlock, ImageRun, SourceAnchor, TableBlock, TabRun, TextRun } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  ImageBlock,
+  ImageRun,
+  ParagraphBlock,
+  SourceAnchor,
+  TableBlock,
+  TabRun,
+  TextRun,
+} from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
   it('is stable for equivalent source anchors with different object key order', () => {
@@ -214,6 +223,43 @@ describe('deriveBlockVersion - table image content', () => {
       }),
     );
 
+    expect(second).not.toBe(first);
+  });
+});
+
+describe('deriveBlockVersion - textboxShape content', () => {
+  const makeTextboxParagraph = (text: string): ParagraphBlock => ({
+    kind: 'paragraph',
+    id: 'textbox-para-1',
+    runs: [{ text, fontFamily: 'Arial', fontSize: 16, pmStart: 10, pmEnd: 10 + text.length }],
+  });
+
+  const makeTextbox = (text: string): FlowBlock => ({
+    kind: 'drawing',
+    id: 'textbox-1',
+    drawingKind: 'textboxShape',
+    geometry: { width: 120, height: 40, rotation: 0, flipH: false, flipV: false },
+    shapeKind: 'rect',
+    contentBlocks: [makeTextboxParagraph(text)],
+    textContent: {
+      parts: [{ text, fontFamily: 'Arial', fontSize: 16 }],
+    },
+    textInsets: { top: 4, right: 6, bottom: 4, left: 6 },
+    textVerticalAlign: 'top',
+  });
+
+  it('produces a different version when textbox text changes', () => {
+    const first = deriveBlockVersion(makeTextbox('Alpha'));
+    const second = deriveBlockVersion(makeTextbox('Beta'));
+    expect(second).not.toBe(first);
+  });
+
+  it('produces a different version when textbox insets change', () => {
+    const first = deriveBlockVersion(makeTextbox('Alpha'));
+    const second = deriveBlockVersion({
+      ...makeTextbox('Alpha'),
+      textInsets: { top: 8, right: 6, bottom: 4, left: 6 },
+    });
     expect(second).not.toBe(first);
   });
 });

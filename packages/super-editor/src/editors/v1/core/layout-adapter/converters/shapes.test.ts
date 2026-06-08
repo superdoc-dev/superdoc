@@ -385,7 +385,7 @@ describe('shapes converter', () => {
 
       expect(result).toBeDefined();
       expect(result?.kind).toBe('drawing');
-      expect(result?.drawingKind).toBe('vectorShape');
+      expect(result?.drawingKind).toBe('textboxShape');
       expect(result?.geometry.width).toBe(250);
       expect(result?.geometry.height).toBe(180);
     });
@@ -470,7 +470,7 @@ describe('shapes converter', () => {
 
       expect(result).toBeDefined();
       expect(result?.kind).toBe('drawing');
-      expect(result?.drawingKind).toBe('vectorShape');
+      expect(result?.drawingKind).toBe('textboxShape');
       expect(result?.geometry.width).toBe(200);
       expect(result?.geometry.height).toBe(100);
     });
@@ -542,6 +542,7 @@ describe('shapes converter', () => {
         bottom: 16,
         left: 4,
       });
+      expect(result.contentBlocks).toEqual([]);
     });
   });
 
@@ -619,6 +620,62 @@ describe('shapes converter', () => {
       expect(blocks).toHaveLength(1);
       expect(blocks[0].kind).toBe('drawing');
       expect(recordBlockKind).toHaveBeenCalledWith('drawing');
+    });
+
+    it('hydrates textbox paragraph children into contentBlocks', () => {
+      const node: PMNode = {
+        type: 'shapeContainer',
+        attrs: { width: 100, height: 100 },
+        content: [
+          {
+            type: 'shapeTextbox',
+            attrs: {},
+            content: [
+              {
+                type: 'paragraph',
+                attrs: {},
+                content: [{ type: 'text', text: 'Textbox line' }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const blocks: FlowBlock[] = [];
+      const recordBlockKind = vi.fn();
+      const paragraphToFlowBlocks = vi.fn(() => [
+        {
+          kind: 'paragraph' as const,
+          id: 'textbox-paragraph-1',
+          runs: [{ text: 'Textbox line', pmStart: 1, pmEnd: 13 }],
+        },
+      ]);
+
+      const context = {
+        blocks,
+        recordBlockKind,
+        nextBlockId: vi.fn(() => 'container-1'),
+        positions: new Map(),
+        storyKey: 'story',
+        trackedChangesConfig: { enabled: false, mode: 'showAll' },
+        hyperlinkConfig: {},
+        enableComments: true,
+        bookmarks: new Map(),
+        converters: {
+          paragraphToFlowBlocks,
+        },
+        converterContext: {},
+        defaultFont: 'Arial',
+        defaultSize: 12,
+      };
+
+      handleShapeContainerNode(node, context as never);
+
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].kind).toBe('drawing');
+      expect(blocks[0].drawingKind).toBe('textboxShape');
+      expect((blocks[0] as DrawingBlock).contentBlocks).toHaveLength(1);
+      expect(paragraphToFlowBlocks).toHaveBeenCalledTimes(1);
     });
   });
 

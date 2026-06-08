@@ -1623,7 +1623,7 @@ describe('toFlowBlocks', () => {
       const drawingBlock = blocks.find((block) => block.kind === 'drawing');
 
       expect(drawingBlock).toBeDefined();
-      expect(drawingBlock?.drawingKind).toBe('vectorShape');
+      expect(drawingBlock?.drawingKind).toBe('textboxShape');
       expect(drawingBlock?.geometry).toMatchObject({
         width: 200,
         height: 150,
@@ -1679,7 +1679,7 @@ describe('toFlowBlocks', () => {
       const drawingBlock = blocks.find((block) => block.kind === 'drawing');
 
       expect(drawingBlock).toBeDefined();
-      expect(drawingBlock?.drawingKind).toBe('vectorShape');
+      expect(drawingBlock?.drawingKind).toBe('textboxShape');
       expect(drawingBlock?.geometry).toMatchObject({
         width: 300,
         height: 100,
@@ -1881,7 +1881,7 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
       const drawingBlock = blocks.find((block) => block.kind === 'drawing');
 
-      expect(drawingBlock?.drawingKind).toBe('vectorShape');
+      expect(drawingBlock?.drawingKind).toBe('textboxShape');
       expect(drawingBlock?.textContent).toEqual({
         horizontalAlign: 'center',
         parts: [{ text: 'Textbox from VML' }],
@@ -1913,8 +1913,8 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(docWithShapes);
       const drawingBlocks = blocks.filter((b) => b.kind === 'drawing');
       expect(drawingBlocks).toHaveLength(2);
-      expect(drawingBlocks[0].drawingKind).toBe('vectorShape');
-      expect(drawingBlocks[1].drawingKind).toBe('vectorShape');
+      expect(drawingBlocks[0].drawingKind).toBe('textboxShape');
+      expect(drawingBlocks[1].drawingKind).toBe('textboxShape');
     });
   });
 

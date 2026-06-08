@@ -119,6 +119,24 @@ const imageLuminanceVersion = (lum: ImageBlock['lum'] | undefined): string => {
   return [lum.bright ?? '', lum.contrast ?? ''].join(':');
 };
 
+const drawingTextVersion = (block: VectorShapeDrawing): string => {
+  const textboxContentBlocks =
+    'contentBlocks' in block &&
+    Array.isArray((block as VectorShapeDrawing & { contentBlocks?: FlowBlock[] }).contentBlocks)
+      ? ((block as VectorShapeDrawing & { contentBlocks?: FlowBlock[] }).contentBlocks ?? [])
+          .map((contentBlock) => deriveBlockVersion(contentBlock))
+          .join(';')
+      : '';
+
+  return JSON.stringify([
+    block.textAlign ?? '',
+    block.textVerticalAlign ?? '',
+    block.textInsets ?? null,
+    block.textContent ?? null,
+    textboxContentBlocks,
+  ]);
+};
+
 const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
   [
     image.src ?? '',
@@ -434,10 +452,10 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
       const imageLike = block as ImageDrawing;
       return ['drawing:image', renderedBlockImageVersion(imageLike)].join('|');
     }
-    if (block.drawingKind === 'vectorShape') {
+    if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
       const vector = block as VectorShapeDrawing;
       return [
-        'drawing:vector',
+        block.drawingKind === 'textboxShape' ? 'drawing:textbox' : 'drawing:vector',
         vector.shapeKind ?? '',
         vector.fillColor ?? '',
         vector.strokeColor ?? '',
@@ -447,6 +465,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         vector.geometry.rotation ?? 0,
         vector.geometry.flipH ? 1 : 0,
         vector.geometry.flipV ? 1 : 0,
+        drawingTextVersion(vector),
       ].join('|');
     }
     if (block.drawingKind === 'shapeGroup') {

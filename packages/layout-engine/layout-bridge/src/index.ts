@@ -213,6 +213,7 @@ export type {
   FragmentHit,
   PositionHit,
   TableHitResult,
+  TextboxHitResult,
   GeometryPageHint,
   ClickToPositionGeometryOptions,
 } from './position-hit.js';
@@ -228,6 +229,7 @@ export {
   hitTestFragment,
   hitTestAtomicFragment,
   hitTestTableFragment,
+  hitTestTextboxFragment,
   findBlockIndexByFragmentId,
   calculatePageTopFallback,
   resolvePositionHitFromDomPosition,
@@ -249,6 +251,7 @@ import {
   hitTestFragment,
   hitTestAtomicFragment,
   hitTestTableFragment,
+  hitTestTextboxFragment,
   findBlockIndexByFragmentId,
   calculatePageTopFallback,
   resolvePositionHitFromDomPosition,

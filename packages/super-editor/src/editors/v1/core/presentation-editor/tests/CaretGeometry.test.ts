@@ -242,6 +242,105 @@ describe('CaretGeometry', () => {
       expect(result === null || result?.pageIndex === 0).toBe(true);
     });
 
+    it('uses textbox DOM geometry for textbox drawing fragments', () => {
+      mockDom.painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment" data-block-id="textbox-1">
+            <div class="superdoc-line" data-pm-start="10" data-pm-end="22">
+              <span data-pm-start="10" data-pm-end="22">Textbox line</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const pageEl = mockDom.painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const fragmentEl = mockDom.painterHost.querySelector('[data-block-id="textbox-1"]') as HTMLElement;
+      const lineEl = mockDom.painterHost.querySelector('.superdoc-line') as HTMLElement;
+      const spanEl = mockDom.painterHost.querySelector('span[data-pm-start="10"]') as HTMLElement;
+
+      const createRect = (left: number, top: number, width: number, height: number) => ({
+        left,
+        top,
+        right: left + width,
+        bottom: top + height,
+        width,
+        height,
+        x: left,
+        y: top,
+        toJSON: () => ({}),
+      });
+
+      mockDom.viewportHost.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792)) as never;
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792)) as never;
+      fragmentEl.getBoundingClientRect = vi.fn(() => createRect(30, 40, 120, 80)) as never;
+      lineEl.getBoundingClientRect = vi.fn(() => createRect(42, 48, 80, 20)) as never;
+      spanEl.getBoundingClientRect = vi.fn(() => createRect(42, 48, 70, 20)) as never;
+
+      const rangeRect = createRect(55, 48, 0, 20);
+      const mockRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        getBoundingClientRect: vi.fn(() => rangeRect),
+      };
+      vi.spyOn(document, 'createRange').mockReturnValue(mockRange as unknown as Range);
+
+      const drawingBlock: FlowBlock = {
+        kind: 'drawing',
+        id: 'textbox-1',
+        drawingKind: 'textboxShape',
+        geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+        contentBlocks: [],
+        textContent: { parts: [{ text: 'Textbox line' }] },
+      } as FlowBlock;
+
+      const drawingMeasure: Measure = {
+        kind: 'drawing',
+        drawingKind: 'textboxShape',
+        width: 120,
+        height: 80,
+        scale: 1,
+        naturalWidth: 120,
+        naturalHeight: 80,
+        geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+      } as Measure;
+
+      const drawingFragment = {
+        kind: 'drawing' as const,
+        drawingKind: 'textboxShape' as const,
+        blockId: 'textbox-1',
+        x: 30,
+        y: 40,
+        width: 120,
+        height: 80,
+        geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+        scale: 1,
+        pmStart: 10,
+        pmEnd: 22,
+      };
+
+      const layout: Layout = {
+        version: 1,
+        pages: [{ size: { w: 612, h: 792 }, fragments: [drawingFragment] }],
+      };
+
+      const deps: ComputeCaretLayoutRectGeometryDeps = {
+        layout,
+        blocks: [drawingBlock],
+        measures: [drawingMeasure],
+        painterHost: mockDom.painterHost,
+        viewportHost: mockDom.viewportHost,
+        visibleHost: mockDom.visibleHost,
+        zoom: 1,
+      };
+
+      const result = computeCaretLayoutRectGeometry(deps, 15, false);
+      expect(result).not.toBe(null);
+      expect(result?.pageIndex).toBe(0);
+      expect(result?.x).toBe(55);
+      expect(result?.y).toBe(48);
+      expect(result?.height).toBe(20);
+    });
+
     it('handles first-line indent mode for lists', () => {
       const block: FlowBlock = {
         kind: 'paragraph',

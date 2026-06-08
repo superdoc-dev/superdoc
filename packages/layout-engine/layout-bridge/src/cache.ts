@@ -180,9 +180,9 @@ const hashDrawingBlock = (block: DrawingBlock): string => {
     return `drawing:image:${hashImageLikeBlock(block)}`;
   }
 
-  if (block.drawingKind === 'vectorShape') {
+  if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
     return [
-      'drawing:vector',
+      block.drawingKind === 'textboxShape' ? 'drawing:textbox' : 'drawing:vector',
       hashDrawingGeometry(block.geometry),
       block.shapeKind ?? '',
       JSON.stringify(block.fillColor ?? null),

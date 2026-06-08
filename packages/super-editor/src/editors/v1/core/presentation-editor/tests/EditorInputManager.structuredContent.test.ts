@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { resolvePointerPositionHit } from '../input/PositionHitResolver.js';
+import { getFragmentAtPosition } from '@superdoc/layout-bridge';
 
 const { mockTextSelectionCreate, mockNodeSelectionCreate } = vi.hoisted(() => ({
   mockTextSelectionCreate: vi.fn(),
@@ -327,6 +328,45 @@ describe('EditorInputManager structured content clicks', () => {
     mountWithDoc('plainSdt');
     const target = document.createElement('span');
     viewportHost.appendChild(target);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 24,
+      } as PointerEventInit),
+    );
+
+    expect(resolvePointerPositionHit as unknown as Mock).toHaveBeenCalled();
+    expect(mockTextSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 12);
+    expect(mockNodeSelectionCreate).not.toHaveBeenCalled();
+  });
+
+  it('keeps textboxShape clicks on TextSelection instead of NodeSelection', () => {
+    mountWithDoc('plainSdt');
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    (getFragmentAtPosition as unknown as Mock).mockReturnValueOnce({
+      fragment: {
+        kind: 'drawing',
+        drawingKind: 'textboxShape',
+        blockId: 'textbox-1',
+      },
+      block: {
+        kind: 'drawing',
+        drawingKind: 'textboxShape',
+        id: 'textbox-1',
+      },
+      measure: {
+        kind: 'drawing',
+        drawingKind: 'textboxShape',
+      },
+    });
 
     const PointerEventImpl = getPointerEventImpl();
     target.dispatchEvent(

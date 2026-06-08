@@ -1,4 +1,4 @@
-import type { DrawingBlock, DrawingMeasure, DrawingFragment } from '@superdoc/contracts';
+import type { DrawingBlock, DrawingMeasure, DrawingFragment, ParagraphMeasure } from '@superdoc/contracts';
 import type { NormalizedColumns } from './layout-image.js';
 import type { PageState } from './paginator.js';
 import { extractBlockPmRange } from './layout-utils.js';
@@ -24,6 +24,8 @@ export type DrawingLayoutContext = {
   advanceColumn: (state: PageState) => PageState;
   /** Computes the X coordinate for a column in the given page state (SD-2629). */
   columnX: (state: PageState, columnIndex?: number) => number;
+  /** Optional laid-out textbox paragraph measurements carried alongside textbox drawings. */
+  textboxContentMeasures?: ParagraphMeasure[];
 };
 
 /**
@@ -66,6 +68,7 @@ export function layoutDrawingBlock({
   ensurePage,
   advanceColumn,
   columnX,
+  textboxContentMeasures,
 }: DrawingLayoutContext): void {
   if (block.anchor?.isAnchored) {
     return;
@@ -133,6 +136,7 @@ export function layoutDrawingBlock({
     geometry: measure.geometry,
     scale: measure.scale,
     drawingContentId: block.drawingContentId,
+    contentMeasures: textboxContentMeasures,
     zIndex: getFragmentZIndex(block),
     pmStart: pmRange.pmStart,
     pmEnd: pmRange.pmEnd,

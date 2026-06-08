@@ -3816,10 +3816,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         'sectionDefaults',
       ],
     };
-    const scopeReportSchema = objectSchema(
-      { scope: scopeEnum, part: { type: 'string' }, detail: { type: 'string' } },
-      ['scope', 'part'],
-    );
+    const scopeReportSchema = objectSchema({ scope: scopeEnum, part: { type: 'string' }, detail: { type: 'string' } }, [
+      'scope',
+      'part',
+    ]);
     const scopeSkipSchema = objectSchema(
       {
         scope: { type: 'string' },
@@ -5186,7 +5186,22 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         decision: { enum: ['accept', 'reject'] },
         target: {
           oneOf: [
-            objectSchema({ id: { type: 'string' }, story: storyLocatorSchema }, ['id']),
+            objectSchema(
+              {
+                id: { type: 'string' },
+                story: storyLocatorSchema,
+                // A partial-range qualifier on an entity (id) target. Accepted by
+                // the schema so the executor can fail closed with INVALID_INPUT
+                // on indivisible (e.g. structural whole-object) revisions rather
+                // than the runtime rejecting it as a malformed target.
+                range: {
+                  type: 'object',
+                  description:
+                    'Partial-range qualifier on an id target. Rejected with INVALID_INPUT for indivisible (e.g. structural) revisions.',
+                },
+              },
+              ['id'],
+            ),
             objectSchema(
               {
                 kind: { const: 'range' },

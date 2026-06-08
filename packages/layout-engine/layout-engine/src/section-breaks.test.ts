@@ -141,6 +141,27 @@ describe('scheduleSectionBreak', () => {
         expect(result.state.pendingColumns).toEqual({ count: 2, gap: 48 });
       });
 
+      it('does not trigger mid-page region change for explicit gaps-only changes before geometry uses gaps', () => {
+        const state = createSectionState({
+          activeColumns: { count: 3, gap: 48, widths: [100, 100, 300], gaps: [48, 48], equalWidth: false },
+        });
+        const block = createSectionBreak({
+          type: 'continuous',
+          columns: { count: 3, gap: 48, widths: [100, 100, 300], gaps: [48, 96], equalWidth: false },
+        });
+
+        const result = scheduleSectionBreak(block, state, BASE_MARGINS);
+
+        expect(result.decision.forceMidPageRegion).toBe(false);
+        expect(result.state.pendingColumns).toEqual({
+          count: 3,
+          gap: 48,
+          widths: [100, 100, 300],
+          gaps: [48, 96],
+          equalWidth: false,
+        });
+      });
+
       it('detects column change when only withSeparator toggles on', () => {
         const state = createSectionState({ activeColumns: { count: 2, gap: 48, withSeparator: false } });
         const block = createSectionBreak({

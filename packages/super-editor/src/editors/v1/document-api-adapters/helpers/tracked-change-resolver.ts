@@ -4,7 +4,6 @@ import type {
   StoryLocator,
   TrackChangeOverlapInfo,
   TrackChangeOverlapLayer,
-  TrackChangeType,
   TrackChangeWordRevisionIds,
   TrackedChangeAddress,
 } from '@superdoc/document-api';
@@ -14,7 +13,13 @@ import {
   TrackInsertMarkName,
 } from '../../extensions/track-changes/constants.js';
 import { getTrackChanges } from '../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
-import { toNonEmptyString } from './value-utils.js';
+import { enumerateStructuralRowChanges } from '../../extensions/track-changes/trackChangesHelpers/structuralRowChanges.js';
+import {
+  projectInternalTrackChangeType,
+  type InternalTrackChangeSubtype,
+  type InternalTrackChangeType,
+} from './tracked-change-type-utils.js';
+import { normalizeExcerpt, toNonEmptyString } from './value-utils.js';
 import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
 import { buildStoryKey, BODY_STORY_KEY } from '../story-runtime/story-key.js';
 import type { TrackedChangeRuntimeRef } from './tracked-change-runtime-ref.js';
@@ -42,11 +47,13 @@ export type GroupedTrackedChange = {
   excerpt?: string;
   wordRevisionIds?: TrackChangeWordRevisionIds;
   overlap?: TrackChangeOverlapInfo;
+  /** Set for whole-object structural revisions (e.g. whole-table insert/delete). */
+  structural?: { side: 'insertion' | 'deletion'; subtype: InternalTrackChangeSubtype };
 };
 
 export type TrackedChangeProjectedSide = 'inserted' | 'deleted';
 
-type ChangeTypeInput = Pick<GroupedTrackedChange, 'hasInsert' | 'hasDelete' | 'hasFormat'>;
+type ChangeTypeInput = Pick<GroupedTrackedChange, 'hasInsert' | 'hasDelete' | 'hasFormat' | 'structural'>;
 type GroupedTrackedChangeDraft = Omit<GroupedTrackedChange, 'id' | 'excerpt'> & {
   excerptParts: string[];
   /**
@@ -97,7 +104,8 @@ function deriveTrackedChangeId(change: Omit<GroupedTrackedChange, 'id'>): string
   return change.rawId;
 }
 
-export function resolveTrackedChangeType(change: ChangeTypeInput): TrackChangeType {
+export function resolveTrackedChangeType(change: ChangeTypeInput): InternalTrackChangeType {
+  if (change.structural) return 'structural';
   if (change.hasFormat) return 'format';
   if (change.hasInsert && change.hasDelete) return 'replacement';
   if (change.hasDelete) return 'delete';
@@ -208,18 +216,19 @@ function layerFromChange(
   change: GroupedTrackedChange,
   relationship: TrackChangeOverlapLayer['relationship'],
 ): InternalTrackChangeOverlapLayer {
+  const type = resolveTrackedChangeType(change);
   return {
     id: change.id,
     rawId: change.rawId,
     commandRawId: change.commandRawId,
-    type: resolveTrackedChangeType(change),
+    type: projectInternalTrackChangeType(type, change.structural),
     relationship,
   };
 }
 
 function compareOverlapChildren(a: GroupedTrackedChange, b: GroupedTrackedChange): number {
-  const aType = resolveTrackedChangeType(a);
-  const bType = resolveTrackedChangeType(b);
+  const aType = projectInternalTrackChangeType(resolveTrackedChangeType(a), a.structural);
+  const bType = projectInternalTrackChangeType(resolveTrackedChangeType(b), b.structural);
   if (aType !== bType) {
     if (aType === 'delete') return -1;
     if (bType === 'delete') return 1;
@@ -382,6 +391,54 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
       return a.id.localeCompare(b.id);
     });
   attachOverlapMetadata(grouped);
+
+  // Whole-object structural revisions (e.g. whole-table insert/delete) live on
+  // node attrs, not marks, so they are enumerated separately and appended as
+  // their own grouped changes. Their `id` is the shared Word revision id; the
+  // accept/reject command routes by id through the review graph which owns the
+  // node-level mutation plan.
+  for (const structural of enumerateStructuralRowChanges(editor.state)) {
+    const excerpt = normalizeExcerpt(editor.state.doc.textBetween(structural.tableFrom, structural.tableTo, ' ', '￼'));
+    // Public id must be stable across import → export → reopen. The logical
+    // `structural.id` is a fresh UUID minted on each import, so derive the
+    // public/raw id from the Word revision id (mirrors inline `word:<mark>:<id>`
+    // grouping). `commandRawId` keeps the logical id the review graph keys by,
+    // so accept/reject still routes to the right structural change.
+    const stableRawId = structural.sourceId ? `word:structural:${structural.sourceId}` : structural.id;
+    grouped.push({
+      rawId: stableRawId,
+      commandRawId: structural.id,
+      id: stableRawId,
+      from: structural.tableFrom,
+      to: structural.tableTo,
+      hasInsert: false,
+      hasDelete: false,
+      hasFormat: false,
+      structural: { side: structural.side, subtype: structural.subtype },
+      attrs: {
+        id: structural.id,
+        sourceId: structural.sourceId || undefined,
+        author: structural.author || undefined,
+        authorEmail: structural.authorEmail || undefined,
+        authorImage: structural.authorImage || undefined,
+        date: structural.date || undefined,
+        importedAuthor: structural.importedAuthor || undefined,
+        origin: structural.sourceId ? 'word' : undefined,
+        revisionGroupId: structural.revisionGroupId || undefined,
+      },
+      excerpt,
+      wordRevisionIds: structural.sourceId
+        ? structural.side === 'insertion'
+          ? { insert: structural.sourceId }
+          : { delete: structural.sourceId }
+        : undefined,
+    });
+  }
+
+  grouped.sort((a, b) => {
+    if (a.from !== b.from) return a.from - b.from;
+    return a.id.localeCompare(b.id);
+  });
 
   groupedCache.set(editor, { doc: currentDoc, grouped });
   return grouped;

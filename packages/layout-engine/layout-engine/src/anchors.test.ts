@@ -1,6 +1,21 @@
 import { describe, it, expect } from 'bun:test';
-import { isPageRelativeAnchor, collectPreRegisteredAnchors, collectAnchoredDrawings } from './anchors.js';
-import type { FlowBlock, ImageBlock, DrawingBlock, Measure, ImageMeasure, DrawingMeasure } from '@superdoc/contracts';
+import {
+  isPageRelativeAnchor,
+  collectPreRegisteredAnchors,
+  collectAnchoredDrawings,
+  collectAnchoredTables,
+} from './anchors.js';
+import type {
+  FlowBlock,
+  ImageBlock,
+  DrawingBlock,
+  Measure,
+  ImageMeasure,
+  DrawingMeasure,
+  TableBlock,
+  TableMeasure,
+  ParagraphMeasure,
+} from '@superdoc/contracts';
 
 describe('anchors', () => {
   describe('isPageRelativeAnchor', () => {
@@ -783,6 +798,144 @@ describe('anchors', () => {
 
       const result = collectAnchoredDrawings(blocks, measures);
       expect(result.size).toBe(0);
+    });
+  });
+
+  describe('collectAnchoredTables', () => {
+    const makeParaMeasure = (height: number): ParagraphMeasure => ({
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 0,
+          width: 100,
+          ascent: height * 0.8,
+          descent: height * 0.2,
+          lineHeight: height,
+        },
+      ],
+      totalHeight: height,
+    });
+
+    const makeFloatingTable = (id: string, offsetV: number): TableBlock => ({
+      kind: 'table',
+      id,
+      rows: [
+        {
+          id: `${id}-row`,
+          cells: [{ id: `${id}-cell`, paragraph: { kind: 'paragraph', id: `${id}-p`, runs: [] } }],
+        },
+      ],
+      anchor: { isAnchored: true, vRelativeFrom: 'paragraph', offsetV },
+      wrap: { type: 'None' },
+    });
+
+    it('anchors a table before a short checkbox line to the following paragraph', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'info', runs: [{ text: 'Long body copy.' }] },
+        makeFloatingTable('field-1', 3.8),
+        { kind: 'paragraph', id: 'yes', runs: [{ text: 'Yes – Specify language' }] },
+        { kind: 'paragraph', id: 'no', runs: [{ text: 'No' }] },
+      ];
+      const measures: Measure[] = [
+        makeParaMeasure(67),
+        { kind: 'table', rows: [], columnWidths: [100], totalWidth: 100, totalHeight: 14 } as TableMeasure,
+        makeParaMeasure(17),
+        makeParaMeasure(17),
+      ];
+
+      const result = collectAnchoredTables(blocks, measures);
+      expect(result.byParagraph.get(2)?.[0].block.id).toBe('field-1');
+    });
+
+    it('walks back to a taller paragraph when tblpY exceeds the immediate predecessor', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'info', runs: [{ text: 'Long body copy.' }] },
+        makeFloatingTable('field-1', 3.8),
+        { kind: 'paragraph', id: 'yes', runs: [{ text: 'Yes' }] },
+        { kind: 'paragraph', id: 'no', runs: [{ text: 'No' }] },
+        makeFloatingTable('field-2', 56),
+      ];
+      const measures: Measure[] = [
+        makeParaMeasure(67),
+        { kind: 'table', rows: [], columnWidths: [100], totalWidth: 100, totalHeight: 14 } as TableMeasure,
+        makeParaMeasure(17),
+        makeParaMeasure(17),
+        { kind: 'table', rows: [], columnWidths: [100], totalWidth: 100, totalHeight: 14 } as TableMeasure,
+      ];
+
+      const result = collectAnchoredTables(blocks, measures);
+      expect(result.byParagraph.get(0)?.[0].block.id).toBe('field-2');
+    });
+
+    it('anchors a table after a spacer paragraph to the following text paragraph', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'spacer', runs: [] },
+        makeFloatingTable('wrap-table', 0.07),
+        { kind: 'paragraph', id: 'wrap-text', runs: [{ text: 'Text to right of the table' }] },
+      ];
+      const measures: Measure[] = [
+        makeParaMeasure(18),
+        {
+          kind: 'table',
+          rows: [],
+          columnWidths: [100, 100, 100, 100],
+          totalWidth: 400,
+          totalHeight: 14,
+        } as TableMeasure,
+        makeParaMeasure(22),
+      ];
+
+      const result = collectAnchoredTables(blocks, measures);
+      expect(result.byParagraph.get(2)?.[0].block.id).toBe('wrap-table');
+    });
+
+    it('does not forward to a trailing empty paragraph when tables sit between empty spacers', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'before', runs: [] },
+        makeFloatingTable('table-a', 0.07),
+        makeFloatingTable('table-b', 0.07),
+        { kind: 'paragraph', id: 'after', runs: [] },
+      ];
+      const measures: Measure[] = [
+        makeParaMeasure(18),
+        { kind: 'table', rows: [], columnWidths: [100, 100, 100], totalWidth: 300, totalHeight: 80 } as TableMeasure,
+        { kind: 'table', rows: [], columnWidths: [100, 100], totalWidth: 200, totalHeight: 120 } as TableMeasure,
+        makeParaMeasure(18),
+      ];
+
+      const result = collectAnchoredTables(blocks, measures);
+      expect(result.byParagraph.get(0)?.map((entry) => entry.block.id)).toEqual(['table-a', 'table-b']);
+      expect(result.byParagraph.has(3)).toBe(false);
+    });
+
+    it('anchors a large-offset table to a forward checkbox line in the next question', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'info', runs: [{ text: 'Long body copy.' }] },
+        makeFloatingTable('field-1', 3.8),
+        { kind: 'paragraph', id: 'yes-1', runs: [{ text: '☐ Yes – Specify language' }] },
+        { kind: 'paragraph', id: 'no-1', runs: [{ text: '☐ No' }] },
+        makeFloatingTable('field-2', 56),
+        { kind: 'paragraph', id: 'heading', runs: [{ text: 'Next question heading text.' }] },
+        { kind: 'paragraph', id: 'yes-2', runs: [{ text: '☐ Yes – Please specify the assistance required' }] },
+      ];
+      const measures: Measure[] = [
+        makeParaMeasure(67),
+        { kind: 'table', rows: [], columnWidths: [100], totalWidth: 100, totalHeight: 14 } as TableMeasure,
+        makeParaMeasure(17),
+        makeParaMeasure(17),
+        { kind: 'table', rows: [], columnWidths: [100], totalWidth: 100, totalHeight: 14 } as TableMeasure,
+        makeParaMeasure(36),
+        makeParaMeasure(17),
+      ];
+
+      const result = collectAnchoredTables(blocks, measures);
+      const anchored = result.byParagraph.get(6)?.[0];
+      expect(anchored?.block.id).toBe('field-2');
+      expect(anchored?.layoutOffsetV).toBe(3);
+      expect(anchored?.lineScopedOnAnchor).toBe(false);
     });
   });
 });

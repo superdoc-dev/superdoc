@@ -56,7 +56,10 @@ export { setBundledFontAssetBase, getBundledFontAssetBase, DEFAULT_BUNDLED_FONT_
 export type { FontResolutionRecord, UsedFace } from './report';
 export { buildFontReport, buildFaceReport } from './report';
 
-export type { FontSetLike, FontFaceLike, FontFaceCtor, FontRegistryOptions } from './registry';
+export type { EmbeddingPolicy } from './os2';
+export { parseEmbeddingPolicy } from './os2';
+
+export type { FontSetLike, FontFaceLike, FontFaceCtor, FontRegistryOptions, OwnedFaceDescriptor } from './registry';
 export {
   FontRegistry,
   getFontRegistryFor,
@@ -64,3 +67,12 @@ export {
   DEFAULT_FONT_LOAD_TIMEOUT_MS,
   __resetDefaultFontRegistry,
 } from './registry';
+
+export type { FontOffering, OfferingClass, FontGeneric } from './font-offerings';
+export {
+  FONT_OFFERINGS,
+  getDefaultFontOfferings,
+  getDefaultFontFamilyOptions,
+  fontOfferingStack,
+  fontOfferingRenderStack,
+} from './font-offerings';

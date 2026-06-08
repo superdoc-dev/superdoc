@@ -1,6 +1,5 @@
+import { resolveColumnCount } from '@superdoc/contracts';
 import type { ColumnLayout, Page, PageMargins } from '@superdoc/contracts';
-
-export type NormalizedColumns = ColumnLayout & { width: number };
 
 export type ConstraintBoundary = {
   y: number;
@@ -64,7 +63,6 @@ export type PaginatorOptions = {
   getActivePageSize(): { w: number; h: number };
   getDefaultPageSize(): { w: number; h: number };
   getActiveColumns(): ColumnLayout;
-  getCurrentColumns(): NormalizedColumns;
   createPage(number: number, pageMargins: PageMargins, pageSizeOverride?: { w: number; h: number }): Page;
   onNewPage?: (state: PageState) => void;
   /**
@@ -91,19 +89,6 @@ export function createPaginator(opts: PaginatorOptions) {
       return state.constraintBoundaries[state.activeConstraintIndex].columns;
     }
     return opts.getActiveColumns();
-  };
-
-  const columnX = (columnIndex: number): number => {
-    const cols = opts.getCurrentColumns();
-    const widths = Array.isArray(cols.widths) && cols.widths.length > 0 ? cols.widths : null;
-    if (!widths) {
-      return opts.margins.left + columnIndex * (cols.width + cols.gap);
-    }
-    let x = opts.margins.left;
-    for (let index = 0; index < columnIndex; index += 1) {
-      x += (widths[index] ?? cols.width) + cols.gap;
-    }
-    return x;
   };
 
   const startNewPage = (): PageState => {
@@ -168,7 +153,10 @@ export function createPaginator(opts: PaginatorOptions) {
 
   const advanceColumn = (state: PageState): PageState => {
     const activeCols = getActiveColumnsForState(state);
-    if (state.columnIndex < activeCols.count - 1) {
+    // Use the RESOLVED count (clamped to usable explicit widths), not the raw w:num, so the fill
+    // loop and the width math (normalizeColumnLayout) agree on how many columns exist. Without this
+    // the loop advances into columns that have no width (the SD-2629 two-track count bug).
+    if (state.columnIndex < resolveColumnCount(activeCols) - 1) {
       // Snapshot max Y before resetting cursor for the next column
       state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
       state.columnIndex += 1;
@@ -199,7 +187,6 @@ export function createPaginator(opts: PaginatorOptions) {
     startNewPage,
     ensurePage,
     advanceColumn,
-    columnX,
     getActiveColumnsForState,
     getPageByNumber,
     pruneTrailingEmptyPages,

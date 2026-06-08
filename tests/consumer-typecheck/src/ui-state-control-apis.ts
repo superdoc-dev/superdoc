@@ -56,6 +56,16 @@ const _setZoomParamsOk: AssertEqual<Parameters<SuperDoc['setZoom']>, [percent: n
 const _setZoomReturnOk: AssertEqual<ReturnType<SuperDoc['setZoom']>, void> = true;
 sd.setZoom(150);
 
+// ─── setZoomMode ────────────────────────────────────────────────────
+// Switches between manual and fit-width zoom. Closed union parameter;
+// invalid strings must be rejected at compile time.
+const _setZoomModeParamsOk: AssertEqual<Parameters<SuperDoc['setZoomMode']>, [mode: 'manual' | 'fit-width']> = true;
+const _setZoomModeReturnOk: AssertEqual<ReturnType<SuperDoc['setZoomMode']>, void> = true;
+sd.setZoomMode('fit-width');
+sd.setZoomMode('manual');
+// @ts-expect-error zoom mode is a closed union; only manual/fit-width.
+sd.setZoomMode('fit-page');
+
 // ─── setHighContrastMode ────────────────────────────────────────────
 // Forwards to `activeEditor.setHighContrastMode` and writes to the
 // highContrastModeStore. No-op until the active editor exists.

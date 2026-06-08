@@ -12,6 +12,7 @@ import type {
   DrawingFragment,
   SourceAnchor,
 } from '@superdoc/contracts';
+import { sliceRunsForLine } from '@superdoc/contracts';
 
 describe('resolveLayout', () => {
   const baseLayout: Layout = {
@@ -105,6 +106,597 @@ describe('resolveLayout', () => {
     const a = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
     const b = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
     expect(a).toEqual(b);
+  });
+
+  describe('PAGEREF resolution', () => {
+    const pageRefRun = (overrides: Partial<Extract<FlowBlock, { kind: 'paragraph' }>['runs'][number]> = {}) =>
+      ({
+        text: '5',
+        fontFamily: 'Arial',
+        fontSize: 12,
+        token: 'pageReference',
+        pmStart: 5,
+        pmEnd: 6,
+        pageRefMetadata: { bookmarkId: 'target', instruction: 'PAGEREF target' },
+        ...overrides,
+      }) as any;
+
+    const makePageRefInput = (run = pageRefRun()) => {
+      const sourceBlock: FlowBlock = { kind: 'paragraph', id: 'source', runs: [run] } as any;
+      const targetBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'target-block',
+        runs: [{ text: 'Target', fontFamily: 'Arial', fontSize: 12, pmStart: 100, pmEnd: 106 }],
+      } as any;
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 }],
+        } as any,
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 6, width: 40, ascent: 8, descent: 2, lineHeight: 12 }],
+        } as any,
+      ];
+      const layout: Layout = {
+        pageSize: { w: 800, h: 1000 },
+        pages: [
+          {
+            number: 1,
+            displayNumber: 1,
+            numberText: '1',
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'source',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                pmStart: 1,
+                pmEnd: 10,
+              },
+            ],
+          },
+          {
+            number: 2,
+            displayNumber: 12,
+            numberText: '12',
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'target-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                pmStart: 100,
+                pmEnd: 106,
+              },
+            ],
+          },
+        ],
+      };
+      return { layout, blocks: [sourceBlock, targetBlock], measures };
+    };
+
+    it('resolves PAGEREF text to the target display page text', () => {
+      const input = makePageRefInput();
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+      const item = result.pages[0].items[0] as any;
+
+      expect(item.block.runs[0].text).toBe('12');
+      expect(item.content.lines[0].line.toChar).toBe(2);
+    });
+
+    it('does not duplicate resolved PAGEREF text across cached split lines', () => {
+      const input = makePageRefInput(pageRefRun({ text: '123456', pmStart: 5, pmEnd: 11 }));
+      input.measures[0] = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 3,
+            width: 24,
+            ascent: 8,
+            descent: 2,
+            lineHeight: 12,
+            segments: [{ runIndex: 0, fromChar: 0, toChar: 3, width: 24, x: 0 }],
+          },
+          {
+            fromRun: 0,
+            fromChar: 3,
+            toRun: 0,
+            toChar: 6,
+            width: 24,
+            ascent: 8,
+            descent: 2,
+            lineHeight: 12,
+            segments: [{ runIndex: 0, fromChar: 3, toChar: 6, width: 24, x: 0 }],
+          },
+        ],
+        totalHeight: 24,
+      } as any;
+      input.layout.pages[0].fragments = [
+        {
+          kind: 'para',
+          blockId: 'source',
+          fromLine: 0,
+          toLine: 2,
+          x: 0,
+          y: 0,
+          width: 100,
+          pmStart: 1,
+          pmEnd: 12,
+        },
+      ];
+
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+      const item = result.pages[0].items[0] as any;
+      const paintedText = item.content.lines
+        .flatMap((lineItem: any) => sliceRunsForLine(item.block, lineItem.line))
+        .map((run: any) => run.text ?? '')
+        .join('');
+      const segmentText = item.content.lines
+        .flatMap((lineItem: any) => lineItem.line.segments ?? [])
+        .map((segment: any) => item.block.runs[segment.runIndex].text.slice(segment.fromChar, segment.toChar))
+        .join('');
+
+      expect(item.block.runs[0].text).toBe('12');
+      expect(paintedText).toBe('12');
+      expect(segmentText).toBe('12');
+    });
+
+    it('changes the paint cache version when the target display page changes', () => {
+      const input1 = makePageRefInput();
+      const input2 = makePageRefInput();
+      input2.layout.pages[1].displayNumber = 13;
+      input2.layout.pages[1].numberText = '13';
+
+      const result1 = resolveLayout({ ...input1, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+      const result2 = resolveLayout({ ...input2, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+      const item1 = result1.pages[0].items[0] as any;
+      const item2 = result2.pages[0].items[0] as any;
+
+      expect(item1.block.runs[0].text).toBe('12');
+      expect(item2.block.runs[0].text).toBe('13');
+      expect(item1.paintCacheVersion).not.toBe(item2.paintCacheVersion);
+    });
+
+    it('keeps fallback text when bookmarks are not passed', () => {
+      const input = makePageRefInput();
+      const result = resolveLayout({ ...input, flowMode: 'paginated' });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('5');
+    });
+
+    it('keeps fallback text when the target bookmark is missing', () => {
+      const input = makePageRefInput();
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['other', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('5');
+    });
+
+    it('resolves relative PAGEREF text across pages', () => {
+      const input = makePageRefInput(
+        pageRefRun({
+          pageRefMetadata: { bookmarkId: 'target', instruction: 'PAGEREF target \\p', relativePosition: true },
+        }),
+      );
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('on page 12');
+    });
+
+    it('resolves same-page relative PAGEREF text using PM order', () => {
+      const input = makePageRefInput(
+        pageRefRun({
+          pmStart: 150,
+          pageRefMetadata: { bookmarkId: 'target', instruction: 'PAGEREF target \\p', relativePosition: true },
+        }),
+      );
+      input.layout.pages = [
+        {
+          number: 1,
+          displayNumber: 1,
+          numberText: '1',
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'source',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 0,
+              width: 100,
+              pmStart: 140,
+              pmEnd: 160,
+            },
+            {
+              kind: 'para',
+              blockId: 'target-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 20,
+              width: 100,
+              pmStart: 100,
+              pmEnd: 106,
+            },
+          ],
+        },
+      ];
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('above');
+    });
+
+    it('resolves same-page relative PAGEREF text to below when the source precedes the target', () => {
+      const input = makePageRefInput(
+        pageRefRun({
+          pmStart: 50,
+          pageRefMetadata: { bookmarkId: 'target', instruction: 'PAGEREF target \\p', relativePosition: true },
+        }),
+      );
+      input.layout.pages = [
+        {
+          number: 1,
+          displayNumber: 1,
+          numberText: '1',
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'source',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 0,
+              width: 100,
+              pmStart: 40,
+              pmEnd: 60,
+            },
+            {
+              kind: 'para',
+              blockId: 'target-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 20,
+              width: 100,
+              pmStart: 100,
+              pmEnd: 106,
+            },
+          ],
+        },
+      ];
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('below');
+    });
+
+    it('applies Roman PAGEREF formatting while preserving the target chapter prefix', () => {
+      const input = makePageRefInput(
+        pageRefRun({
+          pageRefMetadata: {
+            bookmarkId: 'target',
+            instruction: 'PAGEREF target \\* Roman',
+            pageNumberFieldFormat: { format: 'upperRoman' },
+          },
+        }),
+      );
+      input.layout.pages[1].displayNumber = 4;
+      input.layout.pages[1].numberText = 'A:4';
+      input.layout.pages[1].pageNumberChapterText = 'A';
+      input.layout.pages[1].pageNumberChapterSeparator = 'colon';
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('A:IV');
+    });
+
+    it('applies PAGEREF numeric formatting against the target display number', () => {
+      const input = makePageRefInput(
+        pageRefRun({
+          pageRefMetadata: {
+            bookmarkId: 'target',
+            instruction: 'PAGEREF target \\# "00"',
+            numericPictureFormat: { picture: '00' },
+          },
+        }),
+      );
+      input.layout.pages[1].displayNumber = 3;
+      input.layout.pages[1].numberText = '3';
+      const result = resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((result.pages[0].items[0] as any).block.runs[0].text).toBe('03');
+    });
+
+    it('resolves multiple PAGEREF tokens in one paragraph independently', () => {
+      const input = makePageRefInput();
+      input.blocks[0] = {
+        kind: 'paragraph',
+        id: 'source',
+        runs: [
+          pageRefRun({ text: '5', pmStart: 5, pmEnd: 6 }),
+          { text: ' and ', fontFamily: 'Arial', fontSize: 12, pmStart: 6, pmEnd: 11 },
+          pageRefRun({
+            text: '6',
+            pmStart: 11,
+            pmEnd: 12,
+            pageRefMetadata: { bookmarkId: 'other', instruction: 'PAGEREF other' },
+          }),
+        ],
+      } as any;
+      input.blocks.push({
+        kind: 'paragraph',
+        id: 'other-block',
+        runs: [{ text: 'Other', fontFamily: 'Arial', fontSize: 12, pmStart: 200, pmEnd: 205 }],
+      } as any);
+      input.measures[0] = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 2,
+            toChar: 1,
+            width: 60,
+            ascent: 8,
+            descent: 2,
+            lineHeight: 12,
+          },
+        ],
+      } as any;
+      input.measures.push({
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 40, ascent: 8, descent: 2, lineHeight: 12 }],
+      } as any);
+      input.layout.pages.push({
+        number: 3,
+        displayNumber: 23,
+        numberText: '23',
+        fragments: [
+          {
+            kind: 'para',
+            blockId: 'other-block',
+            fromLine: 0,
+            toLine: 1,
+            x: 0,
+            y: 0,
+            width: 100,
+            pmStart: 200,
+            pmEnd: 205,
+          },
+        ],
+      });
+
+      const result = resolveLayout({
+        ...input,
+        flowMode: 'paginated',
+        bookmarks: new Map([
+          ['target', 100],
+          ['other', 200],
+        ]),
+      });
+      const item = result.pages[0].items[0] as any;
+
+      expect(item.block.runs.map((run: any) => run.text).join('')).toBe('12 and 23');
+      expect(item.content.lines[0].line.toChar).toBe(2);
+    });
+
+    it('does not mutate input blocks', () => {
+      const input = makePageRefInput();
+      resolveLayout({ ...input, flowMode: 'paginated', bookmarks: new Map([['target', 100]]) });
+
+      expect((input.blocks[0] as any).runs[0].text).toBe('5');
+    });
+
+    it('resolves PAGEREF text inside table cells', () => {
+      const tableBlock: FlowBlock = {
+        kind: 'table',
+        id: 'source-table',
+        rows: [
+          {
+            id: 'row1',
+            cells: [
+              {
+                id: 'cell1',
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'cell-para',
+                  runs: [pageRefRun()],
+                },
+              },
+            ],
+          },
+        ],
+      } as any;
+      const targetBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'target-block',
+        runs: [{ text: 'Target', fontFamily: 'Arial', fontSize: 12, pmStart: 100, pmEnd: 106 }],
+      } as any;
+      const measures: Measure[] = [
+        {
+          kind: 'table',
+          rows: [
+            {
+              height: 20,
+              cells: [
+                {
+                  width: 100,
+                  paragraph: {
+                    lines: [
+                      { fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 },
+                    ],
+                    totalHeight: 12,
+                  },
+                },
+              ],
+            },
+          ],
+          columnWidths: [100],
+        } as any,
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 6, width: 40, ascent: 8, descent: 2, lineHeight: 12 }],
+        } as any,
+      ];
+      const layout: Layout = {
+        pageSize: { w: 800, h: 1000 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'table',
+                blockId: 'source-table',
+                fromRow: 0,
+                toRow: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 20,
+              },
+            ],
+          },
+          {
+            number: 2,
+            displayNumber: 12,
+            numberText: '12',
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'target-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                pmStart: 100,
+                pmEnd: 106,
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [tableBlock, targetBlock],
+        measures,
+        bookmarks: new Map([['target', 100]]),
+      });
+      const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedTableItem;
+
+      expect(item.block.rows[0].cells[0].paragraph?.runs[0].text).toBe('12');
+      expect(item.measure.rows[0].cells[0].paragraph?.lines[0].toChar).toBe(2);
+      expect((tableBlock as any).rows[0].cells[0].paragraph.runs[0].text).toBe('5');
+    });
+
+    it('resolves PAGEREF text inside list items', () => {
+      const listBlock: FlowBlock = {
+        kind: 'list',
+        id: 'source-list',
+        listType: 'number',
+        items: [
+          {
+            id: 'li1',
+            marker: { kind: 'number', text: '1.', level: 0 },
+            paragraph: {
+              kind: 'paragraph',
+              id: 'list-para',
+              runs: [pageRefRun()],
+            },
+          },
+        ],
+      } as any;
+      const targetBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'target-block',
+        runs: [{ text: 'Target', fontFamily: 'Arial', fontSize: 12, pmStart: 100, pmEnd: 106 }],
+      } as any;
+      const measures: Measure[] = [
+        {
+          kind: 'list',
+          items: [
+            {
+              itemId: 'li1',
+              markerWidth: 20,
+              markerTextWidth: 8,
+              indentLeft: 0,
+              paragraph: {
+                lines: [
+                  { fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 },
+                ],
+                totalHeight: 12,
+              },
+            },
+          ],
+          totalHeight: 12,
+        } as any,
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 6, width: 40, ascent: 8, descent: 2, lineHeight: 12 }],
+        } as any,
+      ];
+      const layout: Layout = {
+        pageSize: { w: 800, h: 1000 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'list-item',
+                blockId: 'source-list',
+                itemId: 'li1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                markerWidth: 20,
+              },
+            ],
+          },
+          {
+            number: 2,
+            displayNumber: 12,
+            numberText: '12',
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'target-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+                pmStart: 100,
+                pmEnd: 106,
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [listBlock, targetBlock],
+        measures,
+        bookmarks: new Map([['target', 100]]),
+      });
+      const item = result.pages[0].items[0] as any;
+
+      expect(item.block.items[0].paragraph.runs[0].text).toBe('12');
+      expect(item.measure.items[0].paragraph.lines[0].toChar).toBe(2);
+      expect((listBlock as any).items[0].paragraph.runs[0].text).toBe('5');
+    });
   });
 
   it('derives neutral layout identity for resolved fragments even when input fragments do not precompute it', () => {

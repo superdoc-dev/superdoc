@@ -15,6 +15,8 @@ import type {
 import {
   cloneColumnLayout,
   formatSectionPageNumberText,
+  getColumnGeometry,
+  getColumnX,
   normalizeColumnLayout,
   rescaleColumnWidths,
 } from '@superdoc/contracts';
@@ -249,22 +251,17 @@ const assignFootnotesToColumns = (
       if (fragment?.kind === 'table' && typeof fragment.columnIndex === 'number') {
         columnIndex = Math.max(0, Math.min(columns.count - 1, fragment.columnIndex));
       } else if (fragment && typeof fragment.x === 'number') {
-        const widths = Array.isArray(columns.widths) && columns.widths.length > 0 ? columns.widths : undefined;
-        if (widths) {
-          let cursorX = columns.left;
-          for (let index = 0; index < columns.count; index += 1) {
-            const columnWidth = widths[index] ?? columns.width;
-            if (fragment.x < cursorX + columnWidth + columns.gap / 2) {
-              columnIndex = index;
-              break;
-            }
-            cursorX += columnWidth + columns.gap;
-            columnIndex = Math.min(columns.count - 1, index + 1);
+        // Geometry-derived midpoint assignment: assign the ref to the column whose right edge plus
+        // half its own gap the fragment falls before. Per-column widths/gaps come from the resolved
+        // geometry, preserving the prior midpoint rule. The old uniform-stride branch was unreachable
+        // for count>1 (normalized columns always carry widths). (SD-2629 4c)
+        const geometry = getColumnGeometry(columns);
+        columnIndex = Math.max(0, geometry.length - 1);
+        for (const col of geometry) {
+          if (fragment.x < columns.left + col.x + col.width + col.gapAfter / 2) {
+            columnIndex = col.index;
+            break;
           }
-        } else {
-          const columnStride = columns.width + columns.gap;
-          const rawIndex = columnStride > 0 ? Math.floor((fragment.x - columns.left) / columnStride) : 0;
-          columnIndex = Math.max(0, Math.min(columns.count - 1, rawIndex));
         }
       }
     }
@@ -2031,8 +2028,9 @@ export async function incrementalLayout(
           slicesByColumn.forEach((columnSlices, rawColumnIndex) => {
             if (columnSlices.length === 0) return;
             const columnIndex = Math.max(0, Math.min(columns.count - 1, rawColumnIndex));
-            const columnStride = columns.width + columns.gap;
-            const columnX = columns.left + columnIndex * columnStride;
+            const columnX = getColumnX(getColumnGeometry(columns), columnIndex, columns.left);
+            // Placement width stays uniform (= the measurement width); per-column footnote
+            // measurement is a deliberate follow-up, not this pass. (SD-2629 4c; do not narrow here)
             const contentWidth = Math.min(columns.width, footnoteWidth);
             if (!Number.isFinite(contentWidth) || contentWidth <= 0) return;
 

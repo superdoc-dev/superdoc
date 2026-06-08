@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { Fragment, Schema } from 'prosemirror-model';
 import { buildTextWithTabs, parentAllowsNodeAt, textBetweenWithTabs } from './text-with-tabs.js';
 
-function makeRealSchema(options: { hasTab?: boolean; hasNoBreakHyphen?: boolean; hasGenericLeaf?: boolean } = {}) {
+function makeRealSchema(
+  options: { hasTab?: boolean; hasLineBreak?: boolean; hasNoBreakHyphen?: boolean; hasGenericLeaf?: boolean } = {},
+) {
   const nodes: Record<string, any> = {
     doc: { content: 'paragraph+' },
     paragraph: { group: 'block', content: 'inline*' },
@@ -12,6 +14,11 @@ function makeRealSchema(options: { hasTab?: boolean; hasNoBreakHyphen?: boolean;
     // Mirrors the real extensions/tab/tab.js shape: inline atom with `content: 'inline*'`.
     // Tab is non-leaf, which is why `textBetweenWithTabs` (not PM's built-in textBetween) is needed.
     nodes.tab = { group: 'inline', inline: true, atom: true, content: 'inline*' };
+  }
+  if (options.hasLineBreak) {
+    // Mirrors the real extensions/line-break/line-break.js shape: inline atom
+    // that disallows marks (`marks: ''`) and renders to <br> / exports to <w:br/>.
+    nodes.lineBreak = { group: 'inline', inline: true, atom: true, marks: '' };
   }
   if (options.hasNoBreakHyphen) {
     // Mirrors the real extensions/no-break-hyphen schema: inline leaf atom with leafText.
@@ -93,11 +100,113 @@ describe('buildTextWithTabs', () => {
     expect(result.child(0).text).toBe('x');
     expect(result.child(0).marks.some((m: any) => m.type.name === 'bold')).toBe(true);
     expect(result.child(1).type.name).toBe('tab');
-    // Tab carries the run's marks — the OOXML exporter reads node.marks on tab
+    // Tab carries the run's marks. The OOXML exporter reads node.marks on tab
     // nodes (tab-translator.js:53) to emit matching <w:rPr> around <w:tab/>.
     expect(result.child(1).marks.some((m: any) => m.type.name === 'bold')).toBe(true);
     expect(result.child(2).text).toBe('y');
     expect(result.child(2).marks.some((m: any) => m.type.name === 'bold')).toBe(true);
+  });
+
+  // SD-3278: a literal '\n' inside a text node exports as raw newline
+  // inside <w:t>, which Word collapses. It must become a `lineBreak` node so the
+  // exporter emits a Word-native <w:br/>.
+  it('splits text around a single newline into text + lineBreak + text', () => {
+    const schema = makeRealSchema({ hasLineBreak: true });
+    const result = buildTextWithTabs(schema, 'Alpha\nBeta', undefined);
+    expect(result).toBeInstanceOf(Fragment);
+    const fragment = result as Fragment;
+    expect(fragment.childCount).toBe(3);
+    expect(fragment.child(0).text).toBe('Alpha');
+    expect(fragment.child(1).type.name).toBe('lineBreak');
+    expect(fragment.child(2).text).toBe('Beta');
+  });
+
+  it('emits a lineBreak node even when the schema has no tab node type', () => {
+    const schema = makeRealSchema({ hasLineBreak: true });
+    const result = buildTextWithTabs(schema, 'Alpha\nBeta', undefined) as Fragment;
+    expect(result).toBeInstanceOf(Fragment);
+    expect(result.childCount).toBe(3);
+    expect(result.child(1).type.name).toBe('lineBreak');
+  });
+
+  it('keeps the raw newline in a single text node when the schema has no lineBreak node type', () => {
+    const schema = makeRealSchema({ hasTab: true });
+    const result = buildTextWithTabs(schema, 'Alpha\nBeta', undefined);
+    expect((result as any).isText).toBe(true);
+    expect((result as any).text).toBe('Alpha\nBeta');
+  });
+
+  it('creates the lineBreak node bare in the creation path', () => {
+    const schema = makeRealSchema({ hasLineBreak: true });
+    const boldMark = schema.marks.bold.create();
+    const result = buildTextWithTabs(schema, 'Alpha\nBeta', [boldMark]) as Fragment;
+    expect(result.child(0).marks.some((m: any) => m.type.name === 'bold')).toBe(true);
+    expect(result.child(1).type.name).toBe('lineBreak');
+    expect(result.child(1).marks.length).toBe(0);
+    expect(result.child(2).marks.some((m: any) => m.type.name === 'bold')).toBe(true);
+  });
+
+  it('omits empty segments around leading, trailing, and consecutive newlines', () => {
+    const schema = makeRealSchema({ hasLineBreak: true });
+    const lead = buildTextWithTabs(schema, '\nfoo', undefined) as Fragment;
+    expect(lead.childCount).toBe(2);
+    expect(lead.child(0).type.name).toBe('lineBreak');
+    expect(lead.child(1).text).toBe('foo');
+
+    const doubled = buildTextWithTabs(schema, 'a\n\nb', undefined) as Fragment;
+    expect(doubled.childCount).toBe(4);
+    expect(doubled.child(0).text).toBe('a');
+    expect(doubled.child(1).type.name).toBe('lineBreak');
+    expect(doubled.child(2).type.name).toBe('lineBreak');
+    expect(doubled.child(3).text).toBe('b');
+  });
+
+  it('interleaves tab and lineBreak nodes when both control characters are present', () => {
+    const schema = makeRealSchema({ hasTab: true, hasLineBreak: true });
+    const result = buildTextWithTabs(schema, 'a\tb\nc', undefined) as Fragment;
+    expect(result.childCount).toBe(5);
+    expect(result.child(0).text).toBe('a');
+    expect(result.child(1).type.name).toBe('tab');
+    expect(result.child(2).text).toBe('b');
+    expect(result.child(3).type.name).toBe('lineBreak');
+    expect(result.child(4).text).toBe('c');
+  });
+
+  it('keeps the raw tab literal but still splits the newline when tabs are disallowed', () => {
+    const schema = makeRealSchema({ hasTab: true, hasLineBreak: true });
+    const result = buildTextWithTabs(schema, 'a\tb\nc', undefined, { parentAllowsTab: false }) as Fragment;
+    expect(result.childCount).toBe(3);
+    expect(result.child(0).text).toBe('a\tb');
+    expect(result.child(1).type.name).toBe('lineBreak');
+    expect(result.child(2).text).toBe('c');
+  });
+
+  // Generated/SDK text often uses CRLF; normalize CRLF and bare CR to
+  // line breaks so no stray carriage return survives in a text segment.
+  it('normalizes CRLF to a lineBreak node', () => {
+    const schema = makeRealSchema({ hasLineBreak: true });
+    const result = buildTextWithTabs(schema, 'Alpha\r\nBeta', undefined) as Fragment;
+    expect(result.childCount).toBe(3);
+    expect(result.child(0).text).toBe('Alpha');
+    expect(result.child(1).type.name).toBe('lineBreak');
+    expect(result.child(2).text).toBe('Beta');
+  });
+
+  it('normalizes a bare CR to a lineBreak node without leaving a stray carriage return', () => {
+    const schema = makeRealSchema({ hasLineBreak: true });
+    const result = buildTextWithTabs(schema, 'Alpha\rBeta', undefined) as Fragment;
+    expect(result.childCount).toBe(3);
+    expect(result.child(0).text).toBe('Alpha');
+    expect(result.child(1).type.name).toBe('lineBreak');
+    expect(result.child(2).text).toBe('Beta');
+  });
+
+  // A `text*`-only parent (e.g. total-page-number) rejects lineBreak.
+  it('keeps the raw newline in a single text node when parentAllowsLineBreak is false', () => {
+    const schema = makeRealSchema({ hasLineBreak: true });
+    const result = buildTextWithTabs(schema, 'Alpha\nBeta', undefined, { parentAllowsLineBreak: false });
+    expect((result as any).isText).toBe(true);
+    expect((result as any).text).toBe('Alpha\nBeta');
   });
 });
 

@@ -8,8 +8,10 @@ import type {
   DrawingMeasure,
   DrawingBlock,
   TableMeasure,
+  TextRun,
 } from '@superdoc/contracts';
 import { EMPTY_SDT_PLACEHOLDER_TEXT } from '@superdoc/contracts';
+import { resolvePhysicalFamily } from '@superdoc/font-system';
 
 const expectParagraphMeasure = (measure: Measure): ParagraphMeasure => {
   expect(measure.kind).toBe('paragraph');
@@ -81,6 +83,91 @@ describe('measureBlock', () => {
       // lineHeight should be at least ascent + descent (+ safety margin)
       expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(measure.lines[0].ascent + measure.lines[0].descent);
       expect(measure.totalHeight).toBe(measure.lines[0].lineHeight);
+    });
+
+    it('does not count empty text runs as justification spaces', async () => {
+      const visibleRuns = [
+        {
+          text: '1. Confidential Information. In connection with ',
+          fontFamily: 'Arial',
+          fontSize: 16,
+        },
+      ];
+      const withoutEmptyRuns: FlowBlock = {
+        kind: 'paragraph',
+        id: 'without-empty-runs',
+        runs: visibleRuns,
+        attrs: { alignment: 'justify' },
+      };
+      const withEmptyRuns: FlowBlock = {
+        kind: 'paragraph',
+        id: 'with-empty-runs',
+        runs: [
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          ...visibleRuns,
+        ],
+        attrs: { alignment: 'justify' },
+      };
+
+      const baseMeasure = expectParagraphMeasure(await measureBlock(withoutEmptyRuns, 1000));
+      const emptyPrefixMeasure = expectParagraphMeasure(await measureBlock(withEmptyRuns, 1000));
+
+      expect(emptyPrefixMeasure.lines).toHaveLength(1);
+      expect(emptyPrefixMeasure.lines[0].width).toBeCloseTo(baseMeasure.lines[0].width, 3);
+      expect(emptyPrefixMeasure.lines[0].spaceCount).toBe(baseMeasure.lines[0].spaceCount);
+      expect(emptyPrefixMeasure.lines[0].segments).toEqual([
+        {
+          runIndex: 3,
+          fromChar: 0,
+          toChar: visibleRuns[0].text.length,
+          width: expect.any(Number),
+        },
+      ]);
+    });
+
+    it('keeps empty-only paragraphs measurable without phantom spaces', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-only-runs',
+        runs: [
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].width).toBe(0);
+      expect(measure.lines[0].spaceCount).toBeUndefined();
+      expect(measure.lines[0].segments).toEqual([]);
+      expect(measure.totalHeight).toBeGreaterThan(0);
+    });
+
+    it('does not let skipped empty runs inflate visible line height', async () => {
+      const visibleBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'visible-small-run',
+        runs: [{ text: 'visible', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+      const emptyPrefixBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-large-prefix-run',
+        runs: [
+          { text: '', fontFamily: 'Arial', fontSize: 48 },
+          { text: 'visible', fontFamily: 'Arial', fontSize: 12 },
+        ],
+        attrs: {},
+      };
+
+      const visibleMeasure = expectParagraphMeasure(await measureBlock(visibleBlock, 1000));
+      const emptyPrefixMeasure = expectParagraphMeasure(await measureBlock(emptyPrefixBlock, 1000));
+
+      expect(emptyPrefixMeasure.lines[0].lineHeight).toBeCloseTo(visibleMeasure.lines[0].lineHeight, 3);
     });
 
     // SD-3330: a line containing only tabs must be measured at the run's font size,
@@ -744,7 +831,7 @@ describe('measureBlock', () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       expect(ctx).not.toBeNull();
-      ctx!.font = '16px Arial';
+      ctx!.font = `16px ${resolvePhysicalFamily('Arial')}`;
       const transformedPlaceholderText = EMPTY_SDT_PLACEHOLDER_TEXT.toUpperCase();
       const transformedWidth = ctx!.measureText(transformedPlaceholderText).width;
       const untransformedWidth = ctx!.measureText(EMPTY_SDT_PLACEHOLDER_TEXT).width;

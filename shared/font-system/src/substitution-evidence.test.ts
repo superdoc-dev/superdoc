@@ -23,15 +23,17 @@ describe('substitution evidence -> resolver derivation', () => {
     for (const [logical, physical] of EXPECTED_SUBSTITUTES) {
       expect(resolver.resolvePrimaryPhysicalFamily(logical)).toBe(physical);
     }
-    // The derivation input is exactly six rows: policyAction 'substitute' with a physical target.
-    const substituteRows = SUBSTITUTION_EVIDENCE.filter(
-      (r) => r.policyAction === 'substitute' && r.physicalFamily,
+    // Asset-gated input: the registry carries more substitute rows than SuperDoc ships, so count only
+    // the ones whose clone is bundled (the resolver's actual input). That set is exactly the six pairs.
+    const bundled = new Set(BUNDLED_MANIFEST.map((f) => f.family));
+    const activeSubstitutes = SUBSTITUTION_EVIDENCE.filter(
+      (r) => r.policyAction === 'substitute' && r.physicalFamily && bundled.has(r.physicalFamily),
     );
-    expect(substituteRows).toHaveLength(EXPECTED_SUBSTITUTES.length);
+    expect(activeSubstitutes).toHaveLength(EXPECTED_SUBSTITUTES.length);
   });
 
   it('does not substitute a family with no evidence row (the map did not grow)', () => {
-    // Aptos is not in the snapshot (no clean open substitute), so it must pass through unchanged.
+    // Aptos has a registry row but no open substitute (customer_supplied), so it passes through unchanged.
     expect(resolveFontFamily('Aptos')).toEqual({
       logicalFamily: 'Aptos',
       physicalFamily: 'Aptos',
@@ -52,12 +54,23 @@ describe('substitution evidence -> resolver derivation', () => {
     });
   });
 
-  it('every substitute target is a family the bundled pack ships (asset-availability invariant)', () => {
-    const bundledFamilies = new Set(BUNDLED_MANIFEST.map((f) => f.family));
-    for (const row of SUBSTITUTION_EVIDENCE) {
-      if (row.policyAction === 'substitute' && row.physicalFamily) {
-        expect(bundledFamilies.has(row.physicalFamily)).toBe(true);
-      }
+  it('every substitute the resolver activates ships in the bundled pack (asset-availability invariant)', () => {
+    const bundled = new Set(BUNDLED_MANIFEST.map((f) => f.family));
+    for (const [, physical] of EXPECTED_SUBSTITUTES) {
+      expect(bundled.has(physical)).toBe(true);
+    }
+  });
+
+  it('keeps an un-bundled substitute inert until its asset ships (the asset gate, not just the policy)', () => {
+    // The registry recommends substitutes SuperDoc has not shipped a clone for (e.g. Georgia -> Gelasio).
+    // canRenderFamily must keep every such row OUT of the resolver: it resolves as_requested, not mapped.
+    const bundled = new Set(BUNDLED_MANIFEST.map((f) => f.family));
+    const unbundled = SUBSTITUTION_EVIDENCE.filter(
+      (r) => r.policyAction === 'substitute' && r.physicalFamily && !bundled.has(r.physicalFamily),
+    );
+    expect(unbundled.length).toBeGreaterThan(0); // the registry really does carry some (e.g. Georgia)
+    for (const row of unbundled) {
+      expect(resolveFontFamily(row.logicalFamily).reason).toBe('as_requested');
     }
   });
 
@@ -71,5 +84,17 @@ describe('substitution evidence -> resolver derivation', () => {
       boldItalic: 'visual_only',
     });
     expect(cambria?.glyphExceptions?.[0]).toMatchObject({ slot: 'boldItalic', codepoint: 0x60 });
+  });
+
+  it('Calibri Light is a category_fallback (visual_only), not a metric substitute', () => {
+    const cl = SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'calibri-light');
+    expect(cl).toMatchObject({ policyAction: 'category_fallback', verdict: 'visual_only', physicalFamily: 'Carlito' });
+    // NOT among the metric substitutes, so the six-pair guard above is unaffected; the resolver maps it
+    // with reason category_fallback, never bundled_substitute.
+    const substituteRows = SUBSTITUTION_EVIDENCE.filter((r) => r.policyAction === 'substitute' && r.physicalFamily);
+    expect(substituteRows.some((r) => r.evidenceId === 'calibri-light')).toBe(false);
+    expect(resolveFontFamily('Calibri Light').reason).toBe('category_fallback');
+    // Its Carlito target still ships in the bundled pack, so the runtime can render the fallback.
+    expect(new Set(BUNDLED_MANIFEST.map((f) => f.family)).has('Carlito')).toBe(true);
   });
 });

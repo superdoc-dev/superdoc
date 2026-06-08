@@ -20,7 +20,7 @@ Retrieve a single tracked change by ID.
 
 ## Expected result
 
-Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `replacement`, `format`), author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available.
+Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `replacement`, `format`), author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available. Whole-table tracked insertions and deletions are surfaced through the legacy `insert` / `delete` types.
 
 ## Input fields
 

@@ -28,6 +28,12 @@ const DELETION_BARRIER = '\u0000';
 const DEFAULT_SEARCH_MODEL = 'raw';
 
 const hasTrackDeleteMark = (node) => node?.marks?.some((mark) => mark?.type?.name === 'trackDelete') ?? false;
+const readLeafText = (node) => {
+  const leafText = node?.type?.spec?.leafText;
+  if (typeof leafText === 'function') return leafText(node);
+  if (typeof leafText === 'string') return leafText;
+  return ATOM_PLACEHOLDER;
+};
 
 /**
  * SearchIndex provides a lazily-built, cached index for searching across
@@ -69,7 +75,7 @@ export class SearchIndex {
       this.#buildVisible(doc);
     } else {
       // Get the flattened text using ProseMirror's optimized textBetween
-      this.text = doc.textBetween(0, doc.content.size, BLOCK_SEPARATOR, ATOM_PLACEHOLDER);
+      this.text = doc.textBetween(0, doc.content.size, BLOCK_SEPARATOR, readLeafText);
     }
 
     this.segments = [];
@@ -141,7 +147,12 @@ export class SearchIndex {
       }
 
       if (node.isLeaf) {
-        parts.push(ATOM_PLACEHOLDER);
+        if (hasTrackDeleteMark(node)) {
+          appendDeletionBarrier();
+          return;
+        }
+
+        parts.push(readLeafText(node));
         emittedDeletionBarrier = false;
         return;
       }
@@ -240,29 +251,48 @@ export class SearchIndex {
     }
 
     if (node.isLeaf) {
-      if (context && searchModel === 'visible') {
-        context.deletionBarrierActive = false;
-      }
-      // Leaf node (atom): check if it's a hard_break or other atom
-      if (node.type.name === 'hard_break') {
+      if (searchModel === 'visible' && hasTrackDeleteMark(node)) {
+        if (context?.deletionBarrierActive) {
+          return offset;
+        }
         addSegment({
           offsetStart: offset,
           offsetEnd: offset + 1,
           docFrom: docPos,
           docTo: docPos + node.nodeSize,
-          kind: 'hardBreak',
+          kind: 'atom',
         });
+        if (context) {
+          context.deletionBarrierActive = true;
+        }
         return offset + 1;
       }
-      // Other atoms get the replacement character
+
+      if (context && searchModel === 'visible') {
+        context.deletionBarrierActive = false;
+      }
+      const leafText = readLeafText(node);
+      if (leafText.length === 0) return offset;
+      // Leaf node (atom): check if it's a hard_break or other atom
+      if (node.type.name === 'hard_break') {
+        addSegment({
+          offsetStart: offset,
+          offsetEnd: offset + leafText.length,
+          docFrom: docPos,
+          docTo: docPos + node.nodeSize,
+          kind: 'hardBreak',
+        });
+        return offset + leafText.length;
+      }
+      // Other atoms use their declared leaf text or the replacement character.
       addSegment({
         offsetStart: offset,
-        offsetEnd: offset + 1,
+        offsetEnd: offset + leafText.length,
         docFrom: docPos,
         docTo: docPos + node.nodeSize,
         kind: 'atom',
       });
-      return offset + 1;
+      return offset + leafText.length;
     }
 
     // For non-leaf nodes, recurse into content
@@ -310,6 +340,14 @@ export class SearchIndex {
    */
   offsetRangeToDocRanges(start, end) {
     const ranges = [];
+    // A single search hit is gapless in offset space, so consecutive segments
+    // (text and inline-leaf atoms like lineBreak) belong to one contiguous
+    // match. Coalesce them into one doc range — otherwise a hit spanning
+    // `text + lineBreak + text` yields discontiguous text ranges that the
+    // downstream D5 contiguity guard rejects (SD-3278). A block separator is a
+    // real split between blocks and ends the current range. The D5 guard still
+    // catches genuinely separate edits, which are not offset-contiguous.
+    let current = null;
 
     for (const segment of this.segments) {
       // Skip segments entirely before our range
@@ -317,25 +355,49 @@ export class SearchIndex {
       // Stop if we're past our range
       if (segment.offsetStart >= end) break;
 
-      // Only include text segments in the result
-      if (segment.kind !== 'text') continue;
+      // Block separators split blocks; never coalesce across them.
+      if (segment.kind === 'blockSep') {
+        if (current) {
+          ranges.push({ from: current.from, to: current.to });
+          current = null;
+        }
+        continue;
+      }
 
-      // Calculate the overlap
       const overlapStart = Math.max(start, segment.offsetStart);
       const overlapEnd = Math.min(end, segment.offsetEnd);
+      if (overlapStart >= overlapEnd) continue;
 
-      if (overlapStart < overlapEnd) {
-        // Map the overlap back to document positions
-        const startInSegment = overlapStart - segment.offsetStart;
-        const endInSegment = overlapEnd - segment.offsetStart;
+      let from;
+      let to;
+      if (segment.kind === 'text') {
+        from = segment.docFrom + (overlapStart - segment.offsetStart);
+        to = segment.docFrom + (overlapEnd - segment.offsetStart);
+      } else {
+        // Inline leaf atom (lineBreak, hardBreak, image, ...): occupies its
+        // whole node span and is part of the contiguous match, not a gap.
+        from = segment.docFrom;
+        to = segment.docTo;
+      }
 
-        ranges.push({
-          from: segment.docFrom + startInSegment,
-          to: segment.docFrom + endInSegment,
-        });
+      // Coalesce only when the next segment is BOTH offset-contiguous (same
+      // search hit) AND PM-contiguous (`from === current.to`, i.e. immediately
+      // adjacent in the document). This merges `text + lineBreak + text` within
+      // one run into a single range, but never bridges a document gap — a
+      // skipped/tracked-deleted leaf, a run boundary, or any content the match
+      // does not actually cover. A non-coalesced segment becomes its own range;
+      // since it stays offset-contiguous, the downstream block coalescing still
+      // sees no gap, while the D5 guard keeps rejecting genuinely separate edits.
+      if (current && segment.offsetStart === current.offsetEnd && from === current.to) {
+        current.to = to;
+        current.offsetEnd = overlapEnd;
+      } else {
+        if (current) ranges.push({ from: current.from, to: current.to });
+        current = { from, to, offsetEnd: overlapEnd };
       }
     }
 
+    if (current) ranges.push({ from: current.from, to: current.to });
     return ranges;
   }
 

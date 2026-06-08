@@ -83,6 +83,7 @@ function serializePerIdNumbering(
   }
   return parts.join(';');
 }
+
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import {
@@ -186,7 +187,7 @@ import {
 } from '@superdoc/font-system';
 import { installBundledSubstitutes } from '@superdoc/font-system/bundled';
 import { FontReadinessGate } from './fonts/FontReadinessGate';
-import { DocumentFontController } from './fonts/DocumentFontController';
+import { DocumentFontController, type EmbeddedFontFace } from './fonts/DocumentFontController';
 import { planFontFaces, type FontPlan } from './fonts/font-load-planner';
 import type { FontsChangedPayload } from '../types/EditorEvents';
 import type { FontFamilyConfig } from '../types/EditorConfig';
@@ -1056,6 +1057,7 @@ export class PresentationEditor extends EventEmitter {
         },
       });
       this.#fontController.applyInitialConfig(this.#options.fontAssets);
+      this.#applyEmbeddedDocumentFonts();
       if (typeof this.#options.disableContextMenu === 'boolean') {
         this.setContextMenuDisabled(this.#options.disableContextMenu);
       }
@@ -2604,8 +2606,96 @@ export class PresentationEditor extends EventEmitter {
         storyKey: BODY_STORY_KEY,
       }),
       ...this.#collectIndexedTrackedChangePositions(),
+      ...this.#collectStructuralBodyTrackedChangePositions(),
       ...this.#collectRenderedTrackedChangePositions(),
     };
+  }
+
+  /**
+   * Emit position entries for decidable whole-table structural tracked changes
+   * living in the BODY story (table insert / table delete).
+   *
+   * Structural row revisions are whole-table changes that the right rail
+   * surfaces as review bubbles (see comments-store
+   * `syncStructuralTrackedChangeComments`). Unlike inline body tracked changes
+   * (whose marks are measured downstream by mark span) and non-body story
+   * changes (handled by `#collectIndexedTrackedChangePositions`, which skips the
+   * body story), a body-story structural change has no inline mark to anchor on.
+   *
+   * We key each entry by the tracked-change index `anchorKey` (matching the
+   * bubble's `trackedChangeAnchorKey`) and carry the table's PM range as
+   * `start`/`end`. `getCommentBounds` falls through `#getStoryTrackedChangeBounds`
+   * (null for the body story) into `#getThreadSelectionBounds`, which resolves
+   * the range to layout rects via `#computeRangeRects(..., forceBodySurface)` —
+   * the exact path body comments/inline TC use — so the bubble lines up with the
+   * table in layout-engine viewing mode.
+   */
+  #collectStructuralBodyTrackedChangePositions(): Record<
+    string,
+    {
+      threadId: string;
+      key: string;
+      storyKey: string;
+      kind: 'trackedChange';
+      structural: true;
+      start?: number;
+      end?: number;
+    }
+  > {
+    const positions: Record<
+      string,
+      {
+        threadId: string;
+        key: string;
+        storyKey: string;
+        kind: 'trackedChange';
+        structural: true;
+        start?: number;
+        end?: number;
+      }
+    > = {};
+
+    let snapshots: ReadonlyArray<{
+      anchorKey?: unknown;
+      type?: unknown;
+      runtimeRef?: { rawId?: unknown; storyKey?: unknown };
+      range?: { from?: unknown; to?: unknown };
+    }> = [];
+
+    try {
+      snapshots = getTrackedChangeIndex(this.#editor).getAll();
+    } catch {
+      return positions;
+    }
+
+    snapshots.forEach((snapshot) => {
+      if (snapshot?.type !== 'structural') return;
+      const storyKey =
+        typeof snapshot?.runtimeRef?.storyKey === 'string' ? snapshot.runtimeRef.storyKey : BODY_STORY_KEY;
+      // Body-story structural changes only — non-body structural would be
+      // picked up by the rendered/indexed passes which key on their own story.
+      if (storyKey !== BODY_STORY_KEY) return;
+
+      const key = typeof snapshot?.anchorKey === 'string' ? snapshot.anchorKey : null;
+      const rawId = snapshot?.runtimeRef?.rawId;
+      const threadId = rawId == null ? null : String(rawId);
+      if (!key || !threadId || positions[key]) return;
+
+      const start = Number.isFinite(snapshot?.range?.from) ? Number(snapshot.range.from) : undefined;
+      const end = Number.isFinite(snapshot?.range?.to) ? Number(snapshot.range.to) : undefined;
+
+      positions[key] = {
+        threadId,
+        key,
+        storyKey,
+        kind: 'trackedChange',
+        structural: true,
+        ...(start !== undefined ? { start } : {}),
+        ...(end !== undefined ? { end } : {}),
+      };
+    });
+
+    return positions;
   }
 
   #collectIndexedTrackedChangePositions(): Record<
@@ -3079,6 +3169,20 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Register the current document's embedded fonts (from the converter) as document-owned registry
+   * faces, so the resolver's `registered_face` rung renders the real embedded font instead of the
+   * bundled substitute. Runs at config time - initial load and after a document swap - BEFORE the
+   * first font plan; the controller skips non-embeddable faces and releases these on the next swap
+   * (`reset`) / teardown (`dispose`). `getEmbeddedFontFaces` is not on the converter's typed surface,
+   * so it is read through a narrow structural cast (same pattern as `getDocumentFonts`).
+   */
+  #applyEmbeddedDocumentFonts(): void {
+    const converter = (this.#editor as Editor & { converter?: { getEmbeddedFontFaces?: () => EmbeddedFontFace[] } })
+      .converter;
+    this.#fontController.applyEmbeddedFaces(converter?.getEmbeddedFontFaces?.());
+  }
+
+  /**
    * Drop this editor's cached blocks + measures and schedule a full document re-layout. The
    * font-readiness gate calls this (via its requestReflow option) for both a late font load and a
    * document font config change: incremental layout reuses previousMeasures for unchanged blocks,
@@ -3431,6 +3535,7 @@ export class PresentationEditor extends EventEmitter {
       blocks,
       measures,
       fontSignature: this.#layoutFontSignature,
+      bookmarks: this.#layoutState.bookmarks,
     });
 
     const isSemanticFlow = this.#layoutOptions.flowMode === 'semantic';
@@ -5248,6 +5353,9 @@ export class PresentationEditor extends EventEmitter {
       // here states the intent and starts the swap from a clean signature.
       this.#layoutFontSignature = '';
       this.#fontController.applyInitialConfig(this.#options.fontAssets);
+      // Register the NEW document's embedded fonts (the swap's `reset()` released the old ones), before
+      // the rerender below runs the first font plan for this document.
+      this.#applyEmbeddedDocumentFonts();
       this.#resetFontReportStateForDocumentChange();
       this.#refreshHeaderFooterStructureThenRerender({ purgeCachedEditors: true });
     };
@@ -7051,6 +7159,7 @@ export class PresentationEditor extends EventEmitter {
           blocks: bodyBlocksForPaint,
           measures: bodyMeasuresForPaint,
           fontSignature,
+          bookmarks,
         });
 
         headerLayouts = result.headers;

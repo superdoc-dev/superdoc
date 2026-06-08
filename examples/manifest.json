@@ -180,6 +180,21 @@
     "ci": true
   },
   {
+    "id": "editor-built-in-responsive-zoom",
+    "section": "editor",
+    "subsection": "built-in-ui",
+    "kind": "minimal-example",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Responsive zoom",
+    "category": "Editor",
+    "surface": "Built-in UI",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/built-in-ui/responsive-zoom",
+    "docs": "https://docs.superdoc.dev/editor/superdoc/configuration#param-zoom",
+    "ci": true
+  },
+  {
     "id": "editor-custom-ui-selection-capture",
     "section": "editor",
     "subsection": "custom-ui",

@@ -10,38 +10,77 @@ import type { Transaction } from 'prosemirror-state';
 import { TrackDeleteMarkName } from '../../extensions/track-changes/constants.js';
 
 /**
- * Build a text-or-fragment suitable for insertion, splitting on '\t' and
- * inserting schema `tab` nodes at each split.
+ * Build a text-or-fragment suitable for insertion, splitting on '\t' and '\n'
+ * and inserting schema `tab` / `lineBreak` nodes at each split.
  *
- * Returns a plain text node when the schema has no `tab` node type, when the
- * parent disallows tab nodes (see {@link parentAllowsTabAt}), or when the text
- * contains no tab characters. The raw '\t' is preserved inside the text node
- * so exporters and readers still see the character.
+ * A tab split produces a `tab` node; a newline split produces a `lineBreak`
+ * node. Each is only performed when the schema exposes the matching node type
+ * (and, for tabs, when the parent admits them; see {@link parentAllowsNodeAt}).
+ * A control character that cannot be materialized stays literal inside the
+ * surrounding text node so exporters and readers still see it.
  *
- * Callers are responsible for ensuring `text` is non-empty (ProseMirror's
- * `schema.text` throws on empty input).
+ * Newlines must become `lineBreak` nodes (not raw '\n' inside a text node):
+ * a literal newline inside `<w:t>` is whitespace that Word collapses on open
+ * (it is not the OOXML representation of a line break), so it would drop the
+ * visible break while SuperDoc still renders it. The `lineBreak` node
+ * round-trips to a Word-native `<w:br/>`. See SD-3278.
+ *
+ * Returns a plain text node when the text contains no splittable control
+ * character (the common case). Callers are responsible for ensuring `text` is
+ * non-empty (ProseMirror's `schema.text` throws on empty input).
  */
 export function buildTextWithTabs(
   schema: Schema,
   text: string,
   marks: readonly ProseMirrorMark[] | undefined,
-  opts: { parentAllowsTab?: boolean } = {},
+  opts: { parentAllowsTab?: boolean; parentAllowsLineBreak?: boolean } = {},
 ): ProseMirrorNode | ProseMirrorFragment {
-  // Check the cheapest/most selective predicate first — most calls carry no '\t'.
-  if (!text.includes('\t')) return schema.text(text, marks);
+  // Normalize CRLF/CR to LF up front so Windows line endings (common in
+  // generated/SDK text) are treated as line breaks too. Only allocate when a
+  // carriage return is actually present.
+  const normalized = text.includes('\r') ? text.replace(/\r\n?/g, '\n') : text;
 
-  const tabNodeType = schema.nodes?.tab;
-  if (!tabNodeType || opts.parentAllowsTab === false) return schema.text(text, marks);
+  // Check the cheapest/most selective predicate first; most calls carry neither.
+  const hasTab = normalized.includes('\t');
+  const hasNewline = normalized.includes('\n');
+  if (!hasTab && !hasNewline) return schema.text(normalized, marks);
 
-  const tabMarks = (marks ?? null) as ProseMirrorMark[] | null;
-  const parts = text.split('\t');
+  // `lineBreak` is a normal inline node, but some textblocks restrict their
+  // content to `text*` (e.g. total-page-number) and reject it. Gate on parent
+  // admission the same way tabs do: callers that target restrictive parents
+  // pass the probe result; others default to allowed. When disallowed or absent
+  // we fall back to literal text, and the export safety net still converts any
+  // raw newline to `<w:br/>` on export.
+  const tabNodeType = hasTab && opts.parentAllowsTab !== false ? schema.nodes?.tab : undefined;
+  const lineBreakNodeType = hasNewline && opts.parentAllowsLineBreak !== false ? schema.nodes?.lineBreak : undefined;
+  if (!tabNodeType && !lineBreakNodeType) return schema.text(normalized, marks);
+
+  // `NodeType.create` takes `readonly Mark[] | undefined` (not null) for marks.
+  const tabMarks: readonly ProseMirrorMark[] | undefined = marks ?? undefined;
+
+  // Split only on the control characters we can replace with a node; any other
+  // control character stays literal inside the surrounding text segments.
+  const splitPattern = [tabNodeType ? '\\t' : null, lineBreakNodeType ? '\\n' : null].filter(Boolean).join('|');
+  const parts = normalized.split(new RegExp(`(${splitPattern})`));
+
   const nodes: ProseMirrorNode[] = [];
-  for (let i = 0; i < parts.length; i++) {
-    if (parts[i]) nodes.push(schema.text(parts[i], marks));
-    // Carry the surrounding marks onto the tab node so the OOXML exporter
-    // wraps `<w:tab/>` in a matching `<w:rPr>` — keeps formatting unbroken
-    // across the tab (bold-run | tab | bold-run rather than bold | plain | bold).
-    if (i < parts.length - 1) nodes.push(tabNodeType.create(null, null, tabMarks));
+  for (const part of parts) {
+    if (part === '') continue; // schema.text throws on empty input
+    if (part === '\t' && tabNodeType) {
+      // Carry the surrounding marks onto the tab node so the OOXML exporter
+      // wraps `<w:tab/>` in a matching `<w:rPr>`, keeping formatting unbroken
+      // across the tab (bold-run | tab | bold-run rather than bold | plain | bold).
+      nodes.push(tabNodeType.create(null, null, tabMarks));
+    } else if (part === '\n' && lineBreakNodeType) {
+      // Create the break bare: a soft line break carries no run formatting.
+      // (Tracking an inserted break so it exports inside <w:ins> is a separate
+      // concern: br-translator does not yet route node.marks the way
+      // noBreakHyphen's translator does; see SD-3371. It is not a schema limit:
+      // a leaf atom can carry marks, governed by the parent run/paragraph.)
+      nodes.push(lineBreakNodeType.create());
+    } else {
+      nodes.push(schema.text(part, marks));
+    }
   }
   return Fragment.from(nodes);
 }
@@ -128,8 +167,14 @@ export function textBetweenWithTabs(
     }
     if (node.isLeaf) {
       if (node.isInline) {
+        if (
+          options.textModel === 'visible' &&
+          node.marks?.some((mark: ProseMirrorMark) => mark.type.name === TrackDeleteMarkName)
+        ) {
+          return false;
+        }
         // Honor PM's `leafText` NodeSpec contract: an inline leaf can declare
-        // its visible text representation (e.g. noBreakHyphen → U+2011) so
+        // its visible text representation (e.g. noBreakHyphen -> U+2011) so
         // flattened reads match the rendered glyph instead of producing the
         // generic placeholder. Falls back to `leafFallback` when undefined.
         const leafTextFn = node.type?.spec?.leafText;

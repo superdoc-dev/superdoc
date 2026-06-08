@@ -2,13 +2,7 @@ import type { TrackedChangeAddress } from './address.js';
 import type { DiscoveryOutput } from './discovery.js';
 import type { StoryLocator } from './story.types.js';
 
-export type TrackChangeType = 'insert' | 'delete' | 'replacement' | 'format' | 'structural';
-/**
- * Finer classification for structural (`type === 'structural'`) tracked
- * changes. `table-insert` / `table-delete` describe a whole-table insert or
- * delete revision.
- */
-export type TrackChangeSubtype = 'table-insert' | 'table-delete';
+export type TrackChangeType = 'insert' | 'delete' | 'replacement' | 'format';
 export type TrackChangeOverlapRelationship = 'parent' | 'child' | 'standalone';
 export type TrackChangeGrouping = 'standalone' | 'replacement-pair' | 'unknown';
 export type TrackChangeProvenanceOrigin = 'word' | 'google-docs' | 'superdoc' | 'custom' | 'unknown';
@@ -53,8 +47,6 @@ export interface TrackChangeInfo {
   /** Convenience alias for `address.entityId`. */
   id: string;
   type: TrackChangeType;
-  /** Finer classification for structural changes (e.g. `table-insert`). */
-  subtype?: TrackChangeSubtype;
   grouping?: TrackChangeGrouping;
   pairedWithChangeId?: string | null;
   /** Raw imported Word OOXML revision IDs (`w:id`) from the source document when available. */
@@ -95,8 +87,6 @@ export interface TrackChangesListQuery {
 export interface TrackChangeDomain {
   address: TrackedChangeAddress;
   type: TrackChangeType;
-  /** Finer classification for structural changes (e.g. `table-insert`). */
-  subtype?: TrackChangeSubtype;
   grouping?: TrackChangeGrouping;
   pairedWithChangeId?: string | null;
   /** Raw imported Word OOXML revision IDs (`w:id`) from the source document when available. */

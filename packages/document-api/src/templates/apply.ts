@@ -26,8 +26,11 @@
  *   media closure; colliding part names / relationship ids / media names are
  *   reallocated and references rewritten consistently.
  * - `sectionDefaults`: the source `w:sectPr` that governs page 1 is adopted as
- *   the active section defaults. Intermediate / later source sections are not
- *   imported.
+ *   the current document's active/final section-default model. On multi-section
+ *   targets, its header/footer visibility model (`headerReference`,
+ *   `footerReference`, `w:titlePg`) is also propagated across the earlier
+ *   sections without overwriting their own page geometry. Intermediate / later
+ *   source sections are not imported.
  *
  * `customXml`, `docProps`, source body content, comments/tracked-changes stores,
  * glossary, signatures, and body media are out of scope and reported, never

@@ -51,6 +51,7 @@ Patterns for the browser editor surface.
 | [comments](./editor/built-in-ui/comments) | [docs](https://docs.superdoc.dev/editor/built-in-ui/comments) |
 | [track-changes](./editor/built-in-ui/track-changes) | [docs](https://docs.superdoc.dev/editor/built-in-ui/track-changes) |
 | [toolbar](./editor/built-in-ui/toolbar) | [docs](https://docs.superdoc.dev/editor/built-in-ui/toolbar) |
+| [responsive-zoom](./editor/built-in-ui/responsive-zoom) | [docs](https://docs.superdoc.dev/editor/superdoc/configuration#param-zoom) |
 
 ### Custom UI
 

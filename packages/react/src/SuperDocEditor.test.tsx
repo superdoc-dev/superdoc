@@ -162,6 +162,72 @@ describe('SuperDocEditor', () => {
       },
       SUPERDOC_READY_TEST_TIMEOUT,
     );
+
+    it(
+      'should call onZoomChange when zoom changes through the core wiring',
+      async () => {
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
+        const onZoomChange = vi.fn();
+
+        render(<SuperDocEditor ref={ref} onReady={onReady} onZoomChange={onZoomChange} />);
+
+        await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+
+        const instance = ref.current?.getInstance();
+        expect(instance).toBeTruthy();
+
+        instance?.setZoom(150);
+
+        expect(onZoomChange).toHaveBeenCalledWith({ zoom: 150, mode: 'manual' });
+        expect(instance?.getZoom()).toBe(150);
+        expect(instance?.getZoomState().mode).toBe('manual');
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
+
+    it(
+      'should route onZoomChange through the latest callback after rerender',
+      async () => {
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
+        const firstOnZoomChange = vi.fn();
+        const secondOnZoomChange = vi.fn();
+
+        const { rerender } = render(<SuperDocEditor ref={ref} onReady={onReady} onZoomChange={firstOnZoomChange} />);
+
+        await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+
+        const instance = ref.current?.getInstance();
+        expect(instance).toBeTruthy();
+
+        rerender(<SuperDocEditor ref={ref} onReady={onReady} onZoomChange={secondOnZoomChange} />);
+
+        // Same instance (callback identity changes must not rebuild) and the
+        // fresh callback receives the event.
+        expect(ref.current?.getInstance()).toBe(instance);
+        instance?.setZoom(80);
+
+        expect(firstOnZoomChange).not.toHaveBeenCalled();
+        expect(secondOnZoomChange).toHaveBeenCalledWith({ zoom: 80, mode: 'manual' });
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
+
+    it(
+      'should apply zoom.initial through config passthrough',
+      async () => {
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
+
+        render(<SuperDocEditor ref={ref} onReady={onReady} zoom={{ initial: 50 }} />);
+
+        await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+
+        expect(ref.current?.getInstance()?.getZoom()).toBe(50);
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
   });
 
   describe('onEditorDestroy', () => {

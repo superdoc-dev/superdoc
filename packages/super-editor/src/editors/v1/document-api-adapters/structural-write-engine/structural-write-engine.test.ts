@@ -895,6 +895,74 @@ describe('materializeFragment — capability gates', () => {
     // Extension nodes bypass capability gates — should fall through to fallback materializer
     expect(() => materializeFragment(editor.state.schema, fragment, new Set(), 'insert')).not.toThrow();
   });
+
+  // SD-3278: a `kind: 'lineBreak'` inline must become a soft `lineBreak`
+  // node (exports to <w:br/>), NOT a `hardBreak` node (exports to a page break).
+  // This is the bug that made the structural.replace workaround fail.
+  it('materializes a structural lineBreak as a soft lineBreak node, not a hardBreak', () => {
+    const fragment: SDFragment = {
+      kind: 'paragraph',
+      paragraph: {
+        inlines: [
+          { kind: 'run', run: { text: 'Alpha' } },
+          { kind: 'lineBreak' },
+          { kind: 'run', run: { text: 'Beta' } },
+        ],
+      },
+    } as any;
+
+    const materialized = materializeFragment(editor.state.schema, fragment, new Set(), 'insert');
+    const roots = Array.isArray(materialized) ? materialized : [materialized];
+    const typeNames = new Set<string>();
+    roots.forEach((root: any) => root.descendants((node: any) => typeNames.add(node.type.name)));
+
+    expect(typeNames.has('lineBreak')).toBe(true);
+    expect(typeNames.has('hardBreak')).toBe(false);
+  });
+
+  // SD-3278: a structural run whose text carries a raw newline (a natural shape
+  // for SDK/agent-built `structural.replace` content) must split into lineBreak
+  // nodes, not keep the literal '\n' in a text node.
+  it('splits a newline inside structural run text into a lineBreak node, not raw text', () => {
+    const fragment: SDFragment = {
+      kind: 'paragraph',
+      paragraph: {
+        inlines: [{ kind: 'run', run: { text: 'left\nright' } }],
+      },
+    } as any;
+
+    const materialized = materializeFragment(editor.state.schema, fragment, new Set(), 'insert');
+    const roots = Array.isArray(materialized) ? materialized : [materialized];
+    const typeCounts: Record<string, number> = {};
+    let text = '';
+    roots.forEach((root: any) =>
+      root.descendants((node: any) => {
+        typeCounts[node.type.name] = (typeCounts[node.type.name] ?? 0) + 1;
+        if (node.isText) text += node.text ?? '';
+      }),
+    );
+
+    expect(typeCounts.lineBreak).toBe(1);
+    expect(typeCounts.hardBreak ?? 0).toBe(0);
+    // No raw newline survives inside a text node.
+    expect(text.includes('\n')).toBe(false);
+    expect(text).toContain('left');
+    expect(text).toContain('right');
+    // The break reads back as '\n' via leafText, so structural reads that
+    // flatten PM content preserve it on round-trip (SD-3278).
+    const readableText = roots
+      .map((root: any) => {
+        if (typeof root.textBetween !== 'function') return root.textContent ?? '';
+        const leafText = (node: any) => {
+          const specLeafText = node?.type?.spec?.leafText;
+          return typeof specLeafText === 'function' ? specLeafText(node) : '';
+        };
+        const size = root.content?.size ?? root.size ?? 0;
+        return root.textBetween(0, size, '', leafText);
+      })
+      .join('');
+    expect(readableText).toBe('left\nright');
+  });
 });
 
 // ---------------------------------------------------------------------------

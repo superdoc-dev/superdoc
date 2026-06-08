@@ -924,6 +924,12 @@ const init = async () => {
     currentZoom.value = zoom;
   });
 
+  superdoc.value?.on('viewport-change', ({ availableWidth, documentWidth, fitZoom }) => {
+    // Passive demo: custom consumers clamp and apply fitZoom themselves via
+    // setZoom(). For automatic behavior, configure `zoom: { mode: 'fit-width' }`.
+    console.log('[viewport-change]', { availableWidth, documentWidth, fitZoom });
+  });
+
   window.superdoc = superdoc.value;
 
   // const ydoc = superdoc.value.ydoc;

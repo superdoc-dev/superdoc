@@ -18,12 +18,13 @@ pnpm corpus:push -- --path rendering/sd-1234-example.docx /path/to/file.docx
 # Skip automatic Word baseline generation/upload for this push
 pnpm corpus:push -- --no-word-baseline --path rendering/sd-1234-example.docx /path/to/file.docx
 
-# Reconcile registry.json in R2 by removing entries for missing object keys
+# Reconcile registry.json in R2 against live .docx keys
 pnpm corpus:update-registry
 ```
 
 `pnpm corpus:pull` now tolerates missing keys and prunes stale `registry.json` entries automatically.
 `pnpm corpus:pull` does not remove local files that no longer exist in R2; use `pnpm corpus:delete` when you want the shared corpus and local copy removed together.
+`pnpm corpus:update-registry` performs a full live reconciliation of `registry.json` against bucket `.docx` keys: it removes stale entries and adds bucket docs that were missing from the registry.
 
 ### Worktrees: seeding from the primary repo
 

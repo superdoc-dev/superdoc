@@ -23,6 +23,9 @@
  * default instance for callers that have no document context (and for backward compatibility).
  */
 
+import { getRenderableFallback } from '@docfonts/fallbacks';
+
+import { BUNDLED_MANIFEST } from './bundled-manifest';
 import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
 
 export type FontResolutionReason =
@@ -91,23 +94,33 @@ function sortPairs(pairs: Array<[string, string]>): Array<[string, string]> {
 }
 
 /**
- * Logical (normalized) -> physical family, DERIVED from the substitution evidence registry
- * ({@link ./substitution-evidence}): every row docfonts marks `policyAction: 'substitute'` with a
- * physical target. The evidence file is the single source of truth; this is its resolver projection
- * (lowercased, quote-stripped keys).
+ * Asset gate: a docfonts fallback activates only when SuperDoc actually ships its physical clone. The
+ * evidence registry carries more substitutes than the bundled pack covers (e.g. Georgia -> Gelasio), so
+ * `canRenderFamily` keeps an un-shipped candidate OUT of the resolver until its `.woff2` lands. The
+ * predicate checks the SUBSTITUTE (physical) family against `bundled-manifest`, matching the package's
+ * `getRenderableFallback` contract.
+ */
+const bundledFamilies: ReadonlySet<string> = new Set(BUNDLED_MANIFEST.map((f) => f.family));
+const canRenderFamily = (family: string): boolean => bundledFamilies.has(family);
+
+/**
+ * Logical (normalized) -> physical family, DERIVED from the docfonts substitution registry: every row
+ * whose ASSET-GATED fallback (`getRenderableFallback`) is a renderable `substitute`. docfonts owns the
+ * decision (evidence + policy + asset-safety); SuperDoc keeps key normalization (`normalizeFamilyKey`)
+ * authoritative so resolver lookups land on the same keys.
  *
  * The inclusion predicate is policyAction, NOT verdict: a QUALIFIED substitute - e.g. Cambria ->
  * Caladea, top-level `visual_only` because Bold Italic's U+0060 advance reflows - is still the
  * recommended substitute and stays mapped. Verdict drives how fidelity is REPORTED (a later pass),
  * never whether SuperDoc substitutes. Gate status (e.g. Helvetica's stale `ship: fail`) is diagnostic,
- * never an inclusion input. Each physical target MUST be a family the bundled pack supplies
- * (see `bundled-manifest.ts`); `substitution-evidence.test.ts` enforces that.
+ * never an inclusion input. The asset gate guarantees every mapped physical ships in the bundled pack.
  */
 function deriveBundledSubstitutes(): Readonly<Record<string, string>> {
   const substitutes: Record<string, string> = {};
   for (const row of SUBSTITUTION_EVIDENCE) {
-    if (row.policyAction === 'substitute' && row.physicalFamily) {
-      substitutes[normalizeFamilyKey(row.logicalFamily)] = row.physicalFamily;
+    const fallback = getRenderableFallback(row.logicalFamily, { canRenderFamily });
+    if (fallback?.policyAction === 'substitute') {
+      substitutes[normalizeFamilyKey(row.logicalFamily)] = fallback.substituteFamily;
     }
   }
   return Object.freeze(substitutes);
@@ -116,18 +129,20 @@ function deriveBundledSubstitutes(): Readonly<Record<string, string>> {
 const BUNDLED_SUBSTITUTES: Readonly<Record<string, string>> = deriveBundledSubstitutes();
 
 /**
- * Logical (normalized) -> non-metric family fallback, DERIVED from the evidence rows docfonts marks
- * `policyAction: 'category_fallback'`. These carry the right letterforms but are NOT metric clones
- * (they reflow and/or differ in weight, e.g. Calibri Light -> Carlito), so they resolve with reason
+ * Logical (normalized) -> non-metric family fallback, DERIVED from the docfonts rows whose asset-gated
+ * fallback is a `category_fallback`. These carry the right letterforms but are NOT metric clones (they
+ * reflow and/or differ in weight, e.g. Calibri Light -> Carlito), so they resolve with reason
  * `category_fallback`, never `bundled_substitute`. A SEPARATE map and reason keep a lower-fidelity
- * fallback from being mistaken for a clean clone. Same source of truth as
- * {@link deriveBundledSubstitutes}; the two partition the evidence by `policyAction`.
+ * fallback from being mistaken for a clean clone. Same asset gate as {@link deriveBundledSubstitutes};
+ * the two partition the renderable fallbacks by `policyAction` (an un-bundled category target, e.g.
+ * Consolas -> Inconsolata SemiExpanded, stays inert).
  */
 function deriveCategoryFallbacks(): Readonly<Record<string, string>> {
   const fallbacks: Record<string, string> = {};
   for (const row of SUBSTITUTION_EVIDENCE) {
-    if (row.policyAction === 'category_fallback' && row.physicalFamily) {
-      fallbacks[normalizeFamilyKey(row.logicalFamily)] = row.physicalFamily;
+    const fallback = getRenderableFallback(row.logicalFamily, { canRenderFamily });
+    if (fallback?.policyAction === 'category_fallback') {
+      fallbacks[normalizeFamilyKey(row.logicalFamily)] = fallback.substituteFamily;
     }
   }
   return Object.freeze(fallbacks);

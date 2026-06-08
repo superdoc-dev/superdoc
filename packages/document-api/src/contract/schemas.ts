@@ -18,7 +18,7 @@ import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from '../ima
 
 type JsonSchema = Record<string, unknown>;
 
-const trackChangeTypeValues = ['insert', 'delete', 'replacement', 'format', 'structural'] as const;
+const trackChangeTypeValues = ['insert', 'delete', 'replacement', 'format'] as const;
 
 /** JSON Schema descriptors for a single operation's input, output, and result variants. */
 export interface OperationSchemaSet {
@@ -1562,10 +1562,6 @@ const trackChangeInfoSchema = objectSchema(
     address: trackedChangeAddressSchema,
     id: { type: 'string' },
     type: { enum: [...trackChangeTypeValues] },
-    subtype: {
-      enum: ['table-insert', 'table-delete'],
-      description: "Finer classification for structural changes (type === 'structural').",
-    },
     grouping: { enum: ['standalone', 'replacement-pair', 'unknown'] },
     pairedWithChangeId: { type: ['string', 'null'] },
     wordRevisionIds: trackChangeWordRevisionIdsSchema,
@@ -1584,10 +1580,6 @@ const trackChangeDomainItemSchema = discoveryItemSchema(
   {
     address: trackedChangeAddressSchema,
     type: { enum: [...trackChangeTypeValues] },
-    subtype: {
-      enum: ['table-insert', 'table-delete'],
-      description: "Finer classification for structural changes (type === 'structural').",
-    },
     grouping: { enum: ['standalone', 'replacement-pair', 'unknown'] },
     pairedWithChangeId: { type: ['string', 'null'] },
     wordRevisionIds: trackChangeWordRevisionIdsSchema,
@@ -5173,7 +5165,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       offset: { type: 'integer', description: 'Number of tracked changes to skip for pagination.' },
       type: {
         enum: [...trackChangeTypeValues],
-        description: "Filter by change type: 'insert', 'delete', 'replacement', 'format', or 'structural'.",
+        description: "Filter by change type: 'insert', 'delete', 'replacement', or 'format'.",
       },
       in: {
         oneOf: [storyLocatorSchema, { const: 'all' }],

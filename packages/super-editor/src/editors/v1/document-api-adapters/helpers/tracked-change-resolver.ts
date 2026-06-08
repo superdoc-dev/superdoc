@@ -4,7 +4,6 @@ import type {
   StoryLocator,
   TrackChangeOverlapInfo,
   TrackChangeOverlapLayer,
-  TrackChangeType,
   TrackChangeWordRevisionIds,
   TrackedChangeAddress,
 } from '@superdoc/document-api';
@@ -15,6 +14,11 @@ import {
 } from '../../extensions/track-changes/constants.js';
 import { getTrackChanges } from '../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
 import { enumerateStructuralRowChanges } from '../../extensions/track-changes/trackChangesHelpers/structuralRowChanges.js';
+import {
+  projectInternalTrackChangeType,
+  type InternalTrackChangeSubtype,
+  type InternalTrackChangeType,
+} from './tracked-change-type-utils.js';
 import { normalizeExcerpt, toNonEmptyString } from './value-utils.js';
 import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
 import { buildStoryKey, BODY_STORY_KEY } from '../story-runtime/story-key.js';
@@ -44,7 +48,7 @@ export type GroupedTrackedChange = {
   wordRevisionIds?: TrackChangeWordRevisionIds;
   overlap?: TrackChangeOverlapInfo;
   /** Set for whole-object structural revisions (e.g. whole-table insert/delete). */
-  structural?: { side: 'insertion' | 'deletion'; subtype: 'table-insert' | 'table-delete' };
+  structural?: { side: 'insertion' | 'deletion'; subtype: InternalTrackChangeSubtype };
 };
 
 export type TrackedChangeProjectedSide = 'inserted' | 'deleted';
@@ -100,7 +104,7 @@ function deriveTrackedChangeId(change: Omit<GroupedTrackedChange, 'id'>): string
   return change.rawId;
 }
 
-export function resolveTrackedChangeType(change: ChangeTypeInput): TrackChangeType {
+export function resolveTrackedChangeType(change: ChangeTypeInput): InternalTrackChangeType {
   if (change.structural) return 'structural';
   if (change.hasFormat) return 'format';
   if (change.hasInsert && change.hasDelete) return 'replacement';
@@ -212,18 +216,19 @@ function layerFromChange(
   change: GroupedTrackedChange,
   relationship: TrackChangeOverlapLayer['relationship'],
 ): InternalTrackChangeOverlapLayer {
+  const type = resolveTrackedChangeType(change);
   return {
     id: change.id,
     rawId: change.rawId,
     commandRawId: change.commandRawId,
-    type: resolveTrackedChangeType(change),
+    type: projectInternalTrackChangeType(type, change.structural),
     relationship,
   };
 }
 
 function compareOverlapChildren(a: GroupedTrackedChange, b: GroupedTrackedChange): number {
-  const aType = resolveTrackedChangeType(a);
-  const bType = resolveTrackedChangeType(b);
+  const aType = projectInternalTrackChangeType(resolveTrackedChangeType(a), a.structural);
+  const bType = projectInternalTrackChangeType(resolveTrackedChangeType(b), b.structural);
   if (aType !== bType) {
     if (aType === 'delete') return -1;
     if (bType === 'delete') return 1;

@@ -561,6 +561,76 @@ new SuperDoc({
   </CodeGroup>
 </ParamField>
 
+<ParamField path="zoom" type="Object">
+  Zoom behavior for the document. Use `mode: 'fit-width'` to keep DOCX and PDF documents fitted to the available container width. Calling `setZoom()` switches back to manual zoom.
+
+  <Expandable title="properties" defaultOpen>
+    <ParamField path="zoom.initial" type="number" default="100">
+      Initial zoom level as a percentage. In `fit-width` mode, this is the paint zoom until the first fit computes.
+    </ParamField>
+    <ParamField path="zoom.mode" type="'manual' | 'fit-width'" default="'manual'">
+      Starting zoom mode. `'manual'` holds the current value. `'fit-width'` keeps the document fitted to the container.
+    </ParamField>
+    <ParamField path="zoom.fitWidth" type="Object">
+      Bounds and padding for the applied fit-width zoom.
+      <Expandable title="properties">
+        <ParamField path="zoom.fitWidth.min" type="number" default="10">
+          Lower bound for the applied zoom percentage.
+        </ParamField>
+        <ParamField path="zoom.fitWidth.max" type="number" default="100">
+          Upper bound for the applied zoom percentage. The default never enlarges the document past its natural size; raise it to let wide containers scale the page up.
+        </ParamField>
+        <ParamField path="zoom.fitWidth.padding" type="number" default="0">
+          Horizontal padding in pixels reserved inside the available width before computing the fit.
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+
+  For custom behavior, listen to [`viewport-change`](/editor/superdoc/events#viewport-change) and call `setZoom()` yourself.
+
+  <CodeGroup>
+
+  ```javascript Usage
+  const superdoc = new SuperDoc({
+    selector: '#editor',
+    document: file,
+    zoom: {
+      mode: 'fit-width',
+      fitWidth: { min: 35, max: 100, padding: 24 },
+    },
+  });
+  ```
+
+  ```javascript Full Example
+  import { SuperDoc } from 'superdoc';
+  import 'superdoc/style.css';
+
+  const superdoc = new SuperDoc({
+    selector: '#editor',
+    document: yourFile,
+    zoom: {
+      initial: 100,
+      mode: 'fit-width',
+      fitWidth: { min: 35, max: 100, padding: 24 },
+    },
+    onZoomChange: ({ zoom, mode }) => {
+      console.log(`Zoom is now ${zoom}% (${mode})`);
+    },
+  });
+  ```
+
+  </CodeGroup>
+
+  <Card
+    title="Responsive zoom example"
+    icon="code"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/built-in-ui/responsive-zoom"
+  >
+    Minimal React example for fit-width zoom with current zoom and viewport metrics.
+  </Card>
+</ParamField>
+
 <ParamField path="layoutMode" type="string" deprecated>
   <Warning>**Removed in v1.0**: Use `viewOptions.layout` instead. `'paginated'` → `'print'`, `'responsive'` → `'web'`.</Warning>
 </ParamField>
@@ -680,6 +750,26 @@ All handlers are optional functions in the configuration:
   ```javascript
   onEditorUpdate: ({ editor }) => {
     autoSave(editor.getJSON());
+  }
+  ```
+</ParamField>
+
+<ParamField path="onZoomChange" type="function">
+  Called when zoom changes from `setZoom()`, the toolbar zoom control, or `fit-width` mode.
+
+  ```javascript
+  onZoomChange: ({ zoom, mode }) => {
+    setZoomIndicator(zoom, mode);
+  }
+  ```
+</ParamField>
+
+<ParamField path="onViewportChange" type="function">
+  Called when the fit-width calculation changes. Pixel-level width jitter is deduped. `getViewportMetrics()` always reads the latest measurements.
+
+  ```javascript
+  onViewportChange: ({ availableWidth, documentWidth, fitZoom }) => {
+    updateFitIndicator({ availableWidth, documentWidth, fitZoom });
   }
   ```
 </ParamField>

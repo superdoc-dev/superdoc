@@ -8,16 +8,18 @@ import { PUBLIC_MUTATION_STEP_OP_IDS, STEP_OP_CATALOG } from './step-op-catalog.
 import { OPERATION_IDS, PRE_APPLY_THROW_CODES, isValidOperationIdFormat } from './types.js';
 import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from '../images/z-order.js';
 import type { TemplatesApplyFailureCode } from '../templates/index.js';
+import type { ReceiptFailureCode } from '../types/index.js';
 
 const TRACK_CHANGES_DECIDE_RECEIPT_FAILURE_CODES = [
   'NO_OP',
+  'INVALID_INPUT',
   'INVALID_TARGET',
   'TARGET_NOT_FOUND',
   'CAPABILITY_UNAVAILABLE',
   'PERMISSION_DENIED',
   'PRECONDITION_FAILED',
   'COMMENT_CASCADE_PARTIAL',
-] as const;
+] as const satisfies readonly ReceiptFailureCode[];
 
 // Every TemplatesApplyFailureCode that the adapter can surface in a returned
 // { success: false, failure } receipt. The satisfies guard below fails to

@@ -60,7 +60,7 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"PERMISSION_DENIED"`, `"PRECONDITION_FAILED"`, `"COMMENT_CASCADE_PARTIAL"` |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_INPUT"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"PERMISSION_DENIED"`, `"PRECONDITION_FAILED"`, `"COMMENT_CASCADE_PARTIAL"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
@@ -97,6 +97,7 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
 ## Non-applied failure codes
 
 - `NO_OP`
+- `INVALID_INPUT`
 - `INVALID_TARGET`
 - `TARGET_NOT_FOUND`
 - `CAPABILITY_UNAVAILABLE`
@@ -214,6 +215,7 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
             "code": {
               "enum": [
                 "NO_OP",
+                "INVALID_INPUT",
                 "INVALID_TARGET",
                 "TARGET_NOT_FOUND",
                 "CAPABILITY_UNAVAILABLE",
@@ -267,6 +269,7 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
         "code": {
           "enum": [
             "NO_OP",
+            "INVALID_INPUT",
             "INVALID_TARGET",
             "TARGET_NOT_FOUND",
             "CAPABILITY_UNAVAILABLE",

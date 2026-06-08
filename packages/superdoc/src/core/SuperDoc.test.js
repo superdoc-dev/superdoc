@@ -146,6 +146,8 @@ const createAppHarness = () => {
     reset: vi.fn(),
     setExceptionHandler: vi.fn(),
     activeZoom: 100,
+    zoomMode: 'manual',
+    viewportMetrics: null,
   };
 
   const commentsStore = {
@@ -1214,6 +1216,91 @@ describe('SuperDoc core', () => {
 
     expect(exportDocxMock).toHaveBeenCalledTimes(1);
     expect(results).toEqual([originalBlob]);
+  });
+
+  it('falls back to original document data and keeps sibling exports when an editor export rejects', async () => {
+    createAppHarness();
+    const onException = vi.fn();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException,
+    });
+    await flushMicrotasks();
+
+    const exportError = new Error('export failed');
+    const originalBlob = new Blob(['fallback'], { type: DOCX });
+    const siblingBlob = new Blob(['exported'], { type: DOCX });
+    const failedExportDocxMock = vi.fn().mockRejectedValue(exportError);
+    const siblingExportDocxMock = vi.fn().mockResolvedValue(siblingBlob);
+    const failedDoc = {
+      id: 'doc-1',
+      type: DOCX,
+      data: originalBlob,
+      getEditor: () => ({ exportDocx: failedExportDocxMock }),
+    };
+    const siblingDoc = {
+      id: 'doc-2',
+      type: DOCX,
+      data: null,
+      getEditor: () => ({ exportDocx: siblingExportDocxMock }),
+    };
+
+    instance.superdocStore.documents = [failedDoc, siblingDoc];
+
+    const results = await instance.exportEditorsToDOCX();
+
+    expect(failedExportDocxMock).toHaveBeenCalledTimes(1);
+    expect(siblingExportDocxMock).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([originalBlob, siblingBlob]);
+    expect(onException).toHaveBeenCalledTimes(1);
+    expect(onException).toHaveBeenCalledWith({ error: exportError, document: failedDoc });
+  });
+
+  it('does not emit a duplicate wrapper exception when the editor already bridged the export error', async () => {
+    createAppHarness();
+    const onException = vi.fn();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException,
+    });
+    await flushMicrotasks();
+
+    const exportError = new Error('export failed');
+    const originalBlob = new Blob(['fallback'], { type: DOCX });
+    const editor = {
+      exportDocx: vi.fn(async () => {
+        instance.emit('exception', { error: exportError, editor });
+        throw exportError;
+      }),
+    };
+
+    instance.superdocStore.documents = [
+      {
+        id: 'doc-1',
+        type: DOCX,
+        data: originalBlob,
+        getEditor: () => editor,
+      },
+    ];
+
+    const results = await instance.exportEditorsToDOCX();
+
+    expect(editor.exportDocx).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([originalBlob]);
+    expect(onException).toHaveBeenCalledTimes(1);
+    expect(onException).toHaveBeenCalledWith({ error: exportError, editor });
   });
 
   it('drops non-DOCX fallback data when an editor export yields no blob', async () => {
@@ -2396,7 +2483,185 @@ describe('SuperDoc core', () => {
 
       instance.setZoom(200);
 
-      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 200 });
+      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 200, mode: 'manual' });
+    });
+
+    it('setZoom switches zoom mode to manual', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      superdocStore.zoomMode = 'fit-width';
+      instance.setZoom(125);
+
+      expect(superdocStore.zoomMode).toBe('manual');
+      expect(instance.getZoomState().mode).toBe('manual');
+    });
+
+    it('setZoomMode switches between manual and fit-width and rejects invalid values', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      instance.setZoomMode('fit-width');
+      expect(superdocStore.zoomMode).toBe('fit-width');
+
+      instance.setZoomMode('manual');
+      expect(superdocStore.zoomMode).toBe('manual');
+
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      instance.setZoomMode('fit-page');
+      expect(superdocStore.zoomMode).toBe('manual');
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it('setZoom and setZoomMode before initialization warn and emit nothing', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      // No flushMicrotasks: async #init has not attached superdocStore yet.
+      const zoomChangeSpy = vi.fn();
+      instance.on('zoomChange', zoomChangeSpy);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      instance.setZoom(150);
+      instance.setZoomMode('fit-width');
+
+      // Neither call may advertise a change that was never persisted.
+      expect(zoomChangeSpy).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
+
+      await flushMicrotasks();
+      expect(instance.getZoom()).toBe(100);
+      expect(instance.getZoomState().mode).toBe('manual');
+    });
+
+    it('setZoomMode emits zoomChange for mode-only transitions and no-ops on the same mode', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const zoomChangeSpy = vi.fn();
+      instance.on('zoomChange', zoomChangeSpy);
+
+      // Mode change with an unchanged value is observable.
+      instance.setZoomMode('fit-width');
+      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 100, mode: 'fit-width' });
+      expect(zoomChangeSpy).toHaveBeenCalledTimes(1);
+
+      // Same-mode call is a no-op: no state churn, no event.
+      instance.setZoomMode('fit-width');
+      expect(zoomChangeSpy).toHaveBeenCalledTimes(1);
+
+      instance.setZoomMode('manual');
+      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 100, mode: 'manual' });
+      expect(zoomChangeSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('getZoomState reports mode, value, fitZoom, and effective bounds', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        zoom: { fitWidth: { min: 35, max: 150 } },
+      });
+      await flushMicrotasks();
+
+      expect(instance.getZoomState()).toEqual({
+        mode: 'manual',
+        value: 100,
+        fitZoom: null,
+        min: 35,
+        max: 150,
+      });
+
+      superdocStore.zoomMode = 'fit-width';
+      superdocStore.activeZoom = 74;
+      superdocStore.viewportMetrics = { availableWidth: 600, documentWidth: 816, fitZoom: 74 };
+
+      expect(instance.getZoomState()).toEqual({
+        mode: 'fit-width',
+        value: 74,
+        fitZoom: 74,
+        min: 35,
+        max: 150,
+      });
+    });
+
+    it('getZoomState falls back to default bounds and reorders swapped min/max', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        zoom: { fitWidth: { min: 150, max: 35 } },
+      });
+      await flushMicrotasks();
+
+      const state = instance.getZoomState();
+      expect(state.min).toBe(35);
+      expect(state.max).toBe(150);
+
+      const defaultsInstance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const defaults = defaultsInstance.getZoomState();
+      expect(defaults.min).toBe(10);
+      expect(defaults.max).toBe(100);
+    });
+
+    it('getZoomState uses default bounds for invalid fit-width fields', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        zoom: { fitWidth: { min: 'narrow', max: -1, padding: 'wide' } },
+      });
+      await flushMicrotasks();
+
+      expect(instance.getZoomState()).toMatchObject({
+        min: 10,
+        max: 100,
+      });
+    });
+
+    it('getViewportMetrics returns null before the first measurement, then the stored metrics', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      expect(instance.getViewportMetrics()).toBeNull();
+
+      const metrics = { availableWidth: 935, documentWidth: 816, fitZoom: 115 };
+      superdocStore.viewportMetrics = metrics;
+
+      expect(instance.getViewportMetrics()).toEqual(metrics);
     });
 
     it('getZoom reflects value set by setZoom', async () => {

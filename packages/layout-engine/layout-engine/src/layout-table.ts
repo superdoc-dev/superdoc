@@ -403,6 +403,42 @@ function countHeaderRows(block: TableBlock): number {
 }
 
 /**
+ * Count the leading rows that form the repeatable header BAND on continuation
+ * pages.
+ *
+ * Starts from the contiguous `w:tblHeader` rows ({@link countHeaderRows}) and
+ * extends downward to include any row that a header-row vertically-merged cell
+ * (`w:vMerge`, `rowSpan > 1`) spans into. Word repeats the whole merged header
+ * band as a unit even when the spanned rows are not themselves flagged
+ * `w:tblHeader`, so the merged cell is never cut at the repeat boundary
+ * (verified against Word's render of the sd-1962 "Inpatient Stay in CRU"
+ * schedule: only row 0 carries `w:tblHeader`, but its `rowSpan = 2`
+ * label / "Screening" / "EOS" cells pull row 1 into the repeated header).
+ *
+ * Without this extension only row 0 repeats while the painter still draws the
+ * merged cell at its full `rowSpan` height, so it overflows the fragment and
+ * paints over the body rows / footnotes below (SD-1962).
+ *
+ * @param block - Table block containing rows, cells, and attributes
+ * @returns Number of leading rows that repeat together as the header band
+ */
+function countRepeatableHeaderRows(block: TableBlock): number {
+  const headerCount = countHeaderRows(block);
+  if (headerCount === 0) return 0;
+
+  // A vMerge that starts inside the flagged header rows cannot be split at the
+  // repeat boundary; extend the band to the farthest row it reaches.
+  let bandEnd = headerCount; // exclusive
+  for (let r = 0; r < headerCount && r < block.rows.length; r++) {
+    for (const cell of block.rows[r]?.cells ?? []) {
+      const rowSpan = cell.rowSpan ?? 1;
+      if (rowSpan > 1) bandEnd = Math.max(bandEnd, r + rowSpan);
+    }
+  }
+  return Math.min(bandEnd, block.rows.length);
+}
+
+/**
  * Sum row heights for a given range.
  *
  * @param rows - Array of measured table rows
@@ -1333,8 +1369,9 @@ export function layoutTableBlock({
     return;
   }
 
-  // 2. Count header rows
-  const headerCount = countHeaderRows(block);
+  // 2. Count header rows (extended to cover vMerge cells that span past the
+  //    flagged header rows, so the merged band repeats intact — see SD-1962).
+  const headerCount = countRepeatableHeaderRows(block);
   const headerPrefixHeights = [0];
   for (let i = 0; i < headerCount; i += 1) {
     headerPrefixHeights.push(headerPrefixHeights[i] + (measure.rows[i]?.height ?? 0));

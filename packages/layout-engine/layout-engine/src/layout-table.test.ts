@@ -1735,6 +1735,79 @@ describe('layoutTableBlock', () => {
       }
     });
 
+    it('extends the repeated header to cover a header-row vMerge spanning a non-header row (SD-1962)', () => {
+      // Row 0 is the ONLY w:tblHeader row, but its first cell is a vertical merge
+      // (w:vMerge="restart", rowSpan=2) that spans into row 1, which is NOT flagged
+      // as a header. Word repeats the entire merged header band as a unit, so the
+      // continuation fragment must repeat BOTH rows. Repeating only row 0 leaves the
+      // painter drawing the merged cell at its full rowSpan height inside a one-row
+      // header, overflowing onto the body/footnotes below (the SD-1962 symptom).
+      const rows = Array.from({ length: 10 }, (_, i) => ({
+        id: `row-${i}` as BlockId,
+        cells: [
+          {
+            id: `cell-${i}-0` as BlockId,
+            // Row 0 owns a 2-row vertical merge; row 1 is its continuation.
+            ...(i === 0 ? { rowSpan: 2 } : {}),
+            paragraph: { kind: 'paragraph' as const, id: `para-${i}-0` as BlockId, runs: [] },
+          },
+          {
+            id: `cell-${i}-1` as BlockId,
+            paragraph: { kind: 'paragraph' as const, id: `para-${i}-1` as BlockId, runs: [] },
+          },
+        ],
+        attrs: { tableRowProperties: { repeatHeader: i === 0 } }, // only row 0 flagged
+      }));
+      const block: TableBlock = { kind: 'table', id: 'test-table' as BlockId, rows };
+      const measure = createMockTableMeasure([100, 100], Array(10).fill(20));
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => ({ page: mockPage, columnIndex: 0, cursorY, contentBottom: 120 }),
+        advanceColumn: () => {
+          cursorY = 0;
+          return { page: mockPage, columnIndex: 0, cursorY: 0, contentBottom: 120 };
+        },
+        columnX: () => 0,
+      });
+
+      expect(fragments.length).toBeGreaterThan(1);
+      // Continuation must repeat the full merged band (rows 0 and 1), not just row 0.
+      expect(fragments[1].repeatHeaderCount).toBe(2);
+    });
+
+    it('does not extend the repeated header when header-row cells do not vertically merge', () => {
+      // Regression guard: a single flagged header row with no rowSpan cells must
+      // still repeat exactly one row (the fix only triggers on vMerge spans).
+      const block = createMockTableBlock(10, [{ repeatHeader: true }, ...Array(9).fill({ repeatHeader: false })]);
+      const measure = createMockTableMeasure([100], Array(10).fill(20));
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({ page: mockPage, columnIndex: 0, cursorY, contentBottom: 120 }),
+        advanceColumn: () => {
+          cursorY = 0;
+          return { page: mockPage, columnIndex: 0, cursorY: 0, contentBottom: 120 };
+        },
+        columnX: () => 0,
+      });
+
+      expect(fragments.length).toBeGreaterThan(1);
+      expect(fragments[1].repeatHeaderCount).toBe(1);
+    });
+
     it('repeats only the completed header prefix when a later header row continues on a new page', () => {
       const block = createMockTableBlock(3, [{ repeatHeader: true }, { repeatHeader: true }, { repeatHeader: false }]);
       const measure = createMockTableMeasure([100, 100], [10, 20, 10], [[10], [10, 10, 10], [10]], 2);

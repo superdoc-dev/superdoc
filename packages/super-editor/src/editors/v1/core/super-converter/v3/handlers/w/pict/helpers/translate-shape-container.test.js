@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { translateShapeContainer } from './translate-shape-container';
 import { handleShapeTextboxImport } from './handle-shape-textbox-import';
 import { translateChildNodes } from '@converter/v2/exporter/helpers/translateChildNodes';
@@ -198,6 +198,55 @@ describe('translateShapeContainer', () => {
     expect(style).toContain('mso-position-horizontal-relative:margin');
     expect(style).toContain('mso-position-vertical:top');
     expect(style).toContain('mso-position-vertical-relative:page');
+  });
+
+  it('wraps DrawingML textbox export in w:p at body level', () => {
+    const liveParagraphs = [{ name: 'w:p', elements: [] }];
+    translateChildNodes.mockReturnValue(liveParagraphs);
+
+    const drawingContent = {
+      name: 'w:drawing',
+      elements: [
+        {
+          name: 'wp:anchor',
+          elements: [
+            {
+              name: 'a:graphic',
+              elements: [
+                {
+                  name: 'a:graphicData',
+                  elements: [
+                    {
+                      name: 'wps:wsp',
+                      elements: [
+                        {
+                          name: 'wps:txbx',
+                          elements: [{ name: 'w:txbxContent', elements: [] }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = translateShapeContainer({
+      node: {
+        type: 'shapeContainer',
+        attrs: { drawingContent },
+        content: [{ type: 'shapeTextbox', attrs: {}, content: [] }],
+      },
+    });
+
+    expect(result?.name).toBe('w:p');
+    const run = result?.elements?.[0];
+    expect(run?.name).toBe('w:r');
+    const altContent = run?.elements?.[0];
+    expect(altContent?.name).toBe('mc:AlternateContent');
   });
 
   it('preserves VML textbox positioning through import to export', () => {

@@ -2215,7 +2215,7 @@ describe('getVectorShape', () => {
       ],
     });
 
-    it('emits an image part in textContent for an inline w:drawing inside the textbox', () => {
+    it('emits an inline image node inside the textbox paragraph content', () => {
       const graphicData = makeShape();
       const result = getVectorShape({
         params: { nodes: [{ name: 'w:drawing', elements: [] }], docx: docxFixture, filename: 'header1.xml' },
@@ -2224,12 +2224,13 @@ describe('getVectorShape', () => {
         size: { width: 374, height: 41 },
       });
 
-      expect(result?.type).toBe('vectorShape');
-      const parts = result?.attrs?.textContent?.parts || [];
-      const imagePart = parts.find((p) => p.kind === 'image');
-      expect(imagePart).toBeTruthy();
-      expect(typeof imagePart?.src).toBe('string');
-      expect(imagePart?.src.length).toBeGreaterThan(0);
+      expect(result?.type).toBe('shapeContainer');
+      const paragraphNodes = result?.content?.[0]?.content || [];
+      const inlineNodes = paragraphNodes.flatMap((paragraph) => paragraph?.content || []);
+      const imageNode = inlineNodes.find((node) => node?.type === 'image');
+      expect(imageNode).toBeTruthy();
+      expect(typeof imageNode?.attrs?.src).toBe('string');
+      expect(imageNode?.attrs?.src.length).toBeGreaterThan(0);
     });
   });
 });

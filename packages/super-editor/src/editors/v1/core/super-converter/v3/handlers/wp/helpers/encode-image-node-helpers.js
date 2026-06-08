@@ -21,6 +21,7 @@ import {
 import { parseRelativeHeight } from './relative-height.js';
 import { CHART_URI, resolveChartPart, parseChartXml } from './chart-helpers.js';
 import { findChildByLocalName, someChildHasLocalName, hasLocalName } from './drawingml-utils.js';
+import { importDrawingMLTextbox } from './import-drawingml-textbox.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
 const SHAPE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
@@ -1351,6 +1352,108 @@ const buildShapePlaceholder = (node, size, padding, marginOffset, shapeType) => 
  * //   }
  * // }
  */
+
+function extractFieldInlineNodes(node) {
+  const fieldType =
+    node?.name === 'sd:autoPageNumber'
+      ? 'PAGE'
+      : node?.name === 'sd:totalPageNumber'
+        ? 'NUMPAGES'
+        : node?.name === 'sd:sectionPageCount'
+          ? 'SECTIONPAGES'
+          : undefined;
+
+  if (!fieldType) return [];
+
+  const cachedText =
+    fieldType === 'SECTIONPAGES' ? (node?.attributes?.resolvedText ?? node?.attributes?.importedCachedText ?? '') : '';
+
+  if (cachedText.length === 0) return [];
+  return [{ type: 'text', text: cachedText }];
+}
+
+function extractInlineNodesFromRun(run, paragraphProperties, params) {
+  if (!run?.elements) return [];
+
+  const nodes = [];
+  run.elements.forEach((el) => {
+    if (el.name === 'w:t' || el.name === 'w:delText') {
+      const textNode = el.elements?.find((n) => n.type === 'text');
+      if (!textNode || typeof textNode.text !== 'string') return;
+      const cleanedText = textNode.text.replace(/\[\[sdspace\]\]/g, ' ');
+      if (cleanedText.length > 0) {
+        nodes.push({ type: 'text', text: cleanedText });
+      }
+    } else if (el.name === 'w:tab') {
+      nodes.push({ type: 'text', text: '\t' });
+    } else if (el.name === 'w:br') {
+      nodes.push({ type: 'lineBreak', attrs: {} });
+    } else if (
+      el.name === 'sd:autoPageNumber' ||
+      el.name === 'sd:totalPageNumber' ||
+      el.name === 'sd:sectionPageCount'
+    ) {
+      nodes.push(...extractFieldInlineNodes(el));
+    } else if (el.name === 'w:drawing') {
+      const inline = el.elements?.find((child) => child?.name === 'wp:inline');
+      if (!inline) return;
+      const imagePm = handleImageNode(inline, { ...params, nodes: [el] }, false);
+      if (imagePm?.type === 'image' && imagePm.attrs?.hidden !== true) {
+        nodes.push(imagePm);
+      }
+    }
+  });
+
+  return nodes;
+}
+
+function paragraphToPmParagraph(paragraph, params) {
+  const processed = preProcessTextBoxContent({ name: 'w:txbxContent', elements: [paragraph] }, params);
+  const paragraphNode = collectTextBoxParagraphs(processed?.elements || [])[0];
+  if (!paragraphNode) return null;
+
+  const paragraphProperties = resolveParagraphPropertiesForTextBox(paragraphNode, params);
+  const alignment = extractParagraphAlignment(paragraphNode) || 'left';
+  const content = [];
+  let pendingRunContent = [];
+
+  const flushPendingRun = () => {
+    if (pendingRunContent.length === 0) return;
+    content.push({ type: 'run', attrs: {}, content: pendingRunContent });
+    pendingRunContent = [];
+  };
+
+  (paragraphNode.elements || []).forEach((element) => {
+    if (element?.name === 'w:r') {
+      const inlineParts = extractInlineNodesFromRun(element, paragraphProperties, params);
+      inlineParts.forEach((part) => {
+        if (part?.type === 'image') {
+          flushPendingRun();
+          content.push(part);
+          return;
+        }
+        pendingRunContent.push(part);
+      });
+      return;
+    }
+
+    if (element?.name?.startsWith('sd:')) {
+      const runContent = extractFieldInlineNodes(element);
+      if (runContent.length > 0) {
+        pendingRunContent.push(...runContent);
+      }
+    }
+  });
+  flushPendingRun();
+
+  return {
+    type: 'paragraph',
+    attrs: { paragraphProperties, textAlign: alignment },
+    content,
+    marks: [],
+  };
+}
+
 export function getVectorShape({
   params,
   node,
@@ -1418,6 +1521,46 @@ export function getVectorShape({
   const textBoxContent = textBox?.elements?.find((el) => el.name === 'w:txbxContent');
   const bodyPr = wsp.elements?.find((el) => el.name === 'wps:bodyPr');
   const nonVisualShapeProps = wsp.elements?.find((el) => el.name === 'wps:cNvSpPr');
+
+  const isWordArt = bodyPr?.attributes?.['fromWordArt'] === '1';
+  const isTextBox = nonVisualShapeProps?.attributes?.['txBox'] === '1';
+
+  if (isTextBox && textBoxContent) {
+    return importDrawingMLTextbox({
+      params,
+      drawingNode: drawingNode?.name === 'w:drawing' ? drawingNode : null,
+      textBoxContent,
+      bodyPr,
+      baseAttrs: {
+        ...schemaAttrs,
+        width,
+        height,
+        rotation,
+        flipH,
+        flipV,
+        fillColor,
+        strokeColor,
+        strokeWidth,
+        lineEnds,
+        effectExtent,
+        marginOffset,
+        anchorData,
+        wrap,
+        isAnchor,
+        isWordArt,
+        isTextBox,
+        originalAttributes: node?.attributes,
+      },
+      paragraphImporter:
+        params?.nodeListHandler != null
+          ? undefined
+          : (paragraph) => {
+              const imported = paragraphToPmParagraph(paragraph, params);
+              return Array.isArray(imported) ? imported : imported ? [imported] : [];
+            },
+    });
+  }
+
   let textContent = null;
   let textAlign = 'left';
 
@@ -1425,9 +1568,6 @@ export function getVectorShape({
     textContent = extractTextFromTextBox(textBoxContent, bodyPr, params);
     textAlign = textContent?.horizontalAlign || 'left';
   }
-
-  const isWordArt = bodyPr?.attributes?.['fromWordArt'] === '1';
-  const isTextBox = nonVisualShapeProps?.attributes?.['txBox'] === '1';
 
   return {
     type: 'vectorShape',

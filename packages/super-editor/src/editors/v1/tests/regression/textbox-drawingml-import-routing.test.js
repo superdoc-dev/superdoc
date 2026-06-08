@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { createDocumentJson } from '@core/super-converter/v2/importer/docxImporter';
+import { initTestEditor, getTestDataByFileName } from '@tests/helpers/helpers.js';
+import { Editor } from '@core/Editor.js';
 import { join } from 'path';
 import { readFile } from 'fs/promises';
-import { Editor } from '@core/Editor.js';
-import { initTestEditor } from '@tests/helpers/helpers.js';
-
-const FIXTURE_PATH = join(__dirname, '../data/sd-1331-text-boxes.docx');
 
 function collectNodesByType(node, type, acc = []) {
   if (!node || typeof node !== 'object') return acc;
@@ -18,37 +17,95 @@ function collectNodesByType(node, type, acc = []) {
 }
 
 describe('sd-1331 textbox import routing', () => {
-  it('currently routes textbox content through DrawingML vectorShape nodes', async () => {
-    const fileSource = await readFile(FIXTURE_PATH);
-    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(fileSource, true);
-    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+  it('produces schema-valid PM JSON for the sd-1331 textbox fixture', async () => {
+    const docx = await getTestDataByFileName('sd-1331-text-boxes.docx');
+    const { editor } = initTestEditor({
+      loadFromSchema: true,
+      content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
+    });
 
     try {
-      const json = editor.getJSON();
+      const converter = { docHiglightColors: new Set(), headers: {}, footers: {}, headerIds: {}, footerIds: {} };
+      const result = createDocumentJson(docx, converter, editor);
+      const json = result.pmDoc;
       const vectorShapes = collectNodesByType(json, 'vectorShape');
       const shapeContainers = collectNodesByType(json, 'shapeContainer');
+      const rootTypes = (json.content || []).map((node) => node?.type);
 
-      expect(shapeContainers).toHaveLength(0);
-      expect(vectorShapes.length).toBeGreaterThan(0);
+      expect(() => editor.schema.nodeFromJSON(json)).not.toThrow();
 
-      const textboxShapes = vectorShapes.filter(
+      expect(rootTypes).not.toContain('shapeTextbox');
+      expect(rootTypes).not.toContain('run');
+      expect(rootTypes).not.toContain('text');
+      expect(shapeContainers.length).toBeGreaterThan(0);
+      expect(vectorShapes).toHaveLength(0);
+
+      const textboxShapes = shapeContainers.filter(
         (node) =>
-          node?.attrs?.kind === 'rect' &&
           node?.attrs?.drawingContent?.name === 'w:drawing' &&
-          node?.attrs?.textContent &&
-          Array.isArray(node.attrs.textContent.parts) &&
-          node.attrs.textContent.parts.length > 0,
+          Array.isArray(node?.content) &&
+          node.content.some((child) => child?.type === 'shapeTextbox'),
       );
 
       expect(textboxShapes.length).toBeGreaterThan(0);
-      expect(textboxShapes.every((node) => node.attrs.textInsets != null)).toBe(true);
-      expect(textboxShapes.some((node) => node.attrs.textAlign === 'left' || node.attrs.textAlign === 'center')).toBe(
-        true,
-      );
     } finally {
       editor.destroy();
     }
   });
 
-  it.todo('normalizes DrawingML textbox content to shapeContainer > shapeTextbox > paragraphs');
+  it('preserves imported shapeContainer geometry through schema node creation', async () => {
+    const docx = await getTestDataByFileName('sd-1331-text-boxes.docx');
+    const { editor } = initTestEditor({
+      loadFromSchema: true,
+      content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
+    });
+
+    try {
+      const converter = { docHiglightColors: new Set(), headers: {}, footers: {}, headerIds: {}, footerIds: {} };
+      const result = createDocumentJson(docx, converter, editor);
+      const json = result.pmDoc;
+      const importedShapeContainers = collectNodesByType(json, 'shapeContainer').filter(
+        (node) =>
+          node?.attrs?.drawingContent?.name === 'w:drawing' &&
+          Array.isArray(node?.content) &&
+          node.content.some((child) => child?.type === 'shapeTextbox'),
+      );
+
+      expect(importedShapeContainers.length).toBeGreaterThan(0);
+      importedShapeContainers.forEach((node) => {
+        expect(node.attrs?.width).toBeGreaterThan(1);
+        expect(node.attrs?.height).toBeGreaterThan(1);
+      });
+
+      const schemaDoc = editor.schema.nodeFromJSON(json).toJSON();
+      const schemaShapeContainers = collectNodesByType(schemaDoc, 'shapeContainer').filter(
+        (node) =>
+          node?.attrs?.drawingContent?.name === 'w:drawing' &&
+          Array.isArray(node?.content) &&
+          node.content.some((child) => child?.type === 'shapeTextbox'),
+      );
+
+      expect(schemaShapeContainers.length).toBeGreaterThan(0);
+      schemaShapeContainers.forEach((node) => {
+        expect(node.attrs?.width).toBeGreaterThan(1);
+        expect(node.attrs?.height).toBeGreaterThan(1);
+      });
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('full editor loads sd-1331-text-boxes.docx without PM view crash', async () => {
+    const filePath = join(__dirname, '../data/sd-1331-text-boxes.docx');
+    const fileSource = await readFile(filePath);
+    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(fileSource, true);
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+    try {
+      const json = editor.getJSON();
+      const shapeContainers = collectNodesByType(json, 'shapeContainer');
+      expect(shapeContainers.length).toBeGreaterThan(0);
+    } finally {
+      editor.destroy();
+    }
+  });
 });

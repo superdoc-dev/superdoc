@@ -2,6 +2,7 @@ import { translateChildNodes } from '@converter/v2/exporter/helpers/translateChi
 import { generateRandomSigned32BitIntStrId } from '@helpers/generateDocxRandomId';
 import { wrapTextInRun } from '@converter/exporter';
 import { parseInlineStyles } from './parse-inline-styles';
+import { translateDrawingMLTextbox } from '../../../wp/helpers/translate-drawingml-textbox.js';
 
 /**
  * @param {Object} params - The parameters for translation.
@@ -9,6 +10,15 @@ import { parseInlineStyles } from './parse-inline-styles';
  */
 export function translateShapeContainer(params) {
   const { node } = params;
+
+  if (node?.attrs?.drawingContent) {
+    const run = translateDrawingMLTextbox(params);
+    if (!run) return null;
+    return {
+      name: 'w:p',
+      elements: [run],
+    };
+  }
   const elements = translateChildNodes(params);
   const shapeAttributes = {
     ...node.attrs.attributes,

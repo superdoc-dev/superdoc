@@ -73,6 +73,14 @@ export const ShapeContainer = Node.create({
         rendered: false,
       },
 
+      anchorData: {
+        rendered: false,
+      },
+
+      marginOffset: {
+        rendered: false,
+      },
+
       attributes: {
         rendered: false,
       },

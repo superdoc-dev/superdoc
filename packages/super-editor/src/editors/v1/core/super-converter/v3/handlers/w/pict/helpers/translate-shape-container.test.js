@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { translateShapeContainer } from './translate-shape-container';
+import { handleShapeTextboxImport } from './handle-shape-textbox-import';
 import { translateChildNodes } from '@converter/v2/exporter/helpers/translateChildNodes';
 import { generateRandomSigned32BitIntStrId } from '@helpers/generateDocxRandomId';
 
@@ -155,5 +156,83 @@ describe('translateShapeContainer', () => {
         },
       ],
     });
+  });
+
+  it('should serialize marginOffset and anchorData into VML style', () => {
+    translateChildNodes.mockReturnValue([{ name: 'v:textbox' }]);
+
+    const params = {
+      node: {
+        attrs: {
+          attributes: {
+            id: 'shape-positioned',
+            type: '#_x0000_t202',
+            style: 'position:absolute;z-index:1',
+          },
+          style: 'width: 100pt;height: 50pt;',
+          fillcolor: '#FFFFFF',
+          anchorData: {
+            alignH: 'center',
+            hRelativeFrom: 'margin',
+            alignV: 'top',
+            vRelativeFrom: 'page',
+          },
+          marginOffset: {
+            horizontal: 96,
+            top: 48,
+          },
+        },
+      },
+    };
+
+    const result = translateShapeContainer(params);
+    const style = result.elements[0].elements[0].elements[0].attributes.style;
+
+    expect(style).toContain('position:absolute');
+    expect(style).toContain('z-index:1');
+    expect(style).toContain('width:100pt');
+    expect(style).toContain('height:50pt');
+    expect(style).toContain('margin-left:72pt');
+    expect(style).toContain('margin-top:36pt');
+    expect(style).toContain('mso-position-horizontal:center');
+    expect(style).toContain('mso-position-horizontal-relative:margin');
+    expect(style).toContain('mso-position-vertical:top');
+    expect(style).toContain('mso-position-vertical-relative:page');
+  });
+
+  it('preserves VML textbox positioning through import to export', () => {
+    translateChildNodes.mockReturnValue([{ name: 'v:textbox' }]);
+
+    const importedNode = handleShapeTextboxImport({
+      params: { docx: {} },
+      pict: {
+        elements: [
+          {
+            name: 'v:shape',
+            attributes: {
+              id: 'shape-roundtrip',
+              type: '#_x0000_t202',
+              style:
+                'position:absolute;margin-left:72pt;margin-top:36pt;width:100pt;height:50pt;mso-position-horizontal:center;mso-position-horizontal-relative:margin;mso-position-vertical:top;mso-position-vertical-relative:page;z-index:1',
+            },
+            elements: [],
+          },
+        ],
+      },
+    });
+
+    const result = translateShapeContainer({ node: importedNode });
+    const style = result.elements[0].elements[0].elements[0].attributes.style;
+
+    expect(style).toContain('position:absolute');
+    expect(style).toContain('z-index:1');
+    expect(style).toContain('width:100pt');
+    expect(style).toContain('height:50pt');
+    expect(style).toContain('margin-left:72pt');
+    expect(style).toContain('margin-top:36pt');
+    expect(style).toContain('mso-position-horizontal:center');
+    expect(style).toContain('mso-position-horizontal-relative:margin');
+    expect(style).toContain('mso-position-vertical:top');
+    expect(style).toContain('mso-position-vertical-relative:page');
   });
 });

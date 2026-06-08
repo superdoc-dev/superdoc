@@ -59,6 +59,17 @@ describe('resolveTrackedChangeType', () => {
   it('returns replacement when both hasInsert and hasDelete are true (no format)', () => {
     expect(resolveTrackedChangeType({ hasInsert: true, hasDelete: true, hasFormat: false })).toBe('replacement');
   });
+
+  it('keeps whole-table revisions structural internally', () => {
+    expect(
+      resolveTrackedChangeType({
+        hasInsert: false,
+        hasDelete: false,
+        hasFormat: false,
+        structural: { side: 'insertion', subtype: 'table-insert' },
+      }),
+    ).toBe('structural');
+  });
 });
 
 describe('groupTrackedChanges', () => {

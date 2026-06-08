@@ -233,6 +233,45 @@ describe('comments-wrappers: anchoredText', () => {
     );
   });
 
+  it('projects structural tracked changes to legacy public comment types', () => {
+    const editor = makeEditor([]);
+    getTrackedChangeIndexMock.mockReturnValue({
+      getAll: () => [
+        {
+          address: { kind: 'entity', entityType: 'trackedChange', entityId: 'word:structural:2' },
+          runtimeRef: { storyKey: 'body', rawId: 'word:structural:2' },
+          story: { kind: 'story', storyType: 'body' },
+          type: 'structural',
+          subtype: 'table-insert',
+          author: 'Alice',
+          authorEmail: 'alice@example.com',
+          date: '2026-05-22T04:00:00.000Z',
+          excerpt: 'inserted table',
+          storyLabel: 'Body',
+          storyKind: 'body',
+          anchorKey: 'tc::body::word:structural:2',
+          range: { from: 10, to: 40 },
+        },
+      ],
+    } as never);
+
+    const wrapper = createCommentsWrapper(editor);
+    const result = wrapper.list();
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toEqual(
+      expect.objectContaining({
+        id: 'word:structural:2',
+        trackedChange: true,
+        trackedChangeType: 'insert',
+        trackedChangeDisplayType: 'tableInsert',
+        trackedChangeText: 'inserted table',
+        deletedText: null,
+        trackedChangeAnchorKey: 'tc::body::word:structural:2',
+      }),
+    );
+  });
+
   it('does not add synthetic comments for imported Word tracked changes', () => {
     const editor = makeEditor([]);
     getTrackedChangeIndexMock.mockReturnValue({

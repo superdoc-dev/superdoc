@@ -3808,9 +3808,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
     compression,
-  }: ExportDocxParams = {}): Promise<
-    Blob | Buffer | Record<string, string | null> | string | ConvertedXmlPart | undefined
-  > {
+  }: ExportDocxParams = {}): Promise<Blob | Buffer | Record<string, string | null> | string | ConvertedXmlPart> {
     try {
       const exportHostEditor = resolveMainBodyEditor(this);
       commitLiveStorySessionRuntimes(exportHostEditor);
@@ -4081,6 +4079,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('exception', { error: err, editor: this });
       console.error(err);
+      throw err;
     }
   }
 

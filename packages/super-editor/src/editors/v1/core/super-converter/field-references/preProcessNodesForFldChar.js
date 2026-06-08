@@ -37,6 +37,8 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   let collectedNodesStack = [];
   let rawCollectedNodesStack = [];
   let fieldRunRPrStack = [];
+  let firstInstrTextRunRPrStack = [];
+  let firstInstrTextRunSeenStack = [];
   let currentFieldStack = [];
   let unpairedEnd = null;
   let unpairedEndPreserveRaw = null;
@@ -52,6 +54,8 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       const collectedNodes = collectedNodesStack.pop().filter((n) => n !== null);
       const rawCollectedNodes = rawCollectedNodesStack.pop().filter((n) => n !== null);
       const fieldRunRPr = fieldRunRPrStack.pop() ?? null;
+      const firstInstrTextRunRPr = firstInstrTextRunRPrStack.pop() ?? null;
+      firstInstrTextRunSeenStack.pop();
       const currentField = currentFieldStack.pop();
       let outputNodes = rawCollectedNodes;
       if (!currentField.preserveRaw) {
@@ -61,6 +65,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
           docx,
           currentField.instructionTokens,
           fieldRunRPr,
+          firstInstrTextRunRPr,
         );
         outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
       } else if (currentField.preserveRawConstructive) {
@@ -160,6 +165,8 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       rawNodeSourceTokens.set(rawNode, rawSourceToken);
       capturedRawNodes.add(rawNode);
       fieldRunRPrStack.push(extractFieldRunRPr(node));
+      firstInstrTextRunRPrStack.push(null);
+      firstInstrTextRunSeenStack.push(false);
       currentFieldStack.push({ instrText: '', instructionTokens: [], afterSeparate: false });
       return;
     }
@@ -174,6 +181,10 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
           const fieldRunRPr = extractFieldRunRPr(node);
           if (fieldRunRPr) {
             fieldRunRPrStack[fieldRunRPrStack.length - 1] = fieldRunRPr;
+          }
+          if (instrTextEl && !firstInstrTextRunSeenStack[firstInstrTextRunSeenStack.length - 1]) {
+            firstInstrTextRunSeenStack[firstInstrTextRunSeenStack.length - 1] = true;
+            firstInstrTextRunRPrStack[firstInstrTextRunRPrStack.length - 1] = fieldRunRPr;
           }
           currentField.instructionTokens.push(...instructionTokens);
           const instrTextValue = instrTextEl?.elements?.[0]?.text;
@@ -321,13 +332,26 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
  * @param {import('../v2/docxHelper').ParsedDocx} [docx] - The docx object.
  * @param {Array<{type: string, text?: string}>} [instructionTokens] - Raw instruction tokens.
  * @param {OpenXmlNode | null} [fieldRunRPr] - The w:rPr captured from field sequence runs.
+ * @param {OpenXmlNode | null} [firstInstrTextRunRPr] - The w:rPr captured from the first instrText run.
  * @returns {{ nodes: OpenXmlNode[], handled: boolean }} The processed nodes and whether a preprocessor handled them.
  */
-const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, instructionTokens, fieldRunRPr) => {
+const _processCombinedNodesForFldChar = (
+  nodesToCombine = [],
+  instrText,
+  docx,
+  instructionTokens,
+  fieldRunRPr,
+  firstInstrTextRunRPr,
+) => {
   const instructionPreProcessor = getInstructionPreProcessor(instrText);
   if (instructionPreProcessor) {
     return {
-      nodes: instructionPreProcessor(nodesToCombine, instrText, { docx, instructionTokens, fieldRunRPr }),
+      nodes: instructionPreProcessor(nodesToCombine, instrText, {
+        docx,
+        instructionTokens,
+        fieldRunRPr,
+        firstInstrTextRunRPr,
+      }),
       handled: true,
     };
   }

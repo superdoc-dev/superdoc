@@ -41,7 +41,10 @@ export function clone<T>(value: T): T {
 
 function mergeIgnorableValues(currentValue: string | undefined, sourceValue: string | undefined): string | undefined {
   const merged = [
-    ...new Set([...(currentValue ?? '').split(/\s+/).filter(Boolean), ...(sourceValue ?? '').split(/\s+/).filter(Boolean)]),
+    ...new Set([
+      ...(currentValue ?? '').split(/\s+/).filter(Boolean),
+      ...(sourceValue ?? '').split(/\s+/).filter(Boolean),
+    ]),
   ];
   return merged.length ? merged.join(' ') : undefined;
 }
@@ -128,8 +131,13 @@ function replaceSingleton(stylesEl: XmlElement, name: string, sourceNode: XmlEle
   if (!stylesEl.elements) stylesEl.elements = [];
   const existingSingletons = stylesEl.elements.filter((c) => localName(c) === name);
   const existingIndex = stylesEl.elements.findIndex((c) => localName(c) === name);
-  const desiredIndex = name === 'docDefaults' ? 0 : stylesEl.elements.some((c) => localName(c) === 'docDefaults') ? 1 : 0;
-  if (existingSingletons.length === 1 && existingIndex === desiredIndex && xmlDeepEqual(existingSingletons[0], sourceNode)) {
+  const desiredIndex =
+    name === 'docDefaults' ? 0 : stylesEl.elements.some((c) => localName(c) === 'docDefaults') ? 1 : 0;
+  if (
+    existingSingletons.length === 1 &&
+    existingIndex === desiredIndex &&
+    xmlDeepEqual(existingSingletons[0], sourceNode)
+  ) {
     return false;
   }
 
@@ -176,7 +184,11 @@ export function mergeStylesAuthoritative(currentRoot: XmlElement, sourceRoot: Xm
   if (!curStyles.elements) curStyles.elements = [];
 
   // Singletons.
-  result.docDefaultsAdopted = replaceSingleton(curStyles, 'docDefaults', firstChildByLocalName(srcStyles, 'docDefaults'));
+  result.docDefaultsAdopted = replaceSingleton(
+    curStyles,
+    'docDefaults',
+    firstChildByLocalName(srcStyles, 'docDefaults'),
+  );
   result.latentStylesAdopted = replaceSingleton(
     curStyles,
     'latentStyles',
@@ -250,13 +262,32 @@ function numAttr(el: XmlElement, attr: string): string | undefined {
   return el.attributes?.[attr];
 }
 
+function reorderNumberingChildren(numberingEl: XmlElement): void {
+  if (!numberingEl.elements) return;
+
+  const other: XmlElement[] = [];
+  const abstracts: XmlElement[] = [];
+  const nums: XmlElement[] = [];
+
+  for (const el of numberingEl.elements) {
+    const ln = localName(el);
+    if (ln === 'abstractNum') abstracts.push(el);
+    else if (ln === 'num') nums.push(el);
+    else other.push(el);
+  }
+
+  numberingEl.elements = [...other, ...abstracts, ...nums];
+}
+
 /**
  * Reconcile source numbering into the current numbering as a dependency graph.
  *
  * Imports the source `w:abstractNum` / `w:num` graph, remapping ids that collide
  * with the target's existing ids, and rewires each imported `w:num`'s
  * `w:abstractNumId` to the (possibly remapped) abstract. IDs are preserved when
- * free, remapped only on collision. Target numbering is retained untouched.
+ * free, remapped only on collision. Existing target definitions are retained,
+ * and the merged child list is normalized so non-definition children stay ahead
+ * of `w:abstractNum` / `w:num` entries.
  */
 export function mergeNumberingGraph(currentRoot: XmlElement, sourceRoot: XmlElement): NumberingMergeResult {
   const result: NumberingMergeResult = { numRemap: new Map(), abstractRemap: new Map(), mappings: [] };
@@ -332,6 +363,8 @@ export function mergeNumberingGraph(currentRoot: XmlElement, sourceRoot: XmlElem
     }
     cur.elements.push(next);
   }
+
+  reorderNumberingChildren(cur);
 
   return result;
 }

@@ -30,6 +30,12 @@ describe('buildFontReport', () => {
         loadStatus: 'loaded',
         exportFamily: 'Calibri',
         missing: false,
+        evidence: {
+          evidenceId: 'calibri',
+          policyAction: 'substitute',
+          verdict: 'metric_safe',
+          lineBreakSafe: true,
+        },
       },
     ]);
   });
@@ -228,6 +234,28 @@ describe('buildFaceReport (face-level)', () => {
     expect(bold?.missing).toBe(true); // the bold face failed - reported missing, regular unaffected
   });
 
+  it('hides the internal embedded alias: reports the logical family, but reads status via the alias', () => {
+    const reg = new FaceRegistry();
+    const PHYS = '__superdoc_embedded_3__0_Calibri';
+    reg.setFace(PHYS, '400', 'normal', 'loaded'); // the embedded face is registered under the alias
+    const resolver = createFontResolver();
+    resolver.mapEmbedded('Calibri', PHYS);
+    const [row] = buildFaceReport(
+      [{ logicalFamily: 'Calibri', weight: '400', style: 'normal' }],
+      reg.asRegistry(),
+      resolver,
+    );
+    expect(row).toEqual({
+      logicalFamily: 'Calibri',
+      physicalFamily: 'Calibri', // the real name, NOT __superdoc_embedded_*
+      reason: 'registered_face',
+      loadStatus: 'loaded', // proves the status was looked up via the alias (where the face lives)
+      exportFamily: 'Calibri',
+      missing: false,
+      face: { weight: '400', style: 'normal' },
+    });
+  });
+
   it('Calibri Light face resolves to Carlito (category_fallback) and stays missing though the face loaded', () => {
     const reg = new FaceRegistry();
     reg.setFace('Carlito', '400', 'normal', 'loaded'); // Carlito Regular registered + loaded
@@ -239,5 +267,101 @@ describe('buildFaceReport (face-level)', () => {
     expect(rows[0]?.reason).toBe('category_fallback');
     // The face loaded, but it is a non-metric fallback (wrong weight), so it is still reported missing.
     expect(rows[0]?.missing).toBe(true);
+  });
+});
+
+describe('verdict-aware evidence (rendered substitutes only)', () => {
+  it('Calibri: metric_safe substitute, line-break safe', () => {
+    const reg = new FakeRegistry();
+    reg.statuses.set('Carlito', 'loaded');
+    expect(buildFontReport(['Calibri'], reg.asRegistry())[0].evidence).toEqual({
+      evidenceId: 'calibri',
+      policyAction: 'substitute',
+      verdict: 'metric_safe',
+      lineBreakSafe: true,
+    });
+  });
+
+  it('Calibri Light: category_fallback, visual_only, NOT line-break safe', () => {
+    const reg = new FakeRegistry();
+    reg.statuses.set('Carlito', 'loaded');
+    expect(buildFontReport(['Calibri Light'], reg.asRegistry())[0].evidence).toEqual({
+      evidenceId: 'calibri-light',
+      policyAction: 'category_fallback',
+      verdict: 'visual_only',
+      lineBreakSafe: false,
+    });
+  });
+
+  it('Cambria family: top-level worst-face verdict (visual_only), all glyph exceptions', () => {
+    const reg = new FakeRegistry();
+    reg.statuses.set('Caladea', 'loaded');
+    const ev = buildFontReport(['Cambria'], reg.asRegistry())[0].evidence;
+    expect(ev?.verdict).toBe('visual_only'); // NOT a clean clone, despite reason bundled_substitute
+    expect(ev?.lineBreakSafe).toBe(false);
+    expect(ev?.glyphExceptions).toMatchObject([{ slot: 'boldItalic', codepoint: 0x60 }]);
+  });
+
+  it('Cambria Regular face: per-face metric_safe, and NO unrelated (Bold Italic) glyph exception', () => {
+    const reg = new FaceRegistry();
+    reg.setFace('Caladea', '400', 'normal', 'loaded');
+    const [row] = buildFaceReport(
+      [{ logicalFamily: 'Cambria', weight: '400', style: 'normal' }],
+      reg.asRegistry(),
+    );
+    expect(row.reason).toBe('bundled_substitute');
+    expect(row.evidence).toEqual({
+      evidenceId: 'cambria',
+      policyAction: 'substitute',
+      verdict: 'metric_safe',
+      lineBreakSafe: true,
+    });
+  });
+
+  it('Cambria Bold Italic face: per-face visual_only, includes its grave-accent exception', () => {
+    const reg = new FaceRegistry();
+    reg.setFace('Caladea', '700', 'italic', 'loaded');
+    const [row] = buildFaceReport(
+      [{ logicalFamily: 'Cambria', weight: '700', style: 'italic' }],
+      reg.asRegistry(),
+    );
+    expect(row.reason).toBe('bundled_substitute');
+    expect(row.evidence?.verdict).toBe('visual_only');
+    expect(row.evidence?.lineBreakSafe).toBe(false);
+    expect(row.evidence?.glyphExceptions).toMatchObject([{ slot: 'boldItalic', codepoint: 0x60 }]);
+  });
+
+  it('attaches NO evidence for as_requested / custom_mapping / registered_face / fallback_face_absent', () => {
+    // as_requested: Aptos has no substitute.
+    const fam = new FakeRegistry();
+    fam.statuses.set('Aptos', 'loaded');
+    expect(buildFontReport(['Aptos'], fam.asRegistry())[0].evidence).toBeUndefined();
+
+    // custom_mapping (Regular) + fallback_face_absent (Bold) via a single-face custom map.
+    const face = new FaceRegistry();
+    face.setFace('Gelasio', '400', 'normal', 'loaded');
+    face.setAwaitedFaceStatus('Georgia', '700', 'normal', 'fallback_used');
+    const resolver = createFontResolver();
+    resolver.map('Georgia', 'Gelasio');
+    const rows = buildFaceReport(
+      [
+        { logicalFamily: 'Georgia', weight: '400', style: 'normal' },
+        { logicalFamily: 'Georgia', weight: '700', style: 'normal' },
+      ],
+      face.asRegistry(),
+      resolver,
+    );
+    expect(rows.find((r) => r.reason === 'custom_mapping')?.evidence).toBeUndefined();
+    expect(rows.find((r) => r.reason === 'fallback_face_absent')?.evidence).toBeUndefined();
+
+    // registered_face: a real Calibri face registered for the logical family.
+    const reg2 = new FaceRegistry();
+    reg2.setFace('Calibri', '400', 'normal', 'loaded');
+    const [calRow] = buildFaceReport(
+      [{ logicalFamily: 'Calibri', weight: '400', style: 'normal' }],
+      reg2.asRegistry(),
+    );
+    expect(calRow.reason).toBe('registered_face');
+    expect(calRow.evidence).toBeUndefined();
   });
 });

@@ -127,22 +127,27 @@ const buildClipPathFromSrcRect = (srcRectAttrs = {}) => {
 
 /**
  * Fill wrap.attrs distance fields from wp:anchor dist* when the wrap element omits them.
+ * Only merges sides each wp:wrap* element may carry (ECMA-376 CT_WrapSquare / Tight / Through / TopBottom).
  *
  * @param {{ type: string, attrs: Record<string, unknown> }} wrap
  * @param {{ top?: number, right?: number, bottom?: number, left?: number }} padding
  */
 const mergeAnchorPaddingIntoWrapDistances = (wrap, padding) => {
   if (!wrap?.attrs || !padding) return;
-  if (wrap.attrs.distTop == null && Number.isFinite(padding.top) && padding.top !== 0) {
+  const type = wrap.type;
+  const mergeVertical = type === 'Square' || type === 'TopAndBottom';
+  const mergeHorizontal = type === 'Square' || type === 'Tight' || type === 'Through';
+
+  if (mergeVertical && wrap.attrs.distTop == null && Number.isFinite(padding.top) && padding.top !== 0) {
     wrap.attrs.distTop = padding.top;
   }
-  if (wrap.attrs.distBottom == null && Number.isFinite(padding.bottom) && padding.bottom !== 0) {
+  if (mergeVertical && wrap.attrs.distBottom == null && Number.isFinite(padding.bottom) && padding.bottom !== 0) {
     wrap.attrs.distBottom = padding.bottom;
   }
-  if (wrap.attrs.distLeft == null && Number.isFinite(padding.left) && padding.left !== 0) {
+  if (mergeHorizontal && wrap.attrs.distLeft == null && Number.isFinite(padding.left) && padding.left !== 0) {
     wrap.attrs.distLeft = padding.left;
   }
-  if (wrap.attrs.distRight == null && Number.isFinite(padding.right) && padding.right !== 0) {
+  if (mergeHorizontal && wrap.attrs.distRight == null && Number.isFinite(padding.right) && padding.right !== 0) {
     wrap.attrs.distRight = padding.right;
   }
 };

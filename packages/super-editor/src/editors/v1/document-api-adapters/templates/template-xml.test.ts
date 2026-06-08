@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { findPageOneSectPr, mergeStylesAuthoritative, reconcileSettings, type XmlElement } from './template-xml.js';
+import {
+  findPageOneSectPr,
+  mergeNumberingGraph,
+  mergeStylesAuthoritative,
+  reconcileSettings,
+  type XmlElement,
+} from './template-xml.js';
 
 function makeDocument(bodyElements: XmlElement[]): XmlElement {
   return {
@@ -40,6 +46,18 @@ function makeParagraph(sectPr?: XmlElement): XmlElement {
           },
         ]
       : [],
+  };
+}
+
+function numberingRoot(children: XmlElement[]): XmlElement {
+  return {
+    elements: [
+      {
+        type: 'element',
+        name: 'w:numbering',
+        elements: children,
+      },
+    ],
   };
 }
 
@@ -158,5 +176,54 @@ describe('reconcileSettings', () => {
       'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
       'mc:Ignorable': 'w14',
     });
+  });
+});
+
+describe('mergeNumberingGraph', () => {
+  it('keeps abstract numbering definitions ahead of num definitions after import', () => {
+    const picBullet: XmlElement = {
+      type: 'element',
+      name: 'w:numPicBullet',
+      attributes: { 'w:numPicBulletId': '0' },
+    };
+    const current = numberingRoot([
+      picBullet,
+      {
+        type: 'element',
+        name: 'w:abstractNum',
+        attributes: { 'w:abstractNumId': '1' },
+        elements: [],
+      },
+      {
+        type: 'element',
+        name: 'w:num',
+        attributes: { 'w:numId': '1' },
+        elements: [{ type: 'element', name: 'w:abstractNumId', attributes: { 'w:val': '1' } }],
+      },
+    ]);
+    const source = numberingRoot([
+      {
+        type: 'element',
+        name: 'w:abstractNum',
+        attributes: { 'w:abstractNumId': '2' },
+        elements: [],
+      },
+      {
+        type: 'element',
+        name: 'w:num',
+        attributes: { 'w:numId': '2' },
+        elements: [{ type: 'element', name: 'w:abstractNumId', attributes: { 'w:val': '2' } }],
+      },
+    ]);
+
+    mergeNumberingGraph(current, source);
+
+    expect(current.elements?.[0].elements).toEqual([
+      picBullet,
+      expect.objectContaining({ name: 'w:abstractNum', attributes: { 'w:abstractNumId': '1' } }),
+      expect.objectContaining({ name: 'w:abstractNum', attributes: { 'w:abstractNumId': '2' } }),
+      expect.objectContaining({ name: 'w:num', attributes: { 'w:numId': '1' } }),
+      expect.objectContaining({ name: 'w:num', attributes: { 'w:numId': '2' } }),
+    ]);
   });
 });

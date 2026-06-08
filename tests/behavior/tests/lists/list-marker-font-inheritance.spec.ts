@@ -10,7 +10,7 @@ type MarkerStyle = {
 
 /**
  * Helper: get computed font styles of a list marker by index.
- * DomPainter renders markers as .superdoc-paragraph-marker — CSS is the
+ * DomPainter renders markers as .superdoc-paragraph-marker. CSS is the
  * authoritative source for visual font since the layout engine sets it.
  */
 async function getMarkerStyle(
@@ -33,13 +33,13 @@ test('existing list markers restyle when font family changes (SD-3238)', async (
   await superdoc.selectAll();
   await superdoc.waitForStable();
   await superdoc.page.locator('[data-item="btn-fontFamily"]').click();
-  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Georgia' }).click();
+  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Times New Roman' }).click();
   await superdoc.waitForStable();
 
-  await superdoc.assertTextMarkAttrs('first item', 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('first item', 'textStyle', { fontFamily: 'Times New Roman' });
 
   const firstMarker = await getMarkerStyle(superdoc, 0);
-  expect(firstMarker.fontFamily.toLowerCase()).toContain('georgia');
+  expect(firstMarker.fontFamily.toLowerCase()).toContain('times new roman');
 });
 
 test('existing list markers restyle when font size changes (SD-3238)', async ({ superdoc }) => {
@@ -65,10 +65,10 @@ test('new empty list item marker inherits font from previous paragraph', async (
   await superdoc.selectAll();
   await superdoc.waitForStable();
   await superdoc.page.locator('[data-item="btn-fontFamily"]').click();
-  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Georgia' }).click();
+  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Times New Roman' }).click();
   await superdoc.waitForStable();
 
-  await superdoc.assertTextMarkAttrs('first item', 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('first item', 'textStyle', { fontFamily: 'Times New Roman' });
 
   const pos = await superdoc.findTextPos('second item');
   await superdoc.setTextSelection(pos + 'second item'.length);
@@ -80,12 +80,12 @@ test('new empty list item marker inherits font from previous paragraph', async (
   expect(markerCount).toBe(3);
 
   const newMarker = await getMarkerStyle(superdoc, 2);
-  expect(newMarker.fontFamily.toLowerCase()).toContain('georgia');
+  expect(newMarker.fontFamily.toLowerCase()).toContain('times new roman');
 });
 
 test('existing list markers restyle after toggle-list flow with pre-typed font (SD-3238)', async ({ superdoc }) => {
   await superdoc.page.locator('[data-item="btn-fontFamily"]').click();
-  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Georgia' }).click();
+  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Times New Roman' }).click();
   await superdoc.waitForStable();
   await superdoc.page.locator('[data-item="btn-fontSize"]').click();
   await superdoc.page.locator('[data-item="btn-fontSize-option"]').filter({ hasText: '30' }).click();

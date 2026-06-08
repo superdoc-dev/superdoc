@@ -25,6 +25,7 @@ vi.mock('@superdoc/style-engine/ooxml', () => ({
 }));
 
 import { pageReferenceNodeToBlock } from './page-reference.js';
+import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 
 function makeParams(
   attrs: Record<string, unknown>,
@@ -94,5 +95,81 @@ describe('pageReferenceNodeToBlock', () => {
     // just like `\h`.
     const run = pageReferenceNodeToBlock(makeParams({ instruction: 'PAGEREF _Toc123 \\H' })) as TextRun | undefined;
     expect(run!.link?.anchor).toBe('_Toc123');
+  });
+
+  it('falls back to parsing legacy instructions when boolean attrs contain schema defaults', () => {
+    const run = pageReferenceNodeToBlock(
+      makeParams({
+        instruction: 'PAGEREF _Toc123 \\h \\p',
+        hasHyperlinkSwitch: false,
+        hasRelativePositionSwitch: false,
+      }),
+    ) as TextRun | undefined;
+
+    expect(run!.link?.anchor).toBe('_Toc123');
+    expect(run!.pageRefMetadata?.relativePosition).toBe(true);
+  });
+
+  it('uses captured instruction run properties for CHARFORMAT fields', () => {
+    const fieldRunProperties = { bold: true, color: 'FF0000' };
+    vi.mocked(resolveRunProperties).mockClear();
+    pageReferenceNodeToBlock(
+      makeParams(
+        {
+          instruction: 'PAGEREF _Toc123 \\* CHARFORMAT',
+          fieldResultFormat: 'charformat',
+          fieldRunProperties,
+        },
+        {
+          node: {
+            type: 'pageReference',
+            attrs: {
+              instruction: 'PAGEREF _Toc123 \\* CHARFORMAT',
+              fieldResultFormat: 'charformat',
+              fieldRunProperties,
+            },
+            content: [
+              {
+                type: 'run',
+                attrs: { runProperties: { italic: true } },
+                content: [{ type: 'text', text: '15' } as PMNode],
+              } as PMNode,
+            ],
+          },
+        },
+      ),
+    );
+
+    expect(vi.mocked(resolveRunProperties).mock.calls.at(-1)?.[1]).toBe(fieldRunProperties);
+  });
+
+  it('preserves PM source positions from the pageReference node', () => {
+    const node: PMNode = {
+      type: 'pageReference',
+      attrs: { instruction: 'PAGEREF _Toc123' },
+      content: [{ type: 'text', text: '15' } as PMNode],
+    };
+    const positions = new WeakMap<PMNode, { start: number; end: number }>();
+    positions.set(node, { start: 42, end: 48 });
+
+    const run = pageReferenceNodeToBlock(makeParams({}, { node, positions })) as TextRun | undefined;
+
+    expect(run?.pmStart).toBe(42);
+    expect(run?.pmEnd).toBe(48);
+  });
+
+  it('sets PAGEREF formatting metadata from typed attrs', () => {
+    const pageNumberFieldFormat = { format: 'upperRoman' as const };
+    const numericPictureFormat = { picture: '00' };
+    const run = pageReferenceNodeToBlock(
+      makeParams({
+        instruction: 'PAGEREF _Toc123',
+        pageNumberFieldFormat,
+        numericPictureFormat,
+      }),
+    ) as TextRun | undefined;
+
+    expect(run?.pageRefMetadata?.pageNumberFieldFormat).toBe(pageNumberFieldFormat);
+    expect(run?.pageRefMetadata?.numericPictureFormat).toBe(numericPictureFormat);
   });
 });

@@ -4,6 +4,10 @@
  * Handles two-pass layout for dynamic cross-reference resolution:
  * - Pass 1: Build anchor map (bookmark → page number)
  * - Pass 2: Resolve pageReference tokens and re-measure affected paragraphs
+ *
+ * Superseded by resolve-stage PAGEREF handling in @superdoc/layout-resolved.
+ * SD-3007 follow-up: remove this legacy scan once step 12 consolidates the
+ * interim anchor-map implementations.
  */
 
 import type { Layout, FlowBlock, ParagraphBlock } from '@superdoc/contracts';

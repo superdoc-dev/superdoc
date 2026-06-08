@@ -917,7 +917,15 @@ function materializeTab(schema: Schema): ProseMirrorNode {
 }
 
 function materializeLineBreak(schema: Schema): ProseMirrorNode {
-  const nodeType = schema.nodes.hardBreak ?? schema.nodes.lineBreak;
+  // A `kind: 'lineBreak'` item is a soft break and must materialize to `lineBreak`
+  // (exports `<w:br/>`), not `hardBreak` (exports `<w:br w:type="page"/>`, a page
+  // break). Block-level page breaks use the distinct `kind: 'break'` path.
+  // KNOWN AMBIGUITY: structural projection (sd-projection) maps BOTH hardBreak
+  // and lineBreak to `kind: 'lineBreak'` with no discriminator, so a structural
+  // read/write echo of an *inline* page break is demoted to a soft break here.
+  // That projection ambiguity predates this change and needs a discriminator to
+  // round-trip inline page breaks (separate follow-up).
+  const nodeType = schema.nodes.lineBreak ?? schema.nodes.hardBreak;
   if (!nodeType) return schema.text('\n');
   return nodeType.create();
 }

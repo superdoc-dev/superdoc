@@ -31,11 +31,18 @@ class FakeFontFace implements FontFaceLike {
 /** Controllable FontFaceSet stand-in: per-family behavior + manual availability. */
 class FakeFontSet implements FontSetLike {
   readonly added: FontFaceLike[] = [];
+  readonly removed: FontFaceLike[] = [];
   readonly behaviors = new Map<string, Behavior>();
   readonly available = new Set<string>();
 
   add(face: FontFaceLike): void {
     this.added.push(face);
+  }
+  delete(face: FontFaceLike): boolean {
+    this.removed.push(face);
+    const i = this.added.indexOf(face);
+    if (i >= 0) this.added.splice(i, 1);
+    return i >= 0;
   }
   load(font: string): Promise<FontFaceLike[]> {
     const family = parseFamily(font);
@@ -305,6 +312,99 @@ describe('FontRegistry face-aware APIs', () => {
     const res = await registry.awaitFaceRequest({ family: 'Broken', weight: '400', style: 'normal' }, 1000);
     expect(res.status).toBe('failed');
     expect(registry.getStatus('Broken')).toBe('failed');
+  });
+});
+
+describe('FontRegistry.registerOwnedFace (document-scoped embedded fonts)', () => {
+  it('registers a binary face that hasFace sees, and its disposer removes exactly that face', () => {
+    const fontSet = new FakeFontSet();
+    const { registry } = makeRegistry(fontSet);
+    // Two embedded faces of one family (binary) + an unrelated bundled/customer (URL) face.
+    const releaseReg = registry.registerOwnedFace({
+      family: 'EmbeddedCalibri',
+      source: new ArrayBuffer(8),
+      weight: '400',
+      style: 'normal',
+    });
+    registry.registerOwnedFace({
+      family: 'EmbeddedCalibri',
+      source: new ArrayBuffer(8),
+      weight: '700',
+      style: 'normal',
+    });
+    registry.register({ family: 'Carlito', source: 'url(carlito.woff2)' });
+
+    expect(registry.hasFace('EmbeddedCalibri', '400', 'normal')).toBe(true); // registered_face oracle sees it
+    expect(releaseReg).toBeTypeOf('function');
+
+    expect(releaseReg?.()).toBe(true);
+    expect(registry.hasFace('EmbeddedCalibri', '400', 'normal')).toBe(false); // released
+    expect(registry.hasFace('EmbeddedCalibri', '700', 'normal')).toBe(true); // sibling face untouched
+    expect(registry.hasFace('Carlito', '400', 'normal')).toBe(true); // other family untouched
+    expect(fontSet.removed).toHaveLength(1); // exactly one face deleted from the set
+
+    // A second release is a no-op (idempotent disposer): no further removal.
+    expect(releaseReg?.()).toBe(false);
+    expect(fontSet.removed).toHaveLength(1);
+  });
+
+  it('clears family-level state only when the last owned face is released', () => {
+    const fontSet = new FakeFontSet();
+    const { registry } = makeRegistry(fontSet);
+    const r400 = registry.registerOwnedFace({
+      family: 'Doc',
+      source: new ArrayBuffer(8),
+      weight: '400',
+      style: 'normal',
+    });
+    const r700 = registry.registerOwnedFace({
+      family: 'Doc',
+      source: new ArrayBuffer(8),
+      weight: '700',
+      style: 'normal',
+    });
+
+    r400?.();
+    expect(registry.isManaged('Doc')).toBe(true); // 700 still there
+    r700?.();
+    expect(registry.isManaged('Doc')).toBe(false); // family fully released
+    expect(registry.hasFace('Doc', '700', 'normal')).toBe(false);
+  });
+
+  it('keeps a shared key alive while another owner (a second document) still holds it', () => {
+    // The registry is shared per FontFaceSet, so two documents can each register the SAME
+    // family|weight|style. Releasing one document's face must NOT drop the other's.
+    const fontSet = new FakeFontSet();
+    const { registry } = makeRegistry(fontSet);
+    const releaseDocA = registry.registerOwnedFace({
+      family: 'Calibri',
+      source: new ArrayBuffer(8),
+      weight: '400',
+      style: 'normal',
+    });
+    const releaseDocB = registry.registerOwnedFace({
+      family: 'Calibri',
+      source: new ArrayBuffer(16),
+      weight: '400',
+      style: 'normal',
+    });
+    expect(fontSet.added).toHaveLength(2); // two distinct faces (binary is never de-duped)
+
+    expect(releaseDocA?.()).toBe(true);
+    expect(registry.hasFace('Calibri', '400', 'normal')).toBe(true); // doc B's face still provides it
+    expect(fontSet.removed).toHaveLength(1);
+
+    expect(releaseDocB?.()).toBe(true);
+    expect(registry.hasFace('Calibri', '400', 'normal')).toBe(false); // last owner gone
+    expect(fontSet.removed).toHaveLength(2);
+  });
+
+  it('returns null with no FontFace constructor / font set (embedded bytes cannot render)', () => {
+    const registry = new FontRegistry({});
+    expect(
+      registry.registerOwnedFace({ family: 'X', source: new ArrayBuffer(8), weight: '400', style: 'normal' }),
+    ).toBeNull();
+    expect(registry.hasFace('X', '400', 'normal')).toBe(false); // resolver falls through to the bundled substitute
   });
 });
 

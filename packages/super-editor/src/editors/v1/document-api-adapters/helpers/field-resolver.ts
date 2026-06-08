@@ -56,7 +56,14 @@ const SYNTHETIC_FIELD_NODE_TYPES: Record<
   string,
   { fieldType: string; instruction: string; resolveInstruction?: (node: ProseMirrorNode) => string }
 > = {
-  'total-page-number': { fieldType: 'NUMPAGES', instruction: 'NUMPAGES' },
+  'total-page-number': {
+    fieldType: 'NUMPAGES',
+    instruction: 'NUMPAGES',
+    resolveInstruction: (node) =>
+      typeof node.attrs?.instruction === 'string' && node.attrs.instruction.trim()
+        ? node.attrs.instruction
+        : 'NUMPAGES',
+  },
   'section-page-count': {
     fieldType: 'SECTIONPAGES',
     instruction: 'SECTIONPAGES',
@@ -112,7 +119,10 @@ export function findAllFields(doc: ProseMirrorNode): ResolvedField[] {
     blockOccurrenceCounters.set(blockId, counter + 1);
 
     const fieldType = extractFieldType(instruction);
-    const resolvedText = (node.attrs?.resolvedText as string) ?? '';
+    const resolvedText =
+      node.type.name === 'sequenceField'
+        ? ((node.attrs?.resolvedNumber as string) ?? '')
+        : ((node.attrs?.resolvedText as string) ?? '');
 
     results.push({
       pos,

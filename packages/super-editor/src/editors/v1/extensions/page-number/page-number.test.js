@@ -318,6 +318,25 @@ describe('AutoPageNumberNodeView', () => {
     expect(nodeView.dom.getAttribute('data-id')).toBe('auto-total-pages');
   });
 
+  it('renders formatted total page count node in edit mode', () => {
+    const doc = {
+      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+    };
+    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const state = { doc, tr };
+    const editor = {
+      options: { totalPageCount: 12, parentEditor: { currentTotalPages: 12 } },
+      state,
+      view: { state, dispatch: vi.fn() },
+    };
+
+    const node = { type: { name: 'total-page-number' }, attrs: { pageNumberNumericPicture: '000' } };
+    const nodeView = new AutoPageNumberNodeView(node, () => 7, [], editor);
+
+    expect(nodeView.dom.textContent).toBe('012');
+  });
+
   it('renders formatted section page count node', () => {
     const doc = {
       resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),

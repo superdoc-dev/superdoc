@@ -72,6 +72,9 @@ import type {
   ContentControlFocusResult,
   ViewportRect,
   ViewportRectResult,
+  ZoomHandle,
+  ZoomMode,
+  ZoomSlice,
 } from './types.js';
 
 /**
@@ -110,7 +113,7 @@ const EDITOR_EVENTS = [
  */
 const LIST_REFRESH_EVENTS = ['commentsUpdate', 'commentsLoaded', 'tracked-changes-changed'] as const;
 
-const SUPERDOC_EVENTS = ['editorCreate', 'document-mode-change', 'zoomChange'] as const;
+const SUPERDOC_EVENTS = ['editorCreate', 'document-mode-change', 'zoomChange', 'viewport-change'] as const;
 
 /**
  * Presentation-editor events the controller listens to. These signal
@@ -701,6 +704,64 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
    * either field, but they do trigger computeState rebuilds).
    */
   let documentMemo: { slice: DocumentSlice } | null = null;
+  let zoomMemo: { slice: ZoomSlice } | null = null;
+
+  // Static fallback for hosts without the zoom surface (older builds,
+  // minimal stubs): manual mode at 100% with no metrics.
+  const FALLBACK_ZOOM_SLICE: ZoomSlice = Object.freeze({
+    mode: 'manual',
+    value: 100,
+    fitZoom: null,
+    min: 10,
+    max: 100,
+    metrics: null,
+  });
+
+  // Read the host zoom state + metrics into one slice. Memoized on the
+  // field values. Metrics compare by reference, which is equivalent to a
+  // field-wise compare because the host's viewport-fit store replaces the
+  // (frozen) metrics object only when a field actually changed; if that
+  // invariant moves, switch this to field-wise. `shallowEqual` on
+  // `state.zoom` then short-circuits `ui.zoom.observe` while nothing
+  // zoom-related changes.
+  const computeZoomSlice = (): ZoomSlice => {
+    if (typeof superdoc.getZoomState !== 'function') return FALLBACK_ZOOM_SLICE;
+    let state: ReturnType<NonNullable<typeof superdoc.getZoomState>> | null = null;
+    try {
+      state = superdoc.getZoomState();
+    } catch {
+      state = null;
+    }
+    if (!state) return FALLBACK_ZOOM_SLICE;
+    let metrics: ZoomSlice['metrics'] = null;
+    try {
+      metrics = superdoc.getViewportMetrics?.() ?? null;
+    } catch {
+      metrics = null;
+    }
+    const prev = zoomMemo?.slice;
+    if (
+      prev &&
+      prev.mode === state.mode &&
+      prev.value === state.value &&
+      prev.fitZoom === state.fitZoom &&
+      prev.min === state.min &&
+      prev.max === state.max &&
+      prev.metrics === metrics
+    ) {
+      return prev;
+    }
+    const slice: ZoomSlice = {
+      mode: state.mode,
+      value: state.value,
+      fitZoom: state.fitZoom,
+      min: state.min,
+      max: state.max,
+      metrics,
+    };
+    zoomMemo = { slice };
+    return slice;
+  };
 
   /**
    * Internal dirty flag. Flipped to `true` by any editor transaction
@@ -937,6 +998,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       documentMode,
       document: documentSlice,
       selection: selectionSlice,
+      zoom: computeZoomSlice(),
       toolbar: { context: toolbarSnapshot.context, commands: builtInCommands } as ToolbarSnapshotSlice,
       comments: {
         total: commentsListCache.total,
@@ -1034,7 +1096,21 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
   // zoomChange fires *before* the re-render, so notifying then would hand
   // consumers stale rects. Tag the next post-paint layout flush as 'zoom'.
-  const onGeometryZoom = () => {
+  // Only a changed VALUE schedules a repaint; mode-only transitions
+  // (setZoomMode with an unchanged value) would latch a tag no flush ever
+  // consumes, mis-labeling the next unrelated layout notification.
+  let lastGeometryZoomValue: number | null = (() => {
+    try {
+      return superdoc.getZoomState?.().value ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  const onGeometryZoom = (...args: unknown[]) => {
+    const payload = args[0] as { zoom?: number } | undefined;
+    const nextZoom = typeof payload?.zoom === 'number' ? payload.zoom : null;
+    if (nextZoom !== null && nextZoom === lastGeometryZoomValue) return;
+    lastGeometryZoomValue = nextZoom;
     zoomPending = true;
   };
   const onGeometryLayout = () => {
@@ -2328,6 +2404,42 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
   };
 
+  // ---- ui.zoom -----------------------------------------------------------
+  // One slice for zoom UIs (mode, value, fit zoom, bounds, metrics) plus
+  // the two mutations. Recomputes on the host's zoomChange (which now
+  // includes mode-only transitions) and viewport-change events; both are
+  // in SUPERDOC_EVENTS.
+  const zoom: ZoomHandle = {
+    getSnapshot: () => computeState().zoom,
+    observe(listener) {
+      return select((state) => state.zoom, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener(snapshot);
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    set(percent: number) {
+      const setter = superdoc.setZoom;
+      if (typeof setter !== 'function') return;
+      try {
+        setter.call(superdoc, percent);
+      } catch (err) {
+        console.error('[superdoc/ui] ui.zoom.set failed:', err);
+      }
+    },
+    setMode(mode: ZoomMode) {
+      const setter = superdoc.setZoomMode;
+      if (typeof setter !== 'function') return;
+      try {
+        setter.call(superdoc, mode);
+      } catch (err) {
+        console.error('[superdoc/ui] ui.zoom.setMode failed:', err);
+      }
+    },
+  };
+
   // Live scopes created via `ui.createScope()`. The controller's
   // `destroy()` cascades into every entry before tearing down its own
   // resources, so consumers do not need to call `scope.destroy()`
@@ -2597,6 +2709,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     selection,
     viewport,
     document,
+    zoom,
     createScope: createScopeFn,
     destroy,
   };

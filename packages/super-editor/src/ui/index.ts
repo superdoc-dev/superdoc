@@ -148,4 +148,8 @@ export type {
   DocumentExportInput,
   DocumentHandle,
   DocumentSlice,
+  ZoomHandle,
+  ZoomMode,
+  ZoomSlice,
+  ZoomViewportMetrics,
 } from './types.js';

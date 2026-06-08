@@ -187,6 +187,19 @@ await ui.document.export({ exportType: ['docx'], commentsType: 'external', trigg
 await ui.document.replaceFile(file);
 ```
 
+### `ui.zoom`
+
+Zoom state, viewport metrics, and the two mutations. The snapshot updates on value changes, mode-only transitions, and viewport metric updates.
+
+```ts
+ui.zoom.getSnapshot();          // { mode, value, fitZoom, min, max, metrics }
+ui.zoom.observe((snapshot) => {});
+ui.zoom.set(125);               // numeric zoom; switches the host to manual mode
+ui.zoom.setMode('fit-width');   // continuous fit to the available width
+```
+
+In React, `useSuperDocZoom()` returns the same snapshot plus bound `set` / `setMode` actions. The toolbar registry also exposes a `zoom-fit-width` toggle command for custom toolbars.
+
 ### `ui.selection`
 
 Live slice, capture, restore, painted geometry.

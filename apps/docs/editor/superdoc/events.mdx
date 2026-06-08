@@ -440,12 +440,12 @@ superdoc.on('pagination-update', ({ totalPages, superdoc }) => {
 
 ### `zoomChange`
 
-When the zoom level changes via `setZoom()`.
+When the zoom level changes, from any source: `setZoom()`, the toolbar zoom control, or [`fit-width` mode](/editor/superdoc/configuration#param-zoom). The payload carries the value and the mode that produced it. Also available as the `onZoomChange` config callback.
 
 <CodeGroup>
 ```javascript Usage
-superdoc.on('zoomChange', ({ zoom }) => {
-  console.log(`Zoom: ${zoom}%`);
+superdoc.on('zoomChange', ({ zoom, mode }) => {
+  console.log(`Zoom: ${zoom}% (${mode})`);
 });
 ```
 
@@ -458,8 +458,41 @@ const superdoc = new SuperDoc({
   document: yourFile,
 });
 
-superdoc.on('zoomChange', ({ zoom }) => {
-  console.log(`Zoom: ${zoom}%`);
+superdoc.on('zoomChange', ({ zoom, mode }) => {
+  console.log(`Zoom: ${zoom}% (${mode})`);
+});
+```
+</CodeGroup>
+
+### `viewport-change`
+
+When the fit-width calculation changes. Pixel-level width changes that do not affect the rounded fit are deduped. `getViewportMetrics()` always reads the latest measurements.
+
+- `availableWidth` - container width in pixels, minus the comments sidebar when visible
+- `documentWidth` - the widest document page width in pixels at 100% zoom (zoom-independent; DOCX from laid-out pages with page-styles fallback, PDF from rendered pages)
+- `fitZoom` - the unclamped zoom percentage that fits the page into the available width
+
+HTML documents reflow to the container, so an HTML-only instance reports no metrics.
+
+For most use cases, prefer [`zoom.mode: 'fit-width'`](/editor/superdoc/configuration#param-zoom). Subscribe to this event only when you want to apply custom zoom behavior.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('viewport-change', ({ fitZoom }) => {
+  superdoc.setZoom(Math.min(100, Math.max(35, fitZoom)));
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onViewportChange: ({ availableWidth, documentWidth, fitZoom }) => {
+    console.log(`Need ${fitZoom}% to fit ${documentWidth}px into ${availableWidth}px`);
+  },
 });
 ```
 </CodeGroup>

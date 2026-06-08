@@ -20,9 +20,15 @@ import type {
   ListBlock,
   ParagraphBlock,
   ParagraphMeasure,
+  TableMeasure,
   LayoutStoryLocator,
+  LineSegment,
+  PageRefLocation,
+  Run,
+  TableBlock,
+  TextRun,
 } from '@superdoc/contracts';
-import { getSdtContainerKey } from '@superdoc/contracts';
+import { buildPageRefAnchorMap, getSdtContainerKey } from '@superdoc/contracts';
 import { resolveParagraphContent } from './resolveParagraph.js';
 import { resolveTableItem } from './resolveTable.js';
 import { resolveImageItem } from './resolveImage.js';
@@ -35,6 +41,7 @@ import {
   resolveFragmentLayoutIdentity,
   sourceAnchorSignature,
 } from './versionSignature.js';
+import { resolvePageRefText } from './resolvePageRefText.js';
 
 export type ResolveLayoutInput = {
   layout: Layout;
@@ -47,6 +54,7 @@ export type ResolveLayoutInput = {
    * epoch). Omitted/'' for default documents, leaving the version unchanged from before.
    */
   fontSignature?: string;
+  bookmarks?: Map<string, number>;
 };
 
 export function buildBlockMap(blocks: FlowBlock[], measures: Measure[]): Map<string, BlockMapEntry> {
@@ -55,6 +63,267 @@ export function buildBlockMap(blocks: FlowBlock[], measures: Measure[]): Map<str
     map.set(blocks[i].id, { block: blocks[i], measure: measures[i] });
   }
   return map;
+}
+
+type PageRefResolutionContext = {
+  sourcePage: number;
+  anchorMap?: Map<string, PageRefLocation>;
+};
+
+type ParagraphPageRefResolution = {
+  block: ParagraphBlock;
+  fragment: ParaFragment;
+  changed: boolean;
+};
+
+type ResolvedPageRefRunText = {
+  text: string;
+  originalLength: number;
+};
+
+function resolveParagraphPageRefs(
+  fragment: ParaFragment,
+  block: ParagraphBlock,
+  measure: ParagraphMeasure,
+  context?: PageRefResolutionContext,
+): ParagraphPageRefResolution {
+  const runTexts = collectResolvedPageRefRunTexts(block, context);
+
+  if (runTexts.size === 0) {
+    return { block, fragment, changed: false };
+  }
+
+  const nextRuns = resolvePageRefRuns(block, runTexts);
+  const sourceLines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
+  const nextLines = sourceLines.map((line) => adjustLineForResolvedPageRefs(line, runTexts));
+
+  return {
+    block: { ...block, runs: nextRuns },
+    fragment: { ...fragment, lines: nextLines },
+    changed: true,
+  };
+}
+
+function resolveParagraphPageRefBlock(
+  block: ParagraphBlock,
+  measure?: ParagraphMeasure,
+  context?: PageRefResolutionContext,
+): { block: ParagraphBlock; measure?: ParagraphMeasure; changed: boolean } {
+  const runTexts = collectResolvedPageRefRunTexts(block, context);
+  if (runTexts.size === 0) return { block, changed: false };
+  return {
+    block: { ...block, runs: resolvePageRefRuns(block, runTexts) },
+    measure: measure
+      ? { ...measure, lines: measure.lines.map((line) => adjustLineForResolvedPageRefs(line, runTexts)) }
+      : undefined,
+    changed: true,
+  };
+}
+
+function collectResolvedPageRefRunTexts(
+  block: ParagraphBlock,
+  context?: PageRefResolutionContext,
+): Map<number, ResolvedPageRefRunText> {
+  const runTexts = new Map<number, ResolvedPageRefRunText>();
+  if (!context?.anchorMap?.size) return runTexts;
+
+  block.runs.forEach((run, index) => {
+    if (!isPageReferenceTextRun(run)) return;
+    const target = context.anchorMap?.get(run.pageRefMetadata.bookmarkId);
+    if (!target) return;
+    const resolvedText = resolvePageRefText({
+      sourcePage: context.sourcePage,
+      sourcePmPosition: run.pmStart,
+      target,
+      metadata: run.pageRefMetadata,
+    });
+    if (resolvedText !== run.text) {
+      runTexts.set(index, { text: resolvedText, originalLength: run.text.length });
+    }
+  });
+
+  return runTexts;
+}
+
+function resolvePageRefRuns(
+  block: ParagraphBlock,
+  runTexts: Map<number, ResolvedPageRefRunText>,
+): ParagraphBlock['runs'] {
+  return block.runs.map((run, index) =>
+    runTexts.has(index) && isTextRun(run) ? { ...run, text: runTexts.get(index)!.text } : run,
+  );
+}
+
+function resolveTablePageRefs(
+  block: TableBlock,
+  measure?: TableMeasure,
+  context?: PageRefResolutionContext,
+): { block: TableBlock; measure?: TableMeasure; changed: boolean } {
+  if (!context?.anchorMap?.size) return { block, changed: false };
+
+  let changed = false;
+  let measureChanged = false;
+  const measureRows = measure?.rows.slice();
+  const rows = block.rows.map((row, rowIndex) => {
+    let rowChanged = false;
+    const measureRow = measureRows?.[rowIndex];
+    const measureCells = measureRow?.cells.slice();
+    const cells = row.cells.map((cell, cellIndex) => {
+      let cellChanged = false;
+      let nextParagraph = cell.paragraph;
+      let nextCellMeasure = measureCells?.[cellIndex];
+      if (cell.paragraph) {
+        const resolved = resolveParagraphPageRefBlock(cell.paragraph, nextCellMeasure?.paragraph, context);
+        nextParagraph = resolved.block;
+        if (resolved.measure && nextCellMeasure) {
+          nextCellMeasure = { ...nextCellMeasure, paragraph: resolved.measure };
+        }
+        cellChanged ||= resolved.changed;
+      }
+
+      let nextBlocks = cell.blocks;
+      let nextBlockMeasures = nextCellMeasure?.blocks;
+      if (cell.blocks) {
+        nextBlocks = cell.blocks.map((childBlock, childIndex) => {
+          const childMeasure = nextBlockMeasures?.[childIndex];
+          if (childBlock.kind === 'paragraph') {
+            const resolved = resolveParagraphPageRefBlock(
+              childBlock,
+              childMeasure?.kind === 'paragraph' ? (childMeasure as ParagraphMeasure) : undefined,
+              context,
+            );
+            if (resolved.measure && nextBlockMeasures) {
+              nextBlockMeasures = nextBlockMeasures.slice();
+              nextBlockMeasures[childIndex] = resolved.measure;
+            }
+            cellChanged ||= resolved.changed;
+            return resolved.block;
+          }
+          if (childBlock.kind === 'table') {
+            const resolved = resolveTablePageRefs(
+              childBlock,
+              childMeasure?.kind === 'table' ? (childMeasure as TableMeasure) : undefined,
+              context,
+            );
+            if (resolved.measure && nextBlockMeasures) {
+              nextBlockMeasures = nextBlockMeasures.slice();
+              nextBlockMeasures[childIndex] = resolved.measure;
+            }
+            cellChanged ||= resolved.changed;
+            return resolved.block;
+          }
+          return childBlock;
+        });
+      }
+
+      if (!cellChanged) return cell;
+      rowChanged = true;
+      if (nextCellMeasure && measureCells) {
+        if (nextBlockMeasures && nextBlockMeasures !== nextCellMeasure.blocks) {
+          nextCellMeasure = { ...nextCellMeasure, blocks: nextBlockMeasures };
+        }
+        measureCells[cellIndex] = nextCellMeasure;
+        measureChanged = true;
+      }
+      return {
+        ...cell,
+        ...(nextParagraph ? { paragraph: nextParagraph } : {}),
+        ...(nextBlocks ? { blocks: nextBlocks } : {}),
+      };
+    });
+
+    if (!rowChanged) return row;
+    changed = true;
+    if (measureRow && measureCells && measureCells !== measureRow.cells) {
+      measureRows![rowIndex] = { ...measureRow, cells: measureCells };
+    }
+    return { ...row, cells };
+  });
+
+  return changed
+    ? {
+        block: { ...block, rows },
+        measure: measure && measureChanged && measureRows ? { ...measure, rows: measureRows } : measure,
+        changed: true,
+      }
+    : { block, changed: false };
+}
+
+function resolveListItemPageRefs(
+  block: ListBlock,
+  itemId: string,
+  measure?: ListMeasure,
+  context?: PageRefResolutionContext,
+): { block: ListBlock; measure?: ListMeasure; changed: boolean } {
+  if (!context?.anchorMap?.size) return { block, changed: false };
+
+  let changed = false;
+  let measureChanged = false;
+  const measureItems = measure?.items.slice();
+  const items = block.items.map((item) => {
+    if (item.id !== itemId) return item;
+    const itemMeasureIndex = measureItems?.findIndex((candidate) => candidate.itemId === itemId) ?? -1;
+    const itemMeasure = itemMeasureIndex >= 0 ? measureItems?.[itemMeasureIndex] : undefined;
+    const resolved = resolveParagraphPageRefBlock(item.paragraph, itemMeasure?.paragraph, context);
+    if (!resolved.changed) return item;
+    if (resolved.measure && itemMeasure && measureItems) {
+      measureItems[itemMeasureIndex] = { ...itemMeasure, paragraph: resolved.measure };
+      measureChanged = true;
+    }
+    changed = true;
+    return { ...item, paragraph: resolved.block };
+  });
+
+  return changed
+    ? {
+        block: { ...block, items },
+        measure: measure && measureChanged && measureItems ? { ...measure, items: measureItems } : measure,
+        changed: true,
+      }
+    : { block, changed: false };
+}
+
+function isTextRun(run: Run): run is TextRun {
+  return (run.kind === 'text' || run.kind === undefined) && 'text' in run;
+}
+
+function isPageReferenceTextRun(
+  run: Run,
+): run is TextRun & { pageRefMetadata: NonNullable<TextRun['pageRefMetadata']> } {
+  return isTextRun(run) && run.token === 'pageReference' && run.pageRefMetadata != null;
+}
+
+function adjustLineForResolvedPageRefs(line: Line, runTexts: Map<number, ResolvedPageRefRunText>): Line {
+  let changed = false;
+  const nextLine: Line = { ...line };
+
+  for (const [runIndex, resolved] of runTexts) {
+    if (runIndex < line.fromRun || runIndex > line.toRun) continue;
+    changed = true;
+    if (line.fromRun === runIndex) nextLine.fromChar = clampResolvedRunBoundary(line.fromChar, resolved);
+    if (line.toRun === runIndex) nextLine.toChar = clampResolvedRunBoundary(line.toChar, resolved);
+  }
+
+  if (line.segments?.length) {
+    const segments = line.segments.map((segment) => {
+      const resolved = runTexts.get(segment.runIndex);
+      if (resolved == null) return segment;
+      changed = true;
+      return {
+        ...segment,
+        fromChar: clampResolvedRunBoundary(segment.fromChar, resolved),
+        toChar: clampResolvedRunBoundary(segment.toChar, resolved),
+      } satisfies LineSegment;
+    });
+    nextLine.segments = segments;
+  }
+
+  return changed ? nextLine : line;
+}
+
+function clampResolvedRunBoundary(offset: number, resolved: ResolvedPageRefRunText): number {
+  if (offset === resolved.originalLength) return resolved.text.length;
+  return Math.min(offset, resolved.text.length);
 }
 
 function sumLineHeights(lines: Line[], from: number, to: number): number {
@@ -133,13 +402,23 @@ function resolveFragmentId(fragment: Fragment): string {
 function resolveParagraphContentIfApplicable(
   fragment: Fragment,
   blockMap: Map<string, BlockMapEntry>,
+  pageRefContext?: PageRefResolutionContext,
 ): ResolvedParagraphContent | undefined {
   if (fragment.kind !== 'para') return undefined;
 
   const entry = blockMap.get(fragment.blockId);
   if (!entry || entry.block.kind !== 'paragraph' || entry.measure.kind !== 'paragraph') return undefined;
 
-  return resolveParagraphContent(fragment, entry.block as ParagraphBlock, entry.measure as ParagraphMeasure);
+  const paragraphBlock = entry.block as ParagraphBlock;
+  const paragraphMeasure = entry.measure as ParagraphMeasure;
+  const resolvedPageRefs = resolveParagraphPageRefs(
+    fragment as ParaFragment,
+    paragraphBlock,
+    paragraphMeasure,
+    pageRefContext,
+  );
+
+  return resolveParagraphContent(resolvedPageRefs.fragment, resolvedPageRefs.block, paragraphMeasure);
 }
 
 function resolveFragmentParagraphBorders(
@@ -201,10 +480,14 @@ function computeBlockVersion(
   // Prepend the document's font-mapping signature so a `fonts.map` change busts paint reuse the
   // same way a font load (getFontConfigVersion, folded inside deriveBlockVersion) does. The cache
   // is per resolveLayout pass, so the signature is constant here; '' leaves the version unchanged.
-  const version = deriveBlockVersion(entry.block);
-  const versioned = fontSignature ? `${fontSignature}|${version}` : version;
+  const versioned = deriveFontAwareBlockVersion(entry.block, fontSignature);
   cache.set(blockId, versioned);
   return versioned;
+}
+
+function deriveFontAwareBlockVersion(block: FlowBlock, fontSignature = ''): string {
+  const version = deriveBlockVersion(block);
+  return fontSignature ? `${fontSignature}|${version}` : version;
 }
 
 function applyPaintVersions(item: Extract<ResolvedPaintItem, { kind: 'fragment' }>, visualVersion: string): void {
@@ -226,6 +509,7 @@ export function resolveFragmentItem(
   blockVersionCache: Map<string, string>,
   story?: LayoutStoryLocator,
   fontSignature = '',
+  pageRefContext?: PageRefResolutionContext,
 ): ResolvedPaintItem {
   const sdtContainerKey = resolveFragmentSdtContainerKey(fragment, blockMap);
   const blockVer = computeBlockVersion(fragment.blockId, blockMap, blockVersionCache, fontSignature);
@@ -236,10 +520,20 @@ export function resolveFragmentItem(
   switch (fragment.kind) {
     case 'table': {
       const item = resolveTableItem(fragment as TableFragment, fragmentIndex, pageIndex, blockMap);
+      const tablePageRefs = resolveTablePageRefs(item.block, item.measure, pageRefContext);
+      if (tablePageRefs.changed) {
+        item.block = tablePageRefs.block;
+        if (tablePageRefs.measure) item.measure = tablePageRefs.measure;
+      }
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
       if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
       item.layoutSourceIdentity = layoutSourceIdentity;
-      applyPaintVersions(item, version);
+      applyPaintVersions(
+        item,
+        tablePageRefs.changed
+          ? fragmentSignature(fragment, deriveFontAwareBlockVersion(tablePageRefs.block, fontSignature))
+          : version,
+      );
       return item;
     }
     case 'image': {
@@ -259,6 +553,33 @@ export function resolveFragmentItem(
       return item;
     }
     default: {
+      const entry = blockMap.get(fragment.blockId);
+      const paragraphPageRefs =
+        fragment.kind === 'para' && entry?.block.kind === 'paragraph' && entry.measure.kind === 'paragraph'
+          ? resolveParagraphPageRefs(
+              fragment as ParaFragment,
+              entry.block as ParagraphBlock,
+              entry.measure as ParagraphMeasure,
+              pageRefContext,
+            )
+          : null;
+      const listPageRefs =
+        fragment.kind === 'list-item' && entry?.block.kind === 'list'
+          ? resolveListItemPageRefs(
+              entry.block as ListBlock,
+              (fragment as ListItemFragment).itemId,
+              entry.measure.kind === 'list' ? (entry.measure as ListMeasure) : undefined,
+              pageRefContext,
+            )
+          : null;
+      const itemVersion = paragraphPageRefs?.changed
+        ? fragmentSignature(
+            paragraphPageRefs.fragment,
+            deriveFontAwareBlockVersion(paragraphPageRefs.block, fontSignature),
+          )
+        : listPageRefs?.changed
+          ? fragmentSignature(fragment, deriveFontAwareBlockVersion(listPageRefs.block, fontSignature))
+          : version;
       // para, list-item — existing generic resolution
       const item: ResolvedFragmentItem = {
         kind: 'fragment',
@@ -273,7 +594,13 @@ export function resolveFragmentItem(
         fragment,
         blockId: fragment.blockId,
         fragmentIndex,
-        content: resolveParagraphContentIfApplicable(fragment, blockMap),
+        content: paragraphPageRefs
+          ? resolveParagraphContent(
+              paragraphPageRefs.fragment,
+              paragraphPageRefs.block,
+              (entry as BlockMapEntry).measure as ParagraphMeasure,
+            )
+          : resolveParagraphContentIfApplicable(fragment, blockMap, pageRefContext),
         layoutSourceIdentity,
       };
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
@@ -281,17 +608,16 @@ export function resolveFragmentItem(
 
       // Pre-extract block/measure for para and list-item fragments so the painter
       // can prefer resolved data over a blockLookup read.
-      const entry = blockMap.get(fragment.blockId);
       if (entry) {
         if (fragment.kind === 'para' && entry.block.kind === 'paragraph' && entry.measure.kind === 'paragraph') {
-          item.block = entry.block as ParagraphBlock;
+          item.block = paragraphPageRefs?.block ?? (entry.block as ParagraphBlock);
           item.measure = entry.measure as ParagraphMeasure;
           if (item.sourceAnchor == null) item.sourceAnchor = (entry.block as ParagraphBlock).sourceAnchor;
         } else if (fragment.kind === 'list-item' && entry.block.kind === 'list' && entry.measure.kind === 'list') {
-          const listBlock = entry.block as ListBlock;
+          const listBlock = listPageRefs?.block ?? (entry.block as ListBlock);
           const listItem = listBlock.items.find((candidate) => candidate.id === (fragment as ListItemFragment).itemId);
           item.block = listBlock;
-          item.measure = entry.measure as ListMeasure;
+          item.measure = listPageRefs?.measure ?? (entry.measure as ListMeasure);
           if (item.sourceAnchor == null) {
             item.sourceAnchor = listItem?.sourceAnchor ?? listItem?.paragraph.sourceAnchor ?? listBlock.sourceAnchor;
           }
@@ -318,17 +644,18 @@ export function resolveFragmentItem(
         if (listItem.continuesOnNext != null) item.continuesOnNext = listItem.continuesOnNext;
         if (listItem.markerWidth != null) item.markerWidth = listItem.markerWidth;
       }
-      applyPaintVersions(item, version);
+      applyPaintVersions(item, itemVersion);
       return item;
     }
   }
 }
 
 export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
-  const { layout, flowMode, blocks, measures } = input;
+  const { layout, flowMode, blocks, measures, bookmarks } = input;
   const fontSignature = input.fontSignature ?? '';
   const blockMap = buildBlockMap(blocks, measures);
   const blockVersionCache = new Map<string, string>();
+  const pageRefAnchorMap = bookmarks?.size ? buildPageRefAnchorMap(bookmarks, layout, blocks, measures) : undefined;
 
   const pages: ResolvedPage[] = layout.pages.map((page, pageIndex) => ({
     id: `page-${pageIndex}`,
@@ -339,7 +666,16 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
     width: page.size?.w ?? layout.pageSize.w,
     height: page.size?.h ?? layout.pageSize.h,
     items: page.fragments.map((fragment, fragmentIndex) =>
-      resolveFragmentItem(fragment, fragmentIndex, pageIndex, blockMap, blockVersionCache, undefined, fontSignature),
+      resolveFragmentItem(
+        fragment,
+        fragmentIndex,
+        pageIndex,
+        blockMap,
+        blockVersionCache,
+        undefined,
+        fontSignature,
+        pageRefAnchorMap ? { sourcePage: page.number, anchorMap: pageRefAnchorMap } : undefined,
+      ),
     ),
     margins: page.margins,
     footnoteReserved: page.footnoteReserved,

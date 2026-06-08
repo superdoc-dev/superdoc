@@ -2,6 +2,7 @@ import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
 import { isHeadless } from '@utils/headless-helpers.js';
 import { formatPageNumberFieldValue, formatSectionPageNumberText } from '@superdoc/contracts';
+import { getPageNumberFieldFormat } from '../../core/layout-adapter/converters/inline-converters/page-number-field-format.js';
 /**
  * Configuration options for PageNumber
  * @typedef {Object} PageNumberOptions
@@ -139,6 +140,7 @@ export const PageNumber = Node.create({
  * @property {string|null} [instruction=null] @internal - Original NUMPAGES field instruction when switched
  * @property {string|null} [pageNumberFormat=null] @internal - Normalized field switch format
  * @property {number|null} [pageNumberZeroPadding=null] @internal - Zero-padding width from numeric picture switch
+ * @property {string|null} [pageNumberNumericPicture=null] @internal - Raw numeric picture switch
  */
 
 /**
@@ -183,6 +185,10 @@ export const TotalPageCount = Node.create({
         rendered: false,
       },
       pageNumberZeroPadding: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberNumericPicture: {
         default: null,
         rendered: false,
       },
@@ -384,13 +390,16 @@ const getNodeAttributes = (nodeName, editor, node = null) => {
         ariaLabel: 'Page number node',
       };
     }
-    case 'total-page-number':
+    case 'total-page-number': {
+      const totalPageCount =
+        Number(editor.options.totalPageCount || editor.options.parentEditor?.currentTotalPages || 1) || 1;
       return {
-        text: editor.options.totalPageCount || editor.options.parentEditor?.currentTotalPages || '1',
+        text: formatPageNumberFieldValue(totalPageCount, getPageNumberFieldFormat(node?.attrs)),
         className: 'sd-editor-auto-total-pages',
         dataId: 'auto-total-pages',
         ariaLabel: 'Total page count node',
       };
+    }
     case 'section-page-count': {
       const sectionPageCount = editor.options.sectionPageCount;
       const cachedText = node?.attrs?.resolvedText ?? node?.attrs?.importedCachedText ?? node?.textContent ?? '1';

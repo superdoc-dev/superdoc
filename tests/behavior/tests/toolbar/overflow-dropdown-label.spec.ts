@@ -28,7 +28,7 @@ test('font family applies and label updates when selected from overflow menu', a
   await overflowMenu.waitFor({ state: 'visible', timeout: 5000 });
   await superdoc.waitForStable();
 
-  // Select Georgia from font family dropdown
+  // Select Times New Roman from font family dropdown
   // await superdoc.page.locator('[data-item="btn-fontFamily"]').click();
   const overflowFontFamilyBtn = overflowMenu.locator('[data-item="btn-fontFamily"]');
   if (!(await overflowFontFamilyBtn.isVisible())) {
@@ -42,7 +42,7 @@ test('font family applies and label updates when selected from overflow menu', a
     .locator('[data-item="btn-fontFamily-option"]')
     .first()
     .waitFor({ state: 'visible', timeout: 5000 });
-  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Georgia' }).click();
+  await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Times New Roman' }).click();
   await superdoc.waitForStable();
 
   // Click into the editor to trigger pending command execution
@@ -53,7 +53,7 @@ test('font family applies and label updates when selected from overflow menu', a
   await superdoc.waitForStable();
 
   // Verify the font was applied to the text
-  await superdoc.assertTextMarkAttrs('Hello world', 'textStyle', { fontFamily: 'Georgia, serif' });
+  await superdoc.assertTextMarkAttrs('Hello world', 'textStyle', { fontFamily: 'Times New Roman, serif' });
 
   // Re-select text and check the toolbar label updated
   const newPos = await superdoc.findTextPos('Hello world');
@@ -64,5 +64,5 @@ test('font family applies and label updates when selected from overflow menu', a
   await superdoc.page.setViewportSize({ width: 1600, height: 1200 });
   await superdoc.waitForStable();
 
-  await expect(superdoc.page.locator('[data-item="btn-fontFamily"]')).toContainText('Georgia');
+  await expect(superdoc.page.locator('[data-item="btn-fontFamily"]')).toContainText('Times New Roman');
 });

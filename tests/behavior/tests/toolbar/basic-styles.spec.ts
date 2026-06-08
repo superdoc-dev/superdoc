@@ -86,16 +86,16 @@ test('font family dropdown changes font', async ({ superdoc }) => {
   await superdoc.waitForStable();
   await superdoc.snapshot('font family dropdown open');
 
-  // Select "Georgia" from the dropdown
-  const georgiaOption = superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Georgia' });
-  await georgiaOption.click();
+  // Select "Times New Roman" from the dropdown
+  const fontOption = superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Times New Roman' });
+  await fontOption.click();
   await superdoc.waitForStable();
 
-  // Assert the toolbar displays "Georgia"
-  await expect(fontButton.locator('.sd-button-label')).toHaveText('Georgia');
-  await superdoc.snapshot('Georgia font applied');
+  // Assert the toolbar displays "Times New Roman"
+  await expect(fontButton.locator('.sd-button-label')).toHaveText('Times New Roman');
+  await superdoc.snapshot('Times New Roman font applied');
 
-  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontFamily: 'Georgia' });
+  await superdoc.assertTextMarkAttrs('is a sentence', 'textStyle', { fontFamily: 'Times New Roman' });
 });
 
 test('font size dropdown changes size', async ({ superdoc }) => {

@@ -284,7 +284,9 @@ describe('face-aware resolution (resolveFace / resolvePhysicalFamilyForFace)', (
 
   it('a REGISTERED real face for the logical family wins over the bundled substitute (registered_face)', () => {
     const r = createFontResolver();
-    // A customer fonts.add (later: an embedded document font) registered real Calibri faces.
+    // A customer `fonts.add` registered real Calibri faces under the logical name (document-agnostic, so
+    // the physical IS the logical family). Embedded document fonts take a separate path - a
+    // document-unique physical family via `mapEmbedded` (see the embedded-provider-identity tests below).
     for (const face of FACES) {
       expect(r.resolveFace('Calibri', face, registered('Calibri'))).toEqual({
         logicalFamily: 'Calibri',
@@ -462,7 +464,9 @@ describe('category_fallback (non-metric family fallback: Calibri Light -> Carlit
       physicalFamily: 'Calibri Light',
       reason: 'as_requested',
     });
-    expect(r.resolvePhysicalFamilyForFace('Calibri Light, sans-serif', R400, noFaces)).toBe('Calibri Light, sans-serif');
+    expect(r.resolvePhysicalFamilyForFace('Calibri Light, sans-serif', R400, noFaces)).toBe(
+      'Calibri Light, sans-serif',
+    );
   });
 
   it('a customer fonts.map still overrides the category fallback (custom_mapping wins)', () => {
@@ -473,5 +477,110 @@ describe('category_fallback (non-metric family fallback: Calibri Light -> Carlit
       physicalFamily: 'Customer Light',
       reason: 'custom_mapping',
     });
+  });
+});
+
+describe('embedded provider identity (mapEmbedded / clearEmbedded)', () => {
+  const norm = (f: string) => f.replace(/^["']|["']$/g, '').toLowerCase();
+  const PHYS = '__superdoc_embedded_7__0_Calibri';
+  const registeredOf =
+    (...families: string[]) =>
+    (f: string) => {
+      const set = new Set(families.map(norm));
+      return set.has(norm(f));
+    };
+  const regular = { weight: '400', style: 'normal' } as const;
+
+  it('binds a logical family to a unique physical family (registered_face), beating the bundled clone', () => {
+    const r = createFontResolver();
+    r.mapEmbedded('Calibri', PHYS);
+    const hasFace = registeredOf(PHYS, 'Carlito'); // embed physical + bundled clone both loadable
+    expect(r.resolveFace('Calibri', regular, hasFace)).toEqual({
+      logicalFamily: 'Calibri',
+      physicalFamily: PHYS, // this document's OWN embedded font, not Carlito and not a shared "Calibri"
+      reason: 'registered_face',
+    });
+    // Paint/measure swaps the primary to the unique physical family (fallbacks preserved).
+    expect(r.resolvePhysicalFamilyForFace('Calibri, sans-serif', regular, hasFace)).toBe(`${PHYS}, sans-serif`);
+  });
+
+  it('beats a same-named registered face (the document embed wins over a global "Calibri")', () => {
+    const r = createFontResolver();
+    r.mapEmbedded('Calibri', PHYS);
+    // Both the unique physical AND a bare "Calibri" (e.g. another document's fonts.add) are loadable.
+    expect(r.resolveFace('Calibri', regular, registeredOf(PHYS, 'Calibri')).physicalFamily).toBe(PHYS);
+  });
+
+  it('is face-aware: a face the embed lacks falls through to the bundled substitute', () => {
+    const r = createFontResolver();
+    r.mapEmbedded('Calibri', PHYS);
+    const hasFace = (f: string, w: '400' | '700', s: 'normal' | 'italic') => {
+      if (norm(f) === norm(PHYS)) return w === '400' && s === 'normal'; // embed: Regular only
+      if (norm(f) === 'carlito') return true; // bundled clone: every face
+      return false;
+    };
+    expect(r.resolveFace('Calibri', { weight: '400', style: 'normal' }, hasFace)).toMatchObject({
+      physicalFamily: PHYS,
+      reason: 'registered_face',
+    });
+    // Bold: the embed lacks it -> bundled substitute, never the embed faux-styled.
+    expect(r.resolveFace('Calibri', { weight: '700', style: 'normal' }, hasFace)).toEqual({
+      logicalFamily: 'Calibri',
+      physicalFamily: 'Carlito',
+      reason: 'bundled_substitute',
+    });
+  });
+
+  it('an explicit fonts.map override still wins over the embedded font', () => {
+    const r = createFontResolver();
+    r.mapEmbedded('Calibri', PHYS);
+    r.map('Calibri', 'Tinos');
+    expect(r.resolveFace('Calibri', regular, registeredOf(PHYS, 'Tinos'))).toMatchObject({
+      physicalFamily: 'Tinos',
+      reason: 'custom_mapping',
+    });
+  });
+
+  it('clearEmbedded reverts the logical family to its bundled substitute', () => {
+    const r = createFontResolver();
+    r.mapEmbedded('Calibri', PHYS);
+    const hasFace = registeredOf(PHYS, 'Carlito');
+    expect(r.resolveFace('Calibri', regular, hasFace).reason).toBe('registered_face');
+    r.clearEmbedded();
+    expect(r.resolveFace('Calibri', regular, hasFace)).toMatchObject({
+      physicalFamily: 'Carlito',
+      reason: 'bundled_substitute',
+    });
+  });
+
+  it('reset() drops embedded bindings as well as fonts.map overrides', () => {
+    const r = createFontResolver();
+    r.mapEmbedded('Calibri', PHYS);
+    r.map('Georgia', 'Gelasio');
+    r.reset();
+    expect(r.resolveFace('Calibri', regular, registeredOf(PHYS, 'Carlito')).reason).toBe('bundled_substitute');
+    expect(r.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia');
+    expect(r.signature).toBe('');
+  });
+
+  it('folds embedded bindings into the signature (document-distinct; empty restores cache sharing)', () => {
+    const r = createFontResolver();
+    expect(r.signature).toBe('');
+    r.mapEmbedded('Calibri', PHYS);
+    expect(r.signature).not.toBe(''); // its physical is document-unique -> de-opts shared cache
+    const other = createFontResolver();
+    other.mapEmbedded('Calibri', '__superdoc_embedded_8__0_Calibri');
+    expect(other.signature).not.toBe(r.signature); // two documents, same logical, distinct signatures
+    r.clearEmbedded();
+    expect(r.signature).toBe(''); // back to shared-default identity
+  });
+
+  it('keeps the existing signature format when there are no embedded bindings', () => {
+    const a = createFontResolver();
+    const b = createFontResolver();
+    a.map('Georgia', 'Gelasio');
+    b.map('Georgia', 'Gelasio');
+    expect(a.signature).toBe(b.signature); // same mappings -> same signature (unchanged)
+    expect(a.signature).not.toBe('');
   });
 });

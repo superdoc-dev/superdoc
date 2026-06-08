@@ -9,6 +9,7 @@ import {
 type NodeOptions = {
   text?: string;
   marks?: Array<{ type: { name: string } }>;
+  leafText?: (node: ProseMirrorNode) => string;
   isInline?: boolean;
   isBlock?: boolean;
   isLeaf?: boolean;
@@ -28,7 +29,7 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
   const nodeSize = isText ? text.length : options.nodeSize != null ? options.nodeSize : isLeaf ? 1 : contentSize + 2;
 
   return {
-    type: { name: typeName },
+    type: { name: typeName, spec: options.leafText ? { leafText: options.leafText } : {} },
     text: isText ? text : undefined,
     nodeSize,
     isText,
@@ -138,6 +139,25 @@ describe('resolveTextRangeInBlock', () => {
 
     expect(result).toEqual({ from: 6, to: 7 });
   });
+
+  it('maps visible offsets across tracked deleted leaf nodes without counting them', () => {
+    const textA = createNode('text', [], { text: 'A' });
+    const deletedBreak = createNode('lineBreak', [], {
+      isInline: true,
+      isLeaf: true,
+      marks: [{ type: { name: 'trackDelete' } }],
+      leafText: () => '\n',
+    });
+    const textB = createNode('text', [], { text: 'B' });
+    const paragraph = createNode('paragraph', [textA, deletedBreak, textB], {
+      isBlock: true,
+      inlineContent: true,
+    });
+
+    const result = resolveTextRangeInBlock(paragraph, 0, { start: 1, end: 2 }, { textModel: 'visible' });
+
+    expect(result).toEqual({ from: 3, to: 4 });
+  });
 });
 
 describe('computeTextContentLength', () => {
@@ -204,6 +224,26 @@ describe('computeTextContentLength', () => {
     expect(computeTextContentLength(paragraph, { textModel: 'visible' })).toBe(2);
     expect(textContentInBlock(paragraph, { textModel: 'visible' })).toBe('AB');
   });
+
+  it('excludes tracked deleted leaf nodes in the visible text model', () => {
+    const textA = createNode('text', [], { text: 'A' });
+    const deletedBreak = createNode('lineBreak', [], {
+      isInline: true,
+      isLeaf: true,
+      marks: [{ type: { name: 'trackDelete' } }],
+      leafText: () => '\n',
+    });
+    const textB = createNode('text', [], { text: 'B' });
+    const paragraph = createNode('paragraph', [textA, deletedBreak, textB], {
+      isBlock: true,
+      inlineContent: true,
+    });
+
+    expect(computeTextContentLength(paragraph)).toBe(3);
+    expect(computeTextContentLength(paragraph, { textModel: 'visible' })).toBe(2);
+    expect(textContentInBlock(paragraph)).toBe('A\nB');
+    expect(textContentInBlock(paragraph, { textModel: 'visible' })).toBe('AB');
+  });
 });
 
 describe('pmPositionToTextOffset', () => {
@@ -267,5 +307,24 @@ describe('pmPositionToTextOffset', () => {
     expect(pmPositionToTextOffset(paragraph, 0, 3, { textModel: 'visible' })).toBe(1);
     expect(pmPositionToTextOffset(paragraph, 0, 6, { textModel: 'visible' })).toBe(1);
     expect(pmPositionToTextOffset(paragraph, 0, 7, { textModel: 'visible' })).toBe(2);
+  });
+
+  it('keeps PM positions inside tracked deleted leaf nodes at the surrounding visible offset', () => {
+    const textA = createNode('text', [], { text: 'A' });
+    const deletedBreak = createNode('lineBreak', [], {
+      isInline: true,
+      isLeaf: true,
+      marks: [{ type: { name: 'trackDelete' } }],
+      leafText: () => '\n',
+    });
+    const textB = createNode('text', [], { text: 'B' });
+    const paragraph = createNode('paragraph', [textA, deletedBreak, textB], {
+      isBlock: true,
+      inlineContent: true,
+    });
+
+    expect(pmPositionToTextOffset(paragraph, 0, 2, { textModel: 'visible' })).toBe(1);
+    expect(pmPositionToTextOffset(paragraph, 0, 3, { textModel: 'visible' })).toBe(1);
+    expect(pmPositionToTextOffset(paragraph, 0, 4, { textModel: 'visible' })).toBe(2);
   });
 });

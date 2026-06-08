@@ -2021,6 +2021,43 @@ describe('layoutTableBlock', () => {
       expect(fragments[0].continuesOnNext).toBeUndefined();
     });
 
+    it('should split full-width anchored tables with tblpPr across pages', () => {
+      const block = createMockTableBlock(10, undefined, {
+        tableProperties: { floatingTableProperties: { horizontalAnchor: 'page' } },
+      });
+      block.anchor = { isAnchored: true, offsetV: 0, offsetH: 0 };
+      const measure = createMockTableMeasure([100, 100], Array(10).fill(20));
+
+      const pages: Array<{ fragments: TableFragment[] }> = [{ fragments: [] }, { fragments: [] }];
+      let pageIndex = 0;
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => ({
+          page: pages[pageIndex],
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 50,
+        }),
+        advanceColumn: (state) => {
+          pageIndex = Math.min(pageIndex + 1, pages.length - 1);
+          return {
+            page: pages[pageIndex],
+            columnIndex: 0,
+            cursorY: 0,
+            contentBottom: 50,
+          };
+        },
+        columnX: () => 0,
+      });
+
+      const fragments = pages.flatMap((page) => page.fragments);
+      expect(fragments.length).toBeGreaterThan(1);
+      expect(fragments.some((fragment) => fragment.continuesOnNext === true)).toBe(true);
+    });
+
     it('should handle cantSplit row forcing move to next page', () => {
       const block = createMockTableBlock(5, [
         { cantSplit: false },

@@ -127,7 +127,14 @@ describe('clickToPosition', () => {
     const layout: Layout = {
       pageSize: { w: 600, h: 800 },
       columns: { count: 2, gap: 20 },
-      pages: [{ number: 1, fragments: [tableFragment] }],
+      pages: [
+        {
+          number: 1,
+          columns: { count: 2, gap: 20 },
+          margins: { top: 0, right: 0, bottom: 0, left: 0 },
+          fragments: [tableFragment],
+        },
+      ],
     };
 
     const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 340, y: 54 });
@@ -208,7 +215,14 @@ describe('clickToPosition', () => {
     const layout: Layout = {
       pageSize: { w: 600, h: 800 },
       columns: { count: 2, gap: 20 },
-      pages: [{ number: 1, fragments: [tableFragment] }],
+      pages: [
+        {
+          number: 1,
+          columns: { count: 2, gap: 20 },
+          margins: { top: 0, right: 0, bottom: 0, left: 0 },
+          fragments: [tableFragment],
+        },
+      ],
     };
 
     const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 360, y: 54 });
@@ -289,7 +303,14 @@ describe('clickToPosition', () => {
     const layout: Layout = {
       pageSize: { w: 600, h: 800 },
       columns: { count: 2, gap: 20 },
-      pages: [{ number: 1, fragments: [tableFragment] }],
+      pages: [
+        {
+          number: 1,
+          columns: { count: 2, gap: 20 },
+          margins: { top: 0, right: 0, bottom: 0, left: 0 },
+          fragments: [tableFragment],
+        },
+      ],
     };
 
     const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 120, y: 54 });

@@ -2515,7 +2515,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'trackChanges.list',
     description: 'List all tracked changes in the document.',
     expectedResult:
-      'Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`, `replacement`, `format`), total count, and raw imported Word OOXML revision IDs (`w:id`) when available.',
+      'Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`, `replacement`, `format`), total count, and raw imported Word OOXML revision IDs (`w:id`) when available. Whole-table tracked insertions and deletions are surfaced through the legacy `insert` / `delete` types.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -2530,7 +2530,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'trackChanges.get',
     description: 'Retrieve a single tracked change by ID.',
     expectedResult:
-      'Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `replacement`, `format`), author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available.',
+      'Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `replacement`, `format`), author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available. Whole-table tracked insertions and deletions are surfaced through the legacy `insert` / `delete` types.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -2551,6 +2551,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: [
         'NO_OP',
+        'INVALID_INPUT',
         'INVALID_TARGET',
         'TARGET_NOT_FOUND',
         'CAPABILITY_UNAVAILABLE',

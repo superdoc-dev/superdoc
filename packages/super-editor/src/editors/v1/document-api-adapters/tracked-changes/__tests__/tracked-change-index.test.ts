@@ -132,6 +132,26 @@ describe('TrackedChangeIndex — per-story cache', () => {
     });
   });
 
+  it('projects type + subtype for whole-table structural changes', () => {
+    const editor = makeEditor();
+    mocks.groupTrackedChanges.mockReturnValueOnce([
+      {
+        ...makeGroupedChange('word:structural:2', 9, 30),
+        hasInsert: false,
+        hasDelete: false,
+        hasFormat: false,
+        structural: { side: 'insertion', subtype: 'table-insert' },
+      },
+    ]);
+
+    const index = getTrackedChangeIndex(editor);
+    const snapshots = index.get({ kind: 'story', storyType: 'body' });
+
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]?.type).toBe('structural');
+    expect(snapshots[0]?.subtype).toBe('table-insert');
+  });
+
   it('preserves overlap metadata on snapshots', () => {
     const editor = makeEditor();
     mocks.groupTrackedChanges.mockReturnValueOnce([

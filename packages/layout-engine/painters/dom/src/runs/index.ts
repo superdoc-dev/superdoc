@@ -8,7 +8,11 @@ export { renderInlineTabRun, renderPositionedTabRun } from './tab-run.js';
 export { appendFormattingParagraphMark, setTextContentWithFormattingSpaceMarks } from './formatting-marks.js';
 export { sanitizeUrl, linkMetrics } from './links.js';
 export { applyRunDataAttributes } from './hash.js';
-export { resolveTrackedChangesConfig, applyTrackedChangeDecorations } from './tracked-changes.js';
+export {
+  resolveTrackedChangesConfig,
+  applyTrackedChangeDecorations,
+  applyRowTrackedChangeToCell,
+} from './tracked-changes.js';
 export {
   resolveRunSdtId,
   createInlineSdtWrapper,

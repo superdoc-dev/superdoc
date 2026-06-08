@@ -34,6 +34,12 @@ export const CanonicalChangeType = Object.freeze({
   Deletion: 'deletion',
   Replacement: 'replacement',
   Formatting: 'formatting',
+  // Structural revisions (whole-object insert/delete) live on node attrs, not
+  // marks. This is used for whole-table insert/delete. The public
+  // document-api projection keeps the legacy `insert | delete | replacement |
+  // format` union and maps structural table revisions back to insert/delete at
+  // the adapter boundary.
+  Structural: 'structural',
 });
 
 /**
@@ -46,6 +52,8 @@ export const ChangeSubtype = Object.freeze({
   TextDeletion: 'text-deletion',
   TextReplacement: 'text-replacement',
   RunFormatting: 'run-formatting',
+  TableInsert: 'table-insert',
+  TableDelete: 'table-delete',
 });
 
 /**

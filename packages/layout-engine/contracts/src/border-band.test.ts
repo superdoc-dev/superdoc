@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getBorderBandProfile, getBorderBandWidthPx } from './border-band.js';
+import { getBorderBandProfile, getBorderBandWidthPx, isNativeCssDoubleStyle } from './border-band.js';
 
 /**
  * Band compositions below are MEASURED from Word renders (300dpi PDF pixel-run
@@ -131,5 +131,17 @@ describe('getBorderBandWidthPx with compound profiles', () => {
     expect(getBorderBandWidthPx({ style: 'triple', width: 2 })).toBe(10);
     expect(getBorderBandWidthPx({ style: 'thinThickSmallGap', width: 4 })).toBe(6);
     expect(getBorderBandWidthPx({ style: 'thinThickThinLargeGap', width: 4 })).toBe(12);
+  });
+});
+
+describe('isNativeCssDoubleStyle (SD-3028)', () => {
+  it('is true only for double (the one band style CSS renders natively as two equal rules)', () => {
+    expect(isNativeCssDoubleStyle('double')).toBe(true);
+  });
+
+  it('is false for the multi-rule overlay styles and non-band styles', () => {
+    for (const s of ['triple', 'thinThickSmallGap', 'thinThickThinLargeGap', 'single', 'dashed', 'none', undefined]) {
+      expect(isNativeCssDoubleStyle(s)).toBe(false);
+    }
   });
 });

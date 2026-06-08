@@ -292,10 +292,12 @@ describe('renderTableRow', () => {
     expect(secondCall.borders?.left).toBeDefined();
   });
 
-  // SD-3308: double borders paint as a single-rule inner rectangle per cell (Word
-  // model: closed boxes with square L-joins, verified against 300dpi Word renders);
-  // the cell keeps a transparent CSS double border so border-box layout is unchanged.
-  it('paints double borders as a per-cell inner rectangle and hides the CSS border paint', () => {
+  // SD-3028: `double` renders via the native CSS `border-style: double` (two equal rules +
+  // gap), which matches Word exactly (300dpi probes). It is NOT routed through the multi-rule
+  // nested-rectangle overlay (that path forced the CSS border transparent and repainted a
+  // single inner rule, collapsing the double to one line). So the cell keeps a real `double`
+  // border and no compound rect is emitted. triple/thinThick* still use the overlay.
+  it('renders double borders via native CSS, not the single-rule compound overlay', () => {
     renderTableRow(
       createDeps({
         rowIndex: 0,
@@ -310,18 +312,10 @@ describe('renderTableRow', () => {
       }) as never,
     );
 
-    const rects = container.querySelectorAll('.superdoc-compound-border-rect');
-    expect(rects.length).toBe(1);
-    const rect = rects[0] as HTMLElement;
-    // band 6, rule 2: the inner-face rule sits band - rule = 4px inside the owned edges.
-    expect(rect.style.left).toBe('4px');
-    expect(rect.style.top).toBe('4px');
-    expect(rect.style.borderTop).toMatch(/2px solid/);
-    expect(rect.style.borderBottom).toMatch(/2px solid/);
-    expect(rect.style.borderLeft).toMatch(/2px solid/);
-    expect(rect.style.borderRight).toMatch(/2px solid/);
-    // double is symmetric: no middle strips
+    // No overlay rects/strips for a plain double — the browser draws the two rules.
+    expect(container.querySelectorAll('.superdoc-compound-border-rect').length).toBe(0);
     expect(container.querySelectorAll('.superdoc-compound-border-mid').length).toBe(0);
+    // The cell receives a real `double` border (renderTableCell applies native CSS double).
     const cellArgs = renderTableCellMock.mock.calls[0][0] as { borders?: { top?: { style?: string } } };
     expect(cellArgs.borders?.top?.style).toBe('double');
   });
@@ -470,31 +464,42 @@ describe('renderTableRow', () => {
       }) as never,
     );
 
-    // Both cells carry half the divider band (6/2 = 3px) as their CSS border.
+    // The interior vertical divider keeps the straddle: each cell carries half the divider
+    // band (6/2 = 3px) on its divider-facing side, and each draws one rule via the overlay
+    // rect — together the two rules form the double centered on the gridline. (SD-3028: only
+    // the straddled interior-vertical double stays in the overlay; full-band sides are native.)
     const callA = renderTableCellMock.mock.calls[0][0] as {
-      borders?: { right?: unknown };
+      borders?: { left?: { style?: string }; right?: unknown };
       borderBandOverridesPx?: { left?: number; right?: number };
     };
     const callB = renderTableCellMock.mock.calls[1][0] as {
-      borders?: { left?: unknown };
+      borders?: { left?: unknown; right?: { style?: string } };
       borderBandOverridesPx?: { left?: number; right?: number };
     };
     expect(callA.borders?.right).toBeDefined();
     expect(callA.borderBandOverridesPx?.right).toBe(3);
     expect(callB.borders?.left).toBeDefined();
     expect(callB.borderBandOverridesPx?.left).toBe(3);
+    // Boundary sides render via native CSS double (not the overlay): they reach renderTableCell
+    // as a real `double` border, with no half-band override.
+    expect(callA.borders?.left?.style).toBe('double');
+    expect(callA.borderBandOverridesPx?.left).toBeUndefined();
+    expect(callB.borders?.right?.style).toBe('double');
+    expect(callB.borderBandOverridesPx?.right).toBeUndefined();
 
-    // Inner rectangles: divider-facing rules sit at the straddled band's faces.
+    // Two overlay rects: one per cell, drawing only the straddled interior divider rule.
     const rects = container.querySelectorAll('.superdoc-compound-border-rect');
     expect(rects.length).toBe(2);
     const rectA = rects[0] as HTMLElement;
     const rectB = rects[1] as HTMLElement;
-    // A: left boundary inset band - rule = 4; right inset band/2 - outerRule = 1.
-    expect(rectA.style.left).toBe('4px');
-    expect(rectA.style.width).toBe('95px');
-    // B starts at gridline 100 + (band/2 - innerRule) = 101; right boundary inset 4.
+    // cellA: only the right (divider) rule; left/top/bottom boundaries are native CSS.
+    expect(rectA.style.borderRightWidth).not.toBe('');
+    expect(rectA.style.borderLeftWidth).toBe('');
+    // cellB: only the left (divider) rule; right boundary is native CSS. Its rule sits just
+    // past the gridline (100 + band/2 - innerRule = 101).
     expect(rectB.style.left).toBe('101px');
-    expect(rectB.style.width).toBe('95px');
+    expect(rectB.style.borderLeftWidth).not.toBe('');
+    expect(rectB.style.borderRightWidth).toBe('');
   });
 
   // SD-1797: a single row's measure only lists cells that START in it, so on a w:vMerge
@@ -1125,13 +1130,14 @@ describe('renderTableRow', () => {
 
   describe('explicitly borderless cells in a compound-bordered table (SD-3308 review)', () => {
     // A cell whose `borders` attribute is present but clears every side is intentionally
-    // borderless. Even in a table with compound (double) table borders, the
-    // nested-rectangle compound path must NOT draw double rules onto it.
+    // borderless. Even in a table with compound (triple) table borders, the
+    // nested-rectangle compound path must NOT draw the rules onto it. (triple, not double:
+    // a plain double renders via native CSS and never uses the overlay rects.)
     const compoundTableBorders = {
-      top: { style: 'double' as const, width: 2, color: '#000000' },
-      bottom: { style: 'double' as const, width: 2, color: '#000000' },
-      left: { style: 'double' as const, width: 2, color: '#000000' },
-      right: { style: 'double' as const, width: 2, color: '#000000' },
+      top: { style: 'triple' as const, width: 2, color: '#000000' },
+      bottom: { style: 'triple' as const, width: 2, color: '#000000' },
+      left: { style: 'triple' as const, width: 2, color: '#000000' },
+      right: { style: 'triple' as const, width: 2, color: '#000000' },
     };
 
     it('draws compound rects for a normal cell (control)', () => {

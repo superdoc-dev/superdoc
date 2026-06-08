@@ -209,6 +209,44 @@ describe('renderTableFragment', () => {
     expect(element.querySelector('.superdoc-compound-border-outline')).not.toBeNull();
   });
 
+  // SD-3028: a table-level `double` is NOT a multi-rule overlay style — it renders via the
+  // boundary cells' native CSS `border-style: double` (two equal rules). The fragment outline
+  // and the separate-mode transparent treatment must skip it, or a third rule stacks on top.
+  it('does not draw the compound outline for a table-level double (native cells render it)', () => {
+    const block = createTestTableBlock();
+    block.attrs = {
+      borders: {
+        top: { style: 'double', width: 2, color: '#000000' },
+        bottom: { style: 'double', width: 2, color: '#000000' },
+        left: { style: 'double', width: 2, color: '#000000' },
+        right: { style: 'double', width: 2, color: '#000000' },
+      },
+    };
+
+    const element = renderTableFragment({
+      doc,
+      fragment: createTestTableFragment(),
+      context,
+      block,
+      measure: createTestTableMeasure(),
+      cellSpacingPx: 0,
+      effectiveColumnWidths: [100],
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {},
+      applySdtDataset: () => {},
+      applyStyles: () => {},
+    });
+
+    // No compound outline / mid-grid / per-cell rects for a plain double.
+    expect(element.querySelector('.superdoc-compound-border-outline')).toBeNull();
+    expect(element.querySelector('.superdoc-compound-border-midring')).toBeNull();
+    expect(element.querySelectorAll('.superdoc-compound-border-rect').length).toBe(0);
+    // The boundary cell carries a real, visible double border (not transparent-ized).
+    const cell = element.querySelector('div[style*="border"]') as HTMLElement | null;
+    expect(cell).not.toBeNull();
+    expect(cell!.style.borderTopStyle === 'double' || cell!.style.borderBottomStyle === 'double').toBe(true);
+  });
+
   // SD-3308: Word paints the MIDDLE rule of table-level 3-rule bands as a continuous
   // grid (measured: the divider's middle rule runs unbroken through the row band and
   // meets the boundary band's middle ring). The fragment paints one ring inset by

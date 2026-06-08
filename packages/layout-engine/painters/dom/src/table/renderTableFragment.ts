@@ -9,7 +9,7 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
-import { getTableVisualDirection, getBorderBandProfile } from '@superdoc/contracts';
+import { getTableVisualDirection, getBorderBandProfile, isNativeCssDoubleStyle } from '@superdoc/contracts';
 import type { ResolvePhysicalFamily } from '@superdoc/font-system';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
@@ -464,7 +464,8 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       ['Left', isRtl ? tableBorders.right : tableBorders.left],
     ] as const) {
       const spec = borderValueToSpec(value);
-      if (spec && getBorderBandProfile(spec)) {
+      // `double` paints via native CSS (two rules); only true overlay styles go transparent.
+      if (spec && getBorderBandProfile(spec) && !isNativeCssDoubleStyle(spec.style)) {
         container.style[`border${cssSide}Color` as 'borderTopColor'] = 'transparent';
       }
     }
@@ -748,6 +749,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       const spec = value as { style?: string; color?: string };
       const profile = getBorderBandProfile(value);
       if (!profile) continue;
+      // `double` renders via the boundary cells' native CSS border (two equal rules);
+      // drawing it here too would stack a third rule. Only true multi-rule overlay styles
+      // (triple/thinThick*) need the outline. (SD-3028)
+      if (isNativeCssDoubleStyle(spec.style)) continue;
       const rule = Math.max(1, Math.round(profile.segments[0]));
       const color = spec.color && /^#[0-9A-Fa-f]{6}$/.test(spec.color) ? spec.color : '#000000';
       if (!outlineEl) {

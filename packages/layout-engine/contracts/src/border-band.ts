@@ -91,3 +91,18 @@ export function getBorderBandWidthPx(value: TableBorderValue | null | undefined)
   if (profile) return profile.band;
   return width;
 }
+
+/**
+ * True when a band border renders correctly via the native CSS `border-style: double`
+ * (two equal rules + gap) and must NOT be routed through the multi-rule nested-rectangle
+ * overlay. `double` is the only ECMA-376 multi-rule style CSS expresses exactly (triple = 3
+ * rules, thinThick* = unequal rules — CSS cannot, so those keep the overlay). Routing `double`
+ * through the overlay forces its native CSS border transparent and repaints a single inner
+ * rule, collapsing the double to one line. (SD-3028)
+ *
+ * @param style - A border style name (or undefined).
+ * @returns true only for the `double` style.
+ */
+export function isNativeCssDoubleStyle(style: string | undefined): boolean {
+  return style === 'double';
+}

@@ -9,7 +9,7 @@ import type {
   TableBorders,
   TableMeasure,
 } from '@superdoc/contracts';
-import { getBorderBandProfile } from '@superdoc/contracts';
+import { getBorderBandProfile, isNativeCssDoubleStyle } from '@superdoc/contracts';
 import type { ResolvePhysicalFamily } from '@superdoc/font-system';
 import { renderTableCell } from './renderTableCell.js';
 import {
@@ -412,6 +412,20 @@ const appendCompoundBorderRects = (
     const spec = borders[side];
     const profile = spec ? getBorderBandProfile(spec) : null;
     if (!spec || !profile) return null;
+    // A symmetric `double` renders via the native CSS `border-style: double` (two equal rules)
+    // on any FULL-BAND side: the table boundary, and the horizontal interior edge owned by this
+    // cell. Routing those through the overlay paints only a single inner rule (the double
+    // collapses to one line). The straddled interior-VERTICAL divider stays in the overlay:
+    // each half-cell draws one rule and together they form the double centered on the gridline.
+    // (SD-3028)
+    if (isNativeCssDoubleStyle(spec.style)) {
+      const fullBand =
+        side === 'top' ||
+        (side === 'bottom' && ownsBottomBand) ||
+        (side === 'left' && leftIsBoundary) ||
+        (side === 'right' && rightIsBoundary);
+      if (fullBand) return null;
+    }
     const { segments } = profile;
     const band = Math.max(1, Math.round(profile.band));
     const outerRule = Math.max(1, Math.round(segments[0]));

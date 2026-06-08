@@ -54,7 +54,7 @@ export { rescaleColumnWidths } from './table-column-rescale.js';
 export { getCellSpacingPx } from './cell-spacing.js';
 
 // Border band width (single source of truth for painter CSS width + measuring row reservation)
-export { getBorderBandWidthPx, getBorderBandProfile } from './border-band.js';
+export { getBorderBandWidthPx, getBorderBandProfile, isNativeCssDoubleStyle } from './border-band.js';
 export type { BorderBandProfile } from './border-band.js';
 
 // OOXML z-index normalization (moved from pm-adapter for cross-stage use)

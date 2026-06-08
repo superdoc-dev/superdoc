@@ -10,7 +10,7 @@
  * - createTableBorderOverlay: Border overlay element creation
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { BorderSpec, CellBorders, TableBorders, TableBorderValue, TableFragment } from '@superdoc/contracts';
 import {
   applyBorder,
@@ -643,5 +643,52 @@ describe('bevelToneSpec (separate-borders outset/inset, SD-3028)', () => {
     const single = { style: 'single' as const, width: 1, color: '#123456' };
     expect(bevelToneSpec(single, 'top', 'table')).toBe(single);
     expect(bevelToneSpec(undefined, 'top', 'cell')).toBeUndefined();
+  });
+});
+
+describe('extended ST_Border values (dashDotStroked / threeDEmboss / threeDEngrave) (SD-3028)', () => {
+  let el: HTMLElement;
+  beforeEach(() => {
+    el = document.createElement('div');
+  });
+
+  // These are valid ECMA-376 ST_Border values (spec order 21/22/23). They must paint as
+  // their CSS approximation, NOT hit the invalid-style 'solid' fallback (which warns).
+  it('paints dashDotStroked as dashed', () => {
+    applyBorder(el, 'Top', { style: 'dashDotStroked', width: 1, color: '#000000' });
+    expect(el.style.borderTopStyle).toBe('dashed');
+  });
+
+  it('paints threeDEmboss as a CSS ridge bevel', () => {
+    applyBorder(el, 'Top', { style: 'threeDEmboss', width: 1, color: '#000000' });
+    expect(el.style.borderTopStyle).toBe('ridge');
+  });
+
+  it('paints threeDEngrave as a CSS groove bevel', () => {
+    applyBorder(el, 'Top', { style: 'threeDEngrave', width: 1, color: '#000000' });
+    expect(el.style.borderTopStyle).toBe('groove');
+  });
+
+  it('does not warn (they are allowed styles, not the invalid fallback)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const style of ['dashDotStroked', 'threeDEmboss', 'threeDEngrave'] as const) {
+      applyBorder(document.createElement('div'), 'Top', { style, width: 1, color: '#000000' });
+    }
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  // §17.4.66 conflict weight = lines x style number. Spec order 21/22/23 ranks these
+  // above the gap families (<=20) and below outset/inset (24/25) at equal line count.
+  it('ranks dashDotStroked (21) above dashed (5) and dashSmallGap (20) at equal weight', () => {
+    const dashed = { style: 'dashed' as const, width: 1, color: '#000000' };
+    const dashDotStroked = { style: 'dashDotStroked' as const, width: 1, color: '#000000' };
+    expect(resolveBorderConflict(dashed, dashDotStroked)).toEqual(dashDotStroked);
+  });
+
+  it('ranks threeDEngrave (23) above threeDEmboss (22) at equal weight', () => {
+    const emboss = { style: 'threeDEmboss' as const, width: 1, color: '#000000' };
+    const engrave = { style: 'threeDEngrave' as const, width: 1, color: '#000000' };
+    expect(resolveBorderConflict(emboss, engrave)).toEqual(engrave);
   });
 });

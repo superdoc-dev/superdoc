@@ -215,6 +215,9 @@ const BORDER_STYLES = new Set<BorderStyle>([
   'thinThickThinLargeGap',
   'wave',
   'doubleWave',
+  'dashDotStroked',
+  'threeDEmboss',
+  'threeDEngrave',
   'outset',
   'inset',
 ]);

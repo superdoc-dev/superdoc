@@ -786,6 +786,9 @@ export type BorderStyle =
   | 'thinThickThinLargeGap'
   | 'wave'
   | 'doubleWave'
+  | 'dashDotStroked'
+  | 'threeDEmboss'
+  | 'threeDEngrave'
   | 'outset'
   | 'inset';
 

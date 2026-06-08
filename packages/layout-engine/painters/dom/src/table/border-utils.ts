@@ -31,6 +31,9 @@ const ALLOWED_BORDER_STYLES = new Set<BorderStyle>([
   'thinThickThinLargeGap',
   'wave',
   'doubleWave',
+  'dashDotStroked',
+  'threeDEmboss',
+  'threeDEngrave',
   'outset',
   'inset',
 ]);
@@ -69,6 +72,12 @@ const borderStyleToCSS = (style?: BorderStyle): string => {
     thinThickThinLargeGap: 'solid',
     wave: 'solid',
     doubleWave: 'solid',
+    // dashDotStroked: CSS cannot alternate dash and dot, so approximate as dashed
+    // (consistent with dotDash/dotDotDash). threeDEmboss/threeDEngrave map to CSS's
+    // native 3D bevels (ridge = raised, groove = engraved) as a close approximation. (SD-3028)
+    dashDotStroked: 'dashed',
+    threeDEmboss: 'ridge',
+    threeDEngrave: 'groove',
     // In the collapsed model Word paints outset/inset as plain solid lines at the
     // authored width and color (300dpi probes, SD-3028); the bevel only exists in
     // separate-borders mode where bevelToneSpec retones the sides.
@@ -287,6 +296,9 @@ const BORDER_STYLE_NUMBER: Partial<Record<BorderStyle, number>> = {
   wave: 18,
   doubleWave: 19,
   dashSmallGap: 20,
+  dashDotStroked: 21,
+  threeDEmboss: 22,
+  threeDEngrave: 23,
   outset: 24,
   inset: 25,
 };
@@ -312,6 +324,9 @@ const BORDER_STYLE_LINES: Partial<Record<BorderStyle, number>> = {
   wave: 1,
   doubleWave: 2,
   dashSmallGap: 1,
+  dashDotStroked: 1,
+  threeDEmboss: 1,
+  threeDEngrave: 1,
 };
 
 export const isPresentBorder = (b?: BorderSpec): b is BorderSpec =>

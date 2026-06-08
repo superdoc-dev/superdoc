@@ -250,6 +250,12 @@ function normalizeLegacyBorderStyle(value: string | undefined): string {
       return 'wave';
     case 'doublewave':
       return 'doubleWave';
+    case 'dashdotstroked':
+      return 'dashDotStroked';
+    case 'threedemboss':
+      return 'threeDEmboss';
+    case 'threedengrave':
+      return 'threeDEngrave';
     case 'outset':
       return 'outset';
     case 'inset':

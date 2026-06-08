@@ -1467,6 +1467,25 @@ class SuperConverter {
       currentNumberingXml.elements = [];
     }
 
+    // Ensure required namespaces are declared on the <w:numbering> element.
+    // Some source documents lack xmlns:w15 but content uses w15:restartNumberingAfterBreak,
+    // causing Word to report namespace errors and require repair.
+    if (currentNumberingXml.attributes) {
+      // Add xmlns:mc if missing (required for mc:Ignorable)
+      if (!currentNumberingXml.attributes['xmlns:mc']) {
+        currentNumberingXml.attributes['xmlns:mc'] = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+      }
+      // Add xmlns:w15 if missing (used by w15:restartNumberingAfterBreak)
+      if (!currentNumberingXml.attributes['xmlns:w15']) {
+        currentNumberingXml.attributes['xmlns:w15'] = 'http://schemas.microsoft.com/office/word/2012/wordml';
+      }
+      // Ensure mc:Ignorable includes w15
+      const ignorable = currentNumberingXml.attributes['mc:Ignorable'] || '';
+      if (!ignorable.includes('w15')) {
+        currentNumberingXml.attributes['mc:Ignorable'] = ignorable ? `${ignorable} w15` : 'w15';
+      }
+    }
+
     this.convertedXml[numberingPath] = numberingXml;
   }
 

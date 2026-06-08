@@ -66,11 +66,38 @@ function findMaxRId(elements) {
 }
 
 /**
- * Ensure document-level relationships exist for all managed parts that are
- * present in the package.
+ * Resolve a relationship target to a zip path.
+ * Targets in word/_rels/document.xml.rels are relative to word/.
  *
- * Adds missing relationships with collision-free rId allocation. Does not
- * remove or modify existing relationships.
+ * @param {string} target - The Target attribute value (e.g., "styles.xml", "./header1.xml", "../customXml/item1.xml")
+ * @returns {string} The normalized zip path (e.g., "word/styles.xml", "customXml/item1.xml")
+ */
+function resolveRelTarget(target) {
+  if (!target) return '';
+
+  // Strip leading ./
+  let normalized = target.startsWith('./') ? target.slice(2) : target;
+
+  // Handle parent directory references (e.g., ../customXml/item1.xml)
+  if (normalized.startsWith('../')) {
+    // Target is outside word/ directory, return as-is without word/ prefix
+    return normalized.slice(3);
+  }
+
+  // Target is relative to word/
+  return normalized.startsWith('word/') ? normalized : `word/${normalized}`;
+}
+
+/**
+ * Ensure document-level relationships exist for all managed parts that are
+ * present in the package, and prune dangling relationships that point to
+ * non-existent files.
+ *
+ * - Adds missing relationships with collision-free rId allocation.
+ * - Removes relationships whose target file does not exist in the package
+ *   (e.g., stylesWithEffects.xml references from legacy documents).
+ * - External relationships (TargetMode="External") are preserved regardless
+ *   of file existence since they point to URLs, not package parts.
  *
  * @param {string} relsXml - Current word/_rels/document.xml.rels XML string
  * @param {(zipPath: string) => boolean} fileExists - Predicate: does this file exist in the package?
@@ -93,6 +120,26 @@ export function reconcileDocumentRelationships(relsXml, fileExists) {
   let changed = false;
   let maxId = findMaxRId(relsTag.elements);
 
+  // Prune dangling relationships (target file doesn't exist)
+  const originalCount = relsTag.elements.length;
+  relsTag.elements = relsTag.elements.filter((el) => {
+    if (el.name !== 'Relationship') return true;
+
+    // Keep external relationships (they point to URLs, not files)
+    if (el.attributes?.TargetMode === 'External') return true;
+
+    const target = el.attributes?.Target;
+    if (!target) return true;
+
+    const zipPath = resolveRelTarget(target);
+    return fileExists(zipPath);
+  });
+
+  if (relsTag.elements.length !== originalCount) {
+    changed = true;
+  }
+
+  // Add missing relationships for managed parts
   for (const entry of MANAGED_DOCUMENT_PARTS) {
     if (!fileExists(entry.zipPath)) continue;
 

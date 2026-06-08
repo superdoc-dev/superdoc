@@ -452,6 +452,22 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       'Left',
       bevelToneSpec(borderValueToSpec(isRtl ? tableBorders.right : tableBorders.left), 'left', 'table'),
     );
+    // A compound table border (double/triple/thinThick*) is painted by the nested-rectangle
+    // outline + middle-grid overlay below, exactly as cell compound borders are. Keep the
+    // container CSS border WIDTH (so separate-mode gap geometry is unchanged) but make its
+    // color transparent on compound sides, or applyBorder's solid band would render a filled
+    // slab under the overlay rules. (SD-3028 review)
+    for (const [cssSide, value] of [
+      ['Top', tableBorders.top],
+      ['Right', isRtl ? tableBorders.left : tableBorders.right],
+      ['Bottom', tableBorders.bottom],
+      ['Left', isRtl ? tableBorders.right : tableBorders.left],
+    ] as const) {
+      const spec = borderValueToSpec(value);
+      if (spec && getBorderBandProfile(spec)) {
+        container.style[`border${cssSide}Color` as 'borderTopColor'] = 'transparent';
+      }
+    }
   }
 
   // Pre-calculate all row heights for rowspan calculations

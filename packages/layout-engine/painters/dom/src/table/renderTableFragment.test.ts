@@ -170,6 +170,45 @@ describe('renderTableFragment', () => {
     expect(element.style.borderRightWidth).toBe('3px');
   });
 
+  // SD-3308 review: in separate-borders mode a COMPOUND table border (triple/thinThick*)
+  // is painted by the nested-rectangle outline/middle-grid overlay. The container's CSS
+  // border keeps its band WIDTH (separate-mode gap geometry) but its color must be
+  // transparent on compound sides, or applyBorder's solid band renders a filled slab
+  // under the overlay rules. A plain single border stays painted normally.
+  it('makes the separate-mode container border transparent on compound sides (no solid slab)', () => {
+    const block = createTestTableBlock();
+    block.attrs = {
+      borderCollapse: 'separate',
+      borders: {
+        top: { style: 'triple', width: 2, color: '#000000' }, // compound -> transparent
+        left: { style: 'single', width: 2, color: '#ff0000' }, // plain -> stays painted
+      },
+    };
+
+    const element = renderTableFragment({
+      doc,
+      fragment: createTestTableFragment(),
+      context,
+      block,
+      measure: createTestTableMeasure(),
+      cellSpacingPx: 6,
+      effectiveColumnWidths: [100],
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {},
+      applySdtDataset: () => {},
+      applyStyles: () => {},
+    });
+
+    // compound top: width kept (band), color transparent so the overlay rules are the only paint
+    expect(element.style.borderTopWidth).not.toBe('');
+    expect(element.style.borderTopColor).toBe('transparent');
+    // plain single left: normal solid paint, not transparent
+    expect(element.style.borderLeftStyle).toBe('solid');
+    expect(element.style.borderLeftColor).not.toBe('transparent');
+    // the compound overlay still paints the frame rules
+    expect(element.querySelector('.superdoc-compound-border-outline')).not.toBeNull();
+  });
+
   // SD-3308: Word paints the MIDDLE rule of table-level 3-rule bands as a continuous
   // grid (measured: the divider's middle rule runs unbroken through the row band and
   // meets the boundary band's middle ring). The fragment paints one ring inset by

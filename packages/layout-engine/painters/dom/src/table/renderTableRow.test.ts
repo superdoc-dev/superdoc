@@ -1123,6 +1123,44 @@ describe('renderTableRow', () => {
     });
   });
 
+  describe('explicitly borderless cells in a compound-bordered table (SD-3308 review)', () => {
+    // A cell whose `borders` attribute is present but clears every side is intentionally
+    // borderless. Even in a table with compound (double) table borders, the
+    // nested-rectangle compound path must NOT draw double rules onto it.
+    const compoundTableBorders = {
+      top: { style: 'double' as const, width: 2, color: '#000000' },
+      bottom: { style: 'double' as const, width: 2, color: '#000000' },
+      left: { style: 'double' as const, width: 2, color: '#000000' },
+      right: { style: 'double' as const, width: 2, color: '#000000' },
+    };
+
+    it('draws compound rects for a normal cell (control)', () => {
+      renderTableRow(
+        createDeps({ rowIndex: 0, totalRows: 1, cellSpacingPx: 0, tableBorders: compoundTableBorders }) as never,
+      );
+      expect(container.querySelectorAll('.superdoc-compound-border-rect').length).toBe(1);
+    });
+
+    it('draws NO compound rects for a cell with an empty borders attribute', () => {
+      renderTableRow(
+        createDeps({
+          rowIndex: 0,
+          totalRows: 1,
+          cellSpacingPx: 0,
+          tableBorders: compoundTableBorders,
+          row: {
+            id: 'row-1',
+            cells: [{ id: 'c1', attrs: { borders: {} }, blocks: [{ kind: 'paragraph', id: 'p1', runs: [] }] }],
+          },
+        }) as never,
+      );
+      expect(container.querySelectorAll('.superdoc-compound-border-rect').length).toBe(0);
+      // and the cell itself stays borderless (no CSS border resolved)
+      const call = renderTableCellMock.mock.calls[0][0] as { borders?: unknown };
+      expect(call.borders).toBeUndefined();
+    });
+  });
+
   describe('structural row tracked changes', () => {
     const trackedRowDeps = (
       kind: 'insert' | 'delete',

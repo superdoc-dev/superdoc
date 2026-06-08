@@ -799,29 +799,38 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     }
 
     const cellGridBounds = getTableCellGridBounds(cellPosition);
+    // A cell whose `borders` attribute is present but clears every side is intentionally
+    // borderless: `resolveRenderedCellBorders` returns undefined for it (no CSS border).
+    // The compound-rectangle path must honor that too, or `appendCompoundBorderRects` would
+    // draw the table's double/triple rules onto a cell that explicitly cleared its borders.
+    // Yield no effective sides so it paints nothing. (SD-3308 review)
+    const cellIsIntentionallyBorderless = hasBordersAttribute && !hasExplicitCellBorders(cellBordersAttr);
     // Word's double model needs the EFFECTIVE border of every side of this cell,
     // not the single-owner-suppressed set: ownership picks which band face the rule
     // sits on, but every surrounding double edge contributes a side to this cell's
     // rectangle. (SD-3308)
     const cb = (cellBordersAttr ?? {}) as CellBorders;
-    const effectiveSideSpecs: CellBorders = {
-      top:
-        cellGridBounds.touchesTopEdge || continuesFromPrev === true
-          ? resolveTableBorderValue(cb.top, effectiveTableBorders?.top)
-          : (resolveBorderConflict(cb.top, aboveCellBorders?.bottom) ??
-            borderValueToSpec(effectiveTableBorders?.insideH)),
-      bottom:
-        cellGridBounds.touchesBottomEdge || continuesOnNext === true
-          ? resolveTableBorderValue(cb.bottom, effectiveTableBorders?.bottom)
-          : (resolveBorderConflict(cb.bottom, undefined) ?? borderValueToSpec(effectiveTableBorders?.insideH)),
-      left: cellGridBounds.touchesLeftEdge
-        ? resolveTableBorderValue(cb.left, effectiveTableBorders?.left)
-        : (resolveBorderConflict(cb.left, leftCellBorders?.right) ?? borderValueToSpec(effectiveTableBorders?.insideV)),
-      right: cellGridBounds.touchesRightEdge
-        ? resolveTableBorderValue(cb.right, effectiveTableBorders?.right)
-        : (resolveBorderConflict(cb.right, rightCellBorders?.left) ??
-          borderValueToSpec(effectiveTableBorders?.insideV)),
-    };
+    const effectiveSideSpecs: CellBorders = cellIsIntentionallyBorderless
+      ? {}
+      : {
+          top:
+            cellGridBounds.touchesTopEdge || continuesFromPrev === true
+              ? resolveTableBorderValue(cb.top, effectiveTableBorders?.top)
+              : (resolveBorderConflict(cb.top, aboveCellBorders?.bottom) ??
+                borderValueToSpec(effectiveTableBorders?.insideH)),
+          bottom:
+            cellGridBounds.touchesBottomEdge || continuesOnNext === true
+              ? resolveTableBorderValue(cb.bottom, effectiveTableBorders?.bottom)
+              : (resolveBorderConflict(cb.bottom, undefined) ?? borderValueToSpec(effectiveTableBorders?.insideH)),
+          left: cellGridBounds.touchesLeftEdge
+            ? resolveTableBorderValue(cb.left, effectiveTableBorders?.left)
+            : (resolveBorderConflict(cb.left, leftCellBorders?.right) ??
+              borderValueToSpec(effectiveTableBorders?.insideV)),
+          right: cellGridBounds.touchesRightEdge
+            ? resolveTableBorderValue(cb.right, effectiveTableBorders?.right)
+            : (resolveBorderConflict(cb.right, rightCellBorders?.left) ??
+              borderValueToSpec(effectiveTableBorders?.insideV)),
+        };
     const rectBorders = (isRtl ? swapCellBordersLR(effectiveSideSpecs) : effectiveSideSpecs) ?? effectiveSideSpecs;
 
     // Visual (post-RTL-swap) boundary flags matching rectBorders sides.

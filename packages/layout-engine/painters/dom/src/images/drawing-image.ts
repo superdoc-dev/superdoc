@@ -24,14 +24,28 @@ export const createShapeGroupImageElement = (doc: Document, child: ShapeGroupChi
   const img = doc.createElement('img');
   img.src = attrs.src;
   img.alt = attrs.alt ?? '';
-  img.style.objectFit = 'contain';
+  img.style.objectFit = attrs.objectFit ?? 'contain';
   img.style.display = 'block';
-  applyImageClipPath(img, attrs.clipPath);
   const opacity = resolveImageOpacity(attrs);
   if (opacity != null) {
     img.style.opacity = opacity;
   }
-  return img;
+  img.style.width = '100%';
+  img.style.height = '100%';
+  if (!attrs.clipPath && !attrs.shapeClipPath) {
+    return img;
+  }
+
+  const clipContainer = doc.createElement('div');
+  clipContainer.style.width = '100%';
+  clipContainer.style.height = '100%';
+  clipContainer.style.overflow = 'hidden';
+  if (attrs.shapeClipPath) {
+    clipContainer.style.clipPath = attrs.shapeClipPath;
+  }
+  applyImageClipPath(img, attrs.clipPath, { clipContainer });
+  clipContainer.appendChild(img);
+  return clipContainer;
 };
 
 export const createShapeTextImageElement = (doc: Document, part: TextPart): HTMLElement => {

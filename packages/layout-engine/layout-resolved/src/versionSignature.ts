@@ -482,6 +482,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         'drawing:group',
         group.geometry.width,
         group.geometry.height,
+        group.effectExtent ? JSON.stringify(group.effectExtent) : '',
         group.groupTransform ? JSON.stringify(group.groupTransform) : '',
         childSignature,
       ].join('|');

@@ -318,6 +318,101 @@ describe('shapes converter', () => {
       expect(result.groupTransform?.height).toBe(300);
     });
 
+    it('expands geometry when effectExtent is provided', () => {
+      const node: PMNode = {
+        type: 'shapeGroup',
+        attrs: {
+          size: { width: 100, height: 50 },
+          groupTransform: {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+          },
+          effectExtent: { left: 2, top: 4, right: 3, bottom: 5 },
+        },
+      };
+
+      const result = shapeGroupNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.geometry.width).toBe(105);
+      expect(result.geometry.height).toBe(59);
+      expect(result.groupTransform?.width).toBe(100);
+      expect(result.groupTransform?.height).toBe(50);
+      expect(result.effectExtent).toEqual({ left: 2, top: 4, right: 3, bottom: 5 });
+    });
+
+    it('supplements group effect extent when child stroke exceeds the imported value', () => {
+      const node: PMNode = {
+        type: 'shapeGroup',
+        attrs: {
+          size: { width: 100, height: 50 },
+          groupTransform: {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+          },
+          effectExtent: { top: 1 },
+          shapes: [
+            {
+              shapeType: 'vectorShape',
+              attrs: {
+                x: 10,
+                y: 0,
+                width: 20,
+                height: 20,
+                fillColor: null,
+                strokeColor: '#111111',
+                strokeWidth: 2.25,
+              },
+            },
+          ],
+        },
+      };
+
+      const result = shapeGroupNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.effectExtent?.top).toBeCloseTo(1.125);
+      expect(result.geometry.height).toBeCloseTo(51.125);
+      expect(result.groupTransform?.height).toBe(50);
+    });
+
+    it('measures child stroke overflow in group transform coordinates when size differs', () => {
+      const node: PMNode = {
+        type: 'shapeGroup',
+        attrs: {
+          size: { width: 200, height: 100 },
+          groupTransform: {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+          },
+          shapes: [
+            {
+              shapeType: 'vectorShape',
+              attrs: {
+                x: 98,
+                y: 10,
+                width: 2,
+                height: 10,
+                fillColor: null,
+                strokeColor: '#111111',
+                strokeWidth: 4,
+              },
+            },
+          ],
+        },
+      };
+
+      const result = shapeGroupNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.effectExtent?.right).toBe(2);
+      expect(result.geometry.width).toBe(202);
+      expect(result.groupTransform?.width).toBe(100);
+    });
+
     it('includes shape children', () => {
       const node: PMNode = {
         type: 'shapeGroup',

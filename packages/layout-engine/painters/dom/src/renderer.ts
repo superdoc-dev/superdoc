@@ -2925,6 +2925,7 @@ export class DomPainter {
         svgElement.setAttribute('width', '100%');
         svgElement.setAttribute('height', '100%');
         svgElement.style.display = 'block';
+        svgElement.style.overflow = 'visible';
 
         // Apply gradient fill if present
         if (block.fillColor && typeof block.fillColor === 'object') {
@@ -3740,15 +3741,25 @@ export class DomPainter {
 
     const groupTransform = block.groupTransform;
     let contentContainer: HTMLElement = groupEl;
+    const groupEffectExtent = block.effectExtent ?? { left: 0, top: 0, right: 0, bottom: 0 };
+    const hasGroupEffectExtent =
+      groupEffectExtent.left > 0 ||
+      groupEffectExtent.top > 0 ||
+      groupEffectExtent.right > 0 ||
+      groupEffectExtent.bottom > 0;
 
-    const visibleWidth = groupTransform?.width ?? block.geometry.width ?? 0;
-    const visibleHeight = groupTransform?.height ?? block.geometry.height ?? 0;
+    const visibleWidth =
+      groupTransform?.width ??
+      Math.max(0, (block.geometry.width ?? 0) - groupEffectExtent.left - groupEffectExtent.right);
+    const visibleHeight =
+      groupTransform?.height ??
+      Math.max(0, (block.geometry.height ?? 0) - groupEffectExtent.top - groupEffectExtent.bottom);
 
-    if (groupTransform) {
+    if (groupTransform || hasGroupEffectExtent) {
       const inner = this.doc!.createElement('div');
       inner.style.position = 'absolute';
-      inner.style.left = '0';
-      inner.style.top = '0';
+      inner.style.left = `${groupEffectExtent.left}px`;
+      inner.style.top = `${groupEffectExtent.top}px`;
       // Container at visible dimensions. Children use pre-scaled positions/sizes.
       inner.style.width = `${Math.max(1, visibleWidth)}px`;
       inner.style.height = `${Math.max(1, visibleHeight)}px`;
@@ -3757,21 +3768,22 @@ export class DomPainter {
     }
 
     block.shapes.forEach((child) => {
-      const childContent = this.createGroupChildContent(child, 1, 1, context);
-      if (!childContent) return;
       const attrs = (child as ShapeGroupChild).attrs ?? {};
+      const paintExtent = this.getShapeGroupChildPaintExtent(child);
+      const childContent = this.createGroupChildContent(child, 1, 1, context, paintExtent);
+      if (!childContent) return;
       const wrapper = this.doc!.createElement('div');
       wrapper.classList.add('superdoc-shape-group__child');
       wrapper.style.position = 'absolute';
 
       // Children use pre-scaled (visual-space) positions/sizes from import.
-      wrapper.style.left = `${Number(attrs.x ?? 0)}px`;
-      wrapper.style.top = `${Number(attrs.y ?? 0)}px`;
+      wrapper.style.left = `${Number(attrs.x ?? 0) - paintExtent.left}px`;
+      wrapper.style.top = `${Number(attrs.y ?? 0) - paintExtent.top}px`;
 
       const childW = typeof attrs.width === 'number' ? attrs.width : block.geometry.width;
       const childH = typeof attrs.height === 'number' ? attrs.height : block.geometry.height;
-      wrapper.style.width = `${Math.max(1, childW)}px`;
-      wrapper.style.height = `${Math.max(1, childH)}px`;
+      wrapper.style.width = `${Math.max(1, childW + paintExtent.left + paintExtent.right)}px`;
+      wrapper.style.height = `${Math.max(1, childH + paintExtent.top + paintExtent.bottom)}px`;
 
       wrapper.style.transformOrigin = 'center';
       const transforms: string[] = [];
@@ -3796,11 +3808,39 @@ export class DomPainter {
     return groupEl;
   }
 
+  private getShapeGroupChildPaintExtent(child: ShapeGroupChild): EffectExtent {
+    if (child.shapeType !== 'vectorShape' || !('fillColor' in child.attrs)) {
+      return { left: 0, top: 0, right: 0, bottom: 0 };
+    }
+    // Producers must include equivalent group-level effectExtent for edge children so the fragment can grow.
+    // Line-end markers use effectExtent for marker sizing; do not overload it with stroke paint room.
+    if ('lineEnds' in child.attrs && child.attrs.lineEnds) {
+      return { left: 0, top: 0, right: 0, bottom: 0 };
+    }
+    if (child.attrs.strokeColor === null) {
+      return { left: 0, top: 0, right: 0, bottom: 0 };
+    }
+    const rawStrokeWidth = child.attrs.strokeWidth;
+    const parsedStrokeWidth =
+      typeof rawStrokeWidth === 'number'
+        ? rawStrokeWidth
+        : typeof rawStrokeWidth === 'string' && rawStrokeWidth.trim() !== ''
+          ? Number(rawStrokeWidth)
+          : undefined;
+    const strokeWidth = parsedStrokeWidth != null && Number.isFinite(parsedStrokeWidth) ? parsedStrokeWidth : 1;
+    if (strokeWidth <= 0) {
+      return { left: 0, top: 0, right: 0, bottom: 0 };
+    }
+    const extent = strokeWidth / 2;
+    return { left: extent, top: extent, right: extent, bottom: extent };
+  }
+
   private createGroupChildContent(
     child: ShapeGroupChild,
     groupScaleX: number = 1,
     groupScaleY: number = 1,
     context?: FragmentRenderContext,
+    paintExtent: EffectExtent = { left: 0, top: 0, right: 0, bottom: 0 },
   ): HTMLElement | null {
     // Type narrowing with explicit checks to help TypeScript distinguish union members
     if (child.shapeType === 'vectorShape' && 'fillColor' in child.attrs) {
@@ -3816,12 +3856,14 @@ export class DomPainter {
           lineEnds?: LineEnds;
         };
       const childGeometry = {
-        width: attrs.width ?? 0,
-        height: attrs.height ?? 0,
+        width: (attrs.width ?? 0) + paintExtent.left + paintExtent.right,
+        height: (attrs.height ?? 0) + paintExtent.top + paintExtent.bottom,
         rotation: attrs.rotation ?? 0,
         flipH: attrs.flipH ?? false,
         flipV: attrs.flipV ?? false,
       };
+      const hasPaintExtent =
+        paintExtent.left > 0 || paintExtent.top > 0 || paintExtent.right > 0 || paintExtent.bottom > 0;
       const vectorChild: ShapeTextDrawingWithEffects = {
         drawingKind: 'vectorShape',
         kind: 'drawing',
@@ -3844,6 +3886,7 @@ export class DomPainter {
         textAlign: attrs.textAlign,
         textVerticalAlign: attrs.textVerticalAlign,
         textInsets: attrs.textInsets,
+        effectExtent: hasPaintExtent ? paintExtent : undefined,
       };
       // Pass geometry and scale factors to ensure text overlay has correct dimensions
       return this.createVectorShapeElement(vectorChild, childGeometry, false, groupScaleX, groupScaleY, context);

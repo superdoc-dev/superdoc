@@ -864,6 +864,8 @@ export interface ShapeGroupAttrs extends ShapeNodeAttributes {
   padding?: ShapeGroupPadding | null;
   /** Margin offset for anchored shape groups */
   marginOffset?: ShapeGroupMarginOffset | null;
+  /** Extra bounds around the shape group */
+  effectExtent?: VectorShapeEffectExtent | null;
   /** @internal Drawing content data */
   drawingContent?: unknown;
   /** Text wrapping configuration */

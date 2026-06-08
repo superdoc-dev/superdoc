@@ -81,6 +81,7 @@ const isHiddenDrawing = (attrs: Record<string, unknown>): boolean => {
 
 type ShapeDrawingBlock = VectorShapeDrawing | TextboxDrawing | ShapeGroupDrawing;
 type ShapeDrawingGeometry = ShapeDrawingBlock['geometry'];
+type ShapeGroupChild = ShapeGroupDrawing['shapes'][number];
 
 type TextboxAttrsPayload = {
   attributes?: Record<string, unknown>;
@@ -651,6 +652,59 @@ export const buildDrawingBlock = (
 // Shape Converter Functions
 // ============================================================================
 
+const mergeEffectExtents = (
+  base: EffectExtent | undefined,
+  supplement: EffectExtent | undefined,
+): EffectExtent | undefined => {
+  if (!base) return supplement;
+  if (!supplement) return base;
+  return {
+    left: Math.max(base.left, supplement.left),
+    top: Math.max(base.top, supplement.top),
+    right: Math.max(base.right, supplement.right),
+    bottom: Math.max(base.bottom, supplement.bottom),
+  };
+};
+
+const hasEffectExtent = (extent: EffectExtent | undefined): extent is EffectExtent => {
+  return !!extent && (extent.left > 0 || extent.top > 0 || extent.right > 0 || extent.bottom > 0);
+};
+
+const getShapeGroupChildStrokeExtent = (child: ShapeGroupChild): number => {
+  if (child.shapeType !== 'vectorShape' || !isPlainObject(child.attrs)) return 0;
+  if (!('fillColor' in child.attrs)) return 0;
+  if ('lineEnds' in child.attrs && child.attrs.lineEnds) return 0;
+  if (child.attrs.strokeColor === null) return 0;
+
+  const strokeWidth = pickNumber(child.attrs.strokeWidth) ?? 1;
+  return strokeWidth > 0 ? strokeWidth / 2 : 0;
+};
+
+const getRequiredGroupEffectExtentFromChildren = (
+  children: ShapeGroupChild[],
+  width: number,
+  height: number,
+): EffectExtent | undefined => {
+  const required: EffectExtent = { left: 0, top: 0, right: 0, bottom: 0 };
+
+  for (const child of children) {
+    const strokeExtent = getShapeGroupChildStrokeExtent(child);
+    if (strokeExtent <= 0 || !isPlainObject(child.attrs)) continue;
+
+    const childX = pickNumber(child.attrs.x) ?? 0;
+    const childY = pickNumber(child.attrs.y) ?? 0;
+    const childWidth = pickNumber(child.attrs.width) ?? 0;
+    const childHeight = pickNumber(child.attrs.height) ?? 0;
+
+    required.left = Math.max(required.left, Math.max(0, strokeExtent - childX));
+    required.top = Math.max(required.top, Math.max(0, strokeExtent - childY));
+    required.right = Math.max(required.right, Math.max(0, childX + childWidth + strokeExtent - width));
+    required.bottom = Math.max(required.bottom, Math.max(0, childY + childHeight + strokeExtent - height));
+  }
+
+  return hasEffectExtent(required) ? required : undefined;
+};
+
 /**
  * Convert a ProseMirror vectorShape node to a DrawingBlock
  *
@@ -709,10 +763,19 @@ export function shapeGroupNodeToDrawingBlock(
   const size = normalizeShapeSize(rawAttrs.size);
   const width = size?.width ?? groupTransform?.width ?? 1;
   const height = size?.height ?? groupTransform?.height ?? 1;
+  const childCoordinateWidth = groupTransform?.width ?? width;
+  const childCoordinateHeight = groupTransform?.height ?? height;
+  const shapes = normalizeShapeGroupChildren(rawAttrs.shapes);
+  const effectExtent = mergeEffectExtents(
+    normalizeEffectExtent(rawAttrs.effectExtent),
+    getRequiredGroupEffectExtentFromChildren(shapes, childCoordinateWidth, childCoordinateHeight),
+  );
+  const extraWidth = (effectExtent?.left ?? 0) + (effectExtent?.right ?? 0);
+  const extraHeight = (effectExtent?.top ?? 0) + (effectExtent?.bottom ?? 0);
 
   const geometry: ShapeDrawingGeometry = {
-    width: coercePositiveNumber(width, 1),
-    height: coercePositiveNumber(height, 1),
+    width: coercePositiveNumber(width + extraWidth, 1),
+    height: coercePositiveNumber(height + extraHeight, 1),
     rotation: coerceNumber(rawAttrs.rotation) ?? 0,
     flipH: coerceBoolean(rawAttrs.flipH) ?? false,
     flipV: coerceBoolean(rawAttrs.flipV) ?? false,
@@ -720,8 +783,9 @@ export function shapeGroupNodeToDrawingBlock(
 
   return buildDrawingBlock(rawAttrs, nextBlockId, positions, node, geometry, 'shapeGroup', {
     groupTransform,
-    shapes: normalizeShapeGroupChildren(rawAttrs.shapes),
+    shapes,
     size,
+    effectExtent,
   });
 }
 

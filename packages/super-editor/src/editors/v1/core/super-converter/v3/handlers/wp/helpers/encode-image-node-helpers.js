@@ -133,6 +133,40 @@ const extractAlphaModFix = (blip) => {
   return Number.isFinite(amt) ? { amt } : undefined;
 };
 
+const buildShapeClipPathFromPreset = (preset) => {
+  if (preset === 'ellipse') return 'ellipse(50% 50% at 50% 50%)';
+  return null;
+};
+
+const extractPicturePresentation = (picture) => {
+  const blipFill = picture?.elements?.find((el) => el.name === 'pic:blipFill');
+  const stretch = findChildByLocalName(blipFill?.elements, 'stretch');
+  const fillRect = findChildByLocalName(stretch?.elements, 'fillRect');
+  const srcRect = findChildByLocalName(blipFill?.elements, 'srcRect');
+  const srcRectAttrs = srcRect?.attributes || {};
+  const clipPath = buildClipPathFromSrcRect(srcRectAttrs);
+  const srcRectHasNegativeValues = ['l', 't', 'r', 'b'].some((attr) => {
+    const val = srcRectAttrs[attr];
+    return val != null && parseFloat(val) < 0;
+  });
+
+  const shouldStretch = Boolean(stretch && fillRect);
+  const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
+  const shouldFillClippedStretch = shouldStretch && !srcRectHasNegativeValues && Boolean(clipPath);
+
+  const spPr = picture?.elements?.find((el) => el.name === 'pic:spPr');
+  const prstGeom = findChildByLocalName(spPr?.elements, 'prstGeom');
+  const shapeClipPath = buildShapeClipPathFromPreset(prstGeom?.attributes?.['prst']);
+
+  return {
+    clipPath,
+    rawSrcRect: srcRect,
+    shouldCover,
+    shouldFillClippedStretch,
+    shapeClipPath,
+  };
+};
+
 /**
  * Fill wrap.attrs distance fields from wp:anchor dist* when the wrap element omits them.
  * Only merges sides each wp:wrap* element may carry (ECMA-376 CT_WrapSquare / Tight / Through / TopBottom).
@@ -355,7 +389,18 @@ export function handleImageNode(node, params, isAnchor) {
       horizontal: positionHValue,
       top: positionVValue,
     };
-    return handleShapeGroup(params, node, graphicData, size, padding, shapeMarginOffset, anchorData, wrap, isHidden);
+    return handleShapeGroup(
+      params,
+      node,
+      graphicData,
+      size,
+      padding,
+      shapeMarginOffset,
+      anchorData,
+      wrap,
+      extractEffectExtent(node),
+      isHidden,
+    );
   }
 
   if (uri === CHART_URI) {
@@ -397,24 +442,7 @@ export function handleImageNode(node, params, isAnchor) {
   //
   // Skip cover mode when srcRect already emitted explicit clipping or when srcRect has
   // negative values (Word already adjusted the mapping).
-  const stretch = findChildByLocalName(blipFill?.elements, 'stretch');
-  const fillRect = findChildByLocalName(stretch?.elements, 'fillRect');
-  const srcRect = findChildByLocalName(blipFill?.elements, 'srcRect');
-  const srcRectAttrs = srcRect?.attributes || {};
-  const clipPath = buildClipPathFromSrcRect(srcRectAttrs);
-
-  // Check if srcRect has negative values (indicating Word extended/adjusted the image mapping)
-  const srcRectHasNegativeValues = ['l', 't', 'r', 'b'].some((attr) => {
-    const val = srcRectAttrs[attr];
-    return val != null && parseFloat(val) < 0;
-  });
-
-  const shouldStretch = Boolean(stretch && fillRect);
-  // Use cover mode for plain stretch/fillRect when there is no explicit srcRect clipping.
-  // When srcRect emits clipping, we set explicit objectFit='fill' so clip-path math applies
-  // to a fully filled extent box (avoids "thin strip" rendering for cropped anchors).
-  const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
-  const shouldFillClippedStretch = shouldStretch && !srcRectHasNegativeValues && Boolean(clipPath);
+  const { clipPath, rawSrcRect, shouldCover, shouldFillClippedStretch } = extractPicturePresentation(picture);
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {
@@ -594,7 +622,7 @@ export function handleImageNode(node, params, isAnchor) {
     shouldCover,
     ...(shouldFillClippedStretch ? { objectFit: 'fill' } : {}),
     ...(clipPath ? { clipPath } : {}),
-    rawSrcRect: srcRect,
+    rawSrcRect,
     originalPadding: {
       distT: attributes['distT'],
       distB: attributes['distB'],
@@ -920,6 +948,7 @@ const parseShapeGroupImageChild = (pic, transform, params) => {
   const cNvPr = findChildByLocalName(nvPicPr?.elements, 'cNvPr');
   const picId = cNvPr?.attributes?.['id'];
   const picName = cNvPr?.attributes?.['name'];
+  const { clipPath, shouldCover, shouldFillClippedStretch, shapeClipPath } = extractPicturePresentation(pic);
 
   return {
     shapeType: 'image',
@@ -929,6 +958,9 @@ const parseShapeGroupImageChild = (pic, transform, params) => {
       imageId: picId,
       imageName: picName,
       ...(alphaModFix ? { alphaModFix } : {}),
+      ...(clipPath ? { clipPath } : {}),
+      ...(shapeClipPath ? { shapeClipPath } : {}),
+      ...(shouldFillClippedStretch ? { objectFit: 'fill' } : shouldCover ? { objectFit: 'cover' } : {}),
     },
   };
 };
@@ -967,10 +999,22 @@ const collectShapeGroupChildren = (groupNode, transform, params) => {
  * @param {{ horizontal?: number, left?: number, top?: number }} marginOffset - Group offsets relative to its anchor (in pixels).
  * @param {{ hRelativeFrom?: string, vRelativeFrom?: string, alignH?: string, alignV?: string }|null} anchorData - Anchor positioning data.
  * @param {{ type: string, attrs: Object }} wrap - Wrap configuration.
+ * @param {{ left?: number, top?: number, right?: number, bottom?: number }|null} effectExtent - Additional drawing paint bounds.
  * @param {boolean} isHidden - Whether the drawing should be hidden.
  * @returns {{ type: 'shapeGroup', attrs: Object }|null} A shapeGroup node representing the group, or null when no content exists.
  */
-const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset, anchorData, wrap, isHidden) => {
+const handleShapeGroup = (
+  params,
+  node,
+  graphicData,
+  size,
+  padding,
+  marginOffset,
+  anchorData,
+  wrap,
+  effectExtent,
+  isHidden,
+) => {
   const wgp = graphicData.elements.find((el) => el.name === 'wpg:wgp');
   if (!wgp) {
     const placeholder = buildShapePlaceholder(node, size, padding, marginOffset, 'group');
@@ -1000,6 +1044,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
       size,
       padding,
       marginOffset,
+      effectExtent,
       anchorData,
       wrap,
       originalAttributes: node?.attributes,

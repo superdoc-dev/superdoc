@@ -57,7 +57,7 @@ describe('handleImageNode - Shape Group Support', () => {
     ...(includeChExt ? [{ name: 'a:chExt', attributes: { cx: chCx, cy: chCy } }] : []),
   ];
 
-  const createShapeGroupNode = (shapes = [], xfrm = {}) => {
+  const createShapeGroupNode = (shapes = [], xfrm = {}, effectExtent = null) => {
     return {
       attributes: {
         behindDoc: '0',
@@ -74,6 +74,14 @@ describe('handleImageNode - Shape Group Support', () => {
             cy: '1628775',
           },
         },
+        ...(effectExtent
+          ? [
+              {
+                name: 'wp:effectExtent',
+                attributes: effectExtent,
+              },
+            ]
+          : []),
         {
           name: 'a:graphic',
           elements: [
@@ -175,67 +183,6 @@ describe('handleImageNode - Shape Group Support', () => {
     };
   };
 
-  const createPicture = ({ rEmbed = 'rIdImage', alphaModFixAmt } = {}) => ({
-    name: 'pic:pic',
-    elements: [
-      {
-        name: 'pic:nvPicPr',
-        elements: [
-          {
-            name: 'pic:cNvPr',
-            attributes: { id: '9', name: 'Grouped Picture' },
-          },
-        ],
-      },
-      {
-        name: 'pic:blipFill',
-        elements: [
-          {
-            name: 'a:blip',
-            attributes: { 'r:embed': rEmbed },
-            ...(alphaModFixAmt != null
-              ? {
-                  elements: [{ name: 'a:alphaModFix', attributes: { amt: String(alphaModFixAmt) } }],
-                }
-              : {}),
-          },
-        ],
-      },
-      {
-        name: 'pic:spPr',
-        elements: [
-          {
-            name: 'a:xfrm',
-            elements: [
-              { name: 'a:off', attributes: { x: '0', y: '0' } },
-              { name: 'a:ext', attributes: { cx: '914400', cy: '914400' } },
-            ],
-          },
-        ],
-      },
-    ],
-  });
-
-  const createImageParams = () => ({
-    filename: 'document.xml',
-    docx: {
-      'word/_rels/document.xml.rels': {
-        elements: [
-          {
-            name: 'Relationships',
-            elements: [
-              {
-                name: 'Relationship',
-                attributes: { Id: 'rIdImage', Target: 'media/grouped-watermark.png' },
-              },
-            ],
-          },
-        ],
-      },
-    },
-    nodes: [{ name: 'w:drawing' }],
-  });
-
   const createTextBoxShape = (id, name, x, y, cx, cy, lines) => {
     const shape = createShape(id, name, x, y, cx, cy);
     shape.elements.push({
@@ -281,6 +228,98 @@ describe('handleImageNode - Shape Group Support', () => {
     };
   };
 
+  const createPicture = ({
+    id = '10',
+    name = 'Picture 10',
+    rId = 'rIdImage',
+    rEmbed,
+    x = '0',
+    y = '0',
+    cx = '9525',
+    cy = '9525',
+    prst = 'ellipse',
+    srcRectAttrs,
+    alphaModFixAmt,
+  } = {}) => {
+    const blipFillElements = [
+      {
+        name: 'a:blip',
+        attributes: { 'r:embed': rEmbed ?? rId },
+        ...(alphaModFixAmt != null
+          ? {
+              elements: [{ name: 'a:alphaModFix', attributes: { amt: String(alphaModFixAmt) } }],
+            }
+          : {}),
+      },
+    ];
+    if (srcRectAttrs) {
+      blipFillElements.push({
+        name: 'a:srcRect',
+        attributes: srcRectAttrs,
+      });
+    }
+    blipFillElements.push({
+      name: 'a:stretch',
+      elements: [{ name: 'a:fillRect' }],
+    });
+
+    return {
+      name: 'pic:pic',
+      elements: [
+        {
+          name: 'pic:nvPicPr',
+          elements: [
+            {
+              name: 'pic:cNvPr',
+              attributes: { id, name },
+            },
+          ],
+        },
+        {
+          name: 'pic:blipFill',
+          elements: blipFillElements,
+        },
+        {
+          name: 'pic:spPr',
+          elements: [
+            {
+              name: 'a:xfrm',
+              elements: [
+                { name: 'a:off', attributes: { x, y } },
+                { name: 'a:ext', attributes: { cx, cy } },
+              ],
+            },
+            {
+              name: 'a:prstGeom',
+              attributes: { prst },
+              elements: [{ name: 'a:avLst' }],
+            },
+          ],
+        },
+      ],
+    };
+  };
+
+  const createParamsWithImageRel = (target = 'media/image5.jpeg', rId = 'rIdImage') => ({
+    filename: 'document.xml',
+    docx: {
+      'word/_rels/document.xml.rels': {
+        elements: [
+          {
+            name: 'Relationships',
+            elements: [
+              {
+                name: 'Relationship',
+                attributes: { Id: rId, Target: target },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    nodes: [{ name: 'w:drawing' }],
+  });
+
   it('should parse a shape group with multiple shapes', () => {
     const shapes = [
       createShape('2', 'Shape 1', '1260360', '0', '1571760', '1571760', 'ff0000'),
@@ -303,9 +342,11 @@ describe('handleImageNode - Shape Group Support', () => {
   });
 
   it('should extract alphaModFix from grouped pictures', () => {
-    const node = createShapeGroupNode([createPicture({ alphaModFixAmt: 9000 })]);
+    const node = createShapeGroupNode([
+      createPicture({ id: '9', name: 'Grouped Picture', alphaModFixAmt: 9000 }),
+    ]);
 
-    const result = handleImageNode(node, createImageParams(), true);
+    const result = handleImageNode(node, createParamsWithImageRel('media/grouped-watermark.png'), true);
 
     expect(result).toBeTruthy();
     expect(result.type).toBe('shapeGroup');
@@ -318,6 +359,27 @@ describe('handleImageNode - Shape Group Support', () => {
         imageName: 'Grouped Picture',
         alphaModFix: { amt: 9000 },
       },
+    });
+  });
+
+  it('should extract group effect extent from wp:effectExtent', () => {
+    const node = createShapeGroupNode(
+      [createShape('2', 'Shape 1', '0', '0', '100', '100')],
+      {},
+      { l: '9525', t: '19050', r: '0', b: '28575' },
+    );
+    const params = {
+      docx: {},
+      nodes: [{ name: 'w:drawing' }],
+    };
+
+    const result = handleImageNode(node, params, true);
+
+    expect(result.attrs.effectExtent).toEqual({
+      left: 1,
+      top: 2,
+      right: 0,
+      bottom: 3,
     });
   });
 
@@ -430,6 +492,50 @@ describe('handleImageNode - Shape Group Support', () => {
     expect(shape.attrs.rotation).toBeGreaterThan(0);
     expect(shape.attrs.flipH).toBe(true);
     expect(shape.attrs.flipV).toBe(true);
+  });
+
+  it('should preserve grouped picture srcRect and ellipse geometry as image clipping attrs', () => {
+    const picture = createPicture({
+      id: '1784104486',
+      name: 'Picture 31',
+      srcRectAttrs: { t: '589', b: '589' },
+    });
+    const node = createShapeGroupNode([picture]);
+
+    const result = handleImageNode(node, createParamsWithImageRel(), true);
+    const image = result.attrs.shapes[0];
+
+    expect(image.shapeType).toBe('image');
+    expect(image.attrs).toMatchObject({
+      src: 'word/media/image5.jpeg',
+      imageId: '1784104486',
+      imageName: 'Picture 31',
+      clipPath: 'inset(0.589% 0% 0.589% 0%)',
+      shapeClipPath: 'ellipse(50% 50% at 50% 50%)',
+      objectFit: 'fill',
+    });
+  });
+
+  it('should reuse stretch fill cover behavior for grouped pictures without srcRect', () => {
+    const picture = createPicture({
+      id: '1784104487',
+      name: 'Picture 32',
+      prst: 'rect',
+    });
+    const node = createShapeGroupNode([picture]);
+
+    const result = handleImageNode(node, createParamsWithImageRel(), true);
+    const image = result.attrs.shapes[0];
+
+    expect(image.shapeType).toBe('image');
+    expect(image.attrs).toMatchObject({
+      src: 'word/media/image5.jpeg',
+      imageId: '1784104487',
+      imageName: 'Picture 32',
+      objectFit: 'cover',
+    });
+    expect(image.attrs.clipPath).toBeUndefined();
+    expect(image.attrs.shapeClipPath).toBeUndefined();
   });
 
   it('should preserve drawingContent for round-tripping', () => {

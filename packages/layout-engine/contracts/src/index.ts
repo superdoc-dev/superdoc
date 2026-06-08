@@ -1171,6 +1171,8 @@ export type ShapeGroupImageChild = {
     alt?: string;
     clipPath?: string;
     alphaModFix?: ImageAlphaModFix;
+    shapeClipPath?: string;
+    objectFit?: string;
     imageId?: string;
     imageName?: string;
   };
@@ -1261,6 +1263,7 @@ export type TextboxDrawing = DrawingBlockBase & {
 export type ShapeGroupDrawing = DrawingBlockBase & {
   drawingKind: 'shapeGroup';
   geometry: DrawingGeometry;
+  effectExtent?: EffectExtent;
   groupTransform?: ShapeGroupTransform;
   shapes: ShapeGroupChild[];
   size?: {

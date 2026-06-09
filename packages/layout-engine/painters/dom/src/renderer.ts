@@ -2933,7 +2933,7 @@ export class DomPainter {
       return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context, fragment);
     }
     if (block.drawingKind === 'shapeGroup') {
-      return this.createShapeGroupElement(block, context);
+      return this.createShapeGroupElement(block, context, fragment.geometry);
     }
     if (block.drawingKind === 'chart') {
       return this.createChartElement(block);
@@ -3935,7 +3935,11 @@ export class DomPainter {
     }
   }
 
-  private createShapeGroupElement(block: ShapeGroupDrawing, context?: FragmentRenderContext): HTMLElement {
+  private createShapeGroupElement(
+    block: ShapeGroupDrawing,
+    context?: FragmentRenderContext,
+    fragmentGeometry?: DrawingGeometry,
+  ): HTMLElement {
     const groupEl = this.doc!.createElement('div');
     groupEl.classList.add('superdoc-shape-group');
     groupEl.style.position = 'relative';
@@ -3967,13 +3971,19 @@ export class DomPainter {
       inner.style.width = `${Math.max(1, visibleWidth)}px`;
       inner.style.height = `${Math.max(1, visibleHeight)}px`;
       const groupTransforms: string[] = [];
-      if (groupTransform?.rotation) {
-        groupTransforms.push(`rotate(${groupTransform.rotation}deg)`);
+      const groupRotation =
+        groupTransform?.rotation && groupTransform.rotation !== fragmentGeometry?.rotation
+          ? groupTransform.rotation
+          : 0;
+      const groupFlipH = groupTransform?.flipH && groupTransform.flipH !== fragmentGeometry?.flipH;
+      const groupFlipV = groupTransform?.flipV && groupTransform.flipV !== fragmentGeometry?.flipV;
+      if (groupRotation) {
+        groupTransforms.push(`rotate(${groupRotation}deg)`);
       }
-      if (groupTransform?.flipH) {
+      if (groupFlipH) {
         groupTransforms.push('scaleX(-1)');
       }
-      if (groupTransform?.flipV) {
+      if (groupFlipV) {
         groupTransforms.push('scaleY(-1)');
       }
       if (groupTransforms.length > 0) {

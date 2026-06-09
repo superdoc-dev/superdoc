@@ -362,6 +362,20 @@ describe('handleImageNode - Shape Group Support', () => {
     });
   });
 
+  it('should preserve XML paint order across nested groups, shapes, and pictures', () => {
+    const nestedPicture = createPicture({ id: '10', name: 'Nested Picture' });
+    const directShape = createShape('11', 'Direct Shape', '0', '0', '100', '100');
+    const directPicture = createPicture({ id: '12', name: 'Direct Picture' });
+    const nestedGroup = createNestedGroup({ children: [nestedPicture] });
+    const node = createShapeGroupNode([nestedGroup, directShape, directPicture]);
+
+    const result = handleImageNode(node, createParamsWithImageRel(), true);
+
+    expect(
+      result.attrs.shapes.map((shape) => (shape.shapeType === 'image' ? shape.attrs.imageId : shape.attrs.shapeId)),
+    ).toEqual(['10', '11', '12']);
+  });
+
   it('should extract group effect extent from wp:effectExtent', () => {
     const node = createShapeGroupNode(
       [createShape('2', 'Shape 1', '0', '0', '100', '100')],

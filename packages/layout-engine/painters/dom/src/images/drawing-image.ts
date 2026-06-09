@@ -25,6 +25,9 @@ export const createShapeGroupImageElement = (doc: Document, child: ShapeGroupChi
   img.src = attrs.src;
   img.alt = attrs.alt ?? '';
   img.style.objectFit = attrs.objectFit ?? 'contain';
+  if (attrs.objectFit === 'cover') {
+    img.style.objectPosition = 'left top';
+  }
   img.style.display = 'block';
   const opacity = resolveImageOpacity(attrs);
   if (opacity != null) {

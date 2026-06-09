@@ -252,6 +252,13 @@ describe('deriveBlockVersion - table image content', () => {
 
     expect(circle).not.toBe(ellipse);
   });
+
+  it('changes when a block image objectFit changes', () => {
+    const contain = deriveBlockVersion({ ...baseImage, objectFit: 'contain' });
+    const cover = deriveBlockVersion({ ...baseImage, objectFit: 'cover' });
+
+    expect(cover).not.toBe(contain);
+  });
 });
 
 describe('deriveBlockVersion - textboxShape content', () => {

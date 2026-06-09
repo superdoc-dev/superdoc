@@ -974,26 +974,23 @@ const parseShapeGroupImageChild = (pic, transform, params) => {
 };
 
 const collectShapeGroupChildren = (groupNode, transform, params) => {
-  const pictures = [];
-  const shapes = [];
-  const nestedChildren = [];
+  const children = [];
 
   for (const child of groupNode?.elements || []) {
     const localName = getLocalName(child?.name);
     if (localName === 'wsp') {
       const shape = parseShapeGroupVectorChild(child, transform, params);
-      if (shape) shapes.push(shape);
+      if (shape) children.push(shape);
     } else if (localName === 'pic') {
       const picture = parseShapeGroupImageChild(child, transform, params);
-      if (picture) pictures.push(picture);
+      if (picture) children.push(picture);
     } else if (localName === 'grpSp') {
       const nestedTransform = composeShapeGroupTransform(transform, getGroupAffineTransform(getGroupXfrm(child)));
-      nestedChildren.push(...collectShapeGroupChildren(child, nestedTransform, params));
+      children.push(...collectShapeGroupChildren(child, nestedTransform, params));
     }
   }
 
-  // Preserve the previous picture-below-shape order for each level; nested leaves are appended as planned.
-  return [...pictures, ...shapes, ...nestedChildren];
+  return children;
 };
 
 /**

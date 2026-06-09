@@ -570,6 +570,9 @@ export type ImageAlphaModFix = {
 /** Hyperlink metadata from OOXML a:hlinkClick on a DrawingML image. */
 export type ImageHyperlink = { url: string; tooltip?: string };
 
+/** CSS object-fit values supported by SuperDoc image rendering paths. */
+export type ObjectFit = 'contain' | 'cover' | 'fill' | 'scale-down';
+
 /**
  * Inline image run for images that flow with text on the same line.
  * Unlike ImageBlock (anchored/floating images), ImageRun is part of the paragraph's run array
@@ -605,7 +608,7 @@ export type ImageRun = {
   /** Clip-path value for preset shape masks applied around the image box. */
   shapeClipPath?: string;
   /** CSS object-fit behavior for the painted image inside its layout box. */
-  objectFit?: 'contain' | 'cover' | 'fill' | 'scale-down';
+  objectFit?: ObjectFit;
 
   /**
    * Spacing around the image (from DOCX distT/distB/distL/distR attributes).
@@ -952,7 +955,7 @@ export type ImageBlock = {
   height?: number;
   alt?: string;
   title?: string;
-  objectFit?: 'contain' | 'cover' | 'fill' | 'scale-down';
+  objectFit?: ObjectFit;
   display?: 'inline' | 'block';
   padding?: BoxSpacing;
   margin?: BoxSpacing;
@@ -1176,7 +1179,7 @@ export type ShapeGroupImageChild = {
     clipPath?: string;
     alphaModFix?: ImageAlphaModFix;
     shapeClipPath?: string;
-    objectFit?: string;
+    objectFit?: ObjectFit;
     imageId?: string;
     imageName?: string;
   };

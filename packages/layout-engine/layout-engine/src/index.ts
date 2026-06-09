@@ -2078,11 +2078,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     });
 
     const columns = getActiveColumnsForState(state);
-    const pageMargins = state.page.margins ?? {
-      top: activeTopMargin,
-      bottom: activeBottomMargin,
-      left: activeLeftMargin,
-      right: activeRightMargin,
+    const pageMargins = {
+      top: state.page.margins?.top ?? activeTopMargin,
+      bottom: state.page.margins?.bottom ?? activeBottomMargin,
+      left: state.page.margins?.left ?? activeLeftMargin,
+      right: state.page.margins?.right ?? activeRightMargin,
     };
     const pageWidth = state.page.size?.w ?? activePageSize.w;
     const contentWidth = pageWidth - ((pageMargins.left ?? 0) + (pageMargins.right ?? 0));

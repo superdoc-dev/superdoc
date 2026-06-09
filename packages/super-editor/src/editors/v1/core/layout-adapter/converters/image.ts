@@ -4,7 +4,7 @@
  * Handles conversion of ProseMirror image nodes to ImageBlocks
  */
 
-import type { ImageBlock, BoxSpacing, ImageAnchor, SourceAnchor } from '@superdoc/contracts';
+import type { ImageBlock, BoxSpacing, ImageAnchor, ObjectFit, SourceAnchor } from '@superdoc/contracts';
 import type { PMNode, BlockIdGenerator, PositionMap, NodeHandlerContext, TrackedChangesConfig } from '../types.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
 import { shouldHideTrackedNode, annotateBlockWithTrackedChange } from '../tracked-changes.js';
@@ -40,7 +40,7 @@ const sourceAnchorFromAttrs = (attrs: Record<string, unknown>): SourceAnchor | u
   return isPlainObject(sourceAnchor) ? (sourceAnchor as SourceAnchor) : undefined;
 };
 
-const isAllowedObjectFit = (value?: string): value is 'contain' | 'cover' | 'fill' | 'scale-down' => {
+const isAllowedObjectFit = (value?: string): value is ObjectFit => {
   return value === 'contain' || value === 'cover' || value === 'fill' || value === 'scale-down';
 };
 
@@ -278,7 +278,7 @@ export function imageNodeToBlock(
   const alphaModFix = isPlainObject(attrs.alphaModFix) ? attrs.alphaModFix : undefined;
   const alphaModFixAmt = pickNumber(alphaModFix?.amt);
 
-  const objectFit: 'contain' | 'cover' | 'fill' | 'scale-down' | undefined = isAllowedObjectFit(explicitObjectFit)
+  const objectFit: ObjectFit | undefined = isAllowedObjectFit(explicitObjectFit)
     ? explicitObjectFit
     : shouldCover
       ? 'cover'

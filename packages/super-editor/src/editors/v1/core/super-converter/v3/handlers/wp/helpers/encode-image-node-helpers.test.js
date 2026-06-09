@@ -1033,7 +1033,7 @@ describe('handleImageNode', () => {
       expect(result.attrs.clipPath).toBe('inset(0% 84.8% 0% 0%)');
     });
 
-    it('preserves standalone picture ellipse geometry as a shape clip path', () => {
+    it('preserves standalone picture ellipse geometry and cover fit for negative srcRect', () => {
       const node = makeNodeWithBlipFill(
         [
           {

@@ -5519,6 +5519,7 @@ describe('DomPainter', () => {
     expect(imageInHeader).toBeNull();
     expect(overlayImage).toBeTruthy();
     expect(overlayImage?.style.top).toBe('40px');
+    expect(overlayImage?.style.pointerEvents).toBe('none');
   });
 
   it('positions non-WordArt wrapNone paragraph-relative header media from the header origin', () => {

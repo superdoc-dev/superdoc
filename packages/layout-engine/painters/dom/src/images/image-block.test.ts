@@ -140,4 +140,22 @@ describe('createShapeGroupImageElement', () => {
     expect(imgEl.style.display).toBe('block');
     expect(imgEl.style.opacity).toBe('0.09');
   });
+
+  it('uses top-left crop anchoring for grouped cover images', () => {
+    const doc = createDoc();
+    const imgEl = createShapeGroupImageElement(doc, {
+      shapeType: 'image',
+      attrs: {
+        x: 0,
+        y: 0,
+        width: 80,
+        height: 40,
+        src: 'data:image/png;base64,AAA',
+        objectFit: 'cover',
+      },
+    }) as HTMLImageElement;
+
+    expect(imgEl.style.objectFit).toBe('cover');
+    expect(imgEl.style.objectPosition).toBe('left top');
+  });
 });

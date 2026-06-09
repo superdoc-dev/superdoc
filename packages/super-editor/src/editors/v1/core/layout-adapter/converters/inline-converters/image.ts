@@ -1,4 +1,4 @@
-import type { ImageRun } from '@superdoc/contracts';
+import type { ImageRun, ObjectFit } from '@superdoc/contracts';
 import type { PMNode } from '../../types.js';
 import { pickNumber, isPlainObject, readImageHyperlink } from '../../utilities.js';
 import { type InlineConverterParams, NotInlineNodeError } from './common.js';
@@ -10,7 +10,7 @@ import { type InlineConverterParams, NotInlineNodeError } from './common.js';
 const DEFAULT_IMAGE_DIMENSION_PX = 100;
 const ALLOWED_OBJECT_FIT = new Set(['contain', 'cover', 'fill', 'scale-down']);
 
-const isAllowedObjectFit = (value: unknown): value is NonNullable<ImageRun['objectFit']> =>
+const isAllowedObjectFit = (value: unknown): value is ObjectFit =>
   typeof value === 'string' && ALLOWED_OBJECT_FIT.has(value);
 
 /**

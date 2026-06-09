@@ -16,7 +16,7 @@ export const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 export const DEFAULT_CORPUS_ROOT = path.join(REPO_ROOT, 'test-corpus');
 export const REGISTRY_KEY = 'registry.json';
 export const DOCX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-export const CORPUS_BUCKET_NAME = 'docx-test-corpus';
+export const CORPUS_BUCKET_NAME = 'docx-test-documents';
 export const CORPUS_ACCOUNT_ID = 'afc2655a510195709ae6fa06772d73f2';
 
 const WRANGLER_CONFIG_PATHS =
@@ -168,6 +168,11 @@ function isMissingWranglerBinary(error) {
     typeof error?.stdout === 'string' ? error.stdout : '',
   ].join('\n');
   return /ENOENT|not found|command not found/i.test(text);
+}
+
+function isAccessDeniedError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /AccessDenied|Access Denied|Forbidden/i.test(message) || error?.['$metadata']?.httpStatusCode === 403;
 }
 
 async function runWrangler(args, { accountId }) {
@@ -409,7 +414,14 @@ async function createWranglerR2Client() {
 export async function createCorpusR2Client() {
   const s3Config = resolveS3Credentials();
   if (s3Config) {
-    return createS3R2Client(s3Config);
+    const s3Client = await createS3R2Client(s3Config);
+    try {
+      await s3Client.listObjects(REGISTRY_KEY);
+      return s3Client;
+    } catch (error) {
+      s3Client.destroy();
+      if (!isAccessDeniedError(error)) throw error;
+    }
   }
   return createWranglerR2Client();
 }

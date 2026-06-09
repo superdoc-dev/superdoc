@@ -46,6 +46,7 @@ type RefreshAfterPaintOptions = {
   proofingAnnotations: ProofingAnnotation[] | null | undefined;
   rebuildDomPositionIndex: () => void;
   reapplyStructuredContentHover?: () => void;
+  reapplyTocGroupHover?: () => void;
 };
 
 /**
@@ -141,6 +142,7 @@ export class PresentationPostPaintPipeline {
     this.syncInlineStyleLayers(options.editorState, options.domPositionIndex);
     this.applyProofingAnnotations(options.proofingAnnotations, options.rebuildDomPositionIndex);
     options.reapplyStructuredContentHover?.();
+    options.reapplyTocGroupHover?.();
   }
 
   destroy(): void {

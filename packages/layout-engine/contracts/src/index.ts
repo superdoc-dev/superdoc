@@ -1778,6 +1778,8 @@ export type ParagraphAttrs = {
   directionContext?: ParagraphDirectionContext;
   isTocEntry?: boolean;
   tocInstruction?: string;
+  /** Stable id shared by every paragraph in the same TOC (docPartObj uniqueId or parent sdBlockId). */
+  tocId?: string;
   /** Floating alignment for positioned paragraphs (from w:framePr/@w:xAlign). */
   floatAlignment?: 'left' | 'right' | 'center';
   /**

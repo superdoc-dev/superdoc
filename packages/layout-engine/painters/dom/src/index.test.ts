@@ -13360,6 +13360,81 @@ describe('applyRunDataAttributes', () => {
       expect(fragment.dataset.pmEnd).toBe('10');
     });
 
+    it('renders a trailing lineBreak continuation as a bare PM-ranged line', () => {
+      const lineBreakBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'linebreak-continuation',
+        runs: [
+          { text: 'Text', fontFamily: 'Arial', fontSize: 16, pmStart: 5, pmEnd: 9 },
+          { kind: 'lineBreak', pmStart: 9, pmEnd: 10 },
+        ],
+      };
+
+      const lineBreakMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 4,
+            width: 40,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 1,
+            fromChar: 0,
+            toRun: 1,
+            toChar: 0,
+            width: 0,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 40,
+      };
+
+      const lineBreakLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'linebreak-continuation',
+                fromLine: 0,
+                toLine: 2,
+                x: 20,
+                y: 20,
+                width: 300,
+                pmStart: 5,
+                pmEnd: 10,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createTestPainter({
+        blocks: [lineBreakBlock],
+        measures: [lineBreakMeasure],
+      });
+
+      painter.paint(lineBreakLayout, mount);
+
+      const lines = mount.querySelectorAll<HTMLElement>('.superdoc-line');
+      expect(lines).toHaveLength(2);
+      expect(lines[1].dataset.pmStart).toBe('9');
+      expect(lines[1].dataset.pmEnd).toBe('10');
+      expect(lines[1].children).toHaveLength(0);
+      expect(lines[1].querySelector('.superdoc-empty-run')).toBeNull();
+      expect(lines[1].textContent).toBe('');
+    });
+
     it('handles multiple consecutive lineBreak runs', () => {
       const multiLineBreakBlock: FlowBlock = {
         kind: 'paragraph',

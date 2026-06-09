@@ -1154,6 +1154,24 @@ menclose::after {
 }
 `;
 
+/**
+ * SD-3400: footnote/endnote note content uses a text (I-beam) cursor like body
+ * text, not the default arrow. Note fragments are painted as generic
+ * `.superdoc-fragment` elements distinguished only by their block-id prefix
+ * (footnote-/endnote-/__sd_semantic_footnote-/__sd_semantic_endnote-), so the
+ * cursor rule keys off `data-block-id`. The renderer marks these fragments
+ * contenteditable=false, so without this rule the browser shows a default arrow
+ * over editable note text.
+ */
+const FOOTNOTE_STYLES = `
+[data-block-id^="footnote-"],
+[data-block-id^="endnote-"],
+[data-block-id^="__sd_semantic_footnote-"],
+[data-block-id^="__sd_semantic_endnote-"] {
+  cursor: text;
+}
+`;
+
 let printStylesInjected = false;
 let linkStylesInjected = false;
 let trackChangeStylesInjected = false;
@@ -1162,6 +1180,7 @@ let sdtContainerStylesInjected = false;
 let fieldAnnotationStylesInjected = false;
 let imageSelectionStylesInjected = false;
 let mathMencloseStylesInjected = false;
+let footnoteStylesInjected = false;
 
 export const ensurePrintStyles = (doc: Document | null | undefined) => {
   if (printStylesInjected || !doc) return;
@@ -1244,4 +1263,17 @@ export const ensureMathMencloseStyles = (doc: Document | null | undefined) => {
   styleEl.textContent = MATH_MENCLOSE_STYLES;
   doc.head?.appendChild(styleEl);
   mathMencloseStylesInjected = true;
+};
+
+/**
+ * Injects footnote/endnote interaction styles (text cursor over note content)
+ * into the document head. Injected once per document lifecycle. (SD-3400)
+ */
+export const ensureFootnoteStyles = (doc: Document | null | undefined) => {
+  if (footnoteStylesInjected || !doc) return;
+  const styleEl = doc.createElement('style');
+  styleEl.setAttribute('data-superdoc-footnote-styles', 'true');
+  styleEl.textContent = FOOTNOTE_STYLES;
+  doc.head?.appendChild(styleEl);
+  footnoteStylesInjected = true;
 };

@@ -65,6 +65,7 @@ import {
   containerStyles,
   containerStylesHorizontal,
   ensureFieldAnnotationStyles,
+  ensureFootnoteStyles,
   ensureFormattingMarksStyles,
   ensureImageSelectionStyles,
   ensureLinkStyles,
@@ -1301,6 +1302,7 @@ export class DomPainter {
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
     ensureMathMencloseStyles(doc);
+    ensureFootnoteStyles(doc);
     if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       ensureRulerStyles(doc);
     }

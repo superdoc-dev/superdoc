@@ -3438,10 +3438,14 @@ function getPageRelativeMeasurementBand(
 function isHeaderFooterAbsoluteOverlay(
   block: ImageBlock | DrawingBlock,
   kind: 'header' | 'footer' | undefined,
+  fragment: Fragment,
+  fragmentBottom: number,
+  canvasHeight: number,
 ): boolean {
   if (!kind) return false;
   if (block.anchor?.isAnchored !== true) return false;
-  return block.wrap?.type === 'None';
+  if (block.wrap?.type !== 'None') return false;
+  return fragment.y < 0 || fragmentBottom > canvasHeight;
 }
 
 /**
@@ -3455,10 +3459,10 @@ function isHeaderFooterAbsoluteOverlay(
  * 3. Page-relative header/footer overlays that do not intersect the region's
  *    reserved margin band — they should still render, but must not reserve
  *    body space like true header/footer content.
- * 4. Header/footer anchored overlays with wrap=None. OOXML wrapNone creates no
- *    text exclusion zone, so these objects render as absolute story overlays
- *    but do not reserve header/footer text-band height. This is limited to
- *    header/footer layout; body wrapNone behavior is out of scope.
+ * 4. Header/footer anchored overlays with wrap=None that extend outside the
+ *    measurement canvas. OOXML wrapNone creates no text exclusion zone, so
+ *    out-of-band story overlays should render without reserving header/footer
+ *    text-band height. In-band wrapNone media remains measurable content.
  */
 function shouldExcludeFromMeasurement(
   fragment: Fragment,
@@ -3485,7 +3489,7 @@ function shouldExcludeFromMeasurement(
   // behindDoc fragments never affect measurement
   if (anchoredBlock.anchor?.behindDoc) return true;
 
-  if (isHeaderFooterAbsoluteOverlay(anchoredBlock, kind)) {
+  if (isHeaderFooterAbsoluteOverlay(anchoredBlock, kind, fragment, fragmentBottom, canvasHeight)) {
     return true;
   }
 

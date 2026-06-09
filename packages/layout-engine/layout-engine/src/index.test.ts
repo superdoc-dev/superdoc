@@ -4970,6 +4970,46 @@ describe('layoutHeaderFooter', () => {
     expect(layout.renderHeight).toBeCloseTo(568);
   });
 
+  it('keeps ordinary wrap=None header media in measurement height', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'header-text',
+      runs: [{ text: 'Header', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 7 }],
+    };
+    const logoBlock: FlowBlock = {
+      kind: 'image',
+      id: 'header-logo',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 20,
+        offsetV: 20,
+        behindDoc: false,
+      },
+      wrap: { type: 'None' },
+    };
+    const paragraphMeasure = makeMeasure([15]);
+    const logoMeasure: Measure = { kind: 'image', width: 80, height: 40 };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, logoBlock],
+      [paragraphMeasure, logoMeasure],
+      {
+        width: 400,
+        height: 100,
+        pageWidth: 500,
+        pageHeight: 700,
+        margins: { left: 50, right: 50, top: 72, bottom: 72, header: 36 },
+      },
+      'header',
+    );
+
+    expect(layout.height).toBeCloseTo(60);
+    expect(layout.renderHeight).toBeCloseTo(layout.height);
+  });
+
   it('excludes wrap=None page-covering overlays from measurement (column/paragraph anchored cover page)', () => {
     // Regression for SD-2499 review: a foreground cover-page rectangle in a
     // header is column/paragraph anchored, has wrap=None, and is sized to

@@ -236,7 +236,7 @@ test.describe('Textbox content editing — footer (sd-1331)', () => {
 
     const el = line.asElement();
     if (!el) {
-      test.skip(true, 'No footer textbox with superdoc-line found in sd-1331');
+      throw new Error('No footer textbox with superdoc-line found in sd-1331 — textbox rendering may have regressed');
       return;
     }
 
@@ -273,7 +273,7 @@ test.describe('Textbox content editing — footer (sd-1331)', () => {
 
     const el = line.asElement();
     if (!el) {
-      test.skip(true, 'No footer textbox with superdoc-line found in sd-1331');
+      throw new Error('No footer textbox with superdoc-line found in sd-1331 — textbox rendering may have regressed');
       return;
     }
 

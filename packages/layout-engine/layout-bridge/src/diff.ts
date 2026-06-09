@@ -518,12 +518,22 @@ const drawingBlocksEqual = (a: DrawingBlock, b: DrawingBlock): boolean => {
     (a.drawingKind === 'vectorShape' || a.drawingKind === 'textboxShape') &&
     (b.drawingKind === 'vectorShape' || b.drawingKind === 'textboxShape')
   ) {
+    const textboxContentEqual =
+      a.drawingKind !== 'textboxShape' ||
+      b.drawingKind !== 'textboxShape' ||
+      jsonEqual((a as TextboxDrawing).contentBlocks, (b as TextboxDrawing).contentBlocks);
+
     return (
       drawingGeometryEqual(a.geometry, b.geometry) &&
       a.shapeKind === b.shapeKind &&
       a.fillColor === b.fillColor &&
       a.strokeColor === b.strokeColor &&
-      a.strokeWidth === b.strokeWidth
+      a.strokeWidth === b.strokeWidth &&
+      a.textAlign === b.textAlign &&
+      a.textVerticalAlign === b.textVerticalAlign &&
+      jsonEqual(a.textInsets, b.textInsets) &&
+      jsonEqual(a.textContent, b.textContent) &&
+      textboxContentEqual
     );
   }
 

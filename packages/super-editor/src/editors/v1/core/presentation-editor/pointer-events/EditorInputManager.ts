@@ -31,7 +31,7 @@ import {
   getFirstTextPosition as getFirstTextPositionFromHelper,
   registerPointerClick as registerPointerClickFromHelper,
 } from '../input/ClickSelectionUtilities.js';
-import { calculateExtendedSelection } from '../selection/SelectionHelpers.js';
+import { calculateExtendedSelection, selectionCollapsesAcrossTableCells } from '../selection/SelectionHelpers.js';
 import {
   shouldUseCellSelection as shouldUseCellSelectionFromHelper,
   getCellPosFromTableHit as getCellPosFromTableHitFromHelper,
@@ -2581,6 +2581,15 @@ export class EditorInputManager {
     const head = hit.pos;
 
     const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
+
+    // SD-3328: When dragging a body selection into (or through) a table, prosemirror-tables'
+    // normalization collapses a TextSelection whose head lands at the start of a cell block
+    // (an empty cell paragraph is always at parentOffset 0), rewriting e.g. [44, 2026] to
+    // [44, 49]. Detect that frame and keep the last good selection instead of dispatching a
+    // doomed one — the selection resumes extending as soon as the head moves into cell text.
+    if (selectionCollapsesAcrossTableCells(editor.state.doc, selAnchor, selHead)) {
+      return;
+    }
 
     try {
       const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, selAnchor, selHead));

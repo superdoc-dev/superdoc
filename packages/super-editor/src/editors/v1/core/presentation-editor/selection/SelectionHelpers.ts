@@ -1,3 +1,4 @@
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { FlowBlock } from '@superdoc/contracts';
 import { findParagraphBoundaries, findWordBoundaries } from '@superdoc/layout-bridge';
 
@@ -165,4 +166,53 @@ export function calculateExtendedSelection(
 
   // Fallback to character mode (no extension) if boundaries not found or mode is 'char'
   return { selAnchor: anchor, selHead: head };
+}
+
+/**
+ * Detects when extending a text selection from `anchor` to `head` would be collapsed by
+ * prosemirror-tables' selection normalization.
+ *
+ * prosemirror-tables (`normalizeSelection` -> `isTextSelectionAcrossCells`) rewrites a
+ * TextSelection to the anchor block's own bounds when the two endpoints resolve to different
+ * table cells AND the head sits at the very start of its block (`parentOffset === 0`). An
+ * empty paragraph inside a cell only ever has `parentOffset === 0`, so dragging a body
+ * selection into (or through) an empty cell paragraph collapses the whole selection back to
+ * the run at the anchor — e.g. `[44, 2026]` becomes `[44, 49]`. (SD-3328.)
+ *
+ * Returns true when extending to `head` would trigger that collapse, so a drag handler can
+ * keep the last good selection for that frame instead of dispatching a doomed one. Mirrors
+ * the upstream condition exactly; the regression test pins it against real editor behavior.
+ *
+ * @param doc - The current ProseMirror document.
+ * @param anchor - The selection anchor position.
+ * @param head - The prospective selection head position.
+ * @returns True if dispatching `TextSelection(anchor, head)` would be normalized to a collapse.
+ */
+export function selectionCollapsesAcrossTableCells(doc: ProseMirrorNode, anchor: number, head: number): boolean {
+  if (anchor === head) return false;
+
+  // Fail open: if the document shape is unexpected or a position is out of range, never block
+  // the selection — extending it is the safe default. This also keeps the guard a no-op for
+  // callers that pass a minimal doc stub.
+  try {
+    const size = doc.content.size;
+    if (anchor < 0 || head < 0 || anchor > size || head > size) return false;
+
+    const $from = doc.resolve(Math.min(anchor, head));
+    const $to = doc.resolve(Math.max(anchor, head));
+
+    const cellAncestor = (pos: typeof $from): ProseMirrorNode | null => {
+      for (let depth = pos.depth; depth > 0; depth--) {
+        const role = pos.node(depth).type.spec.tableRole;
+        if (role === 'cell' || role === 'header_cell') return pos.node(depth);
+      }
+      return null;
+    };
+
+    // Mirrors prosemirror-tables `isTextSelectionAcrossCells`: endpoints in different cells
+    // (or one outside the table entirely) with the head at the start of its block.
+    return cellAncestor($from) !== cellAncestor($to) && $to.parentOffset === 0;
+  } catch {
+    return false;
+  }
 }

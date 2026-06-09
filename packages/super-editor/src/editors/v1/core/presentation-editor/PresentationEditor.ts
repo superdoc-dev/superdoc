@@ -448,6 +448,13 @@ export class PresentationEditor extends EventEmitter {
   #hiddenHost: HTMLElement;
   /** Scroll-isolating wrapper around #hiddenHost. Append/remove this from the DOM. */
   #hiddenHostWrapper: HTMLElement;
+  /**
+   * Hidden-host elements owned by this instance (story-session hosts in
+   * addition to #hiddenHost). Hidden hosts mount on document.body without an
+   * instance marker, so the input bridge consults this set to tell our
+   * editors apart from those of other SuperDoc instances on the page (SD-3249).
+   */
+  #ownedHiddenHosts = new WeakSet<HTMLElement>();
   #layoutOptions: LayoutEngineOptions;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
   #layoutLookupBlocks: FlowBlock[] = [];
@@ -837,6 +844,7 @@ export class PresentationEditor extends EventEmitter {
     );
     this.#hiddenHostWrapper = hiddenHostWrapper;
     this.#hiddenHost = hiddenHost;
+    this.#ownedHiddenHosts.add(hiddenHost);
     if (doc.body) {
       doc.body.appendChild(this.#hiddenHostWrapper);
     } else {
@@ -5008,9 +5016,29 @@ export class PresentationEditor extends EventEmitter {
       {
         useWindowFallback: true,
         getTargetEditor: () => this.getActiveEditor(),
+        ownsEditorDom: (element) => this.#ownsEditorDom(element),
       },
     );
     this.#inputBridge.bind();
+  }
+
+  /**
+   * Whether a hidden-editor DOM element belongs to this instance.
+   *
+   * Hidden hosts (body editor and story-session editors) are appended to
+   * document.body, so containment in #visibleHost cannot identify them.
+   * Without this check, the input bridge's window-fallback stale rerouting
+   * would intercept keystrokes that belong to other SuperDoc instances on the
+   * same page and re-dispatch them into this instance — with two instances
+   * the bridges ping-pong each other's synthetics until the stack overflows
+   * (SD-3249).
+   */
+  #ownsEditorDom(element: HTMLElement): boolean {
+    if (this.#visibleHost?.contains(element)) {
+      return true;
+    }
+    const hiddenHost = element.closest?.('.presentation-editor__hidden-host');
+    return hiddenHost instanceof HTMLElement && this.#ownedHiddenHosts.has(hiddenHost);
   }
 
   /**
@@ -5384,6 +5412,9 @@ export class PresentationEditor extends EventEmitter {
   #createStorySessionEditor(input: StorySessionEditorFactoryInput): StorySessionEditorFactoryResult {
     const { runtime, hostElement, activationOptions } = input;
     const editorContext = activationOptions.editorContext ?? {};
+    // Every story-session editor mounts into this host; record it so the
+    // input bridge can recognize the editor as ours (SD-3249).
+    this.#ownedHiddenHosts.add(hostElement);
 
     if (runtime.kind === 'headerFooter' && runtime.locator.storyType === 'headerFooterPart') {
       const descriptor = this.#headerFooterSession?.manager?.getDescriptorById(runtime.locator.refId) ?? null;

@@ -2330,8 +2330,10 @@ export class DomPainter {
       let pageY: number;
       if (isPageRelative && kind === 'footer') {
         pageY = footerAnchorPageOriginY + fragment.y;
-      } else {
+      } else if (isPageRelative) {
         pageY = fragment.y;
+      } else {
+        pageY = effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
       }
 
       fragEl.style.top = `${pageY}px`;

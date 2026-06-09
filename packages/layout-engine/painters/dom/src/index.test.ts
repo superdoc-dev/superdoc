@@ -5521,6 +5521,62 @@ describe('DomPainter', () => {
     expect(overlayImage?.style.top).toBe('40px');
   });
 
+  it('positions non-WordArt wrapNone paragraph-relative header media from the header origin', () => {
+    const headerImageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'header-image',
+      src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      width: 200,
+      height: 100,
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+      },
+      wrap: {
+        type: 'None',
+      },
+    };
+    const headerImageMeasure: Measure = {
+      kind: 'image',
+      width: 200,
+      height: 100,
+    };
+    const headerFragment = {
+      kind: 'image' as const,
+      blockId: 'header-image',
+      x: 0,
+      y: 40,
+      width: 200,
+      height: 100,
+      isAnchored: true,
+      behindDoc: false,
+    };
+
+    const painter = createTestPainter({
+      blocks: [block, headerImageBlock],
+      measures: [measure, headerImageMeasure],
+      headerProvider: () => ({
+        fragments: [headerFragment],
+        height: 100,
+        offset: 60,
+      }),
+    });
+
+    painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+    const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
+    const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement;
+    const imageInHeader = headerEl.querySelector('[data-block-id="header-image"]') as HTMLElement | null;
+    const overlayImage = pageEl.querySelector(
+      '[data-header-footer-overlay-section="header"][data-block-id="header-image"]',
+    ) as HTMLElement | null;
+
+    expect(imageInHeader).toBeNull();
+    expect(overlayImage).toBeTruthy();
+    expect(overlayImage?.style.top).toBe('100px');
+  });
+
   it('cleans up behindDoc fragments on re-render (no accumulation)', () => {
     // This test verifies that behindDoc fragments don't accumulate across re-renders.
     // Since they're inserted directly on the page (not in header container), they must
@@ -13090,7 +13146,7 @@ describe('applyRunDataAttributes', () => {
       expect(paraEl.style.top).toBe('0px');
     });
 
-    it('renders footer wrapNone foreground media at page level while footer text stays bottom-aligned', () => {
+    it('renders page-relative footer wrapNone foreground media at page level while footer text stays bottom-aligned', () => {
       const mainBlock: FlowBlock = {
         kind: 'paragraph',
         id: 'main-1',
@@ -13113,9 +13169,9 @@ describe('applyRunDataAttributes', () => {
         anchor: {
           isAnchored: true,
           hRelativeFrom: 'column',
-          vRelativeFrom: 'paragraph',
+          vRelativeFrom: 'page',
           offsetH: 575,
-          offsetV: 126,
+          offsetV: -388,
           behindDoc: false,
         },
         wrap: { type: 'None' },
@@ -13139,7 +13195,7 @@ describe('applyRunDataAttributes', () => {
         kind: 'image',
         blockId: 'footer-logo',
         x: 575,
-        y: 126,
+        y: -388,
         width: 533,
         height: 408,
         isAnchored: true,
@@ -13150,6 +13206,7 @@ describe('applyRunDataAttributes', () => {
         pages: [
           {
             number: 1,
+            margins: { footer: 100 },
             fragments: [{ kind: 'para', blockId: 'main-1', fromLine: 0, toLine: 1, x: 30, y: 40, width: 300 }],
           },
         ],
@@ -13191,7 +13248,107 @@ describe('applyRunDataAttributes', () => {
         '[data-header-footer-overlay-section="footer"][data-block-id="footer-logo"]',
       ) as HTMLElement;
       expect(logoPageLevel).toBeTruthy();
-      expect(logoPageLevel.style.top).toBe('126px');
+      expect(logoPageLevel.style.top).toBe('52px');
+      expect(logoPageLevel.style.left).toBe('619px');
+    });
+
+    it('positions paragraph-relative footer wrapNone foreground media from the footer origin', () => {
+      const mainBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'main-1',
+        runs: [{ text: 'Main', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 4 }],
+      };
+      const mainMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 12, descent: 4, lineHeight: 20 }],
+        totalHeight: 20,
+      };
+      const footerTextBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'footer-text',
+        runs: [{ text: 'Footer text', fontFamily: 'Arial', fontSize: 7 }],
+      };
+      const footerLogoBlock: FlowBlock = {
+        kind: 'image',
+        id: 'footer-logo',
+        src: 'data:image/png;base64,xxx',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'paragraph',
+          offsetH: 575,
+          offsetV: 126,
+          behindDoc: false,
+        },
+        wrap: { type: 'None' },
+      };
+      const footerTextMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 100, ascent: 6, descent: 2, lineHeight: 16 }],
+        totalHeight: 16,
+      };
+      const footerLogoMeasure: Measure = { kind: 'image', width: 533, height: 408 };
+      const footerTextFragment: Fragment = {
+        kind: 'para',
+        blockId: 'footer-text',
+        fromLine: 0,
+        toLine: 1,
+        x: 0,
+        y: 0,
+        width: 900,
+      };
+      const footerLogoFragment: Fragment = {
+        kind: 'image',
+        blockId: 'footer-logo',
+        x: 575,
+        y: 126,
+        width: 533,
+        height: 408,
+        isAnchored: true,
+        behindDoc: false,
+      };
+      const layoutData: Layout = {
+        pageSize: { w: 960, h: 540 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'main-1', fromLine: 0, toLine: 1, x: 30, y: 40, width: 300 }],
+          },
+        ],
+      };
+
+      const painter = createTestPainter({
+        blocks: [mainBlock],
+        measures: [mainMeasure],
+        footerProvider: () => ({
+          fragments: [footerTextFragment, footerLogoFragment],
+          height: 32,
+          contentHeight: 16,
+          offset: 514,
+          marginLeft: 44,
+        }),
+      });
+
+      painter.setData(
+        [mainBlock],
+        [mainMeasure],
+        undefined,
+        undefined,
+        [footerTextBlock, footerLogoBlock],
+        [footerTextMeasure, footerLogoMeasure],
+      );
+      painter.paint(layoutData, mount);
+
+      const footerEl = mount.querySelector('.superdoc-page-footer') as HTMLElement;
+      const textEl = footerEl.querySelector('[data-block-id="footer-text"]') as HTMLElement;
+      expect(textEl.style.top).toBe('16px');
+
+      const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
+      const logoPageLevel = pageEl.querySelector(
+        '[data-header-footer-overlay-section="footer"][data-block-id="footer-logo"]',
+      ) as HTMLElement;
+      expect(logoPageLevel).toBeTruthy();
+      expect(logoPageLevel.style.top).toBe('656px');
       expect(logoPageLevel.style.left).toBe('619px');
     });
 

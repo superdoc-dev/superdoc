@@ -508,6 +508,42 @@ describe('handleImageNode - Shape Group Support', () => {
     expect(shape.attrs.flipV).toBe(true);
   });
 
+  it('should preserve group-level rotation and flips on flattened children', () => {
+    const shape = createShape('2', 'Shape 1', '0', '0', '100', '100');
+    const node = createShapeGroupNode([shape], {
+      x: '0',
+      y: '0',
+      cx: '200',
+      cy: '200',
+      chX: '0',
+      chY: '0',
+      chCx: '200',
+      chCy: '200',
+    });
+    const groupXfrm = node.elements[1].elements[0].elements[0].elements[1].elements[0];
+    groupXfrm.attributes = {
+      rot: '5400000',
+      flipH: '1',
+      flipV: '1',
+    };
+    const params = {
+      docx: {},
+      nodes: [{ name: 'w:drawing' }],
+    };
+
+    const result = handleImageNode(node, params, true);
+    const importedShape = result.attrs.shapes[0];
+
+    expect(result.attrs.groupTransform).toMatchObject({
+      rotation: 90,
+      flipH: true,
+      flipV: true,
+    });
+    expect(importedShape.attrs.rotation).toBe(90);
+    expect(importedShape.attrs.flipH).toBe(true);
+    expect(importedShape.attrs.flipV).toBe(true);
+  });
+
   it('should preserve grouped picture srcRect and ellipse geometry as image clipping attrs', () => {
     const picture = createPicture({
       id: '1784104486',

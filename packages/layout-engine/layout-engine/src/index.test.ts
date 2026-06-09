@@ -6346,6 +6346,139 @@ describe('requirePageBoundary edge cases', () => {
       expect(paragraphFragment.x).toBeGreaterThan(DEFAULT_OPTIONS.margins!.left);
       expect(imageFragments).toHaveLength(1);
     });
+
+    it('wraps earlier same-page body paragraphs around later page-relative images', () => {
+      const firstParagraph: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-before-anchor',
+        runs: [],
+      };
+      const anchorParagraph: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-anchor',
+        runs: [],
+      };
+      const imageBlock: ImageBlock = {
+        kind: 'image',
+        id: 'img-later-page-relative',
+        src: 'data:image/png;base64,xxx',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'page',
+          alignH: 'left',
+          alignV: 'top',
+          offsetH: 0,
+          offsetV: DEFAULT_OPTIONS.margins!.top,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+          distLeft: 0,
+          distRight: 10,
+        },
+      };
+      const paragraphMeasure = makeMeasure([20]);
+      const imageMeasure: ImageMeasure = {
+        kind: 'image',
+        width: 120,
+        height: 120,
+      };
+
+      const layout = layoutDocument(
+        [firstParagraph, anchorParagraph, imageBlock],
+        [paragraphMeasure, paragraphMeasure, imageMeasure],
+        {
+          ...DEFAULT_OPTIONS,
+          remeasureParagraph: () => paragraphMeasure,
+        },
+      );
+
+      const page = layout.pages[0];
+      const firstFragment = page.fragments.find(
+        (fragment) => fragment.kind === 'para' && fragment.blockId === 'para-before-anchor',
+      ) as ParaFragment;
+      const anchorFragment = page.fragments.find(
+        (fragment) => fragment.kind === 'para' && fragment.blockId === 'para-anchor',
+      ) as ParaFragment;
+      const imageFragments = page.fragments.filter(
+        (fragment) => fragment.kind === 'image' && fragment.blockId === 'img-later-page-relative',
+      );
+
+      expect(firstFragment.x).toBeGreaterThan(DEFAULT_OPTIONS.margins!.left);
+      expect(anchorFragment.x).toBeGreaterThan(DEFAULT_OPTIONS.margins!.left);
+      expect(imageFragments).toHaveLength(1);
+    });
+
+    it('does not wrap previous-page paragraphs around page-relative images after a page break', () => {
+      const firstPageParagraph: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-before-break',
+        runs: [],
+      };
+      const forcedBreak: FlowBlock = {
+        kind: 'pageBreak',
+        id: 'pb-before-anchor',
+      };
+      const anchorParagraph: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-after-break',
+        runs: [],
+      };
+      const imageBlock: ImageBlock = {
+        kind: 'image',
+        id: 'img-after-page-break',
+        src: 'data:image/png;base64,xxx',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'page',
+          alignH: 'left',
+          alignV: 'top',
+          offsetH: 0,
+          offsetV: DEFAULT_OPTIONS.margins!.top,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+          distLeft: 0,
+          distRight: 10,
+        },
+      };
+      const paragraphMeasure = makeMeasure([20]);
+      const imageMeasure: ImageMeasure = {
+        kind: 'image',
+        width: 120,
+        height: 120,
+      };
+
+      const layout = layoutDocument(
+        [firstPageParagraph, forcedBreak, anchorParagraph, imageBlock],
+        [paragraphMeasure, { kind: 'pageBreak' }, paragraphMeasure, imageMeasure],
+        {
+          ...DEFAULT_OPTIONS,
+          remeasureParagraph: () => paragraphMeasure,
+        },
+      );
+
+      const firstPageParagraphFragment = layout.pages[0].fragments.find(
+        (fragment) => fragment.kind === 'para' && fragment.blockId === 'para-before-break',
+      ) as ParaFragment;
+      const secondPageAnchorFragment = layout.pages[1].fragments.find(
+        (fragment) => fragment.kind === 'para' && fragment.blockId === 'para-after-break',
+      ) as ParaFragment;
+      const imageOnFirstPage = layout.pages[0].fragments.find(
+        (fragment) => fragment.kind === 'image' && fragment.blockId === 'img-after-page-break',
+      );
+      const imageOnSecondPage = layout.pages[1].fragments.find(
+        (fragment) => fragment.kind === 'image' && fragment.blockId === 'img-after-page-break',
+      );
+
+      expect(firstPageParagraphFragment.x).toBe(DEFAULT_OPTIONS.margins!.left);
+      expect(secondPageAnchorFragment.x).toBeGreaterThan(DEFAULT_OPTIONS.margins!.left);
+      expect(imageOnFirstPage).toBeUndefined();
+      expect(imageOnSecondPage).toBeTruthy();
+    });
   });
 
   describe('textbox content measures', () => {

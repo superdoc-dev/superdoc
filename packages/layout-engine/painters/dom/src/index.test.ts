@@ -8830,6 +8830,7 @@ describe('DomPainter', () => {
 
       expect(wrapper?.style.clipPath).toBe('ellipse(50% 50% at 50% 50%)');
       expect(img?.style.objectFit).toBe('cover');
+      expect(img?.style.objectPosition).toBe('left top');
     });
 
     it('renders img element with non-base64 SVG data URL', () => {

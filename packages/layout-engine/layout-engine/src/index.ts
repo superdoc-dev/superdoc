@@ -66,6 +66,7 @@ import {
   collectPreRegisteredAnchors,
   collectPageRelativeAnchorsByParagraph,
   isPageRelativeAnchor,
+  type AnchoredDrawing,
 } from './anchors.js';
 import { normalizeFragmentsForRegion } from './normalize-header-footer-fragments.js';
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
@@ -2046,6 +2047,43 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     return !hasHardBreakBetween(paragraphIndex, anchorIndex);
   };
 
+  const isWrappingDrawingAnchor = (anchorBlock: ImageBlock | DrawingBlock): boolean => {
+    const wrapType = anchorBlock.wrap?.type ?? 'None';
+    return wrapType !== 'None' && wrapType !== 'Inline';
+  };
+
+  const collectLaterPageRelativeAnchorsForParagraph = (
+    paragraphIndex: number,
+    paragraphId: string,
+  ): AnchoredDrawing[] | undefined => {
+    const anchors: AnchoredDrawing[] = [];
+
+    for (const entry of preRegisteredAnchors) {
+      const anchorIndex = blockIndexById.get(entry.block.id);
+      if (anchorIndex == null || anchorIndex <= paragraphIndex) continue;
+      if (!isWrappingDrawingAnchor(entry.block)) continue;
+      if (!shouldWrapParagraphWithPageRelativeAnchor(entry.block, paragraphIndex, paragraphId)) continue;
+      anchors.push(entry);
+    }
+
+    return anchors.length > 0 ? anchors : undefined;
+  };
+
+  const mergeAnchoredDrawings = (...groups: Array<AnchoredDrawing[] | undefined>): AnchoredDrawing[] | undefined => {
+    const merged: AnchoredDrawing[] = [];
+    const seen = new Set<string>();
+
+    for (const group of groups) {
+      for (const entry of group ?? []) {
+        if (seen.has(entry.block.id)) continue;
+        seen.add(entry.block.id);
+        merged.push(entry);
+      }
+    }
+
+    return merged.length > 0 ? merged : undefined;
+  };
+
   const resolveParagraphlessAnchoredTableY = (block: TableBlock, measure: TableMeasure, state: PageState): number => {
     const contentTop = state.topMargin;
     const contentBottom = state.contentBottom;
@@ -2446,10 +2484,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       const wrappingPageRelativeAnchorsForPara = pageRelativeAnchorsForPara?.filter(({ block: anchorBlock }) =>
         shouldWrapParagraphWithPageRelativeAnchor(anchorBlock, index, paraBlock.id),
       );
-      const anchorsForPara =
-        drawingAnchorsForPara || wrappingPageRelativeAnchorsForPara?.length
-          ? [...(drawingAnchorsForPara ?? []), ...(wrappingPageRelativeAnchorsForPara ?? [])]
-          : undefined;
+      const laterPageRelativeAnchorsForPara = collectLaterPageRelativeAnchorsForParagraph(index, paraBlock.id);
+      const anchorsForPara = mergeAnchoredDrawings(
+        drawingAnchorsForPara,
+        wrappingPageRelativeAnchorsForPara,
+        laterPageRelativeAnchorsForPara,
+      );
       const tablesForPara = anchoredTablesByParagraph.get(index);
 
       if (isEmpty) {
@@ -2635,6 +2675,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       const hasPageRelativeAnchorForPara = Boolean(
         pageRelativeAnchorsByParagraph.get(index)?.length ||
+          laterPageRelativeAnchorsForPara?.length ||
           tablesForPara?.some(({ block: tableBlock }) => {
             const vRelativeFrom = tableBlock.anchor?.vRelativeFrom;
             return vRelativeFrom === 'page' || vRelativeFrom === 'margin';

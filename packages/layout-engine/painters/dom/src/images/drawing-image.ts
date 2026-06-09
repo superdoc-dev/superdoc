@@ -1,6 +1,7 @@
 import type { DrawingBlock, ImageDrawing, ShapeGroupChild, ShapeGroupImageChild, TextPart } from '@superdoc/contracts';
 import { applyImageClipPath } from './image-clip-path.js';
 import { createBlockImageContent } from './image-block.js';
+import { applyImageObjectFit } from './object-fit.js';
 import type { BuildImageHyperlinkAnchor } from './types.js';
 import { resolveImageOpacity } from '../runs/image-run.js';
 
@@ -24,10 +25,7 @@ export const createShapeGroupImageElement = (doc: Document, child: ShapeGroupChi
   const img = doc.createElement('img');
   img.src = attrs.src;
   img.alt = attrs.alt ?? '';
-  img.style.objectFit = attrs.objectFit ?? 'contain';
-  if (attrs.objectFit === 'cover') {
-    img.style.objectPosition = 'left top';
-  }
+  applyImageObjectFit(img, attrs.objectFit ?? 'contain');
   img.style.display = 'block';
   const opacity = resolveImageOpacity(attrs);
   if (opacity != null) {

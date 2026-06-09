@@ -1,6 +1,7 @@
 import type { ImageBlock, ImageDrawing } from '@superdoc/contracts';
 import { buildImageFilters, resolveImageOpacity } from '../runs/image-run.js';
 import { applyImageClipPath, readImageClipPathValue } from './image-clip-path.js';
+import { applyImageObjectFit } from './object-fit.js';
 import type { BuildImageHyperlinkAnchor } from './types.js';
 
 type BlockImageSource = ImageBlock | ImageDrawing;
@@ -54,10 +55,7 @@ export const createBlockImageContent = ({
   img.alt = block.alt ?? '';
   img.style.width = '100%';
   img.style.height = '100%';
-  img.style.objectFit = block.objectFit ?? 'contain';
-  if (block.objectFit === 'cover') {
-    img.style.objectPosition = 'left top';
-  }
+  applyImageObjectFit(img, block.objectFit ?? 'contain');
   const shapeClipPath = resolveBlockImageShapeClipPath(block);
   if (shapeClipPath && clipContainer) {
     clipContainer.style.clipPath = shapeClipPath;

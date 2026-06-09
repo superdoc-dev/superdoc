@@ -1158,6 +1158,9 @@ export type ShapeGroupTransform = {
   childHeight?: number;
   childOriginXEmu?: number;
   childOriginYEmu?: number;
+  rotation?: number;
+  flipH?: boolean;
+  flipV?: boolean;
 };
 
 export type ShapeGroupVectorChild = {

@@ -643,8 +643,7 @@ export function toDrawingContentSnapshot(value: unknown): DrawingContentSnapshot
 /**
  * Type guard to check if a value is a ShapeGroupTransform.
  *
- * A valid ShapeGroupTransform must have at least one finite numeric property
- * among: x, y, width, height, childWidth, childHeight, childX, childY.
+ * A valid ShapeGroupTransform must have at least one recognized transform property.
  *
  * @param value - The value to check
  * @returns True if the value has at least one valid transform property
@@ -670,7 +669,10 @@ export function isShapeGroupTransform(value: unknown): value is ShapeGroupTransf
     isFiniteNumber(maybe.childWidth) ||
     isFiniteNumber(maybe.childHeight) ||
     isFiniteNumber(maybe.childX) ||
-    isFiniteNumber(maybe.childY)
+    isFiniteNumber(maybe.childY) ||
+    isFiniteNumber(maybe.rotation) ||
+    maybe.flipH === true ||
+    maybe.flipV === true
   );
 }
 

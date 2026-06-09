@@ -1255,6 +1255,9 @@ describe('Drawing/Shape Utilities', () => {
       expect(isShapeGroupTransform({ y: 20 })).toBe(true);
       expect(isShapeGroupTransform({ width: 100, height: 200 })).toBe(true);
       expect(isShapeGroupTransform({ childX: 5, childY: 10 })).toBe(true);
+      expect(isShapeGroupTransform({ rotation: 90 })).toBe(true);
+      expect(isShapeGroupTransform({ flipH: true })).toBe(true);
+      expect(isShapeGroupTransform({ flipV: true })).toBe(true);
     });
 
     it('returns false for invalid objects', () => {

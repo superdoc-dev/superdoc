@@ -785,6 +785,16 @@ const buildShapeGroupTransformAttrs = (xfrm) => {
   const groupTransform = {};
   if (!xfrm) return groupTransform;
 
+  if (xfrm.attributes?.['rot']) {
+    groupTransform.rotation = rotToDegrees(xfrm.attributes['rot']);
+  }
+  if (xfrm.attributes?.['flipH'] === '1') {
+    groupTransform.flipH = true;
+  }
+  if (xfrm.attributes?.['flipV'] === '1') {
+    groupTransform.flipV = true;
+  }
+
   const off = findChildByLocalName(xfrm.elements, 'off');
   const ext = findChildByLocalName(xfrm.elements, 'ext');
   const chOff = findChildByLocalName(xfrm.elements, 'chOff');
@@ -814,7 +824,7 @@ const buildShapeGroupTransformAttrs = (xfrm) => {
 
 const getGroupAffineTransform = (xfrm) => {
   if (!xfrm) {
-    return { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0 };
+    return { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotation: 0, flipH: false, flipV: false };
   }
 
   const off = findChildByLocalName(xfrm.elements, 'off');
@@ -838,6 +848,9 @@ const getGroupAffineTransform = (xfrm) => {
     scaleY,
     translateX: x - childX * scaleX,
     translateY: y - childY * scaleY,
+    rotation: xfrm.attributes?.['rot'] ? rotToDegrees(xfrm.attributes['rot']) : 0,
+    flipH: xfrm.attributes?.['flipH'] === '1',
+    flipV: xfrm.attributes?.['flipV'] === '1',
   };
 };
 
@@ -846,6 +859,9 @@ const composeShapeGroupTransform = (parent, child) => ({
   scaleY: parent.scaleY * child.scaleY,
   translateX: parent.scaleX * child.translateX + parent.translateX,
   translateY: parent.scaleY * child.translateY + parent.translateY,
+  rotation: (parent.rotation ?? 0) + (child.rotation ?? 0),
+  flipH: Boolean(parent.flipH) !== Boolean(child.flipH),
+  flipV: Boolean(parent.flipV) !== Boolean(child.flipV),
 });
 
 const transformShapeGroupChildRect = (transform, rawX, rawY, rawWidth, rawHeight) => ({
@@ -853,6 +869,9 @@ const transformShapeGroupChildRect = (transform, rawX, rawY, rawWidth, rawHeight
   y: emuToPixels(transform.translateY + transform.scaleY * rawY),
   width: emuToPixels(transform.scaleX * rawWidth),
   height: emuToPixels(transform.scaleY * rawHeight),
+  rotation: transform.rotation ?? 0,
+  flipH: Boolean(transform.flipH),
+  flipV: Boolean(transform.flipV),
 });
 
 const resolveShapeGroupPicturePath = (pic, params) => {
@@ -890,9 +909,10 @@ const parseShapeGroupVectorChild = (wsp, transform, params) => {
   const rawWidth = parseEmuNumber(shapeExt?.attributes?.['cx'], 914400);
   const rawHeight = parseEmuNumber(shapeExt?.attributes?.['cy'], 914400);
   const rect = transformShapeGroupChildRect(transform, rawX, rawY, rawWidth, rawHeight);
-  const rotation = shapeXfrm?.attributes?.['rot'] ? rotToDegrees(shapeXfrm.attributes['rot']) : 0;
-  const flipH = shapeXfrm?.attributes?.['flipH'] === '1';
-  const flipV = shapeXfrm?.attributes?.['flipV'] === '1';
+  const shapeRotation = shapeXfrm?.attributes?.['rot'] ? rotToDegrees(shapeXfrm.attributes['rot']) : 0;
+  const rotation = (rect.rotation ?? 0) + shapeRotation;
+  const flipH = Boolean(rect.flipH) !== (shapeXfrm?.attributes?.['flipH'] === '1');
+  const flipV = Boolean(rect.flipV) !== (shapeXfrm?.attributes?.['flipV'] === '1');
   const style = findChildByLocalName(wsp.elements, 'style');
   const fillColor = extractFillColor(spPr, style);
   const strokeColor = extractStrokeColor(spPr, style);
@@ -941,6 +961,11 @@ const parseShapeGroupImageChild = (pic, transform, params) => {
   const rawY = parseEmuNumber(off?.attributes?.['y']);
   const rawWidth = parseEmuNumber(ext?.attributes?.['cx'], 914400);
   const rawHeight = parseEmuNumber(ext?.attributes?.['cy'], 914400);
+  const rect = transformShapeGroupChildRect(transform, rawX, rawY, rawWidth, rawHeight);
+  const pictureRotation = xfrm?.attributes?.['rot'] ? rotToDegrees(xfrm.attributes['rot']) : 0;
+  const rotation = (rect.rotation ?? 0) + pictureRotation;
+  const flipH = Boolean(rect.flipH) !== (xfrm?.attributes?.['flipH'] === '1');
+  const flipV = Boolean(rect.flipV) !== (xfrm?.attributes?.['flipV'] === '1');
   const path = resolveShapeGroupPicturePath(pic, params);
   if (!path) return null;
 
@@ -957,7 +982,10 @@ const parseShapeGroupImageChild = (pic, transform, params) => {
   return {
     shapeType: 'image',
     attrs: {
-      ...transformShapeGroupChildRect(transform, rawX, rawY, rawWidth, rawHeight),
+      ...rect,
+      rotation,
+      flipH,
+      flipV,
       src: path,
       imageId: picId,
       imageName: picName,

@@ -2,6 +2,7 @@ import type { ImageBlock, ImageRun } from '@superdoc/contracts';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import { assertPmPositions } from '../pm-position-validation.js';
 import { applyImageClipPath, readImageClipPathValue } from '../images/image-clip-path.js';
+import { applyImageObjectFit } from '../images/object-fit.js';
 import type { RunRenderContext } from './types.js';
 import { applyRunDataAttributes } from './hash.js';
 import { sanitizeUrl } from './links.js';
@@ -181,7 +182,7 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
   }
   applyImageClipPath(img, runClipPath);
   if (run.objectFit) {
-    img.style.objectFit = run.objectFit;
+    applyImageObjectFit(img, run.objectFit);
   }
 
   // Add metadata for interactive image resizing (inline images)

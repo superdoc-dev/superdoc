@@ -7,6 +7,7 @@ import {
   extractFillColor,
   extractLineEnds,
   extractCustomGeometry,
+  extractShapeEffects,
 } from './vector-shape-helpers';
 import { convertMetafileToSvg, isMetafileExtension, setMetafileDomEnvironment } from './metafile-converter.js';
 import { convertTiffToPng, isTiffExtension, setTiffDomEnvironment } from './tiff-converter.js';
@@ -918,6 +919,7 @@ const parseShapeGroupVectorChild = (wsp, transform, params) => {
   const strokeColor = extractStrokeColor(spPr, style);
   const strokeWidth = extractStrokeWidth(spPr);
   const lineEnds = extractLineEnds(spPr);
+  const effects = extractShapeEffects(spPr);
   const cNvPr = findChildByLocalName(wsp.elements, 'cNvPr');
   const shapeId = cNvPr?.attributes?.['id'];
   const shapeName = cNvPr?.attributes?.['name'];
@@ -940,6 +942,7 @@ const parseShapeGroupVectorChild = (wsp, transform, params) => {
       strokeColor,
       strokeWidth,
       lineEnds,
+      effects,
       shapeId,
       shapeName,
       textContent,
@@ -1648,6 +1651,7 @@ export function getVectorShape({
   const strokeColor = extractStrokeColor(spPr, style);
   const strokeWidth = extractStrokeWidth(spPr);
   const lineEnds = extractLineEnds(spPr);
+  const effects = extractShapeEffects(spPr);
   const effectExtent = extractEffectExtent(node);
 
   // Extract textbox content if present
@@ -1716,6 +1720,7 @@ export function getVectorShape({
       strokeColor,
       strokeWidth,
       lineEnds,
+      effects,
       effectExtent,
       marginOffset,
       anchorData,

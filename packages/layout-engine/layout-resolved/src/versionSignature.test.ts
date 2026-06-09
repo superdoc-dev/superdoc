@@ -9,6 +9,7 @@ import type {
   TableBlock,
   TabRun,
   TextRun,
+  VectorShapeDrawing,
 } from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
@@ -162,6 +163,42 @@ describe('deriveBlockVersion - tab underline', () => {
     const a = deriveBlockVersion(makeStyledTabParagraph({ fontSize: 16, fontFamily: 'Arial', color: '#123456' }));
     const b = deriveBlockVersion(makeStyledTabParagraph({ fontSize: 16, fontFamily: 'Arial', color: '#123456' }));
     expect(a).toBe(b);
+  });
+});
+
+describe('deriveBlockVersion - vector shape effects', () => {
+  const makeVectorShape = (
+    overrides: Partial<VectorShapeDrawing['effects']['outerShadow']> = {},
+  ): VectorShapeDrawing => ({
+    kind: 'drawing',
+    id: 'shadow-shape',
+    drawingKind: 'vectorShape',
+    geometry: { width: 100, height: 50, rotation: 0, flipH: false, flipV: false },
+    shapeKind: 'rect',
+    fillColor: '#ffffff',
+    strokeColor: '#000000',
+    strokeWidth: 1,
+    effects: {
+      outerShadow: {
+        type: 'outerShadow',
+        blurRadius: 6,
+        distance: 4,
+        direction: 45,
+        color: '#a6a6a6',
+        opacity: 0.4,
+        ...overrides,
+      },
+    },
+  });
+
+  it.each([
+    ['blurRadius', { blurRadius: 7 }],
+    ['distance', { distance: 5 }],
+    ['direction', { direction: 90 }],
+    ['color', { color: '#000000' }],
+    ['opacity', { opacity: 0.8 }],
+  ] as const)('changes when outer shadow %s changes', (_field, overrides) => {
+    expect(deriveBlockVersion(makeVectorShape(overrides))).not.toBe(deriveBlockVersion(makeVectorShape()));
   });
 });
 

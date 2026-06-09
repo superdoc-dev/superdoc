@@ -1131,11 +1131,31 @@ export type EffectExtent = {
   bottom: number;
 };
 
+export type ShapeOuterShadowEffect = {
+  type: 'outerShadow';
+  blurRadius: number;
+  distance: number;
+  direction: number;
+  color: string;
+  opacity: number;
+  alignment?: string;
+  rotateWithShape?: boolean;
+  scaleX?: number;
+  scaleY?: number;
+  skewX?: number;
+  skewY?: number;
+};
+
+export type ShapeEffects = {
+  outerShadow?: ShapeOuterShadowEffect;
+};
+
 export type VectorShapeStyle = {
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
   strokeWidth?: number;
   lineEnds?: LineEnds;
+  effects?: ShapeEffects;
   textContent?: ShapeTextContent;
   textAlign?: string;
   textVerticalAlign?: 'top' | 'center' | 'bottom';
@@ -1234,6 +1254,7 @@ export type VectorShapeDrawing = DrawingBlockBase & {
   strokeColor?: StrokeColor;
   strokeWidth?: number;
   lineEnds?: LineEnds;
+  effects?: ShapeEffects;
   effectExtent?: EffectExtent;
   textContent?: ShapeTextContent;
   textAlign?: string;

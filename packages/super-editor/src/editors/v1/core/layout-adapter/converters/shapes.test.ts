@@ -141,6 +141,63 @@ describe('shapes converter', () => {
       });
     });
 
+    it('forwards valid shape effects to drawing block', () => {
+      const node: PMNode = {
+        type: 'vectorShape',
+        attrs: {
+          width: 100,
+          height: 100,
+          effects: {
+            outerShadow: {
+              type: 'outerShadow',
+              blurRadius: 6.6667,
+              distance: 6.6667,
+              direction: 45,
+              color: '#a6a6a6',
+              opacity: 0.4,
+            },
+          },
+        },
+      };
+
+      const result = vectorShapeNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.effects).toEqual({
+        outerShadow: {
+          type: 'outerShadow',
+          blurRadius: 6.6667,
+          distance: 6.6667,
+          direction: 45,
+          color: '#a6a6a6',
+          opacity: 0.4,
+        },
+      });
+    });
+
+    it('omits invalid shape effects from drawing block', () => {
+      const node: PMNode = {
+        type: 'vectorShape',
+        attrs: {
+          width: 100,
+          height: 100,
+          effects: {
+            outerShadow: {
+              type: 'outerShadow',
+              blurRadius: -1,
+              distance: 6.6667,
+              direction: 45,
+              color: '#a6a6a6',
+              opacity: 0.4,
+            },
+          },
+        },
+      };
+
+      const result = vectorShapeNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.effects).toBeUndefined();
+    });
+
     it('handles wrap configuration', () => {
       const node: PMNode = {
         type: 'vectorShape',
@@ -450,6 +507,42 @@ describe('shapes converter', () => {
       expect(result.shapes).toHaveLength(2);
       expect(result.shapes?.[0].shapeType).toBe('rectangle');
       expect(result.shapes?.[1].shapeType).toBe('circle');
+    });
+
+    it('preserves vector child shape effects', () => {
+      const effects = {
+        outerShadow: {
+          type: 'outerShadow',
+          blurRadius: 6.6667,
+          distance: 6.6667,
+          direction: 45,
+          color: '#a6a6a6',
+          opacity: 0.4,
+        },
+      };
+      const node: PMNode = {
+        type: 'shapeGroup',
+        attrs: {
+          size: { width: 100, height: 100 },
+          shapes: [
+            {
+              shapeType: 'vectorShape',
+              attrs: {
+                width: 50,
+                height: 50,
+                effects,
+              },
+            },
+          ],
+        },
+      };
+
+      const result = shapeGroupNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.shapes?.[0]).toMatchObject({
+        shapeType: 'vectorShape',
+        attrs: { effects },
+      });
     });
 
     it('filters invalid shape children', () => {

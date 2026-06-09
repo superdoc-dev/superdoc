@@ -191,6 +191,7 @@ const hashDrawingBlock = (block: DrawingBlock): string => {
       JSON.stringify(block.customGeometry ?? null),
       JSON.stringify(block.lineEnds ?? null),
       JSON.stringify(block.effectExtent ?? null),
+      JSON.stringify(block.effects ?? null),
       JSON.stringify(block.textContent ?? null),
       block.textAlign ?? '',
       block.textVerticalAlign ?? '',
@@ -451,7 +452,10 @@ const hashRuns = (block: FlowBlock): string => {
     return `${block.id}:table:${contentHash}${tableAttrsKey}`;
   }
 
-  if (block.kind !== 'paragraph') return block.id;
+  if (block.kind !== 'paragraph') {
+    return hashNonParagraphCellBlock(block as Exclude<FlowBlock, ParagraphBlock>);
+  }
+
   const trackedMode =
     (block.attrs && 'trackedChangesMode' in block.attrs && block.attrs.trackedChangesMode) || 'review';
   const trackedEnabled = resolveTrackedChangesEnabled(block.attrs, true);

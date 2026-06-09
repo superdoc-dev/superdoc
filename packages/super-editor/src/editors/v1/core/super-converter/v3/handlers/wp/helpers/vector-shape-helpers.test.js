@@ -7,6 +7,7 @@ import {
   extractStrokeColor,
   extractFillColor,
   extractLineEnds,
+  extractShapeEffects,
   extractCustomGeometry,
 } from './vector-shape-helpers.js';
 import { emuToPixels } from '@converter/helpers.js';
@@ -513,6 +514,107 @@ describe('extractFillColor', () => {
     };
 
     expect(extractFillColor(spPr, style)).toBe('#808080');
+  });
+});
+
+describe('extractShapeEffects', () => {
+  it('returns null when effectLst is missing', () => {
+    expect(extractShapeEffects({ elements: [] })).toBeNull();
+  });
+
+  it('returns null when outerShdw is missing', () => {
+    const spPr = {
+      elements: [{ name: 'a:effectLst', elements: [] }],
+    };
+
+    expect(extractShapeEffects(spPr)).toBeNull();
+  });
+
+  it('parses fixture-like scheme color outer shadow', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:effectLst',
+          elements: [
+            {
+              name: 'a:outerShdw',
+              attributes: { blurRad: '63500', dist: '63500', dir: '2700000', algn: 'tl', rotWithShape: '0' },
+              elements: [
+                {
+                  name: 'a:schemeClr',
+                  attributes: { val: 'bg1' },
+                  elements: [
+                    { name: 'a:lumMod', attributes: { val: '65000' } },
+                    { name: 'a:alpha', attributes: { val: '40000' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = extractShapeEffects(spPr);
+
+    expect(result?.outerShadow).toEqual(
+      expect.objectContaining({
+        type: 'outerShadow',
+        direction: 45,
+        color: '#a6a6a6',
+        opacity: 0.4,
+        alignment: 'tl',
+        rotateWithShape: false,
+      }),
+    );
+    expect(result?.outerShadow.blurRadius).toBeCloseTo(6.6667, 4);
+    expect(result?.outerShadow.distance).toBeCloseTo(6.6667, 4);
+  });
+
+  it('parses srgbClr outer shadows', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:effectLst',
+          elements: [
+            {
+              name: 'a:outerShdw',
+              attributes: { blurRad: '9525', dist: '19050', dir: '5400000' },
+              elements: [{ name: 'a:srgbClr', attributes: { val: '112233' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractShapeEffects(spPr)?.outerShadow).toEqual({
+      type: 'outerShadow',
+      blurRadius: 1,
+      distance: 2,
+      direction: 90,
+      color: '#112233',
+      opacity: 1,
+      rotateWithShape: true,
+    });
+  });
+
+  it('parses rotWithShape="1" as true', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:effectLst',
+          elements: [
+            {
+              name: 'a:outerShdw',
+              attributes: { rotWithShape: '1' },
+              elements: [{ name: 'a:srgbClr', attributes: { val: '000000' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractShapeEffects(spPr)?.outerShadow.rotateWithShape).toBe(true);
   });
 });
 

@@ -23,6 +23,8 @@ import type {
   Run,
   ShapeGroupChild,
   ShapeGroupDrawing,
+  ShapeEffects,
+  ShapeOuterShadowEffect,
   ShapeTextContent,
   SolidFillWithAlpha,
   SourceAnchor,
@@ -2993,6 +2995,9 @@ export class DomPainter {
           }
         }
 
+        // Shadows paint inside the docx-provided effectExtent box. Do not derive extra visual room here;
+        // files with missing or undersized effectExtent can still clip large outer shadows.
+        this.applyShapeEffects(svgElement, block);
         this.applyLineEnds(svgElement, block);
         contentContainer.appendChild(svgElement);
 
@@ -3683,6 +3688,143 @@ export class DomPainter {
     }
   }
 
+  private applyShapeEffects(svgElement: SVGElement, block: VectorShapeDrawingWithEffects): void {
+    const outerShadow = block.effects?.outerShadow;
+    if (!outerShadow) return;
+    this.applyOuterShadowEffect(svgElement, block.id, outerShadow);
+  }
+
+  private applyOuterShadowEffect(svgElement: SVGElement, blockId: string, shadow: ShapeOuterShadowEffect): void {
+    const targets = this.findShapeEffectTargets(svgElement);
+    if (!targets.length) return;
+
+    const defs = this.ensureSvgDefs(svgElement);
+    const filterId = this.sanitizeSvgId(`sd-shadow-${blockId}`);
+    const outlineFilterId = this.sanitizeSvgId(`sd-shadow-outline-${blockId}`);
+    if (!defs.querySelector(`#${filterId}`)) {
+      const filter = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'filter');
+      filter.setAttribute('id', filterId);
+      filter.setAttribute('x', '-50%');
+      filter.setAttribute('y', '-50%');
+      filter.setAttribute('width', '200%');
+      filter.setAttribute('height', '200%');
+
+      const { dx, dy } = this.computeShadowOffset(shadow);
+      const dropShadow = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feDropShadow');
+      dropShadow.setAttribute('dx', this.formatSvgNumber(dx));
+      dropShadow.setAttribute('dy', this.formatSvgNumber(dy));
+      dropShadow.setAttribute('stdDeviation', this.formatSvgNumber(shadow.blurRadius / 2));
+      dropShadow.setAttribute('flood-color', shadow.color);
+      dropShadow.setAttribute('flood-opacity', this.formatSvgNumber(shadow.opacity));
+
+      filter.appendChild(dropShadow);
+      defs.appendChild(filter);
+    }
+
+    targets.forEach((target) => {
+      if (this.shouldRenderFilledShadowClone(target)) {
+        this.appendFilledShadowClone(svgElement, defs, target, outlineFilterId, shadow);
+        return;
+      }
+      target.setAttribute('filter', `url(#${filterId})`);
+    });
+  }
+
+  private computeShadowOffset(shadow: ShapeOuterShadowEffect): { dx: number; dy: number } {
+    const radians = (shadow.direction * Math.PI) / 180;
+    return {
+      dx: shadow.distance * Math.cos(radians),
+      dy: shadow.distance * Math.sin(radians),
+    };
+  }
+
+  private findShapeEffectTargets(svgElement: SVGElement): SVGElement[] {
+    return Array.from(svgElement.querySelectorAll('path, line, polyline, polygon, rect, ellipse, circle')).filter(
+      (target) => !target.closest('defs') && !target.hasAttribute('data-sd-shadow-clone'),
+    ) as SVGElement[];
+  }
+
+  private shouldRenderFilledShadowClone(target: SVGElement): boolean {
+    const fill = target.getAttribute('fill');
+    if (fill !== 'none') return false;
+    if (target.tagName.toLowerCase() === 'path') {
+      return /z\s*$/i.test(target.getAttribute('d') ?? '');
+    }
+    return ['polygon', 'rect', 'ellipse', 'circle'].includes(target.tagName.toLowerCase());
+  }
+
+  private appendFilledShadowClone(
+    svgElement: SVGElement,
+    defs: SVGDefsElement,
+    target: SVGElement,
+    filterId: string,
+    shadow: ShapeOuterShadowEffect,
+  ): void {
+    const existingClone = svgElement.querySelector(`[data-sd-shadow-clone="${filterId}"]`);
+    if (existingClone) return;
+
+    this.ensureOuterShadowOnlyFilter(defs, filterId, shadow);
+
+    const clone = target.cloneNode(false) as SVGElement;
+    clone.setAttribute('data-sd-shadow-clone', filterId);
+    clone.setAttribute('aria-hidden', 'true');
+    clone.setAttribute('fill', '#000000');
+    clone.setAttribute('stroke', 'none');
+    clone.setAttribute('filter', `url(#${filterId})`);
+    target.parentNode?.insertBefore(clone, target);
+  }
+
+  private ensureOuterShadowOnlyFilter(defs: SVGDefsElement, filterId: string, shadow: ShapeOuterShadowEffect): void {
+    if (defs.querySelector(`#${filterId}`)) return;
+
+    const filter = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'filter');
+    filter.setAttribute('id', filterId);
+    filter.setAttribute('x', '-50%');
+    filter.setAttribute('y', '-50%');
+    filter.setAttribute('width', '200%');
+    filter.setAttribute('height', '200%');
+
+    const blur = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feGaussianBlur');
+    blur.setAttribute('in', 'SourceAlpha');
+    blur.setAttribute('stdDeviation', this.formatSvgNumber(shadow.blurRadius / 2));
+    blur.setAttribute('result', 'blur');
+
+    const { dx, dy } = this.computeShadowOffset(shadow);
+    const offset = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feOffset');
+    offset.setAttribute('in', 'blur');
+    offset.setAttribute('dx', this.formatSvgNumber(dx));
+    offset.setAttribute('dy', this.formatSvgNumber(dy));
+    offset.setAttribute('result', 'offsetBlur');
+
+    const flood = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feFlood');
+    flood.setAttribute('flood-color', shadow.color);
+    flood.setAttribute('flood-opacity', this.formatSvgNumber(shadow.opacity));
+    flood.setAttribute('result', 'shadowColor');
+
+    const composite = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feComposite');
+    composite.setAttribute('in', 'shadowColor');
+    composite.setAttribute('in2', 'offsetBlur');
+    composite.setAttribute('operator', 'in');
+    composite.setAttribute('result', 'shadow');
+
+    const outsideOnly = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feComposite');
+    outsideOnly.setAttribute('in', 'shadow');
+    outsideOnly.setAttribute('in2', 'SourceAlpha');
+    outsideOnly.setAttribute('operator', 'out');
+    outsideOnly.setAttribute('result', 'outerShadow');
+
+    filter.appendChild(blur);
+    filter.appendChild(offset);
+    filter.appendChild(flood);
+    filter.appendChild(composite);
+    filter.appendChild(outsideOnly);
+    defs.appendChild(filter);
+  }
+
+  private formatSvgNumber(value: number): string {
+    return Number.isFinite(value) ? Number(value.toFixed(4)).toString() : '0';
+  }
+
   private findLineEndTarget(svgElement: SVGElement): SVGElement | null {
     const line = svgElement.querySelector('line');
     if (line) return line as SVGElement;
@@ -3824,10 +3966,10 @@ export class DomPainter {
       contentContainer = inner;
     }
 
-    block.shapes.forEach((child) => {
+    block.shapes.forEach((child, childIndex) => {
       const attrs = (child as ShapeGroupChild).attrs ?? {};
       const paintExtent = this.getShapeGroupChildPaintExtent(child);
-      const childContent = this.createGroupChildContent(child, 1, 1, context, paintExtent);
+      const childContent = this.createGroupChildContent(child, 1, 1, context, paintExtent, block.id, childIndex);
       if (!childContent) return;
       const wrapper = this.doc!.createElement('div');
       wrapper.classList.add('superdoc-shape-group__child');
@@ -3898,6 +4040,8 @@ export class DomPainter {
     groupScaleY: number = 1,
     context?: FragmentRenderContext,
     paintExtent: EffectExtent = { left: 0, top: 0, right: 0, bottom: 0 },
+    groupId?: string,
+    childIndex?: number,
   ): HTMLElement | null {
     // Type narrowing with explicit checks to help TypeScript distinguish union members
     if (child.shapeType === 'vectorShape' && 'fillColor' in child.attrs) {
@@ -3911,6 +4055,7 @@ export class DomPainter {
           textContent?: ShapeTextContent;
           textAlign?: string;
           lineEnds?: LineEnds;
+          effects?: ShapeEffects;
         };
       const childGeometry = {
         width: (attrs.width ?? 0) + paintExtent.left + paintExtent.right,
@@ -3924,7 +4069,10 @@ export class DomPainter {
       const vectorChild: ShapeTextDrawingWithEffects = {
         drawingKind: 'vectorShape',
         kind: 'drawing',
-        id: `${attrs.shapeId ?? child.shapeType}`,
+        id:
+          groupId != null
+            ? `${groupId}-${childIndex ?? 0}-${attrs.shapeId ?? child.shapeType}`
+            : `${attrs.shapeId ?? child.shapeType}`,
         geometry: childGeometry,
         padding: undefined,
         margin: undefined,
@@ -3939,6 +4087,7 @@ export class DomPainter {
         strokeColor: attrs.strokeColor,
         strokeWidth: attrs.strokeWidth,
         lineEnds: attrs.lineEnds,
+        effects: attrs.effects,
         textContent: attrs.textContent,
         textAlign: attrs.textAlign,
         textVerticalAlign: attrs.textVerticalAlign,

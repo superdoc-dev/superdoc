@@ -925,6 +925,27 @@ export interface VectorShapeEffectExtent {
   bottom?: number;
 }
 
+/** Vector shape outer shadow effect */
+export interface VectorShapeOuterShadowEffect {
+  type: 'outerShadow';
+  blurRadius: number;
+  distance: number;
+  direction: number;
+  color: string;
+  opacity: number;
+  alignment?: string;
+  rotateWithShape?: boolean;
+  scaleX?: number;
+  scaleY?: number;
+  skewX?: number;
+  skewY?: number;
+}
+
+/** Vector shape effects */
+export interface VectorShapeEffects {
+  outerShadow?: VectorShapeOuterShadowEffect;
+}
+
 /** Vector shape node attributes */
 export interface VectorShapeAttrs extends ShapeNodeAttributes {
   /** Shape kind (rect, ellipse, etc.) */
@@ -943,6 +964,8 @@ export interface VectorShapeAttrs extends ShapeNodeAttributes {
   lineEnds?: VectorShapeLineEnds | null;
   /** Extra bounds around the shape */
   effectExtent?: VectorShapeEffectExtent | null;
+  /** Visual effects applied to the shape */
+  effects?: VectorShapeEffects | null;
   /** Rotation in degrees */
   rotation?: number;
   /** Horizontal flip */

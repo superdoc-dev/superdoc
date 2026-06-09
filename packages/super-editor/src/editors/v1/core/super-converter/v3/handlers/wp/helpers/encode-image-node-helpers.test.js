@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleImageNode, getVectorShape } from './encode-image-node-helpers.js';
 import { emuToPixels, polygonToObj, rotToDegrees } from '@converter/helpers.js';
-import { extractFillColor, extractStrokeColor, extractStrokeWidth, extractLineEnds } from './vector-shape-helpers.js';
+import {
+  extractFillColor,
+  extractStrokeColor,
+  extractStrokeWidth,
+  extractLineEnds,
+  extractShapeEffects,
+} from './vector-shape-helpers.js';
 import { convertTiffToPng } from './tiff-converter.js';
 
 vi.mock('@converter/helpers.js', async (importOriginal) => {
@@ -19,6 +25,7 @@ vi.mock('./vector-shape-helpers.js', () => ({
   extractStrokeColor: vi.fn(),
   extractStrokeWidth: vi.fn(),
   extractLineEnds: vi.fn(),
+  extractShapeEffects: vi.fn(),
   extractCustomGeometry: vi.fn(),
 }));
 
@@ -34,6 +41,7 @@ describe('handleImageNode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     emuToPixels.mockImplementation((emu) => (emu ? parseInt(emu, 10) / 1000 : 0));
+    extractShapeEffects.mockReturnValue(null);
     polygonToObj.mockImplementation((polygon) => {
       if (!polygon) return null;
       const points = [];
@@ -1504,6 +1512,7 @@ describe('getVectorShape', () => {
     extractStrokeColor.mockReturnValue('#000000');
     extractStrokeWidth.mockReturnValue(1);
     extractLineEnds.mockReturnValue(null);
+    extractShapeEffects.mockReturnValue(null);
   });
 
   const makeGraphicData = (overrides = {}) => ({
@@ -1623,6 +1632,32 @@ describe('getVectorShape', () => {
     expect(result.attrs.lineEnds).toEqual({
       tail: { type: 'triangle', width: 'med', length: 'lg' },
     });
+  });
+
+  it('adds shape effects from helper extraction', () => {
+    const effects = {
+      outerShadow: {
+        type: 'outerShadow',
+        blurRadius: 6.6667,
+        distance: 6.6667,
+        direction: 45,
+        color: '#a6a6a6',
+        opacity: 0.4,
+      },
+    };
+    extractShapeEffects.mockReturnValue(effects);
+    const graphicData = makeGraphicData();
+    const spPr = graphicData.elements[0].elements[0];
+
+    const result = getVectorShape({
+      params: makeParams(),
+      node: {},
+      graphicData,
+      size: { width: 72, height: 72 },
+    });
+
+    expect(extractShapeEffects).toHaveBeenCalledWith(spPr);
+    expect(result.attrs.effects).toEqual(effects);
   });
 
   it('extracts effectExtent from wp:effectExtent', () => {

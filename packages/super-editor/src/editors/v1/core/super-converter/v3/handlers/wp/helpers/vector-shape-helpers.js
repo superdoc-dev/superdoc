@@ -1,5 +1,7 @@
 import { findChildByLocalName, filterChildrenByLocalName, hasLocalName, getLocalName } from './drawingml-utils.js';
 
+const EMU_PER_PIXEL = 9525;
+
 /**
  * Converts a preset color name (a:prstClr) to its hex value.
  * Per ECMA-376 Part 1, Section 20.1.10.47 (ST_PresetColorVal).
@@ -336,6 +338,62 @@ export function extractLineEnds(spPr) {
 
   if (!headConfig && !tailConfig) return null;
   return { head: headConfig ?? undefined, tail: tailConfig ?? undefined };
+}
+
+export function extractShapeEffects(spPr) {
+  const outerShadow = extractOuterShadowEffect(spPr);
+  if (!outerShadow) return null;
+  return { outerShadow };
+}
+
+function extractOuterShadowEffect(spPr) {
+  const effectLst = findChildByLocalName(spPr?.elements, 'effectLst');
+  const outerShdw = findChildByLocalName(effectLst?.elements, 'outerShdw');
+  if (!outerShdw) return null;
+
+  const colorResult = extractColorFromElement(outerShdw);
+  if (!colorResult) return null;
+
+  return stripUndefined({
+    type: 'outerShadow',
+    blurRadius: readNumber(outerShdw.attributes?.blurRad) / EMU_PER_PIXEL,
+    distance: readNumber(outerShdw.attributes?.dist) / EMU_PER_PIXEL,
+    direction: parseAngle(outerShdw.attributes?.dir) ?? 0,
+    color: colorResult.color,
+    opacity: colorResult.alpha ?? 1,
+    alignment: typeof outerShdw.attributes?.algn === 'string' ? outerShdw.attributes.algn : undefined,
+    rotateWithShape: parseOfficeBoolean(outerShdw.attributes?.rotWithShape),
+    scaleX: parsePercentage(outerShdw.attributes?.sx),
+    scaleY: parsePercentage(outerShdw.attributes?.sy),
+    skewX: parseAngle(outerShdw.attributes?.kx),
+    skewY: parseAngle(outerShdw.attributes?.ky),
+  });
+}
+
+function readNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function parseOfficeBoolean(value) {
+  if (value === undefined || value === null) return true;
+  return value === true || value === 1 || value === '1' || String(value).toLowerCase() === 'true';
+}
+
+function parsePercentage(value) {
+  if (value === undefined || value === null) return undefined;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric / 100000 : undefined;
+}
+
+function parseAngle(value) {
+  if (value === undefined || value === null) return undefined;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric / 60000 : undefined;
+}
+
+function stripUndefined(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined));
 }
 
 /**

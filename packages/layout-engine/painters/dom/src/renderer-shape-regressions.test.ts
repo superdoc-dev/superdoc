@@ -249,6 +249,105 @@ describe('DomPainter shape regressions', () => {
     expect(path?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
   });
 
+  it('renders outer shadow effects as SVG filters on standalone vector shapes', () => {
+    const geometry: DrawingGeometry = { width: 130, height: 80, rotation: 0, flipH: false, flipV: false };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'standalone-shadow-shape',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'roundRect',
+      fillColor: '#ffffff',
+      strokeColor: '#000000',
+      strokeWidth: 1,
+      effectExtent: { left: 2, top: 2, right: 14, bottom: 14 },
+      effects: {
+        outerShadow: {
+          type: 'outerShadow',
+          blurRadius: 6.6667,
+          distance: 6.6667,
+          direction: 45,
+          color: '#a6a6a6',
+          opacity: 0.4,
+        },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+    const filter = svg?.querySelector('filter') as SVGFilterElement | null;
+    const dropShadow = filter?.querySelector('feDropShadow') as SVGElement | null;
+    const path = svg?.querySelector('path') as SVGPathElement | null;
+    const contentWrapper = mount.querySelector(
+      '.superdoc-vector-shape > div[style*="position: absolute"]',
+    ) as HTMLElement | null;
+
+    expect(svg?.querySelectorAll('filter')).toHaveLength(1);
+    expect(svg?.querySelectorAll('feDropShadow')).toHaveLength(1);
+    expect(Number(dropShadow?.getAttribute('dx'))).toBeCloseTo(4.714, 3);
+    expect(Number(dropShadow?.getAttribute('dy'))).toBeCloseTo(4.714, 3);
+    expect(Number(dropShadow?.getAttribute('stdDeviation'))).toBeCloseTo(3.333, 3);
+    expect(dropShadow?.getAttribute('flood-color')).toBe('#a6a6a6');
+    expect(dropShadow?.getAttribute('flood-opacity')).toBe('0.4');
+    expect(path?.getAttribute('filter')).toBe(`url(#${filter?.getAttribute('id')})`);
+    expect(contentWrapper?.style.left).toBe('2px');
+    expect(contentWrapper?.style.top).toBe('2px');
+    expect(svg?.style.overflow).toBe('visible');
+  });
+
+  it('renders no-fill closed shape shadows from a filled shadow clone', () => {
+    const geometry: DrawingGeometry = { width: 130, height: 80, rotation: 0, flipH: false, flipV: false };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'nofill-shadow-shape',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'roundRect',
+      fillColor: null,
+      strokeColor: '#126A59',
+      strokeWidth: 1.5,
+      effectExtent: { left: 2, top: 2, right: 14, bottom: 14 },
+      effects: {
+        outerShadow: {
+          type: 'outerShadow',
+          blurRadius: 6.6667,
+          distance: 6.6667,
+          direction: 45,
+          color: '#a6a6a6',
+          opacity: 0.4,
+        },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+    const paths = Array.from(svg?.querySelectorAll('path') ?? []) as SVGPathElement[];
+    const shadowClone = svg?.querySelector('[data-sd-shadow-clone]') as SVGPathElement | null;
+    const originalPath = paths.find((path) => !path.hasAttribute('data-sd-shadow-clone'));
+    const shadowFilterId = shadowClone?.getAttribute('filter')?.match(/#([^)]+)/)?.[1];
+    const shadowFilter = shadowFilterId ? svg?.querySelector(`#${shadowFilterId}`) : null;
+
+    expect(paths).toHaveLength(2);
+    expect(shadowClone?.getAttribute('fill')).toBe('#000000');
+    expect(shadowClone?.getAttribute('stroke')).toBe('none');
+    expect(shadowFilter?.querySelector('feGaussianBlur')?.getAttribute('stdDeviation')).toBe('3.3333');
+    expect(Number(shadowFilter?.querySelector('feOffset')?.getAttribute('dx'))).toBeCloseTo(4.714, 3);
+    expect(Number(shadowFilter?.querySelector('feOffset')?.getAttribute('dy'))).toBeCloseTo(4.714, 3);
+    expect(shadowFilter?.querySelector('feFlood')?.getAttribute('flood-color')).toBe('#a6a6a6');
+    expect(shadowFilter?.querySelector('feFlood')?.getAttribute('flood-opacity')).toBe('0.4');
+    expect(shadowFilter?.querySelector('feComposite[operator="out"]')?.getAttribute('result')).toBe('outerShadow');
+    expect(originalPath?.getAttribute('fill')).toBe('none');
+    expect(originalPath?.hasAttribute('filter')).toBe(false);
+  });
+
   it('does not inverse-scale shape-group text when child geometry is already pre-scaled', () => {
     const geometry: DrawingGeometry = { width: 200, height: 100, rotation: 0, flipH: false, flipV: false };
 
@@ -385,6 +484,117 @@ describe('DomPainter shape regressions', () => {
     const svg = childWrapper?.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
     expect(svg).toBeTruthy();
     expect(svg?.style.overflow).toBe('visible');
+  });
+
+  it('renders outer shadow effects on shape group vector children', () => {
+    const geometry: DrawingGeometry = { width: 120, height: 120, rotation: 0, flipH: false, flipV: false };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'group-shadow-shape',
+      drawingKind: 'shapeGroup',
+      geometry,
+      shapes: [
+        {
+          shapeType: 'vectorShape',
+          attrs: {
+            x: 10,
+            y: 10,
+            width: 80,
+            height: 50,
+            kind: 'rect',
+            fillColor: '#ffffff',
+            strokeColor: '#000000',
+            strokeWidth: 1,
+            effects: {
+              outerShadow: {
+                type: 'outerShadow',
+                blurRadius: 6.6667,
+                distance: 6.6667,
+                direction: 45,
+                color: '#a6a6a6',
+                opacity: 0.4,
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const svg = mount.querySelector('.superdoc-shape-group .superdoc-vector-shape svg') as SVGSVGElement | null;
+    const filter = svg?.querySelector('filter') as SVGFilterElement | null;
+    const path = svg?.querySelector('path') as SVGPathElement | null;
+
+    expect(svg?.querySelectorAll('filter')).toHaveLength(1);
+    expect(svg?.querySelectorAll('feDropShadow')).toHaveLength(1);
+    expect(path?.getAttribute('filter')).toBe(`url(#${filter?.getAttribute('id')})`);
+  });
+
+  it('uses distinct shadow filters for shape group children without shape ids', () => {
+    const geometry: DrawingGeometry = { width: 160, height: 120, rotation: 0, flipH: false, flipV: false };
+    const shadow = {
+      type: 'outerShadow' as const,
+      blurRadius: 6,
+      distance: 4,
+      direction: 0,
+      color: '#000000',
+      opacity: 0.5,
+    };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'group-shadow-duplicate-child-ids',
+      drawingKind: 'shapeGroup',
+      geometry,
+      shapes: [
+        {
+          shapeType: 'vectorShape',
+          attrs: {
+            x: 10,
+            y: 10,
+            width: 50,
+            height: 40,
+            kind: 'rect',
+            fillColor: '#ffffff',
+            strokeColor: '#000000',
+            strokeWidth: 1,
+            effects: { outerShadow: { ...shadow, color: '#ff0000' } },
+          },
+        },
+        {
+          shapeType: 'vectorShape',
+          attrs: {
+            x: 80,
+            y: 10,
+            width: 50,
+            height: 40,
+            kind: 'rect',
+            fillColor: '#ffffff',
+            strokeColor: '#000000',
+            strokeWidth: 1,
+            effects: { outerShadow: { ...shadow, color: '#0000ff' } },
+          },
+        },
+      ],
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const filters = Array.from(mount.querySelectorAll('filter')) as SVGFilterElement[];
+    const paths = Array.from(
+      mount.querySelectorAll('.superdoc-shape-group .superdoc-vector-shape svg path'),
+    ) as SVGPathElement[];
+    const filterIds = filters.map((filter) => filter.getAttribute('id'));
+
+    expect(filters).toHaveLength(2);
+    expect(new Set(filterIds).size).toBe(2);
+    expect(paths.map((path) => path.getAttribute('filter'))).toEqual(filterIds.map((id) => `url(#${id})`));
   });
 
   it('coerces grouped child stroke width consistently when it is a numeric string', () => {

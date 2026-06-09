@@ -15,6 +15,7 @@ import type {
   ShapeGroupDrawing,
   ShapeGroupImageChild,
   ShapeGroupTransform,
+  ShapeEffects,
   TextPart,
   VectorShapeDrawing,
   FlowBlock,
@@ -808,6 +809,56 @@ export function normalizeEffectExtent(value: unknown): EffectExtent | undefined 
   };
 }
 
+export function normalizeShapeEffects(value: unknown): ShapeEffects | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const maybe = value as Record<string, unknown>;
+  const outerShadow = normalizeOuterShadowEffect(maybe.outerShadow);
+  return outerShadow ? { outerShadow } : undefined;
+}
+
+function normalizeOuterShadowEffect(value: unknown): ShapeEffects['outerShadow'] | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const maybe = value as Record<string, unknown>;
+  if (maybe.type !== 'outerShadow') return undefined;
+
+  const blurRadius = coerceNumber(maybe.blurRadius);
+  const distance = coerceNumber(maybe.distance);
+  const direction = coerceNumber(maybe.direction);
+  const opacity = coerceNumber(maybe.opacity);
+
+  if (
+    blurRadius == null ||
+    blurRadius < 0 ||
+    distance == null ||
+    distance < 0 ||
+    direction == null ||
+    opacity == null ||
+    typeof maybe.color !== 'string'
+  ) {
+    return undefined;
+  }
+
+  const clamp = (val: number) => Math.max(0, Math.min(1, val));
+  const normalized = {
+    type: 'outerShadow' as const,
+    blurRadius,
+    distance,
+    direction,
+    color: maybe.color,
+    opacity: clamp(opacity),
+    alignment: typeof maybe.alignment === 'string' ? maybe.alignment : undefined,
+    rotateWithShape: typeof maybe.rotateWithShape === 'boolean' ? maybe.rotateWithShape : undefined,
+    scaleX: coerceNumber(maybe.scaleX),
+    scaleY: coerceNumber(maybe.scaleY),
+    skewX: coerceNumber(maybe.skewX),
+    skewY: coerceNumber(maybe.skewY),
+  };
+
+  return Object.fromEntries(
+    Object.entries(normalized).filter(([, fieldValue]) => fieldValue !== undefined),
+  ) as ShapeEffects['outerShadow'];
+}
+
 /**
  * Normalizes and validates shape group children from an array.
  *
@@ -842,9 +893,25 @@ export function normalizeEffectExtent(value: unknown): EffectExtent | undefined 
  */
 export function normalizeShapeGroupChildren(value: unknown): ShapeGroupChild[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((child): child is ShapeGroupChild => {
-    if (!child || typeof child !== 'object') return false;
-    return typeof (child as { shapeType?: unknown }).shapeType === 'string';
+  return value.flatMap((child): ShapeGroupChild[] => {
+    if (!child || typeof child !== 'object') return [];
+    if (typeof (child as { shapeType?: unknown }).shapeType !== 'string') return [];
+
+    const shapeChild = child as ShapeGroupChild;
+    if (shapeChild.shapeType !== 'vectorShape') return [shapeChild];
+
+    const attrs = (shapeChild as { attrs?: unknown }).attrs;
+    if (!attrs || typeof attrs !== 'object' || !('effects' in attrs)) return [shapeChild];
+
+    const normalizedEffects = normalizeShapeEffects((attrs as { effects?: unknown }).effects);
+    const normalizedAttrs = { ...(attrs as Record<string, unknown>) };
+    if (normalizedEffects) {
+      normalizedAttrs.effects = normalizedEffects;
+    } else {
+      delete normalizedAttrs.effects;
+    }
+
+    return [{ ...shapeChild, attrs: normalizedAttrs } as ShapeGroupChild];
   });
 }
 

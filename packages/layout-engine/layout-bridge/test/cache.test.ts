@@ -144,6 +144,29 @@ describe('MeasureCache', () => {
     expect(cache.get(item, 400, 600, '')?.totalHeight).toBe(20);
   });
 
+  it('creates different cache keys when vector shape shadow opacity changes', () => {
+    const baseShadow = {
+      type: 'outerShadow' as const,
+      blurRadius: 6,
+      distance: 4,
+      direction: 45,
+      color: '#a6a6a6',
+      opacity: 0.4,
+    };
+    const block1: VectorShapeDrawing = {
+      ...vectorShapeBlock('shadow-shape', 100, 50, '#ffffff'),
+      effects: { outerShadow: baseShadow },
+    };
+    const block2: VectorShapeDrawing = {
+      ...vectorShapeBlock('shadow-shape', 100, 50, '#ffffff'),
+      effects: { outerShadow: { ...baseShadow, opacity: 0.8 } },
+    };
+
+    cache.set(block1, 400, 600, { totalHeight: 20 });
+
+    expect(cache.get(block2, 400, 600)).toBeUndefined();
+  });
+
   it('invalidates by block id even when a font signature is part of the key', () => {
     const item = block('0-paragraph', 'hello');
     cache.set(item, 400, 600, { totalHeight: 20 }, 'docA');

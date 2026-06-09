@@ -473,7 +473,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
       return ['drawing:image', renderedBlockImageVersion(imageLike)].join('|');
     }
     if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
-      const vector = block as VectorShapeDrawing;
+      const vector = block as VectorShapeDrawing | TextboxDrawing;
       return [
         block.drawingKind === 'textboxShape' ? 'drawing:textbox' : 'drawing:vector',
         vector.shapeKind ?? '',
@@ -486,6 +486,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         vector.geometry.flipH ? 1 : 0,
         vector.geometry.flipV ? 1 : 0,
         drawingTextVersion(vector),
+        vector.effects ? JSON.stringify(vector.effects) : '',
       ].join('|');
     }
     if (block.drawingKind === 'shapeGroup') {

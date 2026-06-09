@@ -33,6 +33,7 @@ import {
   normalizeShapeGroupChildren,
   normalizeLineEnds,
   normalizeEffectExtent,
+  normalizeShapeEffects,
   coerceRelativeHeight,
   normalizeZIndex,
   getFragmentZIndex,
@@ -1310,6 +1311,44 @@ describe('Drawing/Shape Utilities', () => {
       expect(normalizeShapeGroupChildren(undefined)).toEqual([]);
       expect(normalizeShapeGroupChildren({} as never)).toEqual([]);
     });
+
+    it('normalizes vector child effects consistently with standalone shapes', () => {
+      const result = normalizeShapeGroupChildren([
+        {
+          shapeType: 'vectorShape',
+          attrs: {
+            effects: {
+              outerShadow: {
+                type: 'outerShadow',
+                blurRadius: 2,
+                distance: 3,
+                direction: 45,
+                color: '#000000',
+                opacity: 1.5,
+              },
+            },
+          },
+        },
+        {
+          shapeType: 'vectorShape',
+          attrs: {
+            effects: {
+              outerShadow: {
+                type: 'outerShadow',
+                blurRadius: 2,
+                distance: 3,
+                direction: 45,
+                color: 123,
+                opacity: 0.5,
+              },
+            },
+          },
+        },
+      ]);
+
+      expect(result[0]?.attrs.effects?.outerShadow.opacity).toBe(1);
+      expect(result[1]?.attrs).not.toHaveProperty('effects');
+    });
   });
 });
 
@@ -1609,6 +1648,109 @@ describe('normalizeEffectExtent', () => {
   it('treats zero as a valid value (not clamped)', () => {
     const result = normalizeEffectExtent({ left: 0, top: 0, right: 0, bottom: 10 });
     expect(result).toEqual({ left: 0, top: 0, right: 0, bottom: 10 });
+  });
+});
+
+describe('normalizeShapeEffects', () => {
+  it('returns undefined for non-object values', () => {
+    expect(normalizeShapeEffects(null)).toBeUndefined();
+    expect(normalizeShapeEffects(undefined)).toBeUndefined();
+    expect(normalizeShapeEffects('shadow')).toBeUndefined();
+    expect(normalizeShapeEffects([])).toBeUndefined();
+  });
+
+  it('returns undefined when outerShadow is missing', () => {
+    expect(normalizeShapeEffects({})).toBeUndefined();
+  });
+
+  it('returns undefined for invalid numeric fields', () => {
+    const base = {
+      type: 'outerShadow',
+      blurRadius: 6,
+      distance: 4,
+      direction: 45,
+      color: '#a6a6a6',
+      opacity: 0.4,
+    };
+
+    expect(normalizeShapeEffects({ outerShadow: { ...base, blurRadius: -1 } })).toBeUndefined();
+    expect(normalizeShapeEffects({ outerShadow: { ...base, distance: -1 } })).toBeUndefined();
+    expect(normalizeShapeEffects({ outerShadow: { ...base, direction: NaN } })).toBeUndefined();
+    expect(normalizeShapeEffects({ outerShadow: { ...base, opacity: Infinity } })).toBeUndefined();
+  });
+
+  it('normalizes valid outer shadow fields', () => {
+    const result = normalizeShapeEffects({
+      outerShadow: {
+        type: 'outerShadow',
+        blurRadius: '6.6667',
+        distance: '6.6667',
+        direction: '45',
+        color: '#a6a6a6',
+        opacity: '0.4',
+        alignment: 'tl',
+        rotateWithShape: false,
+        scaleX: '1.2',
+        scaleY: 0.8,
+        skewX: '3',
+        skewY: 4,
+      },
+    });
+
+    expect(result).toEqual({
+      outerShadow: {
+        type: 'outerShadow',
+        blurRadius: 6.6667,
+        distance: 6.6667,
+        direction: 45,
+        color: '#a6a6a6',
+        opacity: 0.4,
+        alignment: 'tl',
+        rotateWithShape: false,
+        scaleX: 1.2,
+        scaleY: 0.8,
+        skewX: 3,
+        skewY: 4,
+      },
+    });
+  });
+
+  it('clamps opacity and omits undefined optional fields', () => {
+    expect(
+      normalizeShapeEffects({
+        outerShadow: {
+          type: 'outerShadow',
+          blurRadius: 1,
+          distance: 2,
+          direction: 45,
+          color: '#000000',
+          opacity: -1,
+          alignment: undefined,
+        },
+      }),
+    ).toEqual({
+      outerShadow: {
+        type: 'outerShadow',
+        blurRadius: 1,
+        distance: 2,
+        direction: 45,
+        color: '#000000',
+        opacity: 0,
+      },
+    });
+
+    expect(
+      normalizeShapeEffects({
+        outerShadow: {
+          type: 'outerShadow',
+          blurRadius: 1,
+          distance: 2,
+          direction: 45,
+          color: '#000000',
+          opacity: 2,
+        },
+      })?.outerShadow.opacity,
+    ).toBe(1);
   });
 });
 

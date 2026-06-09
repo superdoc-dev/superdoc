@@ -141,7 +141,8 @@ import type {
 } from './story-session/StoryPresentationSessionManager.js';
 import type { StoryPresentationSession } from './story-session/types.js';
 import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/resolve-story-runtime.js';
-import { isNoteContentEmpty } from '../../document-api-adapters/story-runtime/note-story-runtime.js';
+import { parseRenderedNoteTarget, type RenderedNoteTarget } from './notes/note-target.js';
+import { NoteSessionCoordinator } from './notes/NoteSessionCoordinator.js';
 import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
@@ -239,11 +240,6 @@ type ThreadAnchorScrollPlan = {
   applyScroll: (behavior: ScrollBehavior) => void;
 };
 
-type RenderedNoteTarget = {
-  storyType: 'footnote' | 'endnote';
-  noteId: string;
-};
-
 type UnifiedHistoryDebugGlobal = typeof globalThis & {
   __SD_DEBUG_UNIFIED_HISTORY__?: boolean;
 };
@@ -284,28 +280,6 @@ type RenderedNoteFragmentHit = {
   pageIndex: number;
 };
 
-function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
-  if (typeof blockId !== 'string' || blockId.length === 0) {
-    return null;
-  }
-
-  if (blockId.startsWith('footnote-')) {
-    const noteId = blockId.slice('footnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'footnote', noteId } : null;
-  }
-
-  if (blockId.startsWith('__sd_semantic_footnote-')) {
-    const noteId = blockId.slice('__sd_semantic_footnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'footnote', noteId } : null;
-  }
-
-  if (blockId.startsWith('endnote-')) {
-    const noteId = blockId.slice('endnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'endnote', noteId } : null;
-  }
-
-  return null;
-}
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import {
@@ -511,12 +485,8 @@ export class PresentationEditor extends EventEmitter {
   #painterHost: HTMLElement;
   #selectionOverlay: HTMLElement;
   #permissionOverlay: HTMLElement | null = null;
-  /** SD-3400: note target whose page-bottom fragments are highlighted while its session is open. */
-  #activeNoteHighlightTarget: RenderedNoteTarget | null = null;
-  /** SD-3400: unbinds the active note session's emptied-content watcher. */
-  #noteSessionEmptyWatchCleanup: (() => void) | null = null;
-  /** SD-3400: scroll the active note into view once its fragment exists (inserts paint a frame later). */
-  #pendingNoteScrollIntoView = false;
+  /** SD-3400: highlight + smart-scroll + emptied-note commit for the open note session. */
+  #noteSessionCoordinator: NoteSessionCoordinator | null = null;
   #hiddenHost: HTMLElement;
   /** Scroll-isolating wrapper around #hiddenHost. Append/remove this from the DOM. */
   #hiddenHostWrapper: HTMLElement;
@@ -7327,10 +7297,8 @@ export class PresentationEditor extends EventEmitter {
       this.emit('paginationUpdate', payload);
 
       // SD-3400: fragments are rebuilt on every paint — re-apply the active
-      // note highlight so it survives rerenders while the session is open, and
-      // complete any pending scroll-to-note (inserted notes paint on this pass).
-      this.#refreshActiveNoteHighlight();
-      this.#scrollActiveNoteIntoView();
+      // note highlight and complete any pending scroll-to-note.
+      this.#noteSessionCoordinator?.onPaint();
 
       // Emit fresh comment positions after layout completes.
       // Always emit — even when empty — so the store can clear stale positions
@@ -9062,60 +9030,22 @@ export class PresentationEditor extends EventEmitter {
     this.#shouldScrollSelectionIntoView = true;
     this.#scheduleSelectionUpdate({ immediate: true });
 
-    // SD-3400: make the focus change visible (highlight the note at the page
-    // bottom) and watch for the user emptying the note (commit removal
-    // immediately instead of waiting for a click back into the body).
-    this.#activeNoteHighlightTarget = target;
-    this.#refreshActiveNoteHighlight();
-    this.#bindNoteSessionEmptyWatch(session);
-    // Bring the note into view. For an existing note (double-click) the
-    // fragment is already painted and scrolls now; for a freshly inserted note
-    // the fragment appears on the next paint, where the layoutUpdated hook
-    // retries until it exists.
-    this.#pendingNoteScrollIntoView = true;
-    this.#scrollActiveNoteIntoView();
+    // SD-3400: highlight the note, watch for the user emptying it, and bring
+    // it into view (see NoteSessionCoordinator for the full UX contract).
+    this.#ensureNoteSessionCoordinator().onActivated(target, session);
     return true;
   }
 
-  /**
-   * SD-3400: smart-scroll the active note's first painted fragment into view.
-   * No-op when the note is already fully visible; otherwise smooth-centers it.
-   * Stays pending until the fragment exists, so notes created by insert (which
-   * only paint after the next relayout) scroll once they appear.
-   */
-  #scrollActiveNoteIntoView(): void {
-    if (!this.#pendingNoteScrollIntoView) return;
-    const target = this.#activeNoteHighlightTarget;
-    if (!target) {
-      this.#pendingNoteScrollIntoView = false;
-      return;
+  #ensureNoteSessionCoordinator(): NoteSessionCoordinator {
+    if (!this.#noteSessionCoordinator) {
+      this.#noteSessionCoordinator = new NoteSessionCoordinator({
+        getHost: () => this.#painterHost ?? this.#visibleHost,
+        getScrollContainer: () => this.#scrollContainer,
+        hasActiveSession: () => Boolean(this.#getActiveStorySession()),
+        exitActiveSession: () => this.#exitActiveStorySession(),
+      });
     }
-    const host = this.#painterHost ?? this.#visibleHost;
-    if (!host) return;
-    const prefixes = [
-      `${target.storyType}-${target.noteId}-`,
-      `__sd_semantic_${target.storyType}-${target.noteId}-`,
-    ];
-    const fragment = Array.from(host.querySelectorAll('[data-block-id]')).find((el) => {
-      const id = el.getAttribute('data-block-id') ?? '';
-      return prefixes.some((prefix) => id.startsWith(prefix));
-    });
-    if (!fragment) return; // not painted yet — retry on the next layoutUpdated
-
-    this.#pendingNoteScrollIntoView = false;
-    const rect = fragment.getBoundingClientRect();
-    const viewport =
-      this.#scrollContainer instanceof Window
-        ? { top: 0, bottom: this.#scrollContainer.innerHeight }
-        : this.#scrollContainer instanceof Element
-          ? (() => {
-              const r = this.#scrollContainer.getBoundingClientRect();
-              return { top: r.top, bottom: r.bottom };
-            })()
-          : { top: 0, bottom: window.innerHeight };
-    const fullyVisible = rect.top >= viewport.top + 8 && rect.bottom <= viewport.bottom - 8;
-    if (fullyVisible) return;
-    fragment.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return this.#noteSessionCoordinator;
   }
 
   /**
@@ -9128,72 +9058,13 @@ export class PresentationEditor extends EventEmitter {
     return this.#activateRenderedNoteSession(target, {});
   }
 
-  /**
-   * SD-3400: toggle the `sd-note-session-active` highlight on the painted
-   * fragments of the note whose session is open. Paint-only (class + CSS), so
-   * it never affects layout. Re-applied after every paint because fragment
-   * elements are rebuilt by the painter; self-heals when the session is gone.
-   */
-  #refreshActiveNoteHighlight(): void {
-    const host = this.#painterHost ?? this.#visibleHost;
-    if (!host) return;
-    if (this.#activeNoteHighlightTarget && !this.#getActiveStorySession()) {
-      this.#activeNoteHighlightTarget = null;
-    }
-    host.querySelectorAll('.sd-note-session-active').forEach((el) => el.classList.remove('sd-note-session-active'));
-    const target = this.#activeNoteHighlightTarget;
-    if (!target) return;
-    const prefixes = [
-      `${target.storyType}-${target.noteId}-`,
-      `__sd_semantic_${target.storyType}-${target.noteId}-`,
-    ];
-    host.querySelectorAll('[data-block-id]').forEach((el) => {
-      const id = el.getAttribute('data-block-id') ?? '';
-      if (prefixes.some((prefix) => id.startsWith(prefix))) {
-        el.classList.add('sd-note-session-active');
-      }
-    });
-  }
-
-  /**
-   * SD-3400: when the user clears ALL content of a note that previously had
-   * content, exit the session immediately so the commit (which removes the
-   * footnote on both sides) runs right away — no extra click required. Freshly
-   * inserted notes open empty and are only auto-removed once they have held
-   * content, so insert-and-type is unaffected.
-   */
-  #bindNoteSessionEmptyWatch(session: StoryPresentationSession): void {
-    this.#noteSessionEmptyWatchCleanup?.();
-    const sessionEditor = session.editor;
-    let hadContent = !isNoteContentEmpty(sessionEditor.state.doc);
-    const onUpdate = () => {
-      const empty = isNoteContentEmpty(sessionEditor.state.doc);
-      if (!empty) {
-        hadContent = true;
-        return;
-      }
-      if (!hadContent) return;
-      this.#noteSessionEmptyWatchCleanup?.();
-      // Defer past the session editor's own transaction lifecycle.
-      queueMicrotask(() => this.#exitActiveStorySession());
-    };
-    sessionEditor.on?.('update', onUpdate);
-    this.#noteSessionEmptyWatchCleanup = () => {
-      sessionEditor.off?.('update', onUpdate);
-      this.#noteSessionEmptyWatchCleanup = null;
-    };
-  }
-
   #exitActiveStorySession(): void {
     const session = this.#getActiveStorySession();
     if (!session) {
       return;
     }
 
-    this.#noteSessionEmptyWatchCleanup?.();
-    this.#activeNoteHighlightTarget = null;
-    this.#pendingNoteScrollIntoView = false;
-    this.#refreshActiveNoteHighlight();
+    this.#noteSessionCoordinator?.onExit();
 
     this.#storySessionManager?.exit();
     this.#pendingDocChange = true;

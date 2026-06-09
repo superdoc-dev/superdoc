@@ -41,7 +41,13 @@ import {
 import { debugLog } from '../selection/SelectionDebug.js';
 import { DOM_CLASS_NAMES, buildAnnotationSelector, DRAGGABLE_SELECTOR } from '@superdoc/dom-contract';
 import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
-import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
+import {
+  isRenderedNoteBlockId,
+  isSameRenderedNoteTarget,
+  parseRenderedNoteTarget,
+  type RenderedNoteTarget,
+} from '../notes/note-target.js';
+import { resolveNoteReferenceAtPointer } from './note-reference-hit.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 import {
   findStructuredContentBlockAtPos,
@@ -87,57 +93,6 @@ type CommentThreadHit = {
   isAmbiguous: boolean;
   threadId: string | null;
 };
-
-/**
- * Block IDs for note content use `footnote-{id}-` / `endnote-{id}-` prefixes.
- * Semantic footnote blocks use the {@link isSemanticFootnoteBlockId} helper from
- * shared constants — it matches both heading and body footnote block IDs.
- */
-function isRenderedNoteBlockId(blockId: string): boolean {
-  return (
-    typeof blockId === 'string' &&
-    (blockId.startsWith('footnote-') || blockId.startsWith('endnote-') || isSemanticFootnoteBlockId(blockId))
-  );
-}
-
-type RenderedNoteTarget = {
-  storyType: 'footnote' | 'endnote';
-  noteId: string;
-};
-
-function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
-  if (typeof blockId !== 'string' || blockId.length === 0) {
-    return null;
-  }
-
-  if (blockId.startsWith('footnote-')) {
-    const noteId = blockId.slice('footnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'footnote', noteId } : null;
-  }
-
-  if (blockId.startsWith('__sd_semantic_footnote-')) {
-    const noteId = blockId.slice('__sd_semantic_footnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'footnote', noteId } : null;
-  }
-
-  if (blockId.startsWith('endnote-')) {
-    const noteId = blockId.slice('endnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'endnote', noteId } : null;
-  }
-
-  return null;
-}
-
-function isSameRenderedNoteTarget(
-  left: RenderedNoteTarget | null | undefined,
-  right: RenderedNoteTarget | null | undefined,
-): boolean {
-  if (!left || !right) {
-    return false;
-  }
-
-  return left.storyType === right.storyType && left.noteId === right.noteId;
-}
 
 function isOutsidePageBodyContent(layout: Layout, x: number, pageIndex?: number, pageLocalY?: number): boolean {
   if (!Number.isFinite(x) || !Number.isFinite(pageIndex) || !Number.isFinite(pageLocalY)) {
@@ -1894,45 +1849,21 @@ export class EditorInputManager {
 
   /**
    * SD-3400: resolve a double-clicked BODY footnote/endnote reference marker to
-   * its note target so navigation can open the corresponding note. The painted
-   * reference is a superscript run carrying `data-pm-start` (the PM position of
-   * the footnoteReference/endnoteReference node) but no note id, so we read the
-   * node at that position to recover the story type and id.
+   * its note target so navigation can open the corresponding note. Delegates to
+   * the pure {@link resolveNoteReferenceAtPointer} helper.
    */
   #resolveFootnoteReferenceTargetAtPointer(
     target: HTMLElement | null,
     clientX: number,
     clientY: number,
   ): RenderedNoteTarget | null {
-    const fromTarget = this.#noteTargetFromPmStartElement(target?.closest?.('[data-pm-start]') as HTMLElement | null);
-    if (fromTarget) return fromTarget;
-
-    // Real pointer events usually land on the selection overlay above the pages,
-    // not on the painted text span — walk the full hit chain like the
-    // rendered-note resolver does.
-    const doc = this.#deps?.getViewportHost()?.ownerDocument ?? document;
-    if (typeof doc.elementsFromPoint !== 'function') return null;
-    for (const element of doc.elementsFromPoint(clientX, clientY)) {
-      if (!(element instanceof HTMLElement)) continue;
-      const resolved = this.#noteTargetFromPmStartElement(element.closest('[data-pm-start]') as HTMLElement | null);
-      if (resolved) return resolved;
-    }
-    return null;
-  }
-
-  #noteTargetFromPmStartElement(refEl: HTMLElement | null): RenderedNoteTarget | null {
-    if (!refEl) return null;
-    const pmStart = Number(refEl.getAttribute('data-pm-start'));
-    if (!Number.isFinite(pmStart)) return null;
-    const node = this.#deps?.getEditor()?.state?.doc?.nodeAt(pmStart);
-    const nodeType = node?.type?.name;
-    if (nodeType !== 'footnoteReference' && nodeType !== 'endnoteReference') return null;
-    const noteId = node?.attrs?.id;
-    if (noteId == null || String(noteId).length === 0) return null;
-    return {
-      storyType: nodeType === 'endnoteReference' ? 'endnote' : 'footnote',
-      noteId: String(noteId),
-    };
+    return resolveNoteReferenceAtPointer({
+      target,
+      clientX,
+      clientY,
+      doc: this.#deps?.getEditor()?.state?.doc,
+      ownerDocument: this.#deps?.getViewportHost()?.ownerDocument ?? document,
+    });
   }
 
   #handleDoubleClick(event: MouseEvent): void {

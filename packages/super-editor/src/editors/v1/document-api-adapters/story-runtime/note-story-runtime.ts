@@ -119,6 +119,8 @@ export function resolveNoteRuntime(hostEditor: Editor, locator: NoteStoryLocator
   };
 }
 
+type NotesConfig = ReturnType<typeof getNotesConfig>;
+
 function commitNoteRuntime(
   hostEditor: Editor,
   storyEditor: Editor,
@@ -128,62 +130,90 @@ function commitNoteRuntime(
   const noteType = isFootnote ? 'footnote' : 'endnote';
   const notesConfig = getNotesConfig(noteType);
 
-  // SD-3400: clearing all content in the note area deletes the footnote on BOTH
-  // sides — the note element in the notes part AND the body reference — and the
-  // document renumbers. This mirrors the body-side staged delete; deleting from
-  // either side removes the whole footnote. footnotesRemoveWrapper deletes the
-  // body reference node and removes the OOXML element when no other reference
-  // remains. Guard on the reference still existing so a stale commit is a no-op.
   if (isNoteContentEmpty(storyEditor.state.doc)) {
-    const referenceExists = findAllFootnotes(hostEditor.state.doc).some((f) => f.noteId === locator.noteId);
-    if (referenceExists) {
-      footnotesRemoveWrapper(hostEditor, {
-        target: { kind: 'entity', entityType: 'footnote', noteId: locator.noteId },
-      });
-    }
+    removeEmptiedNote(hostEditor, locator);
     return;
   }
 
-  // Try rich export via converter's exportToXmlJson (preserves formatting)
+  if (commitRichNoteContent(hostEditor, storyEditor, locator, notesConfig)) {
+    return;
+  }
+
+  commitPlainTextNoteContent(hostEditor, storyEditor, locator, notesConfig);
+}
+
+/**
+ * SD-3400: clearing all content in the note area deletes the footnote on BOTH
+ * sides — the note element in the notes part AND the body reference — and the
+ * document renumbers. This mirrors the body-side staged delete; deleting from
+ * either side removes the whole footnote. footnotesRemoveWrapper deletes the
+ * body reference node and removes the OOXML element when no other reference
+ * remains. Guard on the reference still existing so a stale commit is a no-op.
+ */
+function removeEmptiedNote(hostEditor: Editor, locator: NoteStoryLocator): void {
+  const referenceExists = findAllFootnotes(hostEditor.state.doc).some((f) => f.noteId === locator.noteId);
+  if (!referenceExists) return;
+  footnotesRemoveWrapper(hostEditor, {
+    target: { kind: 'entity', entityType: 'footnote', noteId: locator.noteId },
+  });
+}
+
+/**
+ * Rich commit via the converter's exportToXmlJson (preserves formatting).
+ * Returns false when the converter is unavailable or export produced nothing,
+ * so the caller can fall back to plain text.
+ */
+function commitRichNoteContent(
+  hostEditor: Editor,
+  storyEditor: Editor,
+  locator: NoteStoryLocator,
+  notesConfig: NotesConfig,
+): boolean {
   const conv = (hostEditor as unknown as { converter?: ConverterWithNoteExport }).converter;
   const pmJson =
     typeof storyEditor.getUpdatedJson === 'function' ? storyEditor.getUpdatedJson() : storyEditor.getJSON();
+  if (!conv?.exportToXmlJson || !pmJson) return false;
 
-  if (conv?.exportToXmlJson && pmJson) {
-    let ooxmlElements: unknown[] | null = null;
-    try {
-      const { result } = conv.exportToXmlJson({
-        data: pmJson,
-        editor: storyEditor,
-        editorSchema: storyEditor.schema,
-        isHeaderFooter: true,
-        comments: [],
-        commentDefinitions: [],
-      });
-      // result.elements[0] is the body wrapper; its children are all
-      // content elements (paragraphs, tables, etc.). Keep all of them
-      // so tables and other non-paragraph content survive the commit.
-      const body = result?.elements?.[0] as { elements?: unknown[] } | undefined;
-      ooxmlElements = body?.elements ?? null;
-    } catch {
-      // Fall through to plain-text fallback
-    }
-
-    if (ooxmlElements && ooxmlElements.length > 0) {
-      mutatePart({
-        editor: hostEditor,
-        partId: notesConfig.partId,
-        operation: 'mutate',
-        source: `story-runtime:commit:${locator.storyType}`,
-        mutate({ part }) {
-          updateNoteContentFromOoxml(part, notesConfig, locator.noteId, ooxmlElements!);
-        },
-      });
-      return;
-    }
+  let ooxmlElements: unknown[] | null = null;
+  try {
+    const { result } = conv.exportToXmlJson({
+      data: pmJson,
+      editor: storyEditor,
+      editorSchema: storyEditor.schema,
+      isHeaderFooter: true,
+      comments: [],
+      commentDefinitions: [],
+    });
+    // result.elements[0] is the body wrapper; its children are all
+    // content elements (paragraphs, tables, etc.). Keep all of them
+    // so tables and other non-paragraph content survive the commit.
+    const body = result?.elements?.[0] as { elements?: unknown[] } | undefined;
+    ooxmlElements = body?.elements ?? null;
+  } catch {
+    // Fall through to plain-text fallback
   }
+  if (!ooxmlElements || ooxmlElements.length === 0) return false;
 
-  // Fallback: plain-text export (loses formatting)
+  const elements = ooxmlElements;
+  mutatePart({
+    editor: hostEditor,
+    partId: notesConfig.partId,
+    operation: 'mutate',
+    source: `story-runtime:commit:${locator.storyType}`,
+    mutate({ part }) {
+      updateNoteContentFromOoxml(part, notesConfig, locator.noteId, elements);
+    },
+  });
+  return true;
+}
+
+/** Fallback: plain-text export (loses formatting). */
+function commitPlainTextNoteContent(
+  hostEditor: Editor,
+  storyEditor: Editor,
+  locator: NoteStoryLocator,
+  notesConfig: NotesConfig,
+): void {
   const doc = storyEditor.state.doc;
   const text = doc.textBetween(0, doc.content.size, '\n', '\n');
 

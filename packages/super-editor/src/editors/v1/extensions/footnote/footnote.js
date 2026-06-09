@@ -1,5 +1,6 @@
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
+import { insertFootnoteAtCursor } from './insert-footnote.js';
 
 const toSuperscriptDigits = (value) => {
   const map = {
@@ -123,13 +124,9 @@ export const FootnoteReference = Node.create({
   addCommands() {
     return {
       /**
-       * SD-3400: insert a new footnote at the current cursor position and move
-       * focus into the new note so the user can immediately type its text.
-       * Creates the footnotes part (with separators) if the document has none.
-       *
-       * Built for custom toolbars: any toolbar action can call
-       * `editor.commands.insertFootnote()`. Intentionally NOT registered in the
-       * default toolbar (per SD-3400).
+       * SD-3400: thin command shim over {@link insertFootnoteAtCursor} so any
+       * custom toolbar can call `editor.commands.insertFootnote()`.
+       * Intentionally NOT registered in the default toolbar (per SD-3400).
        */
       insertFootnote:
         () =>
@@ -137,13 +134,7 @@ export const FootnoteReference = Node.create({
           // The document API dispatches its own (compound) transactions, which
           // would leave the CommandService transaction stale — suppress it.
           tr.setMeta('preventDispatch', true);
-          const result = editor.doc?.footnotes?.insert({ type: 'footnote', content: '' });
-          if (!result?.success) return false;
-          const noteId = result.footnote?.noteId;
-          if (noteId != null) {
-            editor.presentationEditor?.activateNoteSession?.({ storyType: 'footnote', noteId: String(noteId) });
-          }
-          return true;
+          return insertFootnoteAtCursor(editor);
         },
     };
   },

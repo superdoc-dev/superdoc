@@ -13,6 +13,7 @@ import EditorSkeleton from './EditorSkeleton.vue';
 import LinkInput from './toolbar/LinkInput.vue';
 import TableResizeOverlay from './TableResizeOverlay.vue';
 import ImageResizeOverlay from './ImageResizeOverlay.vue';
+import TextboxResizeOverlay from './TextboxResizeOverlay.vue';
 import LinkClickHandler from './link-click/LinkClickHandler.vue';
 import { checkNodeSpecificClicks } from './cursor-helpers.js';
 import { adjustPaginationBreaks } from './pagination-helpers.js';
@@ -1451,6 +1452,12 @@ onBeforeUnmount(() => {
         :editor="contextMenuEditor"
         :visible="imageResizeState.visible"
         :imageElement="imageResizeState.imageElement"
+      />
+      <TextboxResizeOverlay
+        v-if="editorReady && activeEditor"
+        :editor="editor"
+        :visible="Boolean(selectedTextboxState.element)"
+        :textboxElement="selectedTextboxState.element"
       />
     </div>
 

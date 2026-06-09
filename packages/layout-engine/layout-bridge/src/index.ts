@@ -60,6 +60,7 @@ export type {
 } from './headerFooterUtils';
 export {
   layoutHeaderFooterWithCache,
+  invalidateHeaderFooterMeasureCache,
   type HeaderFooterBatchResult,
   getBucketForPageNumber,
   getBucketRepresentative,

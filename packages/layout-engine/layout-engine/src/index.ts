@@ -3369,6 +3369,7 @@ export function layoutHeaderFooter(
   measures: Measure[],
   constraints: HeaderFooterConstraints,
   kind?: 'header' | 'footer',
+  remeasureParagraph?: (block: ParagraphBlock, maxWidth: number, firstLineIndent?: number) => ParagraphMeasure,
 ): HeaderFooterLayout {
   if (blocks.length !== measures.length) {
     throw new Error(
@@ -3392,6 +3393,7 @@ export function layoutHeaderFooter(
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
     allowParagraphlessAnchoredTableFallback: false,
     allowSectionBreakOnlyPageFallback: false,
+    remeasureParagraph,
   });
 
   // Post-normalize page-relative anchored fragment Y positions for footers.

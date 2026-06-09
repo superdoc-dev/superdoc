@@ -1011,6 +1011,8 @@ export async function incrementalLayout(
           1,
           pageResolver,
           kind,
+          undefined,
+          (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
         );
         const layout = layouts.default?.layout;
         if (!layout || !(layout.height > 0)) continue;
@@ -1043,6 +1045,8 @@ export async function incrementalLayout(
         1,
         pageResolver,
         kind,
+        undefined,
+        (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
       );
       const layout = layouts.default?.layout;
       if (layout && layout.height > 0) {
@@ -1102,6 +1106,7 @@ export async function incrementalLayout(
         prelayoutPageResolver,
         'header',
         fontSignature,
+        (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
       );
 
       // Extract actual content heights from each variant
@@ -1209,6 +1214,7 @@ export async function incrementalLayout(
           prelayoutPageResolver,
           'footer',
           fontSignature,
+          (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
         );
 
         // Extract actual content heights from each variant
@@ -2780,6 +2786,7 @@ export async function incrementalLayout(
         pageResolver, // Use page resolver for section-aware numbering
         'header',
         fontSignature,
+        (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
       );
       headers = serializeHeaderFooterResults('header', headerLayouts);
     }
@@ -2793,6 +2800,7 @@ export async function incrementalLayout(
         pageResolver, // Use page resolver for section-aware numbering
         'footer',
         fontSignature,
+        (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
       );
       footers = serializeHeaderFooterResults('footer', footerLayouts);
     }

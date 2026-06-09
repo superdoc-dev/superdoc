@@ -546,6 +546,10 @@ export interface ImageAttrs extends ShapeNodeAttributes {
   shouldCover?: boolean;
   /** @internal Clip-path value for srcRect image crops */
   clipPath?: string;
+  /** @internal Clip-path value for picture shape geometry masks */
+  shapeClipPath?: string;
+  /** @internal CSS object-fit value used by the layout renderer */
+  objectFit?: 'contain' | 'cover' | 'fill' | 'scale-down';
   /** @internal Raw a:srcRect element for lossless round-trip export */
   rawSrcRect?: Record<string, unknown> | null;
   /** @internal DrawingML luminance adjustment from a:lum */

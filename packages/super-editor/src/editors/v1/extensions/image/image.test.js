@@ -6,4 +6,17 @@ describe('Image extension defaults', () => {
     const { style } = Image.options.htmlAttributes;
     expect(style).toContain('display: inline-block');
   });
+
+  it('stores layout image presentation attrs without rendering them through ProseMirror DOM', () => {
+    const attrs = Image.config.addAttributes.call({ options: Image.options });
+
+    expect(attrs.shapeClipPath).toEqual({
+      default: null,
+      rendered: false,
+    });
+    expect(attrs.objectFit).toEqual({
+      default: null,
+      rendered: false,
+    });
+  });
 });

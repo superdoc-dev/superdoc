@@ -307,6 +307,16 @@ export const Image = Node.create({
         },
       },
 
+      shapeClipPath: {
+        default: null,
+        rendered: false,
+      },
+
+      objectFit: {
+        default: null,
+        rendered: false,
+      },
+
       size: {
         default: {},
         renderDOM: ({ size, shouldCover }) => {

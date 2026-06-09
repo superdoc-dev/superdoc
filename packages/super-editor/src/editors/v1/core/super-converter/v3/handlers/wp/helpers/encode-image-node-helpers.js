@@ -149,20 +149,21 @@ const extractPicturePresentation = (picture) => {
     const val = srcRectAttrs[attr];
     return val != null && parseFloat(val) < 0;
   });
+  const spPr = picture?.elements?.find((el) => el.name === 'pic:spPr');
+  const prstGeom = findChildByLocalName(spPr?.elements, 'prstGeom');
+  const shapeClipPath = buildShapeClipPathFromPreset(prstGeom?.attributes?.['prst']);
 
   const shouldStretch = Boolean(stretch && fillRect);
   const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
   const shouldFillClippedStretch = shouldStretch && !srcRectHasNegativeValues && Boolean(clipPath);
-
-  const spPr = picture?.elements?.find((el) => el.name === 'pic:spPr');
-  const prstGeom = findChildByLocalName(spPr?.elements, 'prstGeom');
-  const shapeClipPath = buildShapeClipPathFromPreset(prstGeom?.attributes?.['prst']);
+  const shouldCoverShapeStretch = shouldStretch && Boolean(shapeClipPath) && !clipPath;
 
   return {
     clipPath,
     rawSrcRect: srcRect,
     shouldCover,
     shouldFillClippedStretch,
+    shouldCoverShapeStretch,
     shapeClipPath,
   };
 };
@@ -442,7 +443,8 @@ export function handleImageNode(node, params, isAnchor) {
   //
   // Skip cover mode when srcRect already emitted explicit clipping or when srcRect has
   // negative values (Word already adjusted the mapping).
-  const { clipPath, rawSrcRect, shouldCover, shouldFillClippedStretch } = extractPicturePresentation(picture);
+  const { clipPath, rawSrcRect, shouldCover, shouldFillClippedStretch, shouldCoverShapeStretch, shapeClipPath } =
+    extractPicturePresentation(picture);
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {
@@ -620,8 +622,9 @@ export function handleImageNode(node, params, isAnchor) {
       : {}),
     wrapTopAndBottom: wrap.type === 'TopAndBottom',
     shouldCover,
-    ...(shouldFillClippedStretch ? { objectFit: 'fill' } : {}),
+    ...(shouldFillClippedStretch ? { objectFit: 'fill' } : shouldCoverShapeStretch ? { objectFit: 'cover' } : {}),
     ...(clipPath ? { clipPath } : {}),
+    ...(shapeClipPath ? { shapeClipPath } : {}),
     rawSrcRect,
     originalPadding: {
       distT: attributes['distT'],
@@ -948,7 +951,8 @@ const parseShapeGroupImageChild = (pic, transform, params) => {
   const cNvPr = findChildByLocalName(nvPicPr?.elements, 'cNvPr');
   const picId = cNvPr?.attributes?.['id'];
   const picName = cNvPr?.attributes?.['name'];
-  const { clipPath, shouldCover, shouldFillClippedStretch, shapeClipPath } = extractPicturePresentation(pic);
+  const { clipPath, shouldCover, shouldFillClippedStretch, shouldCoverShapeStretch, shapeClipPath } =
+    extractPicturePresentation(pic);
 
   return {
     shapeType: 'image',
@@ -960,7 +964,11 @@ const parseShapeGroupImageChild = (pic, transform, params) => {
       ...(alphaModFix ? { alphaModFix } : {}),
       ...(clipPath ? { clipPath } : {}),
       ...(shapeClipPath ? { shapeClipPath } : {}),
-      ...(shouldFillClippedStretch ? { objectFit: 'fill' } : shouldCover ? { objectFit: 'cover' } : {}),
+      ...(shouldFillClippedStretch || shouldCoverShapeStretch
+        ? { objectFit: shouldFillClippedStretch ? 'fill' : 'cover' }
+        : shouldCover
+          ? { objectFit: 'cover' }
+          : {}),
     },
   };
 };

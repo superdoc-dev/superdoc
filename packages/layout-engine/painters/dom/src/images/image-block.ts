@@ -27,6 +27,14 @@ export const resolveBlockImageClipPath = (block: unknown): string => {
   return readImageClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
 };
 
+export const resolveBlockImageShapeClipPath = (block: unknown): string => {
+  if (!block || typeof block !== 'object') return '';
+  const record = block as Record<string, unknown>;
+  const attrs =
+    record.attrs && typeof record.attrs === 'object' ? (record.attrs as Record<string, unknown>) : undefined;
+  return readImageClipPathValue(record.shapeClipPath) || readImageClipPathValue(attrs?.shapeClipPath);
+};
+
 export const createBlockImageContent = ({
   doc,
   block,
@@ -49,6 +57,11 @@ export const createBlockImageContent = ({
   img.style.objectFit = block.objectFit ?? 'contain';
   if (block.objectFit === 'cover') {
     img.style.objectPosition = 'left top';
+  }
+  const shapeClipPath = resolveBlockImageShapeClipPath(block);
+  if (shapeClipPath && clipContainer) {
+    clipContainer.style.clipPath = shapeClipPath;
+    clipContainer.style.overflow = 'hidden';
   }
   applyImageClipPath(img, resolveBlockImageClipPath(block), clipContainer ? { clipContainer } : undefined);
   img.style.display = imageDisplay ?? (block.display === 'inline' ? 'inline-block' : 'block');

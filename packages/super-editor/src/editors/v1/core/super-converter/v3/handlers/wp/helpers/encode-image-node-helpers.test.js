@@ -925,7 +925,7 @@ describe('handleImageNode', () => {
    * - certn_logo_left/word/header2.xml: <a:srcRect b="-3978"/> → shouldCover=false
    */
   describe('srcRect/shouldCover behavior', () => {
-    const makeNodeWithBlipFill = (blipFillElements) => ({
+    const makeNodeWithBlipFill = (blipFillElements, pictureElements = []) => ({
       attributes: {
         distT: '1000',
         distB: '2000',
@@ -948,6 +948,7 @@ describe('handleImageNode', () => {
                       name: 'pic:blipFill',
                       elements: [{ name: 'a:blip', attributes: { 'r:embed': 'rId1' } }, ...blipFillElements],
                     },
+                    ...pictureElements,
                   ],
                 },
               ],
@@ -1032,6 +1033,39 @@ describe('handleImageNode', () => {
       expect(result.attrs.clipPath).toBe('inset(0% 84.8% 0% 0%)');
     });
 
+    it('preserves standalone picture ellipse geometry as a shape clip path', () => {
+      const node = makeNodeWithBlipFill(
+        [
+          {
+            name: 'a:stretch',
+            elements: [{ name: 'a:fillRect' }],
+          },
+          {
+            name: 'a:srcRect',
+            attributes: { l: '398', t: '6700', r: '-398', b: '15436' },
+          },
+        ],
+        [
+          {
+            name: 'pic:spPr',
+            elements: [
+              {
+                name: 'a:prstGeom',
+                attributes: { prst: 'ellipse' },
+              },
+            ],
+          },
+        ],
+      );
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result).not.toBeNull();
+      expect(result.attrs.clipPath).toBeUndefined();
+      expect(result.attrs.shapeClipPath).toBe('ellipse(50% 50% at 50% 50%)');
+      expect(result.attrs.objectFit).toBe('cover');
+    });
+
     it('disables shouldCover when srcRect emits clipPath cropping', () => {
       const node = makeNodeWithBlipFill([
         {
@@ -1068,6 +1102,7 @@ describe('handleImageNode', () => {
 
       expect(result).not.toBeNull();
       expect(result.attrs.clipPath).toBeUndefined();
+      expect(result.attrs.objectFit).toBeUndefined();
     });
 
     it('sets shouldCover=false when stretch+fillRect with multiple positive srcRect values', () => {

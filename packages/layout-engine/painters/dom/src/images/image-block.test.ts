@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DrawingBlock, ShapeGroupImageChild } from '@superdoc/contracts';
 import { createDrawingImageElement, createShapeGroupImageElement } from './drawing-image.js';
 import { buildImageHyperlinkAnchor } from './hyperlink.js';
-import { resolveBlockImageClipPath } from './image-block.js';
+import { createBlockImageContent, resolveBlockImageClipPath, resolveBlockImageShapeClipPath } from './image-block.js';
 
 describe('resolveBlockImageClipPath', () => {
   it('prefers a top-level clipPath over attrs.clipPath', () => {
@@ -20,6 +20,55 @@ describe('resolveBlockImageClipPath', () => {
 
   it('ignores unsupported clip-path values', () => {
     expect(resolveBlockImageClipPath({ clipPath: 'url(#clip)' })).toBe('');
+  });
+});
+
+describe('resolveBlockImageShapeClipPath', () => {
+  it('prefers a top-level shapeClipPath over attrs.shapeClipPath', () => {
+    expect(
+      resolveBlockImageShapeClipPath({
+        shapeClipPath: 'ellipse(50% 50% at 50% 50%)',
+        attrs: { shapeClipPath: 'circle(50% at 50% 50%)' },
+      }),
+    ).toBe('ellipse(50% 50% at 50% 50%)');
+  });
+
+  it('falls back to attrs.shapeClipPath when top-level shapeClipPath is absent', () => {
+    expect(resolveBlockImageShapeClipPath({ attrs: { shapeClipPath: 'circle(50% at 50% 50%)' } })).toBe(
+      'circle(50% at 50% 50%)',
+    );
+  });
+
+  it('ignores unsupported shape clip-path values', () => {
+    expect(resolveBlockImageShapeClipPath({ attrs: { shapeClipPath: 'url(#clip)' } })).toBe('');
+  });
+});
+
+describe('createBlockImageContent', () => {
+  const createDoc = (): Document => document.implementation.createHTMLDocument('block-image');
+
+  it('applies shape masks to the clip container separately from source crop clipping', () => {
+    const doc = createDoc();
+    const clipContainer = doc.createElement('div');
+    const imgEl = createBlockImageContent({
+      doc,
+      clipContainer,
+      block: {
+        kind: 'image',
+        id: 'masked-image',
+        src: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+        objectFit: 'fill',
+        attrs: {
+          clipPath: 'inset(6.7% 0% 15.436% 0%)',
+          shapeClipPath: 'ellipse(50% 50% at 50% 50%)',
+        },
+      },
+    }) as HTMLImageElement;
+
+    expect(clipContainer.style.clipPath).toBe('ellipse(50% 50% at 50% 50%)');
+    expect(clipContainer.style.overflow).toBe('hidden');
+    expect(imgEl.style.clipPath).toBe('inset(6.7% 0% 15.436% 0%)');
+    expect(imgEl.style.objectFit).toBe('fill');
   });
 });
 

@@ -2152,8 +2152,17 @@ export class HeaderFooterSessionManager {
       return null;
     }
 
-    const entries = buildSurfacePmEntries(surfaceElement);
-    const entry = findSurfaceEntryAtPos(entries, pos);
+    // behindDoc fragments sit directly on the page element (not inside the H/F container)
+    // so buildSurfacePmEntries on surfaceElement misses them. Include them explicitly.
+    const behindDocFragments = Array.from(
+      pageElement.querySelectorAll<HTMLElement>(`[data-behind-doc-section="${this.#session.mode}"]`),
+    );
+    const allEntries = [
+      ...buildSurfacePmEntries(surfaceElement),
+      ...behindDocFragments.flatMap((frag) => buildSurfacePmEntries(frag)),
+    ].sort((a, b) => a.pmStart - b.pmStart || a.pmEnd - b.pmEnd);
+
+    const entry = findSurfaceEntryAtPos(allEntries, pos);
     if (!entry) {
       return null;
     }

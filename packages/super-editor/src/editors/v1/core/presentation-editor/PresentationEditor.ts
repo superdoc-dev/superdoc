@@ -3643,6 +3643,18 @@ export class PresentationEditor extends EventEmitter {
       const localX = normalized.x - context.region.localX;
       const pageLocalY = normalized.pageLocalY ?? normalized.y - context.region.pageIndex * (bodyPageHeight + pageGap);
       const localY = pageLocalY - context.region.localY;
+
+      // Try DOM hit first — handles page-relative behindDoc fragments that are positioned
+      // outside the H/F region's local coordinate band and would fail the bounds check.
+      const domHit = this.#resolveHeaderFooterDomHit(context, clientX, clientY);
+      if (domHit) {
+        const doc = this.getActiveEditor().state?.doc;
+        return {
+          ...domHit,
+          pos: doc ? Math.max(0, Math.min(domHit.pos, doc.content.size)) : domHit.pos,
+        };
+      }
+
       if (localX < 0 || localY < 0 || localX > context.region.width || localY > context.region.height) {
         return null;
       }
@@ -3652,8 +3664,7 @@ export class PresentationEditor extends EventEmitter {
       };
       const geometryHit =
         clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
-      const domHit = this.#resolveHeaderFooterDomHit(context, clientX, clientY);
-      const hit = domHit ?? geometryHit;
+      const hit = geometryHit;
       if (!hit) {
         return null;
       }

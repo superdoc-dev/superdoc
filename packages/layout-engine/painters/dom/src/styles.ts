@@ -1080,6 +1080,13 @@ const IMAGE_SELECTION_STYLES = `
 .${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}.superdoc-image-selected {
   outline-offset: 2px;
 }
+
+.superdoc-textbox-selected {
+  outline: 2px solid #4a90e2;
+  outline-offset: 2px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(74, 144, 226, 0.35);
+}
 `;
 
 const MATH_MENCLOSE_STYLES = `

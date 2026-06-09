@@ -348,6 +348,7 @@ const cleanupViewingModeUi = () => {
   hideTableResizeOverlay();
   hideImageResizeOverlay();
   clearSelectedImage();
+  clearSelectedTextbox();
 };
 
 /**
@@ -358,6 +359,11 @@ const selectedImageState = reactive({
   element: null,
   blockId: null,
   pmStart: null,
+});
+
+const selectedTextboxState = reactive({
+  element: null,
+  blockId: null,
 });
 
 /**
@@ -781,6 +787,14 @@ const clearSelectedImage = () => {
   selectedImageState.pmStart = null;
 };
 
+const clearSelectedTextbox = () => {
+  if (selectedTextboxState.element?.classList?.contains('superdoc-textbox-selected')) {
+    selectedTextboxState.element.classList.remove('superdoc-textbox-selected');
+  }
+  selectedTextboxState.element = null;
+  selectedTextboxState.blockId = null;
+};
+
 /**
  * Apply visual selection to the provided image fragment element
  * @param {HTMLElement | null} element - DOM element for the image fragment
@@ -821,6 +835,25 @@ const cleanupInactiveHeaderFooterOwnedImageUi = () => {
   }
   if (selectedImageState.element && !canInteractWithHeaderFooterOwnedMedia(selectedImageState.element)) {
     clearSelectedImage();
+  }
+};
+
+const setSelectedTextbox = (element, blockId) => {
+  if (isViewingMode() || !activeEditor.value?.isEditable) {
+    clearSelectedTextbox();
+    return;
+  }
+
+  if (selectedTextboxState.element && selectedTextboxState.element !== element) {
+    selectedTextboxState.element.classList.remove('superdoc-textbox-selected');
+  }
+
+  if (element && element.classList) {
+    element.classList.add('superdoc-textbox-selected');
+    selectedTextboxState.element = element;
+    selectedTextboxState.blockId = blockId ?? null;
+  } else {
+    clearSelectedTextbox();
   }
 };
 
@@ -1078,6 +1111,12 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
       cleanupInactiveHeaderFooterOwnedImageUi();
     };
     presentationEditor.on('headerFooterModeChanged', headerFooterModeChangeHandler);
+    presentationEditor.on('textboxSelected', ({ element, blockId }) => {
+      setSelectedTextbox(element, blockId ?? null);
+    });
+    presentationEditor.on('textboxDeselected', () => {
+      clearSelectedTextbox();
+    });
 
     layoutUpdatedHandler = () => {
       if (imageResizeState.visible && imageResizeState.blockId) {
@@ -1121,6 +1160,16 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
           }
 
           clearSelectedImage();
+        }
+      }
+
+      if (selectedTextboxState.blockId) {
+        const escapedBlockId = CSS.escape(selectedTextboxState.blockId);
+        const refreshed = editorElem.value?.querySelector(`[data-block-id="${escapedBlockId}"]`);
+        if (refreshed) {
+          setSelectedTextbox(refreshed, selectedTextboxState.blockId);
+        } else {
+          clearSelectedTextbox();
         }
       }
 

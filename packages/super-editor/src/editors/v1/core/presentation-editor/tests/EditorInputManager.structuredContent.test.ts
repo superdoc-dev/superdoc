@@ -191,6 +191,7 @@ describe('EditorInputManager structured content clicks', () => {
   let getEditor: Mock;
   let mockHitTestTable: Mock;
   let scheduleSelectionUpdate: Mock;
+  let emitMock: Mock;
 
   function mountWithDoc(
     mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary' | 'emptyInlineSdt' | 'nestedInlineInBlock',
@@ -283,6 +284,7 @@ describe('EditorInputManager structured content clicks', () => {
       scheduleSelectionUpdate: (scheduleSelectionUpdate = vi.fn()),
       updateSelectionDebugHud: vi.fn(),
       hitTestTable: (mockHitTestTable = vi.fn(() => null)),
+      emit: (emitMock = vi.fn()),
     });
     manager.bind();
   });
@@ -348,8 +350,26 @@ describe('EditorInputManager structured content clicks', () => {
 
   it('keeps textboxShape clicks on TextSelection instead of NodeSelection', () => {
     mountWithDoc('plainSdt');
+    const fragment = document.createElement('div');
+    fragment.className = 'superdoc-drawing-fragment';
+    const textbox = document.createElement('div');
+    textbox.className = 'superdoc-textbox-shape';
     const target = document.createElement('span');
-    viewportHost.appendChild(target);
+    textbox.appendChild(target);
+    fragment.appendChild(textbox);
+    viewportHost.appendChild(fragment);
+
+    vi.spyOn(fragment, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 120,
+      bottom: 80,
+      width: 120,
+      height: 80,
+      toJSON: () => ({}),
+    } as DOMRect);
 
     (getFragmentAtPosition as unknown as Mock).mockReturnValueOnce({
       fragment: {
@@ -383,6 +403,139 @@ describe('EditorInputManager structured content clicks', () => {
     expect(resolvePointerPositionHit as unknown as Mock).toHaveBeenCalled();
     expect(mockTextSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 12);
     expect(mockNodeSelectionCreate).not.toHaveBeenCalled();
+  });
+
+  it('uses NodeSelection when click lands on textboxShape border inside a table cell wrapper', () => {
+    mountWithDoc('plainSdt');
+    mockEditor.state.doc.resolve = vi.fn((pos: number) => ({
+      depth: pos === 14 ? 2 : 0,
+      node: (depth: number) => {
+        if (pos === 14) {
+          if (depth === 2) return { type: { name: 'paragraph' } };
+          if (depth === 1) return { type: { name: 'shapeTextbox' } };
+          return { type: { name: 'shapeContainer' } };
+        }
+        return { type: { name: 'doc' } };
+      },
+      before: (depth: number) => (depth === 0 ? 8 : 9),
+    }));
+
+    const wrapper = document.createElement('div');
+    wrapper.dataset.blockId = 'textbox-table-1';
+    const tableDrawing = document.createElement('div');
+    tableDrawing.className = 'superdoc-table-drawing';
+    const textbox = document.createElement('div');
+    textbox.className = 'superdoc-textbox-shape';
+    const line = document.createElement('div');
+    line.dataset.pmStart = '14';
+    textbox.appendChild(line);
+    tableDrawing.appendChild(textbox);
+    wrapper.appendChild(tableDrawing);
+    viewportHost.appendChild(wrapper);
+
+    vi.spyOn(wrapper, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 120,
+      bottom: 80,
+      width: 120,
+      height: 80,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    const PointerEventImpl = getPointerEventImpl();
+    tableDrawing.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 3,
+        clientY: 24,
+      } as PointerEventInit),
+    );
+
+    expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 8);
+    expect(mockTextSelectionCreate).not.toHaveBeenCalled();
+    expect(emitMock).toHaveBeenCalledWith('textboxSelected', {
+      element: wrapper,
+      blockId: 'textbox-table-1',
+    });
+  });
+
+  it('uses NodeSelection for textbox border clicks even when rawHit is missing', () => {
+    mountWithDoc('plainSdt');
+    (resolvePointerPositionHit as unknown as Mock).mockReturnValueOnce(null);
+    mockEditor.state.doc.resolve = vi.fn((pos: number) => ({
+      depth: pos === 14 ? 2 : 0,
+      node: (depth: number) => {
+        if (pos === 14) {
+          if (depth === 2) return { type: { name: 'paragraph' } };
+          if (depth === 1) return { type: { name: 'shapeTextbox' } };
+          return { type: { name: 'shapeContainer' } };
+        }
+        return { type: { name: 'doc' } };
+      },
+      before: (depth: number) => (depth === 0 ? 8 : 9),
+    }));
+
+    const page = document.createElement('div');
+    page.dataset.pageIndex = '0';
+    const fragment = document.createElement('div');
+    fragment.className = 'superdoc-drawing-fragment';
+    fragment.dataset.blockId = 'textbox-header-1';
+    fragment.dataset.behindDocSection = 'footer';
+    const textbox = document.createElement('div');
+    textbox.className = 'superdoc-textbox-shape';
+    const line = document.createElement('div');
+    line.dataset.pmStart = '14';
+    textbox.appendChild(line);
+    fragment.appendChild(textbox);
+    page.appendChild(fragment);
+    viewportHost.appendChild(page);
+
+    vi.spyOn(fragment, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 120,
+      bottom: 80,
+      width: 120,
+      height: 80,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    const originalElementsFromPoint = document.elementsFromPoint;
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: vi.fn(() => [page, document.body] as unknown as Element[]),
+    });
+
+    const PointerEventImpl = getPointerEventImpl();
+    page.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 4,
+        clientY: 24,
+      } as PointerEventInit),
+    );
+
+    expect(mockNodeSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 8);
+    expect(emitMock).toHaveBeenCalledWith('textboxSelected', {
+      element: fragment,
+      blockId: 'textbox-header-1',
+    });
+
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: originalElementsFromPoint,
+    });
   });
 
   it('resolves nested inline structured content before an ancestor block', () => {

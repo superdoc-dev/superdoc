@@ -1,5 +1,12 @@
 import { describe, expect, it, mock } from 'bun:test';
-import type { ParagraphBlock, ParagraphMeasure, Line } from '@superdoc/contracts';
+import type {
+  DrawingFragment,
+  ParagraphBlock,
+  ParagraphMeasure,
+  Line,
+  TextboxDrawing,
+  DrawingMeasure,
+} from '@superdoc/contracts';
 import { layoutParagraphBlock, type ParagraphLayoutContext } from './layout-paragraph.js';
 import type { PageState } from './paginator.js';
 import type { FloatingObjectManager } from './floating-objects.js';
@@ -1283,6 +1290,82 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
       expect(pageState.lastParagraphStyleId).toBe('Normal');
       expect(pageState.lastParagraphContextualSpacing).toBe(true);
     });
+  });
+});
+
+describe('layoutParagraphBlock - anchored textbox drawings', () => {
+  it('attaches textbox content measures for anchored textbox fragments', () => {
+    const pageState = makePageState();
+    const ensurePage = mock(() => pageState);
+    const remeasureParagraph = mock((_block: ParagraphBlock, _maxWidth: number) => ({
+      kind: 'paragraph' as const,
+      lines: [],
+      totalHeight: 18,
+    }));
+
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'anchor-paragraph',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+    };
+
+    const measure = makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
+    const textboxParagraph: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'textbox-paragraph',
+      runs: [{ text: 'Textbox text', fontFamily: 'Arial', fontSize: 10 }],
+      pmStart: 21,
+      pmEnd: 33,
+    };
+    const drawingBlock: TextboxDrawing = {
+      kind: 'drawing',
+      id: 'drawing-1',
+      drawingKind: 'textboxShape',
+      geometry: { width: 143, height: 45, rotation: 0, flipH: false, flipV: false },
+      contentBlocks: [textboxParagraph],
+      textInsets: { top: 10, right: 10, bottom: 10, left: 10 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 0,
+        offsetV: 0,
+      },
+    };
+    const drawingMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      width: 143,
+      height: 45,
+      geometry: drawingBlock.geometry,
+      scale: 1,
+    };
+
+    const ctx: ParagraphLayoutContext = {
+      block,
+      measure,
+      columnWidth: 150,
+      ensurePage,
+      advanceColumn: mock((state) => state),
+      columnX: mock(() => 50),
+      floatManager: makeFloatManager(),
+      remeasureParagraph,
+    };
+
+    layoutParagraphBlock(ctx, {
+      anchoredDrawings: [{ block: drawingBlock, measure: drawingMeasure }],
+      anchoredTables: [],
+      columnWidth: 150,
+      pageWidth: 600,
+      pageMargins: { top: 50, right: 50, bottom: 50, left: 50 },
+      columns: { width: 150, gap: 20, count: 1 },
+      placedAnchoredIds: new Set<string>(),
+    });
+
+    expect(remeasureParagraph).toHaveBeenCalledWith(textboxParagraph, 123);
+    expect(pageState.page.fragments).toHaveLength(2);
+    expect(pageState.page.fragments[0]?.kind).toBe('drawing');
+    const fragment = pageState.page.fragments[0] as DrawingFragment;
+    expect(fragment.contentMeasures).toEqual([{ kind: 'paragraph', lines: [], totalHeight: 18 }]);
   });
 });
 

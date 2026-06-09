@@ -59,6 +59,7 @@ vi.mock('./shapes.js', () => ({
   shapeGroupNodeToDrawingBlock: vi.fn(),
   shapeContainerNodeToDrawingBlock: vi.fn(),
   shapeTextboxNodeToDrawingBlock: vi.fn(),
+  hydrateTextboxDrawingContent: vi.fn((_, drawingBlock) => drawingBlock),
 }));
 
 vi.mock('../attributes/index.js', () => ({

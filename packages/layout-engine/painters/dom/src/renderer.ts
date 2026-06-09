@@ -2901,6 +2901,12 @@ export class DomPainter {
       innerWrapper.style.width = `${fragment.geometry.width}px`;
       innerWrapper.style.height = `${fragment.geometry.height}px`;
       innerWrapper.style.transformOrigin = 'center';
+      if (block.drawingKind === 'shapeGroup' && block.groupTransform) {
+        const effectExtent = block.effectExtent ?? { left: 0, top: 0, right: 0, bottom: 0 };
+        const originX = effectExtent.left + (block.groupTransform.width ?? fragment.geometry.width) / 2;
+        const originY = effectExtent.top + (block.groupTransform.height ?? fragment.geometry.height) / 2;
+        innerWrapper.style.transformOrigin = `${originX}px ${originY}px`;
+      }
 
       const scale = fragment.scale ?? 1;
       const transforms: string[] = ['translate(-50%, -50%)'];

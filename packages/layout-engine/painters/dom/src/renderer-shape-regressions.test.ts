@@ -888,6 +888,48 @@ describe('DomPainter shape regressions', () => {
     expect(groupContent?.style.transform).toBe('');
   });
 
+  it('rotates measured shape groups around the visible group box when effect extent is asymmetric', () => {
+    const geometry: DrawingGeometry = { width: 120, height: 50, rotation: 90, flipH: false, flipV: false };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'shape-group-effect-origin',
+      drawingKind: 'shapeGroup',
+      geometry,
+      effectExtent: { left: 0, top: 0, right: 20, bottom: 0 },
+      groupTransform: {
+        width: 100,
+        height: 50,
+        rotation: 90,
+      },
+      shapes: [
+        {
+          shapeType: 'vectorShape',
+          attrs: {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            kind: 'rect',
+            fillColor: '#E2E8F0',
+            strokeColor: null,
+          },
+        },
+      ],
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const drawingInner = mount.querySelector('.superdoc-drawing-inner') as HTMLElement | null;
+    const groupContent = mount.querySelector('.superdoc-shape-group > div') as HTMLElement | null;
+
+    expect(drawingInner?.style.transformOrigin).toBe('50px 25px');
+    expect(drawingInner?.style.transform).toContain('rotate(90deg)');
+    expect(groupContent?.style.transform).toBe('');
+  });
+
   it('does not add grouped child paint room when stroke is disabled', () => {
     const geometry: DrawingGeometry = { width: 120, height: 120, rotation: 0, flipH: false, flipV: false };
 

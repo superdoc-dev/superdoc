@@ -2403,7 +2403,20 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           (!paraBlock.runs[0].kind || paraBlock.runs[0].kind === 'text') &&
           (!(paraBlock.runs[0] as { text?: string }).text || (paraBlock.runs[0] as { text?: string }).text === ''));
 
-      const anchorsForPara = anchoredByParagraph.get(index);
+      const drawingAnchorsForPara = anchoredByParagraph.get(index);
+      const pageRelativeAnchorsForPara = pageRelativeAnchorsByParagraph.get(index);
+      const explicitPageRelativeAnchorsForPara = pageRelativeAnchorsForPara?.filter(({ block: anchorBlock }) => {
+        const attrs = anchorBlock.attrs;
+        return (
+          attrs != null &&
+          typeof attrs === 'object' &&
+          (attrs as { anchorParagraphId?: unknown }).anchorParagraphId === paraBlock.id
+        );
+      });
+      const anchorsForPara =
+        drawingAnchorsForPara || explicitPageRelativeAnchorsForPara?.length
+          ? [...(drawingAnchorsForPara ?? []), ...(explicitPageRelativeAnchorsForPara ?? [])]
+          : undefined;
       const tablesForPara = anchoredTablesByParagraph.get(index);
 
       if (isEmpty) {
@@ -2657,6 +2670,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (measure.kind !== 'image') {
         throw new Error(`layoutDocument: expected image measure for block ${block.id}`);
       }
+      if (placedAnchoredIds.has(block.id)) {
+        continue;
+      }
 
       // Check if this is a pre-registered page-relative anchor
       if (preRegisteredAnchorIds.has(block.id)) {
@@ -2731,6 +2747,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (block.kind === 'drawing') {
       if (measure.kind !== 'drawing') {
         throw new Error(`layoutDocument: expected drawing measure for block ${block.id}`);
+      }
+      if (placedAnchoredIds.has(block.id)) {
+        continue;
       }
 
       // Check if this is a pre-registered page-relative anchor

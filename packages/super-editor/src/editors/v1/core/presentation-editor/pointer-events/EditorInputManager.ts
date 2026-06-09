@@ -2479,6 +2479,9 @@ export class EditorInputManager {
   ): boolean {
     if (!fragmentHit) return false;
     if (fragmentHit.fragment.kind !== 'image' && fragmentHit.fragment.kind !== 'drawing') return false;
+    if (fragmentHit.fragment.kind === 'drawing' && fragmentHit.fragment.drawingKind === 'textboxShape') {
+      return false;
+    }
 
     const editor = this.#deps?.getEditor();
     try {

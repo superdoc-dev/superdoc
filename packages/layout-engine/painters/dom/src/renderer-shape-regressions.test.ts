@@ -101,6 +101,20 @@ describe('DomPainter shape regressions', () => {
     );
   });
 
+  it('generates roundRect preset geometry in the target coordinate space', () => {
+    const width = 430;
+    const height = 262;
+    const radius = height * (16667 / 100000);
+    const svgMarkup = getPresetShapeSvg({ preset: 'roundRect', width, height });
+    const doc = new DOMParser().parseFromString(svgMarkup, 'image/svg+xml');
+    const path = doc.querySelector('path');
+
+    expect(doc.querySelector('svg')?.getAttribute('viewBox')).toBe(`0 0 ${width} ${height}`);
+    expect(path?.getAttribute('d')).toBe(
+      `M 0 ${radius} A ${radius} ${radius} 0 0 1 ${radius} 0 L ${width - radius} 0 A ${radius} ${radius} 0 0 1 ${width} ${radius} L ${width} ${height - radius} A ${radius} ${radius} 0 0 1 ${width - radius} ${height} L ${radius} ${height} A ${radius} ${radius} 0 0 1 0 ${height - radius} Z`,
+    );
+  });
+
   it.each([
     {
       preset: 'bentArrow',

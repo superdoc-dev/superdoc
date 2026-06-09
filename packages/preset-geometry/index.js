@@ -3078,9 +3078,31 @@ function x0(t, n, o) {
     [l] = L0(e, { width: n, height: o });
   return l ? { viewBox: l.viewBox, paths: l.paths } : null;
 }
+function W0(t, n, o) {
+  let L = Math.max(0, Number(t) || 0),
+    e = Math.max(0, Number(n) || 0),
+    l = Math.min(L, e) * (16667 / 1e5),
+    r = Math.max(0, L - l),
+    i = Math.max(0, e - l);
+  return {
+    preset: 'roundRect',
+    viewBox: `0 0 ${L} ${e}`,
+    paths: l0(
+      [
+        {
+          d: `M 0 ${l} A ${l} ${l} 0 0 1 ${l} 0 L ${r} 0 A ${l} ${l} 0 0 1 ${L} ${l} L ${L} ${i} A ${l} ${l} 0 0 1 ${r} ${e} L ${l} ${e} A ${l} ${l} 0 0 1 0 ${i} Z`,
+          fill: '#000000',
+          stroke: '#000000',
+        },
+      ],
+      o,
+    ),
+  };
+}
 function i0(t) {
   let { preset: n, styleOverrides: o, width: L, height: e } = t;
   if (!n) throw new Error('createPresetShape requires a preset name.');
+  if (n === 'roundRect' && L != null && e != null) return W0(L, e, o);
   if (F.has(n) && L != null && e != null && (L !== e || n === 'leftUpArrow')) {
     let i = x0(n, L, e);
     if (i) return { preset: n, viewBox: i.viewBox, paths: l0(i.paths, o) };

@@ -434,10 +434,10 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
       const imageLike = block as ImageDrawing;
       return ['drawing:image', renderedBlockImageVersion(imageLike)].join('|');
     }
-    if (block.drawingKind === 'vectorShape') {
+    if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
       const vector = block as VectorShapeDrawing;
       return [
-        'drawing:vector',
+        block.drawingKind === 'textboxShape' ? 'drawing:textbox' : 'drawing:vector',
         vector.shapeKind ?? '',
         vector.fillColor ?? '',
         vector.strokeColor ?? '',

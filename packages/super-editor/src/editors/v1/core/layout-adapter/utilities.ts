@@ -1197,7 +1197,7 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
         // for w:drawing inside textbox runs). Hydrate the same way as
         // ImageRuns so Uint8Array (Y.js binary) and string (zip) media
         // alike resolve to a data URI.
-        if (drawingBlock.drawingKind === 'vectorShape') {
+        if (drawingBlock.drawingKind === 'vectorShape' || drawingBlock.drawingKind === 'textboxShape') {
           const parts = (drawingBlock as VectorShapeDrawing).textContent?.parts;
           if (!parts || parts.length === 0) return blk;
           let partsChanged = false;

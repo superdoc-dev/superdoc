@@ -514,7 +514,10 @@ const drawingBlocksEqual = (a: DrawingBlock, b: DrawingBlock): boolean => {
     return imageBlocksEqual(a, b);
   }
 
-  if (a.drawingKind === 'vectorShape' && b.drawingKind === 'vectorShape') {
+  if (
+    (a.drawingKind === 'vectorShape' || a.drawingKind === 'textboxShape') &&
+    (b.drawingKind === 'vectorShape' || b.drawingKind === 'textboxShape')
+  ) {
     return (
       drawingGeometryEqual(a.geometry, b.geometry) &&
       a.shapeKind === b.shapeKind &&

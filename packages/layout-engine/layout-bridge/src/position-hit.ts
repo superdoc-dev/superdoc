@@ -981,11 +981,18 @@ export function clickToPositionGeometry(
       }
     }
 
-    // Fallback: return first position in the cell
+    // Fallback: return first position in the cell.
+    // SD-3328: an EMPTY paragraph (blank line / spacer between bullets) has no runs,
+    // so `firstRun` is undefined and the old code fell through to `return null`. A null
+    // hit aborts the drag (EditorInputManager #handleDragSelectionAt early-return) and
+    // freezes/collapses the in-progress selection while the pointer is over the blank
+    // line. Derive the paragraph's own PM start from its attrs so an empty cell paragraph
+    // always resolves to a valid forward position inside the cell, never null.
     const firstRun = cellBlock.runs?.[0];
-    if (firstRun && firstRun.pmStart != null) {
+    const fallbackPos = firstRun?.pmStart ?? blockPmRangeFromAttrs(cellBlock).pmStart;
+    if (fallbackPos != null) {
       return {
-        pos: firstRun.pmStart,
+        pos: fallbackPos,
         layoutEpoch,
         blockId: tableHit.fragment.blockId,
         pageIndex,

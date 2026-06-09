@@ -6,6 +6,7 @@ import type {
   Measure,
   Line,
   ParaFragment,
+  ParagraphAttrs,
   TableBlock,
   TableMeasure,
   TableFragment,
@@ -141,6 +142,68 @@ describe('clickToPosition', () => {
 
     expect(result?.blockId).toBe('wide-table');
     expect(result?.column).toBe(1);
+  });
+
+  it('resolves an EMPTY cell paragraph to its PM position instead of null (SD-3328)', () => {
+    // An empty paragraph (blank line / spacer) inside a table cell has no runs and no
+    // measured lines, so findLineIndexAtY returns null. Before the fix the cell fallback
+    // (`cellBlock.runs[0].pmStart`) was undefined and the hit resolved to null — which
+    // aborts an in-progress drag and collapses the selection. The hit must resolve to the
+    // empty paragraph's own PM position (from its attrs) so dragging across a blank line
+    // keeps extending the selection.
+    const emptyCellPara: FlowBlock = {
+      kind: 'paragraph',
+      id: 'empty-cell-para',
+      runs: [],
+      attrs: { pmStart: 100, pmEnd: 101 } as unknown as ParagraphAttrs,
+    };
+
+    const tableBlock: TableBlock = {
+      kind: 'table',
+      id: 'empty-cell-table',
+      rows: [{ id: 'row-0', cells: [{ id: 'cell-0-0', blocks: [emptyCellPara] }] }],
+    };
+
+    const emptyCellMeasure: Measure = { kind: 'paragraph', lines: [], totalHeight: 20 };
+
+    const tableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [
+            { blocks: [emptyCellMeasure], paragraph: emptyCellMeasure, width: 320, height: 28, gridColumnStart: 0, colSpan: 1, rowSpan: 1 },
+          ],
+          height: 28,
+        },
+      ],
+      columnWidths: [320],
+      totalWidth: 320,
+      totalHeight: 28,
+    };
+
+    const tableFragment: TableFragment = {
+      kind: 'table',
+      blockId: 'empty-cell-table',
+      fromRow: 0,
+      toRow: 1,
+      x: 30,
+      y: 40,
+      width: 320,
+      height: 28,
+      pmStart: 100,
+      pmEnd: 101,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 600, h: 800 },
+      pages: [{ number: 1, margins: { top: 0, right: 0, bottom: 0, left: 0 }, fragments: [tableFragment] }],
+    };
+
+    const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 120, y: 54 });
+
+    expect(result).not.toBeNull();
+    expect(result?.pos).toBe(100);
+    expect(result?.blockId).toBe('empty-cell-table');
   });
 
   it('falls back to visual x when a table fragment has no columnIndex', () => {

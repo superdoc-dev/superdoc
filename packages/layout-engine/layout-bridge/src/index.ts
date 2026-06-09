@@ -582,6 +582,28 @@ const sumLineHeights = (measure: ParagraphMeasure, fromLine: number, toLine: num
  * @param geometryHelper - Optional PageGeometryHelper for accurate Y calculations (recommended)
  * @returns Array of selection rectangles in container space
  */
+/**
+ * SD-3328: an empty paragraph / blank line that the selection passes through is a
+ * zero-width slice (`pmStart === pmEnd`). `findLinesIntersectingRange` only yields
+ * such a line when `from < pos < to`, so it is genuinely spanned and must be
+ * highlighted. Emit a content-width band so the selection highlight stays
+ * continuous across the blank line — the same as selecting any text. Without this
+ * the band shows a gap and the highlight appears to "disappear" while a drag
+ * crosses a blank line (reported in body paragraphs and inside table cells).
+ */
+function pushEmptyLineSelectionBand(
+  rects: Rect[],
+  opts: { x: number; y: number; width: number; height: number; pageIndex: number },
+): void {
+  rects.push({
+    x: opts.x,
+    y: opts.y,
+    width: Math.max(1, opts.width),
+    height: opts.height,
+    pageIndex: opts.pageIndex,
+  });
+}
+
 export function selectionToRects(
   layout: Layout,
   blocks: FlowBlock[],
@@ -623,7 +645,19 @@ export function selectionToRects(
           if (range.pmStart == null || range.pmEnd == null) return;
           const sliceFrom = Math.max(range.pmStart, from);
           const sliceTo = Math.min(range.pmEnd, to);
-          if (sliceFrom >= sliceTo) return;
+          if (sliceFrom >= sliceTo) {
+            // SD-3328: blank line spanned by the selection — see pushEmptyLineSelectionBand.
+            const emptyLineOffset =
+              lineHeightBeforeIndex(measure, index) - lineHeightBeforeIndex(measure, fragment.fromLine);
+            pushEmptyLineSelectionBand(rects, {
+              x: fragment.x,
+              y: fragment.y + emptyLineOffset + pageTopY,
+              width: fragment.width,
+              height: line.lineHeight,
+              pageIndex,
+            });
+            return;
+          }
 
           // Convert PM positions to character offsets properly
           // (accounts for gaps in PM positions between runs)
@@ -963,7 +997,26 @@ export function selectionToRects(
                 if (range.pmStart == null || range.pmEnd == null) return;
                 const sliceFrom = Math.max(range.pmStart, from);
                 const sliceTo = Math.min(range.pmEnd, to);
-                if (sliceFrom >= sliceTo) return;
+                if (sliceFrom >= sliceTo) {
+                  // SD-3328: blank line spanned by the selection — see pushEmptyLineSelectionBand.
+                  const emptyLineOffset =
+                    lineHeightBeforeIndex(info.measure, index) - lineHeightBeforeIndex(info.measure, info.startLine);
+                  pushEmptyLineSelectionBand(rects, {
+                    x: fragment.x + contentOffsetX + cellX + padding.left,
+                    y:
+                      fragment.y +
+                      contentOffsetY +
+                      rowOffset +
+                      blockTopCursor +
+                      effectiveSpacingBeforePx +
+                      emptyLineOffset +
+                      pageTopY,
+                    width: cellMeasure.width - padding.left - padding.right,
+                    height: line.lineHeight,
+                    pageIndex,
+                  });
+                  return;
+                }
 
                 const charOffsetFrom = pmPosToCharOffset(info.block, line, sliceFrom);
                 const charOffsetTo = pmPosToCharOffset(info.block, line, sliceTo);

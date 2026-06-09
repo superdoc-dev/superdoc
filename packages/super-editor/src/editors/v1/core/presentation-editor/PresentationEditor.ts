@@ -515,6 +515,8 @@ export class PresentationEditor extends EventEmitter {
   #activeNoteHighlightTarget: RenderedNoteTarget | null = null;
   /** SD-3400: unbinds the active note session's emptied-content watcher. */
   #noteSessionEmptyWatchCleanup: (() => void) | null = null;
+  /** SD-3400: scroll the active note into view once its fragment exists (inserts paint a frame later). */
+  #pendingNoteScrollIntoView = false;
   #hiddenHost: HTMLElement;
   /** Scroll-isolating wrapper around #hiddenHost. Append/remove this from the DOM. */
   #hiddenHostWrapper: HTMLElement;
@@ -7325,8 +7327,10 @@ export class PresentationEditor extends EventEmitter {
       this.emit('paginationUpdate', payload);
 
       // SD-3400: fragments are rebuilt on every paint — re-apply the active
-      // note highlight so it survives rerenders while the session is open.
+      // note highlight so it survives rerenders while the session is open, and
+      // complete any pending scroll-to-note (inserted notes paint on this pass).
       this.#refreshActiveNoteHighlight();
+      this.#scrollActiveNoteIntoView();
 
       // Emit fresh comment positions after layout completes.
       // Always emit — even when empty — so the store can clear stale positions
@@ -9064,7 +9068,54 @@ export class PresentationEditor extends EventEmitter {
     this.#activeNoteHighlightTarget = target;
     this.#refreshActiveNoteHighlight();
     this.#bindNoteSessionEmptyWatch(session);
+    // Bring the note into view. For an existing note (double-click) the
+    // fragment is already painted and scrolls now; for a freshly inserted note
+    // the fragment appears on the next paint, where the layoutUpdated hook
+    // retries until it exists.
+    this.#pendingNoteScrollIntoView = true;
+    this.#scrollActiveNoteIntoView();
     return true;
+  }
+
+  /**
+   * SD-3400: smart-scroll the active note's first painted fragment into view.
+   * No-op when the note is already fully visible; otherwise smooth-centers it.
+   * Stays pending until the fragment exists, so notes created by insert (which
+   * only paint after the next relayout) scroll once they appear.
+   */
+  #scrollActiveNoteIntoView(): void {
+    if (!this.#pendingNoteScrollIntoView) return;
+    const target = this.#activeNoteHighlightTarget;
+    if (!target) {
+      this.#pendingNoteScrollIntoView = false;
+      return;
+    }
+    const host = this.#painterHost ?? this.#visibleHost;
+    if (!host) return;
+    const prefixes = [
+      `${target.storyType}-${target.noteId}-`,
+      `__sd_semantic_${target.storyType}-${target.noteId}-`,
+    ];
+    const fragment = Array.from(host.querySelectorAll('[data-block-id]')).find((el) => {
+      const id = el.getAttribute('data-block-id') ?? '';
+      return prefixes.some((prefix) => id.startsWith(prefix));
+    });
+    if (!fragment) return; // not painted yet — retry on the next layoutUpdated
+
+    this.#pendingNoteScrollIntoView = false;
+    const rect = fragment.getBoundingClientRect();
+    const viewport =
+      this.#scrollContainer instanceof Window
+        ? { top: 0, bottom: this.#scrollContainer.innerHeight }
+        : this.#scrollContainer instanceof Element
+          ? (() => {
+              const r = this.#scrollContainer.getBoundingClientRect();
+              return { top: r.top, bottom: r.bottom };
+            })()
+          : { top: 0, bottom: window.innerHeight };
+    const fullyVisible = rect.top >= viewport.top + 8 && rect.bottom <= viewport.bottom - 8;
+    if (fullyVisible) return;
+    fragment.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
   /**
@@ -9141,6 +9192,7 @@ export class PresentationEditor extends EventEmitter {
 
     this.#noteSessionEmptyWatchCleanup?.();
     this.#activeNoteHighlightTarget = null;
+    this.#pendingNoteScrollIntoView = false;
     this.#refreshActiveNoteHighlight();
 
     this.#storySessionManager?.exit();

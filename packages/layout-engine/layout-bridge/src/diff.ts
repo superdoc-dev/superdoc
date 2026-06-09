@@ -10,6 +10,7 @@ import type {
   DrawingGeometry,
   ShapeGroupTransform,
   ShapeGroupChild,
+  TextboxDrawing,
   Run,
   ParagraphAttrs,
   ParagraphSpacing,

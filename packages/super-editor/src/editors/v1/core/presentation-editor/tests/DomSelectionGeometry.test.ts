@@ -573,6 +573,68 @@ describe('computeSelectionRectsFromDom', () => {
       document.createRange = originalCreateRange;
     });
 
+    // SD-3328: A multi-line selection used to render one DOM Range spanning every line and
+    // trust `range.getClientRects()`. Some Chrome builds return incomplete rects for a range
+    // crossing the absolutely-positioned `.superdoc-line` boxes — interior lines collapse to
+    // a few stray slivers while the first/last lines render fully — and `intersectsNode` does
+    // not flag it. Interior lines must instead be covered by the line element's own box.
+    it('covers interior lines with their full-width box when the spanning range returns slivers', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line" data-pm-start="2" data-pm-end="12">
+            <span data-pm-start="2" data-pm-end="12">line one xx</span>
+          </div>
+          <div class="superdoc-line" data-pm-start="12" data-pm-end="22">
+            <span data-pm-start="12" data-pm-end="22">line two xx</span>
+          </div>
+          <div class="superdoc-line" data-pm-start="22" data-pm-end="32">
+            <span data-pm-start="22" data-pm-end="32">line three</span>
+          </div>
+        </div>
+      `;
+
+      const layout = createMockLayout([{ pmStart: 1, pmEnd: 33 }]);
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+
+      const lines = Array.from(painterHost.querySelectorAll('.superdoc-line')) as HTMLElement[];
+      // The interior line (line two) reports a full-width box. If the fix regresses and the
+      // interior line is taken from the spanning range instead, it would be a sliver.
+      lines[1]!.getBoundingClientRect = vi.fn(() => createRect(10, 40, 580, 16));
+
+      // The spanning range simulates the broken browser: only a narrow sliver everywhere.
+      // `intersectsNode` returns true so the legacy missing-entries fallback would NOT fire —
+      // only the new "spans multiple lines" path rescues the interior line.
+      const mockRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        setStartBefore: vi.fn(),
+        setStartAfter: vi.fn(),
+        setEndBefore: vi.fn(),
+        setEndAfter: vi.fn(),
+        intersectsNode: vi.fn(() => true),
+        // Sliver rects sit on the first line's row (y=20), away from the interior line
+        // (y=40), mirroring the broken browser output for the boundary lines.
+        getClientRects: vi.fn(() => [createRect(10, 20, 4, 16)]),
+      } as unknown as Range;
+
+      const originalCreateRange = document.createRange;
+      document.createRange = vi.fn(() => mockRange);
+
+      const options = createOptions(layout);
+      const rects = computeSelectionRectsFromDom(options, 2, 32);
+
+      document.createRange = originalCreateRange;
+
+      expect(rects).not.toBe(null);
+      // The interior line must be covered by a rect at its full width, not a 4px sliver.
+      const interiorRect = rects!.find((r) => Math.abs(r.y - 40) < 1 && r.width > 100);
+      expect(interiorRect).toBeDefined();
+      expect(interiorRect!.width).toBeCloseTo(580, 0);
+    });
+
     it('sets range boundaries across descendant text nodes inside one PM-mapped span', () => {
       painterHost.innerHTML = `
         <div class="superdoc-page" data-page-index="0">

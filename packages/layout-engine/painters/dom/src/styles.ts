@@ -1188,13 +1188,18 @@ const FOOTNOTE_STYLES = `
  * activation, re-applied after each paint, removed on session exit. The pulse
  * draws the eye when focus jumps from the body reference to the note. */
 .sd-note-session-active {
-  background-color: rgba(98, 155, 231, 0.12);
-  box-shadow: -2px 0 0 0 #629be7;
+  background-color: rgba(98, 155, 231, 0.07);
+  /* Thin accent bar with breathing room: the first shadow masks a 3px gap with
+   * the page background, the second paints a 1px bar beyond it. Box-shadows
+   * paint outside the box, so the note line itself is untouched. */
+  box-shadow:
+    -3px 0 0 0 var(--sd-page-bg, #ffffff),
+    -4px 0 0 0 rgba(98, 155, 231, 0.55);
   animation: sd-note-activate-pulse 0.6s ease-out 1;
 }
 @keyframes sd-note-activate-pulse {
-  0% { background-color: rgba(98, 155, 231, 0.4); }
-  100% { background-color: rgba(98, 155, 231, 0.12); }
+  0% { background-color: rgba(98, 155, 231, 0.22); }
+  100% { background-color: rgba(98, 155, 231, 0.07); }
 }
 `;
 

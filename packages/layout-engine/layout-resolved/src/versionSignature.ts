@@ -183,6 +183,8 @@ const renderedInlineImageRunVersion = (image: ImageRun): string =>
     image.alt ?? '',
     image.title ?? '',
     typeof image.clipPath === 'string' ? image.clipPath.trim() : '',
+    typeof image.shapeClipPath === 'string' ? image.shapeClipPath.trim() : '',
+    image.objectFit ?? '',
     image.distTop ?? '',
     image.distBottom ?? '',
     image.distLeft ?? '',

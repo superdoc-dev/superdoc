@@ -389,6 +389,30 @@ describe('deriveBlockVersion - inline image runs', () => {
     expect(deriveBlockVersion(makeTableWithImageRun(clipA))).not.toBe(deriveBlockVersion(makeTableWithImageRun(clipB)));
   });
 
+  it('changes when inline image shape mask changes', () => {
+    const ellipse = {
+      ...baseImageRun,
+      shapeClipPath: 'ellipse(50% 50% at 50% 50%)',
+    } as ImageRun;
+    const circle = {
+      ...baseImageRun,
+      shapeClipPath: 'circle(50% at 50% 50%)',
+    } as ImageRun;
+
+    expect(deriveBlockVersion(makeParagraphWithImageRun(circle))).not.toBe(
+      deriveBlockVersion(makeParagraphWithImageRun(ellipse)),
+    );
+  });
+
+  it('changes when inline image object fit changes', () => {
+    const cover = { ...baseImageRun, objectFit: 'cover' } as ImageRun;
+    const fill = { ...baseImageRun, objectFit: 'fill' } as ImageRun;
+
+    expect(deriveBlockVersion(makeParagraphWithImageRun(fill))).not.toBe(
+      deriveBlockVersion(makeParagraphWithImageRun(cover)),
+    );
+  });
+
   it('changes when a table-cell inline image visual property changes', () => {
     const plain = deriveBlockVersion(makeTableWithImageRun(baseImageRun));
     const filtered = deriveBlockVersion(makeTableWithImageRun({ ...baseImageRun, grayscale: true }));

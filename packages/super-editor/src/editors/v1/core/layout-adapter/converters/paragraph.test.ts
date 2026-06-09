@@ -4130,6 +4130,24 @@ describe('paragraph converters', () => {
       expect(result?.alphaModFix).toEqual({ amt: 9000 });
     });
 
+    it('preserves inline image shape mask and object fit attrs', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'data:image/png;base64,iVBORw...',
+          size: { width: 200, height: 150 },
+          shapeClipPath: 'ellipse(50% 50% at 50% 50%)',
+          objectFit: 'cover',
+          wrap: { type: 'Inline' },
+        },
+      };
+
+      const result = imageNodeToRun(buildImageParams(node, positions));
+
+      expect(result?.shapeClipPath).toBe('ellipse(50% 50% at 50% 50%)');
+      expect(result?.objectFit).toBe('cover');
+    });
+
     it('returns null when src is missing', () => {
       const node: PMNode = {
         type: 'image',

@@ -602,6 +602,10 @@ export type ImageRun = {
   title?: string;
   /** Clip-path value for cropped images. */
   clipPath?: string;
+  /** Clip-path value for preset shape masks applied around the image box. */
+  shapeClipPath?: string;
+  /** CSS object-fit behavior for the painted image inside its layout box. */
+  objectFit?: 'contain' | 'cover' | 'fill' | 'scale-down';
 
   /**
    * Spacing around the image (from DOCX distT/distB/distL/distR attributes).

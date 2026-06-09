@@ -8,6 +8,10 @@ import { type InlineConverterParams, NotInlineNodeError } from './common.js';
  * This ensures images are always rendered with a fallback size for better UX.
  */
 const DEFAULT_IMAGE_DIMENSION_PX = 100;
+const ALLOWED_OBJECT_FIT = new Set(['contain', 'cover', 'fill', 'scale-down']);
+
+const isAllowedObjectFit = (value: unknown): value is NonNullable<ImageRun['objectFit']> =>
+  typeof value === 'string' && ALLOWED_OBJECT_FIT.has(value);
 
 /**
  * Converts an image PM node to an ImageRun for inline rendering.
@@ -102,6 +106,8 @@ export function imageNodeToRun({ node, positions, sdtMetadata }: InlineConverter
   if (typeof attrs.alt === 'string') run.alt = attrs.alt;
   if (typeof attrs.title === 'string') run.title = attrs.title;
   if (typeof attrs.clipPath === 'string') run.clipPath = attrs.clipPath;
+  if (typeof attrs.shapeClipPath === 'string') run.shapeClipPath = attrs.shapeClipPath;
+  if (isAllowedObjectFit(attrs.objectFit)) run.objectFit = attrs.objectFit;
 
   // Spacing attributes (from wrap.attrs.distT/distB/distL/distR)
   const distTop = pickNumber(wrapAttrs.distTop ?? wrapAttrs.distT);

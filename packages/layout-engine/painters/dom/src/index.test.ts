@@ -8814,6 +8814,23 @@ describe('DomPainter', () => {
       expect(img?.height).toBe(100);
     });
 
+    it('renders inline image shape masks on a clip wrapper', () => {
+      renderInlineImageRun({
+        kind: 'image',
+        src: inlineImageSrc,
+        width: 100,
+        height: 80,
+        shapeClipPath: 'ellipse(50% 50% at 50% 50%)',
+        objectFit: 'cover',
+      } as Extract<FlowBlock, { kind: 'paragraph' }>['runs'][number]);
+
+      const wrapper = mount.querySelector('.superdoc-inline-image-clip-wrapper') as HTMLElement | null;
+      const img = wrapper?.querySelector('img') as HTMLImageElement | null;
+
+      expect(wrapper?.style.clipPath).toBe('ellipse(50% 50% at 50% 50%)');
+      expect(img?.style.objectFit).toBe('cover');
+    });
+
     it('renders img element with non-base64 SVG data URL', () => {
       const svg =
         '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><text x="0" y="20">Signature</text></svg>';

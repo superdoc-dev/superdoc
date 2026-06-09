@@ -120,15 +120,28 @@ export function renderCellSelectionOverlay({
       | undefined;
   }
   if (!tableBlock) {
-    const expectedBlockId = `${tableStart}-table`;
-    tableBlock = blocks.find((block) => block.kind === 'table' && block.id === expectedBlockId) as
-      | TableBlock
-      | undefined;
-  }
-  if (!tableBlock) {
-    const tableBlocks = blocks.filter((block) => block.kind === 'table') as TableBlock[];
-    if (tableBlocks.length === 1) {
-      tableBlock = tableBlocks[0];
+    // SD-3328: Map the selection's table to its layout block by document order. Table block IDs
+    // are sequential ("26-table"), not derived from the PM position, so matching a guessed
+    // `${tableStart}-table` id never works and the single-table fallback can't disambiguate a
+    // document with several tables. Counting tables up to the selection's table is reliable and
+    // mirrors how cell positions are resolved elsewhere (getCellPosFromTableHit). This lets a
+    // cell selection render even when no geometry cell-anchor was captured — e.g. a drag that
+    // started on an empty cell paragraph, where the geometry hit-test misses.
+    const docNode = $anchorCell.node(0);
+    let selectedTableIndex = -1;
+    let seenTables = 0;
+    docNode.descendants((node, pos) => {
+      if (node.type.name !== 'table') return true;
+      if (pos === tableStart) {
+        selectedTableIndex = seenTables;
+        return false;
+      }
+      seenTables += 1;
+      return true;
+    });
+    if (selectedTableIndex !== -1) {
+      const tableBlocks = blocks.filter((block) => block.kind === 'table') as TableBlock[];
+      tableBlock = tableBlocks[selectedTableIndex];
     }
   }
   if (!tableBlock) {

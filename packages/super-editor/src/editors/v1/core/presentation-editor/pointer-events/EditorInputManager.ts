@@ -37,6 +37,7 @@ import {
   getCellPosFromTableHit as getCellPosFromTableHitFromHelper,
   getTablePosFromHit as getTablePosFromHitFromHelper,
   hitTestTable as hitTestTableFromHelper,
+  resolveCrossCellSelection,
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
 import { DOM_CLASS_NAMES, buildAnnotationSelector, DRAGGABLE_SELECTOR } from '@superdoc/dom-contract';
@@ -2576,10 +2577,33 @@ export class EditorInputManager {
       return;
     }
 
-    // Text selection mode
     const anchor = this.#dragAnchor!;
     const head = hit.pos;
 
+    // SD-3328: Cross-cell selection from the resolved PM positions. The geometry trigger above
+    // (#hitTestTable) can miss empty cell paragraphs and similar spots, leaving #cellAnchor unset,
+    // so a drag across cells falls to the text path — where prosemirror-tables collapses it
+    // (forward) or the guard freezes it (backward). Deriving the cells from the resolved positions
+    // is reliable: when the anchor and head land in different cells of the same table, select the
+    // cell range directly, the way Word and Google Docs do, regardless of the flaky geometry hit.
+    if (!useActiveSurfaceHitTest) {
+      const crossCell = resolveCrossCellSelection(editor.state.doc, anchor, head);
+      if (crossCell) {
+        try {
+          const tr = editor.state.tr.setSelection(
+            CellSelection.create(editor.state.doc, crossCell.anchorCellPos, crossCell.headCellPos),
+          );
+          editor.view?.dispatch(tr);
+          this.#callbacks.scheduleSelectionUpdate?.();
+          return;
+        } catch (error) {
+          // Fall through to text selection if the cell range cannot be built.
+          console.warn('[SELECTION] Failed to create cross-cell CellSelection during drag:', error);
+        }
+      }
+    }
+
+    // Text selection mode
     const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
 
     // SD-3328: When dragging a body selection into (or through) a table, prosemirror-tables'

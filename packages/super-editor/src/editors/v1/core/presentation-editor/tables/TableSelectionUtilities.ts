@@ -230,6 +230,72 @@ export function getTablePosFromHit(
 }
 
 /**
+ * Resolves the table cell that encloses a ProseMirror position.
+ *
+ * Walks the ancestors of `pos` to find the nearest `tableCell`/`tableHeader` and its enclosing
+ * `table`. Returns positions that point *at* the cell and table nodes (i.e. the position directly
+ * before each), which is the convention `CellSelection.create` expects.
+ *
+ * @param doc - The ProseMirror document.
+ * @param pos - A document position.
+ * @returns `{ cellPos, tablePos }` if `pos` is inside a table cell, otherwise null.
+ */
+export function resolveCellContext(
+  doc: ProseMirrorNode | null,
+  pos: number,
+): { cellPos: number; tablePos: number } | null {
+  if (!doc || !Number.isFinite(pos) || pos < 0 || pos > doc.content.size) return null;
+
+  let $pos: ReturnType<ProseMirrorNode['resolve']>;
+  try {
+    $pos = doc.resolve(pos);
+  } catch {
+    return null;
+  }
+
+  let cellDepth = -1;
+  let tableDepth = -1;
+  for (let depth = $pos.depth; depth > 0; depth--) {
+    const role = $pos.node(depth).type.spec.tableRole;
+    if (cellDepth === -1 && (role === 'cell' || role === 'header_cell')) {
+      cellDepth = depth;
+    }
+    if (cellDepth !== -1 && role === 'table') {
+      tableDepth = depth;
+      break;
+    }
+  }
+  if (cellDepth === -1 || tableDepth === -1) return null;
+
+  return { cellPos: $pos.before(cellDepth), tablePos: $pos.before(tableDepth) };
+}
+
+/**
+ * Determines whether a drag from `anchorPos` to `headPos` should be a cross-cell selection.
+ *
+ * SD-3328: The geometry trigger (`hitTestTable`) can miss empty cell paragraphs, leaving the cell
+ * anchor unset, so a drag across cells falls back to a plain text selection — which prosemirror-
+ * tables then collapses. Deriving the cells from the resolved PM positions is reliable. When both
+ * endpoints resolve to *different* cells of the *same* table, the caller should build a
+ * `CellSelection` (the cell-range highlight Word and Docs show) instead of a text selection.
+ *
+ * @returns Cell positions for `CellSelection.create`, or null when this is not a cross-cell drag
+ *   (one endpoint outside any table, both in the same cell, or in different tables).
+ */
+export function resolveCrossCellSelection(
+  doc: ProseMirrorNode | null,
+  anchorPos: number,
+  headPos: number,
+): { anchorCellPos: number; headCellPos: number } | null {
+  const anchor = resolveCellContext(doc, anchorPos);
+  const head = resolveCellContext(doc, headPos);
+  if (!anchor || !head) return null;
+  if (anchor.tablePos !== head.tablePos) return null; // different tables
+  if (anchor.cellPos === head.cellPos) return null; // same cell -> text selection
+  return { anchorCellPos: anchor.cellPos, headCellPos: head.cellPos };
+}
+
+/**
  * Determines whether cell selection mode should be used based on the current drag state and position.
  *
  * This function implements the state machine logic for transitioning between regular text selection

@@ -3529,6 +3529,38 @@ describe('measureBlock', () => {
       expect(measure.groupTransform?.rotation).toBe(90);
     });
 
+    it('preserves shape group effect extent when group transform is present', async () => {
+      const block: DrawingBlock = {
+        kind: 'drawing',
+        id: 'shape-group-effect-extent',
+        drawingKind: 'shapeGroup',
+        geometry: {
+          width: 105,
+          height: 59,
+          rotation: 0,
+        },
+        groupTransform: {
+          width: 100,
+          height: 50,
+        },
+        effectExtent: {
+          left: 2,
+          top: 4,
+          right: 3,
+          bottom: 5,
+        },
+        shapes: [],
+      };
+
+      const measure = expectDrawingMeasure(await measureBlock(block, { maxWidth: 500 }));
+      expect(measure.width).toBe(105);
+      expect(measure.height).toBe(59);
+      expect(measure.geometry.width).toBe(105);
+      expect(measure.geometry.height).toBe(59);
+      expect(measure.groupTransform?.width).toBe(100);
+      expect(measure.groupTransform?.height).toBe(50);
+    });
+
     it('resolves full-width drawings using maxWidth constraints and indents', async () => {
       const block: DrawingBlock = {
         kind: 'drawing',

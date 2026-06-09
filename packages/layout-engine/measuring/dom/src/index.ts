@@ -3409,8 +3409,11 @@ async function measureDrawingBlock(block: DrawingBlock, constraints: MeasureCons
 
   const geometry = ensureDrawingGeometry(block.geometry);
   if (block.drawingKind === 'shapeGroup' && block.groupTransform) {
-    geometry.width = Math.max(1, block.groupTransform.width ?? geometry.width);
-    geometry.height = Math.max(1, block.groupTransform.height ?? geometry.height);
+    const effectExtent = block.effectExtent ?? { left: 0, top: 0, right: 0, bottom: 0 };
+    const groupWidth = block.groupTransform.width ?? geometry.width;
+    const groupHeight = block.groupTransform.height ?? geometry.height;
+    geometry.width = Math.max(1, geometry.width, groupWidth + effectExtent.left + effectExtent.right);
+    geometry.height = Math.max(1, geometry.height, groupHeight + effectExtent.top + effectExtent.bottom);
     geometry.rotation = normalizeRotation(block.groupTransform.rotation ?? geometry.rotation ?? 0);
     geometry.flipH = Boolean(block.groupTransform.flipH ?? geometry.flipH);
     geometry.flipV = Boolean(block.groupTransform.flipV ?? geometry.flipV);

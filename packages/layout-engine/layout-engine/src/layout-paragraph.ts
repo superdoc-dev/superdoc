@@ -413,6 +413,22 @@ export type AnchoredDrawingEntry = {
   measure: ImageMeasure | DrawingMeasure;
 };
 
+function getSuppressedMarkerImageGroupAnchorOffset(
+  entry: AnchoredDrawingEntry,
+  suppressVisibleSectPrMarkerParagraph: boolean,
+  hasPageRelativeAnchorForParagraph: boolean,
+  markerSpacingBefore: number,
+): number {
+  if (!suppressVisibleSectPrMarkerParagraph || !hasPageRelativeAnchorForParagraph) return 0;
+  if (entry.block.kind !== 'drawing' || entry.block.drawingKind !== 'shapeGroup') return 0;
+  if (!entry.block.shapes?.some((child) => child.shapeType === 'image')) return 0;
+  if ((entry.block.anchor?.vRelativeFrom ?? 'paragraph') !== 'paragraph') return 0;
+  if (entry.block.anchor?.alignV && entry.block.anchor.alignV !== 'top') return 0;
+  // Word keeps a half-spacing paragraph origin for image groups paired with
+  // page-relative vector masks on suppressed section marker paragraphs.
+  return Math.max(0, markerSpacingBefore / 2);
+}
+
 export type ParagraphAnchorsContext = {
   anchoredDrawings?: AnchoredDrawingEntry[];
   anchoredTables?: AnchoredTable[];
@@ -483,6 +499,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     if (!spacingExplicit.before) spacingBefore = 0;
     if (!spacingExplicit.after) spacingAfter = 0;
   }
+  const markerSpacingBefore = spacingBefore;
   const hasAnchoredObjects = Boolean(anchors?.anchoredDrawings?.length || anchors?.anchoredTables?.length);
   const suppressVisibleSectPrMarkerParagraph = attrs?.sectPrMarker === true && emptyTextParagraph && hasAnchoredObjects;
   if (suppressVisibleSectPrMarkerParagraph) {
@@ -556,13 +573,21 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
 
       const contentTop = state.topMargin;
       const contentBottom = state.contentBottom;
+      const anchorParagraphY =
+        paragraphContentStartY +
+        getSuppressedMarkerImageGroupAnchorOffset(
+          entry,
+          suppressVisibleSectPrMarkerParagraph,
+          anchors.hasPageRelativeAnchorForParagraph === true,
+          markerSpacingBefore,
+        );
       const anchorY = resolveAnchoredGraphicY({
         anchor: entry.block.anchor,
         objectHeight: entry.measure.height,
         contentTop,
         contentBottom,
         pageBottomMargin: anchors.pageMargins.bottom ?? 0,
-        anchorParagraphY: paragraphContentStartY,
+        anchorParagraphY,
         firstLineHeight: anchorFirstLineHeight,
       });
 

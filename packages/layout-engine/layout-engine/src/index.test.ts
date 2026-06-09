@@ -740,6 +740,117 @@ describe('layoutDocument', () => {
     expect(paraFragment.width).toBe(contentWidth - exclusionWidth);
   });
 
+  it('positions image shape groups from suppressed marker spacing when paired with page-relative art', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [],
+      attrs: {
+        sectPrMarker: true,
+        spacing: { before: 8 },
+      },
+    };
+    const pageRelativeGroup: FlowBlock = {
+      kind: 'drawing',
+      id: 'page-group',
+      drawingKind: 'shapeGroup',
+      geometry: { width: 100, height: 80, rotation: 0 },
+      shapes: [{ shapeType: 'vectorShape', attrs: { x: 0, y: 0, width: 100, height: 80 } }],
+      attrs: { anchorParagraphId: 'para-1' },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'page',
+        offsetH: 0,
+        offsetV: 20,
+      },
+      wrap: { type: 'None' },
+    };
+    const paragraphRelativeGroup: FlowBlock = {
+      kind: 'drawing',
+      id: 'paragraph-group',
+      drawingKind: 'shapeGroup',
+      geometry: { width: 100, height: 80, rotation: 0 },
+      shapes: [{ shapeType: 'image', attrs: { x: 0, y: 0, width: 100, height: 80, src: 'image.png' } }],
+      attrs: { anchorParagraphId: 'para-1' },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 0,
+        offsetV: 10,
+      },
+      wrap: { type: 'None' },
+    };
+    const paragraphRelativeLine: FlowBlock = {
+      kind: 'drawing',
+      id: 'paragraph-line',
+      drawingKind: 'vectorShape',
+      geometry: { width: 100, height: 2, rotation: 0 },
+      attrs: { anchorParagraphId: 'para-1' },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 0,
+        offsetV: 10,
+      },
+      wrap: { type: 'None' },
+    };
+    const paragraphMeasure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [makeLine(20)],
+      totalHeight: 20,
+    };
+    const drawingMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      drawingKind: 'shapeGroup',
+      width: 100,
+      height: 80,
+      scale: 1,
+      geometry: { width: 100, height: 80, rotation: 0, flipH: false, flipV: false },
+    };
+    const lineMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 100,
+      height: 2,
+      scale: 1,
+      geometry: { width: 100, height: 2, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const layout = layoutDocument(
+      [pageRelativeGroup, paragraphRelativeGroup, paragraphRelativeLine, paragraphBlock],
+      [drawingMeasure, drawingMeasure, lineMeasure, paragraphMeasure],
+      DEFAULT_OPTIONS,
+    );
+
+    const drawingFragment = layout.pages[0].fragments.find(
+      (fragment) => fragment.kind === 'drawing' && fragment.blockId === 'paragraph-group',
+    ) as DrawingFragment;
+    const pageGroupFragment = layout.pages[0].fragments.find(
+      (fragment) => fragment.kind === 'drawing' && fragment.blockId === 'page-group',
+    ) as DrawingFragment;
+    const lineFragment = layout.pages[0].fragments.find(
+      (fragment) => fragment.kind === 'drawing' && fragment.blockId === 'paragraph-line',
+    ) as DrawingFragment;
+
+    expect(drawingFragment.y).toBe(DEFAULT_OPTIONS.margins!.top + 4 + 10);
+    expect(pageGroupFragment.y).toBe(20);
+    expect(lineFragment.y).toBe(DEFAULT_OPTIONS.margins!.top + 10);
+
+    const layoutWithoutPageRelativeCompanion = layoutDocument(
+      [paragraphRelativeGroup, paragraphBlock],
+      [drawingMeasure, paragraphMeasure],
+      DEFAULT_OPTIONS,
+    );
+    const unpairedGroupFragment = layoutWithoutPageRelativeCompanion.pages[0].fragments.find(
+      (fragment) => fragment.kind === 'drawing' && fragment.blockId === 'paragraph-group',
+    ) as DrawingFragment;
+
+    expect(unpairedGroupFragment.y).toBe(DEFAULT_OPTIONS.margins!.top + 10);
+  });
+
   it('does not adjust fragments when image has TopAndBottom wrap', () => {
     const imageBlock: ImageBlock = {
       kind: 'image',

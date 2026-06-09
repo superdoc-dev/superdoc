@@ -823,9 +823,25 @@ const buildShapeGroupTransformAttrs = (xfrm) => {
   return groupTransform;
 };
 
-const getGroupAffineTransform = (xfrm) => {
+const identityMatrix = () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+
+const multiplyMatrix = (left, right) => ({
+  a: left.a * right.a + left.c * right.b,
+  b: left.b * right.a + left.d * right.b,
+  c: left.a * right.c + left.c * right.d,
+  d: left.b * right.c + left.d * right.d,
+  e: left.a * right.e + left.c * right.f + left.e,
+  f: left.b * right.e + left.d * right.f + left.f,
+});
+
+const transformPoint = (matrix, x, y) => ({
+  x: matrix.a * x + matrix.c * y + matrix.e,
+  y: matrix.b * x + matrix.d * y + matrix.f,
+});
+
+const getGroupAffineTransform = (xfrm, { includeVisualTransform = false } = {}) => {
   if (!xfrm) {
-    return { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0 };
+    return { matrix: identityMatrix(), rotation: 0, flipH: false, flipV: false };
   }
 
   const off = findChildByLocalName(xfrm.elements, 'off');
@@ -843,28 +859,64 @@ const getGroupAffineTransform = (xfrm) => {
   const y = parseEmuNumber(off?.attributes?.['y']);
   const scaleX = childWidth !== 0 ? width / childWidth : 1;
   const scaleY = childHeight !== 0 ? height / childHeight : 1;
-
-  return {
-    scaleX,
-    scaleY,
-    translateX: x - childX * scaleX,
-    translateY: y - childY * scaleY,
+  const rotation = xfrm.attributes?.['rot'] ? rotToDegrees(xfrm.attributes['rot']) : 0;
+  const flipH = xfrm.attributes?.['flipH'] === '1';
+  const flipV = xfrm.attributes?.['flipV'] === '1';
+  const baseMatrix = {
+    a: scaleX,
+    b: 0,
+    c: 0,
+    d: scaleY,
+    e: x - childX * scaleX,
+    f: y - childY * scaleY,
   };
+
+  if (!includeVisualTransform || (!rotation && !flipH && !flipV)) {
+    return { matrix: baseMatrix, rotation: 0, flipH: false, flipV: false };
+  }
+
+  const radians = (rotation * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const flipScaleX = flipH ? -1 : 1;
+  const flipScaleY = flipV ? -1 : 1;
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const visualMatrix = {
+    a: cos * flipScaleX,
+    b: sin * flipScaleX,
+    c: -sin * flipScaleY,
+    d: cos * flipScaleY,
+    e: centerX - (cos * flipScaleX * centerX + -sin * flipScaleY * centerY),
+    f: centerY - (sin * flipScaleX * centerX + cos * flipScaleY * centerY),
+  };
+
+  return { matrix: multiplyMatrix(visualMatrix, baseMatrix), rotation, flipH, flipV };
 };
 
 const composeShapeGroupTransform = (parent, child) => ({
-  scaleX: parent.scaleX * child.scaleX,
-  scaleY: parent.scaleY * child.scaleY,
-  translateX: parent.scaleX * child.translateX + parent.translateX,
-  translateY: parent.scaleY * child.translateY + parent.translateY,
+  matrix: multiplyMatrix(parent.matrix, child.matrix),
+  rotation: (parent.rotation ?? 0) + (child.rotation ?? 0),
+  flipH: Boolean(parent.flipH) !== Boolean(child.flipH),
+  flipV: Boolean(parent.flipV) !== Boolean(child.flipV),
 });
 
-const transformShapeGroupChildRect = (transform, rawX, rawY, rawWidth, rawHeight) => ({
-  x: emuToPixels(transform.translateX + transform.scaleX * rawX),
-  y: emuToPixels(transform.translateY + transform.scaleY * rawY),
-  width: emuToPixels(transform.scaleX * rawWidth),
-  height: emuToPixels(transform.scaleY * rawHeight),
-});
+const transformShapeGroupChildRect = (transform, rawX, rawY, rawWidth, rawHeight) => {
+  const matrix = transform.matrix ?? identityMatrix();
+  const width = Math.hypot(matrix.a, matrix.b) * rawWidth;
+  const height = Math.hypot(matrix.c, matrix.d) * rawHeight;
+  const center = transformPoint(matrix, rawX + rawWidth / 2, rawY + rawHeight / 2);
+
+  return {
+    x: emuToPixels(center.x - width / 2),
+    y: emuToPixels(center.y - height / 2),
+    width: emuToPixels(width),
+    height: emuToPixels(height),
+    rotation: transform.rotation ?? 0,
+    flipH: Boolean(transform.flipH),
+    flipV: Boolean(transform.flipV),
+  };
+};
 
 const resolveShapeGroupPicturePath = (pic, params) => {
   const blipFill = findChildByLocalName(pic.elements, 'blipFill');
@@ -1007,7 +1059,10 @@ const collectShapeGroupChildren = (groupNode, transform, params) => {
       const picture = parseShapeGroupImageChild(child, transform, params);
       if (picture) children.push(picture);
     } else if (localName === 'grpSp') {
-      const nestedTransform = composeShapeGroupTransform(transform, getGroupAffineTransform(getGroupXfrm(child)));
+      const nestedTransform = composeShapeGroupTransform(
+        transform,
+        getGroupAffineTransform(getGroupXfrm(child), { includeVisualTransform: true }),
+      );
       children.push(...collectShapeGroupChildren(child, nestedTransform, params));
     }
   }

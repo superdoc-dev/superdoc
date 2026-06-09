@@ -9,11 +9,19 @@ import type {
   TableMeasure,
 } from '@superdoc/contracts';
 import { getTableVisualDirection } from '@superdoc/contracts';
+import type { ResolvePhysicalFamily } from '@superdoc/font-system';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
-import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
+import {
+  applySdtContainerChrome,
+  getSdtContainerKey,
+  getSdtContainerMetadata,
+  hasExplicitSdtContainerKey,
+  type SdtAncestorOptions,
+  type SdtBoundaryOptions,
+} from '../sdt/container.js';
 import { applyBorder, borderValueToSpec, hasExplicitCellBorders } from './border-utils.js';
 import { getTableCellGridBounds } from './grid-geometry.js';
 
@@ -41,6 +49,18 @@ export type TableRenderDependencies = {
   effectiveColumnWidths: number[];
   /** Optional SDT boundary overrides for container styling */
   sdtBoundary?: SdtBoundaryOptions;
+  /** Ancestor SDT key used to suppress duplicate container chrome in nested tables */
+  ancestorContainerKey?: string | null;
+  /** Ancestor SDT metadata used to suppress duplicate id-less container chrome in nested tables */
+  ancestorContainerSdt?: SdtMetadata | null;
+  /** Ancestor SDT keys used to suppress duplicate container chrome in nested tables */
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  /** Ancestor SDT metadata chain used to suppress duplicate id-less container chrome in nested tables */
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
+  /** Receives notification when this table fragment or descendants render SDT container chrome */
+  onSdtContainerChrome?: () => void;
+  /** Built-in SDT chrome rendering mode. */
+  chrome?: 'default' | 'none';
   /** Function to render a line of paragraph content */
   renderLine: (
     block: ParagraphBlock,
@@ -65,6 +85,12 @@ export type TableRenderDependencies = {
   applyContainerSdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Function to apply CSS styles to an element */
   applyStyles: ApplyStylesFn;
+  /**
+   * Per-document logical->physical font resolver for in-cell list markers and drop caps. Threaded
+   * from the renderer's per-document resolver so they paint the same physical family they were
+   * measured in. Undefined falls back to the global resolver.
+   */
+  resolvePhysical?: ResolvePhysicalFamily;
 };
 
 /**
@@ -84,7 +110,7 @@ export type TableRenderDependencies = {
  *
  * **SDT Container Styling:**
  * If the table block has SDT metadata (`block.attrs?.sdt`), applies appropriate
- * container styling via `applySdtContainerStyling()`:
+ * container styling via `applySdtContainerChrome()`:
  * - Document sections: Gray border with hover tooltip
  * - Structured content blocks: Blue border with label
  * Uses type-safe helper functions to avoid unsafe type assertions.
@@ -141,8 +167,14 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     measure,
     cellSpacingPx,
     effectiveColumnWidths,
+    chrome,
     context,
     sdtBoundary,
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
+    onSdtContainerChrome,
     renderLine,
     captureLineSnapshot,
     renderDrawingContent,
@@ -150,6 +182,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     applySdtDataset,
     applyContainerSdtDataset,
     applyStyles,
+    resolvePhysical,
   } = deps;
 
   // Check document first before using it in error handlers
@@ -202,7 +235,36 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const contentTop = tableBorderWidths?.top ?? 0;
 
   // Apply SDT container styling (document sections, structured content blocks)
-  applySdtContainerStyling(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
+  if (
+    applySdtContainerChrome(
+      doc,
+      container,
+      block.attrs?.sdt,
+      block.attrs?.containerSdt,
+      sdtBoundary,
+      {
+        ancestorContainerKey,
+        ancestorContainerSdt,
+        ancestorContainerKeys,
+        ancestorContainerSdts,
+      },
+      chrome,
+    )
+  ) {
+    onSdtContainerChrome?.();
+  }
+  const tableContainerSdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
+  const tableContainerKey = getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
+  const nextAncestorContainerKeys = [
+    ...(ancestorContainerKeys ?? []),
+    ancestorContainerKey,
+    hasExplicitSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt) ? tableContainerKey : null,
+  ].filter((key): key is string => Boolean(key));
+  const nextAncestorContainerSdts = [...(ancestorContainerSdts ?? []), ancestorContainerSdt, tableContainerSdt].filter(
+    (sdt): sdt is SdtMetadata => Boolean(sdt),
+  );
+  const nextAncestorContainerKey = nextAncestorContainerKeys[nextAncestorContainerKeys.length - 1] ?? null;
+  const nextAncestorContainerSdt = nextAncestorContainerSdts[nextAncestorContainerSdts.length - 1] ?? null;
 
   // Add table-specific class for resize overlay targeting and click mapping
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
@@ -259,6 +321,28 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       // Track which column boundaries exist in this row
       const boundariesInRow = new Set<number>();
 
+      // Columns occupied by a cell in this row. Used to detect a trailing
+      // w:gridAfter spacer column this row leaves empty.
+      const occupiedCols = new Set<number>();
+      for (const cellMeasure of rowMeasure.cells) {
+        const s = cellMeasure.gridColumnStart ?? 0;
+        const sp = cellMeasure.colSpan ?? 1;
+        for (let c = s; c < s + sp; c++) occupiedCols.add(c);
+      }
+      // A degenerate trailing gridAfter spacer (last column, unoccupied this row,
+      // narrower than its own min width) sits a few px from the table edge. Emitting
+      // a resize boundary at its left edge crowds the table-edge handle and reads as a
+      // doubled border on hover, so skip that boundary for this row (SD-3345).
+      const lastColIndex = columnCount - 1;
+      const lastColMeta = fragment.metadata.columnBoundaries[lastColIndex];
+      const skipTrailingSpacerBoundary =
+        lastColIndex > 0 &&
+        !occupiedCols.has(lastColIndex) &&
+        !!lastColMeta &&
+        typeof lastColMeta.width === 'number' &&
+        typeof lastColMeta.minWidth === 'number' &&
+        lastColMeta.width < lastColMeta.minWidth;
+
       for (const cellMeasure of rowMeasure.cells) {
         const startCol = cellMeasure.gridColumnStart ?? 0;
         const colSpan = cellMeasure.colSpan ?? 1;
@@ -269,8 +353,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         if (startCol > 0) {
           boundariesInRow.add(startCol);
         }
-        // End boundary (right edge of cell)
-        if (endCol < columnCount) {
+        // End boundary (right edge of cell), unless it lands on a degenerate
+        // trailing gridAfter spacer (its left edge is the table edge for practical
+        // purposes, handled by the table-edge handle).
+        if (endCol < columnCount && !(skipTrailingSpacerBoundary && endCol === lastColIndex)) {
           boundariesInRow.add(endCol);
         }
       }
@@ -357,6 +443,25 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     return r?.height ?? 0;
   });
 
+  // Per-row rightmost occupied grid column (exclusive), INCLUDING cells that span into a row
+  // via w:vMerge (rowspan) from an earlier row. A single row's measure only lists the cells
+  // that START in that row, so on a rowspan-continuation row the columns held by a spanning
+  // cell look empty. The single-owner edge helpers (rowRightEdgeCol / nextRowMaxCol) would
+  // then undercount and treat a leftmost cell as the rightmost column (drawing an interior
+  // right border) or treat a covered column as a gridAfter gap (drawing an interior bottom),
+  // doubling the shared edge. Counting rowspan occupancy keeps those edges single-owned.
+  // (SD-1797)
+  const rowOccupiedRightCols: number[] = new Array(measure.rows.length).fill(0);
+  measure.rows.forEach((rowM, r) => {
+    for (const c of rowM?.cells ?? []) {
+      const right = (c.gridColumnStart ?? 0) + (c.colSpan ?? 1);
+      const lastRow = Math.min(measure.rows.length - 1, r + (c.rowSpan ?? 1) - 1);
+      for (let rr = r; rr <= lastRow; rr += 1) {
+        if (right > rowOccupiedRightCols[rr]) rowOccupiedRightCols[rr] = right;
+      }
+    }
+  });
+
   // First row starts after space before table content (space between table border and first row)
   let y = cellSpacingPx;
 
@@ -374,6 +479,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         y,
         rowMeasure,
         row: block.rows[r],
+        prevRow: r > 0 ? block.rows[r - 1] : undefined,
+        prevRowMeasure: r > 0 ? measure.rows[r - 1] : undefined,
+        nextRow: r < block.rows.length - 1 ? block.rows[r + 1] : undefined,
+        nextRowMeasure: r < block.rows.length - 1 ? measure.rows[r + 1] : undefined,
+        rowOccupiedRightCol: rowOccupiedRightCols[r],
+        nextRowOccupiedRightCol: rowOccupiedRightCols[r + 1],
         totalRows: block.rows.length,
         tableBorders,
         columnWidths: effectiveColumnWidths,
@@ -385,11 +496,17 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         captureLineSnapshot,
         renderDrawingContent,
         applySdtDataset,
-        tableSdt: block.attrs?.sdt ?? null,
+        ancestorContainerKey: nextAncestorContainerKey,
+        ancestorContainerSdt: nextAncestorContainerSdt,
+        ancestorContainerKeys: nextAncestorContainerKeys,
+        ancestorContainerSdts: nextAncestorContainerSdts,
+        onSdtContainerChrome,
+        chrome,
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
         cellSpacingPx,
+        resolvePhysical,
       });
       // Add row height + spacing after every row (including last) for outer spacing after last row
       y += rowMeasure.height + cellSpacingPx;
@@ -536,6 +653,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       y,
       rowMeasure,
       row: block.rows[r],
+      prevRow: r > 0 ? block.rows[r - 1] : undefined,
+      prevRowMeasure: r > 0 ? measure.rows[r - 1] : undefined,
+      nextRow: r < block.rows.length - 1 ? block.rows[r + 1] : undefined,
+      nextRowMeasure: r < block.rows.length - 1 ? measure.rows[r + 1] : undefined,
+      rowOccupiedRightCol: rowOccupiedRightCols[r],
+      nextRowOccupiedRightCol: rowOccupiedRightCols[r + 1],
       totalRows: block.rows.length,
       tableBorders,
       columnWidths: effectiveColumnWidths,
@@ -547,7 +670,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       captureLineSnapshot,
       renderDrawingContent,
       applySdtDataset,
-      tableSdt: block.attrs?.sdt ?? null,
+      ancestorContainerKey: nextAncestorContainerKey,
+      ancestorContainerSdt: nextAncestorContainerSdt,
+      ancestorContainerKeys: nextAncestorContainerKeys,
+      ancestorContainerSdts: nextAncestorContainerSdts,
+      onSdtContainerChrome,
+      chrome,
       // Draw top border if table continues from previous fragment (MS Word behavior)
       continuesFromPrev: isFirstRenderedBodyRow && fragment.continuesFromPrev === true,
       // Draw bottom border if table continues on next fragment (MS Word behavior)
@@ -555,6 +683,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       // Pass partial row data for mid-row splits
       partialRow: partialRowData,
       cellSpacingPx,
+      resolvePhysical,
     });
     // Add row height + spacing after every row (including last) for outer spacing after last row
     y += actualRowHeight + cellSpacingPx;

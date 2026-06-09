@@ -25,7 +25,7 @@ import type {
   LayoutStoryLocator,
 } from '@superdoc/contracts';
 import { namedStoryLocator } from '@superdoc/contracts';
-import type { PageDecorationProvider } from '@superdoc/painter-dom';
+import type { PageDecorationPayload, PageDecorationProvider } from '@superdoc/painter-dom';
 import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
 import type { HeaderFooterPartStoryLocator } from '@superdoc/document-api';
 import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
@@ -47,10 +47,12 @@ import {
 } from '../../header-footer/HeaderFooterRegistry.js';
 import { initHeaderFooterRegistry } from '../../header-footer/HeaderFooterRegistryInit.js';
 import { layoutPerRIdHeaderFooters } from '../../header-footer/HeaderFooterPerRidLayout.js';
+import type { FontResolver, HasFace } from '@superdoc/font-system';
 import {
   extractIdentifierFromConverter,
   getHeaderFooterType,
   getHeaderFooterTypeForSection,
+  resolveEffectiveHeaderFooterRef,
   getBucketForPageNumber,
   getBucketRepresentative,
   buildSectionAwareHeaderFooterLayoutKey,
@@ -65,6 +67,8 @@ import { resolveSectionProjections } from '../../../document-api-adapters/helper
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from '../selection/CaretGeometry.js';
 import { ensureExplicitHeaderFooterSlot } from '../../../document-api-adapters/helpers/header-footer-slot-materialization.js';
 import { normalizeVariant } from './header-footer-variant.js';
+import type { HeaderFooterLayoutSnapshot } from '../../header-footer/types.js';
+import { buildHeaderFooterLayoutSnapshot } from './header-footer-snapshot.js';
 
 // =============================================================================
 // Types
@@ -75,6 +79,18 @@ type SurfacePmEntry = {
   pmEnd: number;
   el: HTMLElement;
 };
+
+type SnapshotAwarePageDecorationPayload = PageDecorationPayload & {
+  matchedVariant?: string | null;
+};
+
+function hasSectionRefsForKind(
+  identifier: MultiSectionHeaderFooterIdentifier | null | undefined,
+  kind: 'header' | 'footer',
+): identifier is MultiSectionHeaderFooterIdentifier {
+  const refKey = kind === 'header' ? 'headerRefs' : 'footerRefs';
+  return Boolean(identifier?.sections?.some((section) => section[refKey] !== undefined));
+}
 
 // AIDEV-NOTE: compat-fallback - header/footer session interaction still keys
 // off `data-pm-*` (prep-002). DomPainter also stamps the parallel neutral
@@ -251,6 +267,11 @@ export type HeaderFooterSessionManagerOptions = {
     header?: number;
     footer?: number;
   };
+  /**
+   * Reads the owning document's current font-mapping signature, folded into header/footer
+   * paint-reuse versions so a runtime `fonts.map` change repaints them. Omitted => '' (default).
+   */
+  getFontSignature?: () => string;
 };
 
 /**
@@ -374,9 +395,22 @@ function storyIdFromHeaderFooterLayoutKey(key: string): string {
   return key.replace(/::s\d+$/, '');
 }
 
-function resolveResult(result: HeaderFooterLayoutResult, storyId?: string | null): ResolvedHeaderFooterLayout {
+function refForVariant(
+  refs: Partial<Record<'default' | 'first' | 'even' | 'odd', string | null | undefined>> | undefined,
+  variant: 'default' | 'first' | 'even' | 'odd',
+): { refId: string; matchedVariant: 'default' | 'first' | 'even' | 'odd' } | undefined {
+  const ref = refs?.[variant];
+  if (ref) return { refId: ref, matchedVariant: variant };
+  return variant === 'odd' && refs?.default ? { refId: refs.default, matchedVariant: 'default' } : undefined;
+}
+
+function resolveResult(
+  result: HeaderFooterLayoutResult,
+  storyId?: string | null,
+  fontSignature = '',
+): ResolvedHeaderFooterLayout {
   const story = buildHeaderFooterStory(result.kind, storyId ?? String(result.type));
-  return resolveHeaderFooterLayout(result.layout, result.blocks, result.measures, story);
+  return resolveHeaderFooterLayout(result.layout, result.blocks, result.measures, story, fontSignature);
 }
 
 function shiftResolvedPaintItemY(item: ResolvedPaintItem, yOffset: number): ResolvedPaintItem {
@@ -394,21 +428,43 @@ function shiftResolvedPaintItemY(item: ResolvedPaintItem, yOffset: number): Reso
   };
 }
 
-function normalizeDecorationFragments(fragments: Fragment[], layoutMinY: number): Fragment[] {
-  if (layoutMinY >= 0) {
+function isExplicitBehindDocMediaFragment(fragment: Fragment): boolean {
+  return (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.behindDoc === true;
+}
+
+function getDecorationNormalizationMinY(fragments: Fragment[], layoutMinY: number): number {
+  if (!Number.isFinite(layoutMinY) || layoutMinY >= 0) {
+    return 0;
+  }
+
+  let minY = Infinity;
+  for (const fragment of fragments) {
+    if (isExplicitBehindDocMediaFragment(fragment)) {
+      continue;
+    }
+    if (Number.isFinite(fragment.y)) {
+      minY = Math.min(minY, fragment.y);
+    }
+  }
+
+  return minY < 0 ? minY : 0;
+}
+
+function normalizeDecorationFragments(fragments: Fragment[], normalizationMinY: number): Fragment[] {
+  if (normalizationMinY >= 0) {
     return fragments;
   }
 
-  const yOffset = -layoutMinY;
+  const yOffset = -normalizationMinY;
   return fragments.map((fragment) => ({ ...fragment, y: fragment.y + yOffset }));
 }
 
-function normalizeDecorationItems(items: ResolvedPaintItem[], layoutMinY: number): ResolvedPaintItem[] {
-  if (layoutMinY >= 0) {
+function normalizeDecorationItems(items: ResolvedPaintItem[], normalizationMinY: number): ResolvedPaintItem[] {
+  if (normalizationMinY >= 0) {
     return items;
   }
 
-  const yOffset = -layoutMinY;
+  const yOffset = -normalizationMinY;
   return items.map((item) => shiftResolvedPaintItemY(item, yOffset));
 }
 
@@ -451,6 +507,11 @@ export class HeaderFooterSessionManager {
   // Region tracking
   #headerRegions: Map<number, HeaderFooterRegion> = new Map();
   #footerRegions: Map<number, HeaderFooterRegion> = new Map();
+  #publishedHeaderFooterLayoutSnapshot: HeaderFooterLayoutSnapshot = {
+    pageBindings: [],
+    storyLayouts: { headers: [], footers: [] },
+  };
+  #headerFooterLayoutSnapshotPending = false;
 
   // Session state
   #session: HeaderFooterSession = { mode: 'body' };
@@ -575,8 +636,9 @@ export class HeaderFooterSessionManager {
 
   /** Set header layout results */
   set headerLayoutResults(results: HeaderFooterLayoutResult[] | null) {
+    this.#headerFooterLayoutSnapshotPending = true;
     this.#headerLayoutResults = results;
-    this.#resolvedHeaderLayouts = results ? results.map((result) => resolveResult(result)) : null;
+    this.#resolvedHeaderLayouts = results ? results.map((result) => this.#resolveResult(result)) : null;
   }
 
   /** Footer layout results */
@@ -586,8 +648,9 @@ export class HeaderFooterSessionManager {
 
   /** Set footer layout results */
   set footerLayoutResults(results: HeaderFooterLayoutResult[] | null) {
+    this.#headerFooterLayoutSnapshotPending = true;
     this.#footerLayoutResults = results;
-    this.#resolvedFooterLayouts = results ? results.map((result) => resolveResult(result)) : null;
+    this.#resolvedFooterLayouts = results ? results.map((result) => this.#resolveResult(result)) : null;
   }
 
   /** Header layouts by rId */
@@ -628,6 +691,43 @@ export class HeaderFooterSessionManager {
   /** Footer regions map (pageIndex -> region) */
   get footerRegions(): Map<number, HeaderFooterRegion> {
     return this.#footerRegions;
+  }
+
+  /**
+   * Read-only header/footer story-part layout snapshot.
+   *
+   * Projects the per-page region facts (`#headerRegions` / `#footerRegions`) and
+   * the per-rId raw/resolved layouts (`#headerLayoutsByRId` / `#footerLayoutsByRId`
+   * and their resolved counterparts) into a deterministic, JSON-safe shape: page
+   * bindings sorted by `pageIndex`, story entries sorted by section-aware
+   * `storyKey`, geometry rounded, and explicit `null` instead of `undefined`. No
+   * Maps, DOM nodes, or editor/session instances leak out.
+   *
+   * Pure readback: does not touch the DOM, rerun layout, or mutate session state.
+   * Returns a well-formed but empty snapshot when the document has no
+   * headers/footers.
+   */
+  getHeaderFooterLayoutSnapshot(): HeaderFooterLayoutSnapshot {
+    if (this.#headerFooterLayoutSnapshotPending) {
+      return this.#publishedHeaderFooterLayoutSnapshot;
+    }
+
+    return this.#buildLiveHeaderFooterLayoutSnapshot();
+  }
+
+  #buildLiveHeaderFooterLayoutSnapshot(): HeaderFooterLayoutSnapshot {
+    return buildHeaderFooterLayoutSnapshot({
+      headerRegions: this.#headerRegions,
+      footerRegions: this.#footerRegions,
+      headerLayoutsByRId: this.#headerLayoutsByRId,
+      footerLayoutsByRId: this.#footerLayoutsByRId,
+      headerLayoutResults: this.#headerLayoutResults,
+      footerLayoutResults: this.#footerLayoutResults,
+      resolvedHeaderByRId: this.#resolvedHeaderByRId,
+      resolvedFooterByRId: this.#resolvedFooterByRId,
+      resolvedHeaderLayouts: this.#resolvedHeaderLayouts,
+      resolvedFooterLayouts: this.#resolvedFooterLayouts,
+    });
   }
 
   // ===========================================================================
@@ -696,10 +796,11 @@ export class HeaderFooterSessionManager {
     headerResults: HeaderFooterLayoutResult[] | null,
     footerResults: HeaderFooterLayoutResult[] | null,
   ): void {
+    this.#headerFooterLayoutSnapshotPending = true;
     this.#headerLayoutResults = headerResults;
     this.#footerLayoutResults = footerResults;
-    this.#resolvedHeaderLayouts = headerResults ? headerResults.map((result) => resolveResult(result)) : null;
-    this.#resolvedFooterLayouts = footerResults ? footerResults.map((result) => resolveResult(result)) : null;
+    this.#resolvedHeaderLayouts = headerResults ? headerResults.map((result) => this.#resolveResult(result)) : null;
+    this.#resolvedFooterLayouts = footerResults ? footerResults.map((result) => this.#resolveResult(result)) : null;
   }
 
   /**
@@ -766,11 +867,13 @@ export class HeaderFooterSessionManager {
 
     // Build section first page numbers map
     const sectionFirstPageNumbers = new Map<number, number>();
+    const sectionPageCounts = new Map<number, number>();
     for (const p of resolvedLayout.pages) {
       const idx = p.sectionIndex ?? 0;
       if (!sectionFirstPageNumbers.has(idx)) {
         sectionFirstPageNumbers.set(idx, p.number);
       }
+      sectionPageCounts.set(idx, (sectionPageCounts.get(idx) ?? 0) + 1);
     }
 
     // Resolve section projections to map sectionIndex → sectionId
@@ -783,30 +886,45 @@ export class HeaderFooterSessionManager {
       const actualPageHeight = page.height ?? fallbackPageHeight;
       const sectionIndex = page.sectionIndex ?? 0;
       const sectionId = sectionIdBySectionIndex.get(sectionIndex) ?? `section-${sectionIndex}`;
+      const sectionPageCount = sectionPageCounts.get(sectionIndex) ?? resolvedLayout.pages.length ?? 1;
 
       // Header region
-      const headerPayload = this.#headerDecorationProvider?.(page.number, margins, page);
+      const headerPayload =
+        (this.#headerDecorationProvider?.(page.number, margins, page) as SnapshotAwarePageDecorationPayload | null) ??
+        null;
       const headerBox = this.#computeDecorationBox('header', margins, actualPageHeight);
       const displayPageNumber = page.numberText ?? String(page.number);
+      const displayPageNumberValue = page.displayNumber ?? page.number;
+      const displayPageChapterNumberText = page.pageNumberChapterText;
+      const displayPageChapterSeparator = page.pageNumberChapterSeparator;
 
       this.#headerRegions.set(pageIndex, {
         kind: 'header',
         headerFooterRefId: headerPayload?.headerFooterRefId,
         sectionType:
           headerPayload?.sectionType ?? this.#computeExpectedSectionType('header', page, sectionFirstPageNumbers),
+        matchedVariant: headerPayload?.matchedVariant ?? undefined,
         sectionId,
         sectionIndex,
         pageIndex,
         pageNumber: page.number,
         displayPageNumber,
+        displayPageNumberValue,
+        displayPageChapterNumberText,
+        displayPageChapterSeparator,
+        sectionPageCount,
         localX: headerPayload?.hitRegion?.x ?? headerBox.x,
         localY: headerPayload?.hitRegion?.y ?? headerBox.offset,
         width: headerPayload?.hitRegion?.width ?? headerBox.width,
         height: headerPayload?.hitRegion?.height ?? headerBox.height,
+        contentHeight: headerPayload?.contentHeight,
+        minY: headerPayload?.minY,
       });
 
       // Footer region
-      const footerPayload = this.#footerDecorationProvider?.(page.number, margins, page);
+      const footerPayload =
+        (this.#footerDecorationProvider?.(page.number, margins, page) as SnapshotAwarePageDecorationPayload | null) ??
+        null;
       const footerBoxMargins = this.#stripFootnoteReserveFromBottomMargin(margins, page);
       const footerBox = this.#computeDecorationBox('footer', footerBoxMargins, actualPageHeight);
       this.#footerRegions.set(pageIndex, {
@@ -814,11 +932,16 @@ export class HeaderFooterSessionManager {
         headerFooterRefId: footerPayload?.headerFooterRefId,
         sectionType:
           footerPayload?.sectionType ?? this.#computeExpectedSectionType('footer', page, sectionFirstPageNumbers),
+        matchedVariant: footerPayload?.matchedVariant ?? undefined,
         sectionId,
         sectionIndex,
         pageIndex,
         pageNumber: page.number,
         displayPageNumber,
+        displayPageNumberValue,
+        displayPageChapterNumberText,
+        displayPageChapterSeparator,
+        sectionPageCount,
         localX: footerPayload?.hitRegion?.x ?? footerBox.x,
         localY: footerPayload?.hitRegion?.y ?? footerBox.offset,
         width: footerPayload?.hitRegion?.width ?? footerBox.width,
@@ -1051,7 +1174,12 @@ export class HeaderFooterSessionManager {
         availableWidth: Math.max(1, region.width),
         availableHeight: Math.max(1, region.height),
         currentPageNumber: Math.max(1, region.pageNumber ?? 1),
+        currentPageNumberText: region.displayPageNumber,
+        currentPageDisplayNumber: Math.max(1, region.displayPageNumberValue ?? region.pageNumber ?? 1),
+        currentPageChapterNumberText: region.displayPageChapterNumberText,
+        currentPageChapterSeparator: region.displayPageChapterSeparator,
         totalPageCount: Math.max(1, bodyPageCount),
+        sectionPageCount: Math.max(1, region.sectionPageCount ?? bodyPageCount),
         surfaceKind: region.kind,
       },
     });
@@ -1648,6 +1776,11 @@ export class HeaderFooterSessionManager {
     };
   }
 
+  /** resolveResult, with this document's font signature folded into the paint-reuse versions. */
+  #resolveResult(result: HeaderFooterLayoutResult, storyId?: string | null): ResolvedHeaderFooterLayout {
+    return resolveResult(result, storyId, this.#options.getFontSignature?.() ?? '');
+  }
+
   /**
    * Layout per-rId header/footers for multi-section documents.
    */
@@ -1655,20 +1788,31 @@ export class HeaderFooterSessionManager {
     headerFooterInput: HeaderFooterInput,
     layout: Layout,
     sectionMetadata: SectionMetadata[],
+    fontResolver?: FontResolver,
+    hasFace?: HasFace,
+    effectiveSignature?: string,
   ): Promise<void> {
-    await layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata, {
-      headerLayoutsByRId: this.#headerLayoutsByRId,
-      footerLayoutsByRId: this.#footerLayoutsByRId,
-    });
+    await layoutPerRIdHeaderFooters(
+      headerFooterInput,
+      layout,
+      sectionMetadata,
+      {
+        headerLayoutsByRId: this.#headerLayoutsByRId,
+        footerLayoutsByRId: this.#footerLayoutsByRId,
+      },
+      fontResolver,
+      hasFace,
+      effectiveSignature,
+    );
 
     // Rebuild resolved maps aligned 1:1 with the raw rId maps.
     this.#resolvedHeaderByRId.clear();
     for (const [key, result] of this.#headerLayoutsByRId) {
-      this.#resolvedHeaderByRId.set(key, resolveResult(result, storyIdFromHeaderFooterLayoutKey(key)));
+      this.#resolvedHeaderByRId.set(key, this.#resolveResult(result, storyIdFromHeaderFooterLayoutKey(key)));
     }
     this.#resolvedFooterByRId.clear();
     for (const [key, result] of this.#footerLayoutsByRId) {
-      this.#resolvedFooterByRId.set(key, resolveResult(result, storyIdFromHeaderFooterLayoutKey(key)));
+      this.#resolvedFooterByRId.set(key, this.#resolveResult(result, storyIdFromHeaderFooterLayoutKey(key)));
     }
   }
 
@@ -1724,25 +1868,30 @@ export class HeaderFooterSessionManager {
     sectionFirstPageNumbers: Map<number, number>,
   ): string {
     const pageNumber = page.number;
+    const effectivePageNumber = page.effectivePageNumber ?? page.displayNumber ?? pageNumber;
     const sectionIndex = page.sectionIndex ?? 0;
     const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
     const isFirstPageOfSection = firstPageInSection === pageNumber;
 
-    // Check for alternateHeaders in converter
+    // Check for alternateHeaders in converter or the multi-section identifier.
     const converter = (this.#options.editor as EditorWithConverter).converter;
-    const hasAlternateHeaders = converter?.pageStyles?.alternateHeaders === true;
+    const hasAlternateHeaders =
+      this.#multiSectionIdentifier?.alternateHeaders === true || converter?.pageStyles?.alternateHeaders === true;
 
     // Only use 'first' variant when titlePg is enabled (w:titlePg element in OOXML).
     // Without titlePg, even the first page of a section uses 'default'.
     const headerIds = converter?.headerIds as { titlePg?: boolean } | undefined;
     const footerIds = converter?.footerIds as { titlePg?: boolean } | undefined;
-    const titlePgEnabled = headerIds?.titlePg === true || footerIds?.titlePg === true;
+    let titlePgEnabled = headerIds?.titlePg === true || footerIds?.titlePg === true;
+    if (this.#multiSectionIdentifier?.sectionTitlePg?.has(sectionIndex)) {
+      titlePgEnabled = this.#multiSectionIdentifier.sectionTitlePg.get(sectionIndex) === true;
+    }
 
     if (isFirstPageOfSection && titlePgEnabled) {
       return 'first';
     }
     if (hasAlternateHeaders) {
-      return page.number % 2 === 0 ? 'even' : 'odd';
+      return effectivePageNumber % 2 === 0 ? 'even' : 'odd';
     }
     return 'default';
   }
@@ -2237,6 +2386,7 @@ export class HeaderFooterSessionManager {
       pageSize: { w: pageWidth, h: pageHeight },
       pages: activeLayoutResult.layout.pages.map((page: Page) => ({
         number: page.number,
+        displayNumber: page.displayNumber,
         numberText: page.numberText,
         fragments: page.fragments,
       })),
@@ -2301,6 +2451,8 @@ export class HeaderFooterSessionManager {
     this.#headerDecorationProvider = this.createDecorationProvider('header', resolvedLayout);
     this.#footerDecorationProvider = this.createDecorationProvider('footer', resolvedLayout);
     this.rebuildRegions(resolvedLayout);
+    this.#publishedHeaderFooterLayoutSnapshot = this.#buildLiveHeaderFooterLayoutSnapshot();
+    this.#headerFooterLayoutSnapshotPending = false;
   }
 
   private resolveAlignedDecorationItems(
@@ -2322,7 +2474,7 @@ export class HeaderFooterSessionManager {
       );
     }
 
-    const freshResolvedLayout = resolveResult(result, storyId);
+    const freshResolvedLayout = this.#resolveResult(result, storyId);
     const freshPage = freshResolvedLayout.pages.find((page) => page.number === slotPageNumber);
     const freshItems = freshPage?.items;
     if (freshItems && freshItems.length === fragments.length) {
@@ -2369,49 +2521,42 @@ export class HeaderFooterSessionManager {
         sectionFirstPageNumbers.set(idx, p.number);
       }
     }
+    const hasSectionResolution = hasSectionRefsForKind(multiSectionId, kind);
 
     return (pageNumber, pageMargins, page) => {
       const sectionIndex = page?.sectionIndex ?? 0;
+      const effectivePageNumber = page?.effectivePageNumber ?? page?.displayNumber ?? pageNumber;
       const firstPageInSection = sectionFirstPageNumbers.get(sectionIndex);
       const sectionPageNumber =
         typeof firstPageInSection === 'number' ? pageNumber - firstPageInSection + 1 : pageNumber;
-      const headerFooterType = multiSectionId
-        ? getHeaderFooterTypeForSection(pageNumber, sectionIndex, multiSectionId, { kind, sectionPageNumber })
-        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind });
-
-      // Resolve section-specific rId using Word's OOXML inheritance model
-      let sectionRId: string | undefined;
-      if (page?.sectionRefs && kind === 'header') {
-        sectionRId = page.sectionRefs.headerRefs?.[headerFooterType as keyof typeof page.sectionRefs.headerRefs];
-        if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
-          const prevSectionIds = multiSectionId.sectionHeaderIds.get(sectionIndex - 1);
-          sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
-        }
-        const shouldUseDefaultHeaderRef =
-          headerFooterType !== 'default' &&
-          page.sectionRefs.headerRefs?.default &&
-          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
-        if (!sectionRId && shouldUseDefaultHeaderRef) {
-          sectionRId = page.sectionRefs.headerRefs?.default;
-        }
-      } else if (page?.sectionRefs && kind === 'footer') {
-        sectionRId = page.sectionRefs.footerRefs?.[headerFooterType as keyof typeof page.sectionRefs.footerRefs];
-        if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
-          const prevSectionIds = multiSectionId.sectionFooterIds.get(sectionIndex - 1);
-          sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
-        }
-        const shouldUseDefaultFooterRef =
-          headerFooterType !== 'default' &&
-          page.sectionRefs.footerRefs?.default &&
-          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
-        if (!sectionRId && shouldUseDefaultFooterRef) {
-          sectionRId = page.sectionRefs.footerRefs?.default;
-        }
-      }
+      const headerFooterType = hasSectionResolution
+        ? getHeaderFooterTypeForSection(effectivePageNumber, sectionIndex, multiSectionId, {
+            kind,
+            sectionPageNumber,
+            parityPageNumber: effectivePageNumber,
+          })
+        : getHeaderFooterType(pageNumber, legacyIdentifier, { kind, parityPageNumber: effectivePageNumber });
 
       if (!headerFooterType) {
         return null;
       }
+
+      const pageSectionRefs = kind === 'header' ? page?.sectionRefs?.headerRefs : page?.sectionRefs?.footerRefs;
+      const sectionResolvedRef = hasSectionResolution
+        ? resolveEffectiveHeaderFooterRef({
+            sections: multiSectionId.sections,
+            sectionIndex,
+            kind,
+            variant: headerFooterType,
+          })
+        : null;
+      const legacyRefs = kind === 'header' ? legacyIdentifier.headerIds : legacyIdentifier.footerIds;
+      const resolvedRef =
+        refForVariant(pageSectionRefs, headerFooterType) ??
+        sectionResolvedRef ??
+        (!hasSectionResolution ? refForVariant(legacyRefs, headerFooterType) : undefined);
+      const sectionRId = resolvedRef?.refId;
+      const layoutVariantType = resolvedRef?.matchedVariant ?? headerFooterType;
 
       // PRIORITY 1: Try per-rId layout (composite key first for per-section margins, then plain rId)
       const compositeKey = sectionRId ? `${sectionRId}::s${sectionIndex}` : undefined;
@@ -2456,11 +2601,12 @@ export class HeaderFooterSessionManager {
             const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
 
             const layoutMinY = rIdLayout.layout.minY ?? 0;
-            const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
-            const normalizedItems = normalizeDecorationItems(alignedItems, layoutMinY);
+            const normalizationMinY = getDecorationNormalizationMinY(fragments, layoutMinY);
+            const normalizedFragments = normalizeDecorationFragments(fragments, normalizationMinY);
+            const normalizedItems = normalizeDecorationItems(alignedItems, normalizationMinY);
             const isActiveHeaderFooter = this.#isActiveDecoration(kind, sectionRId, pageNumber);
 
-            return {
+            const payload: SnapshotAwarePageDecorationPayload = {
               fragments: normalizedFragments,
               items: normalizedItems,
               height: metrics.containerHeight,
@@ -2474,7 +2620,9 @@ export class HeaderFooterSessionManager {
               minY: layoutMinY,
               box: { x: box.x, y: metrics.offset, width: effectiveWidth, height: metrics.containerHeight },
               hitRegion: { x: box.x, y: metrics.offset, width: effectiveWidth, height: metrics.containerHeight },
+              matchedVariant: layoutVariantType,
             };
+            return payload;
           }
         }
       }
@@ -2484,7 +2632,7 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
-      const variantIndex = results.findIndex((entry) => entry.type === headerFooterType);
+      const variantIndex = results.findIndex((entry) => entry.type === layoutVariantType);
       const variant = variantIndex >= 0 ? results[variantIndex] : undefined;
       if (!variant || !variant.layout?.pages?.length) {
         return null;
@@ -2504,7 +2652,7 @@ export class HeaderFooterSessionManager {
         slotPage.number,
         variant,
         resolvedVariant,
-        `variant '${headerFooterType}' page ${pageNumber}`,
+        `variant '${layoutVariantType}' page ${pageNumber}`,
         finalHeaderId ?? headerFooterType,
       );
       if (!alignedVariantItems) {
@@ -2522,11 +2670,12 @@ export class HeaderFooterSessionManager {
       const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
 
       const layoutMinY = variant.layout.minY ?? 0;
-      const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
-      const normalizedItems = normalizeDecorationItems(alignedVariantItems, layoutMinY);
+      const normalizationMinY = getDecorationNormalizationMinY(fragments, layoutMinY);
+      const normalizedFragments = normalizeDecorationFragments(fragments, normalizationMinY);
+      const normalizedItems = normalizeDecorationItems(alignedVariantItems, normalizationMinY);
       const isActiveHeaderFooter = this.#isActiveDecoration(kind, finalHeaderId, pageNumber);
 
-      return {
+      const payload: SnapshotAwarePageDecorationPayload = {
         fragments: normalizedFragments,
         items: normalizedItems,
         height: metrics.containerHeight,
@@ -2540,7 +2689,9 @@ export class HeaderFooterSessionManager {
         minY: layoutMinY,
         box: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },
         hitRegion: { x: box.x, y: metrics.offset, width: box.width, height: metrics.containerHeight },
+        matchedVariant: layoutVariantType,
       };
+      return payload;
     };
   }
 
@@ -2614,6 +2765,11 @@ export class HeaderFooterSessionManager {
     this.#resolvedFooterLayouts = null;
     this.#resolvedHeaderByRId.clear();
     this.#resolvedFooterByRId.clear();
+    this.#publishedHeaderFooterLayoutSnapshot = {
+      pageBindings: [],
+      storyLayouts: { headers: [], footers: [] },
+    };
+    this.#headerFooterLayoutSnapshotPending = false;
 
     // Clear decoration providers
     this.#headerDecorationProvider = undefined;

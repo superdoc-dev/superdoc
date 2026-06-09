@@ -456,6 +456,38 @@ describe('executeTextInsert: setMarks tri-state directives', () => {
     expect(insertedMarks.find((mark) => mark.type.name === 'bold')?.attrs).toEqual({ value: '0' });
     expect(insertedMarks.find((mark) => mark.type.name === 'underline')?.attrs).toEqual({ underlineType: 'none' });
   });
+
+  it('preserves a shared trackInsert mark for direct inserts strictly inside an open insertion', () => {
+    const { editor, tr } = makeEditor();
+    const trackInsert = createTestMark('trackInsert', { id: 'ins-1', authorEmail: 'alice@example.com' });
+    const textStyle = createTestMark('textStyle', { bold: true });
+
+    (tr as any).getMeta = vi.fn((key: string) => (key === 'skipTrackChanges' ? true : undefined));
+    (tr as any).doc.resolve = vi.fn(() => ({
+      marks: () => [textStyle],
+      nodeBefore: { type: { name: 'text' }, nodeSize: 2, marks: [trackInsert, textStyle] },
+      nodeAfter: { type: { name: 'text' }, nodeSize: 3, marks: [trackInsert, textStyle] },
+      parent: { type: { contentMatch: { matchType: () => ({}) } } },
+    }));
+
+    const target = makeTarget({ op: 'text.insert' as any, absFrom: 3, absTo: 3 }) as any;
+    const step: TextInsertStep = {
+      id: 'insert-direct-track-inherit',
+      op: 'text.insert',
+      where: { by: 'select', select: { type: 'text', pattern: 'x' }, require: 'first' },
+      args: { position: 'before', content: { text: 'MID' } },
+    } as any;
+
+    const outcome = executeTextInsert(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    const insertedNode = tr.insert.mock.calls[0][1];
+    const insertedMarks = insertedNode.marks as Array<{ type: { name: string }; attrs: Record<string, unknown> }>;
+    expect(insertedMarks.map((mark) => mark.type.name)).toEqual(expect.arrayContaining(['textStyle', 'trackInsert']));
+    expect(insertedMarks.find((mark) => mark.type.name === 'trackInsert')?.attrs).toEqual(
+      expect.objectContaining({ id: 'ins-1', authorEmail: 'alice@example.com' }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -37,6 +37,7 @@ export const getTrackChanges = (state, id = null) => {
         if (trackedMarks.includes(mark.type.name)) {
           trackedChanges.push({
             mark,
+            node,
             from: pos,
             to: pos + node.nodeSize,
           });

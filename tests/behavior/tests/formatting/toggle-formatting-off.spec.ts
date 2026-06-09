@@ -46,8 +46,8 @@ test('toggle bold off retains other formatting', async ({ superdoc }) => {
   await superdoc.type('hello italic');
   await superdoc.waitForStable();
 
-  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/active/);
-  await expect(superdoc.page.locator('[data-item="btn-bold"]')).not.toHaveClass(/active/);
+  await expect(superdoc.page.locator('[data-item="btn-italic"]')).toHaveClass(/sd-active/);
+  await expect(superdoc.page.locator('[data-item="btn-bold"]')).not.toHaveClass(/sd-active/);
 
   await superdoc.snapshot('toggle-formatting-off');
 });

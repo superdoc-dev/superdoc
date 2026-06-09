@@ -8,6 +8,9 @@ Repo-level DOCX corpus tooling shared by `tests/visual` and `tests/layout`.
 # Download/sync corpus locally (default: <repo>/test-corpus)
 pnpm corpus:pull
 
+# Download one of the Docx Universe folders shown in the UI
+pnpm corpus:pull -- --filter "Test Docs - Extra Spicy"
+
 # Delete one or more corpus docs from R2, remove their registry entries, and delete local copies
 pnpm corpus:delete -- rendering/sd-1234-example.docx
 pnpm corpus:delete -- basic/advanced-tables.docx layout/advanced-tables.docx
@@ -18,12 +21,15 @@ pnpm corpus:push -- --path rendering/sd-1234-example.docx /path/to/file.docx
 # Skip automatic Word baseline generation/upload for this push
 pnpm corpus:push -- --no-word-baseline --path rendering/sd-1234-example.docx /path/to/file.docx
 
-# Reconcile registry.json in R2 by removing entries for missing object keys
+# Reconcile registry.json in R2 against live .docx keys
 pnpm corpus:update-registry
 ```
 
+`pnpm corpus:pull` is registry-driven by default: it syncs the `.docx` entries exposed by `registry.json` from the Docx Universe corpus bucket.
+Pass `--include-unregistered` when you want to merge in live bucket `.docx` objects that were uploaded without a registry reconciliation yet.
 `pnpm corpus:pull` now tolerates missing keys and prunes stale `registry.json` entries automatically.
 `pnpm corpus:pull` does not remove local files that no longer exist in R2; use `pnpm corpus:delete` when you want the shared corpus and local copy removed together.
+`pnpm corpus:update-registry` performs a full live reconciliation of `registry.json` against bucket `.docx` keys: it removes stale entries and adds bucket docs that were missing from the registry.
 
 ### Worktrees: seeding from the primary repo
 
@@ -55,7 +61,7 @@ CI / explicit credentials can use:
 - `SUPERDOC_CORPUS_R2_ACCESS_KEY_ID`
 - `SUPERDOC_CORPUS_R2_SECRET_ACCESS_KEY`
 
-Corpus bucket is fixed in code to `docx-test-corpus`.
+Corpus bucket is fixed in code to `docx-test-documents` (the Docx Universe corpus shown in the UI).
 
 Backward-compatible env names are also accepted:
 

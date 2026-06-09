@@ -75,13 +75,10 @@ const SDK_PYTHON_PACKAGES = [
   'superdoc-sdk',
 ];
 
-// SDK PyPI publishing is intentionally disabled in release-stable.yml while
-// trusted publisher config and storage limits are fixed. Keep recovery from
-// treating missing PyPI versions as incomplete until that publish path is
-// restored. To re-enable: set this true, uncomment both recovered and primary
-// PyPI publish blocks in release-stable.yml, and run generate:all inside
-// prepareSdkPythonSnapshot before build-python-sdk.mjs.
-const SDK_PYPI_ENABLED = false;
+// SDK PyPI publishing is handled by release-stable.yml through trusted
+// publishing. Keep this enabled so recovery treats missing Python packages as
+// incomplete and hands rebuilt artifacts back to the workflow when needed.
+const SDK_PYPI_ENABLED = true;
 
 // superdoc ships under two npm names: `superdoc` (unscoped) and a
 // `@harbour-enterprises/superdoc` mirror published from the same tarball.
@@ -688,6 +685,7 @@ function resumeMcpPublish(workspaceRoot, distTag, options = {}) {
 }
 
 function prepareSdkPythonSnapshot(workspaceRoot, tag) {
+  runInWorkspace(workspaceRoot, 'pnpm', ['run', 'generate:all']);
   runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'packages/sdk/scripts/build-python-sdk.mjs')]);
   return copySdkPythonArtifacts(workspaceRoot, tag);
 }

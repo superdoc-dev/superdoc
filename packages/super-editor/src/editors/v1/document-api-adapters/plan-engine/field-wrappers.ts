@@ -15,6 +15,7 @@ import type {
   MutationOptions,
   ReceiptFailureCode,
 } from '@superdoc/document-api';
+import { formatPageNumberFieldValue } from '@superdoc/contracts';
 import { buildDiscoveryResult } from '@superdoc/document-api';
 import {
   findAllFields,
@@ -29,6 +30,18 @@ import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { getWordStatistics, resolveDocumentStatFieldValue, resolveMainBodyEditor } from '../helpers/word-statistics.js';
+import { resolveSectionPageCountFieldValue } from '../helpers/section-page-count.js';
+import { parsePageNumberFieldSwitches } from '../../core/super-converter/field-references/shared/page-number-field-switches.js';
+import { getPageNumberFieldFormat } from '../../core/layout-adapter/converters/inline-converters/page-number-field-format.js';
+import {
+  isSeqInstruction,
+  parseSeqInstruction,
+  sequenceFieldAttrsFromParsed,
+} from '../../core/super-converter/field-references/shared/seq-instruction.js';
+import {
+  getSequenceFieldUpdaterConverterContext,
+  updateSequenceFieldsInTransaction,
+} from '../helpers/sequence-field-updater.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -108,7 +121,11 @@ export function fieldsInsertWrapper(
   }
 
   if (fieldType === 'NUMPAGES') {
-    return insertNumPagesField(editor, resolved, options);
+    return insertNumPagesField(editor, input, resolved, options);
+  }
+
+  if (fieldType === 'SECTIONPAGES') {
+    return insertSectionPagesField(editor, input, resolved, options);
   }
 
   return insertRawField(editor, input, resolved, options);
@@ -158,6 +175,7 @@ function insertDocumentStatField(
 
 function insertNumPagesField(
   editor: Editor,
+  input: FieldInsertInput,
   resolved: { from: number },
   options?: MutationOptions,
 ): FieldMutationResult {
@@ -175,10 +193,61 @@ function insertNumPagesField(
     );
   }
 
+  const parsedInstruction = parsePageNumberFieldSwitches(input.instruction, 'NUMPAGES');
+
   const receipt = executeDomainCommand(
     editor,
     (): boolean => {
-      const node = nodeType.create({});
+      const node = nodeType.create(parsedInstruction);
+      const { tr } = editor.state;
+      tr.insert(resolved.from, node);
+      editor.dispatch(tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Insert produced no change.');
+  return fieldSuccess(computeFieldAddress(editor.state.doc, resolved.from));
+}
+
+function insertSectionPagesField(
+  editor: Editor,
+  input: FieldInsertInput,
+  resolved: { from: number },
+  options?: MutationOptions,
+): FieldMutationResult {
+  const nodeType = editor.schema.nodes['section-page-count'];
+  if (!nodeType) {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      'fields.insert: section-page-count node type not in schema.',
+    );
+  }
+
+  const normalizedInstruction = input.instruction.trim().replace(/\s+/g, ' ');
+  const parsedInstruction = parsePageNumberFieldSwitches(normalizedInstruction, 'SECTIONPAGES');
+  const initialAttrs = {
+    instruction: normalizedInstruction,
+    ...(parsedInstruction.pageNumberFormat ? { pageNumberFormat: parsedInstruction.pageNumberFormat } : {}),
+    ...(parsedInstruction.pageNumberZeroPadding != null
+      ? { pageNumberZeroPadding: parsedInstruction.pageNumberZeroPadding }
+      : {}),
+  };
+  const initialValue = resolveSectionPageCountFieldValue(editor, { attrs: initialAttrs }) ?? '';
+
+  const receipt = executeDomainCommand(
+    editor,
+    (): boolean => {
+      const textChild = initialValue ? editor.schema.text(initialValue) : null;
+      const node = nodeType.create(
+        {
+          ...initialAttrs,
+          ...(initialValue ? { resolvedText: initialValue } : {}),
+        },
+        textChild,
+      );
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
       editor.dispatch(tr);
@@ -210,15 +279,35 @@ function insertRawField(
     editor,
     (): boolean => {
       const fieldType = extractFieldType(input.instruction);
-      const node = fieldNodeType.create({
-        instruction: input.instruction,
-        identifier: fieldType,
-        format: 'ARABIC',
-        resolvedNumber: '',
-        sdBlockId: `field-${Date.now()}`,
-      });
+      const isSeq = isSeqInstruction(input.instruction);
+      const parsed = isSeq ? parseSeqInstruction(input.instruction) : null;
+      const node = fieldNodeType.create(
+        parsed
+          ? {
+              instruction: input.instruction,
+              ...sequenceFieldAttrsFromParsed(parsed),
+              resolvedNumber: '',
+              resolvedNumberIsCurrent: false,
+              sdBlockId: `field-${Date.now()}`,
+            }
+          : {
+              instruction: input.instruction,
+              identifier: fieldType,
+              format: 'ARABIC',
+              resolvedNumber: '',
+              sdBlockId: `field-${Date.now()}`,
+            },
+      );
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
+      if (parsed) {
+        updateSequenceFieldsInTransaction({
+          tr,
+          schema: editor.schema,
+          scope: { kind: 'identifier', identifier: parsed.identifier },
+          converterContext: getSequenceFieldUpdaterConverterContext(editor),
+        });
+      }
       editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
@@ -259,6 +348,14 @@ export function fieldsRebuildWrapper(
     return rebuildTotalPageNumber(editor, resolved, address, options);
   }
 
+  if (node.type.name === 'section-page-count') {
+    return rebuildSectionPageCount(editor, resolved, address, options);
+  }
+
+  if (node.type.name === 'sequenceField' && isSeqInstruction((node.attrs?.instruction as string) ?? '')) {
+    return rebuildSequenceFields(editor, address, options);
+  }
+
   // Default: clear resolvedNumber to force re-evaluation (sequence fields, etc.)
   const receipt = executeDomainCommand(
     editor,
@@ -278,6 +375,29 @@ export function fieldsRebuildWrapper(
   );
 
   if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Rebuild produced no change.');
+  return fieldSuccess(address);
+}
+
+function rebuildSequenceFields(editor: Editor, address: FieldAddress, options?: MutationOptions): FieldMutationResult {
+  executeDomainCommand(
+    editor,
+    () => {
+      const { tr } = editor.state;
+      const result = updateSequenceFieldsInTransaction({
+        tr,
+        schema: editor.schema,
+        scope: { kind: 'all' },
+        converterContext: getSequenceFieldUpdaterConverterContext(editor),
+      });
+      if (result.changed) {
+        editor.dispatch(tr);
+        clearIndexCache(editor);
+      }
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
   return fieldSuccess(address);
 }
 
@@ -338,7 +458,10 @@ function rebuildTotalPageNumber(
 
   if (stats.pages == null) return fieldSuccess(address);
 
-  const freshValue = String(stats.pages);
+  const node = editor.state.doc.nodeAt(resolved.pos);
+  if (!node) return fieldFailure('TARGET_NOT_FOUND', 'Node not found.');
+
+  const freshValue = formatPageNumberFieldValue(stats.pages, getPageNumberFieldFormat(node.attrs));
 
   const receipt = executeDomainCommand(
     editor,
@@ -348,6 +471,43 @@ function rebuildTotalPageNumber(
       if (!currentNode) return false;
 
       // Replace the entire node to keep text content and resolvedText in sync.
+      const textChild = freshValue ? editor.schema.text(freshValue) : null;
+      const newNode = currentNode.type.create({ ...currentNode.attrs, resolvedText: freshValue }, textChild);
+      tr.replaceWith(resolved.pos, resolved.pos + currentNode.nodeSize, newNode);
+      editor.dispatch(tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (!receiptApplied(receipt)) return fieldFailure('NO_OP', 'Rebuild produced no change.');
+  return fieldSuccess(address);
+}
+
+/**
+ * Rebuilds a section-page-count field by writing the current section page count
+ * into both resolvedText and the node's text content.
+ */
+function rebuildSectionPageCount(
+  editor: Editor,
+  resolved: { pos: number },
+  address: FieldAddress,
+  options?: MutationOptions,
+): FieldMutationResult {
+  const node = editor.state.doc.nodeAt(resolved.pos);
+  if (!node) return fieldFailure('TARGET_NOT_FOUND', 'Node not found.');
+
+  const freshValue = resolveSectionPageCountFieldValue(editor, node);
+  if (freshValue == null) return fieldSuccess(address);
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const { tr } = editor.state;
+      const currentNode = tr.doc.nodeAt(resolved.pos);
+      if (!currentNode) return false;
+
       const textChild = freshValue ? editor.schema.text(freshValue) : null;
       const newNode = currentNode.type.create({ ...currentNode.attrs, resolvedText: freshValue }, textChild);
       tr.replaceWith(resolved.pos, resolved.pos + currentNode.nodeSize, newNode);

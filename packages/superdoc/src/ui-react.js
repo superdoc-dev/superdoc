@@ -18,4 +18,6 @@ export {
   useSuperDocToolbar,
   useSuperDocCommand,
   useSuperDocDocument,
+  useSuperDocFontOptions,
+  useSuperDocZoom,
 } from '@superdoc/super-editor/ui/react';

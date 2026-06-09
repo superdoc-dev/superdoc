@@ -241,6 +241,9 @@ const LINK_AND_TOC_STYLES = `
   color: inherit !important;
   text-decoration: none !important;
   cursor: default;
+  /* Disable native link drag so our pointer loop can run text-selection. */
+  -webkit-user-drag: none;
+  user-drag: none;
 }
 
 .superdoc-toc-entry .superdoc-link:hover {
@@ -250,6 +253,31 @@ const LINK_AND_TOC_STYLES = `
 /* Override focus styles for TOC links (they're not interactive) */
 .superdoc-toc-entry .superdoc-link:focus-visible {
   outline: none;
+}
+
+/* TOC hover. .toc-group-hover is set by PresentationEditor on every entry
+   sharing a data-toc-id so the whole TOC greys out together. The ::after
+   stripe (height set via --toc-gap-below) fills the paragraph-spacing gap
+   between adjacent entries so the hover reads as one continuous block. */
+.superdoc-toc-entry:hover,
+.superdoc-toc-entry.toc-group-hover {
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
+}
+
+/* Pointer-events stay on (default) so the stripe extends the parent entry's
+   hit-test area through the paragraph-spacing gap. Without this, moving the
+   cursor between two adjacent entries fires mouseout on the upper entry with
+   relatedTarget = the page (not a TOC entry), the coordinator drops the
+   group-hover class, and the grey disappears for a frame before the next
+   entry's mouseover restores it — visible as a flicker. */
+.superdoc-toc-entry.toc-group-hover::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--toc-gap-below, 0px);
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
 }
 
 /* Remove focus outlines from layout engine elements */
@@ -310,8 +338,73 @@ const TRACK_CHANGE_STYLES = `
   background-color: var(--sd-tracked-changes-delete-background-focused, #cb0e4744);
 }
 
+.superdoc-layout .track-overlap-insert-delete-dec.track-insert-dec.track-delete-dec.highlighted {
+  border-top: var(--sd-tracked-changes-insert-border-width, 1px) dashed var(--sd-tracked-changes-insert-border, #00853d);
+  border-bottom: var(--sd-tracked-changes-insert-border-width, 1px) dashed var(--sd-tracked-changes-insert-border, #00853d);
+  background-color: var(--sd-tracked-changes-insert-background, #399c7222);
+  color: var(--sd-tracked-changes-insert-text, currentColor);
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, #cb0e47)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px) !important;
+}
+
+.superdoc-layout .track-overlap-insert-delete-dec.track-insert-dec.track-delete-dec.highlighted.track-change-focused {
+  border-left: none;
+  border-right: none;
+  border-top-style: solid;
+  border-bottom-style: solid;
+  background-color: var(--sd-tracked-changes-insert-background-focused, #399c7244);
+  color: var(--sd-tracked-changes-insert-text, currentColor);
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, #cb0e47)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px) !important;
+}
+
 .superdoc-layout .track-format-dec.highlighted.track-change-focused {
   background-color: var(--sd-tracked-changes-format-background-focused, #ffd70033);
+}
+
+/*
+ * Structural row-level tracked changes (inserted/deleted whole rows).
+ *
+ * The painter renders a row as absolutely-positioned cell <div>s (no <tr>), so
+ * each cell of a tracked row carries the same base class (track-insert-dec /
+ * track-delete-dec) + modifier (highlighted / hidden) as inline runs, plus the
+ * block-context marker class track-row-cell-dec. These rules reuse the same
+ * --sd-tracked-changes-insert-* / --sd-tracked-changes-delete-* CSS variables so
+ * the per-author color flows through identically to the inline path.
+ *
+ * 'hidden' mode collapses the cell (and therefore the row) via the existing
+ * .track-insert-dec.hidden / .track-delete-dec.hidden { display: none } rule
+ * above: an inserted row in 'original' mode and a deleted row in 'final' mode
+ * disappear, matching inline behavior.
+ */
+.superdoc-layout .track-row-cell-dec.track-insert-dec.highlighted {
+  background-color: var(--sd-tracked-changes-insert-background, #399c7222);
+  border-top: var(--sd-tracked-changes-insert-border-width, 2px) solid
+    var(--sd-tracked-changes-insert-border, #00853d);
+  border-bottom: var(--sd-tracked-changes-insert-border-width, 2px) solid
+    var(--sd-tracked-changes-insert-border, #00853d);
+}
+
+.superdoc-layout .track-row-cell-dec.track-delete-dec.highlighted {
+  background-color: var(--sd-tracked-changes-delete-background, #cb0e4722);
+  border-top: var(--sd-tracked-changes-delete-border-width, 2px) solid
+    var(--sd-tracked-changes-delete-border, #cb0e47);
+  border-bottom: var(--sd-tracked-changes-delete-border-width, 2px) solid
+    var(--sd-tracked-changes-delete-border, #cb0e47);
+}
+
+.superdoc-layout .track-row-cell-dec.track-delete-dec.highlighted .superdoc-line {
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, #cb0e47)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px);
 }
 `;
 
@@ -417,7 +510,7 @@ const FORMATTING_MARKS_STYLES = `
  *
  * **Implementation Note:**
  * These styles are injected once per document via ensureSdtContainerStyles() to avoid
- * duplication. The DOM painter applies corresponding classes via applySdtContainerStyling().
+ * duplication. The DOM painter applies corresponding classes via applySdtContainerChrome().
  */
 const SDT_CONTAINER_STYLES = `
 /* Document Section - Block-level container with gray border and hover tooltip */
@@ -497,64 +590,125 @@ const SDT_CONTAINER_STYLES = `
 
 /* Structured Content Block - Blue border container */
 .superdoc-structured-content-block {
-  padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid transparent;
+  background-color: transparent;
   position: relative;
+  z-index: 0;
+  --sd-sdt-chrome-left: 0px;
+  --sd-sdt-chrome-width: 100%;
+  --sd-sdt-chrome-bottom-extension: 0px;
 }
 
-.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
+.superdoc-structured-content-block::before {
+  content: '';
+  position: absolute;
+  left: var(--sd-sdt-chrome-left, 0px);
+  top: 0;
+  bottom: calc(0px - var(--sd-sdt-chrome-bottom-extension, 0px));
+  width: var(--sd-sdt-chrome-width, 100%);
+  border-radius: inherit;
+  background-color: var(--sd-content-controls-block-bg, transparent);
+  box-sizing: border-box;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.superdoc-structured-content-block::after {
+  content: '';
+  position: absolute;
+  left: var(--sd-sdt-chrome-left, 0px);
+  top: 0;
+  bottom: calc(0px - var(--sd-sdt-chrome-bottom-extension, 0px));
+  width: var(--sd-sdt-chrome-width, 100%);
+  border: 1px solid transparent;
+  border-radius: inherit;
+  box-sizing: border-box;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover::before {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
+}
+
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover::after {
   border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 /* Group hover (JavaScript-coordinated via PresentationEditor) */
-.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) {
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode)::before {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
+}
+
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode)::after {
   border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 .superdoc-structured-content-block.ProseMirror-selectednode {
-  border-color: var(--sd-content-controls-block-border, #629be7);
   outline: none;
 }
 
-/* Structured content drag handle/label - positioned above */
-.superdoc-structured-content__label {
+.superdoc-structured-content-block.ProseMirror-selectednode::after {
+  border-color: var(--sd-content-controls-block-border, #629be7);
+}
+
+/* Structured content labels - shared box model; positioning differs by scope. */
+.superdoc-structured-content__label,
+.superdoc-structured-content-inline__label {
   font-size: 11px;
   align-items: center;
   justify-content: center;
-  position: absolute;
-  left: 2px;
-  top: -19px;
-  width: calc(100% - 4px);
-  max-width: 130px;
-  min-width: 0;
   height: 18px;
   padding: 0 4px;
   border: 1px solid var(--sd-content-controls-label-border, #629be7);
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
   background-color: var(--sd-content-controls-label-bg, #629be7ee);
   color: var(--sd-content-controls-label-text, #ffffff);
   box-sizing: border-box;
-  z-index: 10;
   display: none;
   pointer-events: auto;
   cursor: pointer;
   user-select: none;
 }
 
+.superdoc-structured-content__label::before,
+.superdoc-structured-content-inline__label::before {
+  content: '';
+  width: 2px;
+  height: 8px;
+  margin-right: 4px;
+  background:
+    radial-gradient(circle, currentColor 1px, transparent 1px) center 0 / 2px 2px no-repeat,
+    radial-gradient(circle, currentColor 1px, transparent 1px) center 3px / 2px 2px no-repeat,
+    radial-gradient(circle, currentColor 1px, transparent 1px) center 6px / 2px 2px no-repeat;
+  flex: 0 0 auto;
+}
+
+/* Structured content drag handle/label - positioned above */
+.superdoc-structured-content__label {
+  position: absolute;
+  left: calc(var(--sd-sdt-chrome-left, 0px) + 2px);
+  top: -18px;
+  width: max-content;
+  max-width: 130px;
+  min-width: 0;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  white-space: nowrap;
+  z-index: 10;
+}
+
 .superdoc-structured-content__label span {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label,
-.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) .superdoc-structured-content__label {
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label {
   display: inline-flex;
 }
 
@@ -567,27 +721,29 @@ const SDT_CONTAINER_STYLES = `
 /* First fragment of a multi-fragment SDT: top corners, no bottom border */
 .superdoc-structured-content-block[data-sdt-container-start="true"]:not([data-sdt-container-end="true"]) {
   border-radius: 4px 4px 0 0;
+}
+
+.superdoc-structured-content-block[data-sdt-container-start="true"]:not([data-sdt-container-end="true"])::after {
   border-bottom: none;
 }
 
 /* Last fragment of a multi-fragment SDT: bottom corners, no top border */
 .superdoc-structured-content-block[data-sdt-container-end="true"]:not([data-sdt-container-start="true"]) {
   border-radius: 0 0 4px 4px;
+}
+
+.superdoc-structured-content-block[data-sdt-container-end="true"]:not([data-sdt-container-start="true"])::after {
   border-top: none;
 }
 
 /* Middle fragment (neither start nor end): no corners, no top/bottom borders */
 .superdoc-structured-content-block:not([data-sdt-container-start="true"]):not([data-sdt-container-end="true"]) {
   border-radius: 0;
-  border-top: none;
-  border-bottom: none;
 }
 
-/* Collapse double borders between adjacent SDT blocks */
-.superdoc-structured-content-block + .superdoc-structured-content-block {
+.superdoc-structured-content-block:not([data-sdt-container-start="true"]):not([data-sdt-container-end="true"])::after {
   border-top: none;
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
+  border-bottom: none;
 }
 
 /* Structured Content Inline - Inline wrapper with blue border */
@@ -596,11 +752,17 @@ const SDT_CONTAINER_STYLES = `
   box-sizing: border-box;
   border-radius: 4px;
   border: 1px solid transparent;
+  background-color: var(--sd-content-controls-inline-bg, transparent);
   position: relative;
   display: inline;
   font-size: initial;
   line-height: normal;
   z-index: 10;
+}
+
+.superdoc-structured-content-inline[data-contains-inline-image='true']:not([data-appearance='hidden']) {
+  display: inline-block;
+  vertical-align: top;
 }
 
 /* Hover effect for inline structured content */
@@ -614,28 +776,55 @@ const SDT_CONTAINER_STYLES = `
   outline: none;
   background-color: transparent;
 }
-/* Inline structured content label - shown on hover */
+
+.superdoc-structured-content-inline[data-empty='true']:not([data-appearance='hidden']) {
+  border-color: var(--sd-content-controls-inline-border, #629be7);
+}
+
+.superdoc-empty-sdt-placeholder {
+  display: inline-block;
+  line-height: normal;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.superdoc-empty-sdt-placeholder::before {
+  content: attr(data-placeholder-text);
+  color: var(--sd-content-controls-placeholder-text, #a6a6a6);
+}
+
+.superdoc-structured-content-inline.ProseMirror-selectednode .superdoc-empty-sdt-placeholder::before,
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-empty-sdt-placeholder::before {
+  background-color: var(--sd-content-controls-placeholder-selected-bg, Highlight);
+}
+
+.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder,
+.superdoc-structured-content-block[data-appearance='hidden'] .superdoc-empty-block-sdt-placeholder,
+.superdoc-empty-sdt-placeholder[data-appearance='hidden'] {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.superdoc-structured-content-inline[data-appearance='hidden'] .superdoc-empty-inline-sdt-placeholder::before,
+.superdoc-structured-content-block[data-appearance='hidden'] .superdoc-empty-block-sdt-placeholder::before,
+.superdoc-empty-sdt-placeholder[data-appearance='hidden']::before {
+  content: '';
+}
+
+/* Inline structured content label - shown when active */
 .superdoc-structured-content-inline__label {
   position: absolute;
-  bottom: calc(100% + 2px);
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 11px;
-  padding: 0 4px;
-  border: 1px solid var(--sd-content-controls-label-border, #629be7);
-  background-color: var(--sd-content-controls-label-bg, #629be7ee);
-  color: var(--sd-content-controls-label-text, #ffffff);
-  border-radius: 4px;
+  bottom: calc(100% + 1px);
+  inset-inline-start: 2px;
+  transform: none;
+  border-radius: 4px 4px 0 0;
   white-space: nowrap;
   z-index: 100;
-  display: none;
-  pointer-events: auto;
-  cursor: pointer;
-  user-select: none;
 }
 
 .superdoc-structured-content-inline.ProseMirror-selectednode .superdoc-structured-content-inline__label {
-  display: block;
+  display: inline-flex;
 }
 
 .superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover .superdoc-structured-content-inline__label {
@@ -651,6 +840,7 @@ const SDT_CONTAINER_STYLES = `
   padding: 0;
   border: none;
   border-radius: 0;
+  background-color: transparent;
 }
 .superdoc-structured-content-inline[data-appearance='hidden']:hover {
   background-color: transparent;
@@ -659,6 +849,61 @@ const SDT_CONTAINER_STYLES = `
 .superdoc-structured-content-inline[data-appearance='hidden'].ProseMirror-selectednode {
   border-color: transparent;
   background-color: transparent;
+}
+
+/* Global content-control chrome opt-out: preserve SDT wrappers/datasets while
+ * suppressing built-in visual chrome on structured-content controls. Their
+ * label elements are not emitted by renderer/helpers when this class is
+ * present (DOM non-emission). documentSection chrome (e.g. the locked-section
+ * tooltip) is intentionally preserved and not in scope.
+ *
+ * Custom styling surface (SD-3322): instead of fully erasing the look, these
+ * rules read --sd-content-controls-custom-* variables whose defaults reproduce
+ * the empty look (0-width transparent border, no background, no radius/padding).
+ * So chrome:'none' stays visually empty by default, but a consumer can paint
+ * their own field/clause look by setting those variables on the painted wrapper
+ * (target it via data-sdt-* attributes) - no !important, and no need to fight
+ * the .ProseMirror-selectednode / .sdt-group-hover state classes, because the
+ * painter reads the variables across rest, hover, and selected. The border is a
+ * full shorthand (e.g. "1px solid #1355ff"); its default "0 solid transparent"
+ * is identical in layout to no border. It's re-asserted in every state so the
+ * box never shifts (no jitter); only the background changes on hover/selected.
+ * Block controls add a -border-left override for an accent rail. */
+.superdoc-cc-chrome-none .superdoc-structured-content-inline {
+  padding: var(--sd-content-controls-custom-inline-padding, 0);
+  border: var(--sd-content-controls-custom-inline-border, 0 solid transparent);
+  border-radius: var(--sd-content-controls-custom-inline-radius, 0);
+  background: var(--sd-content-controls-custom-inline-bg, none);
+}
+.superdoc-cc-chrome-none .superdoc-structured-content-block {
+  padding: var(--sd-content-controls-custom-block-padding, 0);
+  border: var(--sd-content-controls-custom-block-border, 0 solid transparent);
+  border-left: var(--sd-content-controls-custom-block-border-left, var(--sd-content-controls-custom-block-border, 0 solid transparent));
+  border-radius: var(--sd-content-controls-custom-block-radius, 0);
+  background: var(--sd-content-controls-custom-block-bg, none);
+}
+
+.superdoc-cc-chrome-none .superdoc-structured-content-inline:hover,
+.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-lock-mode]:hover {
+  border: var(--sd-content-controls-custom-inline-border, 0 solid transparent);
+  background: var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none));
+}
+.superdoc-cc-chrome-none .superdoc-structured-content-block:hover,
+.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover,
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover {
+  border: var(--sd-content-controls-custom-block-border, 0 solid transparent);
+  border-left: var(--sd-content-controls-custom-block-border-left, var(--sd-content-controls-custom-block-border, 0 solid transparent));
+  background: var(--sd-content-controls-custom-block-hover-bg, var(--sd-content-controls-custom-block-bg, none));
+}
+
+.superdoc-cc-chrome-none .superdoc-structured-content-inline.ProseMirror-selectednode {
+  border: var(--sd-content-controls-custom-inline-border, 0 solid transparent);
+  background: var(--sd-content-controls-custom-inline-selected-bg, var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none)));
+}
+.superdoc-cc-chrome-none .superdoc-structured-content-block.ProseMirror-selectednode {
+  border: var(--sd-content-controls-custom-block-border, 0 solid transparent);
+  border-left: var(--sd-content-controls-custom-block-border-left, var(--sd-content-controls-custom-block-border, 0 solid transparent));
+  background: var(--sd-content-controls-custom-block-selected-bg, var(--sd-content-controls-custom-block-hover-bg, var(--sd-content-controls-custom-block-bg, none)));
 }
 
 /* Hover highlight for SDT containers.
@@ -678,6 +923,52 @@ const SDT_CONTAINER_STYLES = `
   z-index: 9999999;
 }
 
+.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode) {
+  background-color: transparent;
+}
+
+.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode)::before {
+  background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
+}
+
+/* Chrome opt-out for block SDTs. Main paints block chrome through ::before
+ * (background) and ::after (border) pseudo-elements, which the element-level
+ * .superdoc-cc-chrome-none rules above cannot reach. Suppress the pseudo
+ * chrome directly, including the selected-node border and the lock-hover
+ * ::before background. Declared after every chrome-showing pseudo rule so
+ * source order resolves equal-specificity ties, the same way the
+ * viewing-mode rules below do. */
+.superdoc-cc-chrome-none .superdoc-structured-content-block::before,
+.superdoc-cc-chrome-none .superdoc-structured-content-block:hover::before,
+.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover::before,
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover::before {
+  background: none;
+}
+
+.superdoc-cc-chrome-none .superdoc-structured-content-block::after,
+.superdoc-cc-chrome-none .superdoc-structured-content-block:hover::after,
+.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover::after,
+.superdoc-cc-chrome-none .superdoc-structured-content-block.ProseMirror-selectednode::after {
+  border: none;
+}
+
+/* Chrome opt-out for the lock-hover affordance. The base lock-hover rules above
+ * paint a built-in tint and boost z-index on hovered locked controls; under
+ * chrome:'none' that would override the custom hover background and stack above
+ * host-attached UI. Re-assert the custom hover background (so a locked control
+ * follows --sd-content-controls-custom-*-hover-bg, defaulting to empty - no tint
+ * leaks) and reset the z-index. Mirrors the base lock-hover selectors with the
+ * chrome-none prefix, so the extra class wins over the base rules. Split inline
+ * vs block because each reads its own hover variable. */
+.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode, [data-appearance='hidden']) {
+  background: var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none));
+  z-index: auto;
+}
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode) {
+  background: var(--sd-content-controls-custom-block-hover-bg, var(--sd-content-controls-custom-block-bg, none));
+  z-index: auto;
+}
+
 /* Viewing mode: remove structured content affordances */
 .presentation-editor--viewing .superdoc-structured-content-block,
 .presentation-editor--viewing .superdoc-structured-content-inline {
@@ -689,6 +980,20 @@ const SDT_CONTAINER_STYLES = `
 .presentation-editor--viewing .superdoc-structured-content-block:hover {
   background: none;
   border: none;
+}
+
+.presentation-editor--viewing .superdoc-structured-content-block::after,
+.presentation-editor--viewing .superdoc-structured-content-block:hover::after,
+.presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover::after,
+.presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-group-hover::after {
+  border: none;
+}
+
+.presentation-editor--viewing .superdoc-structured-content-block::before,
+.presentation-editor--viewing .superdoc-structured-content-block:hover::before,
+.presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover::before,
+.presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-group-hover::before {
+  background: none;
 }
 
 .presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover,
@@ -720,6 +1025,14 @@ const SDT_CONTAINER_STYLES = `
     background: none;
     border: none;
     padding: 0;
+  }
+
+  .superdoc-structured-content-block::after {
+    border: none;
+  }
+
+  .superdoc-structured-content-block::before {
+    background: none;
   }
 
   .superdoc-document-section__tooltip,

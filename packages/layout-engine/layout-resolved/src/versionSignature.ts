@@ -18,9 +18,11 @@ import {
   type TableAttrs,
   type TableBlock,
   type TableCellAttrs,
+  type TrackedChangeMeta,
   type TextRun,
   type VectorShapeDrawing,
 } from '@superdoc/contracts';
+import { getFontConfigVersion } from '@superdoc/font-system';
 import { hashParagraphBorders } from './paragraphBorderHash.js';
 import {
   hashCellBorders,
@@ -54,6 +56,32 @@ const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string
   return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
 };
 
+const getTrackedChangeLayers = (run: TextRun): TrackedChangeMeta[] => {
+  if (Array.isArray(run.trackedChanges) && run.trackedChanges.length > 0) {
+    return run.trackedChanges;
+  }
+  return run.trackedChange ? [run.trackedChange] : [];
+};
+
+const trackedChangeVersion = (run: TextRun): string =>
+  getTrackedChangeLayers(run)
+    .map((trackedChange) =>
+      [
+        trackedChange.kind ?? '',
+        trackedChange.id ?? '',
+        trackedChange.storyKey ?? '',
+        trackedChange.overlapParentId ?? '',
+        trackedChange.relationship ?? '',
+        trackedChange.author ?? '',
+        trackedChange.authorEmail ?? '',
+        trackedChange.authorImage ?? '',
+        trackedChange.date ?? '',
+        trackedChange.before ? JSON.stringify(trackedChange.before) : '',
+        trackedChange.after ? JSON.stringify(trackedChange.after) : '',
+      ].join(':'),
+    )
+    .join('|');
+
 // ---------------------------------------------------------------------------
 // Clip path helpers
 // ---------------------------------------------------------------------------
@@ -80,6 +108,62 @@ const resolveBlockClipPath = (block: unknown): string => {
   const record = block as Record<string, unknown>;
   return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
 };
+
+const imageHyperlinkVersion = (hyperlink: ImageBlock['hyperlink'] | undefined): string => {
+  if (!hyperlink) return '';
+  return JSON.stringify([hyperlink.url ?? '', hyperlink.tooltip ?? '']);
+};
+
+const imageLuminanceVersion = (lum: ImageBlock['lum'] | undefined): string => {
+  if (!lum) return '';
+  return [lum.bright ?? '', lum.contrast ?? ''].join(':');
+};
+
+const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
+  [
+    image.src ?? '',
+    image.width ?? '',
+    image.height ?? '',
+    image.alt ?? '',
+    image.title ?? '',
+    image.objectFit ?? '',
+    image.display ?? '',
+    image.gain ?? '',
+    image.blacklevel ?? '',
+    image.grayscale ? 1 : 0,
+    imageLuminanceVersion(image.lum),
+    image.rotation ?? '',
+    image.flipH ? 1 : 0,
+    image.flipV ? 1 : 0,
+    imageHyperlinkVersion(image.hyperlink),
+    resolveBlockClipPath(image),
+  ].join('|');
+
+const renderedInlineImageRunVersion = (image: ImageRun): string =>
+  [
+    'img',
+    image.src ?? '',
+    image.width ?? '',
+    image.height ?? '',
+    image.alt ?? '',
+    image.title ?? '',
+    typeof image.clipPath === 'string' ? image.clipPath.trim() : '',
+    image.distTop ?? '',
+    image.distBottom ?? '',
+    image.distLeft ?? '',
+    image.distRight ?? '',
+    image.verticalAlign ?? '',
+    image.gain ?? '',
+    image.blacklevel ?? '',
+    image.grayscale ? 1 : 0,
+    imageLuminanceVersion(image.lum),
+    image.rotation ?? '',
+    image.flipH ? 1 : 0,
+    image.flipV ? 1 : 0,
+    imageHyperlinkVersion(image.hyperlink),
+    stableSerializeEvidenceValue(image.sdt),
+    stableSerializeEvidenceValue(image.dataAttrs),
+  ].join('|');
 
 // ---------------------------------------------------------------------------
 // List marker validation
@@ -203,9 +287,8 @@ export const resolveFragmentLayoutIdentity = (fragment: Fragment, story?: Layout
  * This version string is used for cache invalidation. When any visual property of the block
  * changes, the version string changes, triggering a DOM rebuild instead of reusing cached elements.
  *
- * Duplicated from painters/dom/src/renderer.ts to allow the resolved layout stage to
- * pre-compute block versions without depending on painter-dom. Keep the two copies in sync
- * until the painter fully migrates to resolved versions.
+ * Kept in layout-resolved so the resolved layout stage can pre-compute block
+ * versions without depending on painter-dom.
  */
 export const deriveBlockVersion = (block: FlowBlock): string => {
   if (block.kind === 'paragraph') {
@@ -216,21 +299,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
     const runsVersion = block.runs
       .map((run) => {
         if (run.kind === 'image') {
-          const imgRun = run as ImageRun;
-          return [
-            'img',
-            imgRun.src,
-            imgRun.width,
-            imgRun.height,
-            imgRun.alt ?? '',
-            imgRun.title ?? '',
-            imgRun.clipPath ?? '',
-            imgRun.distTop ?? '',
-            imgRun.distBottom ?? '',
-            imgRun.distLeft ?? '',
-            imgRun.distRight ?? '',
-            readClipPathValue((imgRun as { clipPath?: unknown }).clipPath),
-          ].join(',');
+          return renderedInlineImageRunVersion(run as ImageRun);
         }
 
         if (run.kind === 'lineBreak') {
@@ -238,7 +307,30 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         }
 
         if (run.kind === 'tab') {
-          return [run.text ?? '', 'tab'].join(',');
+          // Include every input the painter's tab underline depends on so the paint cache is
+          // not reused after a relevant change (SD-3330): underline style/color choose the
+          // mark; fontSize sets its thickness; fontFamily/color feed measured line metrics and
+          // the resolved underline color. The font epoch matters too: a tab's underline offset
+          // is derived from measured line metrics, so when a font loads/changes (resolved family
+          // unchanged, only availability) a tab-only underlined line must repaint - a mixed
+          // text+tab line is already busted by its text run, but a tab-only line has none.
+          // bold/italic matter for the same reason: a tab-only line's metrics now come from the
+          // tab's font via getFontInfoFromRun, which feeds bold/italic into the measured ascent/
+          // descent (buildFontString), so the underline offset and line height depend on them.
+          // Without these a font/style/availability change can leave a stale tab underline until an
+          // unrelated edit forces a rebuild.
+          return [
+            run.text ?? '',
+            'tab',
+            run.underline?.style ?? '',
+            run.underline?.color ?? '',
+            run.fontSize ?? '',
+            run.fontFamily ?? '',
+            (run as { bold?: boolean }).bold ? 1 : 0,
+            (run as { italic?: boolean }).italic ? 1 : 0,
+            getFontConfigVersion(),
+            (run as { color?: string }).color ?? '',
+          ].join(',');
         }
 
         if (run.kind === 'fieldAnnotation') {
@@ -271,9 +363,13 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         }
 
         const textRun = run as TextRun;
+        const trackedVersion = trackedChangeVersion(textRun);
         return [
           textRun.text ?? '',
           textRun.fontFamily,
+          // Font epoch: busts paint reuse when a font loads/changes (the resolved physical
+          // family is the same, only its availability changed - logical family alone can't see it).
+          getFontConfigVersion(),
           textRun.fontSize,
           textRun.bold ? 1 : 0,
           textRun.italic ? 1 : 0,
@@ -286,7 +382,8 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
           textRun.vertAlign ?? '',
           textRun.baselineShift != null ? textRun.baselineShift : '',
           textRun.token ?? '',
-          textRun.trackedChange ? 1 : 0,
+          textRun.pageNumberFieldFormat ? JSON.stringify(textRun.pageNumberFieldFormat) : '',
+          trackedVersion,
           textRun.comments?.length ?? 0,
           // SD-3098: DomPainter reads run.bidi to apply dir + RLM injection; signature must include it.
           textRun.bidi ? JSON.stringify(textRun.bidi) : '',
@@ -329,28 +426,13 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
   if (block.kind === 'image') {
     const imgSdt = (block as ImageBlock).attrs?.sdt;
     const imgSdtVersion = getSdtMetadataVersion(imgSdt);
-    return [
-      block.src ?? '',
-      block.width ?? '',
-      block.height ?? '',
-      block.alt ?? '',
-      block.title ?? '',
-      resolveBlockClipPath(block),
-      imgSdtVersion,
-    ].join('|');
+    return [renderedBlockImageVersion(block), imgSdtVersion].join('|');
   }
 
   if (block.kind === 'drawing') {
     if (block.drawingKind === 'image') {
       const imageLike = block as ImageDrawing;
-      return [
-        'drawing:image',
-        imageLike.src ?? '',
-        imageLike.width ?? '',
-        imageLike.height ?? '',
-        imageLike.alt ?? '',
-        resolveBlockClipPath(imageLike),
-      ].join('|');
+      return ['drawing:image', renderedBlockImageVersion(imageLike)].join('|');
     }
     if (block.drawingKind === 'vectorShape') {
       const vector = block as VectorShapeDrawing;
@@ -461,6 +543,13 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
             }
 
             for (const run of runs) {
+              if (run.kind === 'image') {
+                hash = hashString(hash, renderedInlineImageRunVersion(run as ImageRun));
+                hash = hashNumber(hash, run.pmStart ?? -1);
+                hash = hashNumber(hash, run.pmEnd ?? -1);
+                continue;
+              }
+
               if ('text' in run && typeof run.text === 'string') {
                 hash = hashString(hash, run.text);
               }
@@ -478,10 +567,16 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashString(hash, getRunBooleanProp(run, 'strike') ? '1' : '');
               hash = hashString(hash, getRunStringProp(run, 'vertAlign'));
               hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
+              hash = hashString(hash, getRunStringProp(run, 'token'));
+              const pageNumberFieldFormat = (run as { pageNumberFieldFormat?: unknown }).pageNumberFieldFormat;
+              hash = hashString(hash, pageNumberFieldFormat ? JSON.stringify(pageNumberFieldFormat) : '');
               // SD-3098: include run.bidi so rtl-only changes invalidate the cached block hash.
               const bidi = (run as { bidi?: unknown }).bidi;
               hash = hashString(hash, bidi ? JSON.stringify(bidi) : '');
+              hash = hashString(hash, trackedChangeVersion(run as TextRun));
             }
+          } else if (cellBlock?.kind) {
+            hash = hashString(hash, deriveBlockVersion(cellBlock as FlowBlock));
           }
         }
       }

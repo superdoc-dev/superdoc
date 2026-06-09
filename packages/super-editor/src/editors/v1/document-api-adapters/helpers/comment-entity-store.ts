@@ -1,7 +1,17 @@
 import type { Editor } from '../../core/Editor.js';
-import type { CommentInfo, CommentStatus, TextTarget } from '@superdoc/document-api';
+import type {
+  CommentInfo,
+  CommentStatus,
+  CommentTrackedChangeLink,
+  StoryLocator,
+  TextTarget,
+  TrackChangeType,
+} from '@superdoc/document-api';
+export { buildCommentJsonFromText } from '../../utils/comment-content.js';
+import { buildCommentJsonFromText } from '../../utils/comment-content.js';
 
 const FALLBACK_STORE_KEY = '__documentApiComments';
+const DELETED_COMMENT_SNAPSHOT_KEY = '__documentApiDeletedCommentSnapshots';
 
 export interface CommentEntityRecord {
   commentId?: string;
@@ -19,6 +29,16 @@ export interface CommentEntityRecord {
   creatorEmail?: string;
   creatorImage?: string;
   createdTime?: number;
+  trackedChange?: boolean;
+  trackedChangeParentId?: string | null;
+  trackedChangeType?: TrackChangeType | null;
+  trackedChangeDisplayType?: string | null;
+  trackedChangeStory?: StoryLocator | null;
+  trackedChangeStoryKind?: string | null;
+  trackedChangeStoryLabel?: string | null;
+  trackedChangeAnchorKey?: string | null;
+  trackedChangeText?: string | null;
+  deletedText?: string | null;
   [key: string]: unknown;
 }
 
@@ -32,16 +52,31 @@ type EditorWithCommentStorage = Editor & {
 };
 
 function ensureFallbackStore(editor: EditorWithCommentStorage): CommentEntityRecord[] {
-  if (!editor.storage) {
-    (editor as unknown as Record<string, unknown>).storage = {};
-  }
-  const storage = editor.storage as Record<string, unknown>;
+  const storage = ensureEditorStorage(editor);
 
   if (!Array.isArray(storage[FALLBACK_STORE_KEY])) {
     storage[FALLBACK_STORE_KEY] = [];
   }
 
   return storage[FALLBACK_STORE_KEY] as CommentEntityRecord[];
+}
+
+function ensureEditorStorage(editor: EditorWithCommentStorage): Record<string, unknown> {
+  if (!editor.storage) {
+    (editor as unknown as Record<string, unknown>).storage = {};
+  }
+  return editor.storage as Record<string, unknown>;
+}
+
+function getDeletedCommentSnapshotStore(editor: Editor): Map<string, CommentEntityRecord> {
+  const storage = ensureEditorStorage(editor as EditorWithCommentStorage);
+  const existing = storage[DELETED_COMMENT_SNAPSHOT_KEY];
+  if (existing instanceof Map) {
+    return existing as Map<string, CommentEntityRecord>;
+  }
+  const created = new Map<string, CommentEntityRecord>();
+  storage[DELETED_COMMENT_SNAPSHOT_KEY] = created;
+  return created;
 }
 
 export function getCommentEntityStore(editor: Editor): CommentEntityRecord[] {
@@ -109,19 +144,102 @@ export function removeCommentEntityTree(store: CommentEntityRecord[], commentId:
   return removed;
 }
 
-/**
- * Strips HTML tags from a comment text string using simple regex replacement.
- *
- * This is only intended for normalizing comment content that was already authored
- * within the editor. It is NOT a security sanitizer and must not be used to
- * neutralize untrusted or user-supplied HTML.
- */
-function stripHtmlToText(value: string): string {
-  return value
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+function commentEntityIdentity(entry: CommentEntityRecord | undefined): string | undefined {
+  return toNonEmptyString(entry?.commentId) ?? toNonEmptyString(entry?.importedId);
+}
+
+export function stashRemovedCommentEntities(editor: Editor, removed: ReadonlyArray<CommentEntityRecord>): void {
+  if (removed.length === 0) return;
+  const snapshots = getDeletedCommentSnapshotStore(editor);
+  for (const entry of removed) {
+    const identity = commentEntityIdentity(entry);
+    if (!identity) continue;
+    snapshots.set(identity, { ...entry });
+  }
+}
+
+export function restoreStashedCommentEntityTree(editor: Editor, rootCommentId: string): CommentEntityRecord[] {
+  const snapshots = getDeletedCommentSnapshotStore(editor);
+  const store = getCommentEntityStore(editor);
+  const root = Array.from(snapshots.values()).find(
+    (entry) =>
+      toNonEmptyString(entry.commentId) === rootCommentId || toNonEmptyString(entry.importedId) === rootCommentId,
+  );
+  if (!root) return [];
+
+  const restoreIds = new Set<string>();
+  const rootIdentity = commentEntityIdentity(root);
+  if (!rootIdentity) return [];
+  restoreIds.add(rootIdentity);
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const entry of snapshots.values()) {
+      const identity = commentEntityIdentity(entry);
+      if (!identity || restoreIds.has(identity)) continue;
+      const parentId = toNonEmptyString(entry.parentCommentId);
+      if (!parentId || !restoreIds.has(parentId)) continue;
+      restoreIds.add(identity);
+      changed = true;
+    }
+  }
+
+  const restored: CommentEntityRecord[] = [];
+  for (const identity of restoreIds) {
+    const snapshot = snapshots.get(identity);
+    if (!snapshot) continue;
+    upsertCommentEntity(store, identity, { ...snapshot });
+    snapshots.delete(identity);
+    restored.push(snapshot);
+  }
+
+  return restored;
+}
+
+function isDanglingOpenRootComment(entry: CommentEntityRecord, anchoredIds: ReadonlySet<string>): boolean {
+  const commentId = toNonEmptyString(entry.commentId);
+  const importedId = toNonEmptyString(entry.importedId);
+  if (!commentId) return false;
+  if (toNonEmptyString(entry.parentCommentId)) return false;
+  if (isCommentResolved(entry)) return false;
+  if (entry.trackedChange === true || toNonEmptyString(entry.trackedChangeParentId)) return false;
+  if (anchoredIds.has(commentId)) return false;
+  if (importedId && anchoredIds.has(importedId)) return false;
+  return true;
+}
+
+export function reconcileCommentEntityStoreWithAnchors(
+  editor: Editor,
+  anchoredCommentIds: Iterable<string>,
+): { restored: CommentEntityRecord[]; removed: CommentEntityRecord[] } {
+  const anchoredIds = new Set(
+    Array.from(anchoredCommentIds, (value) => toNonEmptyString(value)).filter((value): value is string => !!value),
+  );
+
+  const restored: CommentEntityRecord[] = [];
+  for (const anchoredId of anchoredIds) {
+    restored.push(...restoreStashedCommentEntityTree(editor, anchoredId));
+  }
+
+  const store = getCommentEntityStore(editor);
+  const removed: CommentEntityRecord[] = [];
+  const prunedRootIds = new Set<string>();
+
+  for (const entry of [...store]) {
+    const commentId = toNonEmptyString(entry.commentId);
+    if (!commentId || prunedRootIds.has(commentId)) continue;
+    if (!isDanglingOpenRootComment(entry, anchoredIds)) continue;
+
+    const removedTree = removeCommentEntityTree(store, commentId);
+    if (!removedTree.length) continue;
+
+    stashRemovedCommentEntities(editor, removedTree);
+    removed.push(...removedTree);
+    prunedRootIds.add(commentId);
+  }
+
+  return { restored, removed };
 }
 
 function collectTextFragments(value: unknown, sink: string[]): void {
@@ -146,6 +264,29 @@ function collectTextFragments(value: unknown, sink: string[]): void {
   if (record.nodes) collectTextFragments(record.nodes, sink);
 }
 
+function hasOwnProperty(record: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function hasCommentBodyPayload(raw: Record<string, unknown>): boolean {
+  return (
+    hasOwnProperty(raw, 'commentText') ||
+    hasOwnProperty(raw, 'text') ||
+    hasOwnProperty(raw, 'commentJSON') ||
+    hasOwnProperty(raw, 'elements')
+  );
+}
+
+function isSyntheticTrackedChangeProjection(raw: Record<string, unknown>): boolean {
+  if (raw.trackedChange !== true) return false;
+
+  // Tracked-change projection rows share the comments Y.Array, but they are
+  // not user-authored comment entities. Linked user comments on tracked
+  // content also carry `trackedChange: true`, so only skip rows that lack any
+  // actual comment body payload or thread metadata.
+  return !hasCommentBodyPayload(raw) && !hasOwnProperty(raw, 'parentCommentId');
+}
+
 export function extractCommentText(entry: CommentEntityRecord): string | undefined {
   if (typeof entry.commentText === 'string') return entry.commentText;
 
@@ -155,27 +296,6 @@ export function extractCommentText(entry: CommentEntityRecord): string | undefin
 
   if (!fragments.length) return undefined;
   return fragments.join('').trim();
-}
-
-export function buildCommentJsonFromText(text: string): unknown[] {
-  const normalized = stripHtmlToText(text);
-
-  return [
-    {
-      type: 'paragraph',
-      content: [
-        {
-          type: 'run',
-          content: [
-            {
-              type: 'text',
-              text: normalized,
-            },
-          ],
-        },
-      ],
-    },
-  ];
 }
 
 export function isCommentResolved(entry: CommentEntityRecord): boolean {
@@ -196,8 +316,9 @@ export function isCommentResolved(entry: CommentEntityRecord): boolean {
  *   - Each entry with a `commentId` is upserted into the store. Existing
  *     entries are merged (collaborator-authored fields override locally
  *     captured ones; missing fields are left alone).
- *   - Entries flagged `trackedChange: true` are skipped — those belong to
- *     the tracked-changes domain, not the comments store.
+ *   - Synthetic tracked-change projection rows are skipped — those belong to
+ *     the tracked-changes domain, not the comments store. Linked user
+ *     comments on tracked content are still synced.
  *   - When `options.previouslySynced` is provided, any id present in the
  *     prior set but absent from the current entries is treated as a remote
  *     deletion and pruned via `removeCommentEntityTree`. Locally-authored
@@ -228,7 +349,7 @@ export function syncCommentEntitiesFromCollaboration(
   const validEntries: Array<Record<string, unknown>> = [];
   for (const raw of entries) {
     if (!raw || typeof raw !== 'object') continue;
-    if (raw.trackedChange === true) continue;
+    if (isSyntheticTrackedChangeProjection(raw)) continue;
     const cid = toNonEmptyString(raw.commentId);
     const iid = toNonEmptyString(raw.importedId);
     if (cid) upstreamIds.add(cid);
@@ -270,6 +391,8 @@ export function syncCommentEntitiesFromCollaboration(
     // Identity fields
     if (typeof raw.importedId === 'string') patch.importedId = raw.importedId;
     if (typeof raw.parentCommentId === 'string') patch.parentCommentId = raw.parentCommentId;
+    if (raw.trackedChangeParentId === null) patch.trackedChangeParentId = null;
+    if (typeof raw.trackedChangeParentId === 'string') patch.trackedChangeParentId = raw.trackedChangeParentId;
     // Body
     const commentText =
       typeof raw.commentText === 'string' ? raw.commentText : typeof raw.text === 'string' ? raw.text : undefined;
@@ -281,6 +404,27 @@ export function syncCommentEntitiesFromCollaboration(
     if (typeof raw.creatorEmail === 'string') patch.creatorEmail = raw.creatorEmail;
     if (typeof raw.creatorImage === 'string') patch.creatorImage = raw.creatorImage;
     if (typeof raw.createdTime === 'number') patch.createdTime = raw.createdTime;
+    // Tracked-change linkage
+    if (typeof raw.trackedChange === 'boolean') patch.trackedChange = raw.trackedChange;
+    const normalizedTrackedChangeType = normalizeTrackedChangeType(raw.trackedChangeType);
+    if (normalizedTrackedChangeType !== undefined) patch.trackedChangeType = normalizedTrackedChangeType;
+    if (raw.trackedChangeType === null) patch.trackedChangeType = null;
+    if (typeof raw.trackedChangeDisplayType === 'string') patch.trackedChangeDisplayType = raw.trackedChangeDisplayType;
+    if (raw.trackedChangeDisplayType === null) patch.trackedChangeDisplayType = null;
+    if (raw.trackedChangeStory === null) patch.trackedChangeStory = null;
+    if (raw.trackedChangeStory && typeof raw.trackedChangeStory === 'object') {
+      patch.trackedChangeStory = raw.trackedChangeStory as StoryLocator;
+    }
+    if (typeof raw.trackedChangeStoryKind === 'string') patch.trackedChangeStoryKind = raw.trackedChangeStoryKind;
+    if (raw.trackedChangeStoryKind === null) patch.trackedChangeStoryKind = null;
+    if (typeof raw.trackedChangeStoryLabel === 'string') patch.trackedChangeStoryLabel = raw.trackedChangeStoryLabel;
+    if (raw.trackedChangeStoryLabel === null) patch.trackedChangeStoryLabel = null;
+    if (typeof raw.trackedChangeAnchorKey === 'string') patch.trackedChangeAnchorKey = raw.trackedChangeAnchorKey;
+    if (raw.trackedChangeAnchorKey === null) patch.trackedChangeAnchorKey = null;
+    if (typeof raw.trackedChangeText === 'string') patch.trackedChangeText = raw.trackedChangeText;
+    if (raw.trackedChangeText === null) patch.trackedChangeText = null;
+    if (typeof raw.deletedText === 'string') patch.deletedText = raw.deletedText;
+    if (raw.deletedText === null) patch.deletedText = null;
     // Status
     if (typeof raw.isInternal === 'boolean') patch.isInternal = raw.isInternal;
     if (typeof raw.isDone === 'boolean') patch.isDone = raw.isDone;
@@ -313,16 +457,64 @@ function toNonEmptyString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function normalizeTrackedChangeType(value: unknown): TrackChangeType | undefined {
+  switch (toNonEmptyString(value)) {
+    case 'insert':
+    case 'trackInsert':
+      return 'insert';
+    case 'delete':
+    case 'trackDelete':
+      return 'delete';
+    case 'replacement':
+    case 'both':
+      return 'replacement';
+    case 'format':
+    case 'trackFormat':
+      return 'format';
+    default:
+      return undefined;
+  }
+}
+
+function normalizeTrackedChangeLink(
+  link: CommentTrackedChangeLink | null | undefined,
+): CommentTrackedChangeLink | null | undefined {
+  if (!link) return link;
+  return {
+    ...link,
+    trackedChangeType: normalizeTrackedChangeType(link.trackedChangeType),
+  };
+}
+
 export function toCommentInfo(
   entry: CommentEntityRecord,
   options: {
     target?: TextTarget;
     status?: CommentStatus;
     anchoredText?: string;
+    trackedChangeLink?: CommentTrackedChangeLink | null;
   } = {},
 ): CommentInfo {
   const resolvedId = typeof entry.commentId === 'string' ? entry.commentId : String(entry.importedId ?? '');
   const status = options.status ?? (isCommentResolved(entry) ? 'resolved' : 'open');
+  const trackedChangeLink =
+    options.trackedChangeLink !== undefined
+      ? normalizeTrackedChangeLink(options.trackedChangeLink)
+      : entry.trackedChange === true ||
+          entry.trackedChangeType != null ||
+          entry.trackedChangeAnchorKey != null ||
+          entry.trackedChangeText != null ||
+          entry.deletedText != null
+        ? {
+            trackedChange: true,
+            trackedChangeType: normalizeTrackedChangeType(entry.trackedChangeType),
+            trackedChangeDisplayType: entry.trackedChangeDisplayType ?? null,
+            trackedChangeStory: entry.trackedChangeStory ?? null,
+            trackedChangeAnchorKey: entry.trackedChangeAnchorKey ?? null,
+            trackedChangeText: entry.trackedChangeText ?? null,
+            deletedText: entry.deletedText ?? null,
+          }
+        : null;
 
   return {
     address: {
@@ -341,5 +533,13 @@ export function toCommentInfo(
     createdTime: typeof entry.createdTime === 'number' ? entry.createdTime : undefined,
     creatorName: typeof entry.creatorName === 'string' ? entry.creatorName : undefined,
     creatorEmail: typeof entry.creatorEmail === 'string' ? entry.creatorEmail : undefined,
+    trackedChange: trackedChangeLink?.trackedChange === true ? true : undefined,
+    trackedChangeType: trackedChangeLink?.trackedChangeType,
+    trackedChangeDisplayType: trackedChangeLink?.trackedChangeDisplayType ?? undefined,
+    trackedChangeStory: trackedChangeLink?.trackedChangeStory ?? undefined,
+    trackedChangeAnchorKey: trackedChangeLink?.trackedChangeAnchorKey ?? undefined,
+    trackedChangeText: trackedChangeLink?.trackedChangeText ?? undefined,
+    deletedText: trackedChangeLink?.deletedText ?? undefined,
+    trackedChangeLink,
   };
 }

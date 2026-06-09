@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { config, translator } from './del-translator.js';
 import { NodeTranslator } from '@translator';
 import { exportSchemaToJson } from '@converter/exporter.js';
+import { createImportTrackingContext } from '@extensions/track-changes/review-model/import-context.js';
 
 // Mock external modules
 vi.mock('@converter/exporter.js', () => ({
@@ -103,6 +104,38 @@ describe('w:del translator', () => {
       expect(attrs.id).toBe('footnote-uuid');
       expect(attrs.sourceId).toBe('123');
     });
+
+    it('flows import tracking context through nested deletion content', () => {
+      const context = createImportTrackingContext({});
+      const childFrames = [];
+      const mockSubNodes = [{ content: [{ type: 'text', text: 'deleted text' }] }];
+      const mockNodeListHandler = {
+        handler: vi.fn((childParams) => {
+          childFrames.push(childParams.importTrackingContext.currentParent());
+          return mockSubNodes;
+        }),
+      };
+
+      const result = config.encode(
+        {
+          nodeListHandler: mockNodeListHandler,
+          extraParams: { node: mockNode },
+          importTrackingContext: context,
+          path: [],
+        },
+        {
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          id: '123',
+          date: '2025-10-09T12:00:00Z',
+        },
+      );
+      const attrs = getMarkAttrs(result);
+
+      expect(childFrames[0]).toMatchObject({ logicalId: '123', side: 'deletion' });
+      expect(context.currentParent()).toBeNull();
+      expect(attrs).toEqual(expect.objectContaining({ id: '123', sourceId: '123' }));
+    });
   });
 
   describe('decode', () => {
@@ -144,6 +177,37 @@ describe('w:del translator', () => {
       expect(result.elements[0].elements[0].name).toBe('w:delText');
     });
 
+    it('renames every <w:t> in a multi-segment run to <w:delText> (newline split)', () => {
+      const mockTrackedMark = {
+        type: 'trackDelete',
+        attrs: {
+          id: '789',
+          sourceId: '',
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          date: '2025-10-09T12:00:00Z',
+        },
+      };
+
+      // The newline export safety net produces one run with interleaved w:t/w:br;
+      // every w:t inside <w:del> must become w:delText, not just the first.
+      exportSchemaToJson.mockReturnValue({
+        name: 'w:r',
+        elements: [
+          { name: 'w:t', elements: [{ text: 'Alpha', type: 'text' }] },
+          { name: 'w:br' },
+          { name: 'w:t', elements: [{ text: 'Beta', type: 'text' }] },
+        ],
+      });
+
+      const node = { type: 'text', text: 'Alpha\nBeta', marks: [mockTrackedMark] };
+      const result = config.decode({ node });
+
+      const run = result.elements[0];
+      expect(run.elements.map((n) => n.name)).toEqual(['w:delText', 'w:br', 'w:delText']);
+      expect(run.elements.some((n) => n.name === 'w:t')).toBe(false);
+    });
+
     it('writes sourceId to w:id for round-trip fidelity', () => {
       const mockTrackedMark = {
         type: 'trackDelete',
@@ -162,6 +226,38 @@ describe('w:del translator', () => {
       const result = config.decode({ node });
 
       expect(result.attributes['w:id']).toBe('456');
+    });
+
+    it('drops deleted content entirely in final-doc export mode', () => {
+      const mockTrackedMark = {
+        type: 'trackDelete',
+        attrs: {
+          id: '123',
+          sourceId: '',
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          date: '2025-10-09T12:00:00Z',
+        },
+      };
+
+      exportSchemaToJson.mockReturnValue({ elements: [{ name: 'w:t', text: 'deleted text' }] });
+
+      const node = {
+        type: 'text',
+        text: 'deleted text',
+        marks: [mockTrackedMark, { type: 'italic', attrs: { value: true } }],
+      };
+
+      const result = config.decode({ node, isFinalDoc: true });
+
+      expect(result).toBeNull();
+      expect(exportSchemaToJson).toHaveBeenCalledWith(
+        expect.objectContaining({
+          node: expect.objectContaining({
+            marks: [{ type: 'italic', attrs: { value: true } }],
+          }),
+        }),
+      );
     });
 
     it('returns null if node is missing or invalid', () => {

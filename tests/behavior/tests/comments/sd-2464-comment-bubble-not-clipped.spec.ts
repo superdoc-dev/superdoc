@@ -26,8 +26,16 @@ test('@behavior SD-2464: last comment bubble is not clipped when many tracked ch
   const placeholders = superdoc.page.locator('.comment-placeholder');
   await expect(placeholders.first()).toBeAttached({ timeout: 10_000 });
 
+  // FloatingComments renders a placeholder for every position but only mounts the
+  // heavy CommentDialog for visible/active/pending IDs (virtualization). With many
+  // tracked changes the last placeholder starts outside the mount window, so its
+  // dialog is not attached yet. Scroll it into view first so the observer mounts it.
+  const lastPlaceholder = placeholders.last();
+  await lastPlaceholder.scrollIntoViewIfNeeded();
+  await superdoc.waitForStable();
+
   // Click the last bubble to activate it (triggers sidebar alignment)
-  const lastDialog = placeholders.last().locator('.comments-dialog');
+  const lastDialog = lastPlaceholder.locator('.comments-dialog');
   await expect(lastDialog).toBeAttached({ timeout: 10_000 });
   await lastDialog.click({ position: { x: 12, y: 12 } });
   await superdoc.waitForStable();

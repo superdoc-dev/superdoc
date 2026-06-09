@@ -101,8 +101,8 @@ describe('permission-helpers', () => {
     expect(mockResolver).toHaveBeenCalledTimes(2);
   });
 
-  it('isTrackedChangeActionAllowed treats missing user email as own change', () => {
-    const mockResolver = vi.fn(({ permission }) => permission === 'RESOLVE_OWN');
+  it('isTrackedChangeActionAllowed treats missing user email as other change', () => {
+    const mockResolver = vi.fn(({ permission }) => permission === 'RESOLVE_OTHER');
     editor.options.permissionResolver = mockResolver;
     editor.options.user = null;
 
@@ -114,12 +114,12 @@ describe('permission-helpers', () => {
 
     expect(result).toBe(true);
     expect(mockResolver).toHaveBeenCalledWith(
-      expect.objectContaining({ permission: 'RESOLVE_OWN', trackedChange: expect.any(Object) }),
+      expect.objectContaining({ permission: 'RESOLVE_OTHER', trackedChange: expect.any(Object) }),
     );
   });
 
-  it('isTrackedChangeActionAllowed treats missing author email as own change', () => {
-    const mockResolver = vi.fn(({ permission }) => permission === 'RESOLVE_OWN');
+  it('isTrackedChangeActionAllowed treats missing author email as other change', () => {
+    const mockResolver = vi.fn(({ permission }) => permission === 'RESOLVE_OTHER');
     editor.options.permissionResolver = mockResolver;
 
     const result = isTrackedChangeActionAllowed({
@@ -130,7 +130,7 @@ describe('permission-helpers', () => {
 
     expect(result).toBe(true);
     expect(mockResolver).toHaveBeenCalledWith(
-      expect.objectContaining({ permission: 'RESOLVE_OWN', trackedChange: expect.any(Object) }),
+      expect.objectContaining({ permission: 'RESOLVE_OTHER', trackedChange: expect.any(Object) }),
     );
   });
 
@@ -151,6 +151,23 @@ describe('permission-helpers', () => {
     );
   });
 
+  it('treats same-email different actor ids as other-user changes', () => {
+    const mockResolver = vi.fn(() => true);
+    editor.options.permissionResolver = mockResolver;
+    editor.options.user = { id: 'owner-id', email: 'shared@example.com' };
+
+    const result = isTrackedChangeActionAllowed({
+      editor,
+      action: 'accept',
+      trackedChanges: [{ id: 'case-match', attrs: { authorId: 'other-id', authorEmail: 'shared@example.com' } }],
+    });
+
+    expect(result).toBe(true);
+    expect(mockResolver).toHaveBeenCalledWith(
+      expect.objectContaining({ permission: 'RESOLVE_OTHER', trackedChange: expect.any(Object) }),
+    );
+  });
+
   it('isTrackedChangeActionAllowed short-circuits when any resolver call denies access', () => {
     const mockResolver = vi.fn(({ permission }) => permission !== 'REJECT_OTHER');
     editor.options.permissionResolver = mockResolver;
@@ -166,5 +183,57 @@ describe('permission-helpers', () => {
 
     expect(result).toBe(false);
     expect(mockResolver).toHaveBeenCalledTimes(2);
+  });
+
+  describe('overlap ownership routing', () => {
+    // Phase0-002 "Ownership Model": missing identity on either side must be
+    // treated as different-user under overlap. This is the documented
+    // customer-visible behavior.
+    beforeEach(() => {
+      editor.options.trackedChanges = { ...(editor.options.trackedChanges ?? {}) };
+    });
+
+    it('missing change author email is no longer "own" under overlap', () => {
+      const mockResolver = vi.fn(({ permission }) => permission === 'RESOLVE_OTHER');
+      editor.options.permissionResolver = mockResolver;
+
+      const result = isTrackedChangeActionAllowed({
+        editor,
+        action: 'accept',
+        trackedChanges: [{ id: 'no-author', attrs: { authorEmail: '' } }],
+      });
+
+      expect(result).toBe(true);
+      expect(mockResolver).toHaveBeenCalledWith(expect.objectContaining({ permission: 'RESOLVE_OTHER' }));
+    });
+
+    it('missing current user email is no longer "own" under overlap', () => {
+      const mockResolver = vi.fn(({ permission }) => permission === 'RESOLVE_OTHER');
+      editor.options.permissionResolver = mockResolver;
+      editor.options.user = null;
+
+      const result = isTrackedChangeActionAllowed({
+        editor,
+        action: 'accept',
+        trackedChanges: [{ id: 'x', attrs: { authorEmail: 'someone@example.com' } }],
+      });
+
+      expect(result).toBe(true);
+      expect(mockResolver).toHaveBeenCalledWith(expect.objectContaining({ permission: 'RESOLVE_OTHER' }));
+    });
+
+    it('matching emails remain same-user under overlap', () => {
+      const mockResolver = vi.fn(({ permission }) => permission === 'RESOLVE_OWN');
+      editor.options.permissionResolver = mockResolver;
+
+      const result = isTrackedChangeActionAllowed({
+        editor,
+        action: 'accept',
+        trackedChanges: [{ id: 'same', attrs: { authorEmail: 'owner@example.com' } }],
+      });
+
+      expect(result).toBe(true);
+      expect(mockResolver).toHaveBeenCalledWith(expect.objectContaining({ permission: 'RESOLVE_OWN' }));
+    });
   });
 });

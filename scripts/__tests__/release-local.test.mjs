@@ -449,7 +449,7 @@ test('stable recovery filters prerelease tags so *-next.* never resumes as @late
   );
 });
 
-test('stable recovery ignores PyPI gaps when SDK PyPI publishing is disabled', async () => {
+test('stable recovery tracks PyPI gaps when SDK PyPI publishing is enabled', async () => {
   assert.equal(
     shouldRecoverPackageRelease({
       publishComplete: true,
@@ -481,7 +481,7 @@ test('stable recovery ignores PyPI gaps when SDK PyPI publishing is disabled', a
       tagAtHead: false,
     }),
     true,
-    'npm publish gaps must still trigger recovery while SDK PyPI publishing is disabled',
+    'npm publish gaps must still trigger recovery while SDK PyPI publishing is enabled',
   );
   assert.equal(
     shouldRecoverPackageRelease({
@@ -492,17 +492,21 @@ test('stable recovery ignores PyPI gaps when SDK PyPI publishing is disabled', a
       tagAtHead: false,
     }),
     true,
-    'GitHub release gaps must still trigger recovery while SDK PyPI publishing is disabled',
+    'GitHub release gaps must still trigger recovery while SDK PyPI publishing is enabled',
   );
 
   const content = await readRepoFile('scripts/release-local-stable.mjs');
   assert.ok(
-    content.includes('const SDK_PYPI_ENABLED = false'),
-    'scripts/release-local-stable.mjs: must keep the SDK PyPI disabled state next to the recovery decision',
+    content.includes('const SDK_PYPI_ENABLED = true'),
+    'scripts/release-local-stable.mjs: must keep the SDK PyPI enabled state next to the recovery decision',
   );
   assert.ok(
     /name: 'sdk'[\s\S]*\.\.\.\(SDK_PYPI_ENABLED[\s\S]*pythonPackages: SDK_PYTHON_PACKAGES[\s\S]*preparePythonSnapshot: prepareSdkPythonSnapshot/.test(content),
     'scripts/release-local-stable.mjs: SDK Python tracking and snapshot recovery must move together behind SDK_PYPI_ENABLED',
+  );
+  assert.ok(
+    /function prepareSdkPythonSnapshot[\s\S]*pnpm'[\s\S]*'run'[\s\S]*'generate:all'[\s\S]*build-python-sdk\.mjs/.test(content),
+    'scripts/release-local-stable.mjs: recovered SDK Python snapshots must regenerate artifacts before building wheels',
   );
 });
 

@@ -69,9 +69,17 @@ import type {
   TrackChangesListResult,
   ExtractResult,
 } from './types/index.js';
-import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
+import type {
+  CommentInfo,
+  CommentTarget,
+  CommentsListQuery,
+  CommentsListResult,
+  CommentTrackedChangeLink,
+  TrackedChangeCommentTarget,
+} from './comments/comments.types.js';
 import type {
   CommentsAdapter,
+  CommentsCreateReceipt,
   CommentsApi,
   CommentsCreateInput,
   CommentsPatchInput,
@@ -90,6 +98,7 @@ import { executeFind, type FindAdapter } from './find/find.js';
 import type { SDFindInput, SDFindResult, SDGetInput, SDNodeResult } from './types/sd-envelope.js';
 import type {
   FormatApi,
+  FormatRangeInput,
   FormatInlineAliasApi,
   FormatInlineAliasInput,
   FormatStrikethroughInput,
@@ -105,6 +114,14 @@ import type {
   StylesApplyReceipt,
 } from './styles/index.js';
 import { executeStylesApply } from './styles/index.js';
+import type {
+  TemplatesAdapter,
+  TemplatesApi,
+  TemplatesApplyInput,
+  TemplatesApplyOptions,
+  TemplatesApplyReceipt,
+} from './templates/index.js';
+import { executeTemplatesApply } from './templates/index.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGet, type GetAdapter } from './get/get.js';
@@ -957,6 +974,7 @@ export type {
   FormatInlineAliasInput,
   FormatBoldInput,
   FormatItalicInput,
+  FormatRangeInput,
   FormatUnderlineInput,
   FormatStrikethroughInput,
   StyleApplyInput,
@@ -1019,6 +1037,32 @@ export type {
   StylesApplyReceiptFailure,
   NormalizedStylesApplyOptions,
 } from './styles/index.js';
+export type {
+  TemplatesAdapter,
+  TemplatesApi,
+  TemplatesApplyInput,
+  TemplatesApplyOptions,
+  TemplatesApplyReceipt,
+  TemplatesApplySource,
+  TemplatesApplySourcePath,
+  TemplatesApplySourceBase64,
+  TemplateBodyPolicy,
+  TemplateScope,
+  NormalizedTemplatesApplyOptions,
+  TemplateScopeReport,
+  TemplateSkipReason,
+  TemplateScopeSkip,
+  TemplateUnsupportedItem,
+  TemplateChangeKind,
+  TemplateChangedPart,
+  TemplateIdMapping,
+  TemplateApplyWarning,
+  TemplatesApplySourceInfo,
+  TemplatesApplyReceiptSuccess,
+  TemplatesApplyFailureCode,
+  TemplatesApplyReceiptFailure,
+} from './templates/index.js';
+export { executeTemplatesApply } from './templates/index.js';
 export type { CreateAdapter } from './create/create.js';
 export type {
   TrackChangesAdapter,
@@ -1028,7 +1072,9 @@ export type {
   TrackChangesRejectInput,
   TrackChangesAcceptAllInput,
   TrackChangesRejectAllInput,
+  TrackChangesRangeInput,
   ReviewDecideInput,
+  ReviewDecisionTarget,
 } from './track-changes/track-changes.js';
 export type { BlocksAdapter } from './blocks/blocks.js';
 export type { ImagesAdapter, ImagesApi, CreateImageAdapter } from './images/images.js';
@@ -1417,6 +1463,7 @@ export type {
   SectionPageBorders,
   SectionPageMargins,
   SectionPageNumbering,
+  SectionPageNumberingChapterSeparator,
   SectionPageNumberingFormat,
   SectionPageSetup,
   SectionRangeDomain,
@@ -1443,6 +1490,7 @@ export type {
   SectionsSetVerticalAlignInput,
 } from './sections/sections.types.js';
 export type {
+  CommentsCreateReceipt,
   CommentsCreateInput,
   CommentsPatchInput,
   CommentsDeleteInput,
@@ -1460,7 +1508,14 @@ export type {
   GoToCommentInput,
   SetCommentActiveInput,
 } from './comments/comments.js';
-export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
+export type {
+  CommentInfo,
+  CommentTarget,
+  CommentsListQuery,
+  CommentsListResult,
+  CommentTrackedChangeLink,
+  TrackedChangeCommentTarget,
+} from './comments/comments.types.js';
 export { DocumentApiValidationError } from './errors.js';
 export { textReceiptToSDReceipt, buildStructuralReceipt } from './receipt-bridge.js';
 export type { StructuralReceiptParams } from './receipt-bridge.js';
@@ -1642,9 +1697,19 @@ export interface DocumentApi {
    */
   format: FormatApi & { paragraph: ParagraphFormatApi };
   /**
+   * Legacy root-level alias for inline range formatting.
+   *
+   * Routes to {@link DocumentApi.format.apply}.
+   */
+  formatRange(input: FormatRangeInput, options?: MutationOptions): TextMutationReceipt;
+  /**
    * Stylesheet operations (docDefaults, style definitions, paragraph style references).
    */
   styles: StylesApi & { paragraph: ParagraphStylesApi };
+  /**
+   * Template/substrate operations (apply detected DOCX substrate from a source package).
+   */
+  templates: TemplatesApi;
   /**
    * Tracked-change operations (list, get, decide).
    */
@@ -1804,6 +1869,7 @@ export interface DocumentApiAdapters {
   write: WriteAdapter;
   selectionMutation: SelectionMutationAdapter;
   styles: StylesAdapter;
+  templates: TemplatesAdapter;
   trackChanges: TrackChangesAdapter;
   create: CreateAdapter;
   blocks: BlocksAdapter;
@@ -2018,7 +2084,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       return executeClearContent(adapters.clearContent, input, options);
     },
     comments: {
-      create(input: CommentsCreateInput, options?: RevisionGuardOptions): Receipt {
+      create(input: CommentsCreateInput, options?: RevisionGuardOptions): CommentsCreateReceipt {
         return executeCommentsCreate(adapters.comments, input, options);
       },
       patch(input: CommentsPatchInput, options?: RevisionGuardOptions): Receipt {
@@ -2042,6 +2108,22 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     delete(input: DeleteInput, options?: MutationOptions): TextMutationReceipt {
       return executeDelete(adapters.selectionMutation, input, options);
+    },
+    formatRange(input: FormatRangeInput, options?: MutationOptions): TextMutationReceipt {
+      const raw = input as unknown;
+      if (!raw || typeof raw !== 'object') {
+        return executeStyleApply(adapters.selectionMutation, raw as StyleApplyInput, options);
+      }
+      const { properties, changeMode, dryRun, expectedRevision, ...rest } = raw as FormatRangeInput;
+      const styleInput: StyleApplyInput =
+        typeof rest.ref === 'string'
+          ? { ref: rest.ref, inline: properties, ...(rest.in ? { in: rest.in } : {}) }
+          : { target: rest.target, inline: properties, ...(rest.in ? { in: rest.in } : {}) };
+      return executeStyleApply(adapters.selectionMutation, styleInput, {
+        expectedRevision: expectedRevision ?? options?.expectedRevision,
+        changeMode: changeMode ?? options?.changeMode,
+        dryRun: dryRun ?? options?.dryRun,
+      });
     },
     format: {
       ...inlineAliasApi,
@@ -2125,6 +2207,11 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         clearStyle(input: ParagraphsClearStyleInput, options?: MutationOptions): ParagraphMutationResult {
           return executeParagraphsClearStyle(adapters.paragraphs, input, options);
         },
+      },
+    },
+    templates: {
+      apply(input: TemplatesApplyInput, options?: TemplatesApplyOptions): Promise<TemplatesApplyReceipt> {
+        return executeTemplatesApply(adapters.templates, input, options);
       },
     },
     trackChanges: {

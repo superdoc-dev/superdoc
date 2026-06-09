@@ -179,6 +179,9 @@ export function buildAgentArtifacts(): GeneratedFile[] {
           mutates: operation.metadata.mutates,
           supportsTrackedMode: operation.metadata.supportsTrackedMode,
           supportsDryRun: operation.metadata.supportsDryRun,
+          // SD-3247: async operations resolve a Promise; downstream automation
+          // must await the call instead of inferring sync/async from prose.
+          returnsPromise: operation.metadata.returnsPromise === true,
           requiresPreflightCapabilitiesCheck: operation.metadata.mutates,
           postApplyThrowForbidden: operation.metadata.throws.postApplyForbidden,
           deterministicTargetResolution: operation.metadata.deterministicTargetResolution,

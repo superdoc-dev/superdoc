@@ -1,17 +1,9 @@
 // @ts-check
-import { TrackDeleteMarkName, TrackFormatMarkName, TrackedFormatMarkNames } from '../constants.js';
-import { v4 as uuidv4 } from 'uuid';
+import { TrackDeleteMarkName, TrackedFormatMarkNames } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
-import {
-  hasMatchingMark,
-  markSnapshotMatchesStepMark,
-  upsertMarkSnapshotByType,
-  isTrackFormatNoOp,
-  getTypeName,
-  createMarkSnapshot,
-} from './markSnapshotHelpers.js';
-import { getLiveInlineMarksInRange } from './getLiveInlineMarksInRange.js';
+import { compileTrackedEdit } from '../review-model/overlap-compiler.js';
+import { makeFormatIntent } from '../review-model/edit-intent.js';
 
 /**
  * Add mark step.
@@ -24,10 +16,39 @@ import { getLiveInlineMarksInRange } from './getLiveInlineMarksInRange.js';
  * @param {string} options.date Date.
  */
 export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
-  /** @type {{ formatMark?: import('prosemirror-model').Mark, step?: import('prosemirror-transform').AddMarkStep }} */
-  const meta = {};
-  /** @type {string | null} */
-  let sharedWid = null;
+  if (TrackedFormatMarkNames.includes(step.mark.type.name)) {
+    const intentUser = {
+      name: user?.name || '',
+      email: user?.email || '',
+      image: user?.image || '',
+    };
+    const intent = makeFormatIntent({
+      kind: 'format-apply',
+      from: step.from,
+      to: step.to,
+      mark: step.mark,
+      user: intentUser,
+      date,
+      source: 'native',
+    });
+    const result = compileTrackedEdit({
+      state,
+      tr: newTr,
+      intent,
+    });
+    if (result.ok === true) {
+      if (result.formatMarks?.length) {
+        newTr.setMeta(TrackChangesBasePluginKey, {
+          formatMark: result.formatMarks[0],
+          step,
+        });
+      }
+      newTr.setMeta(CommentsPluginKey, { type: 'force' });
+      return;
+    }
+    // Fail closed for tracked formatting; do not silently apply untracked.
+    return;
+  }
 
   doc.nodesBetween(step.from, step.to, (node, pos) => {
     if (!node.isInline || node.type.name === 'run') {
@@ -38,93 +59,6 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
       return false;
     }
 
-    const rangeFrom = Math.max(step.from, pos);
-    const rangeTo = Math.min(step.to, pos + node.nodeSize);
-
-    /** @type {import('prosemirror-model').Mark[]} */
-    const liveMarks = getLiveInlineMarksInRange({
-      doc: newTr.doc,
-      from: rangeFrom,
-      to: rangeTo,
-    });
-    const existingChangeMark = liveMarks.find((mark) =>
-      [TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name),
-    );
-    const wid = existingChangeMark ? existingChangeMark.attrs.id : (sharedWid ?? (sharedWid = uuidv4()));
     newTr.addMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), step.mark);
-
-    if (TrackedFormatMarkNames.includes(step.mark.type.name) && !hasMatchingMark(liveMarks, step.mark)) {
-      const formatChangeMark = liveMarks.find((mark) => mark.type.name === TrackFormatMarkName);
-
-      /** @type {{ type?: string, attrs?: Record<string, unknown> }[]} */
-      let after = [];
-      /** @type {{ type?: string, attrs?: Record<string, unknown> }[]} */
-      let before = [];
-
-      if (formatChangeMark) {
-        const beforeSnapshots = /** @type {{ type?: string, attrs?: Record<string, unknown> }[]} */ (
-          formatChangeMark.attrs.before || []
-        );
-        const afterSnapshots = /** @type {{ type?: string, attrs?: Record<string, unknown> }[]} */ (
-          formatChangeMark.attrs.after || []
-        );
-        let foundBefore = beforeSnapshots.find((mark) => markSnapshotMatchesStepMark(mark, step.mark, true));
-
-        if (foundBefore) {
-          before = [...beforeSnapshots.filter((mark) => !markSnapshotMatchesStepMark(mark, step.mark, true))];
-          // The step restores the original mark for this type — remove the
-          // corresponding "after" entry since the change has been reverted.
-          after = afterSnapshots.filter((mark) => getTypeName(mark) !== step.mark.type.name);
-        } else {
-          before = [...beforeSnapshots];
-          after = upsertMarkSnapshotByType(afterSnapshots, {
-            type: step.mark.type.name,
-            attrs: step.mark.attrs,
-          });
-        }
-      } else {
-        const existingMarkOfSameType = liveMarks.find(
-          (mark) =>
-            mark.type.name === step.mark.type.name &&
-            ![TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name),
-        );
-        before = existingMarkOfSameType
-          ? [createMarkSnapshot(existingMarkOfSameType.type.name, existingMarkOfSameType.attrs)]
-          : [];
-
-        after = [createMarkSnapshot(step.mark.type.name, step.mark.attrs)];
-      }
-
-      // Check if the format change is effectively a no-op (e.g., reverting
-      // vertAlign to 'baseline' when the original had no vertAlign).
-      if (isTrackFormatNoOp(before, after)) {
-        if (formatChangeMark) {
-          newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), formatChangeMark);
-        }
-        return;
-      }
-
-      if (after.length || before.length) {
-        const newFormatMark = state.schema.marks[TrackFormatMarkName].create({
-          id: wid,
-          sourceId: formatChangeMark?.attrs?.sourceId || '',
-          author: user.name || '',
-          authorEmail: user.email || '',
-          authorImage: user.image || '',
-          date,
-          before,
-          after,
-        });
-        newTr.addMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), newFormatMark);
-
-        meta.formatMark = newFormatMark;
-        meta.step = step;
-
-        newTr.setMeta(TrackChangesBasePluginKey, meta);
-        newTr.setMeta(CommentsPluginKey, { type: 'force' });
-      } else if (formatChangeMark) {
-        newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), formatChangeMark);
-      }
-    }
   });
 };

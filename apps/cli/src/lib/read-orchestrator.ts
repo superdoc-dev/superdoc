@@ -35,6 +35,7 @@ function invokeOperation(
   editor: EditorWithDoc,
   operationId: CliExposedOperationId,
   input: Record<string, unknown>,
+  commandName?: string,
 ): unknown {
   const apiInput = extractInvokeInput(operationId, input);
   const preHook = PRE_INVOKE_HOOKS[operationId];
@@ -47,7 +48,7 @@ function invokeOperation(
       input: transformedInput,
     });
   } catch (error) {
-    throw mapInvokeError(operationId, error);
+    throw mapInvokeError(operationId, error, { commandName });
   }
 
   const postHook = POST_INVOKE_HOOKS[operationId];
@@ -102,13 +103,13 @@ export async function executeReadOperation(request: DocOperationRequest): Promis
   // snapshot sync) from running past a drift failure.
   const envelopeKey = resolveResponseEnvelopeKey(operationId);
   const doc = readOptionalString(input, 'doc');
-  const commandName = deriveCommandName(operationId);
+  const commandName = request.commandName ?? deriveCommandName(operationId);
 
   if (doc) {
     const source = doc === '-' ? 'stdin' : 'path';
     const opened = await openDocument(doc, context.io);
     try {
-      const result = invokeOperation(opened.editor, operationId, input);
+      const result = invokeOperation(opened.editor, operationId, input, commandName);
       const document: DocumentPayload = {
         path: source === 'path' ? doc : undefined,
         source,
@@ -140,7 +141,7 @@ export async function executeReadOperation(request: DocOperationRequest): Promis
       });
 
       try {
-        const result = invokeOperation(opened.editor, operationId, input);
+        const result = invokeOperation(opened.editor, operationId, input, commandName);
 
         // For oneshot collab reads, sync snapshot to keep working.docx current
         const isHostMode = context.executionMode === 'host' && context.sessionPool != null;

@@ -40,6 +40,18 @@ function findFirstTextNode(node) {
   return found;
 }
 
+function findFirstNodeByType(node, typeName) {
+  let found = null;
+  node.descendants((child) => {
+    if (child.type.name === typeName) {
+      found = child;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
 describe('StructuredContentTableCommands', () => {
   let editor;
   let schema;
@@ -890,6 +902,52 @@ describe('StructuredContent ID Validation', () => {
   });
 
   describe('insertStructuredContentBlock', () => {
+    it('preserves preset image content when inserting an sdtLocked block', () => {
+      const signatureSrc = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=';
+
+      const didInsert = editor.commands.insertStructuredContentBlock({
+        attrs: {
+          id: '1299215856',
+          tag: '{"fieldType":"signer"}',
+          alias: 'Signature TEST',
+          lockMode: 'sdtLocked',
+        },
+        json: {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'image',
+              attrs: {
+                src: signatureSrc,
+                alt: 'Signature Example',
+                size: { width: 200, height: 50 },
+                wrap: { type: 'Inline' },
+              },
+            },
+          ],
+        },
+      });
+
+      expect(didInsert).toBe(true);
+
+      const insertedBlock = findFirstNodeByType(editor.state.doc, 'structuredContentBlock');
+      expect(insertedBlock).not.toBeNull();
+      expect(insertedBlock.attrs).toMatchObject({
+        id: '1299215856',
+        alias: 'Signature TEST',
+        lockMode: 'sdtLocked',
+      });
+
+      const insertedImage = findFirstNodeByType(insertedBlock, 'image');
+      expect(insertedImage).not.toBeNull();
+      expect(insertedImage.attrs).toMatchObject({
+        src: expect.stringMatching(/^word\/media\/image-\d+\.svg$/),
+        alt: 'Signature Example',
+        size: { width: 200, height: 50 },
+      });
+      expect(editor.storage.image.media[insertedImage.attrs.src]).toBe(signatureSrc);
+    });
+
     it('accepts valid integer string IDs', () => {
       expect(() => {
         editor.commands.insertStructuredContentBlock({

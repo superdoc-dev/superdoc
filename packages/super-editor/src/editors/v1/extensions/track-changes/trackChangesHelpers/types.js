@@ -34,7 +34,7 @@
  * @typedef {{ node: PmNode; pos: number }} NodePosEntry
  *   The standard `findChildren` / `nodesBetween` result shape.
  *
- * @typedef {{ from: number; to: number; mark: PmMark }} TrackedMarkRange
+ * @typedef {{ from: number; to: number; mark: PmMark; node?: PmNode }} TrackedMarkRange
  *   A live ProseMirror mark located in a `[from, to]` document range.
  *   Used as `findTrackedMarkBetween`'s non-null return and as the
  *   element shape of `getTrackChanges`'s result array.

@@ -10,6 +10,29 @@
 
 import type { ViewportEntityHit } from './types.js';
 
+function parseCommaSeparatedIds(value: string): string[] {
+  return value
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+function getTrackChangeIds(node: { getAttribute(name: string): string | null }): string[] {
+  const trackChangeIds = node.getAttribute('data-track-change-ids');
+  if (trackChangeIds !== null) {
+    const ids = parseCommaSeparatedIds(trackChangeIds);
+    if (ids.length > 0) return ids;
+  }
+
+  const trackChangeId = node.getAttribute('data-track-change-id');
+  return trackChangeId ? [trackChangeId] : [];
+}
+
+function orderTrackChangeIds(ids: string[], preferredTargetId: string | null): string[] {
+  if (!preferredTargetId || !ids.includes(preferredTargetId)) return ids;
+  return [preferredTargetId, ...ids.filter((id) => id !== preferredTargetId)];
+}
+
 /**
  * Read painted entities off `el` and every ancestor up to the document
  * root. Innermost-first ordering: a tracked change inside a comment
@@ -31,8 +54,11 @@ export function collectEntityHitsFromChain(start: Element | null): ViewportEntit
   let el: Element | null = start;
   while (el) {
     const node = el as { getAttribute(name: string): string | null };
-    const trackChangeId = node.getAttribute('data-track-change-id');
-    if (trackChangeId) {
+    const trackChangeIds = orderTrackChangeIds(
+      getTrackChangeIds(node),
+      node.getAttribute('data-track-change-preferred-target-id'),
+    );
+    for (const trackChangeId of trackChangeIds) {
       const key = `trackedChange:${trackChangeId}`;
       if (!seen.has(key)) {
         seen.add(key);

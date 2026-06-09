@@ -2,6 +2,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import { describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import {
+  buildFilteredMetadataXml,
   metadataAttachWrapper,
   metadataGetWrapper,
   metadataListWrapper,
@@ -195,8 +196,20 @@ describe('anchored metadata wrappers', () => {
 
     expect(attached).toMatchObject({ success: true, id: 'meta-1', namespace: 'urn:test:metadata' });
     expect(
-      metadataListWrapper(editor).items.map(({ id, namespace, partName }) => ({ id, namespace, partName })),
-    ).toEqual([{ id: 'meta-1', namespace: 'urn:test:metadata', partName: 'customXml/item1.xml' }]);
+      metadataListWrapper(editor).items.map(({ id, namespace, partName, anchorStatus }) => ({
+        id,
+        namespace,
+        partName,
+        anchorStatus,
+      })),
+    ).toEqual([
+      {
+        id: 'meta-1',
+        namespace: 'urn:test:metadata',
+        partName: 'customXml/item1.xml',
+        anchorStatus: 'orphan',
+      },
+    ]);
     expect(metadataGetWrapper(editor, { id: 'meta-1' })?.payload).toEqual({ label: 'Alpha' });
 
     expect(metadataUpdateWrapper(editor, { id: 'meta-1', payload: { label: 'Beta' } })).toEqual({
@@ -217,6 +230,49 @@ describe('anchored metadata wrappers', () => {
     metadataAttachWrapper(editor, { id: 'b', target: TARGET, namespace: 'urn:b', payload: { n: 2 } });
 
     expect(metadataListWrapper(editor, { namespace: 'urn:b' }).items.map((item) => item.id)).toEqual(['b']);
+  });
+
+  it('marks entries as orphan and supports resolvedOnly filtering', () => {
+    const editor = makeEditor();
+    seedPayload(editor, 'customXml/item1.xml', 'urn:test:metadata', [{ id: 'meta-orphan', json: '{"v":1}' }]);
+
+    const listed = metadataListWrapper(editor);
+    expect(listed.items).toHaveLength(1);
+    expect(listed.items[0]).toMatchObject({ id: 'meta-orphan', anchorStatus: 'orphan' });
+
+    const resolvedOnly = metadataListWrapper(editor, { resolvedOnly: true });
+    expect(resolvedOnly.total).toBe(0);
+    expect(resolvedOnly.items).toEqual([]);
+  });
+
+  it('buildFilteredMetadataXml in final-doc mode removes all anchored-metadata entries', () => {
+    const sdt = createNode('structuredContent', [createNode('text', [], { text: 'Hello' })], {
+      attrs: { id: '100', tag: 'meta-resolved' },
+      isInline: true,
+      isBlock: false,
+      inlineContent: true,
+    });
+    const paragraph = createNode('paragraph', [sdt], {
+      attrs: { sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = makeEditor(doc);
+
+    seedPayload(editor, 'customXml/item1.xml', 'urn:test:metadata', [
+      { id: 'meta-resolved', json: '{"v":1}' },
+      { id: 'meta-orphan', json: '{"v":2}' },
+    ]);
+
+    const filtered = buildFilteredMetadataXml(
+      editor,
+      (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter.convertedXml,
+      { finalDoc: true },
+    );
+    expect(filtered['customXml/item1.xml']).not.toContain('meta-resolved');
+    expect(filtered['customXml/item1.xml']).not.toContain('meta-orphan');
+    expect(filtered['customXml/item1.xml']).toContain('<refs xmlns="urn:test:metadata"></refs>');
   });
 
   it('does not mutate storage during attach dry-run', () => {
@@ -365,6 +421,28 @@ describe('anchored metadata wrappers', () => {
     const doc = createNode('doc', [paragraph], { isBlock: false });
     const editor = makeEditor(doc);
     // Intentionally no seedPayload call — convertedXml stays empty.
+
+    expect(metadataResolveWrapper(editor, { id: 'meta-1' })).toBeNull();
+  });
+
+  it('treats block SDT with matching tag as orphan for list/resolve semantics', () => {
+    const blockSdt = createNode('structuredContentBlock', [createNode('text', [], { text: 'Hello' })], {
+      attrs: { id: '200', tag: 'meta-1' },
+      isInline: false,
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [blockSdt], { isBlock: false });
+    const editor = makeEditor(doc);
+    seedPayload(editor, 'customXml/item1.xml', 'urn:test:metadata', [{ id: 'meta-1', json: '{"label":"Alpha"}' }]);
+
+    const listed = metadataListWrapper(editor);
+    expect(listed.items).toHaveLength(1);
+    expect(listed.items[0]).toMatchObject({ id: 'meta-1', anchorStatus: 'orphan' });
+
+    const resolvedOnly = metadataListWrapper(editor, { resolvedOnly: true });
+    expect(resolvedOnly.total).toBe(0);
+    expect(resolvedOnly.items).toEqual([]);
 
     expect(metadataResolveWrapper(editor, { id: 'meta-1' })).toBeNull();
   });

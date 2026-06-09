@@ -6,6 +6,7 @@ import { translator as wBrNodeTranslator } from './v3/handlers/w/br/br-translato
 import { translator as wHighlightTranslator } from './v3/handlers/w/highlight/highlight-translator.js';
 import { translator as wTabNodeTranslator } from './v3/handlers/w/tab/tab-translator.js';
 import { translator as wNoBreakHyphenNodeTranslator } from './v3/handlers/w/noBreakHyphen/no-break-hyphen-translator.js';
+import { translator as wSmartTagNodeTranslator } from './v3/handlers/w/smartTag/smartTag-translator.js';
 import { translator as wPNodeTranslator } from './v3/handlers/w/p/p-translator.js';
 import { translator as wRNodeTranslator } from './v3/handlers/w/r/r-translator.js';
 import { translator as wTcNodeTranslator } from './v3/handlers/w/tc/tc-translator';
@@ -34,6 +35,7 @@ import { translator as sdIndexTranslator } from '@converter/v3/handlers/sd/index
 import { translator as sdIndexEntryTranslator } from '@converter/v3/handlers/sd/indexEntry';
 import { translator as sdAutoPageNumberTranslator } from '@converter/v3/handlers/sd/autoPageNumber';
 import { translator as sdTotalPageNumberTranslator } from '@converter/v3/handlers/sd/totalPageNumber';
+import { translator as sdSectionPageCountTranslator } from '@converter/v3/handlers/sd/sectionPageCount';
 import { translator as sdDocumentStatFieldTranslator } from '@converter/v3/handlers/sd/documentStatField/documentStatField-translator.js';
 import { translator as pictTranslator } from './v3/handlers/w/pict/pict-translator';
 import { translateVectorShape, translateShapeGroup } from '@converter/v3/handlers/wp/helpers/decode-image-node-helpers';
@@ -218,6 +220,7 @@ export function exportSchemaToJson(params) {
     fieldAnnotation: wSdtNodeTranslator,
     tab: wTabNodeTranslator,
     noBreakHyphen: wNoBreakHyphenNodeTranslator,
+    smartTag: wSmartTagNodeTranslator,
     image: [wDrawingNodeTranslator, pictTranslator],
     hardBreak: wBrNodeTranslator,
     commentRangeStart: wCommentRangeStartTranslator,
@@ -240,6 +243,7 @@ export function exportSchemaToJson(params) {
     documentSection: wSdtNodeTranslator,
     'page-number': sdAutoPageNumberTranslator,
     'total-page-number': sdTotalPageNumberTranslator,
+    'section-page-count': sdSectionPageCountTranslator,
     pageReference: sdPageReferenceTranslator,
     crossReference: sdCrossReferenceTranslator,
     citation: sdCitationTranslator,
@@ -407,6 +411,33 @@ function mergeMcIgnorable(defaultIgnorable = '', originalIgnorable = '') {
   return merged.join(' ');
 }
 
+function normalizeDocumentBackgroundColorForExport(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  const hex = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
+  return hex.toUpperCase();
+}
+
+function translateDocumentBackgroundNode(params) {
+  const background = params?.node?.attrs?.documentBackground;
+  if (!background || typeof background !== 'object') return null;
+
+  if (background.originalXml && typeof background.originalXml === 'object') {
+    return carbonCopy(background.originalXml);
+  }
+
+  const color = normalizeDocumentBackgroundColorForExport(background.color);
+  if (!color) return null;
+
+  return {
+    type: 'element',
+    name: 'w:background',
+    attributes: { 'w:color': color },
+    elements: [],
+  };
+}
+
 /**
  * Translate a document node
  *
@@ -419,6 +450,7 @@ function translateDocumentNode(params) {
     content: params.node.content,
   };
 
+  const translatedBackgroundNode = translateDocumentBackgroundNode(params);
   const translatedBodyNode = exportSchemaToJson({ ...params, node: bodyNode });
 
   // Merge original document attributes with defaults to preserve custom namespaces
@@ -436,7 +468,7 @@ function translateDocumentNode(params) {
 
   const node = {
     name: 'w:document',
-    elements: [translatedBodyNode],
+    elements: translatedBackgroundNode ? [translatedBackgroundNode, translatedBodyNode] : [translatedBodyNode],
     attributes,
   };
 
@@ -696,7 +728,7 @@ export class DocxExporter {
    * };
    * // Returns: ['<w:t>', 'Textcontent', '</w:t>']
    */
-  #generateXml(node) {
+  #generateXml(node, insideDeletion = false) {
     if (!node) return null;
     let { name } = node;
     const { elements, attributes } = node;
@@ -705,7 +737,8 @@ export class DocxExporter {
     // field character runs lose their trackDelete marks (only text content gets marked),
     // so on export the w:del wrapper is absent. Per ECMA-376 §17.16.13, w:delInstrText
     // outside w:del is non-conformant — renaming to w:instrText keeps the field valid.
-    if (name === 'w:delInstrText') {
+    // Inside a surviving w:del wrapper, ECMA-376 expects w:delInstrText to remain intact.
+    if (name === 'w:delInstrText' && !insideDeletion) {
       name = 'w:instrText';
     }
 
@@ -726,8 +759,10 @@ export class DocxExporter {
       return this.#replaceSpecialCharacters(node.text ?? '');
     }
 
+    const nextInsideDeletion = insideDeletion || name === 'w:del';
+
     if (elements) {
-      if (name === 'w:instrText') {
+      if (name === 'w:instrText' || name === 'w:delInstrText') {
         const textContent = (elements || [])
           .map((child) => (typeof child?.text === 'string' ? child.text : ''))
           .join('');
@@ -754,7 +789,7 @@ export class DocxExporter {
       } else {
         if (elements) {
           for (let child of elements) {
-            const newElements = this.#generateXml(child);
+            const newElements = this.#generateXml(child, nextInsideDeletion);
             if (!newElements) {
               continue;
             }

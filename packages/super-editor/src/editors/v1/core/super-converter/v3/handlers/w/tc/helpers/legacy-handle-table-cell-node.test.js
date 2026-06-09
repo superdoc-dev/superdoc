@@ -282,6 +282,61 @@ describe('legacy-handle-table-cell-node', () => {
     expect(row2Cells.every((tc) => tc._vMergeConsumed)).toBe(true);
   });
 
+  it('marks an SDT-wrapped vMerge continuation cell as consumed (SD-3289 / IT-1119)', () => {
+    // Row 1: a normal restart cell.
+    const restartCell = {
+      name: 'w:tc',
+      elements: [
+        { name: 'w:tcPr', elements: [{ name: 'w:vMerge', attributes: { 'w:val': 'restart' } }] },
+        { name: 'w:p' },
+      ],
+    };
+    const row1 = { name: 'w:tr', elements: [restartCell] };
+
+    // Row 2: the continuation cell is wrapped in a cell-level SDT
+    // (ECMA-376 §17.5.2.32). Without the SDT-aware row-cell lookup, the
+    // vMerge pre-pass would skip this cell because it isn't a direct
+    // <w:tc> child of <w:tr>.
+    const continuationCell = {
+      name: 'w:tc',
+      elements: [{ name: 'w:tcPr', elements: [{ name: 'w:vMerge' }] }, { name: 'w:p' }],
+    };
+    const row2 = {
+      name: 'w:tr',
+      elements: [
+        {
+          name: 'w:sdt',
+          elements: [
+            { name: 'w:sdtPr', elements: [{ name: 'w:id', attributes: { 'w:val': '12345' } }] },
+            { name: 'w:sdtContent', elements: [continuationCell] },
+          ],
+        },
+      ],
+    };
+
+    const table = { name: 'w:tbl', elements: [row1, row2] };
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => 'CONTENT') },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: restartCell,
+      table,
+      row: row1,
+      columnIndex: 0,
+      columnWidth: null,
+      allColumnWidths: [90],
+      _referencedStyles: null,
+    });
+
+    expect(out.attrs.rowspan).toBe(2);
+    expect(continuationCell._vMergeConsumed).toBe(true);
+  });
+
   it('blends percentage table shading into a solid background color', () => {
     const cellNode = { name: 'w:tc', elements: [{ name: 'w:p' }] };
     const row = { name: 'w:tr', elements: [cellNode] };

@@ -61,7 +61,7 @@ type ConverterWithConvertedXml = {
   promoteToGuid?: () => string;
 };
 
-type MetadataEntry = AnchoredMetadataInfo;
+type MetadataEntry = Omit<AnchoredMetadataInfo, 'anchorStatus'>;
 
 type MetadataPart = {
   namespace: string;
@@ -167,6 +167,20 @@ function listMetadataParts(convertedXml: Record<string, unknown>): MetadataPart[
     .filter((part): part is MetadataPart => part !== null);
 }
 
+export function buildFilteredMetadataXml(
+  editor: Editor,
+  convertedXml: Record<string, unknown>,
+  options?: { finalDoc?: boolean },
+): Record<string, string> {
+  const filtered: Record<string, string> = {};
+  const finalDoc = options?.finalDoc === true;
+  for (const part of listMetadataParts(convertedXml)) {
+    const resolvedEntries = finalDoc ? [] : part.entries.filter((entry) => hasAnchor(editor, entry.id));
+    filtered[part.partName] = buildEnvelopeXml(part.namespace, resolvedEntries);
+  }
+  return filtered;
+}
+
 function findPartByNamespace(convertedXml: Record<string, unknown>, namespace: string): MetadataPart | null {
   return listMetadataParts(convertedXml).find((part) => part.namespace === namespace) ?? null;
 }
@@ -225,7 +239,7 @@ function findAnchorsById(editor: Editor, id: string) {
 }
 
 function hasAnchor(editor: Editor, id: string): boolean {
-  return findAllSdtNodes(editor.state.doc).some((sdt) => sdt.node.attrs?.tag === id);
+  return findAnchorsById(editor, id).length > 0;
 }
 
 function wrapRangeInAnchor(editor: Editor, target: SelectionTarget, id: string): boolean {
@@ -387,11 +401,12 @@ function removeEntry(editor: Editor, id: string, dryRun: boolean): boolean {
   return true;
 }
 
-function toSummary(entry: MetadataEntry): AnchoredMetadataSummary {
+function toSummary(entry: MetadataEntry, editor: Editor): AnchoredMetadataSummary {
   return {
     id: entry.id,
     namespace: entry.namespace,
     partName: entry.partName,
+    anchorStatus: hasAnchor(editor, entry.id) ? 'resolved' : 'orphan',
   };
 }
 
@@ -403,12 +418,15 @@ function listEntries(editor: Editor, query?: AnchoredMetadataListInput): Metadat
   if (query?.within !== undefined) {
     entries = entries.filter((entry) => anchorOverlaps(editor, entry.id, query.within as SelectionTarget));
   }
+  if (query?.resolvedOnly) {
+    entries = entries.filter((entry) => hasAnchor(editor, entry.id));
+  }
   return entries;
 }
 
 export function metadataListWrapper(editor: Editor, query?: AnchoredMetadataListInput): AnchoredMetadataListResult {
   const allItems = listEntries(editor, query).map((entry) => {
-    const summary = toSummary(entry);
+    const summary = toSummary(entry, editor);
     return buildDiscoveryItem(
       summary.id,
       buildResolvedHandle(`metadata:${summary.id}`, 'ephemeral', 'ext:anchoredMetadata'),
@@ -430,7 +448,12 @@ export function metadataListWrapper(editor: Editor, query?: AnchoredMetadataList
 }
 
 export function metadataGetWrapper(editor: Editor, input: AnchoredMetadataGetInput): AnchoredMetadataInfo | null {
-  return findEntry(getConvertedXml(editor), input.id);
+  const entry = findEntry(getConvertedXml(editor), input.id);
+  if (!entry) return null;
+  return {
+    ...entry,
+    anchorStatus: hasAnchor(editor, entry.id) ? 'resolved' : 'orphan',
+  };
 }
 
 export function metadataResolveWrapper(

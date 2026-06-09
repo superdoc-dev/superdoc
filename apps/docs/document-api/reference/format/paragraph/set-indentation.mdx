@@ -29,28 +29,28 @@ Returns a ParagraphMutationResult; reports NO_OP if indentation already matches.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `left` | integer | yes |  |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 2 (required: right)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `right` | integer | yes |  |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 3 (required: firstLine)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `firstLine` | integer | yes |  |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 4 (required: hanging)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `hanging` | integer | yes |  |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Example request
 
@@ -72,9 +72,9 @@ Returns a ParagraphMutationResult; reports NO_OP if indentation already matches.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `resolution` | object | yes |  |
-| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 | `success` | `true` | yes | Constant: `true` |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 2 (success=false)
 
@@ -85,7 +85,7 @@ Returns a ParagraphMutationResult; reports NO_OP if indentation already matches.
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `resolution` | object | no |  |
-| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 | `success` | `false` | yes | Constant: `false` |
 
 ### Example response

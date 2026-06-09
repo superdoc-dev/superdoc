@@ -1,7 +1,6 @@
 import type { Editor } from '../../core/Editor.js';
 import { TrackInsertMarkName } from '../../extensions/track-changes/constants.js';
-import { buildTrackedChangeCanonicalIdMap } from './tracked-change-resolver.js';
-import { toNonEmptyString } from './value-utils.js';
+import { buildTrackedChangeCanonicalIdMap, getTrackedChangeMarkAlias } from './tracked-change-resolver.js';
 
 type ReceiptInsert = { kind: 'entity'; entityType: 'trackedChange'; entityId: string };
 
@@ -30,9 +29,9 @@ export function collectTrackInsertRefsInRange(editor: Editor, from: number, to: 
     const marks = node.marks ?? [];
     for (const mark of marks) {
       if (mark.type.name !== TrackInsertMarkName) continue;
-      const id = toNonEmptyString(mark.attrs?.id);
-      if (!id) continue;
-      ids.add(canonicalIdByAlias.get(id) ?? id);
+      const alias = getTrackedChangeMarkAlias(mark);
+      if (!alias) continue;
+      ids.add(canonicalIdByAlias.get(alias) ?? alias);
     }
   });
 

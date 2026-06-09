@@ -2,6 +2,7 @@
 import { Plugin, PluginKey, Selection, TextSelection } from 'prosemirror-state';
 import { CellSelection, TableMap } from 'prosemirror-tables';
 import { getTableVisualDirection } from '@superdoc/contracts';
+import { findFirstTextPosInNode, findLastTextPosInNode } from '@core/commands/helpers/textPositions.js';
 
 const TABLE_CELL_ROLES = new Set(['cell', 'header_cell']);
 
@@ -212,42 +213,6 @@ function isFirstCellInTable(context) {
   if (!context) return false;
   const { rect } = getCellRect(context);
   return rect.left === 0 && rect.top === 0;
-}
-
-/**
- * Finds the first text position inside a node.
- * @param {import('prosemirror-model').Node} node
- * @param {number} nodePos
- * @returns {number | null}
- */
-function findFirstTextPosInNode(node, nodePos) {
-  if (node.isText) return nodePos;
-  for (let index = 0, offset = 0; index < node.childCount; index += 1) {
-    const child = node.child(index);
-    const childPos = nodePos + 1 + offset;
-    const found = findFirstTextPosInNode(child, childPos);
-    if (found != null) return found;
-    offset += child.nodeSize;
-  }
-  return null;
-}
-
-/**
- * Finds the last text position inside a node.
- * @param {import('prosemirror-model').Node} node
- * @param {number} nodePos
- * @returns {number | null}
- */
-function findLastTextPosInNode(node, nodePos) {
-  if (node.isText) return nodePos + (node.text?.length ?? 0);
-  for (let index = node.childCount - 1, offset = node.content.size; index >= 0; index -= 1) {
-    const child = node.child(index);
-    offset -= child.nodeSize;
-    const childPos = nodePos + 1 + offset;
-    const found = findLastTextPosInNode(child, childPos);
-    if (found != null) return found;
-  }
-  return null;
 }
 
 /**

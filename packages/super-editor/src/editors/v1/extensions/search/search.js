@@ -49,11 +49,12 @@ const mapIndexMatchesToDocMatches = ({ searchIndex, indexMatches, doc, positionT
     if (ranges.length === 0) continue;
 
     const matchTexts = ranges.map((r) => doc.textBetween(r.from, r.to));
+    const matchText = typeof indexMatch.text === 'string' ? indexMatch.text : matchTexts.join('');
 
     const match = {
       from: ranges[0].from,
       to: ranges[ranges.length - 1].to,
-      text: matchTexts.join(''),
+      text: matchText,
       id: uuidv4(),
       ranges,
       trackerIds: [],
@@ -577,13 +578,22 @@ export const Search = Extension.create({
           if (dispatch) dispatch(tr);
 
           const presentationEditor = editor.presentationEditor;
+          // SD-3315: per-match navigation uses "scroll only if needed" — an already-visible
+          // match must not be re-centered (the ~50px jump). When the match is off-screen or
+          // partially clipped, scrollToPosition falls back to its normal block:'center' landing.
+          // suppressSelectionSyncScroll makes search nav own the scroll across the find-input
+          // focus-restore cycle: that focus blur fires a selectionUpdate which reverts the editor
+          // selection to its pre-search caret, and selection-sync would otherwise scroll the
+          // viewport to that stale caret — a jump/flash on every navigation. goToFirstMatch keeps
+          // plain centering for the initial jump.
+          const scrollOpts = { block: 'center', ifNeeded: true, suppressSelectionSyncScroll: true };
           // Try sync scroll first — returns true when the page is mounted and in body mode.
-          const scrolled = presentationEditor?.scrollToPosition?.(from, { block: 'center' }) ?? false;
+          const scrolled = presentationEditor?.scrollToPosition?.(from, scrollOpts) ?? false;
 
           if (!scrolled) {
             // Async version handles virtualized (un-mounted) pages; fire-and-forget
             // because it will scroll once the target page mounts.
-            Promise.resolve(presentationEditor?.scrollToPositionAsync?.(from, { block: 'center' })).catch(() => {});
+            Promise.resolve(presentationEditor?.scrollToPositionAsync?.(from, scrollOpts)).catch(() => {});
 
             // DOM fallback for non-presentation contexts or when presentation
             // scroll cannot run (e.g. header/footer mode, no layout).

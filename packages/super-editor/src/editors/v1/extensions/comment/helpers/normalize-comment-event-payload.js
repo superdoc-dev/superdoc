@@ -22,6 +22,10 @@ export const normalizeCommentEventPayload = ({ conversation, editorOptions, fall
     normalized.creatorName = user.name;
   }
 
+  if (!normalized.creatorId && user?.id) {
+    normalized.creatorId = user.id;
+  }
+
   if (!normalized.creatorEmail && user?.email) {
     normalized.creatorEmail = user.email;
   }

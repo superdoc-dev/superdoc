@@ -36,7 +36,7 @@ function skippedSuccessScenario(operationId: CliOperationId) {
   });
 }
 
-type SuccessScenarioFactory = (harness: ConformanceHarness) => Promise<ScenarioInvocation>;
+type ScenarioFactory = (harness: ConformanceHarness) => Promise<ScenarioInvocation>;
 
 function deferredRuntimeScenario(
   operationId: CliOperationId,
@@ -3334,7 +3334,7 @@ export const SUCCESS_SCENARIOS = {
     await harness.openSessionFixture(stateDir, 'doc-history-redo', 'history-redo-session');
     return { stateDir, args: ['history', 'redo', '--session', 'history-redo-session'] };
   },
-} as const satisfies Partial<Record<CliOperationId, SuccessScenarioFactory>>;
+} as const satisfies Partial<Record<CliOperationId, ScenarioFactory>>;
 
 const EXPLICIT_RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
   'doc.toc.markEntry',
@@ -3358,8 +3358,9 @@ const EXPLICIT_RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
 ]);
 
 const CANONICAL_OPERATION_IDS = Object.keys(CLI_OPERATION_COMMAND_KEYS) as CliOperationId[];
+const SUCCESS_SCENARIOS_BY_OPERATION: Partial<Record<CliOperationId, ScenarioFactory>> = SUCCESS_SCENARIOS;
 const AUTO_SKIPPED_OPERATION_IDS = CANONICAL_OPERATION_IDS.filter(
-  (operationId) => SUCCESS_SCENARIOS[operationId] == null,
+  (operationId) => SUCCESS_SCENARIOS_BY_OPERATION[operationId] == null,
 );
 
 const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
@@ -3367,13 +3368,37 @@ const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
   ...AUTO_SKIPPED_OPERATION_IDS,
 ]);
 
+const FAILURE_SCENARIOS: Partial<Record<CliOperationId, ScenarioFactory>> = {
+  'doc.trackChanges.decide': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-trackChanges-decide-missing-id');
+    const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-trackChanges-decide-missing-id');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.trackChanges.decide'),
+        fixture.docPath,
+        '--decision',
+        'accept',
+        '--target-json',
+        JSON.stringify({ id: 'missing-track-change-id' }),
+        '--out',
+        harness.createOutputPath('doc-trackChanges-decide-missing-id-output'),
+      ],
+    };
+  },
+};
+
+const EXPECTED_FAILURE_CODES: Partial<Record<CliOperationId, string[]>> = {
+  'doc.trackChanges.decide': ['TARGET_NOT_FOUND'],
+};
+
 export const OPERATION_SCENARIOS = CANONICAL_OPERATION_IDS.map((operationId) => {
-  const success = SUCCESS_SCENARIOS[operationId] ?? skippedSuccessScenario(operationId);
+  const success = SUCCESS_SCENARIOS_BY_OPERATION[operationId] ?? skippedSuccessScenario(operationId);
   const scenario: OperationScenario = {
     operationId,
     success,
-    failure: genericInvalidArgumentFailure(operationId),
-    expectedFailureCodes: ['INVALID_ARGUMENT', 'MISSING_REQUIRED'],
+    failure: FAILURE_SCENARIOS[operationId] ?? genericInvalidArgumentFailure(operationId),
+    expectedFailureCodes: EXPECTED_FAILURE_CODES[operationId] ?? ['INVALID_ARGUMENT', 'MISSING_REQUIRED'],
     ...(RUNTIME_CONFORMANCE_SKIP.has(operationId) ? { skipRuntimeConformance: true } : {}),
   };
   return scenario;

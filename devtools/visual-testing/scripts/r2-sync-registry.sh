@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-BUCKET="docx-test-corpus"
+BUCKET="docx-test-documents"
 TMP_DIR="$(mktemp -d)"
 REGISTRY_FILE="${TMP_DIR}/registry.json"
 

@@ -150,6 +150,12 @@ export interface MiscellaneousCommands {
    */
   addTotalPageCount: () => boolean;
 
+  /**
+   * Insert section page count at the current position
+   * @note Only works in header/footer contexts
+   */
+  addSectionPageCount: () => boolean;
+
   // ============================================
   // LINKED STYLES COMMANDS
   // ============================================

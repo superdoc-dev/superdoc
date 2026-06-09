@@ -126,6 +126,33 @@ const buildClipPathFromSrcRect = (srcRectAttrs = {}) => {
 };
 
 /**
+ * Fill wrap.attrs distance fields from wp:anchor dist* when the wrap element omits them.
+ * Only merges sides each wp:wrap* element may carry (ECMA-376 CT_WrapSquare / Tight / Through / TopBottom).
+ *
+ * @param {{ type: string, attrs: Record<string, unknown> }} wrap
+ * @param {{ top?: number, right?: number, bottom?: number, left?: number }} padding
+ */
+const mergeAnchorPaddingIntoWrapDistances = (wrap, padding) => {
+  if (!wrap?.attrs || !padding) return;
+  const type = wrap.type;
+  const mergeVertical = type === 'Square' || type === 'TopAndBottom';
+  const mergeHorizontal = type === 'Square' || type === 'Tight' || type === 'Through';
+
+  if (mergeVertical && wrap.attrs.distTop == null && Number.isFinite(padding.top) && padding.top !== 0) {
+    wrap.attrs.distTop = padding.top;
+  }
+  if (mergeVertical && wrap.attrs.distBottom == null && Number.isFinite(padding.bottom) && padding.bottom !== 0) {
+    wrap.attrs.distBottom = padding.bottom;
+  }
+  if (mergeHorizontal && wrap.attrs.distLeft == null && Number.isFinite(padding.left) && padding.left !== 0) {
+    wrap.attrs.distLeft = padding.left;
+  }
+  if (mergeHorizontal && wrap.attrs.distRight == null && Number.isFinite(padding.right) && padding.right !== 0) {
+    wrap.attrs.distRight = padding.right;
+  }
+};
+
+/**
  * Encodes image XML into Editor node.
  *
  * Parses WordprocessingML drawing elements (wp:anchor or wp:inline) and converts them
@@ -261,6 +288,12 @@ export function handleImageNode(node, params, isAnchor) {
       break;
     default:
       break;
+  }
+
+  // OOXML stores wrap distances on wp:anchor (distL/distR/distT/distB); wrap child elements
+  // may omit them. Merge into wrap.attrs for wrap modes that affect text flow.
+  if (wrap.type === 'Square' || wrap.type === 'Tight' || wrap.type === 'Through' || wrap.type === 'TopAndBottom') {
+    mergeAnchorPaddingIntoWrapDistances(wrap, padding);
   }
 
   const docPr = node.elements.find((el) => el.name === 'wp:docPr');
@@ -998,7 +1031,8 @@ const handleChartDrawing = (params, node, graphicData, size, padding, marginOffs
  *   parts: Array<{
  *     text: string,
  *     formatting?: { bold?: boolean, italic?: boolean, color?: string, fontSize?: number, fontFamily?: string },
- *     fieldType?: 'PAGE' | 'NUMPAGES',
+ *     fieldType?: 'PAGE' | 'NUMPAGES' | 'SECTIONPAGES',
+ *     pageNumberFormat?: string,
  *     isLineBreak?: boolean,
  *     isEmptyParagraph?: boolean
  *   }>,
@@ -1017,15 +1051,24 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
   let horizontalAlign = null;
 
   /**
-   * Appends a field part (PAGE or NUMPAGES) to textParts with formatting.
-   * @param {'PAGE' | 'NUMPAGES'} fieldType - The field type
+   * Appends a field part (PAGE, NUMPAGES, or SECTIONPAGES) to textParts with formatting.
+   * @param {'PAGE' | 'NUMPAGES' | 'SECTIONPAGES'} fieldType - The field type
    * @param {Object} node - The field node element
    * @param {Object} paragraphProperties - Resolved paragraph properties
    */
   const appendFieldPart = (fieldType, node, paragraphProperties) => {
     const rPr = node?.elements?.find((el) => el.name === 'w:rPr');
     const formatting = extractRunFormatting(rPr, paragraphProperties, params);
-    textParts.push({ text: '', formatting, fieldType });
+    const cachedText =
+      fieldType === 'SECTIONPAGES'
+        ? (node?.attributes?.resolvedText ?? node?.attributes?.importedCachedText ?? '')
+        : '';
+    textParts.push({
+      text: cachedText,
+      formatting,
+      fieldType,
+      ...(node?.attributes?.pageNumberFormat ? { pageNumberFormat: node.attributes.pageNumberFormat } : {}),
+    });
   };
 
   /**
@@ -1061,6 +1104,9 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
       } else if (el.name === 'sd:totalPageNumber') {
         hasText = true;
         appendFieldPart('NUMPAGES', el, paragraphProperties);
+      } else if (el.name === 'sd:sectionPageCount') {
+        hasText = true;
+        appendFieldPart('SECTIONPAGES', el, paragraphProperties);
       } else if (el.name === 'w:drawing') {
         // SD-2804 / ECMA-376 §20.4.2.38: a textbox can hold body-level
         // content, including runs with inline w:drawing images. Defer to
@@ -1115,6 +1161,10 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
     }
     if (el.name === 'sd:totalPageNumber') {
       appendFieldPart('NUMPAGES', el, paragraphProperties);
+      return true;
+    }
+    if (el.name === 'sd:sectionPageCount') {
+      appendFieldPart('SECTIONPAGES', el, paragraphProperties);
       return true;
     }
     if ((el.name === 'w:hyperlink' || el.name === 'sd:pageReference') && Array.isArray(el.elements)) {

@@ -8,6 +8,8 @@ import { translator as tcTranslator } from '../tc';
 import { translator as tblBordersTranslator } from '../tblBorders';
 import { translator as trPrTranslator } from '../trPr';
 import { advancePastRowSpans, fillPlaceholderColumns, isPlaceholderCell } from './tr-helpers.js';
+import { normalizeRowCellChildren } from './row-cell-children.js';
+import { readRowTrackChange, buildRowTrackChangeElement } from './row-track-change.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:tr';
@@ -48,6 +50,15 @@ const encode = (params, encodedAttrs) => {
       nodes: [tPr],
     });
   }
+
+  // Structural tracked-change revision: <w:ins>/<w:del> inside <w:trPr> marks an
+  // inserted/deleted row. The whitelist-based trPr translator drops these, so read
+  // them here onto a row-level attribute. The enumeration layer groups rows of one
+  // table that share a revision into a single logical structural change.
+  const trackChange = readRowTrackChange(tPr, params);
+  if (trackChange) {
+    encodedAttrs['trackChange'] = trackChange;
+  }
   const gridBeforeRaw = tableRowProperties?.['gridBefore'];
   const safeGridBefore =
     typeof gridBeforeRaw === 'number' && Number.isFinite(gridBeforeRaw) && gridBeforeRaw > 0 ? gridBeforeRaw : 0;
@@ -75,7 +86,7 @@ const encode = (params, encodedAttrs) => {
   const totalColumns = Array.isArray(gridColumnWidths) ? gridColumnWidths.length : 0;
   const pendingRowSpans = Array.isArray(activeRowSpans) ? activeRowSpans.slice() : [];
   while (pendingRowSpans.length < totalColumns) pendingRowSpans.push(0);
-  const cellNodes = row.elements.filter((el) => el.name === 'w:tc');
+  const cellEntries = normalizeRowCellChildren(row);
   const content = [];
   let currentColumnIndex = 0;
 
@@ -98,7 +109,7 @@ const encode = (params, encodedAttrs) => {
   fillUntil(safeGridBefore, 'gridBefore');
   skipOccupiedColumns();
 
-  cellNodes?.forEach((node) => {
+  cellEntries.forEach(({ node, cellSdt }) => {
     skipOccupiedColumns();
 
     const startColumn = currentColumnIndex;
@@ -121,6 +132,13 @@ const encode = (params, encodedAttrs) => {
         columnWidth,
       },
     });
+
+    // Attach cell-level SDT metadata after encode. The `NodeTranslator` wrapper
+    // ignores any second arg to `encode`, so we cannot piggyback `cellSdt` on
+    // the standard `encodedAttrs` channel; the cell loop owns this merge.
+    if (result && cellSdt) {
+      result.attrs = { ...(result.attrs || {}), cellSdt };
+    }
 
     if (result) {
       content.push(result);
@@ -214,6 +232,26 @@ const decode = (params, decodedAttrs) => {
 
   const elements = translateChildNodes(translateParams);
 
+  // Re-wrap cells that were originally imported as cell-level SDT
+  // (ECMA-376 §17.5.2.32, CT_SdtCell). The decoder above emits a plain `<w:tc>`
+  // for each cell; we wrap it back in `<w:sdt><w:sdtContent><w:tc/></w:sdtContent></w:sdt>`
+  // using the preserved `sdtPr` (and `sdtEndPr` if present) on the source cell.
+  // Done here (not inside `tc-translator.decode`) so callers checking
+  // `el.name === 'w:tc'` on the decoder result remain correct.
+  let cellCursor = 0;
+  for (let i = 0; i < elements.length; i += 1) {
+    const exportedEl = elements[i];
+    if (!exportedEl || exportedEl.name !== 'w:tc') continue;
+    const sourceCell = trimmedContent[cellCursor];
+    cellCursor += 1;
+    const cellSdt = sourceCell?.attrs?.cellSdt;
+    if (!cellSdt || cellSdt.scope !== 'cell' || !cellSdt.sdtPr) continue;
+    const sdtChildren = [cellSdt.sdtPr];
+    if (cellSdt.sdtEndPr) sdtChildren.push(cellSdt.sdtEndPr);
+    sdtChildren.push({ name: 'w:sdtContent', elements: [exportedEl] });
+    elements[i] = { name: 'w:sdt', elements: sdtChildren };
+  }
+
   if (node.attrs?.tableRowProperties) {
     const tableRowProperties = { ...node.attrs.tableRowProperties };
     if (leadingPlaceholders > 0) {
@@ -251,11 +289,131 @@ const decode = (params, decodedAttrs) => {
     if (trPr) elements.unshift(trPr);
   }
 
+  // Structural tracked-change revision: reconstruct <w:ins>/<w:del> inside
+  // <w:trPr> from the row's trackChange attr (whole-table insert/delete).
+  // Placed after the base row properties (per the CT_TrPr sequence); creates
+  // the trPr if no other row properties produced one.
+  applyRowTrackChangeOnDecode({ node, elements, params });
+
   return {
     name: 'w:tr',
     attributes: decodedAttrs || {},
     elements,
   };
+};
+
+/**
+ * Emit the `<w:ins>`/`<w:del>` revision marker inside `<w:trPr>` from the row's
+ * `trackChange` attr. Mutates `elements` in place.
+ *
+ * @param {{ node: any, elements: any[], params: import('@translator').SCDecoderConfig }} input
+ */
+const applyRowTrackChangeOnDecode = ({ node, elements, params }) => {
+  const marker = buildRowTrackChangeElement(node.attrs?.trackChange, params);
+  if (!marker) return;
+
+  let trPr = elements.find((el) => el && el.name === 'w:trPr');
+  if (!trPr) {
+    trPr = { name: 'w:trPr', elements: [] };
+    elements.unshift(trPr);
+  }
+  if (!Array.isArray(trPr.elements)) trPr.elements = [];
+  // ECMA-376 CT_TrPr is a sequence: the EG_TrPrBase row properties
+  // (gridBefore, cantSplit, trHeight, tblHeader, …) come first, then the
+  // `<w:ins>`/`<w:del>` revision marker, then `<w:trPrChange>`. Insert the
+  // marker after the base props but before any trPrChange — prepending would
+  // emit it before e.g. <w:trHeight>, which is schema-invalid and causes Word
+  // to drop the row revision.
+  const trPrChangeIndex = trPr.elements.findIndex((el) => el && el.name === 'w:trPrChange');
+  if (trPrChangeIndex === -1) {
+    trPr.elements.push(marker);
+  } else {
+    trPr.elements.splice(trPrChangeIndex, 0, marker);
+  }
+
+  // Word marks an inserted/deleted table at TWO levels: the row (`<w:trPr>`
+  // marker, above) AND the content of every cell — each cell paragraph mark
+  // carries `<w:ins>`/`<w:del>` in its `<w:pPr><w:rPr>`, and each run is wrapped
+  // in `<w:ins>`/`<w:del>`. Import drops the cell-level markers (only the row
+  // attr is modeled), so the row's content is bare on export; without the
+  // cell-level markers Word sees an inconsistent state and does not present the
+  // table as a tracked change. Synthesize them from the row revision so the
+  // export round-trips and Word recognizes it.
+  applyCellContentTrackChange({ elements, markerName: marker.name, markerAttributes: marker.attributes });
+};
+
+/**
+ * Stamp the synthesized `<w:ins>`/`<w:del>` markers onto every cell paragraph
+ * mark and run of a tracked-inserted/deleted row. Mutates `elements` in place.
+ *
+ * Idempotent against independently-tracked cell content: a run already wrapped
+ * in `<w:ins>`/`<w:del>` is no longer a bare `<w:r>` (so it is skipped), and a
+ * paragraph mark that already carries an ins/del in its `<w:rPr>` is left
+ * alone. For a deletion, run text (`<w:t>`) is rewritten to `<w:delText>`.
+ *
+ * Runs nested inside EG_PContent containers (`<w:hyperlink>`, `<w:smartTag>`,
+ * run-level `<w:sdt>`, …) are wrapped in place too. Known gaps (follow-up): a
+ * whole cell wrapped as a cell-level `<w:sdt>` is not descended into, and a
+ * table nested inside a cell is not traversed.
+ *
+ * @param {{ elements: any[], markerName: 'w:ins' | 'w:del', markerAttributes: Record<string, string> }} input
+ */
+const applyCellContentTrackChange = ({ elements, markerName, markerAttributes }) => {
+  if (markerName !== 'w:ins' && markerName !== 'w:del') return;
+  const isDelete = markerName === 'w:del';
+  const makeMarker = (children) => ({ name: markerName, attributes: { ...markerAttributes }, elements: children });
+
+  // EG_PContent containers whose descendant runs must also be wrapped. NOT
+  // including `<w:ins>`/`<w:del>` keeps the pass idempotent: already-tracked
+  // runs sit inside those wrappers and are left untouched.
+  const RUN_CONTAINERS = new Set(['w:hyperlink', 'w:smartTag', 'w:sdt', 'w:sdtContent', 'w:dir', 'w:bdo']);
+  const wrapRuns = (content) =>
+    (Array.isArray(content) ? content : []).map((el) => {
+      if (!el || typeof el !== 'object') return el;
+      if (el.name === 'w:r') {
+        if (isDelete && Array.isArray(el.elements)) {
+          el.elements = el.elements.map((child) => (child?.name === 'w:t' ? { ...child, name: 'w:delText' } : child));
+        }
+        return makeMarker([el]);
+      }
+      if (RUN_CONTAINERS.has(el.name) && Array.isArray(el.elements)) {
+        return { ...el, elements: wrapRuns(el.elements) };
+      }
+      return el;
+    });
+
+  for (const tc of elements) {
+    if (tc?.name !== 'w:tc' || !Array.isArray(tc.elements)) continue;
+    for (const paragraph of tc.elements) {
+      if (paragraph?.name !== 'w:p') continue;
+      if (!Array.isArray(paragraph.elements)) paragraph.elements = [];
+
+      // 1. Paragraph mark: <w:pPr><w:rPr>{ins|del}…</w:rPr></w:pPr>.
+      let pPr = paragraph.elements.find((el) => el?.name === 'w:pPr');
+      if (!pPr) {
+        pPr = { name: 'w:pPr', elements: [] };
+        paragraph.elements.unshift(pPr); // pPr is the first child of w:p
+      }
+      if (!Array.isArray(pPr.elements)) pPr.elements = [];
+      let rPr = pPr.elements.find((el) => el?.name === 'w:rPr');
+      if (!rPr) {
+        rPr = { name: 'w:rPr', elements: [] };
+        // CT_PPr: the paragraph-mark rPr comes after normal paragraph props but
+        // before any terminal <w:sectPr> / <w:pPrChange>.
+        const terminalIdx = pPr.elements.findIndex((el) => el?.name === 'w:sectPr' || el?.name === 'w:pPrChange');
+        if (terminalIdx === -1) pPr.elements.push(rPr);
+        else pPr.elements.splice(terminalIdx, 0, rPr);
+      }
+      if (!Array.isArray(rPr.elements)) rPr.elements = [];
+      const alreadyMarked = rPr.elements.some((el) => el?.name === 'w:ins' || el?.name === 'w:del');
+      // CT_ParaRPr sequence: ins/del/move come first in rPr.
+      if (!alreadyMarked) rPr.elements.unshift({ name: markerName, attributes: { ...markerAttributes } });
+
+      // 2. Wrap runs, descending into run containers. `<w:pPr>` is neither a run
+      //    nor a run container, so it passes through untouched.
+      paragraph.elements = wrapRuns(paragraph.elements);
+    }
+  }
 };
 
 /** @type {import('@translator').NodeTranslatorConfig} */

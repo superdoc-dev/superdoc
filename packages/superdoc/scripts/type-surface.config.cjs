@@ -133,36 +133,41 @@ const relocations = [
     viteIncludes: ['../layout-engine/painters/dom/src/**/*'],
     tsconfigIncludes: ['../layout-engine/painters/dom/src'],
   },
-  // pm-adapter: subpath-only. The full barrel pulls in @superdoc/style-engine
-  // and other internal packages that would re-expand the shim list.
-  {
-    pkg: '@superdoc/pm-adapter/converter-context.js',
-    distEntry: 'layout-engine/pm-adapter/src/converter-context.d.ts',
-    matchSubpaths: false,
-    viteIncludes: ['../layout-engine/pm-adapter/src/converter-context.ts'],
-    tsconfigIncludes: ['../layout-engine/pm-adapter/src/converter-context.ts'],
-  },
-  {
-    pkg: '@superdoc/pm-adapter/sections/types.js',
-    distEntry: 'layout-engine/pm-adapter/src/sections/types.d.ts',
-    matchSubpaths: false,
-    viteIncludes: ['../layout-engine/pm-adapter/src/sections/types.ts'],
-    tsconfigIncludes: ['../layout-engine/pm-adapter/src/sections/types.ts'],
-  },
+  // SD-3222: the v1 ProseMirror adapter (converter-context, sections/types)
+  // moved into @superdoc/super-editor (../super-editor/src), so its
+  // declarations are emitted as part of the super-editor source root in
+  // `baseTsconfigIncludes`. No standalone pm-adapter relocation is needed.
   // style-engine/ooxml: subpath-only. Includes the ooxml subtree plus the
   // sibling cascade.ts dependency it imports.
   {
     pkg: '@superdoc/style-engine/ooxml',
     distEntry: 'layout-engine/style-engine/src/ooxml/index.d.ts',
     matchSubpaths: false,
-    viteIncludes: [
-      '../layout-engine/style-engine/src/ooxml/**/*',
-      '../layout-engine/style-engine/src/cascade.ts',
-    ],
-    tsconfigIncludes: [
-      '../layout-engine/style-engine/src/ooxml',
-      '../layout-engine/style-engine/src/cascade.ts',
-    ],
+    viteIncludes: ['../layout-engine/style-engine/src/ooxml/**/*', '../layout-engine/style-engine/src/cascade.ts'],
+    tsconfigIncludes: ['../layout-engine/style-engine/src/ooxml', '../layout-engine/style-engine/src/cascade.ts'],
+  },
+  // SD-3222: the v1 layout-adapter (now under super-editor/src) surfaces a few
+  // bare type imports — `StyleContext`/`ComputedParagraphStyle` from
+  // `@superdoc/style-engine`, `ResolvedRunProperties` from
+  // `@superdoc/word-layout` — that the old narrow pm-adapter relocation kept off
+  // superdoc's emitted surface. Relocate the packages those types come from so
+  // the published d.ts point at bundled dist paths instead of leaking bare,
+  // unpublished `@superdoc/*` specifiers. Both have a bounded dependency
+  // closure: word-layout imports no `@superdoc/*`, and style-engine only pulls
+  // in already-relocated `@superdoc/contracts` and `@superdoc/style-engine/ooxml`.
+  {
+    pkg: '@superdoc/style-engine',
+    distEntry: 'layout-engine/style-engine/src/index.d.ts',
+    matchSubpaths: false,
+    viteIncludes: ['../layout-engine/style-engine/src/**/*'],
+    tsconfigIncludes: ['../layout-engine/style-engine/src'],
+  },
+  {
+    pkg: '@superdoc/word-layout',
+    distEntry: 'word-layout/src/index.d.ts',
+    matchSubpaths: true,
+    viteIncludes: ['../word-layout/src/**/*'],
+    tsconfigIncludes: ['../word-layout/src'],
   },
   // common/list-marker-utils and common (bare): emitted via tsc-postbuild
   // (see sharedCommonDtsTargets) because the source lives in shared/, which
@@ -183,6 +188,26 @@ const relocations = [
     viteIncludes: [], // emitted via sharedCommonDtsTargets tsc-postbuild
     tsconfigIncludes: [],
   },
+  // SD-3222: the v1 layout-adapter's list-helpers re-exports list-numbering
+  // utilities. Emit the leaf module via tsc-postbuild like list-marker-utils.
+  {
+    pkg: '@superdoc/common/list-numbering',
+    distEntry: 'shared/common/list-numbering/index.d.ts',
+    matchSubpaths: false,
+    viteIncludes: [], // emitted via sharedCommonDtsTargets tsc-postbuild
+    tsconfigIncludes: [],
+  },
+  // The font report types (FontResolutionRecord, FontLoadStatus, FontLoadSummary, ...)
+  // surface on `superdoc.fonts` / `fonts-changed`. font-system lives in shared/ like
+  // @superdoc/common, so it is emitted standalone via tsc-postbuild (ensure-types.cjs)
+  // rather than vite includes, which would shift the dts common-ancestor.
+  {
+    pkg: '@superdoc/font-system',
+    distEntry: 'shared/font-system/src/index.d.ts',
+    matchSubpaths: true,
+    viteIncludes: [], // emitted via the font-system tsc-postbuild in ensure-types
+    tsconfigIncludes: [],
+  },
 ];
 
 /**
@@ -194,6 +219,7 @@ const sharedCommonDtsTargets = [
   'list-marker-utils.ts',
   'layout-constants.ts', // dependency of list-marker-utils
   'comments-types.ts',
+  'list-numbering/index.ts', // SD-3222: re-exported by the v1 layout-adapter's list-helpers
 ];
 
 /**
@@ -209,10 +235,11 @@ const relocationGuardPackages = [
   '@superdoc/layout-bridge',
   '@superdoc/layout-engine',
   '@superdoc/painter-dom',
-  '@superdoc/pm-adapter',
   '@superdoc/style-engine',
+  '@superdoc/word-layout',
   '@superdoc/common',
   '@superdoc/common/list-marker-utils',
+  '@superdoc/common/list-numbering',
 ];
 
 /**
@@ -221,7 +248,11 @@ const relocationGuardPackages = [
  * forward-compat documentation; the SD-2942 removal made shim
  * generation a no-op.
  */
-const unshimmedPrivateSpecifiers = ['@superdoc/pm-adapter', '@superdoc/style-engine'];
+const unshimmedPrivateSpecifiers = [
+  '@superdoc/style-engine',
+  '@superdoc/word-layout',
+  '@superdoc/common/list-numbering',
+];
 
 /**
  * Bare `@superdoc/*` specifiers permitted in published d.ts beyond the
@@ -288,6 +319,7 @@ const publicContract = {
   ],
   asset: [
     { subpath: './style.css', tier: 'asset', note: 'CSS bundle; no types' },
+    { subpath: './style.layered.css', tier: 'asset', note: 'Layered CSS bundle; no types' },
   ],
   deprecated: [],
 };

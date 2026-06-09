@@ -12,6 +12,8 @@ export type AddCommentOptions = {
   commentId?: string;
   /** Author name (defaults to user from editor config) */
   author?: string;
+  /** Stable actor id (defaults to user from editor config) */
+  authorId?: string;
   /** Author email (defaults to user from editor config) */
   authorEmail?: string;
   /** Author image URL (defaults to user from editor config) */
@@ -36,6 +38,8 @@ export type InsertCommentOptions = {
   commentText?: string;
   /** Comment creator name */
   creatorName?: string;
+  /** Comment creator actor id */
+  creatorId?: string;
   /** Comment creator email */
   creatorEmail?: string;
   /** Comment creator image URL */
@@ -82,6 +86,22 @@ export type ResolveCommentOptions = {
   commentId: string;
   /** The imported comment ID */
   importedId?: string;
+};
+
+/** Comment identity used by resolveCommentThread */
+export type ResolveCommentThreadItem = {
+  /** The comment ID to resolve */
+  commentId: string;
+  /** The imported comment ID */
+  importedId?: string;
+  /** Whether resolving should preserve document-story anchor markers for this comment */
+  preserveAnchor?: boolean;
+};
+
+/** Options for resolveCommentThread command */
+export type ResolveCommentThreadOptions = {
+  /** The thread root and replies to resolve in one transaction */
+  comments: ResolveCommentThreadItem[];
 };
 
 /**
@@ -135,6 +155,8 @@ export type AddCommentReplyOptions = {
   content?: string;
   /** Author name (defaults to user from editor config) */
   author?: string;
+  /** Stable actor id (defaults to user from editor config) */
+  authorId?: string;
   /** Author email (defaults to user from editor config) */
   authorEmail?: string;
   /** Author image URL (defaults to user from editor config) */
@@ -206,6 +228,12 @@ export interface CommentCommands {
    * editor.commands.resolveComment({ commentId: 'comment-123' })
    */
   resolveComment: (options: ResolveCommentOptions) => boolean;
+
+  /**
+   * Resolve multiple comments in a thread as one editor transaction.
+   * @param options - Object containing thread comment identities
+   */
+  resolveCommentThread: (options: ResolveCommentThreadOptions) => boolean;
 
   /**
    * Reopen a previously-resolved comment — the symmetric inverse of

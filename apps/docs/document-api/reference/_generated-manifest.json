@@ -426,6 +426,8 @@
     "apps/docs/document-api/reference/tables/split-cell.mdx",
     "apps/docs/document-api/reference/tables/split.mdx",
     "apps/docs/document-api/reference/tables/unmerge-cells.mdx",
+    "apps/docs/document-api/reference/templates/apply.mdx",
+    "apps/docs/document-api/reference/templates/index.mdx",
     "apps/docs/document-api/reference/toc/configure.mdx",
     "apps/docs/document-api/reference/toc/edit-entry.mdx",
     "apps/docs/document-api/reference/toc/get-entry.mdx",
@@ -524,6 +526,7 @@
       "aliasMemberPaths": ["format.strikethrough"],
       "key": "format",
       "operationIds": [
+        "formatRange",
         "format.apply",
         "format.bold",
         "format.italic",
@@ -578,6 +581,13 @@
       "operationIds": ["styles.apply"],
       "pagePath": "apps/docs/document-api/reference/styles/index.mdx",
       "title": "Styles"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "templates",
+      "operationIds": ["templates.apply"],
+      "pagePath": "apps/docs/document-api/reference/templates/index.mdx",
+      "title": "Templates"
     },
     {
       "aliasMemberPaths": [],
@@ -1077,5 +1087,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "266b6bb8fa042ebd94c3da6e11652471f49c40a061960f3df9055cf64c4bcbbe"
+  "sourceHash": "5f31d1ac0480544e8ad1f950d39e28617d39a163f56f4e1bb7bbdcaf1a77abef"
 }

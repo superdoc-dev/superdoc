@@ -294,6 +294,56 @@ const mixedSchema = new Schema({
       },
       toDOM: (n) => ['span', n.attrs.resolvedText ?? ''],
     },
+    'section-page-count': {
+      group: 'inline',
+      inline: true,
+      atom: true,
+      content: 'text*',
+      attrs: {
+        instruction: { default: null },
+        importedCachedText: { default: null },
+        resolvedText: { default: null },
+        pageNumberFormat: { default: null },
+        pageNumberZeroPadding: { default: null },
+      },
+      toDOM: () => ['span', 0],
+    },
+    'total-page-number': {
+      group: 'inline',
+      inline: true,
+      atom: true,
+      content: 'text*',
+      attrs: {
+        instruction: { default: null },
+        importedCachedText: { default: null },
+        resolvedText: { default: null },
+        pageNumberFormat: { default: null },
+        pageNumberZeroPadding: { default: null },
+        pageNumberNumericPicture: { default: null },
+      },
+      toDOM: () => ['span', 0],
+    },
+    sequenceField: {
+      group: 'inline',
+      inline: true,
+      atom: true,
+      attrs: {
+        instruction: { default: '' },
+        identifier: { default: '' },
+        fieldArgument: { default: '' },
+        sequenceMode: { default: 'next' },
+        hideResult: { default: false },
+        restartNumber: { default: null },
+        restartLevel: { default: null },
+        format: { default: 'Arabic' },
+        hasGeneralFormat: { default: false },
+        pageNumberFieldFormat: { default: null },
+        numericPictureFormat: { default: null },
+        resolvedNumber: { default: '' },
+        resolvedNumberIsCurrent: { default: false },
+      },
+      toDOM: () => ['span', 0],
+    },
     text: { group: 'inline' },
   },
 });
@@ -337,6 +387,248 @@ describe('updateFieldsInSelection — TOC + stat fields combined (regression)', 
     // Stat-field path also ran — the early-return regression would skip it.
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(result).toBe(true);
+  });
+
+  it('updates SECTIONPAGES fields from the current header/footer section page count', () => {
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const sectionPageCountField = mixedSchema.nodes['section-page-count'].create(
+      {
+        instruction: 'SECTIONPAGES',
+        resolvedText: '1',
+      },
+      mixedSchema.text('1'),
+    );
+    const doc = mixedSchema.nodes.doc.create({}, [para([sectionPageCountField])]);
+    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      options: { sectionPageCount: 4 },
+      state: editorState,
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const outerTr = editorState.tr;
+    const dispatch = vi.fn();
+    const state = {
+      doc,
+      selection: { from: 0, to: doc.content.size },
+      schema: mixedSchema,
+      tr: outerTr,
+    };
+
+    const result = command({ editor, state, tr: outerTr, dispatch });
+
+    expect(result).toBe(true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    const updatedDoc = dispatch.mock.calls[0][0].doc;
+    const updatedField = updatedDoc.nodeAt(1);
+    expect(updatedField.type.name).toBe('section-page-count');
+    expect(updatedField.attrs.resolvedText).toBe('4');
+    expect(updatedField.textContent).toBe('4');
+  });
+
+  it('updates SECTIONPAGES zero-padded fields from the current header/footer section page count', () => {
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const sectionPageCountField = mixedSchema.nodes['section-page-count'].create(
+      {
+        instruction: 'SECTIONPAGES \\# "000"',
+        pageNumberFormat: 'decimal',
+        pageNumberZeroPadding: 3,
+        resolvedText: '001',
+      },
+      mixedSchema.text('001'),
+    );
+    const doc = mixedSchema.nodes.doc.create({}, [para([sectionPageCountField])]);
+    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      options: { sectionPageCount: 4 },
+      state: editorState,
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const outerTr = editorState.tr;
+    const dispatch = vi.fn();
+    const state = {
+      doc,
+      selection: { from: 0, to: doc.content.size },
+      schema: mixedSchema,
+      tr: outerTr,
+    };
+
+    const result = command({ editor, state, tr: outerTr, dispatch });
+
+    expect(result).toBe(true);
+    const updatedDoc = dispatch.mock.calls[0][0].doc;
+    const updatedField = updatedDoc.nodeAt(1);
+    expect(updatedField.attrs.resolvedText).toBe('004');
+    expect(updatedField.textContent).toBe('004');
+  });
+
+  it('updates NUMPAGES fields with preserved numeric picture formatting', () => {
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const totalPageNumberField = mixedSchema.nodes['total-page-number'].create(
+      {
+        instruction: 'NUMPAGES \\# "#,##0 pages"',
+        pageNumberNumericPicture: '#,##0 pages',
+        resolvedText: '1 pages',
+      },
+      mixedSchema.text('1 pages'),
+    );
+    const doc = mixedSchema.nodes.doc.create({}, [para([totalPageNumberField])]);
+    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      currentTotalPages: 1234,
+      state: editorState,
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const outerTr = editorState.tr;
+    const dispatch = vi.fn();
+    const state = {
+      doc,
+      selection: { from: 0, to: doc.content.size },
+      schema: mixedSchema,
+      tr: outerTr,
+    };
+
+    const result = command({ editor, state, tr: outerTr, dispatch });
+
+    expect(result).toBe(true);
+    const updatedDoc = dispatch.mock.calls[0][0].doc;
+    const updatedField = updatedDoc.nodeAt(1);
+    expect(updatedField.type.name).toBe('total-page-number');
+    expect(updatedField.attrs.resolvedText).toBe('1,234 pages');
+    expect(updatedField.textContent).toBe('1,234 pages');
+  });
+
+  it('leaves SECTIONPAGES fields unchanged when section page context is unavailable', () => {
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const sectionPageCountField = mixedSchema.nodes['section-page-count'].create(
+      {
+        instruction: 'SECTIONPAGES',
+        resolvedText: '3',
+      },
+      mixedSchema.text('3'),
+    );
+    const doc = mixedSchema.nodes.doc.create({}, [para([sectionPageCountField])]);
+    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      options: {},
+      state: editorState,
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const outerTr = editorState.tr;
+    const dispatch = vi.fn();
+    const state = {
+      doc,
+      selection: { from: 0, to: doc.content.size },
+      schema: mixedSchema,
+      tr: outerTr,
+    };
+
+    const result = command({ editor, state, tr: outerTr, dispatch });
+
+    expect(result).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+    const unchangedField = editorState.doc.nodeAt(1);
+    expect(unchangedField.attrs.resolvedText).toBe('3');
+    expect(unchangedField.textContent).toBe('3');
+  });
+
+  it('recomputes stale SEQ fields when the selection contains SEQ', () => {
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const seq = (instruction) =>
+      mixedSchema.nodes.sequenceField.create({
+        instruction,
+        identifier: 'Figure',
+        resolvedNumber: '9',
+      });
+    const doc = mixedSchema.nodes.doc.create({}, [para([seq('SEQ Figure')]), para([seq('SEQ Figure')])]);
+    const editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      state: editorState,
+      converter: { translatedLinkedStyles: { docDefaults: {}, styles: {} }, translatedNumbering: {} },
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const dispatch = vi.fn();
+    const result = command({
+      editor,
+      state: { doc, selection: { from: 0, to: doc.content.size }, schema: mixedSchema, tr: editorState.tr },
+      tr: editorState.tr,
+      dispatch,
+    });
+
+    expect(result).toBe(true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    const updatedValues = [];
+    dispatch.mock.calls[0][0].doc.descendants((node) => {
+      if (node.type.name === 'sequenceField') updatedValues.push(node.attrs.resolvedNumber);
+      return true;
+    });
+    expect(updatedValues).toEqual(['1', '2']);
+  });
+
+  it('updates SEQ from fresh state after TOC update dispatches its own transaction', () => {
+    const para = (children) => mixedSchema.nodes.paragraph.create({}, children);
+    const text = (t) => mixedSchema.text(t);
+    const toc = mixedSchema.nodes.tableOfContents.create({ sdBlockId: 'toc-1' }, [para([text('entry')])]);
+    const seqField = mixedSchema.nodes.sequenceField.create({
+      instruction: 'SEQ Figure',
+      identifier: 'Figure',
+      resolvedNumber: '9',
+    });
+    const doc = mixedSchema.nodes.doc.create({}, [toc, para([seqField])]);
+    let editorState = EditorState.create({ schema: mixedSchema, doc });
+    const editor = {
+      doc: {
+        toc: {
+          update: vi.fn(() => {
+            // Simulate toc.update dispatching independently before the SEQ
+            // path runs. The later SEQ transaction must be based on this fresh
+            // state, preserving the TOC edit and the shifted SEQ position.
+            editorState = editorState.apply(editorState.tr.insertText(' updated', 7));
+            return { success: true };
+          }),
+        },
+      },
+      get state() {
+        return editorState;
+      },
+      converter: { translatedLinkedStyles: { docDefaults: {}, styles: {} }, translatedNumbering: {} },
+    };
+
+    const commands = FieldUpdate.config.addCommands.call({ editor });
+    const command = commands.updateFieldsInSelection();
+    const outerTr = editorState.tr;
+    outerTr.setMeta = vi.fn(outerTr.setMeta.bind(outerTr));
+    const dispatch = vi.fn();
+    const seqPos = toc.nodeSize + 1;
+    const result = command({
+      editor,
+      state: { doc, selection: { from: seqPos, to: seqPos + seqField.nodeSize }, schema: mixedSchema, tr: outerTr },
+      tr: outerTr,
+      dispatch,
+    });
+
+    expect(result).toBe(true);
+    expect(editor.doc.toc.update).toHaveBeenCalledTimes(1);
+    expect(outerTr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+
+    const dispatchedDoc = dispatch.mock.calls[0][0].doc;
+    expect(dispatchedDoc.textContent).toContain('entry updated');
+    const seqValues = [];
+    dispatchedDoc.descendants((node) => {
+      if (node.type.name === 'sequenceField') seqValues.push(node.attrs.resolvedNumber);
+      return true;
+    });
+    expect(seqValues).toEqual(['1']);
   });
 });
 

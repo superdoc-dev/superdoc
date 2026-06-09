@@ -1260,6 +1260,11 @@ _No fields._
 | `operations.format.webHidden.dryRun` | boolean | yes |  |
 | `operations.format.webHidden.reasons` | enum[] | no |  |
 | `operations.format.webHidden.tracked` | boolean | yes |  |
+| `operations.formatRange` | object | yes |  |
+| `operations.formatRange.available` | boolean | yes |  |
+| `operations.formatRange.dryRun` | boolean | yes |  |
+| `operations.formatRange.reasons` | enum[] | no |  |
+| `operations.formatRange.tracked` | boolean | yes |  |
 | `operations.get` | object | yes |  |
 | `operations.get.available` | boolean | yes |  |
 | `operations.get.dryRun` | boolean | yes |  |
@@ -2220,6 +2225,11 @@ _No fields._
 | `operations.tables.unmergeCells.dryRun` | boolean | yes |  |
 | `operations.tables.unmergeCells.reasons` | enum[] | no |  |
 | `operations.tables.unmergeCells.tracked` | boolean | yes |  |
+| `operations.templates.apply` | object | yes |  |
+| `operations.templates.apply.available` | boolean | yes |  |
+| `operations.templates.apply.dryRun` | boolean | yes |  |
+| `operations.templates.apply.reasons` | enum[] | no |  |
+| `operations.templates.apply.tracked` | boolean | yes |  |
 | `operations.toc.configure` | object | yes |  |
 | `operations.toc.configure.available` | boolean | yes |  |
 | `operations.toc.configure.dryRun` | boolean | yes |  |
@@ -3566,6 +3576,11 @@ _No fields._
       "dryRun": true,
       "tracked": false
     },
+    "formatRange": {
+      "available": true,
+      "dryRun": true,
+      "tracked": true
+    },
     "get": {
       "available": true,
       "dryRun": false,
@@ -4522,6 +4537,11 @@ _No fields._
       "tracked": false
     },
     "tables.unmergeCells": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "templates.apply": {
       "available": true,
       "dryRun": true,
       "tracked": false
@@ -13194,6 +13214,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "formatRange": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "get": {
           "additionalProperties": false,
           "properties": {
@@ -19914,6 +19969,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "templates.apply": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "toc.configure": {
           "additionalProperties": false,
           "properties": {
@@ -20385,6 +20475,7 @@ _No fields._
         "insert",
         "replace",
         "delete",
+        "formatRange",
         "blocks.list",
         "blocks.delete",
         "blocks.deleteRange",
@@ -20433,6 +20524,7 @@ _No fields._
         "format.stylisticSets",
         "format.contextualAlternates",
         "styles.apply",
+        "templates.apply",
         "create.paragraph",
         "create.heading",
         "create.sectionBreak",

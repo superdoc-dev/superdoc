@@ -9,6 +9,8 @@ import { fileURLToPath, URL } from 'node:url';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { visualizer } from 'rollup-plugin-visualizer';
 import vue from '@vitejs/plugin-vue'
+import layeredCssPlugin from './vite-plugin-layered-css.mjs';
+import bundledFontsPlugin from './vite-plugin-bundled-fonts.mjs';
 
 import { version } from './package.json';
 import sourceResolve from '../../vite.sourceResolve';
@@ -118,6 +120,8 @@ export default defineConfig(({ mode, command }) => {
   const skipDts = process.env.SUPERDOC_SKIP_DTS === '1';
   const plugins = [
     vue(),
+    layeredCssPlugin(),
+    bundledFontsPlugin(),
     !skipDts && dts({
       // Foundational sources (superdoc, super-editor, document-api) are
       // always included; relocation patterns come from the canonical
@@ -338,7 +342,22 @@ export default defineConfig(({ mode, command }) => {
       },
     },
     resolve: {
-      alias: getAliases(isDev),
+      // Under Vitest and the dev server (command 'serve'), alias @superdoc/font-system to its
+      // source: cdn-entry.test.js needs it for the import cdn-entry.js makes, and the dev
+      // playground imports it transitively via layout-engine/super-editor source. font-system
+      // lives under shared/, so it is NOT covered by vite.sourceResolve's packages/** aliases.
+      // The production CDN build aliases it in vite.config.cdn.js; the ES build never imports
+      // cdn-entry. Kept OUT of getAliases so the vite-plugin-dts build (command 'build') is
+      // unaffected - an alias there makes it emit unresolvable source paths. /bundled precedes the bare one.
+      alias: [
+        ...(process.env.VITEST || isDev
+          ? [
+              { find: '@superdoc/font-system/bundled', replacement: path.resolve(__dirname, '../../shared/font-system/src/bundled.ts') },
+              { find: '@superdoc/font-system', replacement: path.resolve(__dirname, '../../shared/font-system/src/index.ts') },
+            ]
+          : []),
+        ...getAliases(isDev),
+      ],
       dedupe: ['prosemirror-model', 'prosemirror-state', 'prosemirror-transform', 'prosemirror-view', 'y-prosemirror'],
       extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
       conditions: ['source'],

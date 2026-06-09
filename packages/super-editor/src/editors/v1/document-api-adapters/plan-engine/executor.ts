@@ -60,6 +60,11 @@ import type { Transaction } from 'prosemirror-state';
 import type { Mapping } from 'prosemirror-transform';
 import { buildTextWithTabs, parentAllowsNodeAt, textBetweenWithTabs } from '../helpers/text-with-tabs.js';
 import { getFormattingStateAtPos } from '../../core/helpers/getMarksFromSelection.js';
+import {
+  TrackDeleteMarkName,
+  TrackFormatMarkName,
+  TrackInsertMarkName,
+} from '../../extensions/track-changes/constants.js';
 
 // ---------------------------------------------------------------------------
 // Character-offset → document-position mapping
@@ -108,6 +113,7 @@ export function charOffsetToDocPos(
       const textStart = Math.max(pos, rangeFrom);
       const textEnd = Math.min(pos + node.nodeSize, rangeTo);
       const textLen = textEnd - textStart;
+      if (textLen <= 0) return false;
       if (count + textLen >= charOffset) {
         foundPos = textStart + (charOffset - count);
       }
@@ -176,6 +182,33 @@ type InlineWrapperSpec = {
 
 function asProseMirrorMarks(marks: readonly unknown[]): readonly ProseMirrorMark[] {
   return marks as readonly ProseMirrorMark[];
+}
+
+const TRACKED_REVIEW_MARK_NAMES = new Set([TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName]);
+
+function hasTrackedReviewMark(marks: readonly ProseMirrorMark[] | undefined): boolean {
+  return Boolean(marks?.some((mark) => TRACKED_REVIEW_MARK_NAMES.has(mark.type.name)));
+}
+
+function rangeTouchesTrackedReviewState(doc: ProseMirrorNode, from: number, to: number): boolean {
+  let found = false;
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (found) return false;
+
+    if (node.isText) {
+      const textStart = Math.max(from, pos);
+      const textEnd = Math.min(to, pos + node.nodeSize);
+      if (textStart >= textEnd) return false;
+    }
+
+    if ((node.isText || node.isInline) && hasTrackedReviewMark(node.marks as readonly ProseMirrorMark[] | undefined)) {
+      found = true;
+      return false;
+    }
+  });
+
+  return found;
 }
 
 function resolveMarksForRange(editor: Editor, target: CompiledRangeTarget, step: MutationStep): readonly unknown[] {
@@ -853,6 +886,16 @@ export function executeTextRewrite(
 
   const replacementText = getReplacementText(step.args.replacement);
   const marks = resolveMarksForRange(editor, target, step);
+  // A rewrite range can start in a normal parent (a run) and span into a
+  // `text*`-only inline container (e.g. total-page-number) that rejects
+  // lineBreak. The edits below land at remapped positions whose parent may
+  // differ from `absFrom`, so probe admission at each actual edit position
+  // rather than once at the range start: a newline that lands in a restrictive
+  // parent falls back to literal text (the export safety net still emits
+  // <w:br/>). Probe on the current `tr` so prior in-loop steps are reflected.
+  const lineBreakNodeType = editor.state.schema.nodes?.lineBreak;
+  const parentAllowsLineBreakAt = (pos: number): boolean =>
+    lineBreakNodeType ? parentAllowsNodeAt(tr, pos, lineBreakNodeType) : false;
   const structuralRewrite = resolveStructuralRangeRewrite(tr.doc, absFrom, absTo, step);
 
   if (structuralRewrite) {
@@ -896,6 +939,18 @@ export function executeTextRewrite(
   const originalText = textBetweenWithTabs(tr.doc, absFrom, absTo, '', '');
   const origLen = originalText.length;
   const replLen = replacementText.length;
+
+  if (rangeTouchesTrackedReviewState(tr.doc, absFrom, absTo)) {
+    if (replacementText.length === 0) {
+      tr.delete(absFrom, absTo);
+      return { changed: target.text.length > 0 };
+    }
+    const content = buildTextWithTabs(editor.state.schema, replacementText, asProseMirrorMarks(marks), {
+      parentAllowsLineBreak: parentAllowsLineBreakAt(absFrom),
+    });
+    tr.replaceWith(absFrom, absTo, content);
+    return { changed: replacementText !== target.text };
+  }
 
   let prefix = 0;
   while (prefix < origLen && prefix < replLen && originalText[prefix] === replacementText[prefix]) {
@@ -948,16 +1003,30 @@ export function executeTextRewrite(
       if (change.type === 'delete') {
         tr.delete(remap(change.docFrom), remap(change.docTo));
       } else if (change.type === 'insert') {
-        const content = buildTextWithTabs(editor.state.schema, change.newText, asProseMirrorMarks(marks));
+        const content = buildTextWithTabs(editor.state.schema, change.newText, asProseMirrorMarks(marks), {
+          parentAllowsLineBreak: parentAllowsLineBreakAt(remap(change.docPos)),
+        });
         tr.insert(remap(change.docPos), content);
       } else {
-        const content = buildTextWithTabs(editor.state.schema, change.newText, asProseMirrorMarks(marks));
+        const content = buildTextWithTabs(editor.state.schema, change.newText, asProseMirrorMarks(marks), {
+          parentAllowsLineBreak: parentAllowsLineBreakAt(remap(change.docFrom)),
+        });
         tr.replaceWith(remap(change.docFrom), remap(change.docTo), content);
       }
     }
+  } else if (trimmedNew.length === 0) {
+    // Pure deletion after trimming: a non-empty replacement whose new text is
+    // fully contained in the old text's common prefix + suffix collapses to an
+    // empty delta (e.g. "best endeavours to:" → "endeavours to:" leaves
+    // trimmedNew === ""). This also covers removing a lineBreak, now that
+    // lineBreak counts as "\n" in the diff. Delete the removed range rather than
+    // building schema.text(''), which ProseMirror rejects for empty text.
+    tr.delete(trimmedFrom, trimmedTo);
   } else {
     // 0 or 1 word change: replace just the trimmed range.
-    const content = buildTextWithTabs(editor.state.schema, trimmedNew, asProseMirrorMarks(marks));
+    const content = buildTextWithTabs(editor.state.schema, trimmedNew, asProseMirrorMarks(marks), {
+      parentAllowsLineBreak: parentAllowsLineBreakAt(trimmedFrom),
+    });
     tr.replaceWith(trimmedFrom, trimmedTo, content);
   }
 
@@ -978,18 +1047,59 @@ function resolveInheritedMarksAt(editor: Editor, tr: Transaction, absPos: number
     const state = editor.state as unknown as { doc: { resolve?: unknown } };
     if (typeof state?.doc?.resolve !== 'function') {
       const $pos = tr.doc.resolve(absPos);
-      return $pos.marks();
+      return mergeDirectInsertTrackedInsertionMark(tr, absPos, $pos.marks());
     }
     const resolved = getFormattingStateAtPos(
       editor.state as unknown as import('prosemirror-state').EditorState,
       absPos,
       editor as unknown as undefined,
     );
-    return (resolved?.resolvedMarks as ProseMirrorMark[]) ?? [];
+    return mergeDirectInsertTrackedInsertionMark(tr, absPos, (resolved?.resolvedMarks as ProseMirrorMark[]) ?? []);
   } catch {
     const $pos = tr.doc.resolve(absPos);
-    return $pos.marks();
+    return mergeDirectInsertTrackedInsertionMark(tr, absPos, $pos.marks());
   }
+}
+
+function getSharedTrackedInsertionMarkAt(tr: Transaction, absPos: number): ProseMirrorMark | null {
+  const maxPos = typeof tr.doc.content?.size === 'number' ? tr.doc.content.size : absPos;
+  const boundedPos = Math.max(0, Math.min(maxPos, absPos));
+  const $pos = tr.doc.resolve(boundedPos);
+  const beforeInsert = $pos.nodeBefore?.marks?.find((mark) => mark.type?.name === TrackInsertMarkName) ?? null;
+  const afterInsert = $pos.nodeAfter?.marks?.find((mark) => mark.type?.name === TrackInsertMarkName) ?? null;
+  const beforeId = typeof beforeInsert?.attrs?.id === 'string' ? beforeInsert.attrs.id : null;
+  const afterId = typeof afterInsert?.attrs?.id === 'string' ? afterInsert.attrs.id : null;
+
+  if (!beforeInsert || !afterInsert || !beforeId || beforeId !== afterId) {
+    return null;
+  }
+
+  return beforeInsert;
+}
+
+function mergeDirectInsertTrackedInsertionMark(
+  tr: Transaction,
+  absPos: number,
+  marks: readonly ProseMirrorMark[],
+): readonly ProseMirrorMark[] {
+  if (tr.getMeta?.('skipTrackChanges') !== true) {
+    return marks;
+  }
+
+  const sharedInsert = getSharedTrackedInsertionMarkAt(tr, absPos);
+  if (!sharedInsert) {
+    return marks;
+  }
+
+  const sharedInsertId = typeof sharedInsert.attrs?.id === 'string' ? sharedInsert.attrs.id : null;
+  if (
+    sharedInsertId &&
+    marks.some((mark) => mark.type?.name === TrackInsertMarkName && mark.attrs?.id === sharedInsertId)
+  ) {
+    return marks;
+  }
+
+  return [...marks, sharedInsert];
 }
 
 export function executeTextInsert(
@@ -1047,7 +1157,12 @@ export function executeTextInsert(
 
   const tabNodeType = editor.state.schema.nodes?.tab;
   const parentAllowsTab = tabNodeType && text.includes('\t') ? parentAllowsNodeAt(tr, absPos, tabNodeType) : false;
-  tr.insert(absPos, buildTextWithTabs(editor.state.schema, text, marks, { parentAllowsTab }));
+  // Restrictive parents like total-page-number are `text*` and reject lineBreak;
+  // probe admission so newline-bearing inserts fall back to literal text there.
+  const lineBreakNodeType = editor.state.schema.nodes?.lineBreak;
+  const parentAllowsLineBreak =
+    lineBreakNodeType && /[\r\n]/.test(text) ? parentAllowsNodeAt(tr, absPos, lineBreakNodeType) : false;
+  tr.insert(absPos, buildTextWithTabs(editor.state.schema, text, marks, { parentAllowsTab, parentAllowsLineBreak }));
 
   return { changed: true };
 }
@@ -1232,7 +1347,13 @@ export function executeSpanTextRewrite(
   // For single replacement block, use flat replacement into the span
   if (replacementBlocks.length === 1) {
     const marks = resolveSpanMarks(editor, target, policy, step.id);
-    const content = buildTextWithTabs(editor.state.schema, replacementBlocks[0], asProseMirrorMarks(marks));
+    // Probe parent admission so a newline replacement into a `text*`-only span
+    // parent falls back to literal text (the export safety net handles the rest).
+    const lineBreakNodeType = editor.state.schema.nodes?.lineBreak;
+    const parentAllowsLineBreak = lineBreakNodeType ? parentAllowsNodeAt(tr, absFrom, lineBreakNodeType) : false;
+    const content = buildTextWithTabs(editor.state.schema, replacementBlocks[0], asProseMirrorMarks(marks), {
+      parentAllowsLineBreak,
+    });
     tr.replaceWith(absFrom, absTo, content);
     return { changed: true };
   }
@@ -2296,7 +2417,9 @@ export function executePlan(editor: Editor, input: MutationsApplyInput): PlanRec
     throw planError('INVALID_INPUT', 'plan must contain at least one step');
   }
 
-  const compiled = compilePlan(editor, input.steps);
+  const compiled = compilePlan(editor, input.steps, {
+    selectTextModel: input.changeMode === 'tracked' ? 'raw' : 'visible',
+  });
 
   return executeCompiledPlan(editor, compiled, {
     changeMode: input.changeMode ?? 'direct',

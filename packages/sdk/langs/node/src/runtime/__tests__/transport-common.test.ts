@@ -350,4 +350,26 @@ describe('buildOperationArgv with real generated contract', () => {
     const argv = buildOperationArgv(realOpenOp, { doc: 'plain.docx' }, {}, undefined);
     expect(argv).not.toContain('--password');
   });
+
+  test('generated doc.open spec includes trackChanges JSON param', () => {
+    const trackChangesParam = realOpenOp.params.find((p) => p.name === 'trackChanges');
+
+    expect(trackChangesParam).toBeDefined();
+    expect(trackChangesParam!.kind).toBe('jsonFlag');
+    expect(trackChangesParam!.type).toBe('json');
+    expect(trackChangesParam!.flag).toBe('track-changes-json');
+  });
+
+  test('trackChanges replacement mode emits --track-changes-json with real doc.open spec', () => {
+    const argv = buildOperationArgv(
+      realOpenOp,
+      { doc: 'test.docx', trackChanges: { replacements: 'independent' } },
+      {},
+      undefined,
+    );
+    const flagIndex = argv.indexOf('--track-changes-json');
+
+    expect(flagIndex).toBeGreaterThan(-1);
+    expect(JSON.parse(argv[flagIndex + 1])).toEqual({ replacements: 'independent' });
+  });
 });

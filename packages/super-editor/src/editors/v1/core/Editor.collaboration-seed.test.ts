@@ -93,7 +93,7 @@ function findYXmlElementByNodeName(root: unknown, nodeName: string): XmlElement 
   return match;
 }
 
-function addCachedResultRunToYjsCrossReference(ydoc: YDoc): void {
+function addCachedResultRunToYjsCrossReference(ydoc: YDoc, cachedText = '\u200e1'): void {
   const crossReferenceElement = findYXmlElementByNodeName(ydoc.getXmlFragment('supereditor'), 'crossReference');
   if (!crossReferenceElement) {
     throw new Error('Expected seeded Yjs fragment to contain a crossReference element.');
@@ -108,9 +108,18 @@ function addCachedResultRunToYjsCrossReference(ydoc: YDoc): void {
   run.setAttribute('runPropertiesInlineKeys', ['fontFamily', 'cs']);
 
   const text = new XmlText();
-  text.insert(0, '\u200e1');
+  text.insert(0, cachedText);
   run.insert(0, [text]);
   crossReferenceElement.insert(0, [run]);
+}
+
+function clearYjsElementResolvedText(ydoc: YDoc, nodeName: string): void {
+  const element = findYXmlElementByNodeName(ydoc.getXmlFragment('supereditor'), nodeName);
+  if (!element) {
+    throw new Error(`Expected seeded Yjs fragment to contain a ${nodeName} element.`);
+  }
+
+  element.setAttribute('resolvedText', '');
 }
 
 function collectCitations(editor: Editor) {
@@ -140,7 +149,7 @@ function createCitationPmDoc(editor: Editor) {
   ]);
 }
 
-function addCachedResultRunToYjsCitation(ydoc: YDoc): void {
+function addCachedResultRunToYjsCitation(ydoc: YDoc, cachedText = '(Smith, 2024)'): void {
   const citationElement = findYXmlElementByNodeName(ydoc.getXmlFragment('supereditor'), 'citation');
   if (!citationElement) {
     throw new Error('Expected seeded Yjs fragment to contain a citation element.');
@@ -155,7 +164,7 @@ function addCachedResultRunToYjsCitation(ydoc: YDoc): void {
   run.setAttribute('runPropertiesInlineKeys', ['fontFamily', 'cs']);
 
   const text = new XmlText();
-  text.insert(0, '(Smith, 2024)');
+  text.insert(0, cachedText);
   run.insert(0, [text]);
   citationElement.insert(0, [run]);
 }
@@ -305,6 +314,107 @@ describe('Editor collaboration seeding', () => {
       expect(observerCitations[0].attrs.instruction).toBe('CITATION Smith2024 \\l 1033');
       expect(observerCitations[0].attrs.sourceIds).toEqual(['Smith2024']);
       expect(observerCitations[0].attrs.resolvedText).toBe('(Smith, 2024)');
+    } finally {
+      if (seedEditor.lifecycleState === 'ready') {
+        seedEditor.close();
+      }
+      if (observerEditor.lifecycleState === 'ready') {
+        observerEditor.close();
+      }
+      seedEditor.destroy();
+      observerEditor.destroy();
+      ydoc.destroy();
+    }
+  });
+
+  it('recovers citation resolvedText from cached Yjs children when a second collaboration client hydrates', async () => {
+    const observerProvider = createProviderStub();
+    observerProvider.synced = true;
+    observerProvider.isSynced = true;
+    const ydoc = new YDoc();
+    const seedEditor = createTestEditor();
+    const observerEditor = createTestEditor({
+      ydoc,
+      collaborationProvider: observerProvider,
+    });
+
+    try {
+      await seedEditor.open(undefined, { mode: 'docx' });
+      const citationDoc = createCitationPmDoc(seedEditor);
+      seedEditor.dispatch(seedEditor.state.tr.replaceWith(0, seedEditor.state.doc.content.size, citationDoc));
+
+      seedEditorStateToYDoc(seedEditor, ydoc);
+      clearYjsElementResolvedText(ydoc, 'citation');
+      addCachedResultRunToYjsCitation(ydoc, '\u200e(Mor, 2006)');
+
+      await observerEditor.open(undefined, {
+        mode: 'docx',
+        fragment: ydoc.getXmlFragment('supereditor'),
+        isNewFile: false,
+      });
+
+      observerProvider.emit('synced', true);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const observerCitations = collectCitations(observerEditor);
+      expect(observerCitations).toHaveLength(1);
+      expect(observerCitations[0].attrs.instruction).toBe('CITATION Smith2024 \\l 1033');
+      expect(observerCitations[0].attrs.resolvedText).toBe('\u200e(Mor, 2006)');
+
+      const citationElement = findYXmlElementByNodeName(ydoc.getXmlFragment('supereditor'), 'citation');
+      expect(citationElement?.getAttribute('resolvedText')).toBe('\u200e(Mor, 2006)');
+      expect(citationElement?.length).toBe(0);
+    } finally {
+      if (seedEditor.lifecycleState === 'ready') {
+        seedEditor.close();
+      }
+      if (observerEditor.lifecycleState === 'ready') {
+        observerEditor.close();
+      }
+      seedEditor.destroy();
+      observerEditor.destroy();
+      ydoc.destroy();
+    }
+  });
+
+  it('recovers crossReference resolvedText from cached Yjs children when a second collaboration client hydrates', async () => {
+    const observerProvider = createProviderStub();
+    observerProvider.synced = true;
+    observerProvider.isSynced = true;
+    const ydoc = new YDoc();
+    const seedEditor = createTestEditor();
+    const observerEditor = createTestEditor({
+      ydoc,
+      collaborationProvider: observerProvider,
+    });
+
+    try {
+      await seedEditor.open(undefined, { mode: 'docx' });
+      const crossReferenceDoc = createCrossReferencePmDoc(seedEditor);
+      seedEditor.dispatch(seedEditor.state.tr.replaceWith(0, seedEditor.state.doc.content.size, crossReferenceDoc));
+
+      seedEditorStateToYDoc(seedEditor, ydoc);
+      clearYjsElementResolvedText(ydoc, 'crossReference');
+      addCachedResultRunToYjsCrossReference(ydoc, 'Target Heading');
+
+      await observerEditor.open(undefined, {
+        mode: 'docx',
+        fragment: ydoc.getXmlFragment('supereditor'),
+        isNewFile: false,
+      });
+
+      observerProvider.emit('synced', true);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const observerCrossReferences = collectCrossReferences(observerEditor);
+      expect(observerCrossReferences).toHaveLength(1);
+      expect(observerCrossReferences[0].attrs.instruction).toBe('REF _Ref228977094 \\r \\h');
+      expect(observerCrossReferences[0].attrs.target).toBe('_Ref228977094');
+      expect(observerCrossReferences[0].attrs.resolvedText).toBe('Target Heading');
+
+      const crossReferenceElement = findYXmlElementByNodeName(ydoc.getXmlFragment('supereditor'), 'crossReference');
+      expect(crossReferenceElement?.getAttribute('resolvedText')).toBe('Target Heading');
+      expect(crossReferenceElement?.length).toBe(0);
     } finally {
       if (seedEditor.lifecycleState === 'ready') {
         seedEditor.close();

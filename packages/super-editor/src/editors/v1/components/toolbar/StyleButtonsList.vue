@@ -79,8 +79,8 @@ onMounted(() => {
     <div
       v-for="(button, index) in props.buttons"
       :key="button.key"
-      class="button-icon"
-      :class="{ selected: props.selectedStyle === button.key }"
+      class="sd-button-icon"
+      :class="{ 'sd-selected': props.selectedStyle === button.key }"
       :style="iconStyle"
       @click="select(button.key)"
       v-html="button.icon"
@@ -100,7 +100,7 @@ onMounted(() => {
   padding: 8px;
   box-sizing: border-box;
 
-  .button-icon {
+  .sd-button-icon {
     cursor: pointer;
     padding: 5px;
     font-size: var(--sd-ui-font-size-600, 16px);
@@ -123,16 +123,16 @@ onMounted(() => {
       fill: currentColor;
     }
 
-    &.selected {
+    &.sd-selected {
       background-color: var(--sd-ui-dropdown-active-bg, #d8dee5);
       color: var(--sd-ui-dropdown-selected-text, #47484a);
     }
   }
 
   &.high-contrast {
-    .button-icon {
+    .sd-button-icon {
       &:hover,
-      &.selected {
+      &.sd-selected {
         background-color: #000;
         color: #fff;
       }

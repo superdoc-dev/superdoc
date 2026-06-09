@@ -16,6 +16,9 @@ export type {
   CommentThreadingStyle,
 } from './comments-types';
 
+// Identity helpers
+export * from './identity';
+
 // List numbering helpers
 export * from './list-numbering';
 export * from './list-rendering';

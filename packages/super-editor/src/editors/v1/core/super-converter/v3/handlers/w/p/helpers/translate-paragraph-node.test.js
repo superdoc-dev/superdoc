@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { translateChildNodes } from '@converter/v2/exporter/helpers/index.js';
+import { buildTrackedChangeIdMap } from '@converter/v2/importer/trackedChangeIdMapper.js';
 import { generateParagraphProperties } from './generate-paragraph-properties.js';
 
 vi.mock('@converter/v2/exporter/helpers/index.js', () => ({
@@ -98,8 +99,13 @@ describe('translateParagraphNode', () => {
       attributes: { 'w:id': id, 'w:author': 'a', 'w:date': 'd' },
       elements: [{ name: 'w:r', elements: [{ name: 'w:delText', elements: [{ type: 'text', text: innerText }] }] }],
     });
+    const buildInsWrapper = (id, innerText) => ({
+      name: 'w:ins',
+      attributes: { 'w:id': id, 'w:author': 'a', 'w:date': 'd' },
+      elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: innerText }] }] }],
+    });
 
-    it('folds a leading commentRangeStart into the following tracked-change wrapper (SD-2528)', () => {
+    it('folds a leading commentRangeStart into the following tracked-change wrapper and keeps the closing markers there', () => {
       const params = baseParams();
       generateParagraphProperties.mockReturnValue(null);
       translateChildNodes.mockReturnValue([
@@ -114,10 +120,10 @@ describe('translateParagraphNode', () => {
       const result = translateParagraphNode(params);
       const names = result.elements.map((e) => e.name);
 
-      expect(names).toEqual(['w:r', 'w:del', 'w:commentRangeEnd', 'w:r', 'w:r']);
+      expect(names).toEqual(['w:r', 'w:del', 'w:r']);
 
       const delNode = result.elements.find((e) => e.name === 'w:del');
-      expect(delNode.elements.map((e) => e.name)).toEqual(['w:commentRangeStart', 'w:r']);
+      expect(delNode.elements.map((e) => e.name)).toEqual(['w:commentRangeStart', 'w:r', 'w:commentRangeEnd', 'w:r']);
       expect(delNode.elements[0].attributes['w:id']).toBe('0');
     });
 
@@ -183,5 +189,83 @@ describe('translateParagraphNode', () => {
       expect(result.elements[0].elements).toHaveLength(1);
       expect(result.elements[2].elements).toHaveLength(1);
     });
+
+    it('absorbs trailing deleted-side comment markers so replacement siblings remain pairable', () => {
+      const params = baseParams();
+      generateParagraphProperties.mockReturnValue(null);
+      translateChildNodes.mockReturnValue([
+        commentRangeStart,
+        buildDelWrapper('1', 'old'),
+        commentRangeEnd,
+        commentReferenceRun,
+        buildInsWrapper('2', 'new'),
+      ]);
+
+      const result = translateParagraphNode(params);
+      const names = result.elements.map((e) => e.name);
+
+      expect(names).toEqual(['w:del', 'w:ins']);
+
+      const delNode = result.elements[0];
+      expect(delNode.elements.map((e) => e.name)).toEqual(['w:commentRangeStart', 'w:r', 'w:commentRangeEnd', 'w:r']);
+
+      const idMap = buildTrackedChangeIdMap({
+        'word/document.xml': {
+          elements: [
+            {
+              name: 'w:document',
+              elements: [{ name: 'w:body', elements: [result] }],
+            },
+          ],
+        },
+      });
+
+      expect(idMap.get('1')).toBe(idMap.get('2'));
+    });
+  });
+
+  it('merges adjacent plain text runs in final-doc export mode after tracked wrappers are removed', () => {
+    const params = {
+      ...baseParams(),
+      isFinalDoc: true,
+    };
+    generateParagraphProperties.mockReturnValue(null);
+    translateChildNodes.mockReturnValue([
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'ABC' }] }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'XYZ' }] }] },
+    ]);
+
+    const result = translateParagraphNode(params);
+
+    expect(result.elements).toHaveLength(1);
+    expect(result.elements[0]).toEqual({
+      name: 'w:r',
+      elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'ABCXYZ' }] }],
+    });
+  });
+
+  it('does not merge adjacent final-doc runs when run properties differ', () => {
+    const params = {
+      ...baseParams(),
+      isFinalDoc: true,
+    };
+    generateParagraphProperties.mockReturnValue(null);
+    translateChildNodes.mockReturnValue([
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'ABC' }] }],
+      },
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:rPr', elements: [{ name: 'w:b' }] },
+          { name: 'w:t', elements: [{ type: 'text', text: 'XYZ' }] },
+        ],
+      },
+    ]);
+
+    const result = translateParagraphNode(params);
+
+    expect(result.elements).toHaveLength(2);
   });
 });

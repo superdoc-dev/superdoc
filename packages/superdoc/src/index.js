@@ -223,6 +223,8 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('./core/types/index.js').FindReplaceRenderContext} FindReplaceRenderContext
  * @typedef {import('./core/types/index.js').FindReplaceResolution} FindReplaceResolution
  * @typedef {import('./core/types/index.js').FindReplaceConfig} FindReplaceConfig
+ * @typedef {import('./core/types/index.js').TrackChangeAuthor} TrackChangeAuthor
+ * @typedef {import('./core/types/index.js').TrackChangesAuthorColorsConfig} TrackChangesAuthorColorsConfig
  * @typedef {import('./core/types/index.js').TrackChangesModuleConfig} TrackChangesModuleConfig
  * @typedef {import('./core/types/index.js').ViewingVisibilityConfig} ViewingVisibilityConfig
  * @typedef {import('./core/types/index.js').SuperDocLayoutEngineOptions} SuperDocLayoutEngineOptions

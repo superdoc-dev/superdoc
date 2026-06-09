@@ -6,9 +6,10 @@ import type { AttributeSpec } from './Attribute.js';
 
 /**
  * Configuration for Mark extensions.
- * @template Options - Type for mark options
- * @template Storage - Type for mark storage
- * @template Attrs - Type for mark attributes (optional, enables typed addAttributes)
+ *
+ * @typeParam Options - Type for mark options.
+ * @typeParam Storage - Type for mark storage.
+ * @typeParam Attrs - Type for mark attributes (optional, enables typed addAttributes).
  */
 export interface MarkConfig<
   Options extends Record<string, unknown> = Record<string, never>,
@@ -39,9 +40,10 @@ export interface MarkConfig<
 
 /**
  * Mark class is used to create Mark extensions.
- * @template Options - Type for mark options
- * @template Storage - Type for mark storage
- * @template Attrs - Type for mark attributes (enables typed attribute access)
+ *
+ * @typeParam Options - Type for mark options.
+ * @typeParam Storage - Type for mark storage.
+ * @typeParam Attrs - Type for mark attributes (enables typed attribute access).
  */
 export class Mark<
   Options extends Record<string, unknown> = Record<string, never>,

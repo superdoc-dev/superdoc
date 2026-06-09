@@ -10,6 +10,7 @@ import { ySyncPluginKey } from 'y-prosemirror';
 const { findChildren } = helpers;
 const SD_BLOCK_ID_ATTRIBUTE_NAME = 'sdBlockId';
 const SD_BLOCK_REV_ATTRIBUTE_NAME = 'sdBlockRev';
+export const BLOCK_NODE_METADATA_UPDATE_META = 'blockNodeMetadataUpdate';
 export const BlockNodePluginKey = new PluginKey('blockNodePlugin');
 
 /**
@@ -267,7 +268,10 @@ export const BlockNode = Extension.create({
       new Plugin({
         key: BlockNodePluginKey,
         appendTransaction: (transactions, oldState, newState) => {
-          const docChanges = transactions.some((tr) => tr.docChanged) && !oldState.doc.eq(newState.doc);
+          const hasContentDocChanges = transactions.some(
+            (tr) => tr.docChanged && !tr.getMeta(BLOCK_NODE_METADATA_UPDATE_META),
+          );
+          const docChanges = hasContentDocChanges && !oldState.doc.eq(newState.doc);
 
           if (hasInitialized && !docChanges) {
             return;
@@ -275,7 +279,7 @@ export const BlockNode = Extension.create({
 
           const { tr } = newState;
           let changed = false;
-          const updatedPositions = new Set();
+          const visitedPositions = new Set();
 
           // Skip sdBlockRev increment for Y.js-origin transactions to prevent
           // an infinite feedback loop in collaboration: Tab A increments rev →
@@ -312,6 +316,7 @@ export const BlockNode = Extension.create({
             let shouldFallbackToFullTraversal = false;
 
             transactions.forEach((transaction, txIndex) => {
+              if (transaction.getMeta(BLOCK_NODE_METADATA_UPDATE_META)) return;
               transaction.steps.forEach((step, stepIndex) => {
                 const stepRanges = [];
                 if (step instanceof ReplaceStep || step instanceof ReplaceAroundStep) {
@@ -363,6 +368,30 @@ export const BlockNode = Extension.create({
             // (e.g., when tr.split() copies the original paragraph's sdBlockId to the new one).
             const seenBlockIds = new Set();
 
+            const updateNodeAt = (node, pos) => {
+              if (!nodeAllowsSdBlockIdAttr(node) && !nodeAllowsSdBlockRevAttr(node)) return;
+              if (visitedPositions.has(pos)) return;
+              visitedPositions.add(pos);
+              const nextAttrs = { ...node.attrs };
+              let nodeChanged = ensureUniqueSdBlockId(node, nextAttrs, seenBlockIds);
+              if (!isYjsOrigin && nodeAllowsSdBlockRevAttr(node)) {
+                nextAttrs.sdBlockRev = getNextBlockRev(node);
+                nodeChanged = true;
+              }
+              if (nodeChanged) {
+                applyNodeAttrs(tr, node, pos, nextAttrs);
+                changed = true;
+              }
+            };
+
+            const updateBlockAncestorsAt = (pos) => {
+              const safePos = Math.max(0, Math.min(pos, docSize));
+              const $pos = newState.doc.resolve(safePos);
+              for (let depth = $pos.depth; depth > 0; depth--) {
+                updateNodeAt($pos.node(depth), $pos.before(depth));
+              }
+            };
+
             for (const { from, to } of mergedRanges) {
               const clampedRange = clampRange(from, to, docSize);
 
@@ -373,20 +402,11 @@ export const BlockNode = Extension.create({
               const { start: safeStart, end: safeEnd } = clampedRange;
 
               try {
+                updateBlockAncestorsAt(safeStart);
+                updateBlockAncestorsAt(Math.max(safeStart, safeEnd - 1));
+                updateBlockAncestorsAt(safeEnd);
                 newState.doc.nodesBetween(safeStart, safeEnd, (node, pos) => {
-                  if (!nodeAllowsSdBlockIdAttr(node) && !nodeAllowsSdBlockRevAttr(node)) return;
-                  if (updatedPositions.has(pos)) return;
-                  const nextAttrs = { ...node.attrs };
-                  let nodeChanged = ensureUniqueSdBlockId(node, nextAttrs, seenBlockIds);
-                  if (!isYjsOrigin && nodeAllowsSdBlockRevAttr(node)) {
-                    nextAttrs.sdBlockRev = getNextBlockRev(node);
-                    nodeChanged = true;
-                  }
-                  if (nodeChanged) {
-                    applyNodeAttrs(tr, node, pos, nextAttrs);
-                    updatedPositions.add(pos);
-                    changed = true;
-                  }
+                  updateNodeAt(node, pos);
                 });
               } catch (error) {
                 console.warn('Block node plugin: nodesBetween failed, falling back to full traversal', error);
@@ -422,6 +442,7 @@ export const BlockNode = Extension.create({
 
           // Restore marks since setNodeMarkup resets them
           tr.setStoredMarks(newState.tr.storedMarks);
+          tr.setMeta(BLOCK_NODE_METADATA_UPDATE_META, true);
 
           return changed ? tr : null;
         },

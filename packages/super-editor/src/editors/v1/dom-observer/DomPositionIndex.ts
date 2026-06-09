@@ -1,4 +1,4 @@
-import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
+import { DOM_CLASS_NAMES, STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES } from '@superdoc/dom-contract';
 import { sortedIndexBy } from 'lodash';
 import { debugLog, getSelectionDebugConfig } from '../core/presentation-editor/selection/SelectionDebug.js';
 
@@ -30,6 +30,10 @@ export type DomPositionIndexEntry = {
 };
 
 function isExcludedFromBodyDomIndex(node: HTMLElement): boolean {
+  if (STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES.some((className) => node.classList.contains(className))) {
+    return true;
+  }
+
   if (node.closest('.superdoc-page-header, .superdoc-page-footer')) {
     return true;
   }

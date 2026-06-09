@@ -8,6 +8,8 @@ import {
   createRulerExecute,
   createRulerStateDeriver,
   createZoomExecute,
+  createZoomFitWidthExecute,
+  createZoomFitWidthStateDeriver,
   createZoomStateDeriver,
 } from './helpers/document.js';
 import {
@@ -186,6 +188,11 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
       id: 'zoom',
       state: createZoomStateDeriver(),
       execute: createZoomExecute(),
+    },
+    'zoom-fit-width': {
+      id: 'zoom-fit-width',
+      state: createZoomFitWidthStateDeriver(),
+      execute: createZoomFitWidthExecute(),
     },
     'document-mode': {
       id: 'document-mode',

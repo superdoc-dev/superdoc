@@ -680,6 +680,45 @@ describe('getDocumentApiCapabilities', () => {
     expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
   });
 
+  // --- templates.apply capability tests ---
+
+  it('marks templates.apply as available when converter can read XML parts', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {},
+      parseXmlToJson: vi.fn(() => ({ elements: [] })),
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['templates.apply'].available).toBe(true);
+    expect(capabilities.operations['templates.apply'].dryRun).toBe(true);
+    expect(capabilities.operations['templates.apply'].reasons).toBeUndefined();
+  });
+
+  it('marks templates.apply unavailable without reporting COMMAND_UNAVAILABLE', () => {
+    const editor = makeEditor();
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['templates.apply'].reasons ?? [];
+    expect(capabilities.operations['templates.apply'].available).toBe(false);
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+    expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  it('marks templates.apply unavailable when converter cannot parse XML parts', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {},
+      parseXmlToJson: undefined,
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['templates.apply'].reasons ?? [];
+    expect(capabilities.operations['templates.apply'].available).toBe(false);
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+    expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
   it('marks sections.setOddEvenHeadersFooters as unavailable when converter is missing', () => {
     const capabilities = getDocumentApiCapabilities(makeEditor());
     const reasons = capabilities.operations['sections.setOddEvenHeadersFooters'].reasons ?? [];

@@ -692,7 +692,7 @@ describe('DomPainter hanging indent with tabs', () => {
       // paddingLeft should be: left (100) + firstLine (500) = 600px
       expect(lineEl.style.paddingLeft).toBe('600px');
 
-      // Tab element should exist and have width equal to LIST_MARKER_GAP (8px)
+      // Tab element should preserve the computed marker-to-text gap.
       const tabEl = lineEl.querySelector('.superdoc-tab') as HTMLElement;
       expect(tabEl).toBeTruthy();
       expect(tabEl.style.width).toBe('10px');

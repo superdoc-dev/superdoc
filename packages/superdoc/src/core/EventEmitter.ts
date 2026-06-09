@@ -22,7 +22,6 @@ export type EventCallback<Args extends unknown[] = unknown[]> = (...args: Args) 
 
 /**
  * EventEmitter class is used to emit and subscribe to events.
- * @template EventMap - Map of event names to their argument types
  */
 export class EventEmitter<EventMap extends DefaultEventMap = DefaultEventMap> {
   #events = new Map<keyof EventMap, EventCallback[]>();
@@ -31,7 +30,6 @@ export class EventEmitter<EventMap extends DefaultEventMap = DefaultEventMap> {
    * Subscribe to the event.
    * @param name Event name.
    * @param fn Callback.
-   * @returns {void}
    */
   on<K extends keyof EventMap>(name: K, fn: EventCallback<EventMap[K]>): void {
     const callbacks = this.#events.get(name);
@@ -46,7 +44,6 @@ export class EventEmitter<EventMap extends DefaultEventMap = DefaultEventMap> {
    * Emit event.
    * @param name Event name.
    * @param args Arguments to pass to each listener.
-   * @returns {void}
    */
   emit<K extends keyof EventMap>(name: K, ...args: EventMap[K]): void {
     const callbacks = this.#events.get(name);
@@ -61,7 +58,6 @@ export class EventEmitter<EventMap extends DefaultEventMap = DefaultEventMap> {
    * or all event subscriptions.
    * @param name Event name.
    * @param fn Callback.
-   * @returns {void}
    */
   off<K extends keyof EventMap>(name: K, fn?: EventCallback<EventMap[K]>): void {
     const callbacks = this.#events.get(name);
@@ -77,7 +73,6 @@ export class EventEmitter<EventMap extends DefaultEventMap = DefaultEventMap> {
    * Subscribe to an event that will be called only once.
    * @param name Event name.
    * @param fn Callback.
-   * @returns {void}
    */
   once<K extends keyof EventMap>(name: K, fn: EventCallback<EventMap[K]>): void {
     const wrapper = (...args: EventMap[K]) => {

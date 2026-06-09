@@ -19,7 +19,7 @@ import { captureHeaderFooterState } from '../algorithm/header-footer-diffing';
 import type { DiffResult } from '../computeDiff';
 import { computeDiff } from '../computeDiff';
 import { replayDiffs, type ReplayDiffsResult } from '../replayDiffs';
-import { buildCanonicalDiffableState } from './canonicalize';
+import { buildCanonicalDiffableState, buildLegacyCanonicalDiffableState } from './canonicalize';
 import { computeFingerprint } from './fingerprint';
 import { buildDiffSummary } from './summary';
 import { V1_COVERAGE, V2_COVERAGE, coverageEquals } from './coverage';
@@ -136,6 +136,30 @@ function buildCanonicalStateForCoverage(
   );
 }
 
+/**
+ * Builds the canonical state under the pre-SD-3279 normalization. Used only
+ * by the validation fallback when a stored fingerprint was computed under
+ * the old algorithm. See {@link buildLegacyCanonicalDiffableState}.
+ */
+function buildLegacyCanonicalStateForCoverage(
+  doc: PMNode,
+  comments: CommentInput[],
+  styles: StylesDocumentProperties | null,
+  numbering: NumberingProperties | null,
+  headerFooters: HeaderFooterState | null,
+  partsState: PartsState | null,
+  coverage: DiffCoverage,
+) {
+  return buildLegacyCanonicalDiffableState(
+    doc,
+    comments,
+    styles,
+    numbering,
+    coverage.headerFooters ? headerFooters : null,
+    coverage.headerFooters ? partsState : null,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Capture
 // ---------------------------------------------------------------------------
@@ -218,6 +242,12 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   // Wrap in try-catch so malformed nested data (e.g. comment body nodes that
   // pass structural validation but fail during canonicalization) surfaces as
   // INVALID_INPUT rather than a raw TypeError.
+  //
+  // SD-3279: snapshots captured under the pre-fix algorithm stored a
+  // fingerprint that included session-local `sdBlockId` values. If the
+  // current normalizer's fingerprint mismatches, retry with the legacy
+  // normalizer so old persisted snapshots remain accepted. Genuinely tampered
+  // snapshots fail both checks.
   let reDerivedFingerprint: string;
   try {
     const targetCanonical = buildCanonicalStateForCoverage(
@@ -238,10 +268,22 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
     );
   }
   if (reDerivedFingerprint !== targetSnapshot.fingerprint) {
-    throw new DiffServiceError(
-      'INVALID_INPUT',
-      `Target snapshot fingerprint does not match re-derived value. The snapshot may have been tampered with.`,
+    const legacyCanonical = buildLegacyCanonicalStateForCoverage(
+      targetDoc,
+      targetComments,
+      targetStyles,
+      targetNumbering,
+      targetHeaderFooters,
+      targetSnapshot.version === SNAPSHOT_VERSION_V2 ? targetPartsState : null,
+      targetCoverage,
     );
+    const legacyFingerprint = computeFingerprint(legacyCanonical);
+    if (legacyFingerprint !== targetSnapshot.fingerprint) {
+      throw new DiffServiceError(
+        'INVALID_INPUT',
+        `Target snapshot fingerprint does not match re-derived value. The snapshot may have been tampered with.`,
+      );
+    }
   }
   // Compute base fingerprint
   const baseDoc = editor.state.doc;
@@ -360,12 +402,30 @@ export function applyDiffPayload(
   );
   const currentFingerprint = computeFingerprint(baseCanonical);
 
+  // SD-3279: diffs produced under the pre-fix algorithm carry a baseFingerprint
+  // that included session-local sdBlockId values. If the current normalizer's
+  // fingerprint mismatches, retry with the legacy normalizer so an old payload
+  // can still be applied against the editor that produced it. Note: this only
+  // recovers same-editor reapplies — old payloads applied to a freshly
+  // reloaded editor were already broken by per-session sdBlockId divergence.
   if (currentFingerprint !== diffPayload.baseFingerprint) {
-    throw new DiffServiceError(
-      'PRECONDITION_FAILED',
-      `Document fingerprint mismatch. Expected "${diffPayload.baseFingerprint}", got "${currentFingerprint}". ` +
-        `The document may have changed since the diff was computed. Re-run diff.compare against the current state.`,
+    const legacyBaseCanonical = buildLegacyCanonicalStateForCoverage(
+      baseDoc,
+      baseComments,
+      baseStyles,
+      baseNumbering,
+      baseHeaderFooters,
+      diffPayload.version === PAYLOAD_VERSION_V2 ? basePartsState : null,
+      diffPayload.coverage,
     );
+    const legacyFingerprint = computeFingerprint(legacyBaseCanonical);
+    if (legacyFingerprint !== diffPayload.baseFingerprint) {
+      throw new DiffServiceError(
+        'PRECONDITION_FAILED',
+        `Document fingerprint mismatch. Expected "${diffPayload.baseFingerprint}", got "${currentFingerprint}". ` +
+          `The document may have changed since the diff was computed. Re-run diff.compare against the current state.`,
+      );
+    }
   }
   // Reconstruct internal DiffResult from opaque payload with structural validation
   const rawDiff = parseDiffPayloadContents(diffPayload.payload);

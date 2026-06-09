@@ -21,7 +21,7 @@ test('SD-2509 replacement bubble preserves deleted text after follow-up edits', 
 
   // Wait for the tracked change to appear
   await expect
-    .poll(async () => (await listTrackChanges(superdoc.page, { type: 'insert' })).total)
+    .poll(async () => (await listTrackChanges(superdoc.page, { type: 'replacement' })).total)
     .toBeGreaterThanOrEqual(1);
 
   // The bubble should show both the deleted and inserted text

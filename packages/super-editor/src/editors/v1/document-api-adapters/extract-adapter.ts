@@ -36,7 +36,7 @@ import { getHeadingLevel, mapBlockNodeType, resolveBlockNodeId } from './helpers
 import { getRevision } from './plan-engine/revision-tracker.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { trackChangesListWrapper } from './plan-engine/track-changes-wrappers.js';
-import { buildTrackedChangeCanonicalIdMap } from './helpers/tracked-change-resolver.js';
+import { buildTrackedChangeCanonicalIdMap, getTrackedChangeMarkAlias } from './helpers/tracked-change-resolver.js';
 import {
   TrackDeleteMarkName,
   TrackFormatMarkName,
@@ -175,9 +175,9 @@ function readSpanTrackedChanges(
   for (const mark of node.marks) {
     const type = TRACK_MARK_TYPE_BY_NAME[mark.type.name];
     if (!type) continue;
-    const rawId = (mark.attrs as Record<string, unknown> | undefined)?.id;
-    if (typeof rawId !== 'string' || rawId.length === 0) continue;
-    const entityId = canonicalIdByAlias.get(rawId);
+    const alias = getTrackedChangeMarkAlias(mark);
+    if (!alias) continue;
+    const entityId = canonicalIdByAlias.get(alias);
     if (!entityId) continue;
     out.push({ entityId, type });
   }

@@ -5,6 +5,39 @@ import { syncCommentsToClients } from '@superdoc/core/collaboration/helpers.js';
 import { comments_module_events } from '@superdoc/common';
 import useSelection from '@superdoc/helpers/use-selection';
 
+const getCommentIds = (comment) =>
+  [comment?.commentId, comment?.importedId].filter((id) => id != null).map((id) => String(id));
+
+function getThreadDescendants(superdoc, rootComment) {
+  const store = superdoc?.commentsStore;
+  if (!store) return [];
+  const raw = store.commentsList;
+  const list = Array.isArray(raw) ? raw : (raw?.value ?? []);
+  const threadIds = new Set(getCommentIds(rootComment));
+  const descendants = [];
+  let expanded = true;
+
+  while (expanded) {
+    expanded = false;
+    for (const comment of list) {
+      if (!comment) continue;
+      const ids = getCommentIds(comment);
+      if (ids.some((id) => threadIds.has(id))) continue;
+
+      const parentIds = [comment.parentCommentId, comment.threadingParentCommentId]
+        .filter((id) => id != null)
+        .map((id) => String(id));
+      if (!parentIds.some((id) => threadIds.has(id))) continue;
+
+      descendants.push(comment);
+      ids.forEach((id) => threadIds.add(id));
+      expanded = true;
+    }
+  }
+
+  return descendants;
+}
+
 /**
  * Comment composable
  *
@@ -27,10 +60,11 @@ export default function useComment(params) {
   const commentElement = ref(null);
   const isFocused = ref(params.isFocused || false);
 
-  const creatorEmail = params.creatorEmail;
-  const creatorName = params.creatorName;
-  const creatorImage = params.creatorImage;
-  const createdTime = params.createdTime || Date.now();
+  const creatorId = ref(params.creatorId ?? null);
+  const creatorEmail = ref(params.creatorEmail ?? null);
+  const creatorName = ref(params.creatorName ?? null);
+  const creatorImage = ref(params.creatorImage ?? null);
+  const createdTime = ref(params.createdTime || Date.now());
   const importedAuthor = ref(params.importedAuthor || null);
   const docxCommentJSON = ref(params.docxCommentJSON || null);
   const origin = params.origin;
@@ -65,32 +99,54 @@ export default function useComment(params) {
   const deletedText = ref(params.deletedText || null);
 
   const resolvedTime = ref(params.resolvedTime || null);
+  const resolvedById = ref(params.resolvedById || null);
   const resolvedByEmail = ref(params.resolvedByEmail || null);
   const resolvedByName = ref(params.resolvedByName || null);
 
   /**
    * Mark this conversation as resolved with UTC date
    *
+   * @param {String} id The actor id of the user marking this conversation as done
    * @param {String} email The email of the user marking this conversation as done
    * @param {String} name The name of the user marking this conversation as done
    * @returns {void}
    */
-  const resolveComment = ({ email, name, superdoc }) => {
+  const resolveComment = ({ id, email, name, superdoc }) => {
     if (resolvedTime.value) return;
     resolvedTime.value = Date.now();
+    resolvedById.value = id ?? null;
     resolvedByEmail.value = email;
     resolvedByName.value = name;
 
+    const emitData = { type: comments_module_events.RESOLVED, comment: getValues() };
+    propagateUpdate(superdoc, emitData);
+
+    const commands = superdoc.activeEditor?.commands;
+
+    // Tracked-change comments are standalone — resolve only this comment.
     if (trackedChange.value) {
-      const emitData = { type: comments_module_events.RESOLVED, comment: getValues() };
-      propagateUpdate(superdoc, emitData);
-      superdoc.activeEditor?.commands?.resolveComment({ commentId, importedId });
+      commands?.resolveComment({ commentId, importedId });
       return;
     }
 
-    const emitData = { type: comments_module_events.RESOLVED, comment: getValues() };
-    propagateUpdate(superdoc, emitData);
-    superdoc.activeEditor?.commands?.resolveComment({ commentId, importedId });
+    // Replies can carry their own reconstructed anchor marks. Convert the
+    // whole thread in one editor transaction so resolved text stops rendering
+    // as open while the root remains the thread-level resolved state.
+    const replies = getThreadDescendants(superdoc, { commentId, importedId });
+    if (replies.length && typeof commands?.resolveCommentThread === 'function') {
+      commands.resolveCommentThread({
+        comments: [
+          { commentId, importedId, preserveAnchor: true },
+          ...replies.map((reply) => ({
+            commentId: reply.commentId,
+            importedId: reply.importedId,
+            preserveAnchor: false,
+          })),
+        ],
+      });
+    } else {
+      commands?.resolveComment({ commentId, importedId });
+    }
   };
 
   /**
@@ -209,7 +265,7 @@ export default function useComment(params) {
   const getCommentUser = () => {
     const user = importedAuthor.value
       ? { name: importedAuthor.value.name || '(Imported)', email: importedAuthor.value.email }
-      : { name: creatorName, email: creatorEmail, image: creatorImage };
+      : { id: creatorId.value, name: creatorName.value, email: creatorEmail.value, image: creatorImage.value };
 
     return user;
   };
@@ -244,10 +300,11 @@ export default function useComment(params) {
         return { ...u, name: u.name ? u.name : u.email };
       }),
       createdAtVersionNumber,
-      creatorEmail,
-      creatorName,
-      creatorImage,
-      createdTime,
+      creatorId: creatorId.value,
+      creatorEmail: creatorEmail.value,
+      creatorName: creatorName.value,
+      creatorImage: creatorImage.value,
+      createdTime: createdTime.value,
       importedAuthor: importedAuthor.value,
       docxCommentJSON: docxCommentJSON.value,
       isInternal: isInternal.value,
@@ -263,6 +320,7 @@ export default function useComment(params) {
       trackedChangeAnchorKey: trackedChangeAnchorKey.value,
       deletedText: deletedText.value,
       resolvedTime: resolvedTime.value,
+      resolvedById: resolvedById.value,
       resolvedByEmail: resolvedByEmail.value,
       resolvedByName: resolvedByName.value,
       origin,
@@ -284,6 +342,7 @@ export default function useComment(params) {
     mentions,
     commentElement,
     isFocused,
+    creatorId,
     creatorEmail,
     creatorName,
     creatorImage,
@@ -302,6 +361,7 @@ export default function useComment(params) {
     trackedChangeStoryLabel,
     trackedChangeAnchorKey,
     resolvedTime,
+    resolvedById,
     resolvedByEmail,
     resolvedByName,
     importedAuthor,

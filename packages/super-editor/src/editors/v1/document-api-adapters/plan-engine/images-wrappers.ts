@@ -123,11 +123,24 @@ function hasCaptionSibling(editor: Editor, imagePos: number): boolean {
   }
 }
 
+function resolveImageAnchorBlockId(editor: Editor, imagePos: number): string | undefined {
+  try {
+    const paragraph = findContainingParagraph(editor, imagePos);
+    const attrs = (paragraph.node.attrs ?? {}) as Record<string, unknown>;
+    const blockId = attrs.sdBlockId ?? attrs.paraId ?? attrs.id ?? attrs.blockId;
+    return typeof blockId === 'string' && blockId.length > 0 ? blockId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function buildImageSummary(editor: Editor, candidate: ImageCandidate): ImageSummary {
   const attrs = candidate.node.attrs;
+  const anchorBlockId = resolveImageAnchorBlockId(editor, candidate.pos);
   return {
     sdImageId: candidate.sdImageId,
     address: buildImageAddress(candidate),
+    ...(anchorBlockId ? { anchor: { blockId: anchorBlockId } } : {}),
     properties: {
       src: attrs.src ?? undefined,
       alt: attrs.alt ?? undefined,
@@ -198,6 +211,38 @@ function filterWrapAttrs(type: string, attrs: Record<string, unknown>): Record<s
     if (key in attrs) result[key] = attrs[key];
   }
   return result;
+}
+
+type ImageMoveSourceParagraphCleanup = {
+  pos: number;
+  end: number;
+};
+
+function resolveImageMoveSourceParagraphCleanup(
+  editor: Editor,
+  imagePos: number,
+  targetPos: number,
+): ImageMoveSourceParagraphCleanup | null {
+  const paragraph = findContainingParagraph(editor, imagePos);
+
+  // Only prune top-level story/body paragraphs. Nested paragraphs (for example
+  // table-cell content) often need to remain as structural containers.
+  if (paragraph.depth !== 1) return null;
+  if (paragraph.node.childCount !== 1) return null;
+  if (paragraph.node.child(0)?.type.name !== 'image') return null;
+
+  // Keep the paragraph when the destination stays inside its inline content.
+  // In that case the image is still using this paragraph as its container.
+  const paragraphContentStart = paragraph.pos + 1;
+  const paragraphContentEnd = paragraph.pos + paragraph.node.nodeSize - 1;
+  if (targetPos >= paragraphContentStart && targetPos <= paragraphContentEnd) {
+    return null;
+  }
+
+  return {
+    pos: paragraph.pos,
+    end: paragraph.pos + paragraph.node.nodeSize,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -379,9 +424,18 @@ export function imagesMoveWrapper(
     const { pos, node } = image;
     const attrs = { ...node.attrs };
     const tr = editor.state.tr;
+    const sourceParagraphCleanup = resolveImageMoveSourceParagraphCleanup(editor, pos, targetPos);
 
     // Delete the source image first.
     tr.delete(pos, pos + node.nodeSize);
+
+    if (sourceParagraphCleanup) {
+      const cleanupFrom = tr.mapping.map(sourceParagraphCleanup.pos);
+      const cleanupTo = tr.mapping.map(sourceParagraphCleanup.end);
+      if (cleanupTo > cleanupFrom) {
+        tr.delete(cleanupFrom, cleanupTo);
+      }
+    }
 
     // Map the pre-resolved target through the delete mapping so it remains
     // accurate after the deletion step shifts positions.

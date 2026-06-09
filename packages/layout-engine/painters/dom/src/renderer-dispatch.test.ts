@@ -50,64 +50,6 @@ function paragraphFixtures() {
   return { blocks: [block], measures: [measure], layout };
 }
 
-function listItemFixtures() {
-  const block: FlowBlock = {
-    kind: 'list',
-    id: 'list-dispatch',
-    listType: 'bullet',
-    items: [
-      {
-        id: 'item-dispatch',
-        marker: { kind: 'bullet', text: '•', level: 0 },
-        paragraph: {
-          kind: 'paragraph',
-          id: 'list-para-dispatch',
-          runs: [{ text: 'Item', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 5 }],
-        },
-      },
-    ],
-  };
-  const measure: Measure = {
-    kind: 'list',
-    items: [
-      {
-        itemId: 'item-dispatch',
-        markerWidth: 20,
-        markerTextWidth: 10,
-        indentLeft: 36,
-        paragraph: {
-          kind: 'paragraph',
-          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 10, descent: 4, lineHeight: 16 }],
-          totalHeight: 16,
-        },
-      },
-    ],
-    totalHeight: 16,
-  };
-  const layout: Layout = {
-    pageSize: { w: 400, h: 500 },
-    pages: [
-      {
-        number: 1,
-        fragments: [
-          {
-            kind: 'list-item',
-            blockId: 'list-dispatch',
-            itemId: 'item-dispatch',
-            fromLine: 0,
-            toLine: 1,
-            x: 50,
-            y: 0,
-            width: 250,
-            markerWidth: 20,
-          },
-        ],
-      },
-    ],
-  };
-  return { blocks: [block], measures: [measure], layout };
-}
-
 function imageFixtures() {
   const block: FlowBlock = {
     kind: 'image',
@@ -335,16 +277,6 @@ describe('renderFragment dispatch', () => {
     painter.paint(layout, container);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![0].kind).toBe('para');
-  });
-
-  it('routes list-item fragment to renderListItemFragment', () => {
-    const dummyDiv = document.createElement('div');
-    const spy = vi.spyOn(DomPainter.prototype as any, 'renderListItemFragment').mockReturnValue(dummyDiv);
-    const { blocks, measures, layout } = listItemFixtures();
-    const painter = createDomPainter({ blocks, measures });
-    painter.paint(layout, container);
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.calls[0]![0].kind).toBe('list-item');
   });
 
   it('routes image fragment to renderImageFragment', () => {

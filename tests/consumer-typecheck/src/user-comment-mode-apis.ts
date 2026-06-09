@@ -13,7 +13,7 @@
  *   - `getComment(commentId)` → `Record<string, unknown> | null`
  *   - `setDocumentMode(type)` → `void`
  *   - `addSharedUser(user)` → `void`
- *   - `removeSharedUser(email)` → `void`
+ *   - `removeSharedUser(userOrEmail)` → `void`
  *
  * The mutation methods have no declared return type in source; TS
  * infers `void`, which the emitted `.d.ts` ships. The `void`
@@ -26,6 +26,11 @@
  * SuperDoc-internal `User` interface that re-declared the public
  * super-editor `User`. This PR unifies the two so the imported
  * `User` from `superdoc` is the same symbol the methods accept.
+ *
+ * `removeSharedUser` intentionally accepts either a full `User` or a
+ * legacy email string. The implementation removes by actor identity
+ * when a `User` is provided, but preserves the email-only call shape
+ * for backward compatibility.
  */
 import type { DocumentMode, SuperDoc, User } from 'superdoc';
 
@@ -59,9 +64,14 @@ const _addSharedUserReturnOk: AssertEqual<ReturnType<SuperDoc['addSharedUser']>,
 sd.addSharedUser(realUser);
 
 // ─── removeSharedUser ───────────────────────────────────────────────
-// Removes by email match. Silent on no-match. Return is `void`.
-const _removeSharedUserParamsOk: AssertEqual<Parameters<SuperDoc['removeSharedUser']>, [email: string]> = true;
+// Removes by actor identity when given a User, while preserving the
+// legacy email-string call shape. Silent on no-match. Return is `void`.
+const _removeSharedUserParamsOk: AssertEqual<
+  Parameters<SuperDoc['removeSharedUser']>,
+  [userOrEmail: User | string]
+> = true;
 const _removeSharedUserReturnOk: AssertEqual<ReturnType<SuperDoc['removeSharedUser']>, void> = true;
+sd.removeSharedUser(realUser);
 sd.removeSharedUser('user@example.com');
 
 void [

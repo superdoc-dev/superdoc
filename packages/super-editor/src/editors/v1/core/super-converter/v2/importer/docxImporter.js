@@ -14,10 +14,11 @@ import { lineBreakNodeHandlerEntity } from './lineBreakImporter.js';
 import { bookmarkStartNodeHandlerEntity } from './bookmarkStartImporter.js';
 import { bookmarkEndNodeHandlerEntity } from './bookmarkEndImporter.js';
 import { alternateChoiceHandler } from './alternateChoiceImporter.js';
-import { autoPageHandlerEntity, autoTotalPageCountEntity } from './autoPageNumberImporter.js';
+import { autoPageHandlerEntity, autoTotalPageCountEntity, sectionPageCountEntity } from './autoPageNumberImporter.js';
 import { documentStatFieldHandlerEntity } from './documentStatFieldImporter.js';
 import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { crossReferenceEntity } from './crossReferenceImporter.js';
+import { sequenceFieldEntity } from './sequenceFieldImporter.js';
 import { pictNodeHandlerEntity } from './pictNodeImporter.js';
 import { importCommentData } from './documentCommentsImporter.js';
 import { buildTrackedChangeIdMap, buildTrackedChangeIdMapsByPart } from './trackedChangeIdMapper.js';
@@ -26,12 +27,14 @@ import { getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
 import { pruneIgnoredNodes } from './ignoredNodes.js';
 import { tabNodeEntityHandler } from './tabImporter.js';
 import { noBreakHyphenNodeEntityHandler } from './noBreakHyphenImporter.js';
+import { smartTagNodeEntityHandler } from './smartTagImporter.js';
 import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
 import { endnoteReferenceHandlerEntity } from './endnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
 import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
 import { bibliographyHandlerEntity } from './bibliographyImporter.js';
+import { tableOfAuthoritiesHandlerEntity } from './tableOfAuthoritiesImporter.js';
 import { preProcessNodesForFldChar } from '../../field-references';
 import { preProcessPageFieldsOnly } from '../../field-references/preProcessPageFieldsOnly.js';
 import { ensureNumberingCache } from './numberingCache.js';
@@ -47,6 +50,7 @@ import { translator as wNumberingTranslator } from '@converter/v3/handlers/w/num
 import { baseNumbering } from '@converter/v2/exporter/helpers/base-list.definitions.js';
 import { patchNumberingDefinitions } from './patchNumberingDefinitions.js';
 import { startCollection, drainDiagnostics } from '@converter/v3/handlers/import-diagnostics.js';
+import { TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY } from '@extensions/track-changes/review-model/word-id-allocator.js';
 
 /**
  * @typedef {import()} XmlNode
@@ -72,7 +76,39 @@ import { startCollection, drainDiagnostics } from '@converter/v3/handlers/import
  * @param {ParsedDocx} docx The parsed docx object
  * @returns {'word' | 'google-docs' | 'unknown'} The detected origin
  */
+const OFFICE_DOCUMENT_RELATIONSHIP =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
+const SUPERDOC_DOCUMENT_ORIGIN_PROPERTY = 'SuperdocDocumentOrigin';
+const STORED_DOCUMENT_ORIGINS = new Set(['word', 'google-docs', 'unknown', 'superdoc']);
+
+const listPackageRelationships = (docx) => {
+  try {
+    const relationships = docx?.['_rels/.rels']?.elements?.find((el) => matchesElementName(el?.name, 'Relationships'));
+    return Array.isArray(relationships?.elements)
+      ? relationships.elements.filter((el) => matchesElementName(el?.name, 'Relationship'))
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const looksLikeGoogleDocsMinimalPackage = (docx) => {
+  const packageRelationships = listPackageRelationships(docx);
+  if (packageRelationships.length !== 1) return false;
+  if (packageRelationships[0]?.attributes?.Type !== OFFICE_DOCUMENT_RELATIONSHIP) return false;
+  return !docx?.['docProps/app.xml'] && !docx?.['docProps/core.xml'] && !docx?.['word/webSettings.xml'];
+};
+
 const detectDocumentOrigin = (docx) => {
+  const storedOrigin = readCustomProperty(docx, SUPERDOC_DOCUMENT_ORIGIN_PROPERTY);
+  if (storedOrigin && STORED_DOCUMENT_ORIGINS.has(storedOrigin)) {
+    return storedOrigin;
+  }
+
+  if (readCustomProperty(docx, 'SuperdocVersion') || readCustomProperty(docx, TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY)) {
+    return 'superdoc';
+  }
+
   const commentsExtended = docx['word/commentsExtended.xml'];
   if (commentsExtended) {
     const { elements: initialElements = [] } = commentsExtended;
@@ -92,7 +128,73 @@ const detectDocumentOrigin = (docx) => {
     return 'google-docs';
   }
 
+  if (looksLikeGoogleDocsMinimalPackage(docx)) {
+    return 'google-docs';
+  }
+
   return 'unknown';
+};
+
+const matchesElementName = (name, localName) => {
+  if (typeof name !== 'string') return false;
+  return name === localName || name.endsWith(`:${localName}`);
+};
+
+function readCustomProperty(docx, propertyName) {
+  try {
+    const customXml = docx?.['docProps/custom.xml'];
+    const properties = customXml?.elements?.find((el) => matchesElementName(el?.name, 'Properties'));
+    const property = properties?.elements?.find(
+      (el) => matchesElementName(el?.name, 'property') && el?.attributes?.name === propertyName,
+    );
+    const value = property?.elements?.[0]?.elements?.[0]?.text;
+    return typeof value === 'string' && value.length > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+const parseTrackedChangeSourceIdMap = (raw) => {
+  if (typeof raw !== 'string' || raw.length === 0) return new Map();
+
+  try {
+    const parsed = JSON.parse(raw);
+    const parts = parsed && typeof parsed === 'object' ? parsed.parts : null;
+    if (!parts || typeof parts !== 'object') return new Map();
+
+    const byPart = new Map();
+    for (const [partPath, entries] of Object.entries(parts)) {
+      if (!partPath || !entries || typeof entries !== 'object') continue;
+      const byWordId = new Map();
+      for (const [wordId, sourceId] of Object.entries(entries)) {
+        if (typeof sourceId === 'string' && sourceId.length > 0) byWordId.set(wordId, sourceId);
+      }
+      if (byWordId.size > 0) byPart.set(partPath, byWordId);
+    }
+    return byPart;
+  } catch {
+    return new Map();
+  }
+};
+
+const readTrackedChangeSourceIdMap = (docx) =>
+  parseTrackedChangeSourceIdMap(readCustomProperty(docx, TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY));
+
+const normalizeDocumentBackgroundColor = (value) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(trimmed)) return null;
+  return `#${trimmed.toUpperCase()}`;
+};
+
+const getDocumentBackground = (documentNode) => {
+  const background = documentNode?.elements?.find((el) => el?.name === 'w:background');
+  const color = normalizeDocumentBackgroundColor(background?.attributes?.['w:color'] ?? background?.attributes?.color);
+  if (!background || !color) return null;
+  return {
+    color,
+    originalXml: carbonCopy(background),
+  };
 };
 
 /**
@@ -119,12 +221,14 @@ const detectCommentThreadingProfile = (docx) => {
 export const createDocumentJson = (docx, converter, editor) => {
   const json = carbonCopy(getInitialJSON(docx));
   if (!json) return null;
+  const documentBackground = getDocumentBackground(json.elements?.[0]);
 
   if (converter) {
     importFootnotePropertiesFromSettings(docx, converter);
     importViewSettingFromSettings(docx, converter);
     converter.documentOrigin = detectDocumentOrigin(docx);
     converter.commentThreadingProfile = detectCommentThreadingProfile(docx);
+    converter.trackedChangeSourceIdMapByPart = readTrackedChangeSourceIdMap(docx);
   }
 
   const nodeListHandler = defaultNodeListHandler();
@@ -205,21 +309,26 @@ export const createDocumentJson = (docx, converter, editor) => {
         attributes: json.elements[0].attributes,
         // Attach body-level sectPr if it exists
         ...(bodySectPr ? { bodySectPr } : {}),
+        ...(documentBackground ? { documentBackground } : {}),
       },
     };
+    const pageStyles = getDocumentStyles(
+      node,
+      docx,
+      converter,
+      editor,
+      numbering,
+      translatedNumbering,
+      translatedLinkedStyles,
+    );
+    if (documentBackground) {
+      pageStyles.documentBackground = { color: documentBackground.color };
+    }
 
     return {
       pmDoc: result,
       savedTagsToRestore: node,
-      pageStyles: getDocumentStyles(
-        node,
-        docx,
-        converter,
-        editor,
-        numbering,
-        translatedNumbering,
-        translatedLinkedStyles,
-      ),
+      pageStyles,
       comments,
       footnotes,
       endnotes,
@@ -256,15 +365,19 @@ export const defaultNodeListHandler = () => {
     endnoteReferenceHandlerEntity,
     tabNodeEntityHandler,
     noBreakHyphenNodeEntityHandler,
+    smartTagNodeEntityHandler,
     tableOfContentsHandlerEntity,
     indexHandlerEntity,
     bibliographyHandlerEntity,
+    tableOfAuthoritiesHandlerEntity,
     indexEntryHandlerEntity,
     autoPageHandlerEntity,
     autoTotalPageCountEntity,
+    sectionPageCountEntity,
     documentStatFieldHandlerEntity,
     pageReferenceEntity,
     crossReferenceEntity,
+    sequenceFieldEntity,
     permStartHandlerEntity,
     permEndHandlerEntity,
     mathNodeHandlerEntity,
@@ -324,6 +437,7 @@ const createNodeListHandler = (nodeHandlers) => {
     parentStyleId,
     lists,
     inlineDocumentFonts,
+    importTrackingContext,
     path = [],
     extraParams = {},
   }) => {
@@ -359,6 +473,7 @@ const createNodeListHandler = (nodeHandlers) => {
                 parentStyleId,
                 lists,
                 inlineDocumentFonts,
+                importTrackingContext,
                 path,
                 extraParams,
               });
@@ -839,6 +954,7 @@ export function filterOutRootInlineNodes(content = []) {
     'hardBreak',
     'pageNumber',
     'totalPageCount',
+    'section-page-count',
     'runItem',
     'image',
     'tab',

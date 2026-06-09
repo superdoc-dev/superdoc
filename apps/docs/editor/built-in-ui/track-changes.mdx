@@ -75,6 +75,46 @@ const superdoc = new SuperDoc({
   </Expandable>
 </ParamField>
 
+<ParamField path="modules.trackChanges.authorColors" type="Object">
+  Resolve one highlight color per tracked-change author. This replaces app-side CSS overrides like `[data-track-change-author]` selectors.
+
+  <Expandable title="Fields">
+    <ParamField path="modules.trackChanges.authorColors.enabled" type="boolean" default="true">
+      Set to `false` to keep the default insert, delete, and format colors.
+    </ParamField>
+    <ParamField path="modules.trackChanges.authorColors.overrides" type="Record<string, string>">
+      Exact color overrides keyed by author email or author name. Email matches first, then name.
+    </ParamField>
+    <ParamField path="modules.trackChanges.authorColors.resolve" type="(author) => string | undefined">
+      Callback for authors not covered by `overrides`. Receives `{ name, email, image }`. Return any CSS color string, or `undefined` to use SuperDoc's deterministic fallback color.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```javascript
+new SuperDoc({
+  selector: "#editor",
+  document: "contract.docx",
+  modules: {
+    trackChanges: {
+      visible: true,
+      authorColors: {
+        overrides: {
+          "alice@example.com": "#1f6feb",
+          "Bob Reviewer": "#d1242f",
+        },
+        resolve: (author) => {
+          if (author.email?.endsWith("@outside-counsel.com")) return "#8250df";
+          return undefined; // SuperDoc assigns a stable fallback color
+        },
+      },
+    },
+  },
+});
+```
+
+Per-author colors apply to insertion, deletion, and format-change highlights. SuperDoc derives lighter background variants from the same author color and exposes the resolved colors through the custom UI snapshot.
+
 ## Viewing mode visibility
 
 Tracked-change markup is hidden by default when `documentMode` is `'viewing'`. Flip `modules.trackChanges.visible` to show it in read-only mode.

@@ -249,6 +249,64 @@ button {
   opacity: 0.5;
 }
 
+.tb-select {
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.tb-select:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tb-font-select {
+  min-width: 150px;
+  padding: 0 8px;
+}
+
+.tb-font-menu {
+  position: relative;
+}
+
+.tb-font-options {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 170px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+.tb-font-option {
+  display: block;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tb-font-option:hover,
+.tb-font-option[aria-selected='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .tb-btn.export-btn {
   border-color: var(--border);
   padding: 0 12px;

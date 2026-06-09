@@ -139,6 +139,106 @@ test('normalizeDocSnapshot ignores internal paint image block ids', () => {
   assert.equal(reference.layoutSnapshot.layout.pages[0].fragments[0].blockId, 'b0');
 });
 
+test('normalizeDocSnapshot canonicalizes paint layout source identity ids', () => {
+  const buildRawSnapshot = (blockId) => ({
+    layoutSnapshot: {
+      blocks: [{ id: blockId }],
+      layout: {
+        pages: [{ fragments: [{ blockId }] }],
+      },
+    },
+    paintSnapshot: {
+      formatVersion: 1,
+      pages: [
+        {
+          lines: [
+            {
+              layoutSourceIdentity: {
+                schema: 'layout-identity/1',
+                story: { kind: 'body' },
+                blockRef: blockId,
+                fragmentId: `body|${blockId}|para:0:1`,
+              },
+            },
+          ],
+        },
+      ],
+      entities: {
+        images: [
+          {
+            layoutSourceIdentity: {
+              schema: 'layout-identity/1',
+              story: { kind: 'body' },
+              blockRef: blockId,
+              fragmentId: `body|${blockId}|image:10:20`,
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  const reference = normalizeDocSnapshot(buildRawSnapshot('reference-block-uuid'));
+  const candidate = normalizeDocSnapshot(buildRawSnapshot('candidate-block-uuid'));
+
+  assert.deepEqual(reference.paintSnapshot, candidate.paintSnapshot);
+  assert.equal(reference.paintSnapshot.pages[0].lines[0].layoutSourceIdentity.blockRef, 'b0');
+  assert.equal(reference.paintSnapshot.pages[0].lines[0].layoutSourceIdentity.fragmentId, 'body|b0|para:0:1');
+  assert.equal(reference.paintSnapshot.entities.images[0].layoutSourceIdentity.blockRef, 'b0');
+  assert.equal(reference.paintSnapshot.entities.images[0].layoutSourceIdentity.fragmentId, 'body|b0|image:10:20');
+});
+
+test('normalizeDocSnapshot canonicalizes tracked change ids and parent links', () => {
+  const buildRawSnapshot = ({ childId, parentId }) => ({
+    layoutSnapshot: {
+      blocks: [
+        {
+          id: 'paragraph-block',
+          runs: [
+            {
+              text: 'child',
+              trackedChanges: [
+                {
+                  kind: 'delete',
+                  id: childId,
+                  overlapParentId: parentId,
+                  author: 'Reviewer',
+                  date: '2026-01-01T00:00:00Z',
+                },
+              ],
+            },
+            {
+              text: 'parent',
+              trackedChanges: [
+                {
+                  kind: 'insert',
+                  id: parentId,
+                  author: 'Reviewer',
+                  date: '2026-01-01T00:00:00Z',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      layout: { pages: [] },
+    },
+  });
+
+  const reference = normalizeDocSnapshot(buildRawSnapshot({ childId: 'reference-child', parentId: 'reference-parent' }));
+  const candidate = normalizeDocSnapshot(buildRawSnapshot({ childId: 'candidate-child', parentId: 'candidate-parent' }));
+  const trackedChanges = reference.layoutSnapshot.blocks[0].runs.flatMap((run) => run.trackedChanges ?? []);
+
+  assert.deepEqual(reference.layoutSnapshot, candidate.layoutSnapshot);
+  assert.deepEqual(
+    trackedChanges.map((change) => ({ id: change.id, overlapParentId: change.overlapParentId })),
+    [
+      { id: 'tc0', overlapParentId: 'tc1' },
+      { id: 'tc1', overlapParentId: undefined },
+    ],
+  );
+});
+
 test('buildAgentArtifact produces repo-relative report paths', () => {
   const args = {
     reference: '1.24.0-next.36',

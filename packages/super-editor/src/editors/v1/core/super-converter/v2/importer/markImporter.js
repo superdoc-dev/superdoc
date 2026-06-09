@@ -3,6 +3,32 @@ import { TrackFormatMarkName } from '@extensions/track-changes/constants.js';
 import { getHexColorFromDocxSystem, isValidHexColor, twipsToInches, twipsToLines, twipsToPt } from '../../helpers.js';
 import { translator as wRPrTranslator } from '../../v3/handlers/w/rpr/index.js';
 import { encodeMarksFromRPr } from '@converter/styles.js';
+import { resolveTrackedChangeImportIds, stampImportTrackingAttrs } from './importTrackingContext.js';
+import { ParagraphSplitSnapshotType } from '../../v3/handlers/helpers.js';
+
+function getInlineParagraphMarkInsertion(params) {
+  return params?.extraParams?.inlineParagraphProperties?.runProperties?.trackInsert || null;
+}
+
+function isMatchingParagraphMarkInsertion(trackInsert, ids) {
+  if (!trackInsert || typeof trackInsert !== 'object') return false;
+
+  const insertionId = trackInsert.id;
+  if (insertionId == null) return false;
+  return ids.some((id) => id != null && String(id) === String(insertionId));
+}
+
+function createParagraphSplitSnapshots() {
+  const snapshot = {
+    type: ParagraphSplitSnapshotType,
+    attrs: { anchor: 'source' },
+  };
+
+  return {
+    before: [snapshot],
+    after: [{ ...snapshot, attrs: { ...snapshot.attrs } }],
+  };
+}
 
 /**
  *
@@ -112,18 +138,32 @@ export function handleStyleChangeMarksV2(rPrChange, currentMarks, params) {
   }
 
   const attributes = rPrChange.attributes || {};
+  const { partPath, sourceId, logicalId } = resolveTrackedChangeImportIds(params, attributes['w:id']);
   const mappedAttributes = {
-    id: attributes['w:id'],
-    sourceId: attributes['w:id'],
+    id: logicalId,
+    sourceId,
     date: attributes['w:date'],
     author: attributes['w:author'],
     authorEmail: attributes['w:authorEmail'],
   };
+  stampImportTrackingAttrs({
+    params,
+    attrs: mappedAttributes,
+    side: 'formatting',
+    sourceId,
+    partPath,
+  });
   let submarks = [];
   const rPr = rPrChange.elements?.find((el) => el.name === 'w:rPr');
   if (rPr) {
     const runProperties = wRPrTranslator.encode({ ...params, nodes: [rPr] }) || {};
     submarks = encodeMarksFromRPr(runProperties, params?.docx);
+  }
+
+  const paragraphMarkInsertion = getInlineParagraphMarkInsertion(params);
+  if (isMatchingParagraphMarkInsertion(paragraphMarkInsertion, [attributes['w:id'], sourceId, logicalId])) {
+    const snapshots = createParagraphSplitSnapshots();
+    return [{ type: TrackFormatMarkName, attrs: { ...mappedAttributes, ...snapshots } }];
   }
 
   return [{ type: TrackFormatMarkName, attrs: { ...mappedAttributes, before: submarks, after: [...currentMarks] } }];

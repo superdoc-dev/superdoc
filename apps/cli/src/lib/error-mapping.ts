@@ -13,6 +13,16 @@ import type { CliExposedOperationId } from '../cli/operation-set.js';
 import { OPERATION_FAMILY, type OperationFamily } from '../cli/operation-hints.js';
 import { CliError, type AdapterLikeError, type CliErrorCode } from './errors.js';
 
+type ErrorMappingContext = {
+  commandName?: string;
+};
+
+const TRACK_CHANGES_REVIEW_HELPER_COMMANDS = new Set(['track-changes accept', 'track-changes reject']);
+
+function isTrackChangesReviewHelper(operationId: CliExposedOperationId, context?: ErrorMappingContext): boolean {
+  return operationId === 'trackChanges.decide' && TRACK_CHANGES_REVIEW_HELPER_COMMANDS.has(context?.commandName ?? '');
+}
+
 // ---------------------------------------------------------------------------
 // Error code extraction
 // ---------------------------------------------------------------------------
@@ -37,9 +47,21 @@ function extractErrorDetails(error: unknown): unknown {
 // Per-family error mappers (thrown errors)
 // ---------------------------------------------------------------------------
 
-function mapTrackChangesError(operationId: CliExposedOperationId, error: unknown, code: string | undefined): CliError {
+function mapTrackChangesError(
+  operationId: CliExposedOperationId,
+  error: unknown,
+  code: string | undefined,
+  context?: ErrorMappingContext,
+): CliError {
   const message = extractErrorMessage(error);
   const details = extractErrorDetails(error);
+
+  if (operationId === 'trackChanges.decide' && code === 'TARGET_NOT_FOUND') {
+    if (isTrackChangesReviewHelper(operationId, context)) {
+      return new CliError('TRACK_CHANGE_NOT_FOUND', message, { operationId, details });
+    }
+    return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
+  }
 
   if (code === 'TARGET_NOT_FOUND' || (typeof message === 'string' && message.includes('was not found'))) {
     return new CliError('TRACK_CHANGE_NOT_FOUND', message, { operationId, details });
@@ -352,9 +374,38 @@ function mapDiffError(operationId: CliExposedOperationId, error: unknown, code: 
   return new CliError('COMMAND_FAILED', message, { operationId, details });
 }
 
+function mapTemplatesError(operationId: CliExposedOperationId, error: unknown, code: string | undefined): CliError {
+  const message = extractErrorMessage(error);
+  const details = extractErrorDetails(error);
+
+  const planEngineError = tryMapPlanEngineError(operationId, error, code);
+  if (planEngineError) return planEngineError;
+
+  if (code === 'CAPABILITY_UNAVAILABLE') {
+    return new CliError('CAPABILITY_UNAVAILABLE', message, { operationId, details });
+  }
+  if (code === 'UNSUPPORTED_SOURCE') {
+    return new CliError('UNSUPPORTED_SOURCE', message, { operationId, details });
+  }
+  if (code === 'INVALID_PACKAGE') {
+    return new CliError('INVALID_PACKAGE', message, { operationId, details });
+  }
+  if (code === 'UNSUPPORTED_TEMPLATE_CONTENT') {
+    return new CliError('UNSUPPORTED_TEMPLATE_CONTENT', message, { operationId, details });
+  }
+
+  if (error instanceof CliError) return error;
+  return new CliError('COMMAND_FAILED', message, { operationId, details });
+}
+
 const FAMILY_MAPPERS: Record<
   OperationFamily,
-  (operationId: CliExposedOperationId, error: unknown, code: string | undefined) => CliError
+  (
+    operationId: CliExposedOperationId,
+    error: unknown,
+    code: string | undefined,
+    context?: ErrorMappingContext,
+  ) => CliError
 > = {
   trackChanges: mapTrackChangesError,
   comments: mapCommentsError,
@@ -367,6 +418,7 @@ const FAMILY_MAPPERS: Record<
   blocks: mapBlocksError,
   query: mapQueryError,
   diff: mapDiffError,
+  templates: mapTemplatesError,
   general: (operationId, error, code) => {
     // Plan-engine errors pass through with original code and structured details
     const planEngineError = tryMapPlanEngineError(operationId, error, code);
@@ -385,11 +437,15 @@ function resolveOperationFamily(operationId: CliExposedOperationId): OperationFa
  * Maps an invoke() exception to a CLI error with the appropriate error code.
  * Called by the generic dispatch path after every invoke() failure.
  */
-export function mapInvokeError(operationId: CliExposedOperationId, error: unknown): CliError {
+export function mapInvokeError(
+  operationId: CliExposedOperationId,
+  error: unknown,
+  context?: ErrorMappingContext,
+): CliError {
   if (error instanceof CliError) return error;
   const code = extractErrorCode(error);
   const family = resolveOperationFamily(operationId);
-  return FAMILY_MAPPERS[family](operationId, error, code);
+  return FAMILY_MAPPERS[family](operationId, error, code, context);
 }
 
 // ---------------------------------------------------------------------------
@@ -418,7 +474,11 @@ function isReceiptLike(value: unknown): value is ReceiptLike {
  * Returns null if the result is not a failed receipt (either successful or
  * not receipt-shaped at all).
  */
-export function mapFailedReceipt(operationId: CliExposedOperationId, result: unknown): CliError | null {
+export function mapFailedReceipt(
+  operationId: CliExposedOperationId,
+  result: unknown,
+  context?: ErrorMappingContext,
+): CliError | null {
   if (!isReceiptLike(result)) return null;
   if (result.success) return null;
 
@@ -439,6 +499,12 @@ export function mapFailedReceipt(operationId: CliExposedOperationId, result: unk
 
   // Track-changes family
   if (family === 'trackChanges') {
+    if (operationId === 'trackChanges.decide' && failureCode === 'TARGET_NOT_FOUND') {
+      if (isTrackChangesReviewHelper(operationId, context)) {
+        return new CliError('TRACK_CHANGE_NOT_FOUND', failureMessage, { operationId, failure });
+      }
+      return new CliError('TARGET_NOT_FOUND', failureMessage, { operationId, failure });
+    }
     if (failureCode === 'TRACK_CHANGE_COMMAND_UNAVAILABLE') {
       return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', failureMessage, { operationId, failure });
     }
@@ -538,6 +604,23 @@ export function mapFailedReceipt(operationId: CliExposedOperationId, result: unk
     }
     if (failureCode === 'CAPABILITY_UNAVAILABLE') {
       return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
+    }
+    return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
+  }
+
+  // Templates family
+  if (family === 'templates') {
+    if (failureCode === 'CAPABILITY_UNAVAILABLE') {
+      return new CliError('CAPABILITY_UNAVAILABLE', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'UNSUPPORTED_SOURCE') {
+      return new CliError('UNSUPPORTED_SOURCE', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'INVALID_PACKAGE') {
+      return new CliError('INVALID_PACKAGE', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'UNSUPPORTED_TEMPLATE_CONTENT') {
+      return new CliError('UNSUPPORTED_TEMPLATE_CONTENT', failureMessage, { operationId, failure });
     }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
   }

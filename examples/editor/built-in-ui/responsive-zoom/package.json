@@ -1,0 +1,23 @@
+{
+  "name": "@superdoc-examples/responsive-zoom",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@superdoc-dev/react": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "superdoc": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

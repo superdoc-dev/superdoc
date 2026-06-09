@@ -180,6 +180,8 @@ export interface TrackInsertAttrs {
   id?: string;
   /** Author of the insertion */
   author?: string;
+  /** Stable actor id of the author */
+  authorId?: string;
   /** Author email */
   authorEmail?: string;
   /** Author avatar/image */
@@ -196,6 +198,8 @@ export interface TrackDeleteAttrs {
   id?: string;
   /** Author of the deletion */
   author?: string;
+  /** Stable actor id of the author */
+  authorId?: string;
   /** Author email */
   authorEmail?: string;
   /** Author avatar/image */
@@ -218,6 +222,8 @@ export interface TrackFormatAttrs {
   id?: string;
   /** Author of the format change */
   author?: string;
+  /** Stable actor id of the author */
+  authorId?: string;
   /** Author email */
   authorEmail?: string;
   /** Author avatar/image */

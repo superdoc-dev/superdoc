@@ -42,10 +42,9 @@
  *   - AIDEV-NOTE: Type-only via `export type { ... }`. Do NOT add `export { ... }`
  *     for any of the 5 value-origin names. That would change `superdoc/types`
  *     from a type-only contract to one that ships runtime helpers.
- *   AIDEV-NOTE: The postbuild gate `verify-public-facade-emit.cjs` parses this file
- *   and verifies that the emitted declarations expose exactly these
- *   named exports. No second hand-maintained list to keep in sync.
- *     same PR. The verifier postbuild fails on drift.
+ *   - AIDEV-NOTE: The postbuild gate `verify-public-facade-emit.cjs` parses this file
+ *     and verifies that the emitted declarations expose exactly these
+ *     named exports. The verifier postbuild fails on drift.
  *   - This entry has a real `public/types.d.cts` shim (unlike SD-3180/SD-3182/SD-3183
  *     entries) because the existing `./types` package.json#exports entry
  *     uses split `types.import` / `types.require` declarations.

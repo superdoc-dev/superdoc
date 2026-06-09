@@ -7,6 +7,7 @@ import {
   MUTATING_OPERATION_IDS,
   OPERATION_IDS,
   buildInternalContractSchemas,
+  createDocumentApi,
   textReceiptToSDReceipt,
   type InlineRunPatchKey,
   type OperationId,
@@ -18,6 +19,7 @@ import {
 } from '../../extensions/track-changes/constants.js';
 import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
+import { assembleDocumentApiAdapters } from '../assemble-adapters.js';
 import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
 import { blocksDeleteWrapper, blocksDeleteRangeWrapper } from '../plan-engine/blocks-wrappers.js';
 import { clearContentWrapper } from '../plan-engine/clear-content-wrapper.js';
@@ -46,6 +48,7 @@ import {
   paragraphsClearDirectionWrapper,
 } from '../plan-engine/paragraphs-wrappers.js';
 import { stylesApplyAdapter } from '../styles-adapter.js';
+import { templatesApplyAdapter } from '../templates/templates-adapter.js';
 import { createTableWrapper } from '../plan-engine/create-table-wrapper.js';
 import {
   tablesDeleteWrapper,
@@ -521,6 +524,56 @@ type MockParagraphNode = {
   textContent: string;
 };
 
+function resolveMockNodePosition(root: ProseMirrorNode, pos: number) {
+  const path: Array<{ node: ProseMirrorNode; start: number }> = [{ node: root, start: -1 }];
+
+  const walk = (node: ProseMirrorNode, contentStart: number): void => {
+    const children = ((node as unknown as { _children?: ProseMirrorNode[] })._children ?? []) as ProseMirrorNode[];
+    let offset = contentStart;
+
+    for (const child of children) {
+      const childStart = offset;
+      const childEnd = childStart + child.nodeSize;
+      if (pos >= childStart && pos < childEnd) {
+        path.push({ node: child, start: childStart });
+        const grandChildren = ((child as unknown as { _children?: ProseMirrorNode[] })._children ??
+          []) as ProseMirrorNode[];
+        if (grandChildren.length > 0) {
+          walk(child, childStart + 1);
+        }
+        return;
+      }
+      offset = childEnd;
+    }
+  };
+
+  walk(root, 0);
+
+  return {
+    depth: path.length - 1,
+    node(depth: number) {
+      return path[depth]?.node ?? root;
+    },
+    before(depth: number) {
+      return path[depth]?.start ?? 0;
+    },
+    start(depth: number) {
+      if (depth <= 0) return 0;
+      return (path[depth]?.start ?? 0) + 1;
+    },
+    end(depth: number) {
+      const entry = path[depth];
+      if (!entry) return 0;
+      return (path[depth]?.start ?? 0) + 1 + entry.node.content.size;
+    },
+    after(depth: number) {
+      const entry = path[depth];
+      if (!entry) return 0;
+      return (path[depth]?.start ?? 0) + entry.node.nodeSize;
+    },
+  };
+}
+
 function createNode(typeName: string, children: ProseMirrorNode[] = [], options: NodeOptions = {}): ProseMirrorNode {
   const attrs = options.attrs ?? {};
   const text = options.text ?? '';
@@ -600,8 +653,40 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
       }
       walk(children, 0);
     },
+    nodesBetween(from: number, to: number, callback: (node: ProseMirrorNode, pos: number) => boolean | void) {
+      function walk(kids: ProseMirrorNode[], startPos: number) {
+        let offset = startPos;
+        for (const child of kids) {
+          const childStart = offset;
+          const childEnd = childStart + child.nodeSize;
+          if (childEnd < from) {
+            offset = childEnd;
+            continue;
+          }
+          if (childStart > to) {
+            break;
+          }
+          const result = callback(child, childStart);
+          if (result !== false) {
+            const innerKids = (child as unknown as { _children?: ProseMirrorNode[] })._children;
+            if (innerKids && innerKids.length > 0) {
+              walk(innerKids, childStart + 1);
+            }
+          }
+          offset = childEnd;
+        }
+      }
+      walk(children, 0);
+    },
+    resolve(pos: number) {
+      return resolveMockNodePosition(node as unknown as ProseMirrorNode, pos);
+    },
   };
   return node as unknown as ProseMirrorNode;
+}
+
+function makeDocumentApiForEditor(editor: Editor) {
+  return createDocumentApi(assembleDocumentApiAdapters(editor));
 }
 
 function makeTextEditor(
@@ -768,6 +853,7 @@ function makeTextEditor(
     })),
     dispatch,
     ...overrides,
+    on: vi.fn(),
     schema: {
       marks: baseMarks,
       ...(overrides.schema ?? {}),
@@ -1121,6 +1207,144 @@ function makeStylesEditor(
     on: vi.fn(),
     emit: vi.fn(),
   } as unknown as Editor;
+}
+
+// ---------------------------------------------------------------------------
+// templates.apply conformance helpers
+// ---------------------------------------------------------------------------
+
+/** CRC-32 (needed for valid STORED zip entries). */
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    crc ^= bytes[i];
+    for (let j = 0; j < 8; j++) {
+      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/** Build a STORED (uncompressed) zip synchronously and return base64. */
+function buildStoredZipBase64(parts: Record<string, string>): string {
+  const enc = new TextEncoder();
+  const files = Object.entries(parts).map(([name, content]) => ({ name, data: enc.encode(content) }));
+
+  const chunks: number[] = [];
+  const central: number[] = [];
+  let offset = 0;
+  const push16 = (arr: number[], v: number) => arr.push(v & 0xff, (v >>> 8) & 0xff);
+  const push32 = (arr: number[], v: number) =>
+    arr.push(v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff);
+
+  for (const f of files) {
+    const nameBytes = enc.encode(f.name);
+    const crc = crc32(f.data);
+    const lfhStart = offset;
+    push32(chunks, 0x04034b50);
+    push16(chunks, 20);
+    push16(chunks, 0);
+    push16(chunks, 0); // STORED
+    push16(chunks, 0);
+    push16(chunks, 0);
+    push32(chunks, crc);
+    push32(chunks, f.data.length);
+    push32(chunks, f.data.length);
+    push16(chunks, nameBytes.length);
+    push16(chunks, 0);
+    for (const b of nameBytes) chunks.push(b);
+    for (const b of f.data) chunks.push(b);
+    offset = chunks.length;
+
+    push32(central, 0x02014b50);
+    push16(central, 20);
+    push16(central, 20);
+    push16(central, 0);
+    push16(central, 0);
+    push16(central, 0);
+    push16(central, 0);
+    push32(central, crc);
+    push32(central, f.data.length);
+    push32(central, f.data.length);
+    push16(central, nameBytes.length);
+    push16(central, 0);
+    push16(central, 0);
+    push16(central, 0);
+    push16(central, 0);
+    push32(central, 0);
+    push32(central, lfhStart);
+    for (const b of nameBytes) central.push(b);
+  }
+
+  const cdStart = chunks.length;
+  for (const b of central) chunks.push(b);
+  const cdSize = central.length;
+
+  // EOCD
+  push32(chunks, 0x06054b50);
+  push16(chunks, 0);
+  push16(chunks, 0);
+  push16(chunks, files.length);
+  push16(chunks, files.length);
+  push32(chunks, cdSize);
+  push32(chunks, cdStart);
+  push16(chunks, 0);
+
+  let bin = '';
+  for (const b of chunks) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+const TEMPLATE_STYLES_XML =
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="ConfTemplateStyle"><w:name w:val="Conf Template Style"/></w:style></w:styles>';
+
+function templateSourceBase64(): string {
+  return buildStoredZipBase64({
+    '[Content_Types].xml':
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
+    'word/styles.xml': TEMPLATE_STYLES_XML,
+  });
+}
+
+/** Mock editor for templates.apply conformance vectors. */
+function makeTemplatesEditor(opts: { hasConverter?: boolean } = {}): Editor {
+  const { hasConverter = true } = opts;
+  const stylesXml = {
+    name: 'xml',
+    elements: [{ name: 'w:styles', elements: [] }],
+  };
+  const converter = hasConverter
+    ? {
+        convertedXml: { 'word/styles.xml': stylesXml } as Record<string, unknown>,
+        documentModified: false,
+        documentGuid: 'tmpl-guid',
+        promoteToGuid: vi.fn(() => 'promoted-guid'),
+        // xml-js style parse mock: route through the real parser shape via a stub
+        parseXmlToJson: (xml: string) => ({ name: 'xml', elements: parseStylesForConformance(xml) }),
+      }
+    : undefined;
+
+  return {
+    converter,
+    options: {},
+    on: vi.fn(),
+    emit: vi.fn(),
+    safeEmit: vi.fn(() => []),
+  } as unknown as Editor;
+}
+
+/**
+ * Minimal styles XML parse for conformance: extracts <w:style> shells.
+ * Avoids importing the full SuperConverter into the conformance suite.
+ */
+function parseStylesForConformance(xml: string): Array<{ name: string; elements: unknown[] }> {
+  const hasStyle = /<w:style\b/.test(xml);
+  return [
+    {
+      name: 'w:styles',
+      elements: hasStyle ? [{ name: 'w:style', attributes: { 'w:styleId': 'ConfTemplateStyle' }, elements: [] }] : [],
+    },
+  ];
 }
 
 /**
@@ -4468,6 +4692,53 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
+  formatRange: {
+    throwCase: () => {
+      const { editor } = makeTextEditor();
+      const api = makeDocumentApiForEditor(editor);
+      return api.formatRange(
+        {
+          target: {
+            kind: 'selection',
+            start: { kind: 'text', blockId: 'missing', offset: 0 },
+            end: { kind: 'text', blockId: 'missing', offset: 1 },
+          },
+          properties: { bold: true },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const { editor } = makeTextEditor();
+      const api = makeDocumentApiForEditor(editor);
+      return api.formatRange(
+        {
+          target: {
+            kind: 'selection',
+            start: { kind: 'text', blockId: 'p1', offset: 2 },
+            end: { kind: 'text', blockId: 'p1', offset: 2 },
+          },
+          properties: { bold: true },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor();
+      const api = makeDocumentApiForEditor(editor);
+      return api.formatRange(
+        {
+          target: {
+            kind: 'selection',
+            start: { kind: 'text', blockId: 'p1', offset: 0 },
+            end: { kind: 'text', blockId: 'p1', offset: 5 },
+          },
+          properties: { bold: true, italic: false },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
   ...formatInlineMutationVectors,
   ...paragraphMutationVectors,
   'create.paragraph': {
@@ -7135,6 +7406,38 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
+  'templates.apply': {
+    throwCase: () => {
+      // Capability gate: missing converter throws CAPABILITY_UNAVAILABLE (pre-apply).
+      const editor = makeTemplatesEditor({ hasConverter: false });
+      return templatesApplyAdapter(
+        editor,
+        { source: { kind: 'base64', data: templateSourceBase64() } },
+        { dryRun: false, expectedRevision: undefined },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTemplatesEditor();
+      initRevision(editor);
+      return templatesApplyAdapter(
+        editor,
+        { source: { kind: 'base64', data: templateSourceBase64() }, bodyPolicy: 'preserve' },
+        { dryRun: false, expectedRevision: undefined },
+      );
+    },
+    failureCase: () => {
+      // Non-zip bytes resolve+decode fine but fail OPC validation, producing an
+      // INVALID_PACKAGE receipt failure (not a pre-apply throw).
+      const editor = makeTemplatesEditor();
+      initRevision(editor);
+      const garbage = btoa('definitely not a zip package at all');
+      return templatesApplyAdapter(
+        editor,
+        { source: { kind: 'base64', data: garbage } },
+        { dryRun: false, expectedRevision: undefined },
+      );
+    },
+  },
 
   // -------------------------------------------------------------------------
   // TOC operations
@@ -8971,6 +9274,24 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(tr.addMark).not.toHaveBeenCalled();
     return result;
   },
+  formatRange: () => {
+    const { editor, dispatch, tr } = makeTextEditor();
+    const api = makeDocumentApiForEditor(editor);
+    const result = api.formatRange(
+      {
+        target: {
+          kind: 'selection',
+          start: { kind: 'text', blockId: 'p1', offset: 0 },
+          end: { kind: 'text', blockId: 'p1', offset: 5 },
+        },
+        properties: { bold: true },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(tr.addMark).not.toHaveBeenCalled();
+    return result;
+  },
   ...formatInlineDryRunVectors,
   ...paragraphDryRunVectors,
   'create.paragraph': () => {
@@ -9509,6 +9830,25 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     );
     // dryRun should not mark the document as modified
     expect((editor as unknown as { converter: { documentModified: boolean } }).converter.documentModified).toBe(false);
+    return result;
+  },
+  'templates.apply': async () => {
+    const editor = makeTemplatesEditor();
+    initRevision(editor);
+    const cvt = (
+      editor as unknown as { converter: { convertedXml: Record<string, unknown>; documentModified: boolean } }
+    ).converter;
+    const before = JSON.stringify(cvt.convertedXml['word/styles.xml']);
+    // templates.apply is async: await the receipt before asserting no mutation
+    // occurred (the async body resolves the source package before returning).
+    const result = await templatesApplyAdapter(
+      editor,
+      { source: { kind: 'base64', data: templateSourceBase64() } },
+      { dryRun: true, expectedRevision: undefined },
+    );
+    // dryRun must not mutate convertedXml or mark the document modified.
+    expect(JSON.stringify(cvt.convertedXml['word/styles.xml'])).toBe(before);
+    expect(cvt.documentModified).toBe(false);
     return result;
   },
 
@@ -11606,10 +11946,11 @@ describe('document-api adapter conformance', () => {
     expectThrowCode(operationId, () => vector!.throwCase());
   });
 
-  it.each(failureCaseOps)('structured failure: %s', (operationId) => {
+  it.each(failureCaseOps)('structured failure: %s', async (operationId) => {
     const vector = mutationVectors[operationId];
     expect(typeof vector?.failureCase, `${operationId} is missing failureCase`).toBe('function');
-    const result = vector!.failureCase!() as { success?: boolean; failure?: { code: string } };
+    // Promise-aware: async operations (e.g. templates.apply) return a Promise.
+    const result = (await Promise.resolve(vector!.failureCase!())) as { success?: boolean; failure?: { code: string } };
     expect(result.success, `${operationId} failureCase should return success=false`).toBe(false);
     if (result.success !== false || !result.failure) return;
     expect(COMMAND_CATALOG[operationId].possibleFailureCodes).toContain(result.failure.code);
@@ -11617,11 +11958,12 @@ describe('document-api adapter conformance', () => {
     assertSchema(operationId, 'failure', result);
   });
 
-  it.each(implementedMutatingOps)('no post-apply throw: %s', (operationId) => {
+  it.each(implementedMutatingOps)('no post-apply throw: %s', async (operationId) => {
     const vector = mutationVectors[operationId]!;
     let result: { success?: boolean };
     try {
-      result = vector.applyCase() as { success?: boolean };
+      // Promise-aware: async operations (e.g. templates.apply) return a Promise.
+      result = (await Promise.resolve(vector.applyCase())) as { success?: boolean };
     } catch (error) {
       const err = error as Error;
       throw new Error(`${operationId} threw post-apply: ${err.message}\n${err.stack ?? ''}`);
@@ -11631,9 +11973,10 @@ describe('document-api adapter conformance', () => {
     assertSchema(operationId, 'success', result);
   });
 
-  it.each(expectedDryRunOps)('dryRun non-mutation: %s', (operationId) => {
+  it.each(expectedDryRunOps)('dryRun non-mutation: %s', async (operationId) => {
     const run = dryRunVectors[operationId]!;
-    const result = run() as { success?: boolean };
+    // Promise-aware: async operations (e.g. templates.apply) return a Promise.
+    const result = (await Promise.resolve(run())) as { success?: boolean };
     expect(result.success).toBe(true);
     assertSchema(operationId, 'output', result);
     assertSchema(operationId, 'success', result);

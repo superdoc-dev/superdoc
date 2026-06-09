@@ -51,6 +51,7 @@ Patterns for the browser editor surface.
 | [comments](./editor/built-in-ui/comments) | [docs](https://docs.superdoc.dev/editor/built-in-ui/comments) |
 | [track-changes](./editor/built-in-ui/track-changes) | [docs](https://docs.superdoc.dev/editor/built-in-ui/track-changes) |
 | [toolbar](./editor/built-in-ui/toolbar) | [docs](https://docs.superdoc.dev/editor/built-in-ui/toolbar) |
+| [responsive-zoom](./editor/built-in-ui/responsive-zoom) | [docs](https://docs.superdoc.dev/editor/superdoc/configuration#param-zoom) |
 
 ### Custom UI
 
@@ -119,6 +120,7 @@ Document editing through models and agents.
 | [bedrock](./ai/bedrock) | AWS Bedrock Converse API with tool use |
 | [streaming](./ai/streaming) | Stream model output into a visible editor |
 | [redlining](./ai/redlining) | LLM-driven tracked-change review (browser) |
+| [footnote-tool-agent](./ai/footnote-tool-agent) | Real LLM tool-use loop: model picks `addFootnoteCitation`, browser executes against `editor.doc` |
 
 ## Advanced
 

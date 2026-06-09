@@ -119,6 +119,44 @@ describe('createStoryEditor', () => {
     expect(note.options.telemetry).toEqual({ enabled: false });
   });
 
+  it('does not synthesize sectionPageCount when the caller lacks section context', () => {
+    const parent = trackEditor(
+      initTestEditor({
+        mode: 'text',
+        content: '<p>parent</p>',
+      }).editor as Editor,
+    );
+
+    const child = trackEditor(
+      createStoryEditor(
+        parent,
+        { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'h/f' }] }] },
+        { documentId: 'hf:part:rId1', isHeaderOrFooter: true, headless: true },
+      ),
+    );
+
+    expect(child.options.sectionPageCount).toBeUndefined();
+  });
+
+  it('preserves explicit sectionPageCount when provided by the caller', () => {
+    const parent = trackEditor(
+      initTestEditor({
+        mode: 'text',
+        content: '<p>parent</p>',
+      }).editor as Editor,
+    );
+
+    const child = trackEditor(
+      createStoryEditor(
+        parent,
+        { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'h/f' }] }] },
+        { documentId: 'hf:part:rId1', isHeaderOrFooter: true, headless: true, sectionPageCount: 4 },
+      ),
+    );
+
+    expect(child.options.sectionPageCount).toBe(4);
+  });
+
   it('keeps telemetry disabled even when a caller passes telemetry overrides', () => {
     const parent = trackEditor(
       initTestEditor({

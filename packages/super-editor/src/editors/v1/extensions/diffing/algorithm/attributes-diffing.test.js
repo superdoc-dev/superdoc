@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAttributesDiff, getMarksDiff } from './attributes-diffing.ts';
+import { applyAttrsDiff, getAttributesDiff, getMarksDiff } from './attributes-diffing.ts';
 
 describe('getAttributesDiff', () => {
   it('detects nested additions, deletions, and modifications', () => {
@@ -162,6 +162,83 @@ describe('getAttributesDiff', () => {
 
     diff = getAttributesDiff(objectA, { ...objectA });
     expect(diff).toBeNull();
+  });
+});
+
+describe('applyAttrsDiff', () => {
+  // SD-3279: replay must not overwrite recipient's session-local identity
+  // attrs. The diff carries only the semantic delta (no sdBlockId path);
+  // applyAttrsDiff must preserve the recipient's sdBlockId untouched.
+  it('preserves recipient attrs that the diff does not mention', () => {
+    const recipientAttrs = { sdBlockId: 'recipient-uuid', sdBlockRev: 7, textAlign: 'left' };
+    const diff = {
+      added: {},
+      deleted: {},
+      modified: { textAlign: { from: 'left', to: 'right' } },
+    };
+
+    const merged = applyAttrsDiff(recipientAttrs, diff);
+
+    expect(merged).toEqual({ sdBlockId: 'recipient-uuid', sdBlockRev: 7, textAlign: 'right' });
+  });
+
+  it('applies added paths, including nested dotted paths', () => {
+    const merged = applyAttrsDiff(
+      { existing: 1 },
+      {
+        added: { 'nested.deep.value': 42, topLevel: 'added' },
+        deleted: {},
+        modified: {},
+      },
+    );
+
+    expect(merged).toEqual({
+      existing: 1,
+      topLevel: 'added',
+      nested: { deep: { value: 42 } },
+    });
+  });
+
+  it('removes deleted paths and keeps siblings', () => {
+    const merged = applyAttrsDiff(
+      { keep: 'me', drop: 'this', nested: { keep: 1, drop: 2 } },
+      {
+        added: {},
+        deleted: { drop: 'this', 'nested.drop': 2 },
+        modified: {},
+      },
+    );
+
+    expect(merged).toEqual({ keep: 'me', nested: { keep: 1 } });
+  });
+
+  it('does not mutate the input base attrs', () => {
+    const base = { sdBlockId: 'recipient', nested: { value: 1 } };
+    applyAttrsDiff(base, {
+      added: { 'nested.added': 2 },
+      deleted: {},
+      modified: { 'nested.value': { from: 1, to: 9 } },
+    });
+
+    expect(base).toEqual({ sdBlockId: 'recipient', nested: { value: 1 } });
+  });
+
+  it('returns a clone of base when diff is null', () => {
+    const base = { sdBlockId: 'recipient', textAlign: 'left' };
+    const merged = applyAttrsDiff(base, null);
+
+    expect(merged).toEqual(base);
+    expect(merged).not.toBe(base);
+  });
+
+  it('tolerates null base attrs', () => {
+    const merged = applyAttrsDiff(null, {
+      added: { textAlign: 'right' },
+      deleted: {},
+      modified: {},
+    });
+
+    expect(merged).toEqual({ textAlign: 'right' });
   });
 });
 

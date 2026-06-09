@@ -14,6 +14,32 @@ describe('mapInvokeError', () => {
     expect(mapped.message).toBe('blocks.delete requires a target.');
     expect(mapped.details).toEqual({ operationId: 'blocks.delete', details: { field: 'target' } });
   });
+
+  test('preserves TARGET_NOT_FOUND for trackChanges.decide stale ids', () => {
+    const error = Object.assign(new Error('Tracked change "tc-1" was not found.'), {
+      code: 'TARGET_NOT_FOUND',
+      details: { id: 'tc-1' },
+    });
+
+    const mapped = mapInvokeError('trackChanges.decide' as any, error);
+    expect(mapped.code).toBe('TARGET_NOT_FOUND');
+    expect(mapped.details).toEqual({ operationId: 'trackChanges.decide', details: { id: 'tc-1' } });
+  });
+
+  test('keeps track-changes accept/reject helper missing ids backward compatible', () => {
+    const error = Object.assign(new Error('Tracked change "tc-1" was not found.'), {
+      code: 'TARGET_NOT_FOUND',
+      details: { id: 'tc-1' },
+    });
+
+    const accept = mapInvokeError('trackChanges.decide' as any, error, { commandName: 'track-changes accept' });
+    const reject = mapInvokeError('trackChanges.decide' as any, error, { commandName: 'track-changes reject' });
+    const canonical = mapInvokeError('trackChanges.decide' as any, error, { commandName: 'track-changes decide' });
+
+    expect(accept.code).toBe('TRACK_CHANGE_NOT_FOUND');
+    expect(reject.code).toBe('TRACK_CHANGE_NOT_FOUND');
+    expect(canonical.code).toBe('TARGET_NOT_FOUND');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -205,6 +231,24 @@ describe('mapFailedReceipt: plan-engine code passthrough', () => {
     expect(result!.code).toBe('COMMAND_FAILED');
   });
 
+  test('maps helper trackChanges.decide TARGET_NOT_FOUND receipts to TRACK_CHANGE_NOT_FOUND', () => {
+    const receipt = {
+      success: false,
+      failure: {
+        code: 'TARGET_NOT_FOUND',
+        message: 'Tracked change "tc-1" was not found.',
+      },
+    };
+
+    const helper = mapFailedReceipt('trackChanges.decide' as any, receipt, { commandName: 'track-changes accept' });
+    const canonical = mapFailedReceipt('trackChanges.decide' as any, receipt, {
+      commandName: 'track-changes decide',
+    });
+
+    expect(helper?.code).toBe('TRACK_CHANGE_NOT_FOUND');
+    expect(canonical?.code).toBe('TARGET_NOT_FOUND');
+  });
+
   test('plan-engine code MATCH_NOT_FOUND passes through with structured details', () => {
     const receipt = {
       success: false,
@@ -297,5 +341,62 @@ describe('mapInvokeError: textMutation INVALID_INPUT ordering', () => {
     expect(result.details).toMatchObject({
       details: { stepIndex: 0, operation: 'text.rewrite' },
     });
+  });
+});
+
+describe('templates.apply error mapping', () => {
+  test('preserves thrown CAPABILITY_UNAVAILABLE for templates.apply', () => {
+    const error = Object.assign(new Error('converter missing'), {
+      code: 'CAPABILITY_UNAVAILABLE',
+      details: { backend: 'converter' },
+    });
+
+    const result = mapInvokeError('templates.apply' as any, error);
+
+    expect(result).toBeInstanceOf(CliError);
+    expect(result.code).toBe('CAPABILITY_UNAVAILABLE');
+    expect(result.details).toEqual({
+      operationId: 'templates.apply',
+      details: { backend: 'converter' },
+    });
+  });
+
+  test('preserves receipt INVALID_PACKAGE for templates.apply', () => {
+    const receipt = {
+      success: false,
+      failure: {
+        code: 'INVALID_PACKAGE',
+        message: 'bad zip',
+        details: { path: '/tmp/source.docx' },
+      },
+    };
+
+    const result = mapFailedReceipt('templates.apply' as any, receipt);
+
+    expect(result).toBeInstanceOf(CliError);
+    expect(result!.code).toBe('INVALID_PACKAGE');
+    expect(result!.details).toEqual({
+      operationId: 'templates.apply',
+      failure: {
+        code: 'INVALID_PACKAGE',
+        message: 'bad zip',
+        details: { path: '/tmp/source.docx' },
+      },
+    });
+  });
+
+  test('preserves receipt UNSUPPORTED_TEMPLATE_CONTENT for templates.apply', () => {
+    const receipt = {
+      success: false,
+      failure: {
+        code: 'UNSUPPORTED_TEMPLATE_CONTENT',
+        message: 'source part could not be parsed',
+      },
+    };
+
+    const result = mapFailedReceipt('templates.apply' as any, receipt);
+
+    expect(result).toBeInstanceOf(CliError);
+    expect(result!.code).toBe('UNSUPPORTED_TEMPLATE_CONTENT');
   });
 });

@@ -48,6 +48,9 @@ Options:
       --filter <prefix>    Prefix filter (repeatable)
       --match <text>       Substring filter (repeatable)
       --exclude <prefix>   Exclude filter (repeatable)
+      --include-unregistered
+                           Merge live bucket .docx objects that are missing from
+                           registry.json (useful for fresh uploads / scratch paths)
       --force              Re-download files even if they already exist
       --no-seed            In a git worktree, skip hardlinking from the primary
                            repo's corpus before pulling from R2
@@ -64,6 +67,7 @@ function parseArgs(argv) {
     filters: [],
     matches: [],
     excludes: [],
+    includeUnregistered: false,
     force: false,
     linkVisual: false,
     dryRun: false,
@@ -99,6 +103,10 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
+    if (arg === '--include-unregistered') {
+      args.includeUnregistered = true;
+      continue;
+    }
     if (arg === '--force') {
       args.force = true;
       continue;
@@ -124,37 +132,99 @@ function parseArgs(argv) {
   return args;
 }
 
-async function loadCorpusDocs(client) {
+function buildLiveDocEntry(relativePath, objectKey = relativePath) {
+  const normalizedPath = normalizePath(relativePath);
+  return {
+    ...coerceDocEntryFromRelativePath(normalizedPath),
+    relative_path: normalizedPath,
+    object_key: normalizePath(objectKey),
+  };
+}
+
+async function listLiveBucketDocs(client) {
+  const allObjectKeys = await client.listObjects('');
+  return sortRegistryDocs(
+    allObjectKeys
+      .map((key) => normalizePath(key))
+      .filter((key) => key.toLowerCase().endsWith('.docx'))
+      .map((key) => buildLiveDocEntry(key, key)),
+  );
+}
+
+async function findUnregisteredBucketMatches(client, filterOptions, knownRelativePaths) {
+  const knownPathSet = new Set(knownRelativePaths.map((value) => normalizePath(value).toLowerCase()).filter(Boolean));
+  const liveRelativePaths = (await client.listObjects(''))
+    .map((key) => normalizePath(key))
+    .filter((key) => key.toLowerCase().endsWith('.docx'));
+
+  return applyPathFilters(liveRelativePaths, filterOptions).filter((value) => !knownPathSet.has(value.toLowerCase()));
+}
+
+async function loadCorpusDocs(client, { includeUnregistered = false } = {}) {
   const registry = await loadRegistryOrNull(client);
-  if (registry?.docs?.length) {
+  const registryDocs =
+    registry?.docs?.length
+      ? registry.docs
+          .map((doc) => {
+            const relativePath = buildDocRelativePath(doc);
+            return {
+              ...doc,
+              relative_path: relativePath,
+              object_key: relativePath,
+            };
+          })
+          .filter((doc) => doc.relative_path && doc.relative_path.toLowerCase().endsWith('.docx'))
+      : [];
+
+  if (registryDocs.length > 0 && !includeUnregistered) {
     return {
       source: REGISTRY_KEY,
       registry,
-      docs: registry.docs
-        .map((doc) => {
-          const relativePath = buildDocRelativePath(doc);
-          return {
-            ...doc,
-            relative_path: relativePath,
-            object_key: relativePath,
-          };
-        })
-        .filter((doc) => doc.relative_path && doc.relative_path.toLowerCase().endsWith('.docx')),
+      docs: registryDocs,
+    };
+  }
+
+  if (includeUnregistered) {
+    const liveDocs = await listLiveBucketDocs(client);
+
+    if (registryDocs.length === 0) {
+      return {
+        source: 'live bucket .docx listing',
+        registry,
+        docs: liveDocs,
+      };
+    }
+
+    const mergedDocsByPath = new Map();
+    for (const doc of registryDocs) {
+      mergedDocsByPath.set(normalizePath(doc.relative_path).toLowerCase(), doc);
+    }
+    for (const liveDoc of liveDocs) {
+      const pathKey = normalizePath(liveDoc.relative_path).toLowerCase();
+      const existingDoc = mergedDocsByPath.get(pathKey);
+      if (existingDoc) {
+        mergedDocsByPath.set(pathKey, {
+          ...liveDoc,
+          ...existingDoc,
+          relative_path: liveDoc.relative_path,
+          object_key: liveDoc.object_key,
+        });
+      } else {
+        mergedDocsByPath.set(pathKey, liveDoc);
+      }
+    }
+
+    return {
+      source: `${REGISTRY_KEY} + live bucket .docx merge`,
+      registry,
+      docs: sortRegistryDocs([...mergedDocsByPath.values()]),
     };
   }
 
   const legacyKeys = await client.listObjects('documents/');
   const docs = legacyKeys
     .filter((key) => key.toLowerCase().endsWith('.docx'))
-    .map((key) => {
-      const objectKey = normalizePath(key);
-      const relativePath = normalizePath(key.replace(/^documents\//, ''));
-      return {
-        ...coerceDocEntryFromRelativePath(relativePath),
-        relative_path: relativePath,
-        object_key: objectKey,
-      };
-    });
+    .map((key) => buildLiveDocEntry(key.replace(/^documents\//, ''), key));
 
   return {
     source: 'documents/ (legacy prefix fallback)',
@@ -230,7 +300,9 @@ async function main() {
       console.log(`[corpus] Bucket: ${client.bucketName}`);
     }
 
-    const corpus = await loadCorpusDocs(client);
+    const corpus = await loadCorpusDocs(client, {
+      includeUnregistered: args.includeUnregistered,
+    });
     const relativePaths = corpus.docs.map((doc) => normalizePath(doc.relative_path)).filter(Boolean);
     const selected = applyPathFilters(relativePaths, {
       filters: args.filters,
@@ -246,6 +318,26 @@ async function main() {
       if (corpus.docs.length === 0) {
         console.error('[corpus] Registry returned 0 documents. Auth may be expired — run: npx wrangler login');
         process.exit(1);
+      }
+      if (!args.includeUnregistered && corpus.source === REGISTRY_KEY) {
+        const unregisteredMatches = await findUnregisteredBucketMatches(
+          client,
+          {
+            filters: args.filters,
+            matches: args.matches,
+            excludes: args.excludes,
+          },
+          relativePaths,
+        );
+        if (unregisteredMatches.length > 0) {
+          console.log(
+            `[corpus] No docs matched filters in registry.json, but ${unregisteredMatches.length} live bucket doc(s) do match.`,
+          );
+          console.log(
+            '[corpus] Re-run with --include-unregistered or run `pnpm corpus:update-registry` to reconcile shared registry.json.',
+          );
+          return;
+        }
       }
       console.log('[corpus] No docs matched filters.');
       return;

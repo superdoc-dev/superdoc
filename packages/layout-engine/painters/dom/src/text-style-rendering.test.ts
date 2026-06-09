@@ -431,6 +431,7 @@ describe('DomPainter text style CSS rendering', () => {
 
       const span = container.querySelector('span');
       expect(span).toBeTruthy();
+      expect(span?.style.lineHeight).toBe('');
       expect(span?.style.verticalAlign).toBe('');
     });
 

@@ -58,6 +58,15 @@ export const Document = Node.create({
          * ensuring that the last section’s page size/orientation/margins are applied correctly.
          */
       },
+      documentBackground: {
+        rendered: false,
+        default: null,
+        /**
+         * Document-level background metadata extracted from w:document > w:background.
+         * Stored separately from paragraph/table shading so page paint can apply it
+         * without changing content-level background semantics.
+         */
+      },
     };
   },
 

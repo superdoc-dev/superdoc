@@ -6,7 +6,7 @@ import {
   getParagraphBorderBox,
   computeBorderSpaceExpansion,
   type BetweenBorderInfo,
-} from './features/paragraph-borders/index.js';
+} from './paragraph/borders/index.js';
 import { hashParagraphBorders } from './paragraph-hash-utils.js';
 
 /** Helper to create BetweenBorderInfo for tests that previously passed a boolean. */
@@ -27,13 +27,11 @@ import type {
   ParagraphBorders,
   ParagraphBorder,
   ParagraphBlock,
-  ListBlock,
   Fragment,
   FlowBlock,
   Layout,
   Measure,
   ParaFragment,
-  ListItemFragment,
   ImageFragment,
   ResolvedPaintItem,
   ResolvedFragmentItem,
@@ -50,35 +48,19 @@ const makeParagraphBlock = (id: string, borders?: ParagraphBorders): ParagraphBl
   attrs: borders ? { borders } : undefined,
 });
 
-const makeListBlock = (id: string, items: { itemId: string; borders?: ParagraphBorders }[]): ListBlock => ({
-  kind: 'list',
-  id,
-  listType: 'bullet',
-  items: items.map((item) => ({
-    id: item.itemId,
-    marker: { text: '•' },
-    paragraph: {
-      kind: 'paragraph',
-      id: `${id}-p-${item.itemId}`,
-      runs: [],
-      attrs: item.borders ? { borders: item.borders } : undefined,
-    },
-  })),
-});
-
 /**
  * Test surrogate for the old BlockLookup — a list of blocks keyed by id that
  * `buildResolvedItems` consumes to synthesize per-fragment ResolvedPaintItems.
  */
-type TestBlockList = ReadonlyArray<ParagraphBlock | ListBlock>;
+type TestBlockList = ReadonlyArray<ParagraphBlock>;
 
-const buildLookup = (entries: { block: ParagraphBlock | ListBlock; measure?: unknown }[]): TestBlockList =>
+const buildLookup = (entries: { block: ParagraphBlock; measure?: unknown }[]): TestBlockList =>
   entries.map((e) => e.block);
 
 /**
  * Build resolved items aligned 1:1 with the given fragments.
- * Looks up each fragment's block (+ list item) to extract paragraph borders,
- * then produces a ResolvedFragmentItem carrying the borders and a border hash.
+ * Looks up each fragment's block to extract paragraph borders, then produces a
+ * ResolvedFragmentItem carrying the borders and a border hash.
  */
 const buildResolvedItems = (fragments: readonly Fragment[], blocks: TestBlockList): ResolvedPaintItem[] => {
   const byId = new Map(blocks.map((b) => [b.id, b]));
@@ -88,9 +70,6 @@ const buildResolvedItems = (fragments: readonly Fragment[], blocks: TestBlockLis
 
     if (fragment.kind === 'para' && block?.kind === 'paragraph') {
       borders = block.attrs?.borders;
-    } else if (fragment.kind === 'list-item' && block?.kind === 'list') {
-      const item = block.items.find((listItem) => listItem.id === fragment.itemId);
-      borders = item?.paragraph.attrs?.borders;
     }
 
     const item: ResolvedFragmentItem = {
@@ -124,23 +103,6 @@ const paraFragment = (blockId: string, overrides?: Partial<ParaFragment>): ParaF
   x: 0,
   y: 0,
   width: 100,
-  ...overrides,
-});
-
-const listItemFragment = (
-  blockId: string,
-  itemId: string,
-  overrides?: Partial<ListItemFragment>,
-): ListItemFragment => ({
-  kind: 'list-item',
-  blockId,
-  itemId,
-  fromLine: 0,
-  toLine: 1,
-  x: 0,
-  y: 0,
-  width: 100,
-  markerWidth: 20,
   ...overrides,
 });
 
@@ -517,29 +479,6 @@ describe('computeBetweenBorderFlags', () => {
     expect(runFlags(fragments, lookup).size).toBe(0);
   });
 
-  it('does not flag same blockId + same itemId list-item fragments', () => {
-    const block = makeListBlock('l1', [{ itemId: 'i1', borders: MATCHING_BORDERS }]);
-    const lookup = buildLookup([{ block }]);
-    const fragments: Fragment[] = [
-      listItemFragment('l1', 'i1', { fromLine: 0, toLine: 2 }),
-      listItemFragment('l1', 'i1', { fromLine: 2, toLine: 4 }),
-    ];
-
-    expect(runFlags(fragments, lookup).size).toBe(0);
-  });
-
-  it('flags different itemIds in same list block', () => {
-    const block = makeListBlock('l1', [
-      { itemId: 'i1', borders: MATCHING_BORDERS },
-      { itemId: 'i2', borders: MATCHING_BORDERS },
-    ]);
-    const lookup = buildLookup([{ block }]);
-    const fragments: Fragment[] = [listItemFragment('l1', 'i1'), listItemFragment('l1', 'i2')];
-
-    const flags = runFlags(fragments, lookup);
-    expect(flags.has(0)).toBe(true);
-  });
-
   // --- non-paragraph fragments ---
   it('skips image fragments', () => {
     const b1 = makeParagraphBlock('b1', MATCHING_BORDERS);
@@ -553,25 +492,6 @@ describe('computeBetweenBorderFlags', () => {
     expect(flags.has(0)).toBe(false);
     // Index 1 is image, skipped — but index 1→2 is image→para, image is skipped
     expect(flags.size).toBe(0);
-  });
-
-  // --- mixed para + list-item ---
-  it('flags para followed by list-item with matching borders', () => {
-    const b1 = makeParagraphBlock('b1', MATCHING_BORDERS);
-    const block = makeListBlock('l1', [{ itemId: 'i1', borders: MATCHING_BORDERS }]);
-    const lookup = buildLookup([{ block: b1 }, { block }]);
-    const fragments: Fragment[] = [paraFragment('b1'), listItemFragment('l1', 'i1')];
-
-    expect(runFlags(fragments, lookup).has(0)).toBe(true);
-  });
-
-  it('flags list-item followed by para with matching borders', () => {
-    const block = makeListBlock('l1', [{ itemId: 'i1', borders: MATCHING_BORDERS }]);
-    const b2 = makeParagraphBlock('b2', MATCHING_BORDERS);
-    const lookup = buildLookup([{ block }, { block: b2 }]);
-    const fragments: Fragment[] = [listItemFragment('l1', 'i1'), paraFragment('b2')];
-
-    expect(runFlags(fragments, lookup).has(0)).toBe(true);
   });
 
   // --- multiple consecutive ---

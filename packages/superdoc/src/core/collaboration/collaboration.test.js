@@ -192,6 +192,32 @@ describe('collaboration.createProvider', () => {
     );
   });
 
+  // SD-673: pin the exact key set of the awareness-update payload.
+  // SuperDocAwarenessUpdatePayload declares { states, added, removed,
+  // superdoc }; the objectContaining assertion above would not catch a
+  // dropped field or a regression to the older { context } shape.
+  it('awareness-update payload has exactly { states, added, removed, superdoc } (SD-673)', () => {
+    const context = { emit: vi.fn() };
+    const result = collaborationModule.createProvider({
+      config: { url: 'ws://test' },
+      user: { name: 'Sam', email: 'sam@example.com' },
+      documentId: 'doc-1',
+      superdocInstance: context,
+    });
+
+    awarenessStatesToArrayMock.mockReturnValueOnce([{ name: 'A' }, { name: 'B' }]);
+    result.provider.emitAwareness({ added: [3], removed: [7] }, new Map());
+
+    expect(context.emit).toHaveBeenCalledTimes(1);
+    const [eventName, payload] = context.emit.mock.calls[0];
+    expect(eventName).toBe('awareness-update');
+    expect(Object.keys(payload).sort()).toEqual(['added', 'removed', 'states', 'superdoc']);
+    expect(payload.states).toEqual([{ name: 'A' }, { name: 'B' }]);
+    expect(payload.added).toEqual([3]);
+    expect(payload.removed).toEqual([7]);
+    expect(payload.superdoc).toBe(context);
+  });
+
   it('creates hocuspocus provider and wires lifecycle callbacks', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const context = { emit: vi.fn() };
@@ -233,7 +259,7 @@ describe('collaboration helpers', () => {
     superdoc = {
       config: {
         superdocId: 'doc-123',
-        user: { name: 'Owner', email: 'owner@example.com' },
+        user: { id: 'owner-id', name: 'Owner', email: 'owner@example.com' },
         role: 'editor',
         isInternal: false,
         socket: { id: 'socket' },
@@ -291,6 +317,12 @@ describe('collaboration helpers', () => {
     // Event from same user should be ignored
     commentsArray.emit({ transaction: { origin: { user: superdoc.config.user } } });
     expect(useCommentMock).toHaveBeenCalledTimes(2);
+
+    // Same email but different actor id should not be ignored.
+    commentsArray.emit({
+      transaction: { origin: { user: { id: 'other-id', name: 'Other', email: superdoc.config.user.email } } },
+    });
+    expect(useCommentMock).toHaveBeenCalledTimes(4);
   });
 
   it('initCollaborationComments loads existing comments from ydoc on init', () => {

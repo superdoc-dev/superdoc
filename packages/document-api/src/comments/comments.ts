@@ -1,8 +1,16 @@
-import type { Receipt, TextAddress, TextTarget } from '../types/index.js';
-import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments.types.js';
+import type { Receipt, ReceiptFailureResult, ReceiptSuccess } from '../types/index.js';
+import type {
+  CommentInfo,
+  CommentTarget,
+  CommentsListQuery,
+  CommentsListResult,
+  TrackedChangeCommentTarget,
+} from './comments.types.js';
 import type { RevisionGuardOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, isTextAddress, isTextTarget, assertNoUnknownFields } from '../validation-primitives.js';
+import { isSelectionTarget } from '../validation/selection-target-validator.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 
 /**
  * Input for adding a comment to a text range.
@@ -20,7 +28,7 @@ export interface AddCommentInput {
    * `textRanges[0]`) or a {@link TextTarget} with multi-segment for
    * selections that span multiple blocks.
    */
-  target?: TextAddress | TextTarget;
+  target?: CommentTarget;
   /** The comment body text. */
   text: string;
 }
@@ -37,7 +45,7 @@ export interface ReplyToCommentInput {
 
 export interface MoveCommentInput {
   commentId: string;
-  target: TextAddress;
+  target: CommentTarget;
 }
 
 export interface ResolveCommentInput {
@@ -93,7 +101,7 @@ export interface CommentsCreateInput {
    * {@link TextTarget}. Prefer passing `editor.doc.selection.current().target`
    * directly for selections that may span multiple blocks.
    */
-  target?: TextAddress | TextTarget;
+  target?: CommentTarget;
   /** Parent comment ID: when provided, creates a reply instead of a root comment. */
   parentCommentId?: string;
 }
@@ -111,7 +119,7 @@ export interface CommentsPatchInput {
   /** New body text (routes to edit). */
   text?: string;
   /** New anchor range (routes to move). */
-  target?: TextAddress;
+  target?: CommentTarget;
   /**
    * Lifecycle transition. `'resolved'` routes to resolve, `'active'`
    * routes to reopen: symmetric inverse that removes the resolve
@@ -130,16 +138,23 @@ export interface CommentsDeleteInput {
   commentId: string;
 }
 
+export type CommentsCreateReceiptSuccess = ReceiptSuccess & {
+  /** Convenience alias for the created comment id. */
+  id: string;
+};
+
+export type CommentsCreateReceipt = CommentsCreateReceiptSuccess | ReceiptFailureResult;
+
 /**
  * Engine-specific adapter that the comments API delegates to.
  */
 export interface CommentsAdapter {
   /** Add a comment at the specified text range. */
-  add(input: AddCommentInput, options?: RevisionGuardOptions): Receipt;
+  add(input: AddCommentInput, options?: RevisionGuardOptions): CommentsCreateReceipt;
   /** Edit the body text of an existing comment. */
   edit(input: EditCommentInput, options?: RevisionGuardOptions): Receipt;
   /** Reply to an existing comment thread. */
-  reply(input: ReplyToCommentInput, options?: RevisionGuardOptions): Receipt;
+  reply(input: ReplyToCommentInput, options?: RevisionGuardOptions): CommentsCreateReceipt;
   /** Move a comment to a different text range. */
   move(input: MoveCommentInput, options?: RevisionGuardOptions): Receipt;
   /** Resolve an open comment. */
@@ -176,7 +191,7 @@ export interface CommentsAdapter {
  * of the document-api contract.
  */
 export interface CommentsApi {
-  create(input: CommentsCreateInput, options?: RevisionGuardOptions): Receipt;
+  create(input: CommentsCreateInput, options?: RevisionGuardOptions): CommentsCreateReceipt;
   patch(input: CommentsPatchInput, options?: RevisionGuardOptions): Receipt;
   delete(input: CommentsDeleteInput, options?: RevisionGuardOptions): Receipt;
   get(input: GetCommentInput): CommentInfo;
@@ -184,6 +199,32 @@ export interface CommentsApi {
 }
 
 const CREATE_COMMENT_ALLOWED_KEYS = new Set(['target', 'text', 'parentCommentId']);
+
+function isTrackedChangeCommentTarget(value: unknown): value is TrackedChangeCommentTarget {
+  if (!isRecord(value)) return false;
+  if (value.kind !== undefined && value.kind !== 'trackedChange') return false;
+  return typeof value.trackedChangeId === 'string' && value.trackedChangeId.length > 0;
+}
+
+function validateCommentTarget(target: unknown, operationName: string): void {
+  if (isTextAddress(target) || isTextTarget(target) || isSelectionTarget(target)) {
+    return;
+  }
+
+  if (isTrackedChangeCommentTarget(target)) {
+    validateStoryLocator(target.story, 'target.story');
+    return;
+  }
+
+  throw new DocumentApiValidationError(
+    'INVALID_TARGET',
+    `${operationName} target must be a TextAddress, TextTarget, SelectionTarget, or tracked-change target.`,
+    {
+      field: 'target',
+      value: target,
+    },
+  );
+}
 
 /**
  * Validates CommentsCreateInput for root comments (non-reply) and throws DocumentApiValidationError on violations.
@@ -230,12 +271,7 @@ function validateCreateCommentInput(input: unknown): asserts input is CommentsCr
     });
   }
 
-  if (!isTextAddress(target) && !isTextTarget(target)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a TextAddress or TextTarget object.', {
-      field: 'target',
-      value: target,
-    });
-  }
+  validateCommentTarget(target, 'comments.create');
 }
 
 const PATCH_COMMENT_ALLOWED_KEYS = new Set(['commentId', 'target', 'text', 'status', 'isInternal']);
@@ -306,11 +342,8 @@ function validatePatchCommentInput(input: unknown): asserts input is CommentsPat
     });
   }
 
-  if (hasTarget && !isTextAddress(target)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
-      field: 'target',
-      value: target,
-    });
+  if (hasTarget) {
+    validateCommentTarget(target, 'comments.patch');
   }
 }
 
@@ -331,7 +364,7 @@ export function executeCommentsCreate(
   adapter: CommentsAdapter,
   input: CommentsCreateInput,
   options?: RevisionGuardOptions,
-): Receipt {
+): CommentsCreateReceipt {
   // Validate the raw input first (catches null, unknown fields, etc.)
   validateCreateCommentInput(input);
 

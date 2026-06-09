@@ -1,6 +1,6 @@
 /**
  * Test-only normalization helpers for comparing rendered line output
- * across different rendering contexts (body, table-cell, list-item).
+ * across different rendering contexts (body, table-cell).
  *
  * DO NOT import this file from production code. Only *.test.ts and
  * other test-utils/ files may import from here.

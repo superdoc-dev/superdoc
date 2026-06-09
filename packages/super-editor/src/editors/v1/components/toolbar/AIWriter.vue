@@ -467,7 +467,7 @@ const handleInput = (event) => {
   display: flex;
 }
 
-.error {
+.sd-error {
   fill: #ed4337;
 }
 

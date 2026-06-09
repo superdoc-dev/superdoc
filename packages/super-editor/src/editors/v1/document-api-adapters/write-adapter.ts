@@ -1,7 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Editor } from '../core/Editor.js';
 import type { MutationOptions, ReceiptFailure, TextAddress, TextMutationReceipt } from '@superdoc/document-api';
+import type { Mark as ProseMirrorMark } from 'prosemirror-model';
 import { DocumentApiAdapterError } from './errors.js';
+import { TrackInsertMarkName } from '../extensions/track-changes/constants.js';
 import { ensureTrackedCapability } from './helpers/mutation-helpers.js';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
 import { checkRevision } from './plan-engine/revision-tracker.js';
@@ -45,6 +47,53 @@ type LegacyDeleteWriteRequest = {
 };
 
 type LegacyWriteRequest = LegacyInsertWriteRequest | LegacyReplaceWriteRequest | LegacyDeleteWriteRequest;
+
+function getSharedTrackedInsertionMarkAtPosition(editor: Editor, pos: number): ProseMirrorMark | null {
+  const stateDoc = editor?.state?.doc as
+    | {
+        content?: { size?: number };
+        resolve?: (pos: number) => {
+          nodeBefore?: { marks?: readonly ProseMirrorMark[] };
+          nodeAfter?: { marks?: readonly ProseMirrorMark[] };
+        };
+      }
+    | undefined;
+  if (typeof stateDoc?.resolve !== 'function') {
+    return null;
+  }
+
+  const maxPos = typeof stateDoc.content?.size === 'number' ? stateDoc.content.size : pos;
+  const boundedPos = Math.max(0, Math.min(maxPos, pos));
+  const $pos = stateDoc.resolve(boundedPos);
+  const beforeInsert = $pos.nodeBefore?.marks?.find((mark) => mark.type?.name === TrackInsertMarkName) ?? null;
+  const afterInsert = $pos.nodeAfter?.marks?.find((mark) => mark.type?.name === TrackInsertMarkName) ?? null;
+  const beforeId = typeof beforeInsert?.attrs?.id === 'string' ? beforeInsert.attrs.id : null;
+  const afterId = typeof afterInsert?.attrs?.id === 'string' ? afterInsert.attrs.id : null;
+
+  if (!beforeInsert || !afterInsert || !beforeId || beforeId !== afterId) {
+    return null;
+  }
+
+  return beforeInsert;
+}
+
+function resolveDirectInsertMarks(editor: Editor, pos: number): ProseMirrorMark[] {
+  const stateDoc = editor?.state?.doc as
+    | {
+        content?: { size?: number };
+        resolve?: (pos: number) => { marks?: () => readonly ProseMirrorMark[] };
+      }
+    | undefined;
+  const maxPos = typeof stateDoc?.content?.size === 'number' ? stateDoc.content.size : pos;
+  const boundedPos = Math.max(0, Math.min(maxPos, pos));
+  const resolved = typeof stateDoc?.resolve === 'function' ? stateDoc.resolve(boundedPos) : null;
+  const marks = resolved?.marks ? [...resolved.marks()] : [];
+  const trackedInsert = getSharedTrackedInsertionMarkAtPosition(editor, boundedPos);
+
+  if (!trackedInsert) return marks;
+  if (marks.some((mark) => mark.eq(trackedInsert))) return marks;
+  return [...marks, trackedInsert];
+}
 
 function resolveLegacyWriteTarget(editor: Editor, request: LegacyWriteRequest): ResolvedWrite | null {
   // Target-less insert → default document-end insertion
@@ -217,6 +266,16 @@ function applyDirectWrite(
     return { success: true, resolution: resolvedTarget.resolution };
   }
 
+  if (request.kind === 'insert') {
+    const marks = resolveDirectInsertMarks(editor, resolvedTarget.range.from);
+    if (marks.length > 0) {
+      const textNode = editor.state.schema.text(request.text ?? '', marks);
+      const tr = applyDirectMutationMeta(editor.state.tr.insert(resolvedTarget.range.from, textNode));
+      editor.dispatch(tr);
+      return { success: true, resolution: resolvedTarget.resolution };
+    }
+  }
+
   // text is guaranteed non-empty for insert/replace after validateWriteRequest
   const tr = applyDirectMutationMeta(
     editor.state.tr.insertText(request.text ?? '', resolvedTarget.range.from, resolvedTarget.range.to),
@@ -254,6 +313,15 @@ function applyTrackedWrite(
   });
 
   if (!didApply) {
+    const lastCompilerFailure = (editor.storage?.trackChanges as { lastCompilerFailure?: ReceiptFailure } | undefined)
+      ?.lastCompilerFailure;
+    if (lastCompilerFailure) {
+      return {
+        success: false,
+        resolution: resolvedTarget.resolution,
+        failure: lastCompilerFailure,
+      };
+    }
     return {
       success: false,
       resolution: resolvedTarget.resolution,

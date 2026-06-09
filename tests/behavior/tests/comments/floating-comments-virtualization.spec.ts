@@ -1,5 +1,6 @@
 import { test, expect } from '../../fixtures/superdoc.js';
-import { assertDocumentApiReady, listTrackChanges, listComments } from '../../helpers/document-api.js';
+import { assertDocumentApiReady, listTrackChanges } from '../../helpers/document-api.js';
+import { getCommentsSnapshot } from '../../helpers/story-tracked-changes.js';
 
 test.use({ config: { toolbar: 'full', comments: 'on', trackChanges: true } });
 
@@ -18,9 +19,27 @@ test('@behavior SD-1997: floating comment bubbles render after tracked changes',
   }
 
   // Verify tracked changes were created
+  let trackedInsertTotal = 0;
   await expect
-    .poll(async () => (await listTrackChanges(superdoc.page, { type: 'insert' })).total)
+    .poll(async () => {
+      trackedInsertTotal = (await listTrackChanges(superdoc.page, { type: 'insert' })).total;
+      return trackedInsertTotal;
+    })
     .toBeGreaterThanOrEqual(5);
+
+  // The live review/comment model should also contain one tracked-change
+  // comment per live tracked insertion before any visual sidebar assertion runs.
+  await expect
+    .poll(async () => {
+      const comments = await getCommentsSnapshot(superdoc.page);
+      return comments.filter(
+        (comment) =>
+          comment?.trackedChange === true &&
+          comment?.trackedChangeType === 'trackInsert' &&
+          String(comment?.trackedChangeText ?? '').length > 0,
+      ).length;
+    })
+    .toBeGreaterThanOrEqual(trackedInsertTotal);
 
   // Verify floating comment placeholders appear in the sidebar
   const placeholders = superdoc.page.locator('.comment-placeholder');

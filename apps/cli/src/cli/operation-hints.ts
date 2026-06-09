@@ -88,10 +88,12 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'blocks.list': 'listed blocks',
   'blocks.delete': 'deleted block',
   'blocks.deleteRange': 'deleted block range',
+  formatRange: 'applied style',
   'format.apply': 'applied style',
   ...buildFormatInlineAliasRecord('applied style'),
   ...buildParagraphRecord('updated paragraph formatting'),
   'styles.apply': 'applied stylesheet defaults',
+  'templates.apply': 'applied template substrate',
   'create.paragraph': 'created paragraph',
   'create.heading': 'created heading',
   'create.tableOfContents': 'created table of contents',
@@ -473,10 +475,12 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'blocks.list': 'plain',
   'blocks.delete': 'plain',
   'blocks.deleteRange': 'plain',
+  formatRange: 'mutationReceipt',
   'format.apply': 'mutationReceipt',
   ...buildFormatInlineAliasRecord('mutationReceipt'),
   ...buildParagraphRecord('plain'),
   'styles.apply': 'receipt',
+  'templates.apply': 'receipt',
   'create.paragraph': 'createResult',
   'create.heading': 'createResult',
   'create.tableOfContents': 'createResult',
@@ -840,10 +844,12 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'blocks.list': 'result',
   'blocks.delete': 'result',
   'blocks.deleteRange': 'result',
+  formatRange: null,
   'format.apply': null,
   ...buildFormatInlineAliasRecord(null),
   ...buildParagraphRecord('result'),
   'styles.apply': 'receipt',
+  'templates.apply': 'receipt',
   'create.paragraph': 'result',
   'create.heading': 'result',
   'create.tableOfContents': 'result',
@@ -1194,6 +1200,7 @@ export const RESPONSE_VALIDATION_KEY: Partial<Record<CliExposedOperationId, stri
   insert: 'receipt',
   replace: 'receipt',
   delete: 'receipt',
+  formatRange: 'receipt',
   'format.apply': 'receipt',
   ...buildFormatInlineAliasRecord('receipt'),
 };
@@ -1218,6 +1225,7 @@ export type OperationFamily =
   | 'blocks'
   | 'query'
   | 'diff'
+  | 'templates'
   | 'general';
 
 export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = {
@@ -1238,10 +1246,12 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'blocks.list': 'blocks',
   'blocks.delete': 'blocks',
   'blocks.deleteRange': 'blocks',
+  formatRange: 'textMutation',
   'format.apply': 'textMutation',
   ...buildFormatInlineAliasRecord('textMutation'),
   ...buildParagraphRecord('textMutation'),
   'styles.apply': 'general',
+  'templates.apply': 'templates',
   'create.paragraph': 'create',
   'create.heading': 'create',
   'create.tableOfContents': 'create',

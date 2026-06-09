@@ -134,6 +134,74 @@ describe('svg-utils', () => {
         expect(span.textContent).toBe('5');
       });
 
+      it('should apply pageNumberFormat to PAGE field type', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'PAGE', pageNumberFormat: 'upperRoman', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          pageNumber: 5,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('V');
+      });
+
+      it('should resolve PAGE field type to section-aware display text when provided', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'PAGE', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          pageNumber: 7,
+          pageNumberText: '3',
+          pageNumberDisplayNumber: 3,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('3');
+      });
+
+      it('should apply pageNumberFormat to section-aware PAGE display number when provided', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'PAGE', pageNumberFormat: 'upperRoman', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          pageNumber: 7,
+          pageNumberText: '3',
+          pageNumberDisplayNumber: 3,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('III');
+      });
+
+      it('should preserve chapter prefix when applying pageNumberFormat to section-aware PAGE display number', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'PAGE', pageNumberFormat: 'upperRoman', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          pageNumber: 7,
+          pageNumberText: '3\u2011III',
+          pageNumberDisplayNumber: 3,
+          pageNumberChapterText: '3',
+          pageNumberChapterSeparator: 'hyphen',
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('3\u2011III');
+      });
+
+      it('should preserve SECTIONPAGES cached text when section page count is unavailable', () => {
+        const textContent = {
+          parts: [{ text: '3', fieldType: 'SECTIONPAGES', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          totalPages: 9,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('3');
+      });
+
       it('should resolve NUMPAGES field type to totalPages', () => {
         const textContent = {
           parts: [{ text: '', fieldType: 'NUMPAGES', formatting: {} }],
@@ -144,6 +212,30 @@ describe('svg-utils', () => {
 
         const span = result.querySelector('span');
         expect(span.textContent).toBe('10');
+      });
+
+      it('should format NUMPAGES field type with pageNumberFormat', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'NUMPAGES', pageNumberFormat: 'upperRoman', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          totalPages: 9,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('IX');
+      });
+
+      it('should format NUMPAGES field type with ordinal pageNumberFormat', () => {
+        const textContent = {
+          parts: [{ text: '', fieldType: 'NUMPAGES', pageNumberFormat: 'ordinal', formatting: {} }],
+        };
+        const result = createTextElement(textContent, 'left', 100, 50, {
+          totalPages: 12,
+        });
+
+        const span = result.querySelector('span');
+        expect(span.textContent).toBe('12th');
       });
 
       it('should default PAGE to "1" when pageNumber not provided', () => {

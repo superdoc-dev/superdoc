@@ -238,6 +238,7 @@ export async function executeOperation(request: ExecuteOperationRequest): Promis
       operationId: docApiId as CliExposedOperationId,
       input,
       context: effectiveContext,
+      commandName,
     });
   }
 

@@ -13,13 +13,25 @@
  * - Handle continuous sections that inherit prior section's running count
  */
 
-import type { Page, SectionMetadata } from '@superdoc/contracts';
+import {
+  formatPageNumber,
+  formatPageNumberFieldValue,
+  formatSectionPageNumberText,
+  type FlowBlock,
+  type Layout,
+  type Page,
+  type PageNumberChapterSeparator,
+  type PageNumberFormat,
+  type ParagraphBlock,
+  type SectionMetadata,
+} from '@superdoc/contracts';
+export { formatPageNumber, formatPageNumberFieldValue, formatSectionPageNumberText };
+export type { PageNumberFormat };
 
-/**
- * Page number format types supported by the layout engine.
- * These match MS Word's page numbering format options.
- */
-export type PageNumberFormat = 'decimal' | 'upperRoman' | 'lowerRoman' | 'upperLetter' | 'lowerLetter' | 'numberInDash';
+export interface ChapterPageInfo {
+  chapterNumberText?: string;
+  chapterStyle?: number;
+}
 
 /**
  * Display page information for a single page in the document.
@@ -34,167 +46,206 @@ export interface DisplayPageInfo {
   displayText: string;
   /** Index of the section this page belongs to */
   sectionIndex: number;
+  /** Physical page count in the current section */
+  sectionPageCount: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  chapterNumberText?: string;
+  /** Separator between chapter prefix and page number component. */
+  chapterSeparator?: PageNumberChapterSeparator;
 }
 
-/**
- * Converts a decimal number to uppercase Roman numeral format.
- *
- * Supports numbers from 1 to 3999. Uses standard Roman numeral rules
- * including subtractive notation (IV, IX, XL, XC, CD, CM).
- *
- * @param num - Number to convert (must be 1-3999)
- * @returns Roman numeral string in uppercase
- *
- * @example
- * ```typescript
- * toUpperRoman(1);    // "I"
- * toUpperRoman(4);    // "IV"
- * toUpperRoman(49);   // "XLIX"
- * toUpperRoman(1994); // "MCMXCIV"
- * ```
- */
-function toUpperRoman(num: number): string {
-  if (num < 1 || num > 3999) {
-    // For numbers outside valid range, fall back to decimal
-    return String(num);
+const HEADING_STYLE_PREFIX = 'heading';
+const CHAPTER_MARKER_SEPARATOR_RE = /[.\-:\u2013\u2014]/;
+const CLEAN_CHAPTER_MARKER_RE = /^[A-Za-z0-9]+(?:[.\-:\u2013\u2014][A-Za-z0-9]+)*$/;
+
+function normalizeHeadingStyleId(styleId: unknown): string | undefined {
+  if (typeof styleId !== 'string') {
+    return undefined;
+  }
+  return styleId.replace(/[\s_-]+/g, '').toLowerCase();
+}
+
+function getHeadingLevel(block: FlowBlock): number | undefined {
+  if (block.kind !== 'paragraph') {
+    return undefined;
   }
 
-  const values = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1];
-  const numerals = ['M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I'];
+  const attrs = (block as ParagraphBlock).attrs;
+  const resolvedHeadingLevel = attrs?.headingLevel;
+  if (typeof resolvedHeadingLevel === 'number' && Number.isInteger(resolvedHeadingLevel) && resolvedHeadingLevel > 0) {
+    return resolvedHeadingLevel;
+  }
 
-  let result = '';
-  let remaining = num;
+  // Adapter-provided headingLevel is authoritative; this keeps legacy/simple
+  // projections working for English built-in style ids like Heading1.
+  const normalizedStyleId = normalizeHeadingStyleId(attrs?.styleId);
+  if (!normalizedStyleId?.startsWith(HEADING_STYLE_PREFIX)) {
+    return undefined;
+  }
 
-  for (let i = 0; i < values.length; i++) {
-    while (remaining >= values[i]) {
-      result += numerals[i];
-      remaining -= values[i];
+  const rawLevel = normalizedStyleId.slice(HEADING_STYLE_PREFIX.length);
+  if (!/^\d+$/.test(rawLevel)) {
+    return undefined;
+  }
+
+  const level = Number(rawLevel);
+  return Number.isInteger(level) && level > 0 ? level : undefined;
+}
+
+export function normalizeChapterMarkerText(markerText: unknown): string | undefined {
+  if (typeof markerText !== 'string') {
+    return undefined;
+  }
+
+  const withoutSuffix = markerText
+    .trim()
+    .replace(/[.)]\s*$/, '')
+    .trim();
+  if (!withoutSuffix) {
+    return undefined;
+  }
+
+  return CLEAN_CHAPTER_MARKER_RE.test(withoutSuffix) ? withoutSuffix : undefined;
+}
+
+function getChapterMarkerText(block: FlowBlock, headingLevel: number): string | undefined {
+  if (block.kind !== 'paragraph') {
+    return undefined;
+  }
+
+  const attrs = (block as ParagraphBlock).attrs;
+  const markerText = normalizeChapterMarkerText(attrs?.wordLayout?.marker?.markerText);
+  if (markerText && markerText.split(CHAPTER_MARKER_SEPARATOR_RE).length <= headingLevel) {
+    return markerText;
+  }
+
+  // Empty Heading 1 markers in imported DOCX can still carry a structured
+  // ordinal. Do not synthesize nested chapter prefixes from the last path
+  // component; a visible multi-level marker is the only safe source for those.
+  const listLevelOrdinal = attrs?.listLevelOrdinal;
+  if (
+    headingLevel === 1 &&
+    typeof listLevelOrdinal === 'number' &&
+    Number.isInteger(listLevelOrdinal) &&
+    listLevelOrdinal > 0
+  ) {
+    return String(listLevelOrdinal);
+  }
+
+  return undefined;
+}
+
+function getBlockIdFromFragment(fragment: unknown): string | undefined {
+  if (
+    typeof fragment === 'object' &&
+    fragment !== null &&
+    'blockId' in fragment &&
+    typeof (fragment as { blockId?: unknown }).blockId === 'string'
+  ) {
+    return (fragment as { blockId: string }).blockId;
+  }
+  return undefined;
+}
+
+function buildBlockById(blocks: FlowBlock[] | ReadonlyMap<string, FlowBlock>): ReadonlyMap<string, FlowBlock> {
+  const blockById = new Map<string, FlowBlock>();
+  if (Array.isArray(blocks)) {
+    for (const block of blocks) {
+      blockById.set(block.id, block);
+    }
+    return blockById;
+  }
+
+  return blocks;
+}
+
+function getActiveChapterNumberText(
+  activeChapterByStyle: ReadonlyMap<number, string>,
+  chapterStyle: number,
+): { chapterNumberText: string; chapterStyle: number } | undefined {
+  for (let headingLevel = chapterStyle; headingLevel > 0; headingLevel -= 1) {
+    const chapterNumberText = activeChapterByStyle.get(headingLevel);
+    if (chapterNumberText) {
+      return { chapterNumberText, chapterStyle: headingLevel };
     }
   }
 
-  return result;
+  return undefined;
 }
 
-/**
- * Converts a decimal number to lowercase Roman numeral format.
- *
- * Same conversion logic as uppercase Roman numerals, but returns
- * lowercase characters.
- *
- * @param num - Number to convert (must be 1-3999)
- * @returns Roman numeral string in lowercase
- *
- * @example
- * ```typescript
- * toLowerRoman(1);    // "i"
- * toLowerRoman(4);    // "iv"
- * toLowerRoman(49);   // "xlix"
- * ```
- */
-function toLowerRoman(num: number): string {
-  return toUpperRoman(num).toLowerCase();
-}
-
-/**
- * Converts a decimal number to uppercase letter format (A-Z, AA-ZZ, etc.).
- *
- * Uses Excel-style column naming: A, B, ..., Z, AA, AB, ..., AZ, BA, ...
- * This provides an alphabetical sequence that continues beyond 26.
- *
- * @param num - Number to convert (1-indexed)
- * @returns Letter sequence in uppercase
- *
- * @example
- * ```typescript
- * toUpperLetter(1);  // "A"
- * toUpperLetter(26); // "Z"
- * toUpperLetter(27); // "AA"
- * toUpperLetter(52); // "AZ"
- * ```
- */
-function toUpperLetter(num: number): string {
-  if (num < 1) {
-    return 'A';
-  }
-
-  let result = '';
-  let n = num;
-
-  while (n > 0) {
-    const remainder = (n - 1) % 26;
-    result = String.fromCharCode(65 + remainder) + result;
-    n = Math.floor((n - 1) / 26);
-  }
-
-  return result;
-}
-
-/**
- * Converts a decimal number to lowercase letter format (a-z, aa-zz, etc.).
- *
- * Same conversion logic as uppercase letters, but returns lowercase characters.
- *
- * @param num - Number to convert (1-indexed)
- * @returns Letter sequence in lowercase
- *
- * @example
- * ```typescript
- * toLowerLetter(1);  // "a"
- * toLowerLetter(26); // "z"
- * toLowerLetter(27); // "aa"
- * ```
- */
-function toLowerLetter(num: number): string {
-  return toUpperLetter(num).toLowerCase();
-}
-
-/**
- * Formats a page number according to the specified format.
- *
- * This function provides MS Word-compatible page number formatting.
- * Edge cases are handled as follows:
- * - Numbers <= 0 are clamped to 1
- * - Roman numerals outside 1-3999 fall back to decimal
- * - All formats handle arbitrarily large positive numbers
- *
- * @param pageNumber - Page number to format (will be clamped to minimum 1)
- * @param format - Desired output format
- * @returns Formatted page number string
- *
- * @example
- * ```typescript
- * formatPageNumber(5, 'decimal');      // "5"
- * formatPageNumber(5, 'upperRoman');   // "V"
- * formatPageNumber(5, 'lowerRoman');   // "v"
- * formatPageNumber(5, 'upperLetter');  // "E"
- * formatPageNumber(5, 'lowerLetter');  // "e"
- * formatPageNumber(0, 'decimal');      // "1" (clamped)
- * formatPageNumber(-5, 'decimal');     // "1" (clamped)
- * ```
- */
-export function formatPageNumber(pageNumber: number, format: PageNumberFormat): string {
-  // Clamp to minimum of 1 for edge cases
-  const num = Math.max(1, pageNumber);
-
-  switch (format) {
-    case 'decimal':
-      return String(num);
-    case 'upperRoman':
-      return toUpperRoman(num);
-    case 'lowerRoman':
-      return toLowerRoman(num);
-    case 'upperLetter':
-      return toUpperLetter(num);
-    case 'lowerLetter':
-      return toLowerLetter(num);
-    case 'numberInDash':
-      return `-${num}-`;
-    default:
-      // TypeScript exhaustiveness check - should never reach here
-      return String(num);
+function clearChildChapterNumberText(activeChapterByStyle: Map<number, string>, headingLevel: number): void {
+  for (const activeHeadingLevel of activeChapterByStyle.keys()) {
+    if (activeHeadingLevel > headingLevel) {
+      activeChapterByStyle.delete(activeHeadingLevel);
+    }
   }
 }
 
+export function buildChapterContextByPage(
+  layout: Layout,
+  blocks: FlowBlock[] | ReadonlyMap<string, FlowBlock>,
+  sections: SectionMetadata[],
+): Map<number, ChapterPageInfo> {
+  const chapterStyles = new Set<number>();
+  let maxChapterStyle = 0;
+  const sectionByIndex = new Map<number, SectionMetadata>();
+  for (const section of sections) {
+    sectionByIndex.set(section.sectionIndex, section);
+    const chapterStyle = section.numbering?.chapterStyle;
+    if (typeof chapterStyle === 'number' && Number.isInteger(chapterStyle) && chapterStyle > 0) {
+      chapterStyles.add(chapterStyle);
+      maxChapterStyle = Math.max(maxChapterStyle, chapterStyle);
+    }
+  }
+
+  const chapterInfoByPage = new Map<number, ChapterPageInfo>();
+  if (chapterStyles.size === 0 || layout.pages.length === 0) {
+    return chapterInfoByPage;
+  }
+
+  const blockById = buildBlockById(blocks);
+  const activeChapterByStyle = new Map<number, string>();
+
+  for (const page of layout.pages) {
+    for (const fragment of page.fragments) {
+      const blockId = getBlockIdFromFragment(fragment);
+      if (!blockId) {
+        continue;
+      }
+
+      const block = blockById.get(blockId);
+      if (!block) {
+        continue;
+      }
+
+      const headingLevel = getHeadingLevel(block);
+      if (!headingLevel || headingLevel > maxChapterStyle) {
+        continue;
+      }
+
+      const chapterNumberText = getChapterMarkerText(block, headingLevel);
+      if (chapterNumberText) {
+        clearChildChapterNumberText(activeChapterByStyle, headingLevel);
+        activeChapterByStyle.set(headingLevel, chapterNumberText);
+      }
+    }
+
+    const sectionIndex = page.sectionIndex ?? 0;
+    const chapterStyle = sectionByIndex.get(sectionIndex)?.numbering?.chapterStyle;
+    if (!chapterStyle) {
+      continue;
+    }
+
+    const activeChapter = getActiveChapterNumberText(activeChapterByStyle, chapterStyle);
+    if (activeChapter) {
+      chapterInfoByPage.set(page.number, activeChapter);
+    }
+  }
+
+  return chapterInfoByPage;
+}
 /**
  * Computes section-aware display page numbers for all pages in a document.
  *
@@ -236,7 +287,11 @@ export function formatPageNumber(pageNumber: number, format: PageNumberFormat): 
  * // displayInfo[2]: { physicalPage: 3, displayNumber: 1, displayText: "1", sectionIndex: 1 }
  * ```
  */
-export function computeDisplayPageNumber(pages: Page[], sections: SectionMetadata[]): DisplayPageInfo[] {
+export function computeDisplayPageNumber(
+  pages: Page[],
+  sections: SectionMetadata[],
+  chapterInfoByPage?: ReadonlyMap<number, ChapterPageInfo>,
+): DisplayPageInfo[] {
   const result: DisplayPageInfo[] = [];
 
   if (pages.length === 0) {
@@ -247,6 +302,12 @@ export function computeDisplayPageNumber(pages: Page[], sections: SectionMetadat
   const sectionMap = new Map<number, SectionMetadata>();
   for (const section of sections) {
     sectionMap.set(section.sectionIndex, section);
+  }
+
+  const sectionPageCounts = new Map<number, number>();
+  for (const page of pages) {
+    const sectionIndex = page.sectionIndex ?? 0;
+    sectionPageCounts.set(sectionIndex, (sectionPageCounts.get(sectionIndex) ?? 0) + 1);
   }
 
   // Track running page counter across sections
@@ -281,18 +342,33 @@ export function computeDisplayPageNumber(pages: Page[], sections: SectionMetadat
     // Get section metadata and numbering format
     const sectionMetadata = sectionMap.get(pageSectionIndex);
     const format: PageNumberFormat = sectionMetadata?.numbering?.format ?? 'decimal';
+    const chapterInfo = chapterInfoByPage?.get(page.number);
+    const chapterNumberText = chapterInfo?.chapterNumberText;
+    const chapterSeparator =
+      chapterNumberText && sectionMetadata?.numbering?.chapterStyle
+        ? (sectionMetadata.numbering.chapterSeparator ?? 'hyphen')
+        : undefined;
 
     // Calculate display number
     // displayNumber is the running counter for this page (can be negative or zero)
     const displayNumber = runningCounter;
     // formatPageNumber will clamp to 1 for display purposes
-    const displayText = formatPageNumber(displayNumber, format);
+    const displayText = formatSectionPageNumberText({
+      displayNumber,
+      pageFormat: format,
+      chapterNumberText,
+      chapterSeparator,
+    });
 
     result.push({
       physicalPage: page.number,
       displayNumber,
       displayText,
       sectionIndex: pageSectionIndex,
+      sectionPageCount: sectionPageCounts.get(pageSectionIndex) ?? pages.length,
+      ...(chapterNumberText ? { pageFormat: format } : {}),
+      ...(chapterNumberText ? { chapterNumberText } : {}),
+      ...(chapterSeparator ? { chapterSeparator } : {}),
     });
 
     // Increment counters

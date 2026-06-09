@@ -2,6 +2,7 @@
 import { NodeTranslator } from '@translator';
 import { processOutputMarks } from '../../../../exporter.js';
 import { parseMarks } from './../../../../v2/importer/markImporter.js';
+import { pageNumberFormatToInstructionSwitch } from '../../../../field-references/fld-preprocessors/page-instruction.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'sd:autoPageNumber';
@@ -24,8 +25,15 @@ const encode = (params) => {
     type: 'page-number',
     attrs: {
       marksAsAttrs: marks,
+      ...getPageNumberFieldAttrs(node),
     },
   };
+  if (typeof node.attributes?.instruction === 'string') {
+    processedNode.attrs.instruction = node.attributes.instruction;
+  }
+  if (typeof node.attributes?.pageNumberFormat === 'string') {
+    processedNode.attrs.pageNumberFormat = node.attributes.pageNumberFormat;
+  }
 
   return processedNode;
 };
@@ -39,6 +47,7 @@ const decode = (params) => {
   const { node } = params;
 
   const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
+  const instruction = getPageInstructionText(node.attrs);
   const translated = [
     {
       name: 'w:r',
@@ -68,7 +77,7 @@ const decode = (params) => {
           elements: [
             {
               type: 'text',
-              text: ' PAGE',
+              text: ` ${instruction}`,
             },
           ],
         },
@@ -108,6 +117,43 @@ const decode = (params) => {
 
   return translated;
 };
+
+function getPageNumberFieldAttrs(node) {
+  const attrs = {};
+  if (node.attributes?.instruction) attrs.instruction = node.attributes.instruction;
+  if (node.attributes?.pageNumberFormat) attrs.pageNumberFormat = node.attributes.pageNumberFormat;
+  if (node.attributes?.pageNumberZeroPadding != null) {
+    attrs.pageNumberZeroPadding = Number(node.attributes.pageNumberZeroPadding);
+  }
+  return attrs;
+}
+
+/**
+ * @param {Record<string, unknown> | undefined} attrs
+ * @returns {string}
+ */
+function getPageInstructionText(attrs = {}) {
+  if (typeof attrs.instruction === 'string' && attrs.instruction.trim()) {
+    return attrs.instruction.trim();
+  }
+
+  if (typeof attrs.pageNumberFormat === 'string') {
+    const instructionSwitch = pageNumberFormatToInstructionSwitch(attrs.pageNumberFormat);
+    if (instructionSwitch) {
+      const numericPicture =
+        typeof attrs.pageNumberZeroPadding === 'number' && attrs.pageNumberZeroPadding > 0
+          ? ` \\# ${'0'.repeat(attrs.pageNumberZeroPadding)}`
+          : '';
+      return `PAGE \\* ${instructionSwitch}${numericPicture}`;
+    }
+  }
+
+  if (typeof attrs.pageNumberZeroPadding === 'number' && attrs.pageNumberZeroPadding > 0) {
+    return `PAGE \\# ${'0'.repeat(attrs.pageNumberZeroPadding)}`;
+  }
+
+  return 'PAGE';
+}
 
 /** @type {import('@translator').NodeTranslatorConfig} */
 export const config = {

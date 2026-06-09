@@ -8,7 +8,9 @@ export type ReceiptFailureCode =
   | 'INVALID_TARGET'
   | 'TARGET_NOT_FOUND'
   | 'CAPABILITY_UNAVAILABLE'
+  | 'PERMISSION_DENIED'
   | 'REVISION_MISMATCH'
+  | 'COMMENT_CASCADE_PARTIAL'
   | 'MATCH_NOT_FOUND'
   | 'AMBIGUOUS_MATCH'
   | 'STYLE_CONFLICT'
@@ -50,7 +52,11 @@ export type ReceiptFailureCode =
   | 'PRESERVE_ONLY_VIOLATION'
   // SD-2070 content controls failure codes
   | 'LOCK_VIOLATION'
-  | 'TYPE_MISMATCH';
+  | 'TYPE_MISMATCH'
+  // SD-3247 templates.apply receipt failure codes
+  | 'UNSUPPORTED_SOURCE'
+  | 'INVALID_PACKAGE'
+  | 'UNSUPPORTED_TEMPLATE_CONTENT';
 
 export type ReceiptFailure = {
   code: ReceiptFailureCode;

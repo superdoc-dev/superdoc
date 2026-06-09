@@ -56,6 +56,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Document-level stylesheet mutations (docDefaults, style definitions).',
     pagePath: 'styles/index.mdx',
   },
+  templates: {
+    title: 'Templates',
+    description: 'Apply detected DOCX template/substrate from a source package, preserving body content.',
+    pagePath: 'templates/index.mdx',
+  },
   lists: {
     title: 'Lists',
     description: 'List inspection and list mutations.',

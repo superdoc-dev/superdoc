@@ -27,11 +27,12 @@ export interface ExtensionLike {
 /**
  * Get extension config field.
  * If the field is a function, it will be bound to the provided context.
+ *
+ * @typeParam T - The expected return type of the config field.
  * @param extension The Editor extension.
  * @param field The config field name.
  * @param context The context object to bind to function.
  * @returns The config field value or bound function.
- * @template T The expected return type of the config field.
  */
 export function getExtensionConfigField<T = unknown>(
   extension: ExtensionLike,

@@ -1,15 +1,15 @@
 import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
-import { Transform } from 'prosemirror-transform';
+import { AddMarkStep, RemoveMarkStep, ReplaceAroundStep, ReplaceStep, Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
-import type { Node as PmNode, Schema } from 'prosemirror-model';
+import type { Mark as PmMark, Node as PmNode, Schema } from 'prosemirror-model';
 import type { Doc as YDoc, XmlFragment as YXmlFragment } from 'yjs';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
 import type { EditorHelpers, ExtensionStorage, ProseMirrorJSON, PageStyles, Toolbar } from './types/EditorTypes.js';
 import type { ChainableCommandObject, CanObject, EditorCommands } from './types/ChainedCommands.js';
-import type { EditorEventMap, FontsResolvedPayload, Comment } from './types/EditorEvents.js';
+import type { EditorEventMap, FontsResolvedPayload, Comment, SdtRef } from './types/EditorEvents.js';
 import type { SchemaSummaryJSON } from './types/EditorSchema.js';
 
-import { EditorState as PmEditorState } from 'prosemirror-state';
+import { EditorState as PmEditorState, NodeSelection as PmNodeSelection } from 'prosemirror-state';
 import { DOMSerializer as PmDOMSerializer } from 'prosemirror-model';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as helpers from './helpers/index.js';
@@ -34,6 +34,12 @@ import {
 import { createDocument } from './helpers/createDocument.js';
 import { isActive } from './helpers/isActive.js';
 import { trackedTransaction } from '@extensions/track-changes/trackChangesHelpers/trackedTransaction.js';
+import {
+  createWordIdAllocator,
+  isDecimalWordId,
+  TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY,
+} from '@extensions/track-changes/review-model/word-id-allocator.js';
+import { TrackDeleteMarkName, TrackFormatMarkName, TrackInsertMarkName } from '@extensions/track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 import { getNecessaryMigrations } from '@core/migrations/index.js';
@@ -66,6 +72,7 @@ import { createDocFromMarkdown, createDocFromHTML } from '@core/helpers/index.js
 import { COMMENT_FILE_BASENAMES } from '@core/super-converter/constants.js';
 import { isHeadless } from '../utils/headless-helpers.js';
 import { canUseDOM } from '../utils/canUseDOM.js';
+import { buildCommentJsonFromText } from '../utils/comment-content.js';
 import { buildSchemaSummary } from './schema-summary.js';
 import type { PresentationEditor } from './presentation-editor/index.js';
 import type { EditorRenderer } from './renderers/EditorRenderer.js';
@@ -92,6 +99,32 @@ import { applyEffectiveEditability, getProtectionStorage } from '../extensions/p
 import { getViewModeSelectionWithoutStructuredContent } from './helpers/getViewModeSelectionWithoutStructuredContent.js';
 import { resolveMainBodyEditor } from '../document-api-adapters/helpers/word-statistics.js';
 import { commitLiveStorySessionRuntimes } from '../document-api-adapters/story-runtime/live-story-session-runtime-registry.js';
+import { buildFilteredMetadataXml } from '../document-api-adapters/plan-engine/anchored-metadata-wrappers.js';
+
+type TrackChangesRuntimeConfig = NonNullable<EditorOptions['trackedChanges']>;
+
+function normalizeEditorTrackChangesOptions(options: Partial<EditorOptions>): Partial<EditorOptions> {
+  const canonical = options.modules?.trackChanges;
+  const legacy = options.trackedChanges;
+
+  if (!canonical && !legacy) return options;
+
+  const normalized: TrackChangesRuntimeConfig = {
+    ...(legacy ?? {}),
+    ...(canonical ?? {}),
+  };
+
+  return {
+    ...options,
+    trackedChanges: normalized,
+  };
+}
+
+type ConverterWithInternalWordIdAllocator = EditorConverterSurface & {
+  wordIdAllocator?: {
+    getSourceIdMap?: () => Record<string, Record<string, string>>;
+  } | null;
+};
 
 declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
@@ -105,6 +138,278 @@ const CURRENT_APP_VERSION =
 const PIXELS_PER_INCH = 96;
 const MAX_HEIGHT_BUFFER_PX = 50;
 const MAX_WIDTH_BUFFER_PX = 20;
+const TRACKED_REVIEW_MARK_NAMES = new Set([TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName]);
+
+const isTrackedReviewMark = (mark: { type?: { name?: string } } | null | undefined): boolean =>
+  Boolean(mark?.type?.name && TRACKED_REVIEW_MARK_NAMES.has(mark.type.name));
+
+const trackedReviewMarkKey = (mark: { type?: { name?: string }; attrs?: Record<string, unknown> }): string | null => {
+  if (!isTrackedReviewMark(mark)) return null;
+  const id = typeof mark.attrs?.id === 'string' ? mark.attrs.id : '';
+  return `${mark.type?.name ?? ''}:${id}`;
+};
+
+const trackedReviewMarkKeysForNode = (node: PmNode | null | undefined): Set<string> => {
+  const keys = new Set<string>();
+  if (!node) return keys;
+  for (const mark of node.marks ?? []) {
+    const key = trackedReviewMarkKey(mark);
+    if (key) keys.add(key);
+  }
+  return keys;
+};
+
+const inlineNodeHasTrackedReviewMark = (node: PmNode): boolean =>
+  Boolean(node.isInline && node.marks?.some(isTrackedReviewMark));
+
+const rangeHasTrackedReviewMark = (doc: PmNode, from: number, to: number): boolean => {
+  if (from >= to) return false;
+
+  const docStart = 0;
+  const docEnd = doc.content.size;
+  const clampedFrom = Math.max(docStart, Math.min(docEnd, from));
+  const clampedTo = Math.max(docStart, Math.min(docEnd, to));
+  if (clampedFrom >= clampedTo) return false;
+
+  let found = false;
+  doc.nodesBetween(clampedFrom, clampedTo, (node) => {
+    if (inlineNodeHasTrackedReviewMark(node)) {
+      found = true;
+      return false;
+    }
+    return undefined;
+  });
+  return found;
+};
+
+const rangeIsTrackedInsertionOnly = (doc: PmNode, from: number, to: number): boolean => {
+  if (from >= to) return false;
+
+  const docStart = 0;
+  const docEnd = doc.content.size;
+  const clampedFrom = Math.max(docStart, Math.min(docEnd, from));
+  const clampedTo = Math.max(docStart, Math.min(docEnd, to));
+  if (clampedFrom >= clampedTo) return false;
+
+  let sawTrackedInsertion = false;
+  let sawUntrackedInline = false;
+  let sawNonInsertionTrackedMark = false;
+
+  doc.nodesBetween(clampedFrom, clampedTo, (node, pos) => {
+    if (!node.isInline || !node.isLeaf) return;
+    if (pos + node.nodeSize <= clampedFrom || pos >= clampedTo) return;
+
+    const trackedMarks = (node.marks ?? []).filter(isTrackedReviewMark);
+    if (!trackedMarks.length) {
+      sawUntrackedInline = true;
+      return;
+    }
+
+    sawTrackedInsertion = true;
+    if (!trackedMarks.every((mark) => mark.type?.name === TrackInsertMarkName)) {
+      sawNonInsertionTrackedMark = true;
+    }
+  });
+
+  return sawTrackedInsertion && !sawUntrackedInline && !sawNonInsertionTrackedMark;
+};
+
+const getSingleTrackedInsertionMarkInRange = (doc: PmNode, from: number, to: number): PmMark | null => {
+  if (!rangeIsTrackedInsertionOnly(doc, from, to)) return null;
+
+  const insertionMarks: PmMark[] = [];
+  const seenIds = new Set<string>();
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isInline || !node.isLeaf) return;
+    if (pos + node.nodeSize <= from || pos >= to) return;
+
+    const insertionMark = (node.marks ?? []).find((mark) => mark.type?.name === TrackInsertMarkName);
+    const id = typeof insertionMark?.attrs?.id === 'string' ? insertionMark.attrs.id : null;
+    if (!insertionMark || !id || seenIds.has(id)) return;
+    seenIds.add(id);
+    insertionMarks.push(insertionMark);
+  });
+
+  return insertionMarks.length === 1 ? insertionMarks[0] : null;
+};
+
+const getSingleTrackedInsertionMarkAtCollapsedPosition = (doc: PmNode, pos: number): PmMark | null => {
+  const boundedPos = Math.max(0, Math.min(doc.content.size, pos));
+  const $pos = doc.resolve(boundedPos);
+  const beforeInsert = $pos.nodeBefore?.marks?.find((mark) => mark.type?.name === TrackInsertMarkName) ?? null;
+  const afterInsert = $pos.nodeAfter?.marks?.find((mark) => mark.type?.name === TrackInsertMarkName) ?? null;
+  const beforeId = typeof beforeInsert?.attrs?.id === 'string' ? beforeInsert.attrs.id : null;
+  const afterId = typeof afterInsert?.attrs?.id === 'string' ? afterInsert.attrs.id : null;
+  if (!beforeInsert || !afterInsert || !beforeId || beforeId !== afterId) return null;
+  return beforeInsert;
+};
+
+const resolveDirectInsertionMutationCommentMeta = (
+  state: EditorState,
+  tr: Transaction,
+): {
+  insertedMark: PmMark;
+  deletionMark: null;
+  formatMark: null;
+  deletionNodes: [];
+  step: ReplaceStep;
+  emitCommentEvent: true;
+} | null => {
+  if (!tr.docChanged || tr.steps.length !== 1) return null;
+
+  const [step] = tr.steps;
+  if (!(step instanceof ReplaceStep)) return null;
+
+  const docs = (tr as unknown as { docs?: PmNode[] }).docs ?? [];
+  const docBeforeStep = docs[0] ?? state.doc;
+  const insertedMark =
+    step.from !== step.to && step.slice.content.size === 0
+      ? getSingleTrackedInsertionMarkInRange(docBeforeStep, step.from, step.to)
+      : step.from === step.to && step.slice.content.size > 0
+        ? getSingleTrackedInsertionMarkAtCollapsedPosition(docBeforeStep, step.from)
+        : null;
+  if (!insertedMark) return null;
+
+  return {
+    insertedMark,
+    deletionMark: null,
+    formatMark: null,
+    deletionNodes: [],
+    step,
+    emitCommentEvent: true,
+  };
+};
+
+const collapsedPositionIsInsideTrackedReviewMark = (doc: PmNode, pos: number): boolean => {
+  const boundedPos = Math.max(0, Math.min(doc.content.size, pos));
+  const $pos = doc.resolve(boundedPos);
+  const beforeKeys = trackedReviewMarkKeysForNode($pos.nodeBefore);
+  if (!beforeKeys.size) return false;
+
+  const afterKeys = trackedReviewMarkKeysForNode($pos.nodeAfter);
+  for (const key of beforeKeys) {
+    if (afterKeys.has(key)) return true;
+  }
+  return false;
+};
+
+const fragmentHasTrackedReviewMark = (fragment: {
+  descendants?: (fn: (node: PmNode) => false | void) => void;
+}): boolean => {
+  let found = false;
+  fragment.descendants?.((node) => {
+    if (inlineNodeHasTrackedReviewMark(node)) {
+      found = true;
+      return false;
+    }
+    return undefined;
+  });
+  return found;
+};
+
+const collapsedInsertionExtendsTrackedInsertion = (
+  doc: PmNode,
+  pos: number,
+  slice: { content?: { descendants?: (fn: (node: PmNode) => false | void) => void } },
+): boolean => {
+  const enclosingInsert = getSingleTrackedInsertionMarkAtCollapsedPosition(doc, pos);
+  if (!enclosingInsert) return false;
+  if (!slice.content) return true;
+
+  const enclosingInsertId = typeof enclosingInsert.attrs?.id === 'string' ? enclosingInsert.attrs.id : null;
+  if (!enclosingInsertId) return false;
+
+  let compatible = true;
+  slice.content.descendants?.((node) => {
+    if (!compatible || !node.isInline) return compatible ? undefined : false;
+    const trackedMarks = (node.marks ?? []).filter(isTrackedReviewMark);
+    if (!trackedMarks.length) return;
+
+    const allMatchEnclosingInsertion = trackedMarks.every(
+      (mark) => mark.type?.name === TrackInsertMarkName && mark.attrs?.id === enclosingInsertId,
+    );
+    if (!allMatchEnclosingInsertion) {
+      compatible = false;
+      return false;
+    }
+    return undefined;
+  });
+
+  return compatible;
+};
+
+const collapsedInsertionExtendsTrackedReviewMark = (
+  doc: PmNode,
+  pos: number,
+  slice: { content?: { descendants?: (fn: (node: PmNode) => false | void) => void } },
+): boolean => {
+  if (!slice.content || !fragmentHasTrackedReviewMark(slice.content)) return false;
+  const boundedPos = Math.max(0, Math.min(doc.content.size, pos));
+  const $pos = doc.resolve(boundedPos);
+  return (
+    trackedReviewMarkKeysForNode($pos.nodeBefore).size > 0 || trackedReviewMarkKeysForNode($pos.nodeAfter).size > 0
+  );
+};
+
+const stepTouchesTrackedReviewState = (step: unknown, doc: PmNode): boolean => {
+  if (step instanceof ReplaceStep) {
+    // Direct deletes wholly inside an unresolved insertion mutate that
+    // insertion in place to match Word. They should not be rerouted into a
+    // synthetic tracked delete.
+    if (
+      step.from !== step.to &&
+      step.slice.content.size === 0 &&
+      rangeIsTrackedInsertionOnly(doc, step.from, step.to)
+    ) {
+      return false;
+    }
+    // Direct typing strictly inside a single unresolved insertion should
+    // extend that insertion in place. Re-routing through trackedTransaction
+    // would create a child insertion and split the parent suggestion.
+    if (
+      step.from === step.to &&
+      step.slice.content.size > 0 &&
+      collapsedInsertionExtendsTrackedInsertion(doc, step.from, step.slice)
+    ) {
+      return false;
+    }
+    if (rangeHasTrackedReviewMark(doc, step.from, step.to)) return true;
+    if (step.from === step.to && step.slice.content.size > 0) {
+      return (
+        collapsedPositionIsInsideTrackedReviewMark(doc, step.from) ||
+        collapsedInsertionExtendsTrackedReviewMark(doc, step.from, step.slice)
+      );
+    }
+    return false;
+  }
+
+  if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) {
+    return rangeHasTrackedReviewMark(doc, step.from, step.to);
+  }
+
+  if (step instanceof ReplaceAroundStep) {
+    return (
+      rangeHasTrackedReviewMark(doc, step.from, step.to) || rangeHasTrackedReviewMark(doc, step.gapFrom, step.gapTo)
+    );
+  }
+
+  return false;
+};
+
+const transactionTouchesTrackedReviewState = (state: EditorState, tr: Transaction): boolean => {
+  if (!tr.docChanged || !tr.steps.length) return false;
+
+  const docs = (tr as unknown as { docs?: PmNode[] }).docs ?? [];
+  return tr.steps.some((step, index) => stepTouchesTrackedReviewState(step, docs[index] ?? state.doc));
+};
+// Best-effort heuristic for labeling a content-control event's `source`. A
+// click sets `uiEvent: 'click'` on its selection transaction (the precise
+// signal); this window is the fallback for selection changes that don't carry
+// that meta but follow a recent pointerDown. It is deliberately generous (a
+// click can be followed by async selection settling); the trade-off is that a
+// keyboard move within this window of a click is labeled 'pointer'. Source is
+// advisory metadata, not a correctness guarantee.
+const CONTENT_CONTROL_POINTER_WINDOW_MS = 800;
 
 type ExtensionInstanceLike = {
   type?: string;
@@ -382,6 +687,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Guard flag to prevent double-tracking document open
    */
   #documentOpenTracked = false;
+  #lastActiveContentControlRef: SdtRef | null = null;
+  #lastPointerDownAt = 0;
 
   /**
    * Fragment configured at construction time. This is reusable default config,
@@ -512,7 +819,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   constructor(options: Partial<EditorOptions>) {
     super();
 
-    const resolvedOptions = { ...options };
+    const resolvedOptions = normalizeEditorTrackChangesOptions(options);
     const domAvailable = canUseDOM();
     const isHeadlessRequested = Boolean(resolvedOptions.isHeadless);
     const mountRequested = Boolean(resolvedOptions.element || resolvedOptions.selector);
@@ -696,7 +1003,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * This prevents race conditions and ensures the editor is always in a valid state,
    * even when operations fail.
    *
-   * @template T - The return type of the operation
    * @param during - State to set while the operation is running
    * @param success - State to set if the operation succeeds
    * @param failure - State to set if the operation fails
@@ -789,10 +1095,27 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('comment-positions', this.options.onCommentLocationsUpdate!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
+    // Emitted unconditionally by PresentationEditor, so only register a real callback -
+    // a bare `this.on('fonts-changed', undefined)` would make `emit` call undefined.
+    if (this.options.onFontsChanged) this.on('fonts-changed', this.options.onFontsChanged);
     this.on('exception', this.options.onException!);
     this.on('pointerDown', this.options.onPointerDown!);
+    this.#trackContentControlPointer();
     this.on('pointerUp', this.options.onPointerUp!);
     this.on('rightClick', this.options.onRightClick!);
+  }
+
+  /**
+   * Record the most recent pointerDown timestamp for content-control event
+   * source detection. Registered on every init path (#registerEventListeners,
+   * #init, #initRichText) so source detection works regardless of
+   * deferDocumentLoad - the default PresentationEditor path uses #init /
+   * #initRichText, not #registerEventListeners.
+   */
+  #trackContentControlPointer(): void {
+    this.on('pointerDown', () => {
+      this.#lastPointerDownAt = Date.now();
+    });
   }
 
   /**
@@ -1118,6 +1441,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // Reset internal state
     this._state = undefined!;
+
+    // Reset content-control event tracking. These track the active SDT and the
+    // last pointer-down for the *current* document; leaving them set would leak
+    // a stale `previous` into the first content-control event of the next
+    // document opened on this instance (or skip the first focus if ids collide).
+    this.#lastActiveContentControlRef = null;
+    this.#lastPointerDownAt = 0;
   }
 
   /**
@@ -1200,8 +1530,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('comment-positions', this.options.onCommentLocationsUpdate!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
+    // Emitted unconditionally by PresentationEditor, so only register a real callback -
+    // a bare `this.on('fonts-changed', undefined)` would make `emit` call undefined.
+    if (this.options.onFontsChanged) this.on('fonts-changed', this.options.onFontsChanged);
     this.on('exception', this.options.onException!);
     this.on('pointerDown', this.options.onPointerDown!);
+    this.#trackContentControlPointer();
     this.on('pointerUp', this.options.onPointerUp!);
     this.on('rightClick', this.options.onRightClick!);
 
@@ -1281,6 +1615,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('locked', this.options.onDocumentLocked!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('pointerDown', this.options.onPointerDown!);
+    this.#trackContentControlPointer();
     this.on('pointerUp', this.options.onPointerUp!);
     this.on('rightClick', this.options.onRightClick!);
 
@@ -2783,17 +3118,34 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
       const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
+      const directInsertionMutationCommentMeta = resolveDirectInsertionMutationCommentMeta(
+        prevState,
+        transactionToApply,
+      );
+      const protectsExistingTrackedReviewState = transactionTouchesTrackedReviewState(prevState, transactionToApply);
+      if (protectsExistingTrackedReviewState && skipTrackChanges) {
+        transactionToApply.setMeta('protectTrackedReviewState', true);
+      }
 
-      const shouldTrack = (isTrackChangesActive || forceTrackChanges) && !skipTrackChanges;
+      const shouldTrack =
+        ((isTrackChangesActive || forceTrackChanges) && !skipTrackChanges) || protectsExistingTrackedReviewState;
+      if (
+        !shouldTrack &&
+        directInsertionMutationCommentMeta &&
+        !transactionToApply.getMeta(TrackChangesBasePluginKey)
+      ) {
+        transactionToApply.setMeta(TrackChangesBasePluginKey, directInsertionMutationCommentMeta);
+      }
       if (shouldTrack && forceTrackChanges && !this.options.user) {
         throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
       }
 
+      const trackedUser = this.options.user ?? {};
       transactionToApply = shouldTrack
         ? trackedTransaction({
             tr: transactionToApply,
             state: prevState,
-            user: this.options.user!,
+            user: trackedUser,
             replacements: this.options.trackedChanges?.replacements === 'independent' ? 'independent' : 'paired',
           })
         : transactionToApply;
@@ -2832,6 +3184,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
         transaction: transactionToApply,
       });
     }
+    this.#emitContentControlEvents({
+      transaction: transactionToApply,
+      nextState,
+      selectionHasChanged,
+    });
 
     const focus = transactionToApply.getMeta('focus');
     if (focus) {
@@ -2867,6 +3224,101 @@ export class Editor extends EventEmitter<EditorEventMap> {
         transaction: effectiveTransaction,
       });
     }
+  }
+
+  #emitContentControlEvents({
+    transaction,
+    nextState,
+    selectionHasChanged,
+  }: {
+    transaction: Transaction;
+    nextState: EditorState;
+    selectionHasChanged: boolean;
+  }): void {
+    const uiEvent = transaction.getMeta('uiEvent');
+    const recentPointerDown = Date.now() - this.#lastPointerDownAt <= CONTENT_CONTROL_POINTER_WINDOW_MS;
+    const source: 'keyboard' | 'pointer' = uiEvent === 'click' || recentPointerDown ? 'pointer' : 'keyboard';
+    // Full active stack (innermost first), matching ui.contentControls
+    // activeIds. `active` is the deepest control; `activePath` lets nested-aware
+    // custom UI read the surrounding controls without combining with observe().
+    const activePath = nextState.selection ? this.#collectActiveSdtRefs(nextState.selection) : [];
+    const activeContentControl = activePath[0] ?? null;
+
+    if (selectionHasChanged) {
+      const previous = this.#lastActiveContentControlRef;
+      const activeChanged = previous?.id !== activeContentControl?.id;
+      if (activeChanged) {
+        if (activeContentControl) {
+          this.emit('contentControlFocus', {
+            active: activeContentControl,
+            previous,
+            activePath,
+            source,
+          });
+        } else if (previous) {
+          this.emit('contentControlBlur', {
+            active: null,
+            previous,
+            activePath: [],
+            source,
+          });
+        }
+        this.#lastActiveContentControlRef = activeContentControl;
+      }
+    }
+
+    if (uiEvent === 'click' && activeContentControl) {
+      this.emit('contentControlClick', {
+        target: activeContentControl,
+        source: 'pointer',
+      });
+    }
+  }
+
+  #collectActiveSdtRefs(selection: EditorState['selection']): SdtRef[] {
+    const refs: SdtRef[] = [];
+    const seenIds = new Set<string>();
+    const selectedNode = selection instanceof PmNodeSelection ? selection.node : null;
+    if (
+      selectedNode &&
+      (selectedNode.type?.name === 'structuredContent' || selectedNode.type?.name === 'structuredContentBlock')
+    ) {
+      const ref = this.#toSdtRef(selectedNode);
+      if (ref) {
+        refs.push(ref);
+        seenIds.add(ref.id);
+      }
+    }
+
+    const anchor = selection.$anchor;
+    if (anchor && typeof anchor.depth === 'number' && typeof anchor.node === 'function') {
+      for (let depth = anchor.depth; depth >= 0; depth -= 1) {
+        const node = anchor.node(depth) as PmNode | null | undefined;
+        if (!node) continue;
+        const typeName = node?.type?.name;
+        if (typeName !== 'structuredContent' && typeName !== 'structuredContentBlock') continue;
+        const ref = this.#toSdtRef(node);
+        if (!ref) continue;
+        if (seenIds.has(ref.id)) continue;
+        refs.push(ref);
+        seenIds.add(ref.id);
+      }
+    }
+    return refs;
+  }
+
+  #toSdtRef(node: PmNode): SdtRef | null {
+    const attrs = node.attrs as { id?: unknown; tag?: unknown; alias?: unknown; controlType?: unknown };
+    const id = attrs?.id;
+    if (typeof id !== 'string' || id.length === 0) return null;
+    const scope = node.type.name === 'structuredContent' ? 'inline' : 'block';
+    return {
+      id,
+      tag: typeof attrs.tag === 'string' ? attrs.tag : undefined,
+      alias: typeof attrs.alias === 'string' ? attrs.alias : undefined,
+      controlType: typeof attrs.controlType === 'string' ? attrs.controlType : 'unknown',
+      scope,
+    };
   }
 
   /**
@@ -3214,6 +3666,117 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
+   * Install a fresh Word revision id allocator on the converter. Walks the
+   * current document and reserves every decimal `sourceId` so newly minted ids
+   * never collide with imported revisions.
+   */
+  #installWordIdAllocatorIfNeeded(): void {
+    if (!this.converter) return;
+
+    const allocator = createWordIdAllocator();
+
+    const reserveAttrs = (attrs: { sourceId?: unknown } | undefined, path: string): void => {
+      const sourceId = attrs?.sourceId;
+      if (isDecimalWordId(sourceId)) {
+        allocator.reserve(path, sourceId as string | number);
+      }
+    };
+
+    const reserveFromDoc = (doc: PmNode | undefined | null, path: string): void => {
+      if (!doc) return;
+      doc.descendants((node) => {
+        if (!Array.isArray(node.marks)) return;
+        for (const mark of node.marks) {
+          const name = mark.type.name;
+          if (name !== 'trackInsert' && name !== 'trackDelete' && name !== 'trackFormat') continue;
+          reserveAttrs(mark.attrs as { sourceId?: unknown }, path);
+        }
+      });
+    };
+
+    const reserveFromJson = (node: unknown, path: string): void => {
+      if (!node || typeof node !== 'object') return;
+      const current = node as { marks?: Array<{ type?: string; attrs?: { sourceId?: unknown } }>; content?: unknown[] };
+      if (Array.isArray(current.marks)) {
+        for (const mark of current.marks) {
+          if (mark.type !== 'trackInsert' && mark.type !== 'trackDelete' && mark.type !== 'trackFormat') continue;
+          reserveAttrs(mark.attrs, path);
+        }
+      }
+      if (Array.isArray(current.content)) {
+        for (const child of current.content) reserveFromJson(child, path);
+      }
+    };
+
+    const wordPartPath = (target: unknown, fallback: string): string => {
+      if (typeof target !== 'string' || !target) return fallback;
+      const stripped = target.replace(/^\/+/, '');
+      return stripped.startsWith('word/') ? stripped : `word/${stripped}`;
+    };
+
+    const relsRoot = this.converter.convertedXml?.['word/_rels/document.xml.rels']?.elements?.find(
+      (node: { name?: string }) => node.name === 'Relationships',
+    );
+    const resolveRelationshipTarget = (relationshipId: string, fallback: string): string => {
+      const target = relsRoot?.elements?.find(
+        (node: { attributes?: { Id?: string; Target?: string } }) => node.attributes?.Id === relationshipId,
+      )?.attributes?.Target;
+      return wordPartPath(target, fallback);
+    };
+
+    reserveFromDoc(this.state?.doc as PmNode, 'word/document.xml');
+    for (const [id, header] of Object.entries(this.converter.headers || {})) {
+      const partPath = resolveRelationshipTarget(id, 'word/header1.xml');
+      const headerEditor = this.converter.headerEditors?.find((item: { id?: string }) => item.id === id);
+      reserveFromDoc(headerEditor?.editor?.state?.doc as PmNode | undefined, partPath);
+      reserveFromJson(header, partPath);
+    }
+    for (const [id, footer] of Object.entries(this.converter.footers || {})) {
+      const partPath = resolveRelationshipTarget(id, 'word/footer1.xml');
+      const footerEditor = this.converter.footerEditors?.find((item: { id?: string }) => item.id === id);
+      reserveFromDoc(footerEditor?.editor?.state?.doc as PmNode | undefined, partPath);
+      reserveFromJson(footer, partPath);
+    }
+    reserveFromJson(this.converter.footnotes, 'word/footnotes.xml');
+    reserveFromJson(this.converter.endnotes, 'word/endnotes.xml');
+
+    (this.converter as ConverterWithInternalWordIdAllocator).wordIdAllocator = allocator;
+  }
+
+  #persistTrackedChangeSourceIdMap(): void {
+    if (!this.converter) return;
+
+    const allocator = (this.converter as ConverterWithInternalWordIdAllocator).wordIdAllocator;
+    const sourceIdMap = allocator?.getSourceIdMap?.() ?? {};
+    if (Object.keys(sourceIdMap).length === 0 && !this.#hasTrackedChangeSourceIdMapProperty()) return;
+
+    const payload = JSON.stringify({ version: 1, parts: sourceIdMap });
+    SuperConverter.setStoredCustomProperty(
+      this.converter.convertedXml,
+      TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY,
+      payload,
+      false,
+    );
+  }
+
+  #hasTrackedChangeSourceIdMapProperty(): boolean {
+    const customXml = this.converter?.convertedXml?.['docProps/custom.xml'];
+    const properties = customXml?.elements?.find((node: { name?: string }) => {
+      const name = node?.name;
+      return name === 'Properties' || name?.endsWith(':Properties');
+    });
+    return Boolean(
+      properties?.elements?.some((node: { name?: string; attributes?: { name?: string } }) => {
+        const name = node?.name;
+        return (
+          (name === 'property' || name?.endsWith(':property')) &&
+          node.attributes?.name === TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY
+        );
+      }),
+    );
+  }
+
+  /**
    * Export the editor document to DOCX.
    *
    * Return type depends on flags:
@@ -3245,9 +3808,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
     compression,
-  }: ExportDocxParams = {}): Promise<
-    Blob | Buffer | Record<string, string | null> | string | ConvertedXmlPart | undefined
-  > {
+  }: ExportDocxParams = {}): Promise<Blob | Buffer | Record<string, string | null> | string | ConvertedXmlPart> {
     try {
       const exportHostEditor = resolveMainBodyEditor(this);
       commitLiveStorySessionRuntimes(exportHostEditor);
@@ -3258,14 +3819,25 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // Normalize commentJSON property (imported comments provide `elements`)
       const preparedComments = effectiveComments.map((comment: Comment) => {
         const elements = Array.isArray(comment.elements) && comment.elements.length ? comment.elements : undefined;
+        const commentJson =
+          comment.commentJSON ??
+          elements ??
+          (typeof comment.commentText === 'string' ? buildCommentJsonFromText(comment.commentText) : undefined);
         return {
           ...comment,
-          commentJSON: comment.commentJSON ?? elements,
+          commentJSON: commentJson,
         };
       });
 
       // Pre-process the document state to prepare for export
       const json = this.#prepareDocumentForExport(preparedComments);
+
+      // Set up the Word revision id allocator on the converter so
+      // ins/del/rPrChange decoders can mint
+      // Word-compatible decimal `w:id` values without overwriting preserved
+      // imported `sourceId` values. The allocator is reset per export so the
+      // reserved set always reflects the current document state.
+      this.#installWordIdAllocatorIfNeeded();
 
       // Export the document to DOCX
       // GUID will be handled automatically in converter.exportToDocx if document was modified
@@ -3284,6 +3856,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
       this.#validateDocumentExport();
 
       if (exportXmlOnly || exportJsonOnly) return documentXml;
+
+      this.#persistTrackedChangeSourceIdMap();
 
       const customXml = this.converter.schemaToXml(this.converter.convertedXml['docProps/custom.xml'].elements[0]);
       const styles = this.converter.schemaToXml(this.converter.convertedXml['word/styles.xml'].elements[0]);
@@ -3396,9 +3970,41 @@ export class Editor extends EventEmitter<EditorEventMap> {
         }
       }
 
+      if (isFinalDoc) {
+        const filteredMetadataParts = buildFilteredMetadataXml(this, this.converter.convertedXml, { finalDoc: true });
+        for (const [path, xml] of Object.entries(filteredMetadataParts)) {
+          updatedDocs[path] = xml;
+        }
+      }
+
       for (const path of Object.keys(this.converter.convertedXml)) {
         if (!path.startsWith('customXml/')) continue;
         if (!path.endsWith('.xml') && !path.endsWith('.rels')) continue;
+        if (Object.prototype.hasOwnProperty.call(updatedDocs, path)) continue;
+        const partData = this.converter.convertedXml[path] as { elements?: unknown[] } | undefined;
+        if (partData?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+
+      // templates.apply: serialize substrate parts copied from a source package
+      // (theme, fontTable, webSettings) so they survive save/export. These parts
+      // have no dedicated serialization above; mirror the customXml passthrough.
+      // Also re-serialize [Content_Types].xml and word/_rels/document.xml.rels
+      // from convertedXml when the adapter added Overrides/Relationships there,
+      // so the copied parts are registered in the package.
+      const templateSubstratePaths = Object.keys(this.converter.convertedXml).filter(
+        (path) =>
+          /^word\/theme\/[^/]+\.xml$/.test(path) || path === 'word/fontTable.xml' || path === 'word/webSettings.xml',
+      );
+      for (const path of templateSubstratePaths) {
+        if (Object.prototype.hasOwnProperty.call(updatedDocs, path)) continue;
+        const partData = this.converter.convertedXml[path] as { elements?: unknown[] } | undefined;
+        if (partData?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+      for (const path of ['[Content_Types].xml', 'word/_rels/document.xml.rels']) {
         if (Object.prototype.hasOwnProperty.call(updatedDocs, path)) continue;
         const partData = this.converter.convertedXml[path] as { elements?: unknown[] } | undefined;
         if (partData?.elements?.[0]) {
@@ -3473,6 +4079,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const err = error instanceof Error ? error : new Error(String(error));
       this.emit('exception', { error: err, editor: this });
       console.error(err);
+      throw err;
     }
   }
 

@@ -51,6 +51,8 @@ export interface SDSection {
   pageNumbering?: {
     start?: number;
     format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
+    chapterStyle?: number;
+    chapterSeparator?: 'hyphen' | 'period' | 'colon' | 'emDash' | 'enDash';
   };
   titlePage?: boolean;
   oddEvenHeadersFooters?: boolean;
@@ -107,7 +109,7 @@ export interface SDCommentThread {
 
 export interface SDTrackedChange {
   id: string;
-  type: 'insert' | 'delete' | 'format';
+  type: 'insert' | 'delete' | 'replacement' | 'format';
   author?: string;
   date?: string;
   target?: SDAnchorRange;

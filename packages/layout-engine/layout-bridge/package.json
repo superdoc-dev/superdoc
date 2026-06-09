@@ -24,6 +24,7 @@
     "@superdoc/common": "workspace:*",
     "@superdoc/contracts": "workspace:*",
     "@superdoc/dom-contract": "workspace:*",
+    "@superdoc/font-system": "workspace:*",
     "@superdoc/layout-engine": "workspace:*",
     "@superdoc/measuring-dom": "workspace:*",
     "@superdoc/word-layout": "workspace:*"
@@ -31,7 +32,6 @@
   "devDependencies": {
     "@superdoc/layout-resolved": "workspace:*",
     "@superdoc/painter-dom": "workspace:*",
-    "@superdoc/pm-adapter": "workspace:*",
     "@types/node": "catalog:",
     "tsup": "catalog:",
     "typescript": "catalog:",

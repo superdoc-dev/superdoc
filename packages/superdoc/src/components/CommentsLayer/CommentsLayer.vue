@@ -27,6 +27,7 @@ const props = defineProps({
 
 const addCommentEntry = (selection) => {
   const params = {
+    creatorId: props.user.id,
     creatorEmail: props.user.email,
     creatorName: props.user.name,
     documentId: selection.documentId,

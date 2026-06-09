@@ -13,11 +13,11 @@ async function clickBodySurface(page: Page) {
 
 async function expectToolbarButtonDisabledState(button: Locator, disabled: boolean) {
   if (disabled) {
-    await expect(button).toHaveClass(/disabled/);
+    await expect(button).toHaveClass(/sd-disabled/);
     return;
   }
 
-  await expect(button).not.toHaveClass(/disabled/);
+  await expect(button).not.toHaveClass(/sd-disabled/);
 }
 
 test('undo button removes last typed text', async ({ superdoc }) => {
@@ -57,7 +57,15 @@ test('redo button restores undone text', async ({ superdoc }) => {
   await superdoc.assertTextContains('Second paragraph.');
 });
 
-test('toolbar undo/redo buttons follow unified history after leaving header editing', async ({ superdoc }) => {
+test('toolbar undo/redo buttons follow unified history after leaving header editing', async ({
+  superdoc,
+  browserName,
+}) => {
+  test.fixme(
+    browserName === 'webkit',
+    'WebKit detaches the body surface locator while leaving header editing in the behavior harness.',
+  );
+
   const undoButton = superdoc.page.locator('[data-item="btn-undo"]');
   const redoButton = superdoc.page.locator('[data-item="btn-redo"]');
   const bodyText = 'Toolbar body text';

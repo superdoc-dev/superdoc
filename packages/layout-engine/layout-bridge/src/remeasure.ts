@@ -10,7 +10,7 @@ import type {
   ParagraphIndent,
   LeaderDecoration,
 } from '@superdoc/contracts';
-import { Engines } from '@superdoc/contracts';
+import { EMPTY_SDT_PLACEHOLDER_TEXT, Engines, isEmptySdtPlaceholderRun } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
 import {
   LIST_MARKER_GAP as _LIST_MARKER_GAP,
@@ -126,6 +126,10 @@ function fontString(run: Run): string {
  * @returns Text content of the run, or empty string for non-text runs
  */
 function runText(run: Run): string {
+  if (isEmptySdtPlaceholderRun(run)) {
+    return run.sdt?.type === 'structuredContent' && run.sdt.appearance === 'hidden' ? '' : EMPTY_SDT_PLACEHOLDER_TEXT;
+  }
+
   return 'src' in run ||
     run.kind === 'lineBreak' ||
     run.kind === 'break' ||
@@ -1379,6 +1383,17 @@ export function remeasureParagraph(
       }
       if (text.length > 0 && isTextRun(run)) {
         lineMaxTextFontSize = Math.max(lineMaxTextFontSize, run.fontSize ?? 16);
+      }
+      if (isEmptySdtPlaceholderRun(run)) {
+        const placeholderWidth = text.length > 0 ? measureRunSliceWidth(run, 0, text.length) : 0;
+        if (width > 0 && width + placeholderWidth > effectiveMaxWidth - WIDTH_FUDGE_PX) {
+          didBreakInThisLine = true;
+          break;
+        }
+        width += placeholderWidth;
+        endRun = r;
+        endChar = text.length > 0 ? text.length : start + 1;
+        continue;
       }
       for (let c = start; c < text.length; c += 1) {
         const ch = text[c];

@@ -65,6 +65,112 @@ const BLOCKED_PROTOCOLS = ['javascript', 'data', 'vbscript', 'file', 'ssh', 'ws'
 const DEFAULT_MAX_LENGTH = 2048;
 
 /**
+ * Maximum allowed length for image data URLs.
+ * Prevents resource exhaustion from extremely large embedded images.
+ */
+export const MAX_IMAGE_DATA_URL_LENGTH = 10 * 1024 * 1024;
+
+/**
+ * Canonical set of image data URL MIME types supported by rendering and export.
+ */
+export const IMAGE_DATA_URL_MIME_TYPES = Object.freeze([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/gif',
+  'image/svg+xml',
+  'image/webp',
+  'image/bmp',
+  'image/ico',
+  'image/tif',
+  'image/tiff',
+]);
+
+/**
+ * Parse a data URI into the MIME type, payload, and base64 flag used by image
+ * validation and DOCX export. Returns null for non-data URI strings.
+ *
+ * The payload separator is tracked separately so callers can reject malformed
+ * values like `data:image/svg+xml` instead of treating them as empty files.
+ *
+ * @param {string} src
+ * @returns {{hasPayloadSeparator: boolean, payload: string, rawMimeType: string, mimeType: string, isBase64: boolean}|null}
+ */
+export const getDataUriMetadata = (src = '') => {
+  if (typeof src !== 'string' || !src.startsWith('data:')) return null;
+
+  const commaIndex = src.indexOf(',');
+  const hasPayloadSeparator = commaIndex !== -1;
+  const metadata = src.slice(5, hasPayloadSeparator ? commaIndex : undefined);
+  const payload = hasPayloadSeparator ? src.slice(commaIndex + 1) : '';
+  const [rawMimeType = '', ...parameters] = metadata.split(';');
+  const mimeType = rawMimeType.toLowerCase();
+
+  return {
+    hasPayloadSeparator,
+    payload,
+    rawMimeType,
+    mimeType,
+    isBase64: parameters.some((part) => part.toLowerCase() === 'base64'),
+  };
+};
+
+/**
+ * Percent-decode a non-base64 data URI payload.
+ *
+ * @param {string} payload
+ * @returns {string|null} Decoded text, or null when the payload has invalid percent escapes.
+ */
+export const tryDecodeDataUriText = (payload = '') => {
+  try {
+    return decodeURIComponent(payload);
+  } catch {
+    return null;
+  }
+};
+
+const BASE64_PAYLOAD_PATTERN = /^[A-Za-z0-9+/]+$/;
+
+const isValidBase64Payload = (payload = '') => {
+  const normalizedPayload = payload.replace(/\s/g, '');
+  if (!normalizedPayload || normalizedPayload.length % 4 === 1) return false;
+
+  const padding = normalizedPayload.match(/=+$/)?.[0] || '';
+  if (padding.length > 2) return false;
+
+  const body = padding ? normalizedPayload.slice(0, -padding.length) : normalizedPayload;
+  if (!body || !BASE64_PAYLOAD_PATTERN.test(body) || body.includes('=')) return false;
+  if (!padding) return true;
+  if (normalizedPayload.length % 4 !== 0) return false;
+
+  return body.length % 4 === (padding.length === 1 ? 3 : 2);
+};
+
+/**
+ * Validate an image data URL for rendering and export.
+ *
+ * The URL must use a supported image MIME type, include a comma payload
+ * separator, and stay within MAX_IMAGE_DATA_URL_LENGTH. Base64 payloads are
+ * accepted for all supported image MIME types. Non-base64 payloads are accepted
+ * only for SVG, where the percent-encoded text must decode successfully.
+ *
+ * @param {unknown} src
+ * @returns {boolean}
+ */
+export const isValidImageDataUrl = (src) => {
+  if (typeof src !== 'string' || !src.startsWith('data:') || src.length > MAX_IMAGE_DATA_URL_LENGTH) {
+    return false;
+  }
+
+  const metadata = getDataUriMetadata(src);
+  if (!metadata?.hasPayloadSeparator || !IMAGE_DATA_URL_MIME_TYPES.includes(metadata.mimeType)) return false;
+  if (metadata.isBase64) return isValidBase64Payload(metadata.payload);
+  if (metadata.mimeType !== 'image/svg+xml') return false;
+
+  return tryDecodeDataUriText(metadata.payload) != null;
+};
+
+/**
  * Default maximum tooltip length in characters.
  *
  * Prevents excessively long tooltips that degrade UX and accessibility.

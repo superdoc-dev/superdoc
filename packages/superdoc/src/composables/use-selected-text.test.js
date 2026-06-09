@@ -33,4 +33,39 @@ describe('useSelectedText', () => {
     r.value = makeEditor(() => 'second');
     expect(selectedText.value).toBe('second');
   });
+
+  const makeRuntime = (text, { canReadSelectedText = true } = {}) => ({
+    getCapabilities: () => ({ selection: { canReadSelectedText } }),
+    getSelectedText: () => text,
+  });
+
+  it('routes the read through the active runtime when it can read selected text', () => {
+    const editorFallback = (from, to, sep) => `fallback[${from}..${to}|${sep}]`;
+    const runtime = makeRuntime('runtime-selection');
+    const { selectedText } = useSelectedText(ref(makeEditor(editorFallback)), {
+      getActiveRuntime: () => runtime,
+    });
+    expect(selectedText.value).toBe('runtime-selection');
+  });
+
+  it('falls back to the editor read when no runtime is active', () => {
+    const { selectedText } = useSelectedText(ref(makeEditor(() => 'editor-read')), {
+      getActiveRuntime: () => null,
+    });
+    expect(selectedText.value).toBe('editor-read');
+  });
+
+  it('falls back to the editor read when the runtime cannot read selected text', () => {
+    const runtime = makeRuntime('unused', { canReadSelectedText: false });
+    const { selectedText } = useSelectedText(ref(makeEditor(() => 'editor-read')), {
+      getActiveRuntime: () => runtime,
+    });
+    expect(selectedText.value).toBe('editor-read');
+  });
+
+  it('routes the read through the active runtime even when the editor ref is null', () => {
+    const runtime = makeRuntime('runtime-selection');
+    const { selectedText } = useSelectedText(ref(null), { getActiveRuntime: () => runtime });
+    expect(selectedText.value).toBe('runtime-selection');
+  });
 });

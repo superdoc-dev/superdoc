@@ -11,6 +11,7 @@ type MockEditorEmitter = {
 
 type MockSectionEditor = MockEditorEmitter & {
   destroy: ReturnType<typeof vi.fn>;
+  setOptions: ReturnType<typeof vi.fn>;
   view: {
     dom: HTMLDivElement;
     focus: ReturnType<typeof vi.fn>;
@@ -58,6 +59,9 @@ const { mockCreateHeaderFooterEditor, mockOnHeaderFooterDataUpdate, mockToFlowBl
         once: emitter.once,
         emit: emitter.emit,
         destroy: vi.fn(),
+        setOptions: vi.fn((options: Record<string, unknown>) => {
+          Object.assign(editorStub.options, options);
+        }),
         view: {
           dom: document.createElement('div'),
           focus: vi.fn(),
@@ -99,12 +103,11 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
-  return {
-    ...actual,
-    toFlowBlocks: mockToFlowBlocks,
-  };
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const { buildLayoutDocumentAdapterVitestMock } = await import(
+    '../presentation-editor/tests/mock-layout-document-adapter-vitest.js'
+  );
+  return buildLayoutDocumentAdapterVitestMock(importOriginal, { toFlowBlocks: mockToFlowBlocks });
 });
 
 const createConverter = () => ({
@@ -216,6 +219,22 @@ describe('HeaderFooterEditorManager', () => {
     expect(host.children).toHaveLength(1);
   });
 
+  it('does not synthesize section page count when creating a header/footer editor without section context', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host, totalPageCount: 9 });
+
+    expect(sectionEditor).toBeDefined();
+    expect(mockCreateHeaderFooterEditor).toHaveBeenCalledTimes(1);
+    expect(mockCreateHeaderFooterEditor.mock.calls[0][0]).toMatchObject({
+      totalPageCount: 9,
+      sectionPageCount: undefined,
+    });
+  });
+
   it('ensureEditorSync reattaches the cached editor container to a new host', () => {
     const editor = createMockEditor();
     const manager = new HeaderFooterEditorManager(editor);
@@ -232,6 +251,147 @@ describe('HeaderFooterEditorManager', () => {
     expect(sameEditor).toBe(sectionEditor);
     expect(firstHost.children).toHaveLength(0);
     expect(secondHost.children).toHaveLength(1);
+  });
+
+  it('preserves section page count DOM text when refreshed without section context', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host });
+    expect(sectionEditor).toBeDefined();
+    const sectionPages = document.createElement('span');
+    sectionPages.dataset.id = 'auto-section-pages';
+    sectionPages.textContent = '3';
+    sectionEditor!.view.dom.appendChild(sectionPages);
+
+    manager.ensureEditorSync(descriptor, { editorHost: host, totalPageCount: 9 });
+
+    expect(sectionPages.textContent).toBe('3');
+  });
+
+  it('refreshes section page count DOM text when section context is available', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host });
+    expect(sectionEditor).toBeDefined();
+    const sectionPages = document.createElement('span');
+    sectionPages.dataset.id = 'auto-section-pages';
+    sectionPages.textContent = '3';
+    sectionEditor!.view.dom.appendChild(sectionPages);
+
+    manager.ensureEditorSync(descriptor, { editorHost: host, sectionPageCount: 5 });
+
+    expect(sectionPages.textContent).toBe('5');
+  });
+
+  it('refreshes section page count DOM text with node pageNumberFormat', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host });
+    expect(sectionEditor).toBeDefined();
+    const sectionPages = document.createElement('span');
+    sectionPages.dataset.id = 'auto-section-pages';
+    sectionPages.textContent = '3';
+    sectionEditor!.view.dom.appendChild(sectionPages);
+    (sectionEditor!.view as unknown as { posAtDOM: ReturnType<typeof vi.fn> }).posAtDOM = vi.fn(() => 0);
+    (sectionEditor as unknown as { state: { doc: { nodeAt: ReturnType<typeof vi.fn> } } }).state = {
+      doc: { nodeAt: vi.fn(() => ({ attrs: { pageNumberFormat: 'upperRoman' } })) },
+    };
+
+    manager.ensureEditorSync(descriptor, { editorHost: host, sectionPageCount: 4 });
+
+    expect(sectionPages.textContent).toBe('IV');
+  });
+
+  it('refreshes total page count DOM text with node numeric picture format', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host });
+    expect(sectionEditor).toBeDefined();
+    const totalPages = document.createElement('span');
+    totalPages.dataset.id = 'auto-total-pages';
+    totalPages.textContent = '1';
+    sectionEditor!.view.dom.appendChild(totalPages);
+    (sectionEditor!.view as unknown as { posAtDOM: ReturnType<typeof vi.fn> }).posAtDOM = vi.fn(() => 0);
+    (sectionEditor as unknown as { state: { doc: { nodeAt: ReturnType<typeof vi.fn> } } }).state = {
+      doc: { nodeAt: vi.fn(() => ({ attrs: { pageNumberNumericPicture: '000' } })) },
+    };
+
+    manager.ensureEditorSync(descriptor, { editorHost: host, totalPageCount: 12 });
+
+    expect(totalPages.textContent).toBe('012');
+  });
+
+  it('refreshes chapter-prefixed page number DOM text with node pageNumberFormat', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host });
+    expect(sectionEditor).toBeDefined();
+    const pageNumber = document.createElement('span');
+    pageNumber.dataset.id = 'auto-page-number';
+    pageNumber.textContent = '1';
+    sectionEditor!.view.dom.appendChild(pageNumber);
+    (sectionEditor!.view as unknown as { posAtDOM: ReturnType<typeof vi.fn> }).posAtDOM = vi.fn(() => 0);
+    (sectionEditor as unknown as { state: { doc: { nodeAt: ReturnType<typeof vi.fn> } } }).state = {
+      doc: { nodeAt: vi.fn(() => ({ attrs: { pageNumberFormat: 'upperRoman' } })) },
+    };
+
+    manager.ensureEditorSync(descriptor, {
+      editorHost: host,
+      currentPageNumberText: '3\u2011IV',
+      currentPageDisplayNumber: 4,
+      currentPageChapterNumberText: '3',
+      currentPageChapterSeparator: 'hyphen',
+    });
+
+    expect(pageNumber.textContent).toBe('3\u2011IV');
+  });
+
+  it('clears stale chapter context when refreshing a cached page number editor', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: host });
+    expect(sectionEditor).toBeDefined();
+    const pageNumber = document.createElement('span');
+    pageNumber.dataset.id = 'auto-page-number';
+    pageNumber.textContent = '1';
+    sectionEditor!.view.dom.appendChild(pageNumber);
+    (sectionEditor!.view as unknown as { posAtDOM: ReturnType<typeof vi.fn> }).posAtDOM = vi.fn(() => 0);
+    (sectionEditor as unknown as { state: { doc: { nodeAt: ReturnType<typeof vi.fn> } } }).state = {
+      doc: { nodeAt: vi.fn(() => ({ attrs: { pageNumberFormat: 'upperRoman' } })) },
+    };
+
+    manager.ensureEditorSync(descriptor, {
+      editorHost: host,
+      currentPageNumberText: '3\u2011IV',
+      currentPageDisplayNumber: 4,
+      currentPageChapterNumberText: '3',
+      currentPageChapterSeparator: 'hyphen',
+    });
+    manager.ensureEditorSync(descriptor, {
+      editorHost: host,
+      currentPageNumberText: 'IV',
+      currentPageDisplayNumber: 4,
+    });
+
+    expect(pageNumber.textContent).toBe('IV');
   });
 
   it('emits contentChanged and syncs converter/Yjs data when section editor updates', async () => {

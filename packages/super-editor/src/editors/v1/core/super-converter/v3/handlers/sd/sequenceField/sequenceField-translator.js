@@ -1,6 +1,10 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
 import { exportSchemaToJson, processOutputMarks } from '../../../../exporter.js';
+import {
+  parseSeqInstruction,
+  sequenceFieldAttrsFromParsed,
+} from '../../../../field-references/shared/seq-instruction.js';
 import { buildInstructionElements } from '../shared/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
@@ -24,17 +28,18 @@ const encode = (params) => {
   });
 
   const instruction = node.attributes?.instruction || '';
-  const { identifier, format, restartLevel } = parseSeqInstruction(instruction);
+  const parsed = parseSeqInstruction(instruction);
+  const parsedAttrs = sequenceFieldAttrsFromParsed(parsed);
 
   return {
     type: SD_NODE_NAME,
     attrs: {
       instruction,
       instructionTokens: node.attributes?.instructionTokens || null,
-      identifier,
-      format,
-      restartLevel,
+      // Raw instruction remains the export source of truth; these parsed attrs support import-time routing and later evaluation.
+      ...parsedAttrs,
       resolvedNumber: extractResolvedText(processedText),
+      resolvedNumberIsCurrent: false,
       marksAsAttrs: node.marks || [],
     },
     content: processedText,
@@ -49,7 +54,7 @@ const encode = (params) => {
 const decode = (params) => {
   const { node } = params;
   const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
-  const contentNodes = (node.content ?? []).flatMap((n) => exportSchemaToJson({ ...params, node: n }));
+  const contentNodes = buildResultContentNodes(params, outputMarks);
   const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens);
 
   return [
@@ -83,27 +88,43 @@ const decode = (params) => {
 };
 
 /**
- * Parses a SEQ instruction into its components.
- * @param {string} instruction
- * @returns {{ identifier: string; format: string; restartLevel: number | null }}
+ * @param {import('@translator').SCDecoderConfig} params
+ * @param {Array<any>} outputMarks
+ * @returns {Array<any>}
  */
-function parseSeqInstruction(instruction) {
-  const parts = instruction.trim().split(/\s+/);
-  const identifier = parts[1] || '';
-  let format = 'ARABIC';
-  let restartLevel = null;
+function buildResultContentNodes(params, outputMarks) {
+  const { node } = params;
+  const resolvedNumber = node.attrs?.resolvedNumber;
+  const hasCurrentResult = node.attrs?.resolvedNumberIsCurrent === true;
 
-  for (let i = 2; i < parts.length; i++) {
-    if (parts[i] === '\\*' && parts[i + 1]) {
-      format = parts[i + 1];
-      i++;
-    } else if (parts[i] === '\\s' && parts[i + 1]) {
-      restartLevel = parseInt(parts[i + 1], 10) || null;
-      i++;
-    }
+  if (hasCurrentResult) {
+    return typeof resolvedNumber === 'string' && resolvedNumber.length > 0
+      ? [buildResolvedNumberRun(resolvedNumber, outputMarks)]
+      : [];
   }
 
-  return { identifier, format, restartLevel };
+  if (Array.isArray(node.content) && node.content.length > 0) {
+    return node.content.flatMap((n) => exportSchemaToJson({ ...params, node: n }));
+  }
+
+  return typeof resolvedNumber === 'string' && resolvedNumber.length > 0
+    ? [buildResolvedNumberRun(resolvedNumber, outputMarks)]
+    : [];
+}
+
+/**
+ * @param {string} text
+ * @param {Array<any>} outputMarks
+ * @returns {any}
+ */
+function buildResolvedNumberRun(text, outputMarks) {
+  return {
+    name: 'w:r',
+    elements: [
+      { name: 'w:rPr', elements: outputMarks },
+      { name: 'w:t', elements: [{ type: 'text', text }] },
+    ],
+  };
 }
 
 /**
@@ -113,10 +134,17 @@ function parseSeqInstruction(instruction) {
  */
 function extractResolvedText(content) {
   if (!Array.isArray(content)) return '';
-  return content
-    .filter((n) => n.type === 'text')
-    .map((n) => n.text || '')
-    .join('');
+  let text = '';
+  for (const node of content) {
+    if (!node) continue;
+    if (node.type === 'text') {
+      text += node.text || '';
+    }
+    if (Array.isArray(node.content)) {
+      text += extractResolvedText(node.content);
+    }
+  }
+  return text;
 }
 
 /** @type {import('@translator').NodeTranslatorConfig} */

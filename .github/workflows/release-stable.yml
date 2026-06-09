@@ -142,40 +142,37 @@ jobs:
       # `git tag --points-at HEAD`. After CLI -> SDK -> MCP, HEAD lands on
       # MCP's version commit and the SDK tag is no longer at HEAD.
       #
-      # PyPI publish steps disabled: trusted-publisher config and per-project
-      # storage cap need to be sorted on the PyPI side before re-enabling.
-      # Restore by uncommenting once access is back.
-      # - name: Publish recovered SDK companion Python packages to PyPI
-      #   if: steps.stable_release.outputs.sdk_python_snapshot_companion_dir != ''
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   with:
-      #     packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_companion_dir }}
-      #     skip-existing: true
-      #
-      # - name: Publish recovered SDK main Python package to PyPI
-      #   if: steps.stable_release.outputs.sdk_python_snapshot_main_dir != ''
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   with:
-      #     packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_main_dir }}
-      #     skip-existing: true
+      - name: Publish recovered SDK companion Python packages to PyPI
+        if: steps.stable_release.outputs.sdk_python_snapshot_companion_dir != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_companion_dir }}
+          skip-existing: true
+
+      - name: Publish recovered SDK main Python package to PyPI
+        if: steps.stable_release.outputs.sdk_python_snapshot_main_dir != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_main_dir }}
+          skip-existing: true
 
       - name: Build and verify Python SDK
         if: steps.stable_release.outputs.sdk_release_present == 'true'
         run: node packages/sdk/scripts/build-python-sdk.mjs
 
-      # - name: Publish companion Python packages to PyPI
-      #   if: steps.stable_release.outputs.sdk_release_present == 'true'
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   with:
-      #     packages-dir: packages/sdk/langs/python/companion-dist/
-      #     skip-existing: true
-      #
-      # - name: Publish main Python SDK to PyPI
-      #   if: steps.stable_release.outputs.sdk_release_present == 'true'
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   with:
-      #     packages-dir: packages/sdk/langs/python/dist/
-      #     skip-existing: true
+      - name: Publish companion Python packages to PyPI
+        if: steps.stable_release.outputs.sdk_release_present == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/langs/python/companion-dist/
+          skip-existing: true
+
+      - name: Publish main Python SDK to PyPI
+        if: steps.stable_release.outputs.sdk_release_present == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/langs/python/dist/
+          skip-existing: true
       # Docs promotion lives in promote-stable-docs.yml. It triggers off this
       # workflow's completion and gates on whether a real superdoc v* tag was
       # created during the run, so tools-only releases leave docs-stable

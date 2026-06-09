@@ -1,6 +1,7 @@
 import type {
   ColumnLayout,
   ColumnRegion,
+  DocumentBackground,
   DrawingBlock,
   FlowMode,
   Fragment,
@@ -10,6 +11,8 @@ import type {
   ListBlock,
   ListMeasure,
   PageMargins,
+  PageNumberChapterSeparator,
+  PageNumberFormat,
   ParagraphBlock,
   ParagraphBorders,
   ParagraphMeasure,
@@ -32,6 +35,8 @@ export type ResolvedLayout = {
   blockVersions?: Record<string, string>;
   /** Resolved pages with normalized dimensions. */
   pages: ResolvedPage[];
+  /** Optional document-level page background from OOXML w:background. */
+  documentBackground?: DocumentBackground;
   /** Document epoch identifier from the source layout. Used for change tracking in the painter. */
   layoutEpoch?: number;
 };
@@ -54,8 +59,18 @@ export type ResolvedPage = {
   margins?: PageMargins;
   /** Extra bottom space reserved for footnotes (px). Used for footer space calculation. */
   footnoteReserved?: number;
+  /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
+  displayNumber?: number;
   /** Formatted page number text (e.g. "i", "ii" for Roman numeral sections). */
   numberText?: string;
+  /** Numeric page number after section page numbering settings are applied. */
+  effectivePageNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   /** Vertical alignment of content within this page. */
   vAlign?: SectionVerticalAlign;
   /** Base section margins before header/footer inflation. Used for vAlign centering calculations. */
@@ -449,6 +464,14 @@ export function isResolvedDrawingItem(item: ResolvedPaintItem): item is Resolved
 export type ResolvedHeaderFooterPage = {
   number: number;
   numberText?: string;
+  /** Section-aware numeric page value before formatting. */
+  displayNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   items: ResolvedPaintItem[];
 };
 
@@ -487,6 +510,14 @@ export type ResolvedListMarkerItem = {
     italic?: boolean;
     color?: string;
     letterSpacing?: number;
+    /**
+     * SD-2656: caps marks from the level rPr ( w:caps / w:smallCaps ). When
+     * `allCaps` is true the painter applies CSS text-transform: uppercase to
+     * the marker text — matching Word's legal/contract list rendering
+     * ("FIRST:", "SECOND:", "THIRD:") for `ordinalText` numbering.
+     */
+    allCaps?: boolean;
+    smallCaps?: boolean;
   };
   /** Optional DOCX source evidence for list-marker observations. */
   sourceAnchor?: SourceAnchor;

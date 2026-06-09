@@ -1,4 +1,4 @@
-import { XmlElement } from 'yjs';
+import { XmlElement, XmlText } from 'yjs';
 
 const CROSS_REFERENCE_NODE_NAME = 'crossReference';
 const CITATION_NODE_NAME = 'citation';
@@ -6,9 +6,10 @@ const SCHEMA_ATOM_NODE_NAMES = new Set([CROSS_REFERENCE_NODE_NAME, CITATION_NODE
 const NORMALIZE_YJS_FRAGMENT_ORIGIN = Symbol.for('superdoc/yjs-fragment-normalize');
 
 /**
- * Imported Word cross references can carry cached result runs in the shared
+ * Imported Word field atoms can carry cached result runs in the shared
  * Yjs XML, but the ProseMirror node is intentionally a leaf atom. Strip only
- * those cached Yjs children before y-prosemirror hydrates the fragment.
+ * those cached Yjs children before y-prosemirror hydrates the fragment, after
+ * preserving their visible text in the canonical resolvedText attr.
  *
  * @param {import('yjs').XmlFragment | null | undefined} fragment
  * @returns {boolean}
@@ -73,9 +74,7 @@ function stripSchemaAtomChildren(parent) {
   if (!isTraversableYjsXml(parent)) return false;
 
   if (parent instanceof XmlElement && SCHEMA_ATOM_NODE_NAMES.has(parent.nodeName)) {
-    if (parent.length === 0) return false;
-    parent.delete(0, parent.length);
-    return true;
+    return normalizeSchemaAtomElement(parent);
   }
 
   let changed = false;
@@ -84,10 +83,7 @@ function stripSchemaAtomChildren(parent) {
     if (!(child instanceof XmlElement)) continue;
 
     if (SCHEMA_ATOM_NODE_NAMES.has(child.nodeName)) {
-      if (child.length > 0) {
-        child.delete(0, child.length);
-        changed = true;
-      }
+      changed = normalizeSchemaAtomElement(child) || changed;
       continue;
     }
 
@@ -95,6 +91,68 @@ function stripSchemaAtomChildren(parent) {
   }
 
   return changed;
+}
+
+/**
+ * @param {import('yjs').XmlElement} element
+ * @returns {boolean}
+ */
+function normalizeSchemaAtomElement(element) {
+  let changed = false;
+
+  if (isEmptyResolvedText(element.getAttribute('resolvedText'))) {
+    const visibleText = extractVisibleXmlText(element);
+    if (visibleText.length > 0) {
+      element.setAttribute('resolvedText', visibleText);
+      changed = true;
+    }
+  }
+
+  if (element.length > 0) {
+    element.delete(0, element.length);
+    changed = true;
+  }
+
+  return changed;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isEmptyResolvedText(value) {
+  return typeof value !== 'string' || value.length === 0;
+}
+
+/**
+ * @param {import('yjs').XmlElement | import('yjs').XmlFragment} parent
+ * @returns {string}
+ */
+function extractVisibleXmlText(parent) {
+  let text = '';
+
+  for (const child of parent.toArray()) {
+    if (child instanceof XmlText) {
+      text += extractVisibleTextFromXmlText(child);
+    } else if (child instanceof XmlElement) {
+      text += extractVisibleXmlText(child);
+    }
+  }
+
+  return text;
+}
+
+/**
+ * `XmlText#toString()` serializes formatting as XML-like tags; we only want the
+ * visible string content when backfilling field result text.
+ *
+ * @param {import('yjs').XmlText} textNode
+ * @returns {string}
+ */
+function extractVisibleTextFromXmlText(textNode) {
+  return textNode.toDelta().reduce((visibleText, op) => {
+    return typeof op.insert === 'string' ? visibleText + op.insert : visibleText;
+  }, '');
 }
 
 function findNormalizableEventTarget(target) {

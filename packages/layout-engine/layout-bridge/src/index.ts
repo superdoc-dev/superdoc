@@ -31,6 +31,17 @@ import {
 
 export type { HeaderFooterType } from '@superdoc/contracts';
 export {
+  selectHeaderFooterVariantForPage,
+  resolveEffectiveHeaderFooterRef,
+  type HeaderFooterKind,
+  type HeaderFooterVariant,
+  type HeaderFooterSectionRefs,
+  type HeaderFooterResolutionSection,
+  type HeaderFooterVariantSelectionInput,
+  type HeaderFooterEffectiveRefInput,
+  type HeaderFooterEffectiveRefResult,
+} from '@superdoc/contracts';
+export {
   extractIdentifierFromConverter,
   getHeaderFooterType,
   defaultHeaderFooterIdentifier,
@@ -70,6 +81,21 @@ export type {
 } from './sectionAwareHeaderFooter';
 export { incrementalLayout, measureCache, normalizeMargin } from './incrementalLayout';
 export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './incrementalLayout';
+export {
+  collectFootnoteLedgers,
+  getPreferredReserveCandidates,
+  getPreferredReserveTrialTargets,
+  isMandatoryOnlyFootnotePage,
+  scoreFootnoteWindow,
+  summarizeFootnoteWindow,
+} from './footnote-scorer';
+export type {
+  FootnotePreferredReserveCandidate,
+  FootnoteWindowScoreInput,
+  FootnoteWindowScoreReason,
+  FootnoteWindowScoreResult,
+  FootnoteWindowStats,
+} from './footnote-scorer';
 // Re-export computeDisplayPageNumber from layout-engine for section-aware page numbering
 export { computeDisplayPageNumber } from '@superdoc/layout-engine';
 export type { DisplayPageInfo, HeaderFooterConstraints } from '@superdoc/layout-engine';

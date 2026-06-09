@@ -29,7 +29,7 @@ Returns a ParagraphMutationResult; reports NO_OP if an identical tab stop alread
 | `alignment` | enum | yes | `"left"`, `"center"`, `"right"`, `"decimal"`, `"bar"` |
 | `leader` | enum | no | `"none"`, `"dot"`, `"hyphen"`, `"underscore"`, `"heavy"`, `"middleDot"` |
 | `position` | integer | yes |  |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Example request
 
@@ -53,9 +53,9 @@ Returns a ParagraphMutationResult; reports NO_OP if an identical tab stop alread
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `resolution` | object | yes |  |
-| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 | `success` | `true` | yes | Constant: `true` |
-| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Variant 2 (success=false)
 
@@ -66,7 +66,7 @@ Returns a ParagraphMutationResult; reports NO_OP if an identical tab stop alread
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `resolution` | object | no |  |
-| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 | `success` | `false` | yes | Constant: `false` |
 
 ### Example response

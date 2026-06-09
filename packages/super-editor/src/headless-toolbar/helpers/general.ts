@@ -1,4 +1,4 @@
-import { resolveStateEditor } from './context.js';
+import { hasContentLockedStructuredContentSelection, resolveStateEditor } from './context.js';
 import type { ToolbarCommandState, ToolbarContext } from '../types.js';
 
 export const isCommandDisabled = (context: ToolbarContext | null) => {
@@ -8,10 +8,14 @@ export const isCommandDisabled = (context: ToolbarContext | null) => {
   return documentMode === 'viewing';
 };
 
+export const isMutationCommandDisabled = (context: ToolbarContext | null) => {
+  return isCommandDisabled(context) || hasContentLockedStructuredContentSelection(context);
+};
+
 export const createDisabledStateDeriver =
   (options?: { withValue?: boolean }) =>
   ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {
-    const disabled = isCommandDisabled(context);
+    const disabled = isMutationCommandDisabled(context);
 
     if (options?.withValue) {
       return {

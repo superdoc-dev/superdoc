@@ -237,6 +237,7 @@ const prepareNotesXmlForExport = ({ notes, editor, converter, convertedXml, conf
     converter,
     relationships: footnoteRelationships,
     media: footnoteMedia,
+    currentPartPath: config.notesPath,
   };
 
   const footnoteElements = notes.map((fn) => createFootnoteElement(fn, exportContext, config)).filter(Boolean);

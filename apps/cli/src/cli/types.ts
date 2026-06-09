@@ -11,6 +11,7 @@
 
 type TypeSpecBase = {
   description?: string;
+  enum?: readonly unknown[];
 };
 
 export type CliTypeSpec =
@@ -25,6 +26,7 @@ export type CliTypeSpec =
       type: 'object';
       properties: Record<string, CliTypeSpec>;
       required?: readonly string[];
+      additionalProperties?: boolean | CliTypeSpec;
     } & TypeSpecBase);
 
 // ---------------------------------------------------------------------------

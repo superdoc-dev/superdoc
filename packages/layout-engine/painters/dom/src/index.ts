@@ -40,13 +40,14 @@ export type {
   PaintSnapshotImageEntity,
   PaintSnapshotEntities,
 } from './renderer.js';
-export type { DomPainterInput, PositionMapping, RenderedLineInfo } from './renderer.js';
+export type { DomPainterInput, PositionMapping } from './renderer.js';
+export type { RenderedLineInfo } from './runs/index.js';
 
 // Re-export utility functions for testing
-export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './renderer.js';
+export { sanitizeUrl, linkMetrics, applyRunDataAttributes } from './runs/index.js';
 
 export { applySquareWrapExclusionsToLines } from './utils/anchor-helpers';
-export { buildImagePmSelector, buildInlineImagePmSelector } from './utils/image-selectors.js';
+export { buildImagePmSelector, buildInlineImagePmSelector } from './images/image-selectors.js';
 
 // Re-export PM position validation utilities
 export {
@@ -101,6 +102,15 @@ export type DomPainterOptions = {
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
   /** Render nonprinting formatting marks such as spaces, tabs, and paragraph marks. */
   showFormattingMarks?: boolean;
+  /** Built-in SDT chrome rendering mode. */
+  contentControlsChrome?: 'default' | 'none';
+  /**
+   * Per-document logical->physical font resolver (a CSS-stack resolver). The painter paints each
+   * run in the family this returns - e.g. Carlito for Calibri - the SAME family measurement used,
+   * so glyph advances match the laid-out positions. Set per painter instance (per document) so two
+   * editors can map one logical family differently. Defaults to the global bundled resolver.
+   */
+  resolvePhysical?: (cssFontFamily: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }) => string;
 };
 
 export type DomPainterHandle = {

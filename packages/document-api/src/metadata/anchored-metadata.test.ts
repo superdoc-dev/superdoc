@@ -211,6 +211,11 @@ describe('metadata.list validation', () => {
     ).not.toThrow();
   });
 
+  it('accepts resolvedOnly filter', () => {
+    const adapter = makeAdapter();
+    expect(() => executeAnchoredMetadataList(adapter, { resolvedOnly: true })).not.toThrow();
+  });
+
   it('rejects non-string namespace', () => {
     const adapter = makeAdapter();
     expect(() => executeAnchoredMetadataList(adapter, { namespace: 42 as unknown as string })).toThrow(
@@ -237,6 +242,13 @@ describe('metadata.list validation', () => {
     expect(() =>
       executeAnchoredMetadataList(adapter, { within: { foo: 'bar' } as unknown as SelectionTarget }),
     ).toThrow(DocumentApiValidationError);
+  });
+
+  it('rejects non-boolean resolvedOnly', () => {
+    const adapter = makeAdapter();
+    expect(() => executeAnchoredMetadataList(adapter, { resolvedOnly: 'yes' as unknown as boolean })).toThrow(
+      DocumentApiValidationError,
+    );
   });
 });
 

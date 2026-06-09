@@ -1,3 +1,5 @@
+import { getActorIdentityKey } from '../identity';
+
 type ReadonlyLooseRecord = Readonly<Record<string, unknown>>;
 
 /**
@@ -6,8 +8,10 @@ type ReadonlyLooseRecord = Readonly<Record<string, unknown>>;
 export type HexColor = `#${string}`;
 
 export interface User extends ReadonlyLooseRecord {
-  readonly email: string;
-  readonly name?: string;
+  readonly id?: string | null;
+  readonly email?: string | null;
+  readonly name?: string | null;
+  readonly color?: HexColor | string;
 }
 
 export interface AwarenessState extends ReadonlyLooseRecord {
@@ -49,17 +53,17 @@ export const awarenessStatesToArray = (
 
   return Array.from(states.entries())
     .filter(hasUser)
-    .filter(([, value]) => {
-      const userEmail = value.user.email;
-      if (seenUsers.has(userEmail)) return false;
-      seenUsers.add(userEmail);
+    .filter(([clientId, value]) => {
+      const identityKey = getActorIdentityKey({ actor: value.user, fallbackKey: clientId });
+      if (!identityKey) return false;
+      if (seenUsers.has(identityKey)) return false;
+      seenUsers.add(identityKey);
       return true;
     })
     .map(([key, value]) => {
-      // Type narrowing guarantees user exists here
-      const email = value.user.email;
+      const identityKey = getActorIdentityKey({ actor: value.user, fallbackKey: key });
 
-      let color = context.userColorMap.get(email);
+      let color = context.userColorMap.get(identityKey);
       if (!color) {
         // Prefer the color already set on the user's awareness state (e.g. hash-assigned by SuperDoc).
         // Fall back to the configured palette if available.
@@ -69,7 +73,7 @@ export const awarenessStatesToArray = (
           (context.config.colors.length > 0
             ? context.config.colors[context.colorIndex % context.config.colors.length]
             : (undefined as unknown as HexColor));
-        context.userColorMap.set(email, color);
+        context.userColorMap.set(identityKey, color);
         context.colorIndex++;
       }
 

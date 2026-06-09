@@ -142,6 +142,44 @@ modules: {
   Colors for the active tracked change highlight. Same properties as `trackChangeHighlightColors`. Defaults to `trackChangeHighlightColors` values when not set.
 </ParamField>
 
+## Small-screen behavior
+
+Use `displayMode` to control how comment/tracked-change bubbles render when container width is constrained.
+
+<ParamField path="modules.comments.displayMode" type="'sidebar' | 'inline' | 'auto'" default="'sidebar'">
+  Display policy for comment and tracked-change bubbles.
+  - `'sidebar'`: always render right sidebar bubbles.
+  - `'inline'`: always render compact inline popover mode.
+  - `'auto'`: switch between sidebar and inline mode based on measured available width.
+</ParamField>
+
+<ParamField path="modules.comments.compactBreakpointPx" type="number">
+  Optional fixed compact threshold (px) for `displayMode: 'auto'`.
+  If set, inline mode activates when available width is below this value.
+</ParamField>
+
+<ParamField path="modules.comments.compactMeasurementSelector" type="string">
+  Optional CSS selector for the width measurement target in `displayMode: 'auto'`.
+  Useful for custom flex/grid host shells where the default measurement target is not representative.
+</ParamField>
+
+```javascript
+modules: {
+  comments: {
+    displayMode: "auto",
+  },
+}
+```
+
+```javascript
+modules: {
+  comments: {
+    displayMode: "auto",
+    compactMeasurementSelector: "#editor-shell",
+  },
+}
+```
+
 ## Viewing mode visibility
 
 Comments are hidden by default when `documentMode` is `viewing`. Use

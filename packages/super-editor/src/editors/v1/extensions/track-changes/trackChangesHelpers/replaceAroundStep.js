@@ -3,6 +3,7 @@ import { Slice } from 'prosemirror-model';
 import { replaceStep } from './replaceStep.js';
 import { TrackDeleteMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/index.js';
+import { getChangeAuthorIdentity, matchesSameUserRefinement } from '../review-model/identity.js';
 
 /**
  * Check whether the enclosing structural scope (listItem, or paragraph
@@ -117,6 +118,7 @@ const findPreviousLiveCharPos = (doc, cursorPos, trackDeleteMarkType) => {
  * @param {string} options.date
  * @param {import('prosemirror-transform').Step} options.originalStep
  * @param {number} options.originalStepIndex
+ * @param {'paired' | 'independent'} [options.replacements]
  */
 export const replaceAroundStep = ({
   state,
@@ -129,6 +131,7 @@ export const replaceAroundStep = ({
   date,
   originalStep,
   originalStepIndex,
+  replacements = 'paired',
 }) => {
   // Diff replay uses forceTrackChanges for consistency, but structural metadata updates
   // (e.g. table style setNodeMarkup) are encoded as ReplaceAroundStep and cannot be
@@ -202,6 +205,7 @@ export const replaceAroundStep = ({
     date,
     originalStep: charStep,
     originalStepIndex,
+    replacements,
   });
 
   // Position the cursor at the deletion edge. The original transaction's
@@ -220,8 +224,8 @@ export const replaceAroundStep = ({
   // earlier deletion with the current ID so they merge into a single tracked change.
   if (trackMeta.deletionMark) {
     const ourId = trackMeta.deletionMark.attrs.id;
-    const ourEmail = trackMeta.deletionMark.attrs.authorEmail;
     const ourDate = trackMeta.deletionMark.attrs.date;
+    const ourIdentity = getChangeAuthorIdentity(trackMeta.deletionMark);
     const searchTo = Math.min(newTr.doc.content.size, deleteFrom + 20);
 
     let contiguous = true;
@@ -233,7 +237,11 @@ export const replaceAroundStep = ({
         contiguous = false; // Live text — stop, deletions are no longer contiguous.
         return;
       }
-      if (delMark.attrs.id !== ourId && delMark.attrs.authorEmail === ourEmail && delMark.attrs.date === ourDate) {
+      const isSameActor = matchesSameUserRefinement({
+        currentUser: ourIdentity,
+        change: getChangeAuthorIdentity(delMark),
+      });
+      if (delMark.attrs.id !== ourId && isSameActor && delMark.attrs.date === ourDate) {
         const markType = state.schema.marks[TrackDeleteMarkName];
         const merged = markType.create({ ...delMark.attrs, id: ourId });
         newTr.removeMark(pos, pos + node.nodeSize, delMark);

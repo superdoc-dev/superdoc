@@ -305,8 +305,8 @@ describe('trackChangesHelpers', () => {
     expect(plainHasOldDeleteId).toBe(false);
   });
 
-  it('removes Word-imported insertions without authorEmail when deleted', () => {
-    const insertXml = `<w:ins w:id="1" w:author="Word Author" w:date="2024-09-02T15:56:00Z">
+  it('removes unattributed Word-imported insertions without authorEmail when deleted', () => {
+    const insertXml = `<w:ins w:id="1" w:date="2024-09-02T15:56:00Z">
         <w:r>
           <w:t>Inserted</w:t>
         </w:r>
@@ -333,6 +333,42 @@ describe('trackChangesHelpers', () => {
     const finalState = state.apply(trackedDelete);
 
     expect(finalState.doc.textContent).toBe('');
+  });
+
+  it('preserves named Word-imported insertions without authorEmail when deleted by another user', () => {
+    const insertXml = `<w:ins w:id="1" w:author="Word Author" w:date="2024-09-02T15:56:00Z">
+        <w:r>
+          <w:t>Inserted</w:t>
+        </w:r>
+      </w:ins>`;
+    const nodes = parseXmlToJson(insertXml).elements;
+    const result = handleTrackChangeNode({ docx: {}, nodes, nodeListHandler: defaultNodeListHandler() });
+    expect(result.nodes.length).toBe(1);
+
+    const insertedMark = result.nodes?.[0]?.content?.[0]?.marks?.find((mark) => mark.type === TrackInsertMarkName);
+    expect(insertedMark).toBeDefined();
+    expect(insertedMark.attrs?.author).toBe('Word Author');
+    expect(insertedMark.attrs?.authorEmail).toBeUndefined();
+
+    const runNodes = result.nodes.map((node) => ProseMirrorNode.fromJSON(schema, node));
+    const paragraph = schema.nodes.paragraph.create({}, runNodes);
+    const doc = schema.nodes.doc.create({}, paragraph);
+    const state = createState(doc);
+
+    const textEntry = documentHelpers.findInlineNodes(state.doc).find(({ node }) => node.isText);
+    expect(textEntry).toBeDefined();
+
+    const deleteTr = state.tr.delete(textEntry.pos, textEntry.pos + textEntry.node.nodeSize);
+    deleteTr.setMeta('inputType', 'deleteContentBackward');
+    const trackedDelete = trackedTransaction({ tr: deleteTr, state, user });
+    const finalState = state.apply(trackedDelete);
+
+    expect(finalState.doc.textContent).toBe('Inserted');
+    const finalTextEntry = documentHelpers.findInlineNodes(finalState.doc).find(({ node }) => node.isText);
+    expect(finalTextEntry).toBeDefined();
+    const markNames = finalTextEntry.node.marks.map((mark) => mark.type.name);
+    expect(markNames).toContain(TrackInsertMarkName);
+    expect(markNames).toContain(TrackDeleteMarkName);
   });
 
   it('addMarkStep adds format mark metadata for styling changes', () => {
@@ -662,6 +698,37 @@ describe('trackChangesHelpers', () => {
     tr.setMeta('custom', true);
     const result = trackedTransaction({ tr, state, user });
     expect(result).toBe(tr);
+  });
+
+  it('trackedTransaction does not treat addToHistory as tracking intent by itself', () => {
+    const state = createState(createDocWithText('abc'));
+    const tr = state.tr.insertText('!', 1);
+    tr.setMeta('addToHistory', false);
+
+    const result = trackedTransaction({ tr, state, user });
+
+    expect(result).toBe(tr);
+  });
+
+  it('trackedTransaction tracks SuperDoc slice paste transactions and preserves paste metadata', () => {
+    const state = createState(createDocWithText('abc'));
+    const tr = state.tr.insertText('Pasted', 2);
+    tr.setMeta('superdocSlicePaste', true);
+    tr.setMeta('paste', true);
+    tr.setMeta('uiEvent', 'paste');
+
+    const tracked = trackedTransaction({ tr, state, user });
+    const nextState = state.apply(tracked);
+
+    expect(tracked).not.toBe(tr);
+    expect(tracked.getMeta('superdocSlicePaste')).toBe(true);
+    expect(tracked.getMeta('paste')).toBe(true);
+    expect(tracked.getMeta('uiEvent')).toBe('paste');
+
+    const hasTrackedPastedText = documentHelpers
+      .findInlineNodes(nextState.doc)
+      .some(({ node }) => node.text === 'Pasted' && node.marks.some((mark) => mark.type.name === TrackInsertMarkName));
+    expect(hasTrackedPastedText).toBe(true);
   });
 
   it('trackedTransaction skips Yjs-origin transactions', () => {

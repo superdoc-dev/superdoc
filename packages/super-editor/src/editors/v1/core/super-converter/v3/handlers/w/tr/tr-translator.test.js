@@ -16,8 +16,8 @@ vi.mock('../tc', () => ({
   translator: {
     encode: vi.fn((params) => {
       const tcNode = params.extraParams.node;
-      const tcPr = tcNode.elements?.find((el) => el.name === 'w:tcPr');
-      const gridSpan = tcPr?.elements?.find((el) => el.name === 'w:gridSpan');
+      const tcPr = tcNode.elements?.find((el) => el?.name === 'w:tcPr');
+      const gridSpan = tcPr?.elements?.find((el) => el?.name === 'w:gridSpan');
       const colspan = gridSpan?.attributes['w:val'] || '1';
       return {
         type: 'tableCell',
@@ -334,6 +334,306 @@ describe('w:tr translator', () => {
       );
       const translateCall = translateChildNodes.mock.calls[0][0];
       expect(translateCall.node.content).toHaveLength(2);
+    });
+  });
+
+  describe('structural tracked changes (whole-table insert/delete)', () => {
+    const rowWithMarker = (markerName) => ({
+      name: 'w:tr',
+      elements: [
+        {
+          name: 'w:trPr',
+          elements: [
+            {
+              name: markerName,
+              attributes: {
+                'w:id': '7',
+                'w:author': 'Alice Reviewer',
+                'w:authorEmail': 'alice@example.com',
+                'w:date': '2026-05-20T16:00:00Z',
+              },
+            },
+          ],
+        },
+        { name: 'w:tc', elements: [] },
+      ],
+    });
+
+    it('reads <w:ins> in <w:trPr> into a rowInsert trackChange attr', () => {
+      const row = rowWithMarker('w:ins');
+      const result = translator.encode({ nodes: [row], extraParams: { row, columnWidths: [100] } }, {});
+
+      expect(result.attrs.trackChange).toMatchObject({
+        type: 'rowInsert',
+        id: '7',
+        sourceId: '7',
+        author: 'Alice Reviewer',
+        authorEmail: 'alice@example.com',
+        date: '2026-05-20T16:00:00Z',
+      });
+    });
+
+    it('reads <w:del> in <w:trPr> into a rowDelete trackChange attr', () => {
+      const row = rowWithMarker('w:del');
+      const result = translator.encode({ nodes: [row], extraParams: { row, columnWidths: [100] } }, {});
+
+      expect(result.attrs.trackChange).toMatchObject({ type: 'rowDelete', id: '7' });
+    });
+
+    it('leaves trackChange unset for a plain row', () => {
+      const row = {
+        name: 'w:tr',
+        elements: [
+          { name: 'w:trPr', elements: [] },
+          { name: 'w:tc', elements: [] },
+        ],
+      };
+      const result = translator.encode({ nodes: [row], extraParams: { row, columnWidths: [100] } }, {});
+
+      expect(result.attrs.trackChange).toBeUndefined();
+    });
+
+    describe('export (decode)', () => {
+      const rowNode = (trackChange) => ({
+        type: 'tableRow',
+        attrs: { trackChange },
+        content: [{ type: 'tableCell', attrs: {}, content: [] }],
+      });
+
+      it('emits <w:ins> inside <w:trPr> for a rowInsert trackChange', () => {
+        const node = rowNode({
+          type: 'rowInsert',
+          id: '7',
+          sourceId: '7',
+          author: 'Alice Reviewer',
+          authorEmail: 'alice@example.com',
+          date: '2026-05-20T16:00:00Z',
+        });
+        const result = translator.decode({ node }, {});
+        const trPr = result.elements.find((el) => el?.name === 'w:trPr');
+        expect(trPr).toBeDefined();
+        const ins = trPr.elements.find((el) => el?.name === 'w:ins');
+        expect(ins).toBeDefined();
+        expect(ins.attributes).toMatchObject({
+          'w:id': '7',
+          'w:author': 'Alice Reviewer',
+          'w:authorEmail': 'alice@example.com',
+          'w:date': '2026-05-20T16:00:00Z',
+        });
+        // With no base row properties, the marker is the sole child of w:trPr.
+        expect(trPr.elements[0].name).toBe('w:ins');
+      });
+
+      it('places the revision marker after base row props and before trPrChange (CT_TrPr order)', () => {
+        // Drive the (mocked) trPr translator to emit a base prop + a trPrChange,
+        // so the marker placement against real siblings is asserted.
+        vi.mocked(trPrTranslator.decode).mockReturnValueOnce({
+          name: 'w:trPr',
+          elements: [{ name: 'w:trHeight', attributes: { 'w:val': '300' } }, { name: 'w:trPrChange' }],
+        });
+        const node = {
+          type: 'tableRow',
+          attrs: {
+            trackChange: { type: 'rowInsert', id: '7', sourceId: '7' },
+            tableRowProperties: { rowHeight: { value: '300' } },
+          },
+          content: [{ type: 'tableCell', attrs: {}, content: [] }],
+        };
+        const result = translator.decode({ node }, {});
+        const trPr = result.elements.find((el) => el?.name === 'w:trPr');
+        const order = trPr.elements.map((el) => el.name);
+        // ins must follow the base prop and precede trPrChange.
+        expect(order).toEqual(['w:trHeight', 'w:ins', 'w:trPrChange']);
+      });
+
+      it('emits <w:del> inside <w:trPr> for a rowDelete trackChange', () => {
+        const node = rowNode({ type: 'rowDelete', id: '3', sourceId: '3', author: 'Alice Reviewer' });
+        const result = translator.decode({ node }, {});
+        const trPr = result.elements.find((el) => el?.name === 'w:trPr');
+        const del = trPr.elements.find((el) => el?.name === 'w:del');
+        expect(del).toBeDefined();
+        expect(del.attributes['w:id']).toBe('3');
+      });
+
+      it('emits no revision marker for a plain row', () => {
+        const node = rowNode(null);
+        const result = translator.decode({ node }, {});
+        const trPr = result.elements.find((el) => el?.name === 'w:trPr');
+        // No tableRowProperties and no trackChange → no w:trPr is synthesized.
+        expect(trPr).toBeUndefined();
+      });
+
+      // Drive translateChildNodes to emit a realistic cell (a paragraph with a
+      // text run) so the synthesized cell-content markers can be asserted.
+      const mockCellWithText = () => {
+        translateChildNodes.mockReturnValueOnce([
+          {
+            name: 'w:tc',
+            elements: [
+              { name: 'w:tcPr', elements: [] },
+              {
+                name: 'w:p',
+                elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Hi' }] }] }],
+              },
+            ],
+          },
+        ]);
+      };
+      const decodeTrackedRow = (trackChange) =>
+        translator.decode({ node: { type: 'tableRow', attrs: { trackChange }, content: [] } }, {});
+
+      it('marks each cell paragraph mark and wraps cell runs in <w:ins> for a rowInsert', () => {
+        mockCellWithText();
+        const result = decodeTrackedRow({ type: 'rowInsert', id: '7', sourceId: '7', author: 'Alice Reviewer' });
+        const tc = result.elements.find((el) => el?.name === 'w:tc');
+        const paragraph = tc.elements.find((el) => el?.name === 'w:p');
+
+        // Paragraph mark tracked as inserted: pPr > rPr > w:ins (first in rPr).
+        const pPr = paragraph.elements.find((el) => el?.name === 'w:pPr');
+        const rPr = pPr.elements.find((el) => el?.name === 'w:rPr');
+        expect(rPr.elements[0].name).toBe('w:ins');
+        expect(rPr.elements[0].attributes['w:id']).toBe('7');
+
+        // The text run is wrapped in <w:ins>, keeping <w:t> (not <w:delText>).
+        const insRun = paragraph.elements.find((el) => el?.name === 'w:ins' && el.elements?.[0]?.name === 'w:r');
+        expect(insRun).toBeDefined();
+        expect(insRun.elements[0].elements.some((c) => c?.name === 'w:t')).toBe(true);
+      });
+
+      it('marks cell paragraph marks with <w:del> and rewrites run text to <w:delText> for a rowDelete', () => {
+        mockCellWithText();
+        const result = decodeTrackedRow({ type: 'rowDelete', id: '3', sourceId: '3', author: 'Alice Reviewer' });
+        const tc = result.elements.find((el) => el?.name === 'w:tc');
+        const paragraph = tc.elements.find((el) => el?.name === 'w:p');
+
+        const pPr = paragraph.elements.find((el) => el?.name === 'w:pPr');
+        const rPr = pPr.elements.find((el) => el?.name === 'w:rPr');
+        expect(rPr.elements[0].name).toBe('w:del');
+
+        const delRun = paragraph.elements.find((el) => el?.name === 'w:del' && el.elements?.[0]?.name === 'w:r');
+        expect(delRun).toBeDefined();
+        // Deleted run text becomes <w:delText>, never <w:t>.
+        const run = delRun.elements[0];
+        expect(run.elements.some((c) => c?.name === 'w:delText')).toBe(true);
+        expect(run.elements.some((c) => c?.name === 'w:t')).toBe(false);
+      });
+
+      it('wraps runs nested inside a <w:hyperlink>, converting <w:t> to <w:delText> for a delete', () => {
+        translateChildNodes.mockReturnValueOnce([
+          {
+            name: 'w:tc',
+            elements: [
+              {
+                name: 'w:p',
+                elements: [
+                  {
+                    name: 'w:hyperlink',
+                    attributes: { 'r:id': 'rId5' },
+                    elements: [
+                      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link' }] }] },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ]);
+        const result = decodeTrackedRow({ type: 'rowDelete', id: '9', sourceId: '9', author: 'Alice Reviewer' });
+        const tc = result.elements.find((el) => el?.name === 'w:tc');
+        const paragraph = tc.elements.find((el) => el?.name === 'w:p');
+        const hyperlink = paragraph.elements.find((el) => el?.name === 'w:hyperlink');
+        // The hyperlink container stays; its inner run is wrapped in <w:del>.
+        const delWrap = hyperlink.elements.find((el) => el?.name === 'w:del' && el.elements?.[0]?.name === 'w:r');
+        expect(delWrap).toBeDefined();
+        expect(delWrap.elements[0].elements.some((c) => c?.name === 'w:delText')).toBe(true);
+      });
+
+      it('inserts the paragraph-mark <w:rPr> before a terminal <w:sectPr> (CT_PPr order)', () => {
+        translateChildNodes.mockReturnValueOnce([
+          {
+            name: 'w:tc',
+            elements: [
+              {
+                name: 'w:p',
+                elements: [
+                  {
+                    name: 'w:pPr',
+                    elements: [
+                      { name: 'w:jc', attributes: { 'w:val': 'left' } },
+                      { name: 'w:sectPr', elements: [] },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ]);
+        const result = decodeTrackedRow({ type: 'rowInsert', id: '11', sourceId: '11', author: 'Alice Reviewer' });
+        const tc = result.elements.find((el) => el?.name === 'w:tc');
+        const pPr = tc.elements.find((el) => el?.name === 'w:p').elements.find((el) => el?.name === 'w:pPr');
+        const order = pPr.elements.map((el) => el?.name);
+        // rPr (with the ins) must precede the terminal sectPr.
+        expect(order).toEqual(['w:jc', 'w:rPr', 'w:sectPr']);
+        const rPr = pPr.elements.find((el) => el?.name === 'w:rPr');
+        expect(rPr.elements[0].name).toBe('w:ins');
+      });
+
+      it('does not double-mark an already-tracked run or paragraph mark (idempotent)', () => {
+        translateChildNodes.mockReturnValueOnce([
+          {
+            name: 'w:tc',
+            elements: [
+              {
+                name: 'w:p',
+                elements: [
+                  {
+                    name: 'w:pPr',
+                    elements: [{ name: 'w:rPr', elements: [{ name: 'w:ins', attributes: { 'w:id': '99' } }] }],
+                  },
+                  { name: 'w:ins', attributes: { 'w:id': '99' }, elements: [{ name: 'w:r', elements: [] }] },
+                ],
+              },
+            ],
+          },
+        ]);
+        const result = decodeTrackedRow({ type: 'rowInsert', id: '11', sourceId: '11', author: 'Alice Reviewer' });
+        const paragraph = result.elements.find((el) => el?.name === 'w:tc').elements.find((el) => el?.name === 'w:p');
+        const rPr = paragraph.elements.find((el) => el?.name === 'w:pPr').elements.find((el) => el?.name === 'w:rPr');
+        // Existing paragraph-mark ins is preserved; no second ins added.
+        expect(rPr.elements.filter((el) => el?.name === 'w:ins')).toHaveLength(1);
+        // The already-wrapped run is not re-wrapped (no <w:ins><w:ins>).
+        const wrap = paragraph.elements.find((el) => el?.name === 'w:ins' && el.elements?.[0]?.name === 'w:r');
+        expect(wrap).toBeDefined();
+        expect(wrap.elements[0].name).toBe('w:r');
+      });
+
+      it('round-trips import → export preserving the trPr ins markup', () => {
+        const importRow = {
+          name: 'w:tr',
+          elements: [
+            {
+              name: 'w:trPr',
+              elements: [
+                {
+                  name: 'w:ins',
+                  attributes: { 'w:id': '7', 'w:author': 'Alice Reviewer', 'w:date': '2026-05-20T16:00:00Z' },
+                },
+              ],
+            },
+            { name: 'w:tc', elements: [] },
+          ],
+        };
+        const encoded = translator.encode(
+          { nodes: [importRow], extraParams: { row: importRow, columnWidths: [100] } },
+          {},
+        );
+        const exported = translator.decode({ node: encoded }, {});
+        const trPr = exported.elements.find((el) => el?.name === 'w:trPr');
+        const ins = trPr.elements.find((el) => el?.name === 'w:ins');
+        expect(ins.attributes['w:id']).toBe('7');
+        expect(ins.attributes['w:author']).toBe('Alice Reviewer');
+        expect(ins.attributes['w:date']).toBe('2026-05-20T16:00:00Z');
+      });
     });
   });
 });

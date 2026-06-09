@@ -27,7 +27,17 @@ function resolvePosSafely(doc: ProseMirrorNode, pos: number): ReturnType<ProseMi
 }
 
 export function findStructuredContentBlockAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
-  if (!Number.isFinite(pos)) return null;
+  if (!Number.isInteger(pos)) return null;
+
+  const nodeAtPos = typeof doc.nodeAt === 'function' ? doc.nodeAt(pos) : null;
+  if (nodeAtPos?.type?.name === 'structuredContentBlock') {
+    return {
+      node: nodeAtPos,
+      pos,
+      start: pos + 1,
+      end: pos + nodeAtPos.nodeSize - 1,
+    };
+  }
 
   const $pos = resolvePosSafely(doc, pos);
   if (!$pos) return null;

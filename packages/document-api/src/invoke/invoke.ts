@@ -74,6 +74,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     insert: (input, options) => api.insert(input, options),
     replace: (input, options) => api.replace(input, options),
     delete: (input, options) => api.delete(input, options),
+    formatRange: (input, options) => api.formatRange(input, options),
 
     // --- blocks.* ---
     'blocks.list': (input) => api.blocks.list(input),
@@ -111,6 +112,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
 
     // --- styles.* ---
     'styles.apply': (input, options) => api.styles.apply(input, options),
+
+    // --- templates.* ---
+    'templates.apply': (input, options) => api.templates.apply(input, options),
 
     // --- create.* ---
     'create.paragraph': (input, options) => api.create.paragraph(input, options),

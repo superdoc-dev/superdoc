@@ -10,7 +10,17 @@
  * page number is used when calculating dimensions and caching layouts.
  */
 
-import type { FlowBlock, ParagraphBlock, TableBlock } from '@superdoc/contracts';
+import {
+  formatChapterPageNumberText,
+  formatPageNumberFieldValue,
+  formatSectionPageNumberText,
+  type FlowBlock,
+  type ListBlock,
+  type PageNumberChapterSeparator,
+  type PageNumberFormat,
+  type ParagraphBlock,
+  type TableBlock,
+} from '@superdoc/contracts';
 
 /**
  * Walk every paragraph block reachable through `blocks`, including those
@@ -22,6 +32,11 @@ function forEachParagraphBlock(blocks: FlowBlock[], visit: (para: ParagraphBlock
   for (const block of blocks) {
     if (block.kind === 'paragraph') {
       visit(block as ParagraphBlock);
+    } else if (block.kind === 'list') {
+      const list = block as ListBlock;
+      for (const item of list.items ?? []) {
+        forEachParagraphBlock([item.paragraph], visit);
+      }
     } else if (block.kind === 'table') {
       const table = block as TableBlock;
       for (const row of table.rows ?? []) {
@@ -41,7 +56,7 @@ function forEachParagraphBlock(blocks: FlowBlock[], visit: (para: ParagraphBlock
  * Resolves page number tokens in a batch of header or footer blocks.
  *
  * Headers and footers can contain the same token types as body content
- * (pageNumber, totalPageCount), but they need to be resolved to the specific
+ * (pageNumber, totalPageCount, sectionPageCount), but they need to be resolved to the specific
  * page where the header/footer will appear. This function mutates the blocks
  * in-place to replace token placeholders with actual values.
  *
@@ -72,6 +87,11 @@ export function resolveHeaderFooterTokens(
   pageNumber: number,
   totalPages: number,
   pageNumberText?: string,
+  displayPageNumber?: number,
+  sectionPageCount?: number,
+  pageNumberFormat?: PageNumberFormat,
+  chapterNumberText?: string,
+  chapterSeparator?: PageNumberChapterSeparator,
 ): void {
   // Validate inputs
   if (!blocks || blocks.length === 0) {
@@ -90,6 +110,10 @@ export function resolveHeaderFooterTokens(
 
   const pageNumberStr = pageNumberText ?? String(pageNumber);
   const totalPagesStr = String(totalPages);
+  const displayNumber = displayPageNumber ?? pageNumber;
+  const sectionPageNumberFormat = pageNumberFormat ?? 'decimal';
+  const sectionPageCountNumber = sectionPageCount || totalPages || 1;
+  const sectionPageCountStr = String(sectionPageCountNumber);
 
   // Process every paragraph block, including those nested in table cells
   // (SD-1332). The page-number field can live in `tableCell > paragraph >
@@ -104,11 +128,30 @@ export function resolveHeaderFooterTokens(
           // IMPORTANT: Do NOT delete run.token - the painter needs it to
           // re-resolve the correct page number at render time for each page.
           // The text here is for measurement purposes (digit width).
-          run.text = pageNumberStr;
+          run.text = run.pageNumberFieldFormat
+            ? formatChapterPageNumberText({
+                pageComponent: formatPageNumberFieldValue(displayNumber, run.pageNumberFieldFormat),
+                chapterNumberText,
+                chapterSeparator,
+              })
+            : chapterNumberText
+              ? formatSectionPageNumberText({
+                  displayNumber,
+                  pageFormat: sectionPageNumberFormat,
+                  chapterNumberText,
+                  chapterSeparator,
+                })
+              : pageNumberStr;
         } else if (run.token === 'totalPageCount') {
           // Replace placeholder text with total page count for measurement.
           // IMPORTANT: Keep token for painter to re-resolve if needed.
-          run.text = totalPagesStr;
+          run.text = run.pageNumberFieldFormat
+            ? formatPageNumberFieldValue(totalPages, run.pageNumberFieldFormat)
+            : totalPagesStr;
+        } else if (run.token === 'sectionPageCount') {
+          run.text = run.pageNumberFieldFormat
+            ? formatPageNumberFieldValue(sectionPageCountNumber, run.pageNumberFieldFormat)
+            : sectionPageCountStr;
         }
         // Note: pageReference tokens should not appear in headers/footers typically,
         // but if they do, they'll be handled by the PAGEREF resolution logic
@@ -175,6 +218,16 @@ function cloneHeaderFooterBlock(block: FlowBlock): FlowBlock {
         })),
       })),
     } as TableBlock;
+  }
+  if (block.kind === 'list') {
+    const list = block as ListBlock;
+    return {
+      ...list,
+      items: (list.items ?? []).map((item) => ({
+        ...item,
+        paragraph: cloneHeaderFooterBlock(item.paragraph) as ParagraphBlock,
+      })),
+    } as ListBlock;
   }
   // For other block types, shallow copy is sufficient (they don't contain tokens)
   return { ...block };

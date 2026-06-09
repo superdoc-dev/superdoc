@@ -3,6 +3,7 @@ import type {
   ImageBlock,
   DrawingBlock,
   ImageDrawing,
+  ImageRun,
   BoxSpacing,
   ImageAnchor,
   ImageWrap,
@@ -419,6 +420,12 @@ const paragraphBlocksEqual = (a: FlowBlock & { kind: 'paragraph' }, b: FlowBlock
   for (let i = 0; i < a.runs.length; i += 1) {
     const runA = a.runs[i];
     const runB = b.runs[i];
+    if (runA.kind === 'image' || runB.kind === 'image') {
+      if (runA.kind !== 'image' || runB.kind !== 'image') return false;
+      if (!imageRunsEqual(runA, runB)) return false;
+      continue;
+    }
+
     // MathRun: compare textContent (derived from OMML) to detect equation changes
     if (runA.kind === 'math' || runB.kind === 'math') {
       if (runA.kind !== runB.kind) return false;
@@ -447,6 +454,32 @@ const paragraphBlocksEqual = (a: FlowBlock & { kind: 'paragraph' }, b: FlowBlock
     if (mismatch) return false;
   }
   return true;
+};
+
+const imageRunsEqual = (a: ImageRun, b: ImageRun): boolean => {
+  return (
+    a.src === b.src &&
+    a.width === b.width &&
+    a.height === b.height &&
+    a.alt === b.alt &&
+    a.title === b.title &&
+    a.clipPath === b.clipPath &&
+    a.distTop === b.distTop &&
+    a.distBottom === b.distBottom &&
+    a.distLeft === b.distLeft &&
+    a.distRight === b.distRight &&
+    a.verticalAlign === b.verticalAlign &&
+    a.rotation === b.rotation &&
+    a.flipH === b.flipH &&
+    a.flipV === b.flipV &&
+    a.gain === b.gain &&
+    a.blacklevel === b.blacklevel &&
+    a.grayscale === b.grayscale &&
+    jsonEqual(a.lum, b.lum) &&
+    jsonEqual(a.hyperlink, b.hyperlink) &&
+    jsonEqual(a.sdt, b.sdt) &&
+    shallowRecordEqual(a.dataAttrs, b.dataAttrs)
+  );
 };
 
 const imageBlocksEqual = (a: ImageBlock | ImageDrawing, b: ImageBlock | ImageDrawing): boolean => {

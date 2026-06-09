@@ -8,7 +8,10 @@ import type {
   DrawingMeasure,
   DrawingBlock,
   TableMeasure,
+  TextRun,
 } from '@superdoc/contracts';
+import { EMPTY_SDT_PLACEHOLDER_TEXT } from '@superdoc/contracts';
+import { resolvePhysicalFamily } from '@superdoc/font-system';
 
 const expectParagraphMeasure = (measure: Measure): ParagraphMeasure => {
   expect(measure.kind).toBe('paragraph');
@@ -80,6 +83,116 @@ describe('measureBlock', () => {
       // lineHeight should be at least ascent + descent (+ safety margin)
       expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(measure.lines[0].ascent + measure.lines[0].descent);
       expect(measure.totalHeight).toBe(measure.lines[0].lineHeight);
+    });
+
+    it('does not count empty text runs as justification spaces', async () => {
+      const visibleRuns = [
+        {
+          text: '1. Confidential Information. In connection with ',
+          fontFamily: 'Arial',
+          fontSize: 16,
+        },
+      ];
+      const withoutEmptyRuns: FlowBlock = {
+        kind: 'paragraph',
+        id: 'without-empty-runs',
+        runs: visibleRuns,
+        attrs: { alignment: 'justify' },
+      };
+      const withEmptyRuns: FlowBlock = {
+        kind: 'paragraph',
+        id: 'with-empty-runs',
+        runs: [
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          ...visibleRuns,
+        ],
+        attrs: { alignment: 'justify' },
+      };
+
+      const baseMeasure = expectParagraphMeasure(await measureBlock(withoutEmptyRuns, 1000));
+      const emptyPrefixMeasure = expectParagraphMeasure(await measureBlock(withEmptyRuns, 1000));
+
+      expect(emptyPrefixMeasure.lines).toHaveLength(1);
+      expect(emptyPrefixMeasure.lines[0].width).toBeCloseTo(baseMeasure.lines[0].width, 3);
+      expect(emptyPrefixMeasure.lines[0].spaceCount).toBe(baseMeasure.lines[0].spaceCount);
+      expect(emptyPrefixMeasure.lines[0].segments).toEqual([
+        {
+          runIndex: 3,
+          fromChar: 0,
+          toChar: visibleRuns[0].text.length,
+          width: expect.any(Number),
+        },
+      ]);
+    });
+
+    it('keeps empty-only paragraphs measurable without phantom spaces', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-only-runs',
+        runs: [
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].width).toBe(0);
+      expect(measure.lines[0].spaceCount).toBeUndefined();
+      expect(measure.lines[0].segments).toEqual([]);
+      expect(measure.totalHeight).toBeGreaterThan(0);
+    });
+
+    it('does not let skipped empty runs inflate visible line height', async () => {
+      const visibleBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'visible-small-run',
+        runs: [{ text: 'visible', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+      const emptyPrefixBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-large-prefix-run',
+        runs: [
+          { text: '', fontFamily: 'Arial', fontSize: 48 },
+          { text: 'visible', fontFamily: 'Arial', fontSize: 12 },
+        ],
+        attrs: {},
+      };
+
+      const visibleMeasure = expectParagraphMeasure(await measureBlock(visibleBlock, 1000));
+      const emptyPrefixMeasure = expectParagraphMeasure(await measureBlock(emptyPrefixBlock, 1000));
+
+      expect(emptyPrefixMeasure.lines[0].lineHeight).toBeCloseTo(visibleMeasure.lines[0].lineHeight, 3);
+    });
+
+    // SD-3330: a line containing only tabs must be measured at the run's font size,
+    // not the 12px fallback, so it has the same height as a text line in the same
+    // paragraph font. Without this, tab-only lines render shorter than text lines.
+    it('measures a tab-only line at the run font size, not the 12px default', async () => {
+      const textBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'text',
+        runs: [{ text: 'x', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const tabBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tab',
+        runs: [{ kind: 'tab', text: '\t', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+
+      const textMeasure = expectParagraphMeasure(await measureBlock(textBlock, 1000));
+      const tabMeasure = expectParagraphMeasure(await measureBlock(tabBlock, 1000));
+
+      // The tab-only line height matches the text line (both 16px), not 12px × 1.15.
+      expect(tabMeasure.lines[0].lineHeight).toBeCloseTo(textMeasure.lines[0].lineHeight, 1);
+      expect(tabMeasure.lines[0].lineHeight).toBeGreaterThan(16);
     });
 
     it('breaks lines when text exceeds maxWidth', async () => {
@@ -683,6 +796,68 @@ describe('measureBlock', () => {
         expect(line.toRun).toBeLessThanOrEqual(2);
         expect(line.toRun).toBeGreaterThanOrEqual(line.fromRun);
       });
+    });
+
+    it('measures empty inline SDT placeholders using the visible placeholder text width', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-inline-sdt',
+        runs: [
+          {
+            kind: 'text',
+            text: '',
+            fontFamily: 'Arial',
+            fontSize: 16,
+            pmStart: 10,
+            pmEnd: 10,
+            visualPlaceholder: 'emptyInlineSdt',
+            sdt: { type: 'structuredContent', scope: 'inline', id: 'sdt-empty' },
+          },
+        ],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0]).toMatchObject({ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0 });
+      expect(measure.lines[0].width).toBeGreaterThan(8);
+      expect(measure.lines[0].segments).toHaveLength(1);
+      expect(measure.lines[0].segments[0]).toMatchObject({ runIndex: 0, fromChar: 0, toChar: 0 });
+      expect(measure.lines[0].segments[0].width).toBe(measure.lines[0].width);
+    });
+
+    it('applies textTransform when measuring empty SDT placeholder text', async () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      expect(ctx).not.toBeNull();
+      ctx!.font = `16px ${resolvePhysicalFamily('Arial')}`;
+      const transformedPlaceholderText = EMPTY_SDT_PLACEHOLDER_TEXT.toUpperCase();
+      const transformedWidth = ctx!.measureText(transformedPlaceholderText).width;
+      const untransformedWidth = ctx!.measureText(EMPTY_SDT_PLACEHOLDER_TEXT).width;
+      expect(transformedWidth).not.toBeCloseTo(untransformedWidth, 2);
+
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-inline-sdt-uppercase',
+        runs: [
+          {
+            kind: 'text',
+            text: '',
+            fontFamily: 'Arial',
+            fontSize: 16,
+            textTransform: 'uppercase',
+            visualPlaceholder: 'emptyInlineSdt',
+            sdt: { type: 'structuredContent', scope: 'inline', id: 'sdt-empty-uppercase' },
+          },
+        ],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].width).toBeCloseTo(transformedWidth, 2);
     });
   });
 
@@ -3638,6 +3813,103 @@ describe('measureBlock', () => {
       expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[0]);
       expect(measure.columnWidths[2]).toBeGreaterThan(measure.columnWidths[1]);
       expect(measure.totalWidth).toBe(450);
+    });
+
+    it('keeps tblW auto tables with a fitting authored grid within that grid budget despite wider tcW preferences', async () => {
+      const paragraph = (id: string, text: string): FlowBlock => ({
+        kind: 'paragraph',
+        id,
+        runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
+      });
+      const cell = (id: string, text: string, width: number) => ({
+        id,
+        blocks: [paragraph(`${id}-paragraph`, text)],
+        attrs: {
+          tableCellProperties: {
+            cellWidth: { value: width, type: 'dxa' },
+          },
+        },
+      });
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'table-autofit-grid-budget',
+        attrs: {
+          tableWidth: { value: 0, type: 'auto' },
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              cell('cell-0-0', 'Title', 3600),
+              cell('cell-0-1', 'Year', 1152),
+              cell('cell-0-2', 'Genre', 2160),
+              cell('cell-0-3', 'Notes', 4320),
+            ],
+          },
+          {
+            id: 'row-1',
+            cells: [
+              cell('cell-1-0', 'A', 2160),
+              cell('cell-1-1', 'B', 2160),
+              cell('cell-1-2', 'C', 2160),
+              cell('cell-1-3', 'D', 2160),
+            ],
+          },
+        ],
+        columnWidths: [144, 144, 144, 144],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 576 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+      expect(measure.columnWidths).toHaveLength(4);
+      expect(measure.totalWidth).toBeLessThanOrEqual(576);
+      expect(measure.columnWidths[0]).toBeGreaterThan(measure.columnWidths[1]);
+      expect(measure.columnWidths[3]).toBeGreaterThan(measure.columnWidths[2]);
+    });
+
+    it('does not stretch missing-grid AutoFit tables to fallback content width', async () => {
+      const paragraph = (id: string, text: string): FlowBlock => ({
+        kind: 'paragraph',
+        id,
+        runs: [{ text, fontFamily: 'Times New Roman', fontSize: 12 }],
+      });
+      const cell = (id: string, text: string, width: number) => ({
+        id,
+        blocks: [paragraph(`${id}-paragraph`, text)],
+        attrs: {
+          tableCellProperties: {
+            cellWidth: { value: width, type: 'dxa' },
+          },
+        },
+      });
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'table-autofit-missing-grid',
+        attrs: {},
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              cell('cell-0-0', '', 3885),
+              cell('cell-0-1', 'Lets see how Word Reacts seems liek we are...', 3900),
+            ],
+          },
+          {
+            id: 'row-1',
+            cells: [cell('cell-1-0', 'Lets go ..', 3885), cell('cell-1-1', '', 3900)],
+          },
+        ],
+        columnWidths: [312, 312],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 624 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+      expect(measure.columnWidths).toHaveLength(2);
+      expect(measure.totalWidth).toBeCloseTo(519, 3);
     });
 
     it('scales column widths proportionally when exceeding available width', async () => {

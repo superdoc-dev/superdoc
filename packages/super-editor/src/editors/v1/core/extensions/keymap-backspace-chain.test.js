@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { handleBackspace } from './keymap.js';
+import { handleBackspace, handleDelete } from './keymap.js';
 
 /**
  * Pins the ordering of commands in the Backspace chain.
@@ -37,6 +37,9 @@ describe('handleBackspace chain ordering', () => {
     const commands = {
       undoInputRule: make('undoInputRule'),
       deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
+      selectInlineSdtBeforeRunStart: make('selectInlineSdtBeforeRunStart'),
+      selectBlockSdtBeforeTextBlockStart: make('selectBlockSdtBeforeTextBlockStart'),
+      moveIntoBlockSdtBeforeTextBlockStart: make('moveIntoBlockSdtBeforeTextBlockStart'),
       backspaceEmptyRunParagraph: make('backspaceEmptyRunParagraph'),
       backspaceSkipEmptyRun: make('backspaceSkipEmptyRun'),
       backspaceAtomBefore: make('backspaceAtomBefore'),
@@ -73,6 +76,9 @@ describe('handleBackspace chain ordering', () => {
       'undoInputRule',
       // step 2 sets inputType meta and returns false (no command call)
       'deleteBlockSdtAtTextBlockStart',
+      'selectInlineSdtBeforeRunStart',
+      'selectBlockSdtBeforeTextBlockStart',
+      'moveIntoBlockSdtBeforeTextBlockStart',
       'backspaceEmptyRunParagraph',
       'backspaceSkipEmptyRun',
       'backspaceAtomBefore',
@@ -102,6 +108,9 @@ describe('handleBackspace chain ordering', () => {
     // walk (undoInputRule at 0, meta-setter at 1, then SDT at 2).
     expect(callLog[0]).toBe('undoInputRule');
     expect(callLog[1]).toBe('deleteBlockSdtAtTextBlockStart');
+    expect(callLog[2]).toBe('selectInlineSdtBeforeRunStart');
+    expect(callLog[3]).toBe('selectBlockSdtBeforeTextBlockStart');
+    expect(callLog[4]).toBe('moveIntoBlockSdtBeforeTextBlockStart');
   });
 
   it('places mixedBidiBackspace after backspaceAcrossRuns and before deleteSelection', () => {
@@ -109,10 +118,13 @@ describe('handleBackspace chain ordering', () => {
     handleBackspace(editor);
 
     const acrossRunsIndex = callLog.indexOf('backspaceAcrossRuns');
+    const inlineSdtIndex = callLog.indexOf('selectInlineSdtBeforeRunStart');
     const mixedIndex = callLog.indexOf('mixedBidiBackspace');
     const deleteSelectionIndex = callLog.indexOf('deleteSelection');
 
+    expect(inlineSdtIndex).toBeGreaterThanOrEqual(0);
     expect(acrossRunsIndex).toBeGreaterThanOrEqual(0);
+    expect(acrossRunsIndex).toBeGreaterThan(inlineSdtIndex);
     expect(mixedIndex).toBeGreaterThan(acrossRunsIndex);
     expect(deleteSelectionIndex).toBeGreaterThan(mixedIndex);
   });
@@ -153,5 +165,65 @@ describe('handleBackspace chain ordering', () => {
     expect(callLog).toContain('backspaceAcrossRuns');
     expect(callLog).toContain('deleteSelection');
     expect(callLog).not.toContain('mixedBidiBackspace');
+  });
+});
+
+describe('handleDelete chain ordering', () => {
+  const makeEditor = () => {
+    const callLog = [];
+    const tr = {
+      setMeta: vi.fn(() => tr),
+    };
+    const make = (name) => () => {
+      callLog.push(name);
+      return false;
+    };
+
+    const commands = {
+      deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
+      selectInlineSdtAfterRunEnd: make('selectInlineSdtAfterRunEnd'),
+      selectBlockSdtAfterTextBlockEnd: make('selectBlockSdtAfterTextBlockEnd'),
+      moveIntoBlockSdtAfterTextBlockEnd: make('moveIntoBlockSdtAfterTextBlockEnd'),
+      deleteSkipEmptyRun: make('deleteSkipEmptyRun'),
+      deleteAtomAfter: make('deleteAtomAfter'),
+      deleteNextToRun: make('deleteNextToRun'),
+      deleteSelection: make('deleteSelection'),
+      joinForward: make('joinForward'),
+      selectNodeForward: make('selectNodeForward'),
+    };
+
+    const editor = {
+      view: { state: { tr }, dispatch: vi.fn() },
+      commands: {
+        first: vi.fn((build) => {
+          const fns = build({ commands });
+          for (const fn of fns) {
+            const result = fn();
+            if (result) return result;
+          }
+          return false;
+        }),
+      },
+    };
+
+    return { editor, callLog };
+  };
+
+  it('runs inline SDT forward selection before generic Delete fallbacks', () => {
+    const { editor, callLog } = makeEditor();
+    handleDelete(editor);
+
+    expect(callLog).toEqual([
+      'deleteBlockSdtAtTextBlockStart',
+      'selectInlineSdtAfterRunEnd',
+      'selectBlockSdtAfterTextBlockEnd',
+      'moveIntoBlockSdtAfterTextBlockEnd',
+      'deleteSkipEmptyRun',
+      'deleteAtomAfter',
+      'deleteNextToRun',
+      'deleteSelection',
+      'joinForward',
+      'selectNodeForward',
+    ]);
   });
 });

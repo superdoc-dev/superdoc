@@ -1,4 +1,0 @@
-{
-  "$comment": "Auto-managed by tests/consumer-typecheck/check-public-method-coverage.mjs. Each entry is \"memberName:obligation\" where obligation is one of parameters | returns | call. Refresh with --write after adding fixtures.",
-  "knownUnmet": []
-}

@@ -17,6 +17,12 @@ export const useSuperdocStore = defineStore('superdoc', () => {
   const pages = reactive({});
   const documentUsers = ref([]);
   const activeZoom = ref(100);
+  /** @type {import('vue').Ref<import('@superdoc/core/types/index.js').SuperDocZoomMode>} */
+  const zoomMode = ref('manual');
+  // Latest viewport measurements (availableWidth / documentWidth / fitZoom),
+  // written by the viewport-fit composable; null until editors mount.
+  /** @type {import('vue').Ref<import('@superdoc/core/types/index.js').SuperDocViewportMetrics | null>} */
+  const viewportMetrics = ref(null);
   const isReady = ref(false);
   const isInternal = ref(false);
 
@@ -63,6 +69,28 @@ export const useSuperdocStore = defineStore('superdoc', () => {
   const init = async (config) => {
     reset();
     currentConfig.value = config;
+
+    // Seed the initial zoom before documents initialize so editor creation
+    // reads it (SuperDoc.vue passes activeZoom into layoutEngineOptions) and
+    // the first paint renders directly at the configured zoom.
+    if (config.zoom?.initial !== undefined) {
+      const initialZoom = config.zoom.initial;
+      if (typeof initialZoom === 'number' && Number.isFinite(initialZoom) && initialZoom > 0) {
+        activeZoom.value = initialZoom;
+      } else {
+        console.warn('[SuperDoc] zoom.initial expects a positive number representing percentage');
+      }
+    }
+
+    if (config.zoom?.mode !== undefined) {
+      const mode = config.zoom.mode;
+      if (mode === 'manual' || mode === 'fit-width') {
+        zoomMode.value = mode;
+      } else {
+        console.warn("[SuperDoc] zoom.mode expects 'manual' or 'fit-width'");
+      }
+    }
+
     const { documents: configDocs, modules: configModules, user: configUser, users: configUsers } = config;
 
     documentUsers.value = configUsers || [];
@@ -261,6 +289,8 @@ export const useSuperdocStore = defineStore('superdoc', () => {
     documentUsers,
     users,
     activeZoom,
+    zoomMode,
+    viewportMetrics,
     documentScroll,
     isInternal,
 

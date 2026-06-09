@@ -44,9 +44,14 @@ function includesNormalized(haystack, needle) {
 
 function oflNoticeFragments(family) {
   const fragments = [];
-  const [ownerNotice] = family.copyrightNotice.split(' with Reserved Font Name ');
-  if (ownerNotice) fragments.push(ownerNotice);
-  if (family.reservedFontName) fragments.push(`Reserved Font Name "${family.reservedFontName}"`);
+  const singleRfnMarker = ' with Reserved Font Name ';
+  if (family.copyrightNotice.includes(singleRfnMarker)) {
+    const [ownerNotice] = family.copyrightNotice.split(singleRfnMarker);
+    if (ownerNotice) fragments.push(ownerNotice);
+    if (family.reservedFontName) fragments.push(`Reserved Font Name "${family.reservedFontName}"`);
+  } else if (family.copyrightNotice) {
+    fragments.push(family.copyrightNotice);
+  }
   if (family.copyrightNotice.includes('Copyright (c) 2012 Red Hat, Inc.')) {
     fragments.push('Copyright (c) 2012 Red Hat, Inc.');
   }
@@ -70,14 +75,29 @@ function parseRuntimeManifest() {
   const source = readText(runtimeManifestPath);
   const rows = [];
   const pattern = /family\('([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'\)/g;
-  let match;
-  while ((match = pattern.exec(source)) !== null) {
+  let match = pattern.exec(source);
+  while (match !== null) {
     const [, family, filePrefix, license] = match;
     rows.push({
       family,
       license,
       files: FOUR_FACE_SUFFIXES.map((suffix) => `${filePrefix}-${suffix}.woff2`),
     });
+    match = pattern.exec(source);
+  }
+  const customPattern = /familyWithFaces\('([^']+)'\s*,\s*'([^']+)'\s*,\s*\[([\s\S]*?)\]\)/g;
+  const facePattern = /{\s*weight:\s*'([^']+)'\s*,\s*style:\s*'([^']+)'\s*,\s*file:\s*'([^']+)'\s*}/g;
+  match = customPattern.exec(source);
+  while (match !== null) {
+    const [, family, license, faceBlock] = match;
+    const files = [];
+    let faceMatch = facePattern.exec(faceBlock);
+    while (faceMatch !== null) {
+      files.push(faceMatch[3]);
+      faceMatch = facePattern.exec(faceBlock);
+    }
+    rows.push({ family, license, files });
+    match = customPattern.exec(source);
   }
   return rows;
 }

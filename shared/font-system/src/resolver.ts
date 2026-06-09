@@ -3,11 +3,10 @@
  *
  * A document refers to a font by its *logical* family - the name Word wrote, e.g.
  * "Calibri". The browser may not have that font (it is proprietary), so SuperDoc
- * renders a metric-compatible *physical* substitute - e.g. Carlito, whose advance
- * widths match Calibri so line breaks land where Word puts them. The logical name
- * stays the source of truth (toolbar, export); only measurement and paint use the
- * physical family, and they MUST use the same one or text is measured in one font
- * and painted in another.
+ * renders a reviewed *physical* fallback, such as metric-compatible Carlito for Calibri. The
+ * logical name stays the source of truth (toolbar, export); only measurement and paint use the
+ * physical family, and they MUST use the same one or text is measured in one font and painted in
+ * another.
  *
  * The value reaching measure and paint is a CSS font-family *stack* the layout
  * builds via `toCssFontFamily`, e.g. "Calibri, sans-serif" - so resolution applies
@@ -16,17 +15,16 @@
  * Resolution is a {@link FontResolver} INSTANCE, not a global: each document gets its
  * own so two editors on one page can map the same logical family differently (a
  * customer `fonts.map`) without leaking across documents - the same per-document
- * isolation the registry already has per `FontFaceSet`. Every instance is seeded with
- * the verified clean clones (Calibri->Carlito, Cambria->Caladea, Arial->Liberation Sans,
- * Times New Roman->Liberation Serif, Courier New->Liberation Mono, plus Helvetica aliased
- * to the same Liberation Sans). The module-level `resolve*` functions delegate to a shared
- * default instance for callers that have no document context (and for backward compatibility).
+ * isolation the registry already has per `FontFaceSet`. Every instance is seeded from DocFonts
+ * evidence gated by the local bundled asset manifest. The module-level `resolve*` functions delegate
+ * to a shared default instance for callers that have no document context (and for backward
+ * compatibility).
  */
 
-import { getRenderableFallback } from '@docfonts/fallbacks';
+import { getFallbackDecisionForFace, getRenderableFallback } from '@docfonts/fallbacks';
 
 import { BUNDLED_MANIFEST } from './bundled-manifest';
-import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
+import { SUBSTITUTION_EVIDENCE, type FaceSlot } from './substitution-evidence';
 
 export type FontResolutionReason =
   /** No substitute is known; the requested family is used as-is. */
@@ -64,6 +62,11 @@ export interface FontResolution {
   /** The bare physical family that is actually loaded, measured, and painted. */
   physicalFamily: string;
   reason: FontResolutionReason;
+  /**
+   * The real registered face used for loading when the requested face is synthetic. Omitted when the
+   * requested face itself is the source face.
+   */
+  sourceFace?: FaceKey;
 }
 
 /** A specific face within a family: the weight/style axis a run renders at. */
@@ -95,13 +98,67 @@ function sortPairs(pairs: Array<[string, string]>): Array<[string, string]> {
 
 /**
  * Asset gate: a docfonts fallback activates only when SuperDoc actually ships its physical clone. The
- * evidence registry carries more substitutes than the bundled pack covers (e.g. Georgia -> Gelasio), so
+ * evidence registry carries more substitutes than the bundled pack covers (e.g. Arial Narrow), so
  * `canRenderFamily` keeps an un-shipped candidate OUT of the resolver until its `.woff2` lands. The
  * predicate checks the SUBSTITUTE (physical) family against `bundled-manifest`, matching the package's
  * `getRenderableFallback` contract.
  */
 const bundledFamilies: ReadonlySet<string> = new Set(BUNDLED_MANIFEST.map((f) => f.family));
 const canRenderFamily = (family: string): boolean => bundledFamilies.has(family);
+
+function faceSlotFor({ weight, style }: FaceKey): FaceSlot {
+  const bold = weight === '700';
+  const italic = style === 'italic';
+  if (bold && italic) return 'boldItalic';
+  if (bold) return 'bold';
+  if (italic) return 'italic';
+  return 'regular';
+}
+
+function faceKeyForSlot(slot: FaceSlot): FaceKey {
+  switch (slot) {
+    case 'bold':
+      return { weight: '700', style: 'normal' };
+    case 'italic':
+      return { weight: '400', style: 'italic' };
+    case 'boldItalic':
+      return { weight: '700', style: 'italic' };
+    case 'regular':
+      return { weight: '400', style: 'normal' };
+  }
+}
+
+function reasonForFallback(policyAction: 'substitute' | 'category_fallback'): FontResolutionReason {
+  return policyAction === 'category_fallback' ? 'category_fallback' : 'bundled_substitute';
+}
+
+type FaceResolution = { physical: string; reason: FontResolutionReason; sourceFace?: FaceKey };
+
+function resolveDocfontsFace(primary: string, face: FaceKey, hasFace: HasFace): FaceResolution | null {
+  const decision = getFallbackDecisionForFace(primary, faceSlotFor(face), { canRenderFamily });
+  if (decision.kind === 'face_missing') {
+    return { physical: primary, reason: 'fallback_face_absent' };
+  }
+  if (decision.kind !== 'fallback') return null;
+  const fallback = decision.fallback;
+  if (fallback.policyAction !== 'substitute' && fallback.policyAction !== 'category_fallback') return null;
+  if (hasFace(fallback.substituteFamily, face.weight, face.style)) {
+    return {
+      physical: fallback.substituteFamily,
+      reason: reasonForFallback(fallback.policyAction),
+    };
+  }
+  const sourceFace = fallback.faceSource?.kind === 'synthetic' ? faceKeyForSlot(fallback.faceSource.from) : face;
+  if (!hasFace(fallback.substituteFamily, sourceFace.weight, sourceFace.style)) {
+    return fallback.policyAction === 'substitute' ? { physical: primary, reason: 'fallback_face_absent' } : null;
+  }
+  const sourceDiffers = sourceFace.weight !== face.weight || sourceFace.style !== face.style;
+  return {
+    physical: fallback.substituteFamily,
+    reason: reasonForFallback(fallback.policyAction),
+    ...(sourceDiffers ? { sourceFace } : {}),
+  };
+}
 
 /**
  * Logical (normalized) -> physical family, DERIVED from the docfonts substitution registry: every row
@@ -172,8 +229,8 @@ function splitStack(cssFontFamily: string): string[] {
 }
 
 /**
- * Per-document logical -> physical font resolver. Seeded with the bundled clean-clone
- * map; also holds per-instance runtime overrides (a customer `fonts.map`). Because each
+ * Per-document logical -> physical font resolver. Seeded with bundled DocFonts fallbacks;
+ * also holds per-instance runtime overrides (a customer `fonts.map`). Because each
  * document owns its instance, two documents can map the same logical family to different
  * physical families without interfering. Its {@link signature} (NOT the numeric
  * {@link version}) is the identity measure-cache keys and paint reuse signatures must fold in,
@@ -337,20 +394,16 @@ export class FontResolver {
    *   2a. this document's embedded face, under its UNIQUE physical family -> registered_face
    *       (so a shared FontFaceSet renders THIS document's bytes, not another document's same-named font)
    *   2b. a registered real face for the logical family itself (customer `fonts.add`) -> registered_face
-   *   3. bundled metric-compatible substitute -> bundled_substitute  (if it provides the face)
+   *   3. bundled substitute -> bundled_substitute  (real face, or an explicit docfonts synthetic source)
    *   4. non-metric category fallback -> category_fallback  (if it provides the face; a lower-fidelity
    *      family fallback like Calibri Light -> Carlito, never reported metric-safe)
    *   5. otherwise as_requested (no provider, including a category fallback that lacked the face) - or
-   *      fallback_face_absent when an override/bundled substitute WAS known but lacked the face, so a
-   *      single-face clone is never faux-styled.
+   *      fallback_face_absent when an override/bundled substitute WAS known but lacked the face and no
+   *      docfonts synthetic source authorized it.
    * `physical === primary` (no swap) for 2b / as_requested / fallback_face_absent; embedded 2a swaps
    * to its document-unique physical family.
    */
-  #resolveFaceLadder(
-    primary: string,
-    face: FaceKey,
-    hasFace: HasFace,
-  ): { physical: string; reason: FontResolutionReason } {
+  #resolveFaceLadder(primary: string, face: FaceKey, hasFace: HasFace): FaceResolution {
     const key = normalizeFamilyKey(primary);
     const override = this.#overrides.get(key);
     // 1. explicit `fonts.map` override - but only when the mapped family can actually supply this
@@ -372,20 +425,16 @@ export class FontResolver {
     if (hasFace(primary, face.weight, face.style)) {
       return { physical: primary, reason: 'registered_face' };
     }
-    // 3. bundled metric-compatible substitute.
-    const bundled = BUNDLED_SUBSTITUTES[key];
-    if (bundled && hasFace(bundled, face.weight, face.style)) {
-      return { physical: bundled, reason: 'bundled_substitute' };
-    }
-    // 4. non-metric category fallback (e.g. Calibri Light -> Carlito): a family fallback, lower
-    //    fidelity. Apply only when it actually supplies the face. On a miss it falls through to
-    //    as_requested below (there was no metric substitute to be "absent"), never fallback_face_absent.
-    const category = CATEGORY_FALLBACKS[key];
-    if (category && hasFace(category, face.weight, face.style)) {
-      return { physical: category, reason: 'category_fallback' };
-    }
+    // 3/4. docfonts fallback: either a bundled substitute or a lower-fidelity category fallback.
+    //      Query the face-aware docfonts helper instead of checking the requested face directly:
+    //      rows may explicitly allow synthetic faces (e.g. Cooper Black Bold -> Caprasimo Regular),
+    //      in which case the load gate must await the source face while paint keeps the requested
+    //      bold/italic style for browser synthesis.
+    const docfonts = resolveDocfontsFace(primary, face, hasFace);
+    if (docfonts) return docfonts;
     // 5. a configured provider (an override or a bundled clone) was known but none could supply this
     //    face: pass the logical family through, reported non-metric, never faux-styled.
+    const bundled = BUNDLED_SUBSTITUTES[key];
     if (override || bundled) {
       return { physical: primary, reason: 'fallback_face_absent' };
     }
@@ -422,29 +471,34 @@ export class FontResolver {
   }
 
   /**
-   * Face-aware structured resolution. Like {@link resolveFontFamily}, but a substitute applies
-   * ONLY when the physical family actually provides the requested face (per `hasFace`). Otherwise
-   * the logical family passes through with reason `fallback_face_absent`, so a single-face
-   * substitute is never faux-styled onto a weight/style it lacks. The four-face shipped clones
-   * provide every face, so they resolve identically to {@link resolveFontFamily}.
+   * Face-aware structured resolution. Like {@link resolveFontFamily}, but a substitute applies only
+   * when the physical family provides the requested face or docfonts explicitly names a synthetic
+   * source face. Otherwise the logical family passes through with reason `fallback_face_absent`, so a
+   * single-face substitute is never faux-styled by accident. The four-face shipped clones provide every
+   * face, so they resolve identically to {@link resolveFontFamily}.
    */
   resolveFace(logicalFamily: string, face: FaceKey, hasFace: HasFace): FontResolution {
     const parts = splitStack(logicalFamily);
     const primary = parts[0] ?? logicalFamily;
-    const { physical, reason } = this.#resolveFaceLadder(primary, face, hasFace);
+    const { physical, reason, sourceFace } = this.#resolveFaceLadder(primary, face, hasFace);
     // physicalFamily is a bare load/report family (the gate awaits it via faceProbe, which re-quotes):
     // strip quotes off a quoted primary carried through for registered_face / fallback_face_absent /
     // as_requested, so the probe matches the registered face instead of a literal "Calibri". The CSS
     // paint variant (resolvePhysicalFamilyForFace) keeps the quoted stack. No-op for substitute names.
-    return { logicalFamily, physicalFamily: stripFamilyQuotes(physical), reason };
+    return {
+      logicalFamily,
+      physicalFamily: stripFamilyQuotes(physical),
+      reason,
+      ...(sourceFace ? { sourceFace } : {}),
+    };
   }
 
   /**
    * Face-aware CSS-stack variant for MEASURE and PAINT - the face-scoped counterpart of
-   * {@link resolvePhysicalFamily}. Swaps the primary family to its substitute ONLY when the
-   * substitute provides this face; otherwise returns the value unchanged (logical family + its
-   * fallbacks), so a missing face is never faux-styled. Measure and paint MUST call this with the
-   * same face key, or text is measured in one face and painted in another.
+   * {@link resolvePhysicalFamily}. Swaps the primary family to its substitute when this exact face is
+   * real or docfonts authorizes a synthetic source face. Otherwise returns the value unchanged
+   * (logical family + its fallbacks), so a missing face is never faux-styled by accident. Measure and
+   * paint MUST call this with the same face key, or text is measured in one face and painted in another.
    */
   resolvePhysicalFamilyForFace(cssFontFamily: string, face: FaceKey, hasFace: HasFace): string {
     if (!cssFontFamily) return cssFontFamily;
@@ -482,7 +536,7 @@ export class FontResolver {
   }
 }
 
-/** Create a per-document resolver seeded with the bundled clean-clone map. */
+/** Create a per-document resolver seeded with bundled DocFonts fallbacks. */
 export function createFontResolver(): FontResolver {
   return new FontResolver();
 }
@@ -517,9 +571,9 @@ export function resolveFace(logicalFamily: string, face: FaceKey, hasFace: HasFa
 /**
  * Maps a logical CSS family to the physical render family for a SPECIFIC face (weight/style): a
  * per-document `fonts.map` override or a bundled substitute, but only when that substitute provides
- * the face (else the family passes through, never faux-styled). The one shared spelling for what was
- * duplicated across the painter, measuring, and planner packages. Face-aware so a single-face clone
- * (e.g. a Regular-only Gelasio) is never mapped onto a Bold/Italic run it cannot render.
+ * the face or docfonts authorizes a synthetic source face. The one shared spelling for what was
+ * duplicated across the painter, measuring, and planner packages. Face-aware so a single-face clone is
+ * never mapped onto a Bold/Italic run it cannot render unless the evidence explicitly allows it.
  */
 export type ResolvePhysicalFamily = (cssFontFamily: string, face: FaceKey) => string;
 

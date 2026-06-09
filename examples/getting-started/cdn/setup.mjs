@@ -19,7 +19,7 @@ const assets = [
   [sampleSource, resolve(here, 'test_file.docx')],
 ];
 
-// The bundled metric-compatible substitutes ship as separate assets under dist/fonts/.
+// The bundled reviewed fallbacks ship as separate assets under dist/fonts/.
 // The CDN build auto-detects `./fonts/` relative to superdoc.min.js, so the example must
 // serve them beside the script (here/fonts/) or every .woff2 404s.
 const fontsSrc = resolve(dist, 'fonts');
@@ -30,14 +30,14 @@ if (missing.length || !existsSync(fontsSrc)) {
   console.error('[cdn-example/setup] Build the SuperDoc bundle first:');
   console.error('  pnpm --filter superdoc build');
   console.error('Missing files:');
-  for (const [src] of missing) console.error('  ' + src);
-  if (!existsSync(fontsSrc)) console.error('  ' + fontsSrc + ' (bundled font assets)');
+  for (const [src] of missing) console.error(`  ${src}`);
+  if (!existsSync(fontsSrc)) console.error(`  ${fontsSrc} (bundled font assets)`);
   process.exit(1);
 }
 
 for (const [src, dst] of assets) {
   copyFileSync(src, dst);
-  console.log('[cdn-example/setup] copied', dst.replace(here + '/', ''));
+  console.log('[cdn-example/setup] copied', dst.replace(`${here}/`, ''));
 }
 
 cpSync(fontsSrc, fontsDst, { recursive: true });

@@ -12,6 +12,7 @@ import { resolvePhysicalFamily, type ResolvePhysicalFamily } from '@superdoc/fon
 import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { shouldRenderSdtContainerChrome, type SdtBoundaryOptions } from '../sdt/container.js';
+import { allowFontSynthesis } from '../runs/font-synthesis.js';
 import type { BetweenBorderInfo } from './borders/index.js';
 import { renderParagraphContent, type ParagraphRenderLineInput } from './renderParagraphContent.js';
 
@@ -179,6 +180,7 @@ const renderDropCap = (
     style: run.italic ? 'italic' : 'normal',
   });
   dropCapEl.style.fontSize = `${run.fontSize}px`;
+  allowFontSynthesis(dropCapEl);
   if (run.bold) {
     dropCapEl.style.fontWeight = 'bold';
   }

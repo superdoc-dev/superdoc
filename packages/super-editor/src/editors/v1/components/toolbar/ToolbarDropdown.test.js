@@ -59,7 +59,9 @@ describe('ToolbarDropdown keyboard focus', () => {
 
     const options = document.body.querySelectorAll('.toolbar-dropdown-option');
     expect(options).toHaveLength(3);
-    expect(document.activeElement).toBe(options[0]);
+    // The open watcher focuses the first option after its own awaited ticks; poll for the focus
+    // instead of racing that scheduler with a fixed number of test ticks.
+    await vi.waitFor(() => expect(document.activeElement).toBe(options[0]));
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     expect(document.activeElement).toBe(options[1]);

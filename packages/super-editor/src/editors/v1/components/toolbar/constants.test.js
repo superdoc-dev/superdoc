@@ -1,20 +1,26 @@
-import { describe, it, expect } from 'vitest';
-import { TOOLBAR_FONTS, composeToolbarFontOptions } from './constants';
+import { describe, expect, it } from 'vitest';
+import { composeToolbarFontOptions, TOOLBAR_FONTS } from './constants';
 
 describe('TOOLBAR_FONTS (built-in font dropdown, derived from the font-offering registry)', () => {
-  it('advertises only the metric-safe bundled defaults, in alphabetical order', () => {
+  it('advertises bundled defaults and bundled qualified choices, in alphabetical order', () => {
     expect(TOOLBAR_FONTS.map((f) => f.label)).toEqual([
       'Arial',
       'Calibri',
+      'Comic Sans MS',
+      'Cooper Black',
       'Courier New',
+      'Garamond',
+      'Georgia',
       'Helvetica',
+      'Tahoma',
       'Times New Roman',
+      'Trebuchet MS',
     ]);
   });
 
-  it('does not leak non-bundled or qualified fonts into the default dropdown', () => {
+  it('does not leak non-advertised fonts into the default dropdown', () => {
     const labels = new Set(TOOLBAR_FONTS.map((f) => f.label));
-    for (const name of ['Georgia', 'Aptos', 'Cambria', 'Calibri Light']) {
+    for (const name of ['Aptos', 'Cambria', 'Calibri Light', 'Arial Narrow']) {
       expect(labels.has(name)).toBe(false);
     }
   });
@@ -66,9 +72,15 @@ describe('composeToolbarFontOptions (document fonts unioned with the bundled def
       'Arial',
       'Bangla MN',
       'Calibri',
+      'Comic Sans MS',
+      'Cooper Black',
       'Courier New',
+      'Garamond',
+      'Georgia',
       'Helvetica',
+      'Tahoma',
       'Times New Roman',
+      'Trebuchet MS',
     ]);
     expect(options.filter((o) => o.label === 'Calibri')).toHaveLength(1);
   });

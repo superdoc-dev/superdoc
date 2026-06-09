@@ -153,9 +153,15 @@ describe('createSuperDocUI', () => {
       'Arial',
       'Bangla MN',
       'Calibri',
+      'Comic Sans MS',
+      'Cooper Black',
       'Courier New',
+      'Garamond',
+      'Georgia',
       'Helvetica',
+      'Tahoma',
       'Times New Roman',
+      'Trebuchet MS',
     ]);
     expect(options.find((option) => option.label === 'Aptos')).toEqual({
       label: 'Aptos',
@@ -179,8 +185,33 @@ describe('createSuperDocUI', () => {
     superdoc.fireSuperdoc('fonts-changed');
     await flushMicrotasks();
 
-    expect(observed.at(0)).toEqual(['Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman']);
-    expect(observed.at(-1)).toEqual(['Aptos', 'Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman']);
+    expect(observed.at(0)).toEqual([
+      'Arial',
+      'Calibri',
+      'Comic Sans MS',
+      'Cooper Black',
+      'Courier New',
+      'Garamond',
+      'Georgia',
+      'Helvetica',
+      'Tahoma',
+      'Times New Roman',
+      'Trebuchet MS',
+    ]);
+    expect(observed.at(-1)).toEqual([
+      'Aptos',
+      'Arial',
+      'Calibri',
+      'Comic Sans MS',
+      'Cooper Black',
+      'Courier New',
+      'Garamond',
+      'Georgia',
+      'Helvetica',
+      'Tahoma',
+      'Times New Roman',
+      'Trebuchet MS',
+    ]);
   });
 
   it('refreshes ui.fonts for delimiter-colliding font names', async () => {

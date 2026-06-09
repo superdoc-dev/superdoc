@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "spdxExpression": "OFL-1.1 AND Apache-2.0",
-  "generatedFrom": "Bundled font legal review, 2026-06-03",
+  "generatedFrom": "Bundled font legal review, 2026-06-03; Caprasimo added from DocFonts Google Fonts OFL provenance, 2026-06-08; OFL fallback batch added from DocFonts Google Fonts provenance, 2026-06-09",
   "families": [
     {
       "family": "Carlito",
@@ -186,6 +186,264 @@
           "weight": "bold",
           "style": "italic",
           "sha256": "0fce31aa9a25eb896122b309d86ebfd5541a12d917f2b94669b0e166302e29b9"
+        }
+      ]
+    },
+    {
+      "family": "Caprasimo",
+      "replaces": ["Cooper Black"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "1.001",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/caprasimo",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2023 The Caprasimo Project Authors (https://github.com/docrepair-fonts/caprasimo-fonts).",
+      "trademarkNotice": null,
+      "sourceFile": {
+        "file": "Caprasimo-Regular.ttf",
+        "sha256": "786ab84ee787d40df55be78cb4361e485a1c6687195cbcccf3538cb5e46ced90"
+      },
+      "faces": [
+        {
+          "file": "Caprasimo-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "66c6d1e052b6553371f29d21bfee798bb3c2238f51b54a89fe50d4234db348b1"
+        }
+      ]
+    },
+    {
+      "family": "Gelasio",
+      "replaces": ["Georgia"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "1.008",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/gelasio",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2022 The Gelasio Project Authors (https://github.com/SorkinType/Gelasio)",
+      "trademarkNotice": null,
+      "sourceFiles": [
+        {
+          "file": "Gelasio[wght].ttf",
+          "sha256": "4daecea457258c9ebeb8bc99ed3fd24353618bfad3ea4b93fa0b5d0468fc04e4",
+          "instanceWeights": [400, 700]
+        },
+        {
+          "file": "Gelasio-Italic[wght].ttf",
+          "sha256": "52559e845a4d33514e5f93bb9ae7dbeae1894a53f2c565a15f18af40cd337c09",
+          "instanceWeights": [400, 700]
+        }
+      ],
+      "faces": [
+        {
+          "file": "Gelasio-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "1514bedc3e56233eb414876d213df3de01ee2075f23aae2c44ca96462964884c"
+        },
+        {
+          "file": "Gelasio-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "d5d57ba918bec682ff23f9491dc39f5b3b938c5281bd2630d0640b533f935c5c"
+        },
+        {
+          "file": "Gelasio-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "f49bebf82ba6ba3fdfd4a5a248b82fea24f398c21ad7c5f51dca64d93aeaa757"
+        },
+        {
+          "file": "Gelasio-BoldItalic.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "c6f0f2c42f0fa5186986b293250ad92a1c6e716968c570add483008c02407a44"
+        }
+      ]
+    },
+    {
+      "family": "Cardo",
+      "replaces": ["Garamond"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "Regular 1.0451; Bold 1.0011; Italic 0.991",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/cardo",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright (c) 2002-2011, David J. Perry (hospes02@scholarsfonts.net)",
+      "trademarkNotice": null,
+      "sourceFiles": [
+        {
+          "file": "Cardo-Regular.ttf",
+          "sha256": "bcb81f376f1c3892c7026dabf2beafbd1a7ee8ae95d132ee7d4ff7d7c3988261"
+        },
+        {
+          "file": "Cardo-Bold.ttf",
+          "sha256": "6c9383b1471936ee83b08b67bf79f0ed92bee3d5e8363ec3ba21309d5a272e36"
+        },
+        {
+          "file": "Cardo-Italic.ttf",
+          "sha256": "52c51cfde3a827dd9428511c4a968699952b8a917c5f0e97be782cbfa1880f9c"
+        }
+      ],
+      "faces": [
+        {
+          "file": "Cardo-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "e5f2ab143c0a3be44dc79eb1033db65ec0181ee4630217f14cd2bfccad86dc82"
+        },
+        {
+          "file": "Cardo-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "f8c73ba923c2517cf21e7afe61f2d126722cb7037bfa8da4a5ecf0dcf858cd42"
+        },
+        {
+          "file": "Cardo-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "241bc8d8f7967633cc47db11c46e8ec33cf82ad0f3e33e2592fe2460dc52e4fd"
+        }
+      ]
+    },
+    {
+      "family": "Comic Relief",
+      "replaces": ["Comic Sans MS"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "1.200",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/comicrelief",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2013 The Comic Relief Project Authors (https://github.com/loudifier/Comic-Relief)",
+      "trademarkNotice": null,
+      "sourceFiles": [
+        {
+          "file": "ComicRelief-Regular.ttf",
+          "sha256": "9ef4958ab06385d91f635f83a15569786b243f9d010cfb3f9a5cdda593c7bc22"
+        },
+        {
+          "file": "ComicRelief-Bold.ttf",
+          "sha256": "33aee007212b696afd57d50c901135cd723cd188f7ad98f3a1c572ea64e8f0d5"
+        }
+      ],
+      "faces": [
+        {
+          "file": "ComicRelief-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "4da72e2fd1f17ffdee624f527718b7f236324aab81d15168969e63307083dce6"
+        },
+        {
+          "file": "ComicRelief-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "8c33948ae740c0f4baaf6f7cb85e2d135566024328ee87f898de350ffe830632"
+        }
+      ]
+    },
+    {
+      "family": "Noto Sans",
+      "replaces": ["Tahoma"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "2.015",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/notosans",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)",
+      "trademarkNotice": null,
+      "sourceFiles": [
+        {
+          "file": "NotoSans[wdth,wght].ttf",
+          "sha256": "bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d",
+          "instanceWeights": [400, 700],
+          "instanceWidth": 100
+        },
+        {
+          "file": "NotoSans-Italic[wdth,wght].ttf",
+          "sha256": "58e6e0ebd1931b29a365aa2d3e2ee9a9e831a3af7cf3ad1462d4e72154f0b291",
+          "instanceWeights": [400, 700],
+          "instanceWidth": 100
+        }
+      ],
+      "faces": [
+        {
+          "file": "NotoSans-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "5b19f444b4445d247161b9bd24965569fc5e827d982b32216b2091beab665c47"
+        },
+        {
+          "file": "NotoSans-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "25200a5e071684d0199d1ae6a1e8d868c1c17f23a5004311a2942fe74674c85b"
+        },
+        {
+          "file": "NotoSans-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "376f0a4448c3ff51e01a2b9651b6b30d6dc8f263d7dc9b7c42ddbb8c7ad4fa81"
+        },
+        {
+          "file": "NotoSans-BoldItalic.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "081e841bfe1ebfcf3687499ecda39f0a10ea40e0a5d131d74e1f375d1d18a9f1"
+        }
+      ]
+    },
+    {
+      "family": "PT Sans",
+      "replaces": ["Trebuchet MS"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "2.003W OFL",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/ptsans",
+      "reservedFontName": "PT Sans, PT Serif, ParaType",
+      "copyrightNotice": "Copyright (c) 2010, ParaType Ltd. (http://www.paratype.com/public), with Reserved Font Names \"PT Sans\", \"PT Serif\" and \"ParaType\".",
+      "trademarkNotice": null,
+      "sourceFiles": [
+        {
+          "file": "PT_Sans-Web-Regular.ttf",
+          "sha256": "9cc831490532009bae2b3ce0d39c62adfc889060beb421593bfd9d2396d0f10a"
+        },
+        {
+          "file": "PT_Sans-Web-Bold.ttf",
+          "sha256": "3128bd5ecf01816e59a23d54c57a7a6b14615b07db53ff277c77376010265b05"
+        },
+        {
+          "file": "PT_Sans-Web-Italic.ttf",
+          "sha256": "5a90fe2d0cd798700935240580bdcc12c0ffc9102c0c7163b3418e13bc21debd"
+        },
+        {
+          "file": "PT_Sans-Web-BoldItalic.ttf",
+          "sha256": "81ac221cdd02bccfa679c74adb122478e9d092e65a722e31ca11469961483785"
+        }
+      ],
+      "faces": [
+        {
+          "file": "PTSans-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "502c9879033faf9e12cdc5925792757d6398ac6e947f62f9736be09848f4a175"
+        },
+        {
+          "file": "PTSans-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "8dac9c371ed1e0d21a46d76cae4b209f1435f76350565e5557bf4954ce465e0e"
+        },
+        {
+          "file": "PTSans-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "58b0a1cc07aa64f0f0ce054b144e5493d5429af75d1ac3ccc0bd99166547790d"
+        },
+        {
+          "file": "PTSans-BoldItalic.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "9c2d39693376aee4d0f93f51ba2e720c69441d1b66fdd2f6a77f13600c5f6691"
         }
       ]
     }

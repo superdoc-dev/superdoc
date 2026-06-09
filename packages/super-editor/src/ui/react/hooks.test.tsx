@@ -186,9 +186,15 @@ describe('domain hooks', () => {
       'Aptos',
       'Arial',
       'Calibri',
+      'Comic Sans MS',
+      'Cooper Black',
       'Courier New',
+      'Garamond',
+      'Georgia',
       'Helvetica',
+      'Tahoma',
       'Times New Roman',
+      'Trebuchet MS',
     ]);
     expect(options?.find((option) => option.label === 'Aptos')).toEqual({
       label: 'Aptos',

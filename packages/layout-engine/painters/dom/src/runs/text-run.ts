@@ -14,6 +14,7 @@ import type { RunRenderContext, TrackedChangesRenderConfig } from './types.js';
 import { applyRunDataAttributes } from './hash.js';
 import { applyLinkAttributes, applyLinkDataset, buildLinkRenderData, enhanceAccessibility } from './links.js';
 import { setTextContentWithFormattingSpaceMarks } from './formatting-marks.js';
+import { allowFontSynthesis } from './font-synthesis.js';
 import {
   normalizeRtlDateTokenForWordParity,
   resolveRunDirectionAttribute,
@@ -110,6 +111,7 @@ export const applyRunStyles = (
     style: run.italic ? 'italic' : 'normal',
   });
   element.style.fontSize = `${run.fontSize}px`;
+  allowFontSynthesis(element);
   if (run.bold) element.style.fontWeight = 'bold';
   if (run.italic) element.style.fontStyle = 'italic';
 

@@ -504,9 +504,9 @@ describe('handleImageNode - Shape Group Support', () => {
     const result = handleImageNode(node, params, true);
     const shape = result.attrs.shapes[0];
 
-    expect(shape.attrs.rotation).toBeGreaterThan(0);
-    expect(shape.attrs.flipH).toBe(true);
-    expect(shape.attrs.flipV).toBe(true);
+    expect(shape.attrs.rotation).toBe(270);
+    expect(shape.attrs.flipH).toBe(false);
+    expect(shape.attrs.flipV).toBe(false);
   });
 
   it('should preserve group-level rotation and flips on the group transform', () => {

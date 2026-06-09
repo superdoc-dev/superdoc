@@ -20,8 +20,29 @@ import {
   updateNoteElement,
 } from '../../core/parts/adapters/notes-part-descriptor.js';
 import { normalizeNotePmJson } from '../helpers/note-pm-json.js';
+import { footnotesRemoveWrapper } from '../plan-engine/footnote-wrappers.js';
+import { findAllFootnotes } from '../helpers/footnote-resolver.js';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 
 type NoteStoryLocator = FootnoteStoryLocator | EndnoteStoryLocator;
+
+/**
+ * SD-3400: a note is "empty" once it holds no text and no embedded atoms
+ * (images, etc.). Whitespace-only content counts as empty — the user cleared it.
+ */
+function isNoteContentEmpty(doc: ProseMirrorNode): boolean {
+  let hasContent = false;
+  doc.descendants((node) => {
+    if (hasContent) return false;
+    if (node.isText) {
+      if ((node.text ?? '').trim().length > 0) hasContent = true;
+    } else if (node.isAtom && node.type.name !== 'text') {
+      hasContent = true;
+    }
+    return !hasContent;
+  });
+  return !hasContent;
+}
 
 interface NoteExportToXmlJsonResult {
   result?: {
@@ -105,6 +126,22 @@ function commitNoteRuntime(
 ): void {
   const noteType = isFootnote ? 'footnote' : 'endnote';
   const notesConfig = getNotesConfig(noteType);
+
+  // SD-3400: clearing all content in the note area deletes the footnote on BOTH
+  // sides — the note element in the notes part AND the body reference — and the
+  // document renumbers. This mirrors the body-side staged delete; deleting from
+  // either side removes the whole footnote. footnotesRemoveWrapper deletes the
+  // body reference node and removes the OOXML element when no other reference
+  // remains. Guard on the reference still existing so a stale commit is a no-op.
+  if (isNoteContentEmpty(storyEditor.state.doc)) {
+    const referenceExists = findAllFootnotes(hostEditor.state.doc).some((f) => f.noteId === locator.noteId);
+    if (referenceExists) {
+      footnotesRemoveWrapper(hostEditor, {
+        target: { kind: 'entity', entityType: 'footnote', noteId: locator.noteId },
+      });
+    }
+    return;
+  }
 
   // Try rich export via converter's exportToXmlJson (preserves formatting)
   const conv = (hostEditor as unknown as { converter?: ConverterWithNoteExport }).converter;

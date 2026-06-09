@@ -5,7 +5,7 @@
  * empty or blank notes to be misclassified as missing.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DocumentApiAdapterError } from '../errors.js';
 
 // ---------------------------------------------------------------------------
@@ -34,6 +34,14 @@ vi.mock('../../core/parts/adapters/notes-part-descriptor.js', () => ({
   getNoteElements: vi.fn(() => []),
   ensureFootnoteRefRun: vi.fn(),
   updateNoteElement: vi.fn(),
+}));
+
+// SD-3400: mock the removal boundary so the commit-on-empty wiring can be
+// asserted without exercising footnotesRemoveWrapper's internals (covered by
+// footnote-wrappers.test.ts).
+const mockFootnotesRemoveWrapper = vi.fn(() => ({ success: true }));
+vi.mock('../plan-engine/footnote-wrappers.js', () => ({
+  footnotesRemoveWrapper: (...args: unknown[]) => mockFootnotesRemoveWrapper(...args),
 }));
 
 // Import after mocks are set up
@@ -252,5 +260,59 @@ describe('resolveNoteRuntime — empty note content', () => {
     resolveNoteRuntime(hostEditor, footnoteLocator);
 
     expect(mockCreateStoryEditor).toHaveBeenCalledWith(hostEditor, doc, expect.any(Object));
+  });
+});
+
+describe('SD-3400: clearing a note in the area removes the footnote on both sides', () => {
+  beforeEach(() => mockFootnotesRemoveWrapper.mockClear());
+
+  // Host editor whose body contains a footnoteReference id '1' (so real
+  // findAllFootnotes confirms the reference exists before removal).
+  const makeHost = () =>
+    ({
+      converter: { footnotes: [{ id: '1', content: [{ type: 'paragraph' }] }], endnotes: [] },
+      state: { doc: { descendants: (cb: (n: unknown, p: number) => void) => cb({ type: { name: 'footnoteReference' }, attrs: { id: '1' } }, 5) } },
+      on: vi.fn(),
+    }) as any;
+
+  const storyEditorWith = (descendants: (cb: (n: unknown, p: number) => boolean | void) => void) => ({
+    state: { doc: { content: { size: 4 }, textBetween: () => '', descendants } },
+    schema: {},
+    getJSON: () => ({ type: 'doc', content: [{ type: 'paragraph' }] }),
+    getUpdatedJson: () => ({ type: 'doc', content: [{ type: 'paragraph' }] }),
+    destroy: vi.fn(),
+    on: vi.fn(),
+  });
+
+  it('removes both the body reference and the note element when the committed content is empty', () => {
+    // Story doc holds only an empty paragraph — no text, no atoms.
+    mockCreateStoryEditor.mockReturnValueOnce(
+      storyEditorWith((cb) => {
+        cb({ isText: false, isAtom: false, type: { name: 'paragraph' } }, 0);
+      }) as never,
+    );
+    const host = makeHost();
+    const runtime = resolveNoteRuntime(host, footnoteLocator);
+
+    runtime.commit?.(host);
+
+    expect(mockFootnotesRemoveWrapper).toHaveBeenCalledWith(host, {
+      target: { kind: 'entity', entityType: 'footnote', noteId: '1' },
+    });
+  });
+
+  it('does not remove the footnote when the committed note still has content', () => {
+    mockCreateStoryEditor.mockReturnValueOnce(
+      storyEditorWith((cb) => {
+        cb({ isText: false, isAtom: false, type: { name: 'paragraph' } }, 0);
+        cb({ isText: true, isAtom: true, text: 'kept', type: { name: 'text' } }, 1);
+      }) as never,
+    );
+    const host = makeHost();
+    const runtime = resolveNoteRuntime(host, footnoteLocator);
+
+    runtime.commit?.(host);
+
+    expect(mockFootnotesRemoveWrapper).not.toHaveBeenCalled();
   });
 });

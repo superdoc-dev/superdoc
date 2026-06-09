@@ -140,6 +140,25 @@ describe('layoutDrawingBlock', () => {
     });
   });
 
+  describe('Textbox content measures', () => {
+    it('should attach textbox content measures to drawing fragments when provided', () => {
+      const contentMeasures = [{ kind: 'paragraph', lines: [], totalHeight: 24 }];
+      const context = {
+        ...createMockContext({
+          drawingKind: 'textboxShape',
+        }),
+        textboxContentMeasures: contentMeasures,
+      };
+
+      layoutDrawingBlock(context);
+
+      const state = context.ensurePage();
+      expect(state.page.fragments).toHaveLength(1);
+      expect(state.page.fragments[0]?.kind).toBe('drawing');
+      expect((state.page.fragments[0] as DrawingFragment).contentMeasures).toEqual(contentMeasures);
+    });
+  });
+
   describe('Basic inline placement', () => {
     it('should place drawing at current cursor position with no margins', () => {
       const context = createMockContext();

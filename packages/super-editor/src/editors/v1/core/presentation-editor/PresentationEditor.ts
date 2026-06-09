@@ -141,6 +141,7 @@ import type {
 } from './story-session/StoryPresentationSessionManager.js';
 import type { StoryPresentationSession } from './story-session/types.js';
 import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/resolve-story-runtime.js';
+import { isNoteContentEmpty } from '../../document-api-adapters/story-runtime/note-story-runtime.js';
 import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
@@ -510,6 +511,10 @@ export class PresentationEditor extends EventEmitter {
   #painterHost: HTMLElement;
   #selectionOverlay: HTMLElement;
   #permissionOverlay: HTMLElement | null = null;
+  /** SD-3400: note target whose page-bottom fragments are highlighted while its session is open. */
+  #activeNoteHighlightTarget: RenderedNoteTarget | null = null;
+  /** SD-3400: unbinds the active note session's emptied-content watcher. */
+  #noteSessionEmptyWatchCleanup: (() => void) | null = null;
   #hiddenHost: HTMLElement;
   /** Scroll-isolating wrapper around #hiddenHost. Append/remove this from the DOM. */
   #hiddenHostWrapper: HTMLElement;
@@ -7319,6 +7324,10 @@ export class PresentationEditor extends EventEmitter {
       this.emit('layoutUpdated', payload);
       this.emit('paginationUpdate', payload);
 
+      // SD-3400: fragments are rebuilt on every paint — re-apply the active
+      // note highlight so it survives rerenders while the session is open.
+      this.#refreshActiveNoteHighlight();
+
       // Emit fresh comment positions after layout completes.
       // Always emit — even when empty — so the store can clear stale positions
       // (e.g. when undo removes the last tracked-change mark).
@@ -9048,6 +9057,13 @@ export class PresentationEditor extends EventEmitter {
     session.editor.view?.focus();
     this.#shouldScrollSelectionIntoView = true;
     this.#scheduleSelectionUpdate({ immediate: true });
+
+    // SD-3400: make the focus change visible (highlight the note at the page
+    // bottom) and watch for the user emptying the note (commit removal
+    // immediately instead of waiting for a click back into the body).
+    this.#activeNoteHighlightTarget = target;
+    this.#refreshActiveNoteHighlight();
+    this.#bindNoteSessionEmptyWatch(session);
     return true;
   }
 
@@ -9061,11 +9077,71 @@ export class PresentationEditor extends EventEmitter {
     return this.#activateRenderedNoteSession(target, {});
   }
 
+  /**
+   * SD-3400: toggle the `sd-note-session-active` highlight on the painted
+   * fragments of the note whose session is open. Paint-only (class + CSS), so
+   * it never affects layout. Re-applied after every paint because fragment
+   * elements are rebuilt by the painter; self-heals when the session is gone.
+   */
+  #refreshActiveNoteHighlight(): void {
+    const host = this.#painterHost ?? this.#visibleHost;
+    if (!host) return;
+    if (this.#activeNoteHighlightTarget && !this.#getActiveStorySession()) {
+      this.#activeNoteHighlightTarget = null;
+    }
+    host.querySelectorAll('.sd-note-session-active').forEach((el) => el.classList.remove('sd-note-session-active'));
+    const target = this.#activeNoteHighlightTarget;
+    if (!target) return;
+    const prefixes = [
+      `${target.storyType}-${target.noteId}-`,
+      `__sd_semantic_${target.storyType}-${target.noteId}-`,
+    ];
+    host.querySelectorAll('[data-block-id]').forEach((el) => {
+      const id = el.getAttribute('data-block-id') ?? '';
+      if (prefixes.some((prefix) => id.startsWith(prefix))) {
+        el.classList.add('sd-note-session-active');
+      }
+    });
+  }
+
+  /**
+   * SD-3400: when the user clears ALL content of a note that previously had
+   * content, exit the session immediately so the commit (which removes the
+   * footnote on both sides) runs right away — no extra click required. Freshly
+   * inserted notes open empty and are only auto-removed once they have held
+   * content, so insert-and-type is unaffected.
+   */
+  #bindNoteSessionEmptyWatch(session: StoryPresentationSession): void {
+    this.#noteSessionEmptyWatchCleanup?.();
+    const sessionEditor = session.editor;
+    let hadContent = !isNoteContentEmpty(sessionEditor.state.doc);
+    const onUpdate = () => {
+      const empty = isNoteContentEmpty(sessionEditor.state.doc);
+      if (!empty) {
+        hadContent = true;
+        return;
+      }
+      if (!hadContent) return;
+      this.#noteSessionEmptyWatchCleanup?.();
+      // Defer past the session editor's own transaction lifecycle.
+      queueMicrotask(() => this.#exitActiveStorySession());
+    };
+    sessionEditor.on?.('update', onUpdate);
+    this.#noteSessionEmptyWatchCleanup = () => {
+      sessionEditor.off?.('update', onUpdate);
+      this.#noteSessionEmptyWatchCleanup = null;
+    };
+  }
+
   #exitActiveStorySession(): void {
     const session = this.#getActiveStorySession();
     if (!session) {
       return;
     }
+
+    this.#noteSessionEmptyWatchCleanup?.();
+    this.#activeNoteHighlightTarget = null;
+    this.#refreshActiveNoteHighlight();
 
     this.#storySessionManager?.exit();
     this.#pendingDocChange = true;

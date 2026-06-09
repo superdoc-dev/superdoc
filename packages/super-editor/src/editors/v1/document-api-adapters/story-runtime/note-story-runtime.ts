@@ -29,8 +29,9 @@ type NoteStoryLocator = FootnoteStoryLocator | EndnoteStoryLocator;
 /**
  * SD-3400: a note is "empty" once it holds no text and no embedded atoms
  * (images, etc.). Whitespace-only content counts as empty — the user cleared it.
+ * Exported so PresentationEditor's note-session watcher applies the same rule.
  */
-function isNoteContentEmpty(doc: ProseMirrorNode): boolean {
+export function isNoteContentEmpty(doc: ProseMirrorNode): boolean {
   let hasContent = false;
   doc.descendants((node) => {
     if (hasContent) return false;

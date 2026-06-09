@@ -27,6 +27,19 @@ describe('ensureFootnoteStyles', () => {
     expect(cssText).toContain('[data-block-id^="__sd_semantic_footnote-"]');
     expect(cssText).toContain('cursor: text;');
   });
+
+  it('signals clickability on body reference markers and highlights the active note (SD-3400)', () => {
+    ensureFootnoteStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-footnote-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    expect(cssText).toContain('[data-note-reference]');
+    expect(cssText).toContain('cursor: pointer;');
+    expect(cssText).toContain('[data-note-reference]:hover');
+    expect(cssText).toContain('.sd-note-session-active');
+    expect(cssText).toContain('sd-note-activate-pulse');
+  });
 });
 
 describe('ensureSdtContainerStyles', () => {

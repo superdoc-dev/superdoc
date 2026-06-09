@@ -1170,6 +1170,32 @@ const FOOTNOTE_STYLES = `
 [data-block-id^="__sd_semantic_endnote-"] {
   cursor: text;
 }
+
+/* SD-3400: body reference markers are interactive (double-click opens the
+ * note). Pointer cursor + a hover pill signal clickability without affecting
+ * layout (background/box-shadow are paint-only). */
+[data-note-reference] {
+  cursor: pointer;
+  border-radius: 2px;
+}
+[data-note-reference]:hover {
+  background-color: var(--sd-content-controls-block-hover-bg, #d3e3fd);
+  box-shadow: 0 0 0 2px var(--sd-content-controls-block-hover-bg, #d3e3fd);
+}
+
+/* SD-3400: while a note session is open, highlight the note's fragments at the
+ * page bottom so the focus change is visible. Applied by PresentationEditor on
+ * activation, re-applied after each paint, removed on session exit. The pulse
+ * draws the eye when focus jumps from the body reference to the note. */
+.sd-note-session-active {
+  background-color: rgba(98, 155, 231, 0.12);
+  box-shadow: -2px 0 0 0 #629be7;
+  animation: sd-note-activate-pulse 0.6s ease-out 1;
+}
+@keyframes sd-note-activate-pulse {
+  0% { background-color: rgba(98, 155, 231, 0.4); }
+  100% { background-color: rgba(98, 155, 231, 0.12); }
+}
 `;
 
 let printStylesInjected = false;

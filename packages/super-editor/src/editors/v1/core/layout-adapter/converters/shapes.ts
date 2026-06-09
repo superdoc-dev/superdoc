@@ -7,7 +7,10 @@
 
 import type {
   DrawingBlock,
+  FlowBlock,
   ImageBlock,
+  ParagraphBlock,
+  TextboxDrawing,
   VectorShapeDrawing,
   ShapeGroupDrawing,
   ImageAnchor,
@@ -42,6 +45,7 @@ import {
   mergeWrapDistancesFromPadding,
   ptToPx,
 } from '../utilities.js';
+import { getLastParagraphFont } from './paragraph.js';
 
 // ============================================================================
 // Constants
@@ -75,7 +79,7 @@ const isHiddenDrawing = (attrs: Record<string, unknown>): boolean => {
   return typeof attrs.visibility === 'string' && attrs.visibility.toLowerCase() === 'hidden';
 };
 
-type ShapeDrawingBlock = VectorShapeDrawing | ShapeGroupDrawing;
+type ShapeDrawingBlock = VectorShapeDrawing | TextboxDrawing | ShapeGroupDrawing;
 type ShapeDrawingGeometry = ShapeDrawingBlock['geometry'];
 
 type TextboxAttrsPayload = {
@@ -214,6 +218,61 @@ const extractTextboxTextContent = (node: PMNode): ShapeTextContent | undefined =
 
   return parts.length > 0 ? { parts, ...(horizontalAlign ? { horizontalAlign } : {}) } : undefined;
 };
+
+const isParagraphNode = (node: PMNode | undefined): node is PMNode => node?.type === 'paragraph';
+
+const toTextboxParagraphBlocks = (node: PMNode, context: NodeHandlerContext): ParagraphBlock[] => {
+  const shapeTextboxNode = node.type === 'shapeTextbox' ? node : resolveNestedShapeTextboxNode(node);
+  const paragraphToFlowBlocks = context.converters?.paragraphToFlowBlocks;
+  if (!shapeTextboxNode || !paragraphToFlowBlocks || !Array.isArray(shapeTextboxNode.content)) {
+    return [];
+  }
+
+  const textboxBlocks: FlowBlock[] = [];
+  for (const child of shapeTextboxNode.content) {
+    if (!isParagraphNode(child)) continue;
+
+    const convertedBlocks = paragraphToFlowBlocks({
+      para: child,
+      nextBlockId: context.nextBlockId,
+      positions: context.positions,
+      storyKey: context.storyKey,
+      trackedChangesConfig: context.trackedChangesConfig,
+      bookmarks: context.bookmarks,
+      hyperlinkConfig: context.hyperlinkConfig,
+      themeColors: context.themeColors,
+      converters: context.converters,
+      converterContext: context.converterContext,
+      enableComments: context.enableComments,
+      previousParagraphFont: getLastParagraphFont(textboxBlocks),
+    });
+
+    textboxBlocks.push(...convertedBlocks);
+  }
+
+  return textboxBlocks.filter((block): block is ParagraphBlock => block.kind === 'paragraph');
+};
+
+export function hydrateTextboxDrawingContent(
+  node: PMNode,
+  drawingBlock: DrawingBlock,
+  context: Pick<NodeHandlerContext, 'nextBlockId' | 'positions' | 'converters' | 'converterContext'> &
+    Partial<
+      Pick<
+        NodeHandlerContext,
+        'storyKey' | 'trackedChangesConfig' | 'bookmarks' | 'hyperlinkConfig' | 'themeColors' | 'enableComments'
+      >
+    >,
+): DrawingBlock {
+  if (drawingBlock.drawingKind !== 'textboxShape') {
+    return drawingBlock;
+  }
+
+  return {
+    ...drawingBlock,
+    contentBlocks: toTextboxParagraphBlocks(node, context as NodeHandlerContext),
+  };
+}
 
 const parseTextboxInsetValue = (value: string): number | undefined => {
   const trimmed = value.trim();
@@ -709,7 +768,10 @@ export function shapeContainerNodeToDrawingBlock(
     positions,
     node,
     geometry,
-    'vectorShape',
+    'textboxShape',
+    {
+      contentBlocks: [],
+    },
   );
 }
 
@@ -754,7 +816,10 @@ export function shapeTextboxNodeToDrawingBlock(
     positions,
     node,
     geometry,
-    'vectorShape',
+    'textboxShape',
+    {
+      contentBlocks: [],
+    },
   );
 }
 
@@ -808,7 +873,7 @@ export function handleShapeContainerNode(node: PMNode, context: NodeHandlerConte
 
   const drawingBlock = shapeContainerNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
-    blocks.push(drawingBlock);
+    blocks.push(hydrateTextboxDrawingContent(node, drawingBlock, context));
     recordBlockKind?.(drawingBlock.kind);
   }
 }
@@ -825,7 +890,7 @@ export function handleShapeTextboxNode(node: PMNode, context: NodeHandlerContext
 
   const drawingBlock = shapeTextboxNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
-    blocks.push(drawingBlock);
+    blocks.push(hydrateTextboxDrawingContent(node, drawingBlock, context));
     recordBlockKind?.(drawingBlock.kind);
   }
 }

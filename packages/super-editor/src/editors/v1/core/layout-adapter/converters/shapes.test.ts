@@ -8,6 +8,7 @@ import {
   shapeGroupNodeToDrawingBlock,
   shapeContainerNodeToDrawingBlock,
   shapeTextboxNodeToDrawingBlock,
+  hydrateTextboxDrawingContent,
   handleVectorShapeNode,
   handleShapeGroupNode,
   handleShapeContainerNode,
@@ -385,7 +386,7 @@ describe('shapes converter', () => {
 
       expect(result).toBeDefined();
       expect(result?.kind).toBe('drawing');
-      expect(result?.drawingKind).toBe('vectorShape');
+      expect(result?.drawingKind).toBe('textboxShape');
       expect(result?.geometry.width).toBe(250);
       expect(result?.geometry.height).toBe(180);
     });
@@ -470,9 +471,10 @@ describe('shapes converter', () => {
 
       expect(result).toBeDefined();
       expect(result?.kind).toBe('drawing');
-      expect(result?.drawingKind).toBe('vectorShape');
+      expect(result?.drawingKind).toBe('textboxShape');
       expect(result?.geometry.width).toBe(200);
       expect(result?.geometry.height).toBe(100);
+      expect((result as DrawingBlock & { contentBlocks?: unknown[] }).contentBlocks).toEqual([]);
     });
 
     it('includes textbox-specific properties', () => {
@@ -542,6 +544,53 @@ describe('shapes converter', () => {
         bottom: 16,
         left: 4,
       });
+      expect(result.drawingKind).toBe('textboxShape');
+      expect((result as DrawingBlock & { contentBlocks?: unknown[] }).contentBlocks).toEqual([]);
+    });
+
+    it('hydrates paragraph children into contentBlocks for textbox drawings', () => {
+      const node: PMNode = {
+        type: 'shapeTextbox',
+        attrs: {
+          width: 150,
+          height: 75,
+        },
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'Line 1' }],
+          },
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'Line 2' }],
+          },
+        ],
+      };
+
+      const drawingBlock = shapeTextboxNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+      const paragraphToFlowBlocks = vi
+        .fn()
+        .mockImplementation(({ para }: { para: PMNode }) => [{ kind: 'paragraph', id: para.content?.[0]?.text }]);
+
+      const hydrated = hydrateTextboxDrawingContent(node, drawingBlock, {
+        nextBlockId: mockBlockIdGenerator,
+        positions: mockPositionMap,
+        converters: {
+          paragraphToFlowBlocks,
+        } as never,
+        converterContext: {} as never,
+        trackedChangesConfig: { enabled: false, mode: 'review' },
+        bookmarks: new Map(),
+        hyperlinkConfig: { enableRichHyperlinks: false },
+        enableComments: false,
+      });
+
+      expect(hydrated.drawingKind).toBe('textboxShape');
+      expect((hydrated as DrawingBlock & { contentBlocks?: Array<{ id: string }> }).contentBlocks).toEqual([
+        { kind: 'paragraph', id: 'Line 1' },
+        { kind: 'paragraph', id: 'Line 2' },
+      ]);
+      expect(paragraphToFlowBlocks).toHaveBeenCalledTimes(2);
     });
   });
 

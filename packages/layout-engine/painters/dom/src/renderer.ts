@@ -29,6 +29,7 @@ import type {
   TableBlock,
   TableFragment,
   TableMeasure,
+  TextboxDrawing,
   VectorShapeDrawing,
   VectorShapeStyle,
   ResolvedLayout,
@@ -134,7 +135,7 @@ type EffectExtent = {
   bottom: number;
 };
 
-type VectorShapeDrawingWithEffects = VectorShapeDrawing & {
+type ShapeTextDrawingWithEffects = (VectorShapeDrawing | TextboxDrawing) & {
   lineEnds?: LineEnds;
   effectExtent?: EffectExtent;
 };
@@ -336,7 +337,7 @@ function hasPageContextTokenInBlock(block: FlowBlock | undefined): boolean {
     }
   } else if (block.kind === 'drawing') {
     const drawing = block as DrawingBlock;
-    if (drawing.drawingKind === 'vectorShape') {
+    if (drawing.drawingKind === 'vectorShape' || drawing.drawingKind === 'textboxShape') {
       return hasPageContextTokenInShapeText(drawing.textContent);
     }
     if (drawing.drawingKind === 'shapeGroup') {
@@ -2869,7 +2870,7 @@ export class DomPainter {
     if (block.drawingKind === 'image') {
       return createDrawingImageElement(this.doc, block, this.buildImageHyperlinkAnchor.bind(this));
     }
-    if (block.drawingKind === 'vectorShape') {
+    if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
       return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context);
     }
     if (block.drawingKind === 'shapeGroup') {
@@ -2882,7 +2883,7 @@ export class DomPainter {
   }
 
   private createVectorShapeElement(
-    block: VectorShapeDrawingWithEffects,
+    block: ShapeTextDrawingWithEffects,
     geometry?: DrawingGeometry,
     applyTransforms = false,
     groupScaleX = 1,
@@ -2972,7 +2973,7 @@ export class DomPainter {
   /**
    * Apply fill and stroke styles to a fallback shape container
    */
-  private applyFallbackShapeStyle(container: HTMLElement, block: VectorShapeDrawing): void {
+  private applyFallbackShapeStyle(container: HTMLElement, block: ShapeTextDrawingWithEffects): void {
     // Handle fill color
     if (block.fillColor === null) {
       container.style.background = 'none';
@@ -3009,7 +3010,7 @@ export class DomPainter {
   }
 
   private createShapeTextElement(
-    block: VectorShapeDrawing,
+    block: VectorShapeDrawing | TextboxDrawing,
     width: number,
     height: number,
     groupScaleX = 1,
@@ -3043,7 +3044,7 @@ export class DomPainter {
     );
   }
 
-  private shouldUseWordArtTextRenderer(block: VectorShapeDrawing): boolean {
+  private shouldUseWordArtTextRenderer(block: VectorShapeDrawing | TextboxDrawing): boolean {
     return block.attrs?.isWordArt === true && this.hasShapeTextContent(block.textContent);
   }
 
@@ -3334,7 +3335,7 @@ export class DomPainter {
   }
 
   private tryCreatePresetSvg(
-    block: VectorShapeDrawing,
+    block: ShapeTextDrawingWithEffects,
     widthOverride?: number,
     heightOverride?: number,
   ): string | null {
@@ -3385,7 +3386,7 @@ export class DomPainter {
    * Each path in the custom geometry has its own coordinate space (w × h) which is
    * mapped to the shape's actual dimensions via the SVG viewBox.
    */
-  private tryCreateCustomGeometrySvg(block: VectorShapeDrawing, width: number, height: number): string | null {
+  private tryCreateCustomGeometrySvg(block: ShapeTextDrawingWithEffects, width: number, height: number): string | null {
     const custGeom = block.customGeometry;
     if (!custGeom?.paths?.length) return null;
 
@@ -3476,7 +3477,7 @@ export class DomPainter {
   }
 
   private getEffectExtentMetrics(
-    block: VectorShapeDrawingWithEffects,
+    block: ShapeTextDrawingWithEffects,
     geometry?: DrawingGeometry,
   ): {
     offsetX: number;
@@ -3496,7 +3497,7 @@ export class DomPainter {
     return { offsetX: left, offsetY: top, innerWidth, innerHeight };
   }
 
-  private applyLineEnds(svgElement: SVGElement, block: VectorShapeDrawingWithEffects): void {
+  private applyLineEnds(svgElement: SVGElement, block: ShapeTextDrawingWithEffects): void {
     const lineEnds = block.lineEnds;
     if (!lineEnds) return;
     if (block.strokeColor === null) return;
@@ -3736,7 +3737,7 @@ export class DomPainter {
         flipH: attrs.flipH ?? false,
         flipV: attrs.flipV ?? false,
       };
-      const vectorChild: VectorShapeDrawingWithEffects = {
+      const vectorChild: ShapeTextDrawingWithEffects = {
         drawingKind: 'vectorShape',
         kind: 'drawing',
         id: `${attrs.shapeId ?? child.shapeType}`,
@@ -3872,7 +3873,7 @@ export class DomPainter {
         if (block.drawingKind === 'shapeGroup') {
           return this.createShapeGroupElement(block, context);
         }
-        if (block.drawingKind === 'vectorShape') {
+        if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
           return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
         }
         if (block.drawingKind === 'chart') {

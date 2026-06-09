@@ -2893,6 +2893,9 @@ export class DomPainter {
   ): HTMLElement {
     const container = this.doc!.createElement('div');
     container.classList.add('superdoc-vector-shape');
+    if (block.drawingKind === 'textboxShape') {
+      container.classList.add('superdoc-textbox-shape');
+    }
     container.style.width = '100%';
     container.style.height = '100%';
     container.style.position = 'relative';

@@ -4,11 +4,12 @@ import type {
   Layout,
   PageNumberChapterSeparator,
   PageNumberFormat,
-  SectionMetadata,
+  SectionMetadata, ParagraphBlock 
 } from '@superdoc/contracts';
 import {
   computeDisplayPageNumber,
   layoutHeaderFooterWithCache,
+  remeasureParagraph,
   buildSectionAwareHeaderFooterLayoutKey,
   buildSectionContentWidth,
   buildEffectiveHeaderFooterRefsBySection,
@@ -187,6 +188,7 @@ async function layoutBlocksByRId(
         pageResolver,
         kind,
         fontSignature,
+        (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
       );
 
       if (batchResult.default) {
@@ -311,6 +313,7 @@ async function layoutWithPerSectionConstraints(
         pageResolver,
         kind,
         fontSignature,
+        (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
       );
 
       if (batchResult.default) {

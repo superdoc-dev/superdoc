@@ -4391,6 +4391,47 @@ describe('layoutHeaderFooter', () => {
     expect(paragraphFragment.x).toBe(0);
     expect(paragraphFragment.width).toBe(200);
   });
+
+  it('computes contentMeasures for textboxShape blocks when remeasureParagraph is provided', () => {
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'footer-textbox-1',
+      drawingKind: 'textboxShape',
+      geometry: { width: 120, height: 40, rotation: 0, flipH: false, flipV: false },
+      contentBlocks: [
+        {
+          kind: 'paragraph',
+          id: 'footer-textbox-para-1',
+          runs: [{ text: 'Footer text', pmStart: 1, pmEnd: 12 }],
+        },
+      ],
+      textInsets: { top: 4, right: 8, bottom: 4, left: 8 },
+    };
+    const textboxMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 120,
+      height: 40,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 40,
+      geometry: { width: 120, height: 40, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const layout = layoutHeaderFooter(
+      [textboxBlock],
+      [textboxMeasure],
+      { width: 400, height: 80 },
+      'footer',
+      (_block, _maxWidth) => makeMeasure([16]),
+    );
+
+    const fragment = layout.pages[0].fragments[0] as DrawingFragment;
+    expect(fragment.kind).toBe('drawing');
+    expect(fragment.drawingKind).toBe('textboxShape');
+    expect(Array.isArray(fragment.contentMeasures)).toBe(true);
+    expect(fragment.contentMeasures).toHaveLength(1);
+  });
 });
 
 describe('requirePageBoundary edge cases', () => {

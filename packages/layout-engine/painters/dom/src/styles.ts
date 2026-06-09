@@ -1177,6 +1177,15 @@ const FOOTNOTE_STYLES = `
 [data-note-reference] {
   cursor: pointer;
   border-radius: 2px;
+  position: relative;
+}
+/* The painted digit is ~6x11px — far too small to hover or double-click
+ * reliably. An invisible pseudo-element halo expands the interactive target
+ * (hover, cursor, clicks all hit the marker span) without moving any text. */
+[data-note-reference]::after {
+  content: '';
+  position: absolute;
+  inset: -4px -5px;
 }
 [data-note-reference]:hover {
   background-color: var(--sd-content-controls-block-hover-bg, #d3e3fd);

@@ -56,6 +56,11 @@ export function computeHeaderFooterContentHash(blocks: FlowBlock[]): string {
         }
       }
     }
+
+    if (block.kind === 'drawing' && 'geometry' in block) {
+      const g = (block as { geometry?: { width?: number; height?: number } }).geometry;
+      if (g) parts.push(`g:${g.width ?? 0}x${g.height ?? 0}`);
+    }
   }
 
   return parts.join('|');

@@ -5933,13 +5933,15 @@ export class PresentationEditor extends EventEmitter {
       onSurfaceTransaction: ({ sourceEditor, surface, headerId, sectionType, transaction, duration }) => {
         const documentTransaction =
           transaction && typeof transaction === 'object' ? (transaction as { docChanged?: boolean }) : null;
-        if (documentTransaction?.docChanged && headerId) {
-          this.#invalidateTrackedChangesForStory({
-            kind: 'story',
-            storyType: 'headerFooterPart',
-            refId: headerId,
-          });
-          this.#headerFooterSession?.invalidateLayoutForRefs([headerId]);
+        if (documentTransaction?.docChanged) {
+          if (headerId) {
+            this.#invalidateTrackedChangesForStory({
+              kind: 'story',
+              storyType: 'headerFooterPart',
+              refId: headerId,
+            });
+            this.#headerFooterSession?.invalidateLayoutForRefs([headerId]);
+          }
           this.#flowBlockCache.setHasExternalChanges?.(true);
           this.#pendingDocChange = true;
           this.#selectionSync.onLayoutStart();

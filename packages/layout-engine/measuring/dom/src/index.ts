@@ -3408,9 +3408,9 @@ async function measureDrawingBlock(block: DrawingBlock, constraints: MeasureCons
   const naturalWidth = Math.max(1, rotatedBounds.width);
   const naturalHeight = Math.max(1, rotatedBounds.height);
 
-  // For floating drawings (wrapNone), don't constrain to the content area width.
-  // These drawings are positioned independently and can extend to page edges.
-  const isFloating = block.wrap?.type === 'None';
+  // Anchored and floating drawings are positioned independently — don't constrain
+  // to the content area width (they can extend past margins/page edges).
+  const isFloating = block.wrap?.type === 'None' || block.anchor?.isAnchored === true;
   const maxWidth = fullWidthMax ?? (constraints.maxWidth > 0 && !isFloating ? constraints.maxWidth : naturalWidth);
 
   // For anchored drawings with negative vertical positioning (designed to overflow their container),

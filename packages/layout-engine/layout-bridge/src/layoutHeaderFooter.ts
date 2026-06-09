@@ -465,6 +465,11 @@ export class HeaderFooterLayoutCache {
 
 const sharedHeaderFooterCache = new HeaderFooterLayoutCache();
 
+/** Invalidate header/footer measure cache entries for the given block IDs. */
+export function invalidateHeaderFooterMeasureCache(blockIds: string[]): void {
+  sharedHeaderFooterCache.invalidate(blockIds);
+}
+
 /**
  * Layouts header/footer variants with intelligent caching and page number resolution.
  *

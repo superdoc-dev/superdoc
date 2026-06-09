@@ -106,6 +106,14 @@ function buildShapeStyle(attrs) {
     style['mso-position-vertical-relative'] = attrs.anchorData.vRelativeFrom;
   }
 
+  // User-driven resize: override width/height from live attrs (px → pt).
+  if (attrs.width != null) {
+    style['width'] = `${convertToPt(attrs.width)}pt`;
+  }
+  if (attrs.height != null) {
+    style['height'] = `${convertToPt(attrs.height)}pt`;
+  }
+
   const entries = Object.entries(style);
   if (entries.length === 0) return undefined;
 

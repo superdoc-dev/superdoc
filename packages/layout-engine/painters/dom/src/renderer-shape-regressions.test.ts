@@ -848,6 +848,46 @@ describe('DomPainter shape regressions', () => {
     expect(groupContent?.style.transform).toBe('');
   });
 
+  it('does not double-apply equivalent normalized shape group rotations', () => {
+    const geometry: DrawingGeometry = { width: 200, height: 100, rotation: 90, flipH: false, flipV: false };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'shape-group-equivalent-measured-transform',
+      drawingKind: 'shapeGroup',
+      geometry,
+      groupTransform: {
+        width: 200,
+        height: 100,
+        rotation: 450,
+      },
+      shapes: [
+        {
+          shapeType: 'vectorShape',
+          attrs: {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            kind: 'rect',
+            fillColor: '#E2E8F0',
+            strokeColor: null,
+          },
+        },
+      ],
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const drawingInner = mount.querySelector('.superdoc-drawing-inner') as HTMLElement | null;
+    const groupContent = mount.querySelector('.superdoc-shape-group > div') as HTMLElement | null;
+
+    expect(drawingInner?.style.transform).toContain('rotate(90deg)');
+    expect(groupContent?.style.transform).toBe('');
+  });
+
   it('does not add grouped child paint room when stroke is disabled', () => {
     const geometry: DrawingGeometry = { width: 120, height: 120, rotation: 0, flipH: false, flipV: false };
 

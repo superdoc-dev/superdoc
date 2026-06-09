@@ -137,6 +137,8 @@ type EffectExtent = {
   bottom: number;
 };
 
+const normalizeRotationDegrees = (rotation: number): number => ((rotation % 360) + 360) % 360;
+
 type ShapeTextDrawingWithEffects = (VectorShapeDrawing | TextboxDrawing) & {
   lineEnds?: LineEnds;
   effectExtent?: EffectExtent;
@@ -3971,10 +3973,12 @@ export class DomPainter {
       inner.style.width = `${Math.max(1, visibleWidth)}px`;
       inner.style.height = `${Math.max(1, visibleHeight)}px`;
       const groupTransforms: string[] = [];
+      const normalizedGroupRotation =
+        typeof groupTransform?.rotation === 'number' ? normalizeRotationDegrees(groupTransform.rotation) : 0;
+      const normalizedFragmentRotation =
+        typeof fragmentGeometry?.rotation === 'number' ? normalizeRotationDegrees(fragmentGeometry.rotation) : 0;
       const groupRotation =
-        groupTransform?.rotation && groupTransform.rotation !== fragmentGeometry?.rotation
-          ? groupTransform.rotation
-          : 0;
+        normalizedGroupRotation && normalizedGroupRotation !== normalizedFragmentRotation ? groupTransform.rotation : 0;
       const groupFlipH = groupTransform?.flipH && groupTransform.flipH !== fragmentGeometry?.flipH;
       const groupFlipV = groupTransform?.flipV && groupTransform.flipV !== fragmentGeometry?.flipV;
       if (groupRotation) {

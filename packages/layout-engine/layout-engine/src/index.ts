@@ -2004,9 +2004,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const preRegisteredAnchors = collectPreRegisteredAnchors(blocks, measures);
   const pageRelativeAnchorsByParagraph = collectPageRelativeAnchorsByParagraph(blocks, measures);
 
-  // Map to store pre-computed positions for page-relative anchors (for fragment creation later).
-  // Page placement is resolved at encounter time so anchors follow pagination (e.g., after page breaks).
-  const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number }>();
+  // Page-relative anchors need special placement when their block is encountered
+  // so they can resolve against the active page/section geometry.
+  const preRegisteredAnchorIds = new Set<string>();
 
   const resolveParagraphlessAnchoredTableY = (block: TableBlock, measure: TableMeasure, state: PageState): number => {
     const contentTop = state.topMargin;
@@ -2063,40 +2063,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   };
 
   for (const entry of preRegisteredAnchors) {
-    // Ensure first page exists
-    const state = paginator.ensurePage();
-
-    const contentTop = state.topMargin;
-    const contentBottom = state.contentBottom;
-    const anchorY = resolveAnchoredGraphicY({
-      anchor: entry.block.anchor,
-      objectHeight: entry.measure.height ?? 0,
-      contentTop,
-      contentBottom,
-      pageBottomMargin: state.page.margins?.bottom ?? activeBottomMargin,
-      preRegisteredFallbackToContentTop: true,
-    });
-
-    // Compute anchor X position
-    const anchorX = entry.block.anchor
-      ? computeAnchorX(
-          entry.block.anchor,
-          state.columnIndex,
-          normalizeColumns(activeColumns, activePageSize.w - (activeLeftMargin + activeRightMargin)),
-          entry.measure.width,
-          { left: activeLeftMargin, right: activeRightMargin },
-          activePageSize.w,
-        )
-      : activeLeftMargin;
-
-    // Register with float manager so all paragraphs see this exclusion
-    // NOTE: We only register exclusion zones here, NOT fragments.
-    // Fragments will be created when the image block is encountered in the layout loop.
-    // This prevents the section break logic from seeing "content" on the page and creating a new page.
-    floatManager.registerDrawing(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
-
-    // Store pre-computed position for later use when creating the fragment.
-    preRegisteredPositions.set(entry.block.id, { anchorX, anchorY });
+    preRegisteredAnchorIds.add(entry.block.id);
   }
 
   // Pre-compute keepNext chains for correct pagination grouping.
@@ -2692,8 +2659,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
 
       // Check if this is a pre-registered page-relative anchor
-      const preRegPos = preRegisteredPositions.get(block.id);
-      if (preRegPos && Number.isFinite(preRegPos.anchorX) && Number.isFinite(preRegPos.anchorY)) {
+      if (preRegisteredAnchorIds.has(block.id)) {
         // Place on the current pagination page where this block is encountered.
         // Resolve coordinates against the current section/page geometry; the
         // pre-registration pass may have run before section margins changed.
@@ -2768,8 +2734,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
 
       // Check if this is a pre-registered page-relative anchor
-      const preRegPos = preRegisteredPositions.get(block.id);
-      if (preRegPos && Number.isFinite(preRegPos.anchorX) && Number.isFinite(preRegPos.anchorY)) {
+      if (preRegisteredAnchorIds.has(block.id)) {
         // Place on the current pagination page where this block is encountered.
         // Resolve coordinates against the current section/page geometry; the
         // pre-registration pass may have run before section margins changed.

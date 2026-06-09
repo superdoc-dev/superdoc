@@ -5968,7 +5968,7 @@ describe('requirePageBoundary edge cases', () => {
         (fragment) => fragment.kind === 'para' && fragment.blockId === 'para-page-1',
       ) as ParaFragment;
       expect(wrappedPara).toBeTruthy();
-      expect(wrappedPara.x).toBeGreaterThan(DEFAULT_OPTIONS.margins!.left);
+      expect(wrappedPara.x).toBe(DEFAULT_OPTIONS.margins!.left);
 
       const page2Para = page2.fragments.find(
         (fragment) => fragment.kind === 'para' && fragment.blockId === 'para-page-2',
@@ -6197,9 +6197,13 @@ describe('requirePageBoundary edge cases', () => {
       const imageOnPage2 = page2.fragments.find(
         (fragment) => fragment.kind === 'image' && fragment.blockId === 'img-pre-reg-page',
       );
+      const page1Para = page1.fragments.find(
+        (fragment) => fragment.kind === 'para' && fragment.blockId === 'para-page-1',
+      ) as ParaFragment;
 
       expect(imageOnPage1).toBeUndefined();
       expect(imageOnPage2).toBeTruthy();
+      expect(page1Para.x).toBe(DEFAULT_OPTIONS.margins!.left);
     });
   });
 

@@ -1924,6 +1924,42 @@ export async function incrementalLayout(
               const finalReserve = Math.min(clusterRoomPx + continuationToReservePx + overheadForBand, nextPageMaxBand);
               reserves[pageIndex + 1] = Math.max(reserves[pageIndex + 1] ?? 0, Math.ceil(finalReserve));
             }
+          } else {
+            // SD-3400: terminal-page footnote reserve bump.
+            // The carry-forward bump above only runs when there is a next page to
+            // drain onto. On the LAST page a footnote anchored here has nowhere to
+            // continue, so once the body fills the page the bodyMaxY-derived
+            // maxReserve collapses to ~0, placeFootnote can place nothing, and
+            // reserves[pageIndex] stays 0 — the body never yields and the footnote
+            // is silently dropped. When the placed reserve is short of the anchored
+            // demand, bump this page's reserve to that demand (capped at the
+            // physical band) so the next relayout pass shrinks the body and the
+            // footnote renders on its anchor page (matching Word). Guarded on
+            // `< clusterDemand` so pages whose footnote already placed fully are
+            // untouched — no gap/regression on non-dense pages.
+            let clusterDemand = 0;
+            for (let cIdx = 0; cIdx < columnCount; cIdx += 1) {
+              const idsHere = idsByColumn.get(pageIndex)?.get(cIdx) ?? [];
+              if (idsHere.length === 0) continue;
+              let columnCluster = 0;
+              for (let i = 0; i < idsHere.length; i += 1) {
+                columnCluster += fullHeightOf(idsHere[i]);
+                if (i > 0) columnCluster += safeGap;
+              }
+              if (columnCluster > clusterDemand) clusterDemand = columnCluster;
+            }
+            if (clusterDemand > 0 && (reserves[pageIndex] ?? 0) < clusterDemand) {
+              const overhead = safeSeparatorSpacingBefore + continuationDividerHeight + safeTopPadding;
+              const thisPage = layoutForPages.pages?.[pageIndex];
+              const thisPageSize = thisPage?.size ?? layoutForPages.pageSize ?? DEFAULT_PAGE_SIZE;
+              const thisTop = normalizeMargin(thisPage?.margins?.top, DEFAULT_MARGINS.top);
+              const thisBottomRaw = normalizeMargin(thisPage?.margins?.bottom, DEFAULT_MARGINS.bottom);
+              const physicalContentHeight = Math.max(0, thisPageSize.h - thisTop - thisBottomRaw);
+              const minBodyHeight = MIN_FOOTNOTE_BODY_HEIGHT * 20;
+              const thisPageMaxBand = Math.max(0, physicalContentHeight - minBodyHeight);
+              const finalReserve = Math.min(clusterDemand + overhead, thisPageMaxBand);
+              reserves[pageIndex] = Math.max(reserves[pageIndex] ?? 0, Math.ceil(finalReserve));
+            }
           }
         }
 

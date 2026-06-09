@@ -55,6 +55,7 @@ import {
   getColumnGeometry,
   getColumnSeparatorPositions as getColumnSeparatorPositionsFromGeometry,
   normalizeColumnLayout,
+  normalizeZIndex,
   resolveColumnMode,
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
@@ -854,6 +855,9 @@ function collectLineTabsForSnapshot(lineEl: HTMLElement): PaintSnapshotTabStyle[
 const DEFAULT_PAGE_HEIGHT_PX = 1056;
 /** Default gap used when virtualization is enabled (kept in sync with PresentationEditor layout defaults). */
 const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
+// Keeps non-behindDoc header/footer wrapNone decorations above the behindDoc
+// background tier while the whole page-background story still uses CSS z-index 0.
+const PAGE_BACKGROUND_OVERLAY_Z_ORDER_OFFSET = 1_000_000;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const WORDART_LINE_FILL_RATIO = 0.9;
 // Comment highlight color tokens moved to CommentHighlightDecorator (super-editor).
@@ -2064,6 +2068,57 @@ export class DomPainter {
     return true;
   }
 
+  private getPageBackgroundDecorationZOrder(fragment: Fragment, resolvedItem: ResolvedPaintItem | undefined): number {
+    const block = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
+    const isBehindDoc =
+      ((fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.behindDoc === true) ||
+      (block && (block.kind === 'image' || block.kind === 'drawing') && block.anchor?.behindDoc === true);
+
+    if (block && (block.kind === 'image' || block.kind === 'drawing')) {
+      const attrs = block.attrs as { originalAttributes?: unknown } | undefined;
+      const normalizedZIndex = normalizeZIndex(attrs?.originalAttributes);
+      if (isBehindDoc && normalizedZIndex != null) return normalizedZIndex;
+    }
+
+    if ((fragment.kind === 'image' || fragment.kind === 'drawing') && typeof fragment.zIndex === 'number') {
+      return isBehindDoc ? fragment.zIndex : PAGE_BACKGROUND_OVERLAY_Z_ORDER_OFFSET + Math.max(1, fragment.zIndex);
+    }
+
+    if (block && (block.kind === 'image' || block.kind === 'drawing')) {
+      const attrs = block.attrs as { originalAttributes?: unknown } | undefined;
+      const normalizedZIndex = normalizeZIndex(attrs?.originalAttributes);
+      if (normalizedZIndex != null) {
+        return PAGE_BACKGROUND_OVERLAY_Z_ORDER_OFFSET + Math.max(1, normalizedZIndex);
+      }
+    }
+
+    return 0;
+  }
+
+  private insertPageBackgroundDecoration(pageEl: HTMLElement, fragEl: HTMLElement, zOrder: number): void {
+    fragEl.dataset.pageBackgroundZIndex = String(zOrder);
+    let lastBackgroundDecoration: Element | null = null;
+    let insertBefore: Element | null = null;
+    // Patch renders can temporarily leave stale decoration nodes after body
+    // fragments. Only the leading decoration run is the page background layer.
+    for (const child of Array.from(pageEl.children)) {
+      const el = child as HTMLElement;
+      if (el.dataset.behindDocSection != null || el.dataset.headerFooterOverlaySection != null) {
+        const existingZOrder = Number(el.dataset.pageBackgroundZIndex ?? 0);
+        if (existingZOrder > zOrder) {
+          insertBefore = el;
+          break;
+        }
+        lastBackgroundDecoration = el;
+        continue;
+      }
+
+      break;
+    }
+
+    pageEl.insertBefore(fragEl, insertBefore ?? lastBackgroundDecoration?.nextSibling ?? pageEl.firstChild);
+  }
+
   /**
    * Header/footer layout emits normalized anchor Y coordinates:
    * - headers: local to the header container origin
@@ -2283,8 +2338,11 @@ export class DomPainter {
       fragEl.style.left = `${isPageRelative ? fragment.x : marginLeft + fragment.x}px`;
       fragEl.style.zIndex = '0'; // Same level as page, but inserted first so renders behind
       fragEl.dataset.behindDocSection = kind; // Track for cleanup on re-render
-      // Insert at beginning of page so it renders behind body content due to DOM order
-      pageEl.insertBefore(fragEl, pageEl.firstChild);
+      this.insertPageBackgroundDecoration(
+        pageEl,
+        fragEl,
+        this.getPageBackgroundDecorationZOrder(fragment, resolvedItem),
+      );
     });
 
     // Render normal fragments in the header/footer container
@@ -2342,11 +2400,17 @@ export class DomPainter {
 
       fragEl.style.top = `${pageY}px`;
       fragEl.style.left = `${marginLeft + fragment.x}px`;
-      const zIndex = fragment.kind === 'image' || fragment.kind === 'drawing' ? fragment.zIndex : undefined;
-      fragEl.style.zIndex = String(zIndex ?? 1);
+      // Header/footer wrapNone shapes still belong to the page background story:
+      // keep their authored z-order within that story, but do not let their high
+      // OOXML z-index lift them above body content.
+      fragEl.style.zIndex = '0';
       fragEl.style.pointerEvents = 'none';
       fragEl.dataset.headerFooterOverlaySection = kind;
-      pageEl.appendChild(fragEl);
+      this.insertPageBackgroundDecoration(
+        pageEl,
+        fragEl,
+        this.getPageBackgroundDecorationZOrder(fragment, resolvedItem),
+      );
     });
   }
 

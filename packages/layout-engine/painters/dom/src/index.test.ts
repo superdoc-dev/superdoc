@@ -21,6 +21,7 @@ import type {
   TrackedChangeMeta,
   TrackedChangesMode,
 } from '@superdoc/contracts';
+import { OOXML_Z_INDEX_BASE } from '@superdoc/contracts';
 
 const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageGap: 0, pages: [] };
 
@@ -5461,13 +5462,58 @@ describe('DomPainter', () => {
     expect(activeWatermark?.style.opacity).toBe('1');
   });
 
-  it('renders non-WordArt wrapNone page-relative header media as a foreground overlay', () => {
+  it('renders non-WordArt wrapNone page-relative header media above behindDoc media but below body content', () => {
+    const bodyBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'body-text',
+      runs: [{ text: 'Body text', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const bodyMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 9, width: 80, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+    const headerBackgroundBlock: FlowBlock = {
+      kind: 'image',
+      id: 'header-background',
+      src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      width: 200,
+      height: 100,
+      attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE + 10 } },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'page',
+        behindDoc: true,
+      },
+      wrap: {
+        type: 'None',
+      },
+    };
+    const headerTintBlock: FlowBlock = {
+      kind: 'image',
+      id: 'header-tint',
+      src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      width: 200,
+      height: 100,
+      attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE + 20 } },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'page',
+        behindDoc: true,
+      },
+      wrap: {
+        type: 'None',
+      },
+    };
     const headerImageBlock: FlowBlock = {
       kind: 'image',
       id: 'header-image',
       src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
       width: 200,
       height: 100,
+      attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE - 1000 } },
       anchor: {
         isAnchored: true,
         hRelativeFrom: 'page',
@@ -5477,10 +5523,63 @@ describe('DomPainter', () => {
         type: 'None',
       },
     };
+    const footerBackgroundBlock: FlowBlock = {
+      kind: 'image',
+      id: 'footer-background',
+      src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      width: 200,
+      height: 100,
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'page',
+        behindDoc: true,
+      },
+      wrap: {
+        type: 'None',
+      },
+    };
+    const headerBackgroundMeasure: Measure = {
+      kind: 'image',
+      width: 200,
+      height: 100,
+    };
     const headerImageMeasure: Measure = {
       kind: 'image',
       width: 200,
       height: 100,
+    };
+    const headerTintMeasure: Measure = {
+      kind: 'image',
+      width: 200,
+      height: 100,
+    };
+    const footerBackgroundMeasure: Measure = {
+      kind: 'image',
+      width: 200,
+      height: 100,
+    };
+    const headerBackgroundFragment = {
+      kind: 'image' as const,
+      blockId: 'header-background',
+      x: 0,
+      y: 40,
+      width: 200,
+      height: 100,
+      isAnchored: true,
+      behindDoc: true,
+      zIndex: 0,
+    };
+    const headerTintFragment = {
+      kind: 'image' as const,
+      blockId: 'header-tint',
+      x: 0,
+      y: 40,
+      width: 200,
+      height: 100,
+      isAnchored: true,
+      behindDoc: true,
+      zIndex: 0,
     };
     const headerFragment = {
       kind: 'image' as const,
@@ -5491,35 +5590,101 @@ describe('DomPainter', () => {
       height: 100,
       isAnchored: true,
       behindDoc: false,
+      zIndex: 1,
+    };
+    const footerBackgroundFragment = {
+      kind: 'image' as const,
+      blockId: 'footer-background',
+      x: 0,
+      y: 420,
+      width: 200,
+      height: 100,
+      isAnchored: true,
+      behindDoc: true,
     };
 
     const painter = createTestPainter({
-      blocks: [block, headerImageBlock],
-      measures: [measure, headerImageMeasure],
+      blocks: [bodyBlock],
+      measures: [bodyMeasure],
       headerProvider: () => ({
-        fragments: [headerFragment],
+        fragments: [headerTintFragment, headerBackgroundFragment, headerFragment],
         height: 100,
         offset: 60,
       }),
+      footerProvider: () => ({
+        fragments: [footerBackgroundFragment],
+        height: 100,
+        offset: 400,
+      }),
     });
+    painter.setData(
+      [bodyBlock],
+      [bodyMeasure],
+      [headerBackgroundBlock, headerTintBlock, headerImageBlock],
+      [headerBackgroundMeasure, headerTintMeasure, headerImageMeasure],
+      [footerBackgroundBlock],
+      [footerBackgroundMeasure],
+    );
 
-    painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+    const pageLayout: Layout = {
+      ...layout,
+      pages: [
+        {
+          ...layout.pages[0],
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'body-text', fromLine: 0, toLine: 1, x: 0, y: 80, width: 200 }],
+        },
+      ],
+    };
 
-    const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
-    const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement;
-    const behindDocImage = pageEl.querySelector(
-      '[data-behind-doc-section="header"][data-block-id="header-image"]',
-    ) as HTMLElement | null;
-    const imageInHeader = headerEl.querySelector('[data-block-id="header-image"]') as HTMLElement | null;
-    const overlayImage = pageEl.querySelector(
-      '[data-header-footer-overlay-section="header"][data-block-id="header-image"]',
-    ) as HTMLElement | null;
+    painter.paint(pageLayout, mount);
 
-    expect(behindDocImage).toBeNull();
-    expect(imageInHeader).toBeNull();
-    expect(overlayImage).toBeTruthy();
-    expect(overlayImage?.style.top).toBe('40px');
-    expect(overlayImage?.style.pointerEvents).toBe('none');
+    const assertBackgroundOrder = () => {
+      const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
+      const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement;
+      const behindDocBackground = pageEl.querySelector(
+        '[data-behind-doc-section="header"][data-block-id="header-background"]',
+      ) as HTMLElement | null;
+      const behindDocTint = pageEl.querySelector(
+        '[data-behind-doc-section="header"][data-block-id="header-tint"]',
+      ) as HTMLElement | null;
+      const imageInHeader = headerEl.querySelector('[data-block-id="header-image"]') as HTMLElement | null;
+      const overlayImage = pageEl.querySelector(
+        '[data-header-footer-overlay-section="header"][data-block-id="header-image"]',
+      ) as HTMLElement | null;
+      const footerBackground = pageEl.querySelector(
+        '[data-behind-doc-section="footer"][data-block-id="footer-background"]',
+      ) as HTMLElement | null;
+      const bodyText = pageEl.querySelector('[data-block-id="body-text"]') as HTMLElement | null;
+
+      expect(behindDocBackground).toBeTruthy();
+      expect(behindDocTint).toBeTruthy();
+      expect(imageInHeader).toBeNull();
+      expect(overlayImage).toBeTruthy();
+      expect(overlayImage?.style.top).toBe('40px');
+      expect(overlayImage?.style.zIndex).toBe('0');
+      expect(overlayImage?.style.pointerEvents).toBe('none');
+      expect(footerBackground).toBeTruthy();
+      expect(bodyText).toBeTruthy();
+      expect(bodyText?.style.zIndex).toBe('');
+
+      const directChildren = Array.from(pageEl.children);
+      expect(directChildren.indexOf(behindDocBackground as Element)).toBeLessThan(
+        directChildren.indexOf(behindDocTint as Element),
+      );
+      expect(directChildren.indexOf(behindDocTint as Element)).toBeLessThan(
+        directChildren.indexOf(overlayImage as Element),
+      );
+      expect(directChildren.indexOf(overlayImage as Element)).toBeLessThan(directChildren.indexOf(bodyText as Element));
+      expect(directChildren.indexOf(footerBackground as Element)).toBeLessThan(
+        directChildren.indexOf(bodyText as Element),
+      );
+    };
+
+    assertBackgroundOrder();
+
+    painter.paint(pageLayout, mount);
+    assertBackgroundOrder();
   });
 
   it('positions non-WordArt wrapNone paragraph-relative header media from the header origin', () => {

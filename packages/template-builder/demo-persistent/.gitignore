@@ -1,0 +1,7 @@
+# Only ignore these folders
+node_modules
+documents
+
+# Explicitly include dist (override parent gitignore)
+!dist
+!dist/**

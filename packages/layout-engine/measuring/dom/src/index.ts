@@ -3408,6 +3408,13 @@ async function measureDrawingBlock(block: DrawingBlock, constraints: MeasureCons
   }
 
   const geometry = ensureDrawingGeometry(block.geometry);
+  if (block.drawingKind === 'shapeGroup' && block.groupTransform) {
+    geometry.width = Math.max(1, block.groupTransform.width ?? geometry.width);
+    geometry.height = Math.max(1, block.groupTransform.height ?? geometry.height);
+    geometry.rotation = normalizeRotation(block.groupTransform.rotation ?? geometry.rotation ?? 0);
+    geometry.flipH = Boolean(block.groupTransform.flipH ?? geometry.flipH);
+    geometry.flipV = Boolean(block.groupTransform.flipV ?? geometry.flipV);
+  }
   const attrs = block.attrs as Record<string, unknown> | undefined;
   const indentLeft = typeof attrs?.hrIndentLeft === 'number' ? attrs.hrIndentLeft : 0;
   const indentRight = typeof attrs?.hrIndentRight === 'number' ? attrs.hrIndentRight : 0;

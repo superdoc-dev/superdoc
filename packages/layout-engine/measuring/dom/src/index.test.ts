@@ -3502,6 +3502,33 @@ describe('measureBlock', () => {
       expect(measure.scale).toBe(1);
     });
 
+    it('honors shape group transforms when measuring rotated bounds', async () => {
+      const block: DrawingBlock = {
+        kind: 'drawing',
+        id: 'shape-group-rotated-transform',
+        drawingKind: 'shapeGroup',
+        geometry: {
+          width: 200,
+          height: 100,
+          rotation: 0,
+        },
+        groupTransform: {
+          width: 200,
+          height: 100,
+          rotation: 90,
+        },
+        shapes: [],
+      };
+
+      const measure = expectDrawingMeasure(await measureBlock(block, { maxWidth: 500 }));
+      expect(measure.width).toBeCloseTo(100);
+      expect(measure.height).toBeCloseTo(200);
+      expect(measure.geometry.width).toBe(200);
+      expect(measure.geometry.height).toBe(100);
+      expect(measure.geometry.rotation).toBe(90);
+      expect(measure.groupTransform?.rotation).toBe(90);
+    });
+
     it('resolves full-width drawings using maxWidth constraints and indents', async () => {
       const block: DrawingBlock = {
         kind: 'drawing',

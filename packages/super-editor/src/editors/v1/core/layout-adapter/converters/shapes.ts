@@ -670,14 +670,30 @@ const hasEffectExtent = (extent: EffectExtent | undefined): extent is EffectExte
   return !!extent && (extent.left > 0 || extent.top > 0 || extent.right > 0 || extent.bottom > 0);
 };
 
+const getCenteredStrokeHalfExtent = (attrs: Record<string, unknown>): number => {
+  if (!('fillColor' in attrs)) return 0;
+  if ('lineEnds' in attrs && attrs.lineEnds) return 0;
+  if (attrs.strokeColor === null) return 0;
+
+  const strokeWidth = pickNumber(attrs.strokeWidth) ?? 1;
+  return strokeWidth > 0 ? strokeWidth / 2 : 0;
+};
+
 const getShapeGroupChildStrokeExtent = (child: ShapeGroupChild): number => {
   if (child.shapeType !== 'vectorShape' || !isPlainObject(child.attrs)) return 0;
-  if (!('fillColor' in child.attrs)) return 0;
-  if ('lineEnds' in child.attrs && child.attrs.lineEnds) return 0;
-  if (child.attrs.strokeColor === null) return 0;
+  return getCenteredStrokeHalfExtent(child.attrs);
+};
 
-  const strokeWidth = pickNumber(child.attrs.strokeWidth) ?? 1;
-  return strokeWidth > 0 ? strokeWidth / 2 : 0;
+const getRequiredVectorShapeEffectExtent = (attrs: Record<string, unknown>): EffectExtent | undefined => {
+  const strokeExtent = getCenteredStrokeHalfExtent(attrs);
+  if (strokeExtent <= 0) return undefined;
+
+  return {
+    left: strokeExtent,
+    top: strokeExtent,
+    right: strokeExtent,
+    bottom: strokeExtent,
+  };
 };
 
 const getRequiredGroupEffectExtentFromChildren = (
@@ -722,7 +738,10 @@ export function vectorShapeNodeToDrawingBlock(
   if (isHiddenDrawing(rawAttrs)) {
     return null;
   }
-  const effectExtent = normalizeEffectExtent(rawAttrs.effectExtent);
+  const effectExtent = mergeEffectExtents(
+    normalizeEffectExtent(rawAttrs.effectExtent),
+    getRequiredVectorShapeEffectExtent(rawAttrs),
+  );
   const baseWidth = coercePositiveNumber(rawAttrs.width, 1);
   const baseHeight = coercePositiveNumber(rawAttrs.height, 1);
   const extraWidth = (effectExtent?.left ?? 0) + (effectExtent?.right ?? 0);

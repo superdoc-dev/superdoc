@@ -60,6 +60,26 @@ describe('shapes converter', () => {
       expect(result.effectExtent).toEqual({ left: 2, top: 4, right: 3, bottom: 5 });
     });
 
+    it('supplements standalone vector shape effect extent for centered strokes', () => {
+      const node: PMNode = {
+        type: 'vectorShape',
+        attrs: {
+          width: 100,
+          height: 50,
+          fillColor: '#f2f2f2',
+          strokeColor: '#111111',
+          strokeWidth: 2,
+          effectExtent: { left: 0, top: 0, right: 2, bottom: 3 },
+        },
+      };
+
+      const result = vectorShapeNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.geometry.width).toBe(103);
+      expect(result.geometry.height).toBe(54);
+      expect(result.effectExtent).toEqual({ left: 1, top: 1, right: 2, bottom: 3 });
+    });
+
     it('uses default dimensions when width/height are invalid', () => {
       const node: PMNode = {
         type: 'vectorShape',

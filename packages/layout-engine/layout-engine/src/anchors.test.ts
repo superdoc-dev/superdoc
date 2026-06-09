@@ -655,6 +655,55 @@ describe('anchors', () => {
       expect(anchorsForPara0?.[0].block.id).toBe('drawing-1');
     });
 
+    it('prefers explicit anchorParagraphId for anchored drawings', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'nearest-para',
+          runs: [],
+        },
+        {
+          kind: 'drawing',
+          id: 'drawing-anchored',
+          drawingKind: 'shapeGroup',
+          geometry: { width: 60, height: 30, rotation: 0 },
+          anchor: {
+            isAnchored: true,
+            vRelativeFrom: 'paragraph',
+            offsetV: 32,
+          },
+          attrs: { anchorParagraphId: 'target-para' },
+        } as DrawingBlock,
+        {
+          kind: 'paragraph',
+          id: 'target-para',
+          runs: [],
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [],
+          totalHeight: 0,
+        },
+        {
+          kind: 'drawing',
+          width: 60,
+          height: 30,
+        } as DrawingMeasure,
+        {
+          kind: 'paragraph',
+          lines: [],
+          totalHeight: 0,
+        },
+      ];
+
+      const result = collectAnchoredDrawings(blocks, measures);
+      expect(result.has(0)).toBe(false);
+      expect(result.has(2)).toBe(true);
+      expect(result.get(2)?.[0].block.id).toBe('drawing-anchored');
+    });
+
     it('should return empty map when no paragraphs exist', () => {
       const blocks: FlowBlock[] = [
         {

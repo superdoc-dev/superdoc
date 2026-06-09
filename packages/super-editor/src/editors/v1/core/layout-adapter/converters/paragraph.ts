@@ -904,6 +904,14 @@ export function paragraphToFlowBlocks({
 
   const hasParagraphBlock = blocks.some((block) => block.kind === 'paragraph');
   if (!hasParagraphBlock && !suppressedByVanish && !paragraphProps.runProperties?.vanish) {
+    let syntheticParagraphAttrs = deepClone(paragraphAttrs);
+    if (isSectPrMarker) {
+      if (syntheticParagraphAttrs) {
+        syntheticParagraphAttrs.sectPrMarker = true;
+      } else {
+        syntheticParagraphAttrs = { sectPrMarker: true };
+      }
+    }
     blocks.push({
       kind: 'paragraph',
       id: baseBlockId,
@@ -914,7 +922,7 @@ export function paragraphToFlowBlocks({
           fontSize: defaultSize,
         },
       ],
-      attrs: deepClone(paragraphAttrs),
+      attrs: syntheticParagraphAttrs,
       sourceAnchor,
     });
   }

@@ -64,6 +64,7 @@ import {
   collectAnchoredDrawings,
   collectAnchoredTables,
   collectPreRegisteredAnchors,
+  collectPageRelativeAnchorsByParagraph,
   isPageRelativeAnchor,
 } from './anchors.js';
 import { normalizeFragmentsForRegion } from './normalize-header-footer-fragments.js';
@@ -2001,6 +2002,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // These images position themselves relative to the page, not a paragraph, so they
   // must be registered first so all paragraphs can wrap around them.
   const preRegisteredAnchors = collectPreRegisteredAnchors(blocks, measures);
+  const pageRelativeAnchorsByParagraph = collectPageRelativeAnchorsByParagraph(blocks, measures);
 
   // Map to store pre-computed positions for page-relative anchors (for fragment creation later).
   // Page placement is resolved at encounter time so anchors follow pagination (e.g., after page breaks).
@@ -2425,6 +2427,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           (!paraBlock.runs[0].kind || paraBlock.runs[0].kind === 'text') &&
           (!(paraBlock.runs[0] as { text?: string }).text || (paraBlock.runs[0] as { text?: string }).text === ''));
 
+      const anchorsForPara = anchoredByParagraph.get(index);
+      const tablesForPara = anchoredTablesByParagraph.get(index);
+
       if (isEmpty) {
         const isSectPrMarker = paraBlock.attrs?.sectPrMarker === true;
         // Check if previous block was pageBreak and next block is sectionBreak
@@ -2441,17 +2446,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             nextBreakType === 'oddPage' ||
             nextSectionBreak.attrs?.requirePageBoundary === true);
 
-        if (isSectPrMarker && nextBreakForcesPage) {
+        const hasAnchoredObjectsForMarker = Boolean(anchorsForPara?.length || tablesForPara?.length);
+
+        if (isSectPrMarker && nextBreakForcesPage && !hasAnchoredObjectsForMarker) {
           continue;
         }
 
-        if (prevBlock?.kind === 'pageBreak' && nextBlock?.kind === 'sectionBreak') {
+        if (prevBlock?.kind === 'pageBreak' && nextBlock?.kind === 'sectionBreak' && !hasAnchoredObjectsForMarker) {
           continue;
         }
       }
-
-      const anchorsForPara = anchoredByParagraph.get(index);
-      const tablesForPara = anchoredTablesByParagraph.get(index);
 
       /**
        * keepNext Chain-Aware Page Break Logic
@@ -2607,6 +2611,14 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
 
+      const hasPageRelativeAnchorForPara = Boolean(
+        pageRelativeAnchorsByParagraph.get(index)?.length ||
+          tablesForPara?.some(({ block: tableBlock }) => {
+            const vRelativeFrom = tableBlock.anchor?.vRelativeFrom;
+            return vRelativeFrom === 'page' || vRelativeFrom === 'margin';
+          }),
+      );
+
       layoutParagraphBlock(
         {
           block,
@@ -2635,6 +2647,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
                 left: activeLeftMargin,
                 right: activeRightMargin,
               },
+              sectionBaseTopMargin: activeSectionBaseTopMargin,
+              sectionHeaderDistance: activeHeaderDistance,
+              hasPageRelativeAnchorForParagraph: hasPageRelativeAnchorForPara,
               columns: getCurrentColumns(),
               placedAnchoredIds,
             }

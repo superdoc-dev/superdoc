@@ -2341,6 +2341,114 @@ describe('paragraph converters', () => {
         expect(shapeGroupNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
       });
 
+      it('marks synthetic shape-only sectPr paragraphs and preserves drawing anchor ids', () => {
+        const paragraphAttrs = {
+          spacing: { before: 128 },
+          spacingExplicit: { before: true },
+          pageBreakSource: 'sectPr',
+        };
+        vi.mocked(computeParagraphAttrs).mockReturnValue({
+          paragraphAttrs,
+          resolvedParagraphProperties: {},
+        } as never);
+        vi.mocked(shapeGroupNodeToDrawingBlock).mockImplementation((_node, next) => {
+          return {
+            kind: 'drawing',
+            id: next('drawing'),
+            drawingKind: 'shapeGroup',
+            geometry: { width: 60, height: 30, rotation: 0 },
+            anchor: {
+              isAnchored: true,
+              hRelativeFrom: 'column',
+              vRelativeFrom: 'paragraph',
+              offsetV: 32,
+            },
+            wrap: { type: 'None' },
+            attrs: { wrap: { type: 'None' } },
+            shapes: [],
+          } as never;
+        });
+
+        const blocks = paragraphToFlowBlocks(
+          {
+            type: 'paragraph',
+            attrs: {
+              pageBreakSource: 'sectPr',
+              paragraphProperties: { sectPr: { type: 'nextPage' } },
+            },
+            content: [{ type: 'shapeGroup' }, { type: 'shapeGroup' }],
+          },
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
+
+        const drawingBlocks = blocks.filter((block) => block.kind === 'drawing') as Array<
+          FlowBlock & { attrs?: Record<string, unknown> }
+        >;
+        expect(drawingBlocks).toHaveLength(2);
+        expect(drawingBlocks[0].attrs?.anchorParagraphId).toBe(drawingBlocks[1].attrs?.anchorParagraphId);
+
+        const syntheticParagraph = blocks.find(
+          (block) => block.kind === 'paragraph' && block.id === drawingBlocks[0].attrs?.anchorParagraphId,
+        ) as ParagraphBlock | undefined;
+        expect(syntheticParagraph).toBeDefined();
+        expect(syntheticParagraph?.runs).toHaveLength(1);
+        expect((syntheticParagraph?.runs[0] as TextRun | undefined)?.text).toBe('');
+        expect(syntheticParagraph?.attrs?.sectPrMarker).toBe(true);
+        expect(syntheticParagraph?.attrs?.spacing).toEqual({ before: 128 });
+        expect(syntheticParagraph?.attrs?.pageBreakSource).toBe('sectPr');
+      });
+
+      it('does not mark non-sectPr synthetic shape-only paragraphs as sectPr markers', () => {
+        vi.mocked(computeParagraphAttrs).mockReturnValue({
+          paragraphAttrs: {
+            spacing: { before: 128 },
+            spacingExplicit: { before: true },
+          },
+          resolvedParagraphProperties: {},
+        } as never);
+        vi.mocked(shapeGroupNodeToDrawingBlock).mockReturnValue({
+          kind: 'drawing',
+          id: 'drawing-0',
+          drawingKind: 'shapeGroup',
+          geometry: { width: 60, height: 30, rotation: 0 },
+          anchor: {
+            isAnchored: true,
+            hRelativeFrom: 'column',
+            vRelativeFrom: 'paragraph',
+            offsetV: 32,
+          },
+          wrap: { type: 'None' },
+          attrs: { wrap: { type: 'None' } },
+          shapes: [],
+        } as never);
+
+        const blocks = paragraphToFlowBlocks(
+          {
+            type: 'paragraph',
+            content: [{ type: 'shapeGroup' }],
+          },
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
+
+        const syntheticParagraph = blocks.find((block) => block.kind === 'paragraph') as ParagraphBlock | undefined;
+        expect(syntheticParagraph).toBeDefined();
+        expect(syntheticParagraph?.attrs?.sectPrMarker).not.toBe(true);
+      });
+
       it('should attach inline paragraph alignment to inline shapeGroup drawings', () => {
         const shapeNode: PMNode = { type: 'shapeGroup' };
 

@@ -2674,6 +2674,713 @@ describe('layoutDocument', () => {
       expect(layout.pages[1].fragments[0].blockId).toBe('p2');
     });
 
+    it('places drawings anchored to an empty sectPr marker paragraph without applying marker spacing', () => {
+      const makeDrawingBlock = (id: string): FlowBlock => ({
+        kind: 'drawing',
+        id,
+        drawingKind: 'shapeGroup',
+        geometry: { width: 60, height: 30, rotation: 0 },
+        attrs: { anchorParagraphId: 'p-marker' },
+        anchor: {
+          isAnchored: true,
+          vRelativeFrom: 'paragraph',
+          offsetV: 32,
+        },
+        wrap: { type: 'None' },
+      });
+      const makeDrawingMeasure = (): Measure => ({
+        kind: 'drawing',
+        drawingKind: 'shapeGroup',
+        width: 60,
+        height: 30,
+        scale: 1,
+        geometry: { width: 60, height: 30, rotation: 0, flipH: false, flipV: false },
+      });
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p-before', runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 12 }] },
+        makeDrawingBlock('drawing-1'),
+        makeDrawingBlock('drawing-2'),
+        {
+          kind: 'paragraph',
+          id: 'p-marker',
+          runs: [{ text: '', fontFamily: 'Arial', fontSize: 12 }],
+          attrs: {
+            sectPrMarker: true,
+            spacing: { before: 128 },
+            spacingExplicit: { before: true },
+          },
+        },
+        {
+          kind: 'sectionBreak',
+          id: 'sb1',
+          type: 'nextPage',
+          margins: {},
+          pageSize: { w: 612, h: 792 },
+          columns: { count: 1, gap: 0 },
+          attrs: { source: 'sectPr' },
+        },
+        { kind: 'paragraph', id: 'p-after', runs: [{ text: 'After', fontFamily: 'Arial', fontSize: 12 }] },
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+        makeDrawingMeasure(),
+        makeDrawingMeasure(),
+        { kind: 'paragraph', lines: [makeLine(16)], totalHeight: 16 },
+        { kind: 'sectionBreak' },
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+      ];
+
+      const layout = layoutDocument(blocks, measures, {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      });
+
+      const fragments = layout.pages.flatMap((page) => page.fragments);
+      expect(fragments.some((fragment) => fragment.kind === 'para' && fragment.blockId === 'p-marker')).toBe(false);
+
+      const drawingFragments = fragments.filter((fragment) => fragment.kind === 'drawing') as DrawingFragment[];
+      expect(drawingFragments).toHaveLength(2);
+      for (const fragment of drawingFragments) {
+        expect(fragment.isAnchored).toBe(true);
+        expect(fragment.y).toBe(124);
+        expect(fragment.y).not.toBe(252);
+      }
+
+      expect(layout.pages).toHaveLength(2);
+      expect(layout.pages[1].fragments.some((fragment) => fragment.blockId === 'p-after')).toBe(true);
+    });
+
+    it('keeps anchors on an empty marker between pageBreak and sectionBreak', () => {
+      const drawingBlock: FlowBlock = {
+        kind: 'drawing',
+        id: 'drawing-1',
+        drawingKind: 'shapeGroup',
+        geometry: { width: 60, height: 30, rotation: 0 },
+        attrs: { anchorParagraphId: 'p-marker' },
+        anchor: {
+          isAnchored: true,
+          vRelativeFrom: 'paragraph',
+          offsetV: 32,
+        },
+        wrap: { type: 'None' },
+      };
+      const drawingMeasure: DrawingMeasure = {
+        kind: 'drawing',
+        drawingKind: 'shapeGroup',
+        width: 60,
+        height: 30,
+        scale: 1,
+        geometry: { width: 60, height: 30, rotation: 0, flipH: false, flipV: false },
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p-before', runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 12 }] },
+        drawingBlock,
+        { kind: 'pageBreak', id: 'pb-before-marker' } as PageBreakBlock,
+        {
+          kind: 'paragraph',
+          id: 'p-marker',
+          runs: [{ text: '', fontFamily: 'Arial', fontSize: 12 }],
+          attrs: {
+            sectPrMarker: true,
+            spacing: { before: 128 },
+            spacingExplicit: { before: true },
+          },
+        },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-after-marker',
+          type: 'nextPage',
+          margins: {},
+          attrs: { source: 'sectPr' },
+        },
+        { kind: 'paragraph', id: 'p-after', runs: [{ text: 'After', fontFamily: 'Arial', fontSize: 12 }] },
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+        drawingMeasure,
+        { kind: 'pageBreak' },
+        { kind: 'paragraph', lines: [makeLine(16)], totalHeight: 16 },
+        { kind: 'sectionBreak' },
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+      ];
+
+      const layout = layoutDocument(blocks, measures, {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      });
+
+      const markerPage = layout.pages.find((page) =>
+        page.fragments.some((fragment) => fragment.blockId === 'drawing-1'),
+      );
+      const drawingFragment = markerPage?.fragments.find((fragment) => fragment.blockId === 'drawing-1') as
+        | DrawingFragment
+        | undefined;
+      expect(markerPage?.number).toBe(2);
+      expect(drawingFragment?.y).toBe(104);
+      expect(
+        markerPage?.fragments.some((fragment) => fragment.kind === 'para' && fragment.blockId === 'p-marker'),
+      ).toBe(false);
+      expect(layout.pages.some((page) => page.fragments.some((fragment) => fragment.blockId === 'p-after'))).toBe(true);
+    });
+
+    it('uses the base section top margin plus header distance for first-page empty sectPr marker anchors', () => {
+      const drawingBlock: FlowBlock = {
+        kind: 'drawing',
+        id: 'drawing-1',
+        drawingKind: 'shapeGroup',
+        geometry: { width: 60, height: 30, rotation: 0 },
+        attrs: { anchorParagraphId: 'p-marker' },
+        anchor: {
+          isAnchored: true,
+          vRelativeFrom: 'paragraph',
+          offsetV: 32,
+        },
+        wrap: { type: 'None' },
+      };
+      const drawingMeasure: DrawingMeasure = {
+        kind: 'drawing',
+        drawingKind: 'shapeGroup',
+        width: 60,
+        height: 30,
+        scale: 1,
+        geometry: { width: 60, height: 30, rotation: 0, flipH: false, flipV: false },
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p-before', runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 12 }] },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-before-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40, header: 30 },
+          attrs: { source: 'sectPr', sectionIndex: 1 },
+        },
+        drawingBlock,
+        {
+          kind: 'paragraph',
+          id: 'p-marker',
+          runs: [{ text: '', fontFamily: 'Arial', fontSize: 12 }],
+          attrs: {
+            sectPrMarker: true,
+            spacing: { before: 128 },
+            spacingExplicit: { before: true },
+          },
+        },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-after-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40, header: 30 },
+          attrs: { source: 'sectPr', sectionIndex: 2 },
+        },
+        { kind: 'paragraph', id: 'p-after', runs: [{ text: 'After', fontFamily: 'Arial', fontSize: 12 }] },
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+        { kind: 'sectionBreak' },
+        drawingMeasure,
+        { kind: 'paragraph', lines: [makeLine(16)], totalHeight: 16 },
+        { kind: 'sectionBreak' },
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+      ];
+
+      const layout = layoutDocument(blocks, measures, {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 40, right: 40, bottom: 40, left: 40 },
+        headerContentHeights: { default: 200 },
+      });
+
+      const markerPage = layout.pages.find((page) =>
+        page.fragments.some((fragment) => fragment.blockId === 'drawing-1'),
+      );
+      const drawingFragment = markerPage?.fragments.find((fragment) => fragment.blockId === 'drawing-1') as
+        | DrawingFragment
+        | undefined;
+      expect(markerPage?.margins.top).toBe(230);
+      expect(drawingFragment?.y).toBe(122);
+      expect(drawingFragment?.y).not.toBe(262);
+      expect(
+        markerPage?.fragments.some((fragment) => fragment.kind === 'para' && fragment.blockId === 'p-marker'),
+      ).toBe(false);
+    });
+
+    it('does not push first-page empty sectPr marker anchors below the effective top margin', () => {
+      const drawingBlock: FlowBlock = {
+        kind: 'drawing',
+        id: 'drawing-1',
+        drawingKind: 'shapeGroup',
+        geometry: { width: 60, height: 30, rotation: 0 },
+        attrs: { anchorParagraphId: 'p-marker' },
+        anchor: {
+          isAnchored: true,
+          vRelativeFrom: 'paragraph',
+          offsetV: 32,
+        },
+        wrap: { type: 'None' },
+      };
+      const drawingMeasure: DrawingMeasure = {
+        kind: 'drawing',
+        drawingKind: 'shapeGroup',
+        width: 60,
+        height: 30,
+        scale: 1,
+        geometry: { width: 60, height: 30, rotation: 0, flipH: false, flipV: false },
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p-before', runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 12 }] },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-before-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40 },
+          attrs: { source: 'sectPr', sectionIndex: 1 },
+        },
+        drawingBlock,
+        {
+          kind: 'paragraph',
+          id: 'p-marker',
+          runs: [{ text: '', fontFamily: 'Arial', fontSize: 12 }],
+          attrs: {
+            sectPrMarker: true,
+            spacing: { before: 128 },
+            spacingExplicit: { before: true },
+          },
+        },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-after-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40 },
+          attrs: { source: 'sectPr', sectionIndex: 2 },
+        },
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+        { kind: 'sectionBreak' },
+        drawingMeasure,
+        { kind: 'paragraph', lines: [makeLine(16)], totalHeight: 16 },
+        { kind: 'sectionBreak' },
+      ];
+
+      const layout = layoutDocument(blocks, measures, {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      });
+
+      const markerPage = layout.pages.find((page) =>
+        page.fragments.some((fragment) => fragment.blockId === 'drawing-1'),
+      );
+      const drawingFragment = markerPage?.fragments.find((fragment) => fragment.blockId === 'drawing-1') as
+        | DrawingFragment
+        | undefined;
+      expect(markerPage?.margins.top).toBe(60);
+      expect(drawingFragment?.y).toBe(92);
+      expect(drawingFragment?.y).not.toBe(132);
+      expect(
+        markerPage?.fragments.some((fragment) => fragment.kind === 'para' && fragment.blockId === 'p-marker'),
+      ).toBe(false);
+    });
+
+    it('places anchored tables on an empty sectPr marker from the base section top margin plus header distance', () => {
+      const tableBlock = makeTableBlock('marker-table', 1, {
+        anchor: { isAnchored: true, hRelativeFrom: 'column', vRelativeFrom: 'paragraph', offsetH: 0, offsetV: 32 },
+        wrap: { type: 'None' },
+      });
+      tableBlock.attrs = { anchorParagraphId: 'p-marker' };
+
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p-before', runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 12 }] },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-before-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40, header: 30 },
+          attrs: { source: 'sectPr', sectionIndex: 1 },
+        },
+        tableBlock,
+        {
+          kind: 'paragraph',
+          id: 'p-marker',
+          runs: [{ text: '', fontFamily: 'Arial', fontSize: 12 }],
+          attrs: {
+            sectPrMarker: true,
+            spacing: { before: 128 },
+            spacingExplicit: { before: true },
+          },
+        },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-after-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40, header: 30 },
+          attrs: { source: 'sectPr', sectionIndex: 2 },
+        },
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+        { kind: 'sectionBreak' },
+        makeTableMeasure([60], [20]),
+        { kind: 'paragraph', lines: [makeLine(16)], totalHeight: 16 },
+        { kind: 'sectionBreak' },
+      ];
+
+      const layout = layoutDocument(blocks, measures, {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 40, right: 40, bottom: 40, left: 40 },
+        headerContentHeights: { default: 200 },
+      });
+
+      const markerPage = layout.pages.find((page) =>
+        page.fragments.some((fragment) => fragment.blockId === 'marker-table'),
+      );
+      const tableFragment = markerPage?.fragments.find((fragment) => fragment.blockId === 'marker-table');
+      expect(markerPage?.margins.top).toBe(230);
+      expect(tableFragment?.kind).toBe('table');
+      expect(tableFragment?.y).toBe(122);
+      expect(tableFragment?.y).not.toBe(262);
+      expect(
+        markerPage?.fragments.some((fragment) => fragment.kind === 'para' && fragment.blockId === 'p-marker'),
+      ).toBe(false);
+    });
+
+    it('keeps effective top margin for empty sectPr marker anchors that also own page-relative drawings', () => {
+      const pageRelativeDrawing: FlowBlock = {
+        kind: 'drawing',
+        id: 'title-group',
+        drawingKind: 'shapeGroup',
+        geometry: { width: 120, height: 40, rotation: 0 },
+        attrs: { anchorParagraphId: 'p-marker' },
+        anchor: {
+          isAnchored: true,
+          vRelativeFrom: 'page',
+          offsetV: 142,
+        },
+        wrap: { type: 'None' },
+      };
+      const paragraphRelativeLine: FlowBlock = {
+        kind: 'drawing',
+        id: 'title-line',
+        drawingKind: 'vectorShape',
+        geometry: { width: 120, height: 2, rotation: 0 },
+        attrs: { anchorParagraphId: 'p-marker' },
+        anchor: {
+          isAnchored: true,
+          vRelativeFrom: 'paragraph',
+          offsetV: 8,
+        },
+        wrap: { type: 'None' },
+      };
+      const makeDrawingMeasure = (
+        width: number,
+        height: number,
+        drawingKind: DrawingMeasure['drawingKind'],
+      ): DrawingMeasure => ({
+        kind: 'drawing',
+        drawingKind,
+        width,
+        height,
+        scale: 1,
+        geometry: { width, height, rotation: 0, flipH: false, flipV: false },
+      });
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p-before', runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 12 }] },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-before-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40, header: 30 },
+          attrs: { source: 'sectPr', sectionIndex: 1 },
+        },
+        pageRelativeDrawing,
+        paragraphRelativeLine,
+        {
+          kind: 'paragraph',
+          id: 'p-marker',
+          runs: [{ text: '', fontFamily: 'Arial', fontSize: 12 }],
+          attrs: {
+            sectPrMarker: true,
+            spacing: { before: 128 },
+            spacingExplicit: { before: true },
+          },
+        },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-after-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40, header: 30 },
+          attrs: { source: 'sectPr', sectionIndex: 2 },
+        },
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+        { kind: 'sectionBreak' },
+        makeDrawingMeasure(120, 40, 'shapeGroup'),
+        makeDrawingMeasure(120, 2, 'vectorShape'),
+        { kind: 'paragraph', lines: [makeLine(16)], totalHeight: 16 },
+        { kind: 'sectionBreak' },
+      ];
+
+      const layout = layoutDocument(blocks, measures, {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 40, right: 40, bottom: 40, left: 40 },
+        headerContentHeights: { default: 200 },
+      });
+
+      const markerPage = layout.pages.find((page) =>
+        page.fragments.some((fragment) => fragment.blockId === 'title-line'),
+      );
+      const lineFragment = markerPage?.fragments.find((fragment) => fragment.blockId === 'title-line') as
+        | DrawingFragment
+        | undefined;
+      const groupFragment = markerPage?.fragments.find((fragment) => fragment.blockId === 'title-group') as
+        | DrawingFragment
+        | undefined;
+
+      expect(markerPage?.margins.top).toBe(230);
+      expect(groupFragment?.y).toBe(142);
+      expect(lineFragment?.y).toBe(238);
+      expect(lineFragment?.y).not.toBe(68);
+    });
+
+    it('keeps effective top margin for fallback-resolved empty sectPr marker anchors that also own page-relative drawings', () => {
+      const pageRelativeDrawing: FlowBlock = {
+        kind: 'drawing',
+        id: 'title-group',
+        drawingKind: 'shapeGroup',
+        geometry: { width: 120, height: 40, rotation: 0 },
+        anchor: {
+          isAnchored: true,
+          vRelativeFrom: 'page',
+          offsetV: 142,
+        },
+        wrap: { type: 'None' },
+      };
+      const paragraphRelativeLine: FlowBlock = {
+        kind: 'drawing',
+        id: 'title-line',
+        drawingKind: 'vectorShape',
+        geometry: { width: 120, height: 2, rotation: 0 },
+        anchor: {
+          isAnchored: true,
+          vRelativeFrom: 'paragraph',
+          offsetV: 8,
+        },
+        wrap: { type: 'None' },
+      };
+      const makeDrawingMeasure = (
+        width: number,
+        height: number,
+        drawingKind: DrawingMeasure['drawingKind'],
+      ): DrawingMeasure => ({
+        kind: 'drawing',
+        drawingKind,
+        width,
+        height,
+        scale: 1,
+        geometry: { width, height, rotation: 0, flipH: false, flipV: false },
+      });
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p-before', runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 12 }] },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-before-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40, header: 30 },
+          attrs: { source: 'sectPr', sectionIndex: 1 },
+        },
+        {
+          kind: 'paragraph',
+          id: 'p-marker',
+          runs: [{ text: '', fontFamily: 'Arial', fontSize: 12 }],
+          attrs: {
+            sectPrMarker: true,
+            spacing: { before: 128 },
+            spacingExplicit: { before: true },
+          },
+        },
+        pageRelativeDrawing,
+        paragraphRelativeLine,
+        {
+          kind: 'sectionBreak',
+          id: 'sb-after-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40, header: 30 },
+          attrs: { source: 'sectPr', sectionIndex: 2 },
+        },
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+        { kind: 'sectionBreak' },
+        { kind: 'paragraph', lines: [makeLine(16)], totalHeight: 16 },
+        makeDrawingMeasure(120, 40, 'shapeGroup'),
+        makeDrawingMeasure(120, 2, 'vectorShape'),
+        { kind: 'sectionBreak' },
+      ];
+
+      const layout = layoutDocument(blocks, measures, {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 40, right: 40, bottom: 40, left: 40 },
+        headerContentHeights: { default: 200 },
+      });
+
+      const markerPage = layout.pages.find((page) =>
+        page.fragments.some((fragment) => fragment.blockId === 'title-line'),
+      );
+      const lineFragment = markerPage?.fragments.find((fragment) => fragment.blockId === 'title-line') as
+        | DrawingFragment
+        | undefined;
+      const groupFragment = markerPage?.fragments.find((fragment) => fragment.blockId === 'title-group') as
+        | DrawingFragment
+        | undefined;
+
+      expect(markerPage?.margins.top).toBe(230);
+      expect(groupFragment?.y).toBe(142);
+      expect(lineFragment?.y).toBe(238);
+      expect(lineFragment?.y).not.toBe(68);
+      expect(
+        markerPage?.fragments.some((fragment) => fragment.kind === 'para' && fragment.blockId === 'p-marker'),
+      ).toBe(false);
+    });
+
+    it('keeps effective top margin for empty sectPr marker anchors that also own page-relative tables', () => {
+      const pageRelativeTable = makeTableBlock('title-table', 1, {
+        anchor: { isAnchored: true, hRelativeFrom: 'column', vRelativeFrom: 'page', offsetH: 0, offsetV: 142 },
+        wrap: { type: 'None' },
+      });
+      pageRelativeTable.attrs = { anchorParagraphId: 'p-marker' };
+      const paragraphRelativeLine: FlowBlock = {
+        kind: 'drawing',
+        id: 'title-line',
+        drawingKind: 'vectorShape',
+        geometry: { width: 120, height: 2, rotation: 0 },
+        attrs: { anchorParagraphId: 'p-marker' },
+        anchor: {
+          isAnchored: true,
+          vRelativeFrom: 'paragraph',
+          offsetV: 8,
+        },
+        wrap: { type: 'None' },
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p-before', runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 12 }] },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-before-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40, header: 30 },
+          attrs: { source: 'sectPr', sectionIndex: 1 },
+        },
+        pageRelativeTable,
+        paragraphRelativeLine,
+        {
+          kind: 'paragraph',
+          id: 'p-marker',
+          runs: [{ text: '', fontFamily: 'Arial', fontSize: 12 }],
+          attrs: {
+            sectPrMarker: true,
+            spacing: { before: 128 },
+            spacingExplicit: { before: true },
+          },
+        },
+        {
+          kind: 'sectionBreak',
+          id: 'sb-after-marker',
+          type: 'nextPage',
+          margins: { top: 60, bottom: 40, left: 40, right: 40, header: 30 },
+          attrs: { source: 'sectPr', sectionIndex: 2 },
+        },
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+        { kind: 'sectionBreak' },
+        makeTableMeasure([60], [20]),
+        {
+          kind: 'drawing',
+          drawingKind: 'vectorShape',
+          width: 120,
+          height: 2,
+          scale: 1,
+          geometry: { width: 120, height: 2, rotation: 0, flipH: false, flipV: false },
+        },
+        { kind: 'paragraph', lines: [makeLine(16)], totalHeight: 16 },
+        { kind: 'sectionBreak' },
+      ];
+
+      const layout = layoutDocument(blocks, measures, {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 40, right: 40, bottom: 40, left: 40 },
+        headerContentHeights: { default: 200 },
+      });
+
+      const markerPage = layout.pages.find((page) =>
+        page.fragments.some((fragment) => fragment.blockId === 'title-line'),
+      );
+      const lineFragment = markerPage?.fragments.find((fragment) => fragment.blockId === 'title-line') as
+        | DrawingFragment
+        | undefined;
+      const tableFragment = markerPage?.fragments.find((fragment) => fragment.blockId === 'title-table');
+
+      expect(markerPage?.margins.top).toBe(230);
+      expect(tableFragment?.kind).toBe('table');
+      expect(tableFragment?.y).toBe(142);
+      expect(lineFragment?.y).toBe(238);
+      expect(lineFragment?.y).not.toBe(68);
+    });
+
+    it('does not suppress non-empty sectPr marker paragraphs that own anchors', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p-before', runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 12 }] },
+        {
+          kind: 'drawing',
+          id: 'drawing-1',
+          drawingKind: 'shapeGroup',
+          geometry: { width: 60, height: 30, rotation: 0 },
+          attrs: { anchorParagraphId: 'p-marker' },
+          anchor: {
+            isAnchored: true,
+            vRelativeFrom: 'paragraph',
+            offsetV: 32,
+          },
+          wrap: { type: 'None' },
+        },
+        {
+          kind: 'paragraph',
+          id: 'p-marker',
+          runs: [{ text: 'Marker text', fontFamily: 'Arial', fontSize: 12 }],
+          attrs: {
+            sectPrMarker: true,
+            spacing: { before: 128 },
+            spacingExplicit: { before: true },
+          },
+        },
+        { kind: 'paragraph', id: 'p-after', runs: [{ text: 'After', fontFamily: 'Arial', fontSize: 12 }] },
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+        {
+          kind: 'drawing',
+          drawingKind: 'shapeGroup',
+          width: 60,
+          height: 30,
+          scale: 1,
+          geometry: { width: 60, height: 30, rotation: 0, flipH: false, flipV: false },
+        },
+        { kind: 'paragraph', lines: [makeLine(16)], totalHeight: 16 },
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+      ];
+
+      const layout = layoutDocument(blocks, measures, {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      });
+
+      const fragments = layout.pages.flatMap((page) => page.fragments);
+      expect(fragments.some((fragment) => fragment.kind === 'para' && fragment.blockId === 'p-marker')).toBe(true);
+
+      const drawingFragment = fragments.find((fragment) => fragment.kind === 'drawing') as DrawingFragment | undefined;
+      expect(drawingFragment?.isAnchored).toBe(true);
+      expect(drawingFragment?.y).toBe(252);
+    });
+
     it('does NOT skip empty paragraph if not between pageBreak and sectionBreak', () => {
       const blocks: FlowBlock[] = [
         { kind: 'paragraph', id: 'p1', runs: [{ text: 'Content', fontFamily: 'Arial', fontSize: 12 }] },

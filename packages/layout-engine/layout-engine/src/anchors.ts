@@ -134,6 +134,40 @@ export function collectPreRegisteredAnchors(blocks: FlowBlock[], measures: Measu
   return result;
 }
 
+export function collectPageRelativeAnchorsByParagraph(
+  blocks: FlowBlock[],
+  measures: Measure[],
+): Map<number, AnchoredDrawing[]> {
+  const map = new Map<number, AnchoredDrawing[]>();
+  const len = Math.min(blocks.length, measures.length);
+  const paragraphIndexById = buildParagraphIndexById(blocks, len);
+
+  for (let i = 0; i < len; i += 1) {
+    const block = blocks[i];
+    const measure = measures[i];
+    const isImage = block.kind === 'image' && measure?.kind === 'image';
+    const isDrawing = block.kind === 'drawing' && measure?.kind === 'drawing';
+    if (!isImage && !isDrawing) continue;
+
+    const drawingBlock = block as ImageBlock | DrawingBlock;
+    const drawingMeasure = measure as ImageMeasure | DrawingMeasure;
+    if (!drawingBlock.anchor?.isAnchored || !isPageRelativeAnchor(drawingBlock)) continue;
+
+    const anchorParagraphId =
+      typeof drawingBlock.attrs === 'object' && drawingBlock.attrs
+        ? (drawingBlock.attrs as { anchorParagraphId?: unknown }).anchorParagraphId
+        : undefined;
+    const anchorParaIndex = resolveAnchorParagraphIndex(blocks, len, paragraphIndexById, i, anchorParagraphId);
+    if (anchorParaIndex == null) continue;
+
+    const list = map.get(anchorParaIndex) ?? [];
+    list.push({ block: drawingBlock, measure: drawingMeasure });
+    map.set(anchorParaIndex, list);
+  }
+
+  return map;
+}
+
 /**
  * Collect anchored drawings (images/drawings) mapped to their anchor paragraph index.
  * Map of paragraph block index -> anchored images/drawings associated with that paragraph.

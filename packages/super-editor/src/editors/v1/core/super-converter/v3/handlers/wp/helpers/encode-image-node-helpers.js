@@ -839,6 +839,28 @@ const transformPoint = (matrix, x, y) => ({
   y: matrix.b * x + matrix.d * y + matrix.f,
 });
 
+const normalizeDegrees = (degrees) => {
+  const normalized = ((degrees % 360) + 360) % 360;
+  return Object.is(normalized, -0) ? 0 : normalized;
+};
+
+const decomposeMatrixOrientation = (matrix) => {
+  const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+  if (determinant < 0) {
+    return {
+      rotation: normalizeDegrees((Math.atan2(-matrix.b, -matrix.a) * 180) / Math.PI),
+      flipH: true,
+      flipV: false,
+    };
+  }
+
+  return {
+    rotation: normalizeDegrees((Math.atan2(matrix.b, matrix.a) * 180) / Math.PI),
+    flipH: false,
+    flipV: false,
+  };
+};
+
 const getGroupAffineTransform = (xfrm, { includeVisualTransform = false } = {}) => {
   if (!xfrm) {
     return { matrix: identityMatrix(), rotation: 0, flipH: false, flipV: false };
@@ -894,12 +916,13 @@ const getGroupAffineTransform = (xfrm, { includeVisualTransform = false } = {}) 
   return { matrix: multiplyMatrix(visualMatrix, baseMatrix), rotation, flipH, flipV };
 };
 
-const composeShapeGroupTransform = (parent, child) => ({
-  matrix: multiplyMatrix(parent.matrix, child.matrix),
-  rotation: (parent.rotation ?? 0) + (child.rotation ?? 0),
-  flipH: Boolean(parent.flipH) !== Boolean(child.flipH),
-  flipV: Boolean(parent.flipV) !== Boolean(child.flipV),
-});
+const composeShapeGroupTransform = (parent, child) => {
+  const matrix = multiplyMatrix(parent.matrix, child.matrix);
+  return {
+    matrix,
+    ...decomposeMatrixOrientation(matrix),
+  };
+};
 
 const transformShapeGroupChildRect = (transform, rawX, rawY, rawWidth, rawHeight) => {
   const matrix = transform.matrix ?? identityMatrix();

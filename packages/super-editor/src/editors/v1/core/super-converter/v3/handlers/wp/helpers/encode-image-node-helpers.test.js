@@ -810,6 +810,114 @@ describe('handleImageNode', () => {
     expect(result.attrs.shapes.map((shape) => shape.attrs.flipH)).toEqual([true, true]);
   });
 
+  it('composes nested shape group flip and rotation for flattened child orientation', () => {
+    rotToDegrees.mockImplementation((rot) => parseInt(rot, 10) / 60000);
+    const shape = {
+      name: 'wps:wsp',
+      elements: [
+        {
+          name: 'wps:spPr',
+          elements: [
+            { name: 'a:prstGeom', attributes: { prst: 'rect' } },
+            {
+              name: 'a:xfrm',
+              elements: [
+                { name: 'a:off', attributes: { x: '0', y: '0' } },
+                { name: 'a:ext', attributes: { cx: '50000', cy: '50000' } },
+              ],
+            },
+          ],
+        },
+        { name: 'wps:cNvPr', attributes: { id: '1', name: 'Shape 1' } },
+      ],
+    };
+
+    const node = {
+      attributes: {},
+      elements: [
+        { name: 'wp:extent', attributes: { cx: '200000', cy: '100000' } },
+        {
+          name: 'a:graphic',
+          elements: [
+            {
+              name: 'a:graphicData',
+              attributes: { uri: 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup' },
+              elements: [
+                {
+                  name: 'wpg:wgp',
+                  elements: [
+                    {
+                      name: 'wpg:grpSpPr',
+                      elements: [
+                        {
+                          name: 'a:xfrm',
+                          elements: [
+                            { name: 'a:off', attributes: { x: '0', y: '0' } },
+                            { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                            { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                            { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      name: 'wpg:grpSp',
+                      elements: [
+                        {
+                          name: 'wpg:grpSpPr',
+                          elements: [
+                            {
+                              name: 'a:xfrm',
+                              attributes: { flipH: '1' },
+                              elements: [
+                                { name: 'a:off', attributes: { x: '0', y: '0' } },
+                                { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                                { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                                { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                              ],
+                            },
+                          ],
+                        },
+                        {
+                          name: 'wpg:grpSp',
+                          elements: [
+                            {
+                              name: 'wpg:grpSpPr',
+                              elements: [
+                                {
+                                  name: 'a:xfrm',
+                                  attributes: { rot: '5400000' },
+                                  elements: [
+                                    { name: 'a:off', attributes: { x: '0', y: '0' } },
+                                    { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                                    { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                                    { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                                  ],
+                                },
+                              ],
+                            },
+                            shape,
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = handleImageNode(node, makeParams(), false);
+    const importedShape = result.attrs.shapes[0];
+
+    expect(importedShape.attrs.rotation).toBe(270);
+    expect(importedShape.attrs.flipH).toBe(true);
+    expect(importedShape.attrs.flipV).toBe(false);
+  });
+
   describe('wrap types', () => {
     it('handles wrap type None', () => {
       const node = makeNode();

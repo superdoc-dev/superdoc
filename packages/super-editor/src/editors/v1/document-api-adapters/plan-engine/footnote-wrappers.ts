@@ -210,7 +210,11 @@ export function footnotesInsertWrapper(
     );
   }
 
-  const resolved = resolveInlineInsertPosition(editor, input.at, 'footnotes.insert');
+  // SD-3400: omitting `at` inserts at the current selection head — the natural
+  // target for toolbar actions ("place a marker at the current cursor location").
+  const resolved = input.at
+    ? resolveInlineInsertPosition(editor, input.at, 'footnotes.insert')
+    : { from: editor.state.selection.head, to: editor.state.selection.head };
 
   const { success } = compoundMutation({
     editor,

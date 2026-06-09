@@ -153,6 +153,7 @@ function makeEditor(
     state: {
       doc: makeDocWithFootnoteRefs(refs),
       tr,
+      selection: { head: 1, from: 1, to: 1 },
     },
     schema: {
       nodes: {
@@ -215,6 +216,17 @@ describe('footnote-wrappers', () => {
     const noteElements = getFootnoteElements(editor);
     expect(noteElements).toHaveLength(1);
     expect(noteElements[0].attributes['w:id']).toBe('1');
+  });
+
+  it('inserts at the current selection head when at is omitted (SD-3400 toolbar path)', () => {
+    const editor = makeEditor([], []);
+
+    const result = footnotesInsertWrapper(editor, { type: 'footnote', content: '' });
+
+    expect(result.success).toBe(true);
+    // The reference node lands at the selection head, no TextTarget required.
+    expect(editor.state.tr.insert).toHaveBeenCalledWith(1, expect.anything());
+    expect(getFootnoteElements(editor)).toHaveLength(1);
   });
 
   it('allocates a note id that avoids all existing ids', () => {

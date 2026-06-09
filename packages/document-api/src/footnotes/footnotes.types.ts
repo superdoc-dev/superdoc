@@ -49,7 +49,11 @@ export interface FootnoteGetInput {
 }
 
 export interface FootnoteInsertInput {
-  at: TextTarget;
+  /**
+   * Where to place the reference marker. Omit to insert at the current
+   * selection (caret position) — the natural target for toolbar actions.
+   */
+  at?: TextTarget;
   type: 'footnote' | 'endnote';
   content: string;
 }

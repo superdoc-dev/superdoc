@@ -120,6 +120,34 @@ export const FootnoteReference = Node.create({
     };
   },
 
+  addCommands() {
+    return {
+      /**
+       * SD-3400: insert a new footnote at the current cursor position and move
+       * focus into the new note so the user can immediately type its text.
+       * Creates the footnotes part (with separators) if the document has none.
+       *
+       * Built for custom toolbars: any toolbar action can call
+       * `editor.commands.insertFootnote()`. Intentionally NOT registered in the
+       * default toolbar (per SD-3400).
+       */
+      insertFootnote:
+        () =>
+        ({ editor, tr }) => {
+          // The document API dispatches its own (compound) transactions, which
+          // would leave the CommandService transaction stale — suppress it.
+          tr.setMeta('preventDispatch', true);
+          const result = editor.doc?.footnotes?.insert({ type: 'footnote', content: '' });
+          if (!result?.success) return false;
+          const noteId = result.footnote?.noteId;
+          if (noteId != null) {
+            editor.presentationEditor?.activateNoteSession?.({ storyType: 'footnote', noteId: String(noteId) });
+          }
+          return true;
+        },
+    };
+  },
+
   parseDOM() {
     return [{ tag: 'sup[data-footnote-id]' }];
   },

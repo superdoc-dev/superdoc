@@ -8,8 +8,11 @@ export type ComputeTextboxCaretLayoutRectDeps = {
   zoom: number;
 };
 
-function findTextboxFragmentElement(viewportHost: HTMLElement, blockId: string): HTMLElement | null {
-  const candidates = Array.from(viewportHost.querySelectorAll<HTMLElement>('[data-block-id]'));
+function findTextboxFragmentElement(viewportHost: HTMLElement, blockId: string, pageIndex: number): HTMLElement | null {
+  // Scope the search to the correct page so the same blockId on repeated H/F
+  // pages (same header/footer painted on every page) resolves to the right DOM instance.
+  const pageEl = viewportHost.querySelector<HTMLElement>(`[data-page-index="${pageIndex}"]`) ?? viewportHost;
+  const candidates = Array.from(pageEl.querySelectorAll<HTMLElement>('[data-block-id]'));
   return candidates.find((el) => el.dataset.blockId === blockId) ?? null;
 }
 
@@ -20,7 +23,7 @@ export function computeTextboxCaretLayoutRectFromDom(
   _block: TextboxDrawing,
   pageIndex: number,
 ): TextboxCaretLayoutRect | null {
-  const fragmentEl = findTextboxFragmentElement(viewportHost, fragment.blockId);
+  const fragmentEl = findTextboxFragmentElement(viewportHost, fragment.blockId, pageIndex);
   if (!fragmentEl) return null;
 
   const lineEls = Array.from(fragmentEl.querySelectorAll<HTMLElement>('.superdoc-line[data-pm-start][data-pm-end]'));

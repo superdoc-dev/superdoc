@@ -1059,7 +1059,7 @@ export function clickToPositionGeometry(
             );
           }
 
-          const isFirstLineOfParagraph = lineIndex === 0 && paragraphIndex === 0;
+          const isFirstLineOfParagraph = lineIndex === 0;
           if (isFirstLineOfParagraph) {
             const suppressFLI = (contentBlock.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
             const firstLineOffset = getFirstLineIndentOffset(contentBlock.attrs?.indent, suppressFLI);

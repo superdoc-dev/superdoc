@@ -534,6 +534,71 @@ describe('DomPainter shape regressions', () => {
     expect(path?.getAttribute('filter')).toBe(`url(#${filter?.getAttribute('id')})`);
   });
 
+  it('adds paint room for shadowed no-stroke shape group vector children', () => {
+    const geometry: DrawingGeometry = { width: 120, height: 80, rotation: 0, flipH: false, flipV: false };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'group-shadow-no-stroke-child',
+      drawingKind: 'shapeGroup',
+      geometry,
+      effectExtent: { left: 0, top: 0, right: 13, bottom: 12 },
+      shapes: [
+        {
+          shapeType: 'vectorShape',
+          attrs: {
+            x: 5,
+            y: 7,
+            width: 80,
+            height: 50,
+            kind: 'rect',
+            fillColor: {
+              type: 'gradient',
+              stops: [
+                { position: 0, color: '#616565', alpha: 0.75 },
+                { position: 1, color: '#383B3D', alpha: 0.75 },
+              ],
+              angle: 0,
+              gradientType: 'linear',
+            },
+            strokeColor: null,
+            strokeWidth: 1,
+            effects: {
+              outerShadow: {
+                type: 'outerShadow',
+                blurRadius: 6.6667,
+                distance: 6.6667,
+                direction: 45,
+                color: '#757574',
+                opacity: 0.4,
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const childWrapper = mount.querySelector('.superdoc-shape-group__child') as HTMLElement | null;
+    const contentContainer = childWrapper?.querySelector(
+      '.superdoc-vector-shape > div[style*="position: absolute"]',
+    ) as HTMLElement | null;
+    const svg = childWrapper?.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+
+    expect(Number.parseFloat(childWrapper?.style.left ?? '')).toBeCloseTo(-0.29, 1);
+    expect(Number.parseFloat(childWrapper?.style.top ?? '')).toBeCloseTo(1.71, 1);
+    expect(Number.parseFloat(childWrapper?.style.width ?? '')).toBeCloseTo(100, 1);
+    expect(Number.parseFloat(childWrapper?.style.height ?? '')).toBeCloseTo(70, 1);
+    expect(Number.parseFloat(contentContainer?.style.left ?? '')).toBeCloseTo(5.29, 1);
+    expect(Number.parseFloat(contentContainer?.style.top ?? '')).toBeCloseTo(5.29, 1);
+    expect(contentContainer?.style.width).toBe('80px');
+    expect(contentContainer?.style.height).toBe('50px');
+    expect(svg?.querySelector('feDropShadow')).toBeTruthy();
+  });
+
   it('uses distinct shadow filters for shape group children without shape ids', () => {
     const geometry: DrawingGeometry = { width: 160, height: 120, rotation: 0, flipH: false, flipV: false };
     const shadow = {
@@ -746,6 +811,16 @@ describe('DomPainter shape regressions', () => {
             lineEnds: {
               head: { type: 'triangle' },
             },
+            effects: {
+              outerShadow: {
+                type: 'outerShadow',
+                blurRadius: 6,
+                distance: 6,
+                direction: 45,
+                color: '#757574',
+                opacity: 0.4,
+              },
+            },
           },
         },
       ],
@@ -767,6 +842,7 @@ describe('DomPainter shape regressions', () => {
     expect(marker?.getAttribute('markerUnits')).toBe('strokeWidth');
     expect(marker?.getAttribute('markerWidth')).toBe('4');
     expect(marker?.getAttribute('markerHeight')).toBe('4');
+    expect(childWrapper?.querySelector('feDropShadow')).toBeTruthy();
   });
 
   it('rotates and fits top-level WordArt textboxes with the shared drawing wrapper', () => {

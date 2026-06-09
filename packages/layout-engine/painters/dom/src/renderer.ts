@@ -3713,7 +3713,7 @@ export class DomPainter {
       const dropShadow = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feDropShadow');
       dropShadow.setAttribute('dx', this.formatSvgNumber(dx));
       dropShadow.setAttribute('dy', this.formatSvgNumber(dy));
-      dropShadow.setAttribute('stdDeviation', this.formatSvgNumber(shadow.blurRadius / 2));
+      dropShadow.setAttribute('stdDeviation', this.formatSvgNumber(this.getShadowStdDeviation(shadow)));
       dropShadow.setAttribute('flood-color', shadow.color);
       dropShadow.setAttribute('flood-opacity', this.formatSvgNumber(shadow.opacity));
 
@@ -3736,6 +3736,10 @@ export class DomPainter {
       dx: shadow.distance * Math.cos(radians),
       dy: shadow.distance * Math.sin(radians),
     };
+  }
+
+  private getShadowStdDeviation(shadow: ShapeOuterShadowEffect): number {
+    return Math.max(0, shadow.blurRadius / 2);
   }
 
   private findShapeEffectTargets(svgElement: SVGElement): SVGElement[] {
@@ -3786,7 +3790,7 @@ export class DomPainter {
 
     const blur = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feGaussianBlur');
     blur.setAttribute('in', 'SourceAlpha');
-    blur.setAttribute('stdDeviation', this.formatSvgNumber(shadow.blurRadius / 2));
+    blur.setAttribute('stdDeviation', this.formatSvgNumber(this.getShadowStdDeviation(shadow)));
     blur.setAttribute('result', 'blur');
 
     const { dx, dy } = this.computeShadowOffset(shadow);
@@ -4011,15 +4015,17 @@ export class DomPainter {
     if (child.shapeType !== 'vectorShape' || !('fillColor' in child.attrs)) {
       return { left: 0, top: 0, right: 0, bottom: 0 };
     }
+    const attrs = child.attrs as VectorShapeStyle;
     // Producers must include equivalent group-level effectExtent for edge children so the fragment can grow.
     // Line-end markers use effectExtent for marker sizing; do not overload it with stroke paint room.
-    if ('lineEnds' in child.attrs && child.attrs.lineEnds) {
+    const shadowExtent = this.getOuterShadowPaintExtent(attrs.effects?.outerShadow);
+    if (attrs.lineEnds) {
       return { left: 0, top: 0, right: 0, bottom: 0 };
     }
-    if (child.attrs.strokeColor === null) {
-      return { left: 0, top: 0, right: 0, bottom: 0 };
+    if (attrs.strokeColor === null) {
+      return shadowExtent;
     }
-    const rawStrokeWidth = child.attrs.strokeWidth;
+    const rawStrokeWidth = (child.attrs as { strokeWidth?: unknown }).strokeWidth;
     const parsedStrokeWidth =
       typeof rawStrokeWidth === 'number'
         ? rawStrokeWidth
@@ -4028,10 +4034,27 @@ export class DomPainter {
           : undefined;
     const strokeWidth = parsedStrokeWidth != null && Number.isFinite(parsedStrokeWidth) ? parsedStrokeWidth : 1;
     if (strokeWidth <= 0) {
-      return { left: 0, top: 0, right: 0, bottom: 0 };
+      return shadowExtent;
     }
     const extent = strokeWidth / 2;
-    return { left: extent, top: extent, right: extent, bottom: extent };
+    return {
+      left: Math.max(extent, shadowExtent.left),
+      top: Math.max(extent, shadowExtent.top),
+      right: Math.max(extent, shadowExtent.right),
+      bottom: Math.max(extent, shadowExtent.bottom),
+    };
+  }
+
+  private getOuterShadowPaintExtent(shadow?: ShapeOuterShadowEffect): EffectExtent {
+    if (!shadow) return { left: 0, top: 0, right: 0, bottom: 0 };
+    const { dx, dy } = this.computeShadowOffset(shadow);
+    const spread = this.getShadowStdDeviation(shadow) * 3;
+    return {
+      left: Math.max(0, spread - dx),
+      top: Math.max(0, spread - dy),
+      right: Math.max(0, spread + dx),
+      bottom: Math.max(0, spread + dy),
+    };
   }
 
   private createGroupChildContent(

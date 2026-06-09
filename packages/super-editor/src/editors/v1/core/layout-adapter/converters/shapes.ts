@@ -686,16 +686,39 @@ const getShapeGroupChildStrokeExtent = (child: ShapeGroupChild): number => {
   return getCenteredStrokeHalfExtent(child.attrs);
 };
 
+const getOuterShadowPaintExtent = (attrs: Record<string, unknown>): EffectExtent | undefined => {
+  if ('lineEnds' in attrs && attrs.lineEnds) return undefined;
+
+  const shadow = normalizeShapeEffects(attrs.effects)?.outerShadow;
+  if (!shadow) return undefined;
+
+  const radians = (shadow.direction * Math.PI) / 180;
+  const dx = shadow.distance * Math.cos(radians);
+  const dy = shadow.distance * Math.sin(radians);
+  const spread = Math.max(0, shadow.blurRadius / 2) * 3;
+  const extent = {
+    left: Math.max(0, spread - dx),
+    top: Math.max(0, spread - dy),
+    right: Math.max(0, spread + dx),
+    bottom: Math.max(0, spread + dy),
+  };
+
+  return hasEffectExtent(extent) ? extent : undefined;
+};
+
 const getRequiredVectorShapeEffectExtent = (attrs: Record<string, unknown>): EffectExtent | undefined => {
   const strokeExtent = getCenteredStrokeHalfExtent(attrs);
-  if (strokeExtent <= 0) return undefined;
+  const strokeEffectExtent =
+    strokeExtent > 0
+      ? {
+          left: strokeExtent,
+          top: strokeExtent,
+          right: strokeExtent,
+          bottom: strokeExtent,
+        }
+      : undefined;
 
-  return {
-    left: strokeExtent,
-    top: strokeExtent,
-    right: strokeExtent,
-    bottom: strokeExtent,
-  };
+  return mergeEffectExtents(strokeEffectExtent, getOuterShadowPaintExtent(attrs));
 };
 
 const getRequiredGroupEffectExtentFromChildren = (
@@ -706,18 +729,30 @@ const getRequiredGroupEffectExtentFromChildren = (
   const required: EffectExtent = { left: 0, top: 0, right: 0, bottom: 0 };
 
   for (const child of children) {
+    if (child.shapeType !== 'vectorShape' || !isPlainObject(child.attrs)) continue;
+
     const strokeExtent = getShapeGroupChildStrokeExtent(child);
-    if (strokeExtent <= 0 || !isPlainObject(child.attrs)) continue;
+    const strokeEffectExtent =
+      strokeExtent > 0
+        ? {
+            left: strokeExtent,
+            top: strokeExtent,
+            right: strokeExtent,
+            bottom: strokeExtent,
+          }
+        : undefined;
+    const paintExtent = mergeEffectExtents(strokeEffectExtent, getOuterShadowPaintExtent(child.attrs));
+    if (!paintExtent) continue;
 
     const childX = pickNumber(child.attrs.x) ?? 0;
     const childY = pickNumber(child.attrs.y) ?? 0;
     const childWidth = pickNumber(child.attrs.width) ?? 0;
     const childHeight = pickNumber(child.attrs.height) ?? 0;
 
-    required.left = Math.max(required.left, Math.max(0, strokeExtent - childX));
-    required.top = Math.max(required.top, Math.max(0, strokeExtent - childY));
-    required.right = Math.max(required.right, Math.max(0, childX + childWidth + strokeExtent - width));
-    required.bottom = Math.max(required.bottom, Math.max(0, childY + childHeight + strokeExtent - height));
+    required.left = Math.max(required.left, Math.max(0, paintExtent.left - childX));
+    required.top = Math.max(required.top, Math.max(0, paintExtent.top - childY));
+    required.right = Math.max(required.right, Math.max(0, childX + childWidth + paintExtent.right - width));
+    required.bottom = Math.max(required.bottom, Math.max(0, childY + childHeight + paintExtent.bottom - height));
   }
 
   return hasEffectExtent(required) ? required : undefined;

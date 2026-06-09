@@ -80,6 +80,37 @@ describe('shapes converter', () => {
       expect(result.effectExtent).toEqual({ left: 1, top: 1, right: 2, bottom: 3 });
     });
 
+    it('supplements standalone vector shape effect extent for outer shadows', () => {
+      const node: PMNode = {
+        type: 'vectorShape',
+        attrs: {
+          width: 100,
+          height: 50,
+          fillColor: '#f2f2f2',
+          strokeColor: null,
+          effects: {
+            outerShadow: {
+              type: 'outerShadow',
+              blurRadius: 6.6667,
+              distance: 6.6667,
+              direction: 45,
+              color: '#757574',
+              opacity: 0.4,
+            },
+          },
+        },
+      };
+
+      const result = vectorShapeNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.effectExtent?.left).toBeCloseTo(5.286);
+      expect(result.effectExtent?.top).toBeCloseTo(5.286);
+      expect(result.effectExtent?.right).toBeCloseTo(14.714);
+      expect(result.effectExtent?.bottom).toBeCloseTo(14.714);
+      expect(result.geometry.width).toBeCloseTo(120);
+      expect(result.geometry.height).toBeCloseTo(70);
+    });
+
     it('uses default dimensions when width/height are invalid', () => {
       const node: PMNode = {
         type: 'vectorShape',
@@ -453,6 +484,55 @@ describe('shapes converter', () => {
       expect(result.effectExtent?.top).toBeCloseTo(1.125);
       expect(result.geometry.height).toBeCloseTo(51.125);
       expect(result.groupTransform?.height).toBe(50);
+    });
+
+    it('supplements group effect extent when child shadow exceeds the imported value', () => {
+      const node: PMNode = {
+        type: 'shapeGroup',
+        attrs: {
+          size: { width: 505, height: 62 },
+          groupTransform: {
+            x: 0,
+            y: 0,
+            width: 505,
+            height: 62,
+          },
+          effectExtent: { left: 0, top: 0, right: 13, bottom: 12 },
+          shapes: [
+            {
+              shapeType: 'vectorShape',
+              attrs: {
+                x: 7,
+                y: 11,
+                width: 497,
+                height: 50,
+                fillColor: '#616565',
+                strokeColor: null,
+                effects: {
+                  outerShadow: {
+                    type: 'outerShadow',
+                    blurRadius: 6.6667,
+                    distance: 6.6667,
+                    direction: 45,
+                    color: '#757574',
+                    opacity: 0.4,
+                  },
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      const result = shapeGroupNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock;
+
+      expect(result.effectExtent?.left).toBe(0);
+      expect(result.effectExtent?.top).toBe(0);
+      expect(result.effectExtent?.right).toBeCloseTo(13.714);
+      expect(result.effectExtent?.bottom).toBeCloseTo(13.714);
+      expect(result.geometry.width).toBeCloseTo(518.714);
+      expect(result.geometry.height).toBeCloseTo(75.714);
+      expect(result.groupTransform?.height).toBe(62);
     });
 
     it('measures child stroke overflow in group transform coordinates when size differs', () => {

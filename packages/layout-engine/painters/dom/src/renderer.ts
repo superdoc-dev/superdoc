@@ -3966,6 +3966,20 @@ export class DomPainter {
       // Container at visible dimensions. Children use pre-scaled positions/sizes.
       inner.style.width = `${Math.max(1, visibleWidth)}px`;
       inner.style.height = `${Math.max(1, visibleHeight)}px`;
+      const groupTransforms: string[] = [];
+      if (groupTransform?.rotation) {
+        groupTransforms.push(`rotate(${groupTransform.rotation}deg)`);
+      }
+      if (groupTransform?.flipH) {
+        groupTransforms.push('scaleX(-1)');
+      }
+      if (groupTransform?.flipV) {
+        groupTransforms.push('scaleY(-1)');
+      }
+      if (groupTransforms.length > 0) {
+        inner.style.transformOrigin = 'center';
+        inner.style.transform = groupTransforms.join(' ');
+      }
       groupEl.appendChild(inner);
       contentContainer = inner;
     }

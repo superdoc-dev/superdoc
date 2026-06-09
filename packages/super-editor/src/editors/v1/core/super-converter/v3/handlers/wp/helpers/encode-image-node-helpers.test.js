@@ -640,6 +640,89 @@ describe('handleImageNode', () => {
     expect(result.attrs.textContent).toBeDefined();
   });
 
+  it('keeps shape group rotation and flips on the group instead of each child', () => {
+    rotToDegrees.mockImplementation((rot) => parseInt(rot, 10) / 60000);
+    extractFillColor.mockReturnValue('#ffffff');
+    extractStrokeColor.mockReturnValue(null);
+    extractStrokeWidth.mockReturnValue(0);
+
+    const makeGroupedShape = ({ x, id }) => ({
+      name: 'wps:wsp',
+      elements: [
+        {
+          name: 'wps:spPr',
+          elements: [
+            { name: 'a:prstGeom', attributes: { prst: 'rect' } },
+            {
+              name: 'a:xfrm',
+              elements: [
+                { name: 'a:off', attributes: { x: String(x), y: '0' } },
+                { name: 'a:ext', attributes: { cx: '50000', cy: '50000' } },
+              ],
+            },
+          ],
+        },
+        { name: 'wps:cNvPr', attributes: { id, name: `Shape ${id}` } },
+      ],
+    });
+
+    const node = {
+      attributes: {},
+      elements: [
+        { name: 'wp:extent', attributes: { cx: '200000', cy: '100000' } },
+        {
+          name: 'a:graphic',
+          elements: [
+            {
+              name: 'a:graphicData',
+              attributes: { uri: 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup' },
+              elements: [
+                {
+                  name: 'wpg:wgp',
+                  elements: [
+                    {
+                      name: 'wpg:grpSpPr',
+                      elements: [
+                        {
+                          name: 'a:xfrm',
+                          attributes: { rot: '5400000', flipH: '1', flipV: '1' },
+                          elements: [
+                            { name: 'a:off', attributes: { x: '0', y: '0' } },
+                            { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                            { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                            { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                          ],
+                        },
+                      ],
+                    },
+                    makeGroupedShape({ x: 0, id: '1' }),
+                    makeGroupedShape({ x: 100000, id: '2' }),
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result.type).toBe('shapeGroup');
+    expect(result.attrs.groupTransform).toMatchObject({
+      rotation: 90,
+      flipH: true,
+      flipV: true,
+      width: 200,
+      height: 100,
+    });
+    expect(result.attrs.shapes).toHaveLength(2);
+    expect(result.attrs.shapes.map((shape) => shape.attrs.x)).toEqual([0, 100]);
+    expect(result.attrs.shapes.map((shape) => shape.attrs.rotation)).toEqual([0, 0]);
+    expect(result.attrs.shapes.map((shape) => shape.attrs.flipH)).toEqual([false, false]);
+    expect(result.attrs.shapes.map((shape) => shape.attrs.flipV)).toEqual([false, false]);
+  });
+
   describe('wrap types', () => {
     it('handles wrap type None', () => {
       const node = makeNode();

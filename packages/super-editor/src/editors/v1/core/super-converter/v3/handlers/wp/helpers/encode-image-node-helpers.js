@@ -825,7 +825,7 @@ const buildShapeGroupTransformAttrs = (xfrm) => {
 
 const getGroupAffineTransform = (xfrm) => {
   if (!xfrm) {
-    return { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotation: 0, flipH: false, flipV: false };
+    return { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0 };
   }
 
   const off = findChildByLocalName(xfrm.elements, 'off');
@@ -849,9 +849,6 @@ const getGroupAffineTransform = (xfrm) => {
     scaleY,
     translateX: x - childX * scaleX,
     translateY: y - childY * scaleY,
-    rotation: xfrm.attributes?.['rot'] ? rotToDegrees(xfrm.attributes['rot']) : 0,
-    flipH: xfrm.attributes?.['flipH'] === '1',
-    flipV: xfrm.attributes?.['flipV'] === '1',
   };
 };
 
@@ -860,9 +857,6 @@ const composeShapeGroupTransform = (parent, child) => ({
   scaleY: parent.scaleY * child.scaleY,
   translateX: parent.scaleX * child.translateX + parent.translateX,
   translateY: parent.scaleY * child.translateY + parent.translateY,
-  rotation: (parent.rotation ?? 0) + (child.rotation ?? 0),
-  flipH: Boolean(parent.flipH) !== Boolean(child.flipH),
-  flipV: Boolean(parent.flipV) !== Boolean(child.flipV),
 });
 
 const transformShapeGroupChildRect = (transform, rawX, rawY, rawWidth, rawHeight) => ({
@@ -870,9 +864,6 @@ const transformShapeGroupChildRect = (transform, rawX, rawY, rawWidth, rawHeight
   y: emuToPixels(transform.translateY + transform.scaleY * rawY),
   width: emuToPixels(transform.scaleX * rawWidth),
   height: emuToPixels(transform.scaleY * rawHeight),
-  rotation: transform.rotation ?? 0,
-  flipH: Boolean(transform.flipH),
-  flipV: Boolean(transform.flipV),
 });
 
 const resolveShapeGroupPicturePath = (pic, params) => {

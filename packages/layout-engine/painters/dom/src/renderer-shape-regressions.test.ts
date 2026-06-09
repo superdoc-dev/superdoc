@@ -751,6 +751,63 @@ describe('DomPainter shape regressions', () => {
     expect(childWrapper?.style.height).toBe('54px');
   });
 
+  it('applies shape group rotation and flips to the group content container', () => {
+    const geometry: DrawingGeometry = { width: 200, height: 100, rotation: 0, flipH: false, flipV: false };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'shape-group-container-transform',
+      drawingKind: 'shapeGroup',
+      geometry,
+      groupTransform: {
+        width: 200,
+        height: 100,
+        rotation: 90,
+        flipH: true,
+        flipV: true,
+      },
+      shapes: [
+        {
+          shapeType: 'vectorShape',
+          attrs: {
+            x: 0,
+            y: 0,
+            width: 50,
+            height: 50,
+            kind: 'rect',
+            fillColor: '#E2E8F0',
+            strokeColor: null,
+          },
+        },
+        {
+          shapeType: 'vectorShape',
+          attrs: {
+            x: 100,
+            y: 0,
+            width: 50,
+            height: 50,
+            kind: 'rect',
+            fillColor: '#CBD5E1',
+            strokeColor: null,
+          },
+        },
+      ],
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const groupContent = mount.querySelector('.superdoc-shape-group > div') as HTMLElement | null;
+    const childWrappers = mount.querySelectorAll('.superdoc-shape-group__child');
+
+    expect(groupContent?.style.transformOrigin).toBe('center');
+    expect(groupContent?.style.transform).toBe('rotate(90deg) scaleX(-1) scaleY(-1)');
+    expect(childWrappers).toHaveLength(2);
+    expect((childWrappers[0] as HTMLElement).style.transform).toBe('');
+    expect((childWrappers[1] as HTMLElement).style.transform).toBe('');
+  });
+
   it('does not add grouped child paint room when stroke is disabled', () => {
     const geometry: DrawingGeometry = { width: 120, height: 120, rotation: 0, flipH: false, flipV: false };
 

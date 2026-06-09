@@ -443,6 +443,53 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(activateRenderedNoteSession).not.toHaveBeenCalled();
   });
 
+  describe('SD-3400: double-click a body footnote/endnote reference navigates to the note', () => {
+    const makeRefSpan = (pmStart: number, text: string) => {
+      const refEl = document.createElement('span');
+      refEl.setAttribute('data-pm-start', String(pmStart));
+      refEl.setAttribute('data-pm-end', String(pmStart + 1));
+      refEl.textContent = text;
+      viewportHost.appendChild(refEl);
+      return refEl;
+    };
+
+    it('activates the footnote session for the referenced note', () => {
+      (mockEditor.state.doc as unknown as { nodeAt: (pos: number) => unknown }).nodeAt = (pos: number) =>
+        pos === 38 ? { type: { name: 'footnoteReference' }, attrs: { id: '3' } } : null;
+      const refEl = makeRefSpan(38, '3');
+
+      refEl.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 5, clientY: 5 }));
+
+      expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+        { storyType: 'footnote', noteId: '3' },
+        expect.objectContaining({ clientX: 5, clientY: 5 }),
+      );
+    });
+
+    it('activates the endnote session for a body endnote reference', () => {
+      (mockEditor.state.doc as unknown as { nodeAt: (pos: number) => unknown }).nodeAt = (pos: number) =>
+        pos === 50 ? { type: { name: 'endnoteReference' }, attrs: { id: '2' } } : null;
+      const refEl = makeRefSpan(50, 'ii');
+
+      refEl.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 7, clientY: 9 }));
+
+      expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+        { storyType: 'endnote', noteId: '2' },
+        expect.objectContaining({ clientX: 7, clientY: 9 }),
+      );
+    });
+
+    it('does not activate when double-clicking ordinary body text', () => {
+      (mockEditor.state.doc as unknown as { nodeAt: (pos: number) => unknown }).nodeAt = (pos: number) =>
+        pos === 12 ? { type: { name: 'text' }, attrs: {} } : null;
+      const refEl = makeRefSpan(12, 'word');
+
+      refEl.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 5, clientY: 5 }));
+
+      expect(activateRenderedNoteSession).not.toHaveBeenCalled();
+    });
+  });
+
   it('does not activate a note session on semantic footnotes heading click', () => {
     (resolvePointerPositionHit as unknown as Mock).mockReturnValue(null);
 

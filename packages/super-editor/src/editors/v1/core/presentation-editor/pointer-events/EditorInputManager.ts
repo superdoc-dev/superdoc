@@ -1892,6 +1892,29 @@ export class EditorInputManager {
     this.#callbacks.clearHoverRegion?.();
   }
 
+  /**
+   * SD-3400: resolve a double-clicked BODY footnote/endnote reference marker to
+   * its note target so navigation can open the corresponding note. The painted
+   * reference is a superscript run carrying `data-pm-start` (the PM position of
+   * the footnoteReference/endnoteReference node) but no note id, so we read the
+   * node at that position to recover the story type and id.
+   */
+  #resolveFootnoteReferenceTargetAtPointer(target: HTMLElement | null): RenderedNoteTarget | null {
+    const refEl = target?.closest?.('[data-pm-start]') as HTMLElement | null;
+    if (!refEl) return null;
+    const pmStart = Number(refEl.getAttribute('data-pm-start'));
+    if (!Number.isFinite(pmStart)) return null;
+    const node = this.#deps?.getEditor()?.state?.doc?.nodeAt(pmStart);
+    const nodeType = node?.type?.name;
+    if (nodeType !== 'footnoteReference' && nodeType !== 'endnoteReference') return null;
+    const noteId = node?.attrs?.id;
+    if (noteId == null || String(noteId).length === 0) return null;
+    return {
+      storyType: nodeType === 'endnoteReference' ? 'endnote' : 'footnote',
+      noteId: String(noteId),
+    };
+  }
+
   #handleDoubleClick(event: MouseEvent): void {
     if (!this.#deps) return;
     if (event.button !== 0) return;
@@ -1913,6 +1936,21 @@ export class EditorInputManager {
 
     const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
     if (!normalized) return;
+
+    // SD-3400: double-clicking a BODY footnote/endnote reference marker navigates
+    // to its note content. Activating the note session focuses the note and scrolls
+    // its selection into view, so the user lands on the corresponding note.
+    const footnoteRefTarget = this.#resolveFootnoteReferenceTargetAtPointer(target);
+    if (footnoteRefTarget) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.#callbacks.activateRenderedNoteSession?.(footnoteRefTarget, {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        pageIndex: normalized.pageIndex,
+      });
+      return;
+    }
 
     const clickedNoteTarget = this.#resolveRenderedNoteTargetAtPointer(target, event.clientX, event.clientY);
     if (clickedNoteTarget) {

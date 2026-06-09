@@ -7050,6 +7050,79 @@ describe('DomPainter', () => {
     expect(shapeEl?.textContent).toContain('Contract ACC');
   });
 
+  it('renders textboxShape with contentMeasures as superdoc-line DOM inside table cell', () => {
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'table-cell-textbox-lines',
+      drawingKind: 'textboxShape',
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      textInsets: { top: 4, right: 8, bottom: 4, left: 12 },
+      contentBlocks: [
+        {
+          kind: 'paragraph',
+          id: 'cell-textbox-para',
+          runs: [{ text: 'Cell text', fontFamily: 'Arial', fontSize: 14, pmStart: 5, pmEnd: 14 }],
+        },
+      ],
+      contentMeasures: [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 9, width: 80, ascent: 12, descent: 4, lineHeight: 18 }],
+          totalHeight: 18,
+        },
+      ],
+    };
+
+    const tableBlock: TableBlock = {
+      kind: 'table',
+      id: 'table-cell-textbox',
+      rows: [{ id: 'row-0', cells: [{ id: 'cell-0', blocks: [textboxBlock], attrs: {} }] }],
+    };
+
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 120,
+      height: 80,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 80,
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+    };
+    const tableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [{ height: 80, cells: [{ width: 140, height: 80, gridColumnStart: 0, blocks: [textboxMeasure] }] }],
+      columnWidths: [140],
+      totalWidth: 140,
+      totalHeight: 80,
+    };
+
+    const tableLayout: Layout = {
+      pageSize: { w: 300, h: 300 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            { kind: 'table', blockId: 'table-cell-textbox', x: 0, y: 0, width: 140, height: 80, fromRow: 0, toRow: 1 },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tableBlock], measures: [tableMeasure] });
+    painter.paint(tableLayout, mount);
+
+    const wrapper = mount.querySelector('[data-block-id="table-cell-textbox-lines"]') as HTMLElement | null;
+    const lineEl = mount.querySelector('.superdoc-line') as HTMLElement | null;
+
+    expect(wrapper).toBeTruthy();
+    expect(lineEl).toBeTruthy();
+    expect(lineEl?.dataset.pmStart).toBe('5');
+    expect(lineEl?.dataset.pmEnd).toBe('14');
+    expect(mount.querySelector('.superdoc-vector-shape')?.textContent).toContain('Cell text');
+  });
+
   it('renders formatted PAGE fields in drawing text', () => {
     const vectorShapeBlock: FlowBlock = {
       kind: 'drawing',

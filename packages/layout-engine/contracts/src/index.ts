@@ -1230,6 +1230,8 @@ export type TextboxDrawing = DrawingBlockBase & {
     left: number;
   };
   contentBlocks: ParagraphBlock[];
+  /** Paragraph layout results for table-cell textboxes; populated by the layout bridge, read by the painter. */
+  contentMeasures?: ParagraphMeasure[];
 };
 
 export type ShapeGroupDrawing = DrawingBlockBase & {

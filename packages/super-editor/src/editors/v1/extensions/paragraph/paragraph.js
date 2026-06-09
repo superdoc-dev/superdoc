@@ -386,14 +386,16 @@ export const Paragraph = OxmlNode.create({
             // We avoid `findParentNode(isList)` here because `isList` depends on
             // `getResolvedParagraphProperties`, a WeakMap cache keyed by node
             // identity. After the numbering plugin's `appendTransaction` sets
-            // `listRendering`, the paragraph node object is replaced, leaving
-            // the new node uncached — causing `isList` to return false.
+            // `listRendering`, the paragraph node object is replaced, so the
+            // new node is uncached and `isList` can return false.
             const { $from } = selection;
             let paragraph = null;
+            let paragraphDepth = null;
             for (let d = $from.depth; d >= 0; d--) {
               const node = $from.node(d);
               if (node.type.name === 'paragraph') {
                 paragraph = node;
+                paragraphDepth = d;
                 break;
               }
             }
@@ -404,7 +406,18 @@ export const Paragraph = OxmlNode.create({
             if (!isListParagraph) return false;
             if (!isVisuallyEmptyParagraph(paragraph) && !hasOnlyBreakContent(paragraph)) return false;
 
-            const tr = state.tr.insertText(event.data);
+            let tr = state.tr;
+            if (hasOnlyBreakContent(paragraph) && paragraphDepth != null) {
+              const contentStart = $from.start(paragraphDepth);
+              const contentEnd = $from.end(paragraphDepth);
+              tr = tr.delete(contentStart, contentEnd).insertText(event.data, contentStart);
+              // insertText at an explicit position leaves the caret before the inserted
+              // text, so subsequent native keystrokes prepend instead of append (typing
+              // "abcdef" lands as "bcdefa"). Place the caret after the inserted text.
+              tr = tr.setSelection(TextSelection.create(tr.doc, contentStart + event.data.length));
+            } else {
+              tr = tr.insertText(event.data);
+            }
             view.dispatch(tr);
             event.preventDefault();
             return true;

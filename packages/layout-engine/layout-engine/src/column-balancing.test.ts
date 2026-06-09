@@ -555,4 +555,190 @@ describe('balanceSectionOnPage', () => {
 
     expect(result).toBeNull();
   });
+
+  // SD-3359: Word balances a continuous multi-column section by flowing content
+  // line-by-line — a paragraph that straddles the column boundary SPLITS at a line
+  // boundary (the IT-1150 complaint). Atomic per-fragment assignment leaves the
+  // columns lumpy whenever one fragment is large relative to the section.
+  describe('paragraph line splitting across columns (SD-3359)', () => {
+    type SplitFragment = TestFragment & {
+      fromLine?: number;
+      toLine?: number;
+      continuesFromPrev?: boolean;
+      continuesOnNext?: boolean;
+    };
+    const LINE = 20;
+    const TOP = 96;
+    const COL1_X = 96 + 288 + 48;
+
+    /** A (5 lines) + B (3 lines) + C (14 lines): atomic best is 160 | 280 (120px lumpy);
+     * line-balanced is 220 | 220 with C split across the boundary. */
+    function straddleFixture(cLines = 14): {
+      fragments: SplitFragment[];
+      measureMap: Map<string, { kind: string; lines: Array<{ lineHeight: number }> }>;
+      blockSectionMap: Map<string, number>;
+    } {
+      const mk = (id: string, y: number): SplitFragment => ({
+        blockId: id,
+        x: 96,
+        y,
+        width: 624,
+        kind: 'para',
+      });
+      const fragments = [mk('A', TOP), mk('B', TOP + 100), mk('C', TOP + 160)];
+      const measureMap = new Map<string, { kind: string; lines: Array<{ lineHeight: number }> }>([
+        ['A', createMeasure('paragraph', Array(5).fill(LINE))],
+        ['B', createMeasure('paragraph', Array(3).fill(LINE))],
+        ['C', createMeasure('paragraph', Array(cLines).fill(LINE))],
+      ]);
+      const blockSectionMap = new Map<string, number>([
+        ['A', 1],
+        ['B', 1],
+        ['C', 1],
+      ]);
+      return { fragments, measureMap, blockSectionMap };
+    }
+
+    const balance = (
+      fragments: SplitFragment[],
+      measureMap: Map<string, { kind: string; lines: Array<{ lineHeight: number }> }>,
+      blockSectionMap: Map<string, number>,
+      extra: Record<string, unknown> = {},
+    ) =>
+      balanceSectionOnPage({
+        fragments,
+        sectionIndex: 1,
+        sectionColumns: { count: 2, gap: 48, width: 288 },
+        sectionHasExplicitColumnBreak: false,
+        blockSectionMap,
+        margins: { left: 96 },
+        topMargin: TOP,
+        columnWidth: 288,
+        availableHeight: 720,
+        measureMap,
+        ...extra,
+      });
+
+    it('splits a straddling paragraph at a line boundary so columns balance', () => {
+      const { fragments, measureMap, blockSectionMap } = straddleFixture();
+
+      const result = balance(fragments, measureMap, blockSectionMap);
+
+      expect(result).not.toBeNull();
+      // C was split into two fragments.
+      const cFrags = fragments.filter((f) => f.blockId === 'C') as SplitFragment[];
+      expect(cFrags.length).toBe(2);
+      const [c1, c2] = cFrags.sort((a, b) => (a.fromLine ?? 0) - (b.fromLine ?? 0));
+      // The halves partition C's lines contiguously.
+      expect(c1.toLine).toBe(c2.fromLine!);
+      expect(c2.toLine).toBe(14);
+      // First half continues in col 0 below A+B; second half tops col 1.
+      expect(c1.x).toBe(96);
+      expect(c2.x).toBe(COL1_X);
+      expect(c2.y).toBe(TOP);
+      expect(c1.continuesOnNext).toBe(true);
+      expect(c2.continuesFromPrev).toBe(true);
+      // Column bottoms balance within one line height (vs 120px atomic lumpiness).
+      const bottom = (f: SplitFragment): number => {
+        const from = f.fromLine ?? 0;
+        const to = f.toLine ?? measureMap.get(f.blockId)!.lines.length;
+        return f.y + (to - from) * LINE;
+      };
+      const col0Bottom = Math.max(...fragments.filter((f) => f.x === 96).map(bottom));
+      const col1Bottom = Math.max(...fragments.filter((f) => f.x === COL1_X).map(bottom));
+      expect(Math.abs(col0Bottom - col1Bottom)).toBeLessThanOrEqual(LINE);
+      // The balanced bottom beats the atomic assignment (TOP + 280).
+      expect(result!.maxY).toBeLessThan(TOP + 280);
+      expect(result!.maxY).toBe(Math.max(col0Bottom, col1Bottom));
+    });
+
+    it('does not split a paragraph with keepLines (author intent wins)', () => {
+      const { fragments, measureMap, blockSectionMap } = straddleFixture();
+
+      const result = balance(fragments, measureMap, blockSectionMap, {
+        keepLinesBlockIds: new Set(['C']),
+      });
+
+      expect(result).not.toBeNull();
+      // C stays whole — no extra fragment, no partial line range.
+      expect(fragments.filter((f) => f.blockId === 'C').length).toBe(1);
+      const c = fragments.find((f) => f.blockId === 'C')! as SplitFragment;
+      expect(c.fromLine ?? 0).toBe(0);
+      expect(c.toLine ?? 14).toBe(14);
+    });
+
+    it('balances a single tall paragraph alone in the section by splitting it', () => {
+      const { fragments, measureMap, blockSectionMap } = straddleFixture();
+      const only = [{ ...fragments[2], y: TOP }]; // C alone (14 lines = 280px)
+
+      const result = balance(only, measureMap, blockSectionMap);
+
+      // Previously skipped (single atomic block can't distribute); a breakable
+      // paragraph CAN balance — Word splits it across the columns.
+      expect(result).not.toBeNull();
+      expect(only.length).toBe(2);
+      const [c1, c2] = (only as SplitFragment[]).sort((a, b) => (a.fromLine ?? 0) - (b.fromLine ?? 0));
+      expect(c1.toLine).toBe(c2.fromLine!);
+      expect(c2.toLine).toBe(14);
+      expect(result!.maxY).toBeLessThan(TOP + 280);
+    });
+
+    it('slices remeasured fragment.lines across the split (no duplicated halves)', () => {
+      // A fragment remeasured for a narrower column carries its own `lines`, and
+      // resolveParagraph renders that array INSTEAD of measure.lines[fromLine..toLine].
+      // The split must slice `lines` for each half, or both columns render the whole
+      // paragraph. The remeasured heights (22px) also differ from the stale measure
+      // (20px), so the break point and cursors must come from the remeasured lines.
+      const { fragments, measureMap, blockSectionMap } = straddleFixture();
+      const REMEASURED = 22;
+      const c = fragments[2] as SplitFragment & { lines?: Array<{ lineHeight: number }> };
+      c.lines = Array.from({ length: 14 }, () => ({ lineHeight: REMEASURED }));
+
+      const result = balance(fragments, measureMap, blockSectionMap);
+
+      expect(result).not.toBeNull();
+      const cFrags = (
+        fragments.filter((f) => f.blockId === 'C') as Array<SplitFragment & { lines?: Array<{ lineHeight: number }> }>
+      ).sort((a, b) => (a.fromLine ?? 0) - (b.fromLine ?? 0));
+      expect(cFrags.length).toBe(2);
+      const [c1, c2] = cFrags;
+      // Each half carries ONLY its own remeasured lines, partitioning the original 14.
+      expect(c1.lines).toBeDefined();
+      expect(c2.lines).toBeDefined();
+      expect(c1.lines!.length + c2.lines!.length).toBe(14);
+      expect(c1.lines!.length).toBe((c1.toLine ?? 0) - (c1.fromLine ?? 0));
+      expect(c2.lines!.length).toBe(c2.toLine! - c2.fromLine!);
+      // Cursors advanced by the remeasured heights: the second column's bottom is
+      // its line count at 22px, not at the stale 20px measure.
+      const col1Frags = fragments.filter((f) => f.x === COL1_X) as Array<
+        SplitFragment & { lines?: Array<{ lineHeight: number }> }
+      >;
+      const col1Bottom = Math.max(
+        ...col1Frags.map((f) => f.y + (f.lines ? f.lines.reduce((s, l) => s + l.lineHeight, 0) : 0)),
+      );
+      expect(col1Bottom).toBe(result!.maxY);
+    });
+
+    it('offsets the split by the fragment fromLine when pagination already split the paragraph', () => {
+      const { fragments, measureMap, blockSectionMap } = straddleFixture();
+      // C is the tail of a 16-line paragraph: this page renders lines [2, 16).
+      measureMap.set('C', createMeasure('paragraph', Array(16).fill(LINE)));
+      const c = fragments[2];
+      c.fromLine = 2;
+      c.toLine = 16;
+
+      const result = balance(fragments, measureMap, blockSectionMap);
+
+      expect(result).not.toBeNull();
+      const cFrags = (fragments.filter((f) => f.blockId === 'C') as SplitFragment[]).sort(
+        (a, b) => (a.fromLine ?? 0) - (b.fromLine ?? 0),
+      );
+      expect(cFrags.length).toBe(2);
+      const [c1, c2] = cFrags;
+      expect(c1.fromLine).toBe(2);
+      expect(c1.toLine).toBe(c2.fromLine!);
+      expect(c2.toLine).toBe(16);
+      expect(c2.fromLine!).toBeGreaterThan(2);
+    });
+  });
 });

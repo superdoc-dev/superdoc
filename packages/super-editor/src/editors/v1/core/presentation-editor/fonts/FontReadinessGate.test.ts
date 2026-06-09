@@ -6,6 +6,7 @@ import type {
   FontLoadResult,
   FontLoadStatus,
   FontRegistry,
+  UsedFace,
 } from '@superdoc/font-system';
 import { FontReadinessGate, type FontEnvironment } from './FontReadinessGate';
 
@@ -500,5 +501,57 @@ describe('FontReadinessGate', () => {
       expect(second.loaded).toBe(0);
       expect(second.results).toEqual([]);
     });
+  });
+});
+
+describe('FontReadinessGate.getDocumentFontOptions (document-used fonts, public read API)', () => {
+  // The full public chain needs a painted render plan, so this covers the gate seam that owns used-face wiring.
+  class FaceRegistry {
+    getStatus(): FontLoadStatus {
+      return 'unloaded';
+    }
+    getFaceStatus(): FontLoadStatus {
+      return 'unloaded';
+    }
+    hasFace(): boolean {
+      return false;
+    }
+    asRegistry(): FontRegistry {
+      return this as unknown as FontRegistry;
+    }
+  }
+
+  const regular = (logicalFamily: string): UsedFace => ({ logicalFamily, weight: '400', style: 'normal' });
+
+  function makeOptionsGate(getUsedFaces: () => UsedFace[], documentFonts: string[] = []) {
+    return new FontReadinessGate({
+      registry: new FaceRegistry().asRegistry(),
+      getDocumentFonts: () => documentFonts,
+      getUsedFaces,
+      requestReflow: vi.fn(),
+      invalidateCaches: vi.fn(),
+      getFontEnvironment: () => null,
+    });
+  }
+
+  it('returns one option per RENDERED font, ignoring declared-but-unused font-table rows and the defaults', () => {
+    const gate = makeOptionsGate(() => [regular('Aptos')], ['Calibri', 'Georgia', 'Aptos']);
+
+    const options = gate.getDocumentFontOptions();
+
+    expect(options.map((o) => o.logicalFamily)).toEqual(['Aptos']);
+    expect(options[0]).toEqual({ logicalFamily: 'Aptos', previewFamily: 'Aptos' });
+  });
+
+  it('returns [] when the document renders no fonts, even with declared families (no defaults leak in)', () => {
+    const gate = makeOptionsGate(() => [], ['Calibri', 'Arial']);
+    expect(gate.getDocumentFontOptions()).toEqual([]);
+  });
+
+  it('never throws (font UI must not break layout): returns [] when the used-faces read fails', () => {
+    const gate = makeOptionsGate(() => {
+      throw new Error('render plan unavailable');
+    });
+    expect(gate.getDocumentFontOptions()).toEqual([]);
   });
 });

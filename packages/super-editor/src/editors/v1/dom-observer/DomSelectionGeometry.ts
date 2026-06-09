@@ -576,6 +576,31 @@ export function computeDomCaretPageLocal(
   const boundary = resolveTextBoundaryInElement(targetEl, pos, entry.pmStart, entry.pmEnd, 'forward');
   if (!boundary) {
     const elRect = targetEl.getBoundingClientRect();
+
+    if (targetEl.classList.contains('superdoc-line')) {
+      const paddingLeft = parseFloat(targetEl.style.paddingLeft) || 0;
+      const paddingRight = parseFloat(targetEl.style.paddingRight) || 0;
+      const lineLeft = (elRect.left - pageRect.left) / zoom + paddingLeft;
+      const lineRight = (elRect.right - pageRect.left) / zoom - paddingRight;
+      // AIDEV-NOTE: DomPainter resolves OOXML start/end and RTL defaults to physical
+      // left/right textAlign on .superdoc-line. If painter emits CSS logical values,
+      // update this branch to resolve them before choosing x.
+      const textAlign = targetEl.style.textAlign;
+      let x: number;
+      if (textAlign === 'center') {
+        x = (lineLeft + lineRight) / 2;
+      } else if (textAlign === 'right') {
+        x = lineRight;
+      } else {
+        x = lineLeft;
+      }
+      return {
+        pageIndex: Number(page.dataset.pageIndex ?? '0'),
+        x,
+        y: (elRect.top - pageRect.top) / zoom,
+      };
+    }
+
     // For non-text elements (images, math), position caret at the right edge
     // when pos matches pmEnd (cursor after the element)
     const isEmptySdtPlaceholder =
@@ -583,7 +608,8 @@ export function computeDomCaretPageLocal(
       targetEl.classList.contains('superdoc-empty-inline-sdt-placeholder') ||
       targetEl.classList.contains('superdoc-empty-block-sdt-placeholder');
     const atEnd = isEmptySdtPlaceholder ? pos > entry.pmEnd : pos >= entry.pmEnd;
-    const lineEl = isEmptySdtPlaceholder ? (targetEl.closest('.superdoc-line') as HTMLElement | null) : null;
+    const useLineTopForY = isEmptySdtPlaceholder || targetEl.classList.contains('superdoc-tab');
+    const lineEl = useLineTopForY ? (targetEl.closest('.superdoc-line') as HTMLElement | null) : null;
     const yRect = lineEl?.getBoundingClientRect() ?? elRect;
     return {
       pageIndex: Number(page.dataset.pageIndex ?? '0'),

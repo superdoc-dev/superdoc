@@ -30,6 +30,7 @@ ContextMenu
 CoreCommandMap
 CreateHeadlessToolbarOptions
 DocumentApi
+DocumentFontOption
 DocumentProtectionState
 DocxEncryptionError
 DocxEncryptionErrorCode

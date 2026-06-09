@@ -1620,6 +1620,263 @@ describe('computeDomCaretPageLocal', () => {
       });
     });
 
+    it('anchors the caret Y to the line top for a trailing tab (not the bottom-aligned tab box)', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="6">hello</span>
+            <span class="superdoc-tab" data-pm-start="6" data-pm-end="7"></span>
+          </div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const lineEl = painterHost.querySelector('.superdoc-line') as HTMLElement;
+      const tabEl = painterHost.querySelector('.superdoc-tab') as HTMLElement;
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      lineEl.getBoundingClientRect = vi.fn(() => createRect(10, 20, 100, 16));
+      tabEl.getBoundingClientRect = vi.fn(() => createRect(60, 28, 48, 8));
+
+      const options = createCaretOptions();
+      const caret = computeDomCaretPageLocal(options, 7);
+
+      expect(caret).not.toBe(null);
+      expect(caret).toMatchObject({
+        pageIndex: 0,
+        x: 108,
+        y: 20,
+      });
+    });
+
+    it('positions the caret at the line start (not the page right edge) for a soft-break continuation line', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="6">hello</span>
+          </div>
+          <div class="superdoc-line" data-pm-start="6" data-pm-end="7"></div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const lines = painterHost.querySelectorAll('.superdoc-line');
+      const continuationLine = lines[1] as HTMLElement;
+      continuationLine.style.textAlign = 'left';
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      continuationLine.getBoundingClientRect = vi.fn(() => createRect(72, 40, 468, 16));
+
+      const options = createCaretOptions();
+      const caret = computeDomCaretPageLocal(options, 7);
+
+      expect(caret).not.toBe(null);
+      expect(caret).toMatchObject({
+        pageIndex: 0,
+        x: 72,
+        y: 40,
+      });
+    });
+
+    it('positions the soft-break continuation caret at the right edge for a right-aligned line', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="6">hello</span>
+          </div>
+          <div class="superdoc-line" data-pm-start="6" data-pm-end="7"></div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const lines = painterHost.querySelectorAll('.superdoc-line');
+      const continuationLine = lines[1] as HTMLElement;
+
+      continuationLine.style.textAlign = 'right';
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      continuationLine.getBoundingClientRect = vi.fn(() => createRect(72, 40, 468, 16));
+
+      const options = createCaretOptions();
+      const caret = computeDomCaretPageLocal(options, 7);
+
+      expect(caret).not.toBe(null);
+      expect(caret).toMatchObject({
+        pageIndex: 0,
+        x: 540,
+        y: 40,
+      });
+    });
+
+    it('insets the soft-break continuation caret by the line paddingLeft for an indented/list line', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="6">hello</span>
+          </div>
+          <div class="superdoc-line" data-pm-start="6" data-pm-end="7"></div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const lines = painterHost.querySelectorAll('.superdoc-line');
+      const continuationLine = lines[1] as HTMLElement;
+      continuationLine.style.textAlign = 'left';
+      continuationLine.style.paddingLeft = '36px';
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      continuationLine.getBoundingClientRect = vi.fn(() => createRect(72, 40, 468, 16));
+
+      const options = createCaretOptions();
+      const caret = computeDomCaretPageLocal(options, 7);
+
+      expect(caret).not.toBe(null);
+      expect(caret).toMatchObject({
+        pageIndex: 0,
+        x: 108,
+        y: 40,
+      });
+    });
+
+    it('keeps padded soft-break continuation coordinates page-local at non-1 zoom', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="6">hello</span>
+          </div>
+          <div class="superdoc-line" data-pm-start="6" data-pm-end="7"></div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const lines = painterHost.querySelectorAll('.superdoc-line');
+      const continuationLine = lines[1] as HTMLElement;
+      continuationLine.style.textAlign = 'left';
+      continuationLine.style.paddingLeft = '36px';
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 1224, 1584));
+      continuationLine.getBoundingClientRect = vi.fn(() => createRect(144, 80, 936, 32));
+
+      const options = createCaretOptions();
+      options.zoom = 2;
+      const caret = computeDomCaretPageLocal(options, 7);
+
+      expect(caret).not.toBe(null);
+      expect(caret).toMatchObject({
+        pageIndex: 0,
+        x: 108,
+        y: 40,
+      });
+    });
+
+    it('insets the right-aligned soft-break continuation caret by the line paddingRight', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="6">hello</span>
+          </div>
+          <div class="superdoc-line" data-pm-start="6" data-pm-end="7"></div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const lines = painterHost.querySelectorAll('.superdoc-line');
+      const continuationLine = lines[1] as HTMLElement;
+      continuationLine.style.textAlign = 'right';
+      continuationLine.style.paddingRight = '24px';
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      continuationLine.getBoundingClientRect = vi.fn(() => createRect(72, 40, 468, 16));
+
+      const options = createCaretOptions();
+      const caret = computeDomCaretPageLocal(options, 7);
+
+      expect(caret).not.toBe(null);
+      expect(caret).toMatchObject({
+        pageIndex: 0,
+        x: 516,
+        y: 40,
+      });
+    });
+
+    it('uses painter-resolved physical right alignment for an RTL soft-break continuation', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="6">hello</span>
+          </div>
+          <div class="superdoc-line" data-pm-start="6" data-pm-end="7" dir="rtl"></div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const lines = painterHost.querySelectorAll('.superdoc-line');
+      const continuationLine = lines[1] as HTMLElement;
+
+      continuationLine.style.direction = 'rtl';
+      continuationLine.style.textAlign = 'right';
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      continuationLine.getBoundingClientRect = vi.fn(() => createRect(72, 40, 468, 16));
+
+      const options = createCaretOptions();
+      const caret = computeDomCaretPageLocal(options, 7);
+
+      expect(caret).not.toBe(null);
+      expect(caret).toMatchObject({
+        pageIndex: 0,
+        x: 540,
+        y: 40,
+      });
+    });
+
+    it('centers the soft-break continuation caret on the content box for asymmetric padding', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="1" data-pm-end="6">hello</span>
+          </div>
+          <div class="superdoc-line" data-pm-start="6" data-pm-end="7"></div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const lines = painterHost.querySelectorAll('.superdoc-line');
+      const continuationLine = lines[1] as HTMLElement;
+      continuationLine.style.textAlign = 'center';
+      continuationLine.style.paddingLeft = '36px';
+      continuationLine.style.paddingRight = '12px';
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      continuationLine.getBoundingClientRect = vi.fn(() => createRect(72, 40, 468, 16));
+
+      const options = createCaretOptions();
+      const caret = computeDomCaretPageLocal(options, 7);
+
+      expect(caret).not.toBe(null);
+      expect(caret).toMatchObject({
+        pageIndex: 0,
+        x: 318,
+        y: 40,
+      });
+    });
+
     it('positions caret at the left edge of an empty inline SDT placeholder', () => {
       painterHost.innerHTML = `
         <div class="superdoc-page" data-page-index="0">

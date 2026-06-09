@@ -190,7 +190,6 @@ jobs:
         working-directory: devtools/visual-testing
         env:
           SD_TESTING_R2_ACCOUNT_ID: ${{ secrets.SD_TESTING_R2_ACCOUNT_ID }}
-          SD_TESTING_R2_BUCKET_NAME: ${{ secrets.SD_TESTING_R2_BUCKET_NAME }}
           SD_TESTING_R2_BASELINES_BUCKET_NAME: ${{ secrets.SD_TESTING_R2_BASELINES_BUCKET_NAME }}
           SD_TESTING_R2_ACCESS_KEY_ID: ${{ secrets.SD_TESTING_R2_ACCESS_KEY_ID }}
           SD_TESTING_R2_SECRET_ACCESS_KEY: ${{ secrets.SD_TESTING_R2_SECRET_ACCESS_KEY }}

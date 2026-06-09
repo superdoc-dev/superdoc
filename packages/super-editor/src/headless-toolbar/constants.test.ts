@@ -4,11 +4,11 @@ import { DEFAULT_FONT_FAMILY_OPTIONS } from './constants';
 describe('DEFAULT_FONT_FAMILY_OPTIONS (headless default font options, derived from the font-offering registry)', () => {
   it('advertises only the metric-safe bundled defaults (logical name + logical stack)', () => {
     expect(DEFAULT_FONT_FAMILY_OPTIONS).toEqual([
-      { label: 'Calibri', value: 'Calibri, sans-serif' },
       { label: 'Arial', value: 'Arial, sans-serif' },
+      { label: 'Calibri', value: 'Calibri, sans-serif' },
       { label: 'Courier New', value: 'Courier New, monospace' },
-      { label: 'Times New Roman', value: 'Times New Roman, serif' },
       { label: 'Helvetica', value: 'Helvetica, sans-serif' },
+      { label: 'Times New Roman', value: 'Times New Roman, serif' },
     ]);
   });
 

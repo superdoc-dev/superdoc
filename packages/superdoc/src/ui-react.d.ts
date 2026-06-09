@@ -11,5 +11,6 @@ export {
   useSuperDocToolbar,
   useSuperDocCommand,
   useSuperDocDocument,
+  useSuperDocZoom,
   type SuperDocHost,
 } from '@superdoc/super-editor/ui/react';

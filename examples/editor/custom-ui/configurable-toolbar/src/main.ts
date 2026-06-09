@@ -1,7 +1,7 @@
 /**
  * The smallest example that proves how to build your own toolbar with
- * `superdoc/ui`. Three built-in commands and one custom command, all
- * on the same surface, no framework.
+ * `superdoc/ui`. Formatting buttons, a font-family picker, and one
+ * custom command, all on the same surface, no framework.
  *
  * Each button subscribes per-id via `ui.commands.<id>.observe(...)`,
  * which only fires when that command's `active` / `disabled` /
@@ -32,6 +32,26 @@ const ui = createSuperDocUI({ superdoc });
 const scope = ui.createScope();
 
 const toolbar = document.querySelector<HTMLElement>('#toolbar')!;
+
+type FontOption = { label: string; value: string; previewFamily: string };
+
+function normalizeFontToken(value: unknown): string {
+  return typeof value === 'string' ? value.split(',')[0]?.trim().replace(/^["']|["']$/g, '') || '' : '';
+}
+
+function optionValueForCurrentFont(value: unknown, options: readonly FontOption[]): string {
+  const current = normalizeFontToken(value).toLowerCase();
+  if (!current) return '';
+
+  const match = options.find((option) => {
+    const logical = normalizeFontToken(option.value).toLowerCase();
+    const label = normalizeFontToken(option.label).toLowerCase();
+    const preview = normalizeFontToken(option.previewFamily).toLowerCase();
+    return current === logical || current === label || current === preview;
+  });
+
+  return match?.value ?? '';
+}
 
 // Built-in command buttons. Same shape, different ids. Each one
 // subscribes per-id so unrelated state changes don't re-render the
@@ -74,6 +94,123 @@ for (const config of BUILT_IN_BUTTONS) {
 const sep = document.createElement('span');
 sep.className = 'sep';
 toolbar.appendChild(sep);
+
+const fontPicker = document.createElement('div');
+fontPicker.className = 'font-picker';
+toolbar.appendChild(fontPicker);
+
+const fontButton = document.createElement('button');
+fontButton.type = 'button';
+fontButton.className = 'font-picker-trigger';
+fontButton.title = 'Font family';
+fontButton.setAttribute('aria-label', 'Font family');
+fontButton.setAttribute('aria-haspopup', 'listbox');
+fontButton.setAttribute('aria-expanded', 'false');
+fontPicker.appendChild(fontButton);
+
+const fontMenu = document.createElement('div');
+fontMenu.className = 'font-picker-menu';
+fontMenu.setAttribute('role', 'listbox');
+fontMenu.hidden = true;
+fontPicker.appendChild(fontMenu);
+
+let currentFontValue = '';
+let currentFontOptions: FontOption[] = [];
+let capturedFontSelection: ReturnType<typeof ui.selection.capture> | null = null;
+
+const rememberFontSelection = () => {
+  const capture = ui.selection.capture();
+  if (capture) capturedFontSelection = capture;
+};
+
+const selectedFontOption = () => {
+  const value = optionValueForCurrentFont(currentFontValue, currentFontOptions);
+  return currentFontOptions.find((font) => font.value === value) ?? null;
+};
+
+const setFontMenuOpen = (open: boolean) => {
+  fontMenu.hidden = !open;
+  fontButton.setAttribute('aria-expanded', String(open));
+};
+
+const refreshFontButton = () => {
+  const selected = selectedFontOption();
+  fontButton.textContent = selected?.label ?? 'Font';
+  fontButton.style.fontFamily = selected?.previewFamily ?? '';
+};
+
+const applyFontValue = (value: string) => {
+  if (capturedFontSelection) {
+    ui.selection.restore(capturedFontSelection);
+    capturedFontSelection = null;
+  }
+  setFontMenuOpen(false);
+  ui.toolbar.execute('font-family', value);
+};
+
+const renderFontOptions = () => {
+  const selectedValue = selectedFontOption()?.value ?? '';
+  fontMenu.replaceChildren(
+    ...currentFontOptions.map((font) => {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'font-picker-option';
+      option.textContent = font.label;
+      option.style.fontFamily = font.previewFamily;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', String(font.value === selectedValue));
+      option.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        rememberFontSelection();
+      });
+      option.addEventListener('click', () => applyFontValue(font.value));
+      return option;
+    }),
+  );
+};
+
+scope.add(
+  ui.fonts.observe((snapshot) => {
+    currentFontOptions = [...snapshot.options];
+    renderFontOptions();
+    refreshFontButton();
+  }),
+);
+
+fontButton.addEventListener('mousedown', (event) => {
+  event.preventDefault();
+  rememberFontSelection();
+});
+fontButton.addEventListener('click', () => setFontMenuOpen(fontMenu.hidden));
+
+const closeFontMenuOnOutsideClick = (event: MouseEvent) => {
+  if (!fontPicker.contains(event.target as Node | null)) setFontMenuOpen(false);
+};
+const closeFontMenuOnEscape = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') setFontMenuOpen(false);
+};
+document.addEventListener('mousedown', closeFontMenuOnOutsideClick);
+document.addEventListener('keydown', closeFontMenuOnEscape);
+scope.add(() => {
+  document.removeEventListener('mousedown', closeFontMenuOnOutsideClick);
+  document.removeEventListener('keydown', closeFontMenuOnEscape);
+});
+
+const fontCommand = ui.commands.get('font-family');
+if (fontCommand) {
+  scope.add(
+    fontCommand.observe((state) => {
+      fontButton.disabled = state.disabled;
+      currentFontValue = typeof state.value === 'string' ? state.value : '';
+      renderFontOptions();
+      refreshFontButton();
+    }),
+  );
+}
+
+const fontSep = document.createElement('span');
+fontSep.className = 'sep';
+toolbar.appendChild(fontSep);
 
 // Custom command. Same surface as built-ins. The id is namespaced so
 // it won't collide with future built-ins.

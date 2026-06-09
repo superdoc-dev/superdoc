@@ -1,22 +1,22 @@
 # SD-3212 A1 — root classification
 
 Generated: 2026-05-25T00:00:00.000Z
-Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (229 names, locked baseline)
+Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (234 names, locked baseline)
 
 ## Summary
 
 | Bucket | Count |
 |---|---|
-| supported-root | 158 |
+| supported-root | 166 |
 | legacy-root | 60 |
 | move-to-subpath | 0 |
 | internal-candidate | 8 |
 | NEEDS-REVIEW | 0 |
-| **total** | **226** |
+| **total** | **234** |
 
-Confidence: high=123, medium=101, needs-review=0.
+Confidence: high=131, medium=101, needs-review=0.
 
-## supported-root (158)
+## supported-root (166)
 
 | Name | Confidence | Source | Rationale |
 |---|---|---|---|
@@ -42,6 +42,7 @@ Confidence: high=123, medium=101, needs-review=0.
 | `DirectSurfaceRequest` | medium | surface | Headless Surface API type. Public extension surface for custom UI integrations. |
 | `DocRange` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
 | `Document` | high | core | Consumer-supplied document descriptor used in Config.documents and SuperDocState.documents; the public counterpart to the internal RuntimeDocument (which carries runtime-only fields and stays internal). |
+| `DocumentFontOption` | high | font-api | Document-scoped font picker option returned by superdoc.fonts.getDocumentFontOptions() and surfaced through ui.fonts / useSuperDocFontOptions for custom toolbar integrations. |
 | `DocumentApi` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `DocumentMode` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
 | `DocumentProtectionState` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |

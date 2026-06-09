@@ -4,21 +4,20 @@
  * already uses, what do we render?". An offering answers "should SuperDoc advertise this logical font
  * as a choice, and on which surface?".
  *
- * Two consumers are intended (only the first ships here):
+ * Two consumers are intended:
  *   1. DEFAULT toolbar options - reliable, bundled, metric-safe fonts SuperDoc can render
  *      deterministically today. Built from {@link getDefaultFontOfferings}.
- *   2. DOCUMENT-specific options (later) - whatever a given document actually uses, surfaced with a
- *      fidelity status. That is document-scoped and runtime-aware; it does NOT belong in this static
- *      module.
+ *   2. DOCUMENT-specific options - whatever a given document actually uses. Those are
+ *      document-scoped and runtime-aware; this static module only provides the default offerings.
  *
  * Derived from `SUBSTITUTION_EVIDENCE` x `BUNDLED_MANIFEST`. Adding/retiring a font is an evidence
  * edit, never a hand-maintained toolbar list.
  */
-import { SUBSTITUTION_EVIDENCE, type SubstituteVerdict } from './substitution-evidence';
+import { SUBSTITUTION_EVIDENCE, type CssGeneric, type SubstituteVerdict } from './substitution-evidence';
 import { BUNDLED_MANIFEST } from './bundled-manifest';
 
 /** CSS generic family used to terminate an offering's fallback stack. */
-export type FontGeneric = 'sans-serif' | 'serif' | 'monospace';
+export type FontGeneric = CssGeneric;
 
 /** Which UI surface a logical font may appear on. A product decision, distinct from the verdict. */
 export type OfferingClass =
@@ -49,19 +48,6 @@ export interface FontOffering {
   evidenceId: string;
 }
 
-/**
- * CSS generic per bundled physical family. Neither docfonts evidence nor BUNDLED_MANIFEST carries a
- * generic category, so this is an explicit, deliberate classifier. `font-offerings.test.ts` asserts
- * every bundled family appears here, so a new bundled clone cannot silently ship without one.
- */
-const PHYSICAL_GENERIC: Readonly<Record<string, FontGeneric>> = Object.freeze({
-  Carlito: 'sans-serif', // Calibri
-  Caladea: 'serif', // Cambria
-  'Liberation Sans': 'sans-serif', // Arial, Helvetica
-  'Liberation Serif': 'serif', // Times New Roman
-  'Liberation Mono': 'monospace', // Courier New
-});
-
 const BUNDLED_FAMILIES: ReadonlySet<string> = new Set(BUNDLED_MANIFEST.map((f) => f.family));
 
 /** Classify one evidence row by its policy action, verdict, and whether its target is bundled. */
@@ -85,10 +71,7 @@ function deriveOfferings(): readonly FontOffering[] {
     return {
       logicalFamily: row.logicalFamily,
       physicalFamily: row.physicalFamily,
-      // Generic is only load-bearing for offerings we actually surface (all bundled); a missing entry
-      // for a bundled family is a config error the test catches, so the `?? 'sans-serif'` is a guard,
-      // not a default we rely on.
-      generic: (row.physicalFamily && PHYSICAL_GENERIC[row.physicalFamily]) || 'sans-serif',
+      generic: row.generic,
       offering: classifyOffering(row.policyAction, row.verdict, row.physicalFamily, bundled),
       bundled,
       verdict: row.verdict,
@@ -101,26 +84,17 @@ function deriveOfferings(): readonly FontOffering[] {
 /** Every logical font SuperDoc has evidence for, classified by offering surface. */
 export const FONT_OFFERINGS: readonly FontOffering[] = deriveOfferings();
 
-/**
- * Explicit PRODUCT order for the default toolbar - deliberately NOT the evidence/provenance order the
- * rows happen to sit in. Preserves the prior relative order of the carried-over fonts (Arial, Courier
- * New, Times New Roman) so the toolbar does not reshuffle for existing users.
- */
-const DEFAULT_FONT_ORDER: readonly string[] = ['Calibri', 'Arial', 'Courier New', 'Times New Roman', 'Helvetica'];
+function compareLogicalFamily(a: FontOffering, b: FontOffering): number {
+  return a.logicalFamily.localeCompare(b.logicalFamily, 'en', { sensitivity: 'base' });
+}
 
 /**
- * The metric-safe, bundled-backed offerings safe to advertise as DEFAULT toolbar choices, in product
- * order. Excludes qualified (Cambria), category fallbacks (Calibri Light), and not-yet-bundled
- * candidates (Georgia) - those reach the toolbar later as document-specific options with a status.
+ * The metric-safe, bundled-backed offerings safe to advertise as DEFAULT toolbar choices, sorted by
+ * logical family. Excludes qualified (Cambria), category fallbacks (Calibri Light), and not-yet-bundled
+ * candidates (Georgia) - those can reach the toolbar as document-specific options.
  */
 export function getDefaultFontOfferings(): FontOffering[] {
-  const rank = (name: string): number => {
-    const i = DEFAULT_FONT_ORDER.indexOf(name);
-    return i === -1 ? DEFAULT_FONT_ORDER.length : i; // a future default not yet ranked sorts to the end
-  };
-  return FONT_OFFERINGS.filter((o) => o.offering === 'default').sort(
-    (a, b) => rank(a.logicalFamily) - rank(b.logicalFamily),
-  );
+  return FONT_OFFERINGS.filter((o) => o.offering === 'default').sort(compareLogicalFamily);
 }
 
 /** The logical CSS stack stored/applied when an offering is chosen, e.g. "Calibri, sans-serif". */

@@ -144,6 +144,16 @@ export const createZoomStateDeriver =
     };
   };
 
+export const createZoomFitWidthStateDeriver =
+  () =>
+  ({ context, superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any> }): ToolbarCommandState => {
+    const mode = typeof superdoc?.getZoomState === 'function' ? superdoc.getZoomState()?.mode : undefined;
+    return {
+      active: mode === 'fit-width',
+      disabled: !context || typeof superdoc?.setZoomMode !== 'function',
+    };
+  };
+
 export const createDocumentModeStateDeriver =
   () =>
   ({ context, superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any> }): ToolbarCommandState => {
@@ -179,6 +189,18 @@ export const createZoomExecute =
     }
 
     superdoc.setZoom?.(normalizedPayload);
+    return true;
+  };
+
+// Toggle fit-width mode. A second activation returns to manual at the
+// current value, matching toolbar toggle conventions; numeric zoom stays
+// on the separate `zoom` command.
+export const createZoomFitWidthExecute =
+  () =>
+  ({ superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any>; payload?: unknown }) => {
+    if (typeof superdoc?.setZoomMode !== 'function') return false;
+    const mode = typeof superdoc.getZoomState === 'function' ? superdoc.getZoomState()?.mode : undefined;
+    superdoc.setZoomMode(mode === 'fit-width' ? 'manual' : 'fit-width');
     return true;
   };
 

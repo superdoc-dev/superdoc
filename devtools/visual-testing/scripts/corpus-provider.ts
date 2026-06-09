@@ -16,6 +16,9 @@ const DEFAULT_CACHE_DIR = path.join(os.homedir(), '.cache', 'superdoc-corpus');
 /** R2 object key for the corpus registry JSON file. */
 const REGISTRY_OBJECT_KEY = 'registry.json';
 
+/** Canonical Docx Universe corpus bucket used by this repo. */
+const CANONICAL_CORPUS_BUCKET_NAME = 'docx-test-documents';
+
 /**
  * A document in the test corpus.
  */
@@ -307,8 +310,8 @@ async function fetchObjectBuffer(client: S3Client, bucket: string, key: string):
 
 /**
  * Create an R2-backed corpus provider.
- * Requires SD_TESTING_R2_ACCOUNT_ID, SD_TESTING_R2_BUCKET_NAME,
- * SD_TESTING_R2_ACCESS_KEY_ID, and SD_TESTING_R2_SECRET_ACCESS_KEY env vars.
+ * Requires SD_TESTING_R2_ACCOUNT_ID, SD_TESTING_R2_ACCESS_KEY_ID, and
+ * SD_TESTING_R2_SECRET_ACCESS_KEY env vars.
  *
  * @param options - Provider options
  * @returns CorpusProvider instance
@@ -316,7 +319,7 @@ async function fetchObjectBuffer(client: S3Client, bucket: string, key: string):
  */
 async function createR2Provider(options: ProviderOptions): Promise<CorpusProvider> {
   const accountId = process.env.SD_TESTING_R2_ACCOUNT_ID ?? '';
-  const bucketName = process.env.SD_TESTING_R2_BUCKET_NAME ?? '';
+  const bucketName = CANONICAL_CORPUS_BUCKET_NAME;
   const cacheDir = options.cacheDir ?? DEFAULT_CACHE_DIR;
 
   const accessKeyId = process.env.SD_TESTING_R2_ACCESS_KEY_ID ?? '';
@@ -324,9 +327,6 @@ async function createR2Provider(options: ProviderOptions): Promise<CorpusProvide
 
   if (!accountId) {
     throw new Error('Missing SD_TESTING_R2_ACCOUNT_ID');
-  }
-  if (!bucketName) {
-    throw new Error('Missing SD_TESTING_R2_BUCKET_NAME');
   }
   if (!accessKeyId) {
     throw new Error('Missing SD_TESTING_R2_ACCESS_KEY_ID');

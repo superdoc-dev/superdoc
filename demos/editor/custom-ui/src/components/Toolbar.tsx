@@ -1,8 +1,10 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DocumentMode } from 'superdoc';
+import type { SelectionCapture } from 'superdoc/ui';
 import {
   useSuperDocUI,
   useSuperDocCommand,
+  useSuperDocFontOptions,
   useSuperDocSelection,
   useSuperDocDocument,
 } from 'superdoc/ui/react';
@@ -67,6 +69,7 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
         {TEXT_BUTTONS.map((b) => (
           <ToolbarButton key={b.id} id={b.id} ready={ready} button={b} onClick={() => execute(b.id)} />
         ))}
+        <FontFamilyPicker />
       </div>
 
       <div className="toolbar-group">
@@ -107,6 +110,103 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
         <ReimportButton />
         <ExportButton />
       </div>
+    </div>
+  );
+}
+
+function normalizeFontValue(value: unknown): string {
+  return typeof value === 'string' ? value.split(',')[0]?.trim().replace(/^["']|["']$/g, '') || '' : '';
+}
+
+function FontFamilyPicker() {
+  const ui = useSuperDocUI();
+  const font = useSuperDocCommand('font-family');
+  const options = useSuperDocFontOptions();
+  const capturedSelection = useRef<SelectionCapture | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const current = normalizeFontValue(font.value).toLowerCase();
+  const selectedOption =
+    options.find((option) => {
+      return (
+        normalizeFontValue(option.value).toLowerCase() === current ||
+        normalizeFontValue(option.label).toLowerCase() === current ||
+        normalizeFontValue(option.previewFamily).toLowerCase() === current
+      );
+    }) ?? null;
+  const selected = selectedOption?.value ?? '';
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node | null)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  const rememberSelection = () => {
+    const capture = ui?.selection.capture();
+    if (capture) capturedSelection.current = capture;
+  };
+
+  const applyFont = (value: string) => {
+    if (!ui) return;
+    if (capturedSelection.current) {
+      ui.selection.restore(capturedSelection.current);
+      capturedSelection.current = null;
+    }
+    setOpen(false);
+    ui.toolbar.execute('font-family', value);
+  };
+
+  return (
+    <div className="tb-font-menu" ref={menuRef}>
+      <button
+        type="button"
+        className="tb-select tb-font-select"
+        disabled={!ui || font.disabled}
+        aria-label="Font family"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title="Font family"
+        style={{ fontFamily: selectedOption?.previewFamily }}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          rememberSelection();
+        }}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {selectedOption?.label ?? 'Font'}
+      </button>
+      {open && (
+        <div className="tb-font-options" role="listbox" aria-label="Font family">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="option"
+              aria-selected={option.value === selected}
+              className="tb-font-option"
+              style={{ fontFamily: option.previewFamily }}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                rememberSelection();
+              }}
+              onClick={() => applyFont(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { describe, it, expect } from 'vitest';
+import { Schema } from 'prosemirror-model';
 import { SearchIndex } from './SearchIndex.js';
 
 describe('SearchIndex.stripDiacritics', () => {
@@ -142,6 +143,66 @@ describe('SearchIndex.searchIgnoringDiacritics', () => {
   });
 });
 
+describe('SearchIndex lineBreak leaf text', () => {
+  const schema = new Schema({
+    nodes: {
+      doc: { content: 'paragraph+' },
+      paragraph: { group: 'block', content: 'inline*' },
+      text: { group: 'inline' },
+      lineBreak: {
+        group: 'inline',
+        inline: true,
+        atom: true,
+        leafText: () => '\n',
+      },
+    },
+    marks: {},
+  });
+
+  function buildLineBreakDoc() {
+    return schema.nodes.doc.create(null, [
+      schema.nodes.paragraph.create(null, [schema.text('Alpha'), schema.nodes.lineBreak.create(), schema.text('Beta')]),
+    ]);
+  }
+
+  it('indexes lineBreak using its declared leafText', () => {
+    const index = new SearchIndex();
+
+    index.ensureValid(buildLineBreakDoc());
+
+    expect(index.text).toBe('Alpha\nBeta');
+    expect(index.search('Alpha\nBeta')).toHaveLength(1);
+  });
+
+  it('coalesces a hit spanning text + lineBreak + text into one contiguous doc range', () => {
+    const index = new SearchIndex();
+    index.ensureValid(buildLineBreakDoc());
+
+    // The full 'Alpha\nBeta' span (text + lineBreak + text, all PM-adjacent in
+    // one block) must map to a single contiguous range, not discontiguous text
+    // ranges that the downstream D5 contiguity guard would reject.
+    const ranges = index.offsetRangeToDocRanges(0, index.text.length);
+    expect(ranges).toHaveLength(1);
+  });
+
+  it('does NOT coalesce across a block separator (negative)', () => {
+    const index = new SearchIndex();
+    index.ensureValid(
+      schema.nodes.doc.create(null, [
+        schema.nodes.paragraph.create(null, [schema.text('Alpha')]),
+        schema.nodes.paragraph.create(null, [schema.text('Beta')]),
+      ]),
+    );
+
+    // 'Alpha\nBeta' here is two paragraphs joined by a block separator, not an
+    // inline break. The separator is a real split: the span must stay two ranges
+    // (one per block), never a single editable text range.
+    expect(index.text).toBe('Alpha\nBeta');
+    const ranges = index.offsetRangeToDocRanges(0, index.text.length);
+    expect(ranges).toHaveLength(2);
+  });
+});
+
 describe('SearchIndex searchModel: visible', () => {
   function textNode(text, { deleted = false } = {}) {
     return {
@@ -150,6 +211,19 @@ describe('SearchIndex searchModel: visible', () => {
       isBlock: false,
       text,
       nodeSize: text.length,
+      marks: deleted ? [{ type: { name: 'trackDelete' } }] : [],
+      forEach: () => {},
+    };
+  }
+
+  function leafNode(typeName, { deleted = false, leafText = undefined } = {}) {
+    return {
+      isText: false,
+      isLeaf: true,
+      isInline: true,
+      isBlock: false,
+      type: { name: typeName, spec: leafText ? { leafText } : {} },
+      nodeSize: 1,
       marks: deleted ? [{ type: { name: 'trackDelete' } }] : [],
       forEach: () => {},
     };
@@ -204,6 +278,23 @@ describe('SearchIndex searchModel: visible', () => {
     return { doc };
   }
 
+  function buildDocWithTrackedDeletedLineBreak() {
+    const paragraph = containerNode(
+      [textNode('before'), leafNode('lineBreak', { deleted: true, leafText: () => '\n' }), textNode('after')],
+      {
+        isBlock: true,
+        textBetween: 'before\nafter',
+      },
+    );
+
+    const doc = containerNode([paragraph], {
+      isBlock: false,
+      textBetween: 'before\nafter',
+    });
+
+    return { doc };
+  }
+
   it('excludes pending tracked deletions in visible model', () => {
     const { doc } = buildDocWithTrackedDeletion();
     const index = new SearchIndex();
@@ -249,5 +340,15 @@ describe('SearchIndex searchModel: visible', () => {
     expect(ranges).toHaveLength(1);
     expect(ranges[0].to - ranges[0].from).toBe('after'.length);
     expect(ranges[0]).toEqual({ from: 13, to: 18 });
+  });
+
+  it('excludes pending tracked deletions on leaf nodes in visible model', () => {
+    const { doc } = buildDocWithTrackedDeletedLineBreak();
+    const index = new SearchIndex();
+
+    index.ensureValid(doc, { searchModel: 'visible' });
+
+    expect(index.search('\n')).toHaveLength(0);
+    expect(index.search('beforeafter')).toHaveLength(0);
   });
 });

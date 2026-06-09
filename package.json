@@ -83,6 +83,7 @@
     "docapi:check": "pnpm run check:public:docapi",
     "docapi:sync:check": "pnpm run generate:docapi && pnpm run check:public:docapi",
     "check:types": "tsc -b tsconfig.references.json",
+    "check:font-licenses": "node shared/font-system/scripts/check-bundled-font-licenses.mjs",
     "check:public:superdoc": "node scripts/check-public-contract.mjs",
     "check:public:docapi": "node scripts/check-public-docapi.mjs",
     "check:public": "pnpm run check:public:superdoc && pnpm run check:public:docapi",

@@ -997,7 +997,10 @@ function insertTextAroundSdt(
   const { tr } = editor.state;
   const tabType = editor.schema.nodes?.tab;
   const parentAllowsTab = tabType && content.includes('\t') ? parentAllowsNodeAt(tr, pos, tabType) : false;
-  tr.insert(pos, buildTextWithTabs(editor.schema, content, undefined, { parentAllowsTab }));
+  const lineBreakType = editor.schema.nodes?.lineBreak;
+  const parentAllowsLineBreak =
+    lineBreakType && /[\r\n]/.test(content) ? parentAllowsNodeAt(tr, pos, lineBreakType) : false;
+  tr.insert(pos, buildTextWithTabs(editor.schema, content, undefined, { parentAllowsTab, parentAllowsLineBreak }));
   dispatchTransaction(editor, tr);
   return true;
 }

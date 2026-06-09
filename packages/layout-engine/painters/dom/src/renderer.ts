@@ -19,7 +19,6 @@ import type {
   PageNumberFormat,
   ParaFragment,
   ParagraphBlock,
-  ParagraphMeasure,
   PositionedDrawingGeometry,
   Run,
   ShapeGroupChild,
@@ -3045,8 +3044,8 @@ export class DomPainter {
     height: number,
     context?: FragmentRenderContext,
   ): Element {
-    const fragmentWithContent = fragment as (DrawingFragment & { contentMeasures?: ParagraphMeasure[] }) | undefined;
-    if (!Array.isArray(fragmentWithContent?.contentMeasures) || fragmentWithContent.contentMeasures.length === 0) {
+    const contentMeasures = fragment?.contentMeasures ?? block.contentMeasures;
+    if (!Array.isArray(contentMeasures) || contentMeasures.length === 0) {
       return this.hasShapeTextContent(block.textContent)
         ? this.createShapeTextElement(block, width, height, 1, 1, context)
         : this.doc!.createElement('div');
@@ -3080,9 +3079,9 @@ export class DomPainter {
     const availableWidth = Math.max(1, width - insets.left - insets.right);
 
     block.contentBlocks.forEach((paragraphBlock, paragraphIndex) => {
-      const measure = fragmentWithContent.contentMeasures?.[paragraphIndex];
+      const measure = contentMeasures[paragraphIndex];
       if (!measure) return;
-      measure.lines.forEach((line: Line, lineIndex: number) => {
+      measure.lines.forEach((line, lineIndex) => {
         linesHost.appendChild(this.renderLine(paragraphBlock, line, renderContext, availableWidth, lineIndex));
       });
     });

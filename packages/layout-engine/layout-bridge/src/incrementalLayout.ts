@@ -6,12 +6,15 @@ import type {
   HeaderFooterLayout,
   SectionMetadata,
   ParagraphBlock,
+  ParagraphMeasure,
   ColumnLayout,
   SectionBreakBlock,
   NormalizedColumnLayout,
   PageNumberChapterSeparator,
   PageNumberFormat,
+  TextboxDrawing,
 } from '@superdoc/contracts';
+import { layoutTextboxContent } from '@superdoc/layout-engine';
 import {
   cloneColumnLayout,
   formatSectionPageNumberText,
@@ -1364,6 +1367,8 @@ export async function incrementalLayout(
       );
     }
   }
+
+  hydrateTableTextboxMeasures(currentBlocks, (block, maxWidth) => remeasureParagraph(block, maxWidth));
 
   const pageTokenEnd = performance.now();
   const totalTokenTime = pageTokenEnd - pageTokenStart;
@@ -2838,6 +2843,31 @@ const DEFAULT_MARGINS = { top: 72, right: 72, bottom: 72, left: 72 };
  */
 export const normalizeMargin = (value: number | undefined, fallback: number): number =>
   Number.isFinite(value) ? (value as number) : fallback;
+
+/**
+ * Walks table blocks (including nested tables) and computes `contentMeasures` for any
+ * `textboxShape` drawings found in table cells. Stores results directly on the block so
+ * the painter can read them without a `DrawingFragment` (table-cell drawings have none).
+ */
+export function hydrateTableTextboxMeasures(
+  blocks: FlowBlock[],
+  remeasure: (block: ParagraphBlock, maxWidth: number) => ParagraphMeasure,
+): void {
+  for (const block of blocks) {
+    if (block.kind !== 'table') continue;
+    for (const row of block.rows ?? []) {
+      for (const cell of row.cells ?? []) {
+        for (const cellBlock of cell.blocks ?? []) {
+          if (cellBlock.kind === 'drawing' && cellBlock.drawingKind === 'textboxShape') {
+            (cellBlock as TextboxDrawing).contentMeasures = layoutTextboxContent(cellBlock, remeasure);
+          } else if (cellBlock.kind === 'table') {
+            hydrateTableTextboxMeasures([cellBlock], remeasure);
+          }
+        }
+      }
+    }
+  }
+}
 
 /**
  * Rewrites section break blocks so that `layoutDocument` uses the semantic page

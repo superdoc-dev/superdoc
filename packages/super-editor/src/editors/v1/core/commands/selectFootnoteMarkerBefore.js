@@ -5,36 +5,57 @@ export const SELECT_FOOTNOTE_MARKER_META = 'selectFootnoteMarker';
 const isNoteReference = (node) =>
   node?.type.name === 'footnoteReference' || node?.type.name === 'endnoteReference';
 
+/**
+ * Resolves the note marker ending at `boundaryPos` (the position right after it).
+ * Real documents wrap each reference in its own run, so the sibling at the
+ * boundary is usually that run wrapper, not the marker — look at its last child.
+ */
+function markerEndingAt(node, boundaryPos) {
+  if (isNoteReference(node)) {
+    return { node, pos: boundaryPos - node.nodeSize };
+  }
+  if (node?.type.name === 'run' && isNoteReference(node.lastChild)) {
+    const marker = node.lastChild;
+    // Marker sits at the end of the run's content, just inside the closing token.
+    return { node: marker, pos: boundaryPos - 1 - marker.nodeSize };
+  }
+  return null;
+}
+
+/** Forward mirror of {@link markerEndingAt}: marker starting at `boundaryPos`. */
+function markerStartingAt(node, boundaryPos) {
+  if (isNoteReference(node)) {
+    return { node, pos: boundaryPos };
+  }
+  if (node?.type.name === 'run' && isNoteReference(node.firstChild)) {
+    // Marker sits at the start of the run's content, just inside the opening token.
+    return { node: node.firstChild, pos: boundaryPos + 1 };
+  }
+  return null;
+}
+
 function getPreviousNoteMarker(state) {
   const { $from } = state.selection;
 
-  // Run-wrapped case: caret at the start of a run, marker is the node before the run.
+  // Caret at the start of a run: the marker (or its run wrapper) precedes the run.
   if ($from.parent.type.name === 'run' && $from.parentOffset === 0) {
     const runStart = $from.before($from.depth);
-    const node = state.doc.resolve(runStart).nodeBefore;
-    if (!isNoteReference(node)) return null;
-    return { node, pos: runStart - node.nodeSize };
+    return markerEndingAt(state.doc.resolve(runStart).nodeBefore, runStart);
   }
 
-  const node = $from.nodeBefore;
-  if (!isNoteReference(node)) return null;
-  return { node, pos: $from.pos - node.nodeSize };
+  return markerEndingAt($from.nodeBefore, $from.pos);
 }
 
 function getNextNoteMarker(state) {
   const { $from } = state.selection;
 
-  // Run-wrapped case: caret at the end of a run, marker is the node after the run.
+  // Caret at the end of a run: the marker (or its run wrapper) follows the run.
   if ($from.parent.type.name === 'run' && $from.parentOffset === $from.parent.content.size) {
     const runEnd = $from.after($from.depth);
-    const node = state.doc.resolve(runEnd).nodeAfter;
-    if (!isNoteReference(node)) return null;
-    return { node, pos: runEnd };
+    return markerStartingAt(state.doc.resolve(runEnd).nodeAfter, runEnd);
   }
 
-  const node = $from.nodeAfter;
-  if (!isNoteReference(node)) return null;
-  return { node, pos: $from.pos };
+  return markerStartingAt($from.nodeAfter, $from.pos);
 }
 
 function selectNoteMarker(state, dispatch, marker) {

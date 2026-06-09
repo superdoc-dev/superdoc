@@ -479,6 +479,41 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
       );
     });
 
+    it('activates via elementsFromPoint when the event target is the selection overlay (real pointer path)', () => {
+      // Real double-clicks land on the transparent selection overlay above the
+      // pages, so event.target has no data-pm-start ancestor. The resolver must
+      // fall back to the elementsFromPoint hit chain. (Manual-testing regression:
+      // double-click on a body reference did nothing.)
+      (mockEditor.state.doc as unknown as { nodeAt: (pos: number) => unknown }).nodeAt = (pos: number) =>
+        pos === 38 ? { type: { name: 'footnoteReference' }, attrs: { id: '4' } } : null;
+      const refEl = makeRefSpan(38, '4');
+
+      const overlay = document.createElement('div');
+      overlay.className = 'presentation-editor__selection-overlay';
+      viewportHost.appendChild(overlay);
+
+      const originalElementsFromPoint = document.elementsFromPoint?.bind(document);
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: () => [overlay, refEl],
+      });
+      try {
+        overlay.dispatchEvent(
+          new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 21, clientY: 33 }),
+        );
+
+        expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+          { storyType: 'footnote', noteId: '4' },
+          expect.objectContaining({ clientX: 21, clientY: 33 }),
+        );
+      } finally {
+        Object.defineProperty(document, 'elementsFromPoint', {
+          configurable: true,
+          value: originalElementsFromPoint,
+        });
+      }
+    });
+
     it('does not activate when double-clicking ordinary body text', () => {
       (mockEditor.state.doc as unknown as { nodeAt: (pos: number) => unknown }).nodeAt = (pos: number) =>
         pos === 12 ? { type: { name: 'text' }, attrs: {} } : null;

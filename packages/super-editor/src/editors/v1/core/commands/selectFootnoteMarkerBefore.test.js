@@ -38,10 +38,10 @@ const makeDoc = (schema, refType = 'footnoteReference') => {
   return schema.node('doc', null, [schema.node('paragraph', null, [beforeRun, markerRun, afterRun])]);
 };
 
-const findNode = (doc, typeName) => {
+const findNode = (doc, typeName, predicate = () => true) => {
   let result = null;
   doc.descendants((node, pos) => {
-    if (node.type.name === typeName) {
+    if (!result && node.type.name === typeName && predicate(node)) {
       result = { node, pos, end: pos + node.nodeSize };
       return false;
     }
@@ -64,6 +64,26 @@ describe('selectFootnoteMarkerBefore', () => {
     // TextSelection (not NodeSelection — the marker is selectable:false) spanning the atom.
     expect(dispatched.selection).toBeInstanceOf(TextSelection);
     expect(dispatched.selection).not.toBeInstanceOf(NodeSelection);
+    expect(dispatched.selection.from).toBe(marker.pos);
+    expect(dispatched.selection.to).toBe(marker.end);
+  });
+
+  it('selects the marker when the caret is at the start of the FOLLOWING run (marker wrapped in its own run)', () => {
+    // Real documents wrap each reference in its own run. Clicking just after the
+    // superscript places the caret at the start of the next text run, where
+    // nodeBefore is the marker's run wrapper — not the marker itself. The command
+    // must look inside the wrapper. (Manual-testing regression: first Backspace
+    // deleted the letter before the marker instead of selecting the marker.)
+    const schema = makeSchema();
+    const doc = makeDoc(schema);
+    const marker = findNode(doc, 'footnoteReference');
+    const afterRun = findNode(doc, 'run', (n) => n.textContent === 'After');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, afterRun.pos + 1) });
+
+    let dispatched;
+    const ok = selectFootnoteMarkerBefore()({ state, dispatch: (tr) => (dispatched = tr) });
+
+    expect(ok).toBe(true);
     expect(dispatched.selection.from).toBe(marker.pos);
     expect(dispatched.selection.to).toBe(marker.end);
   });
@@ -113,6 +133,21 @@ describe('selectFootnoteMarkerAfter', () => {
 
     expect(ok).toBe(true);
     expect(dispatched.selection).toBeInstanceOf(TextSelection);
+    expect(dispatched.selection.from).toBe(marker.pos);
+    expect(dispatched.selection.to).toBe(marker.end);
+  });
+
+  it('selects the marker when the caret is at the end of the PRECEDING run (marker wrapped in its own run)', () => {
+    const schema = makeSchema();
+    const doc = makeDoc(schema);
+    const marker = findNode(doc, 'footnoteReference');
+    const beforeRun = findNode(doc, 'run', (n) => n.textContent === 'Before');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, beforeRun.end - 1) });
+
+    let dispatched;
+    const ok = selectFootnoteMarkerAfter()({ state, dispatch: (tr) => (dispatched = tr) });
+
+    expect(ok).toBe(true);
     expect(dispatched.selection.from).toBe(marker.pos);
     expect(dispatched.selection.to).toBe(marker.end);
   });

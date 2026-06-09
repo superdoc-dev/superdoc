@@ -1899,8 +1899,28 @@ export class EditorInputManager {
    * the footnoteReference/endnoteReference node) but no note id, so we read the
    * node at that position to recover the story type and id.
    */
-  #resolveFootnoteReferenceTargetAtPointer(target: HTMLElement | null): RenderedNoteTarget | null {
-    const refEl = target?.closest?.('[data-pm-start]') as HTMLElement | null;
+  #resolveFootnoteReferenceTargetAtPointer(
+    target: HTMLElement | null,
+    clientX: number,
+    clientY: number,
+  ): RenderedNoteTarget | null {
+    const fromTarget = this.#noteTargetFromPmStartElement(target?.closest?.('[data-pm-start]') as HTMLElement | null);
+    if (fromTarget) return fromTarget;
+
+    // Real pointer events usually land on the selection overlay above the pages,
+    // not on the painted text span — walk the full hit chain like the
+    // rendered-note resolver does.
+    const doc = this.#deps?.getViewportHost()?.ownerDocument ?? document;
+    if (typeof doc.elementsFromPoint !== 'function') return null;
+    for (const element of doc.elementsFromPoint(clientX, clientY)) {
+      if (!(element instanceof HTMLElement)) continue;
+      const resolved = this.#noteTargetFromPmStartElement(element.closest('[data-pm-start]') as HTMLElement | null);
+      if (resolved) return resolved;
+    }
+    return null;
+  }
+
+  #noteTargetFromPmStartElement(refEl: HTMLElement | null): RenderedNoteTarget | null {
     if (!refEl) return null;
     const pmStart = Number(refEl.getAttribute('data-pm-start'));
     if (!Number.isFinite(pmStart)) return null;
@@ -1940,7 +1960,7 @@ export class EditorInputManager {
     // SD-3400: double-clicking a BODY footnote/endnote reference marker navigates
     // to its note content. Activating the note session focuses the note and scrolls
     // its selection into view, so the user lands on the corresponding note.
-    const footnoteRefTarget = this.#resolveFootnoteReferenceTargetAtPointer(target);
+    const footnoteRefTarget = this.#resolveFootnoteReferenceTargetAtPointer(target, event.clientX, event.clientY);
     if (footnoteRefTarget) {
       event.preventDefault();
       event.stopPropagation();

@@ -6256,6 +6256,56 @@ describe('requirePageBoundary edge cases', () => {
       expect(paragraphFragment.x).toBeGreaterThan(DEFAULT_OPTIONS.margins!.left);
       expect(imageFragments).toHaveLength(1);
     });
+
+    it('wraps the fallback anchor paragraph when a page-relative image is emitted after it', () => {
+      const paragraphBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-with-fallback-anchor',
+        runs: [],
+      };
+      const imageBlock: ImageBlock = {
+        kind: 'image',
+        id: 'img-after-fallback-anchor-para',
+        src: 'data:image/png;base64,xxx',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'page',
+          alignH: 'left',
+          alignV: 'top',
+          offsetH: 0,
+          offsetV: DEFAULT_OPTIONS.margins!.top,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+          distLeft: 0,
+          distRight: 10,
+        },
+      };
+      const paragraphMeasure = makeMeasure([20]);
+      const imageMeasure: ImageMeasure = {
+        kind: 'image',
+        width: 120,
+        height: 120,
+      };
+
+      const layout = layoutDocument([paragraphBlock, imageBlock], [paragraphMeasure, imageMeasure], {
+        ...DEFAULT_OPTIONS,
+        remeasureParagraph: () => paragraphMeasure,
+      });
+
+      const page = layout.pages[0];
+      const paragraphFragment = page.fragments.find(
+        (fragment) => fragment.kind === 'para' && fragment.blockId === 'para-with-fallback-anchor',
+      ) as ParaFragment;
+      const imageFragments = page.fragments.filter(
+        (fragment) => fragment.kind === 'image' && fragment.blockId === 'img-after-fallback-anchor-para',
+      );
+
+      expect(paragraphFragment.x).toBeGreaterThan(DEFAULT_OPTIONS.margins!.left);
+      expect(imageFragments).toHaveLength(1);
+    });
   });
 
   describe('textbox content measures', () => {

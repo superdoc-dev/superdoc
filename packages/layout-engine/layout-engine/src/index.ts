@@ -2007,6 +2007,44 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Page-relative anchors need special placement when their block is encountered
   // so they can resolve against the active page/section geometry.
   const preRegisteredAnchorIds = new Set<string>();
+  const blockIndexById = new Map(blocks.map((candidateBlock, candidateIndex) => [candidateBlock.id, candidateIndex]));
+
+  const hasHardBreakBetween = (startIndex: number, endIndex: number): boolean => {
+    const first = Math.min(startIndex, endIndex) + 1;
+    const last = Math.max(startIndex, endIndex);
+    for (let candidateIndex = first; candidateIndex < last; candidateIndex += 1) {
+      const candidateBlock = blocks[candidateIndex];
+      if (
+        candidateBlock.kind === 'pageBreak' ||
+        candidateBlock.kind === 'sectionBreak' ||
+        candidateBlock.kind === 'columnBreak'
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const shouldWrapParagraphWithPageRelativeAnchor = (
+    anchorBlock: ImageBlock | DrawingBlock,
+    paragraphIndex: number,
+    paragraphId: string,
+  ): boolean => {
+    const anchorParagraphId =
+      anchorBlock.attrs != null && typeof anchorBlock.attrs === 'object'
+        ? (anchorBlock.attrs as { anchorParagraphId?: unknown }).anchorParagraphId
+        : undefined;
+    if (typeof anchorParagraphId === 'string') {
+      return anchorParagraphId === paragraphId;
+    }
+
+    const anchorIndex = blockIndexById.get(anchorBlock.id);
+    if (anchorIndex == null || anchorIndex === paragraphIndex) {
+      return false;
+    }
+
+    return !hasHardBreakBetween(paragraphIndex, anchorIndex);
+  };
 
   const resolveParagraphlessAnchoredTableY = (block: TableBlock, measure: TableMeasure, state: PageState): number => {
     const contentTop = state.topMargin;
@@ -2405,17 +2443,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       const drawingAnchorsForPara = anchoredByParagraph.get(index);
       const pageRelativeAnchorsForPara = pageRelativeAnchorsByParagraph.get(index);
-      const explicitPageRelativeAnchorsForPara = pageRelativeAnchorsForPara?.filter(({ block: anchorBlock }) => {
-        const attrs = anchorBlock.attrs;
-        return (
-          attrs != null &&
-          typeof attrs === 'object' &&
-          (attrs as { anchorParagraphId?: unknown }).anchorParagraphId === paraBlock.id
-        );
-      });
+      const wrappingPageRelativeAnchorsForPara = pageRelativeAnchorsForPara?.filter(({ block: anchorBlock }) =>
+        shouldWrapParagraphWithPageRelativeAnchor(anchorBlock, index, paraBlock.id),
+      );
       const anchorsForPara =
-        drawingAnchorsForPara || explicitPageRelativeAnchorsForPara?.length
-          ? [...(drawingAnchorsForPara ?? []), ...(explicitPageRelativeAnchorsForPara ?? [])]
+        drawingAnchorsForPara || wrappingPageRelativeAnchorsForPara?.length
+          ? [...(drawingAnchorsForPara ?? []), ...(wrappingPageRelativeAnchorsForPara ?? [])]
           : undefined;
       const tablesForPara = anchoredTablesByParagraph.get(index);
 

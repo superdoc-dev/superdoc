@@ -5986,6 +5986,70 @@ describe('requirePageBoundary edge cases', () => {
       expect(drawingOnPage2).toBeTruthy();
     });
 
+    it('resolves pre-registered page-relative drawings with the active section margins', () => {
+      const firstSectionParagraph: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-first-section',
+        runs: [],
+      };
+      const sectionBreak: SectionBreakBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-second-section',
+        type: 'nextPage',
+        margins: { top: 80, right: 40, bottom: 50, left: 120 },
+      };
+      const drawingBlock: FlowBlock = {
+        kind: 'drawing',
+        id: 'drawing-second-section',
+        drawingKind: 'vectorShape',
+        geometry: { width: 60, height: 40, rotation: 0 },
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'margin',
+          vRelativeFrom: 'margin',
+          alignH: 'left',
+          alignV: 'top',
+          offsetH: 5,
+          offsetV: 10,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+        },
+      };
+      const secondSectionParagraph: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-second-section',
+        runs: [],
+      };
+      const paragraphMeasure = makeMeasure([20]);
+      const drawingMeasure: DrawingMeasure = {
+        kind: 'drawing',
+        drawingKind: 'vectorShape',
+        width: 60,
+        height: 40,
+        scale: 1,
+        naturalWidth: 60,
+        naturalHeight: 40,
+        geometry: { width: 60, height: 40, rotation: 0, flipH: false, flipV: false },
+      };
+
+      const layout = layoutDocument(
+        [firstSectionParagraph, sectionBreak, drawingBlock, secondSectionParagraph],
+        [paragraphMeasure, { kind: 'sectionBreak' }, drawingMeasure, paragraphMeasure],
+        DEFAULT_OPTIONS,
+      );
+
+      const secondPage = layout.pages[1];
+      const fragment = secondPage.fragments.find(
+        (frag) => frag.blockId === 'drawing-second-section',
+      ) as DrawingFragment;
+
+      expect(fragment).toBeTruthy();
+      expect(fragment.x).toBe(125);
+      expect(fragment.y).toBe(90);
+    });
+
     it('creates fragment for margin-relative anchored drawing with wrapNone', () => {
       const paragraphBlock: FlowBlock = {
         kind: 'paragraph',

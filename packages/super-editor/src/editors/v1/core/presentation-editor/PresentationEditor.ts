@@ -8992,7 +8992,7 @@ export class PresentationEditor extends EventEmitter {
 
   #activateRenderedNoteSession(
     target: RenderedNoteTarget,
-    options: { clientX: number; clientY: number; pageIndex?: number },
+    options: { clientX?: number; clientY?: number; pageIndex?: number },
   ): boolean {
     if ((this.#headerFooterSession?.session?.mode ?? 'body') !== 'body') {
       this.#headerFooterSession?.exitMode();
@@ -9028,15 +9028,20 @@ export class PresentationEditor extends EventEmitter {
       },
     );
 
-    const hit = this.hitTest(options.clientX, options.clientY);
     const doc = session.editor.state?.doc;
-    if (hit && doc) {
-      try {
-        const selection = this.#createCollapsedSelectionNearInlineContent(doc, hit.pos);
-        const tr = session.editor.state.tr.setSelection(selection);
-        session.editor.view?.dispatch(tr);
-      } catch {
-        // Ignore stale pointer hits during activation races.
+    // SD-3400: pointer activation places the caret at the click position;
+    // programmatic activation (no coords, e.g. insert-footnote focus) leaves the
+    // caret at the note's default start so the user can type from the beginning.
+    if (typeof options.clientX === 'number' && typeof options.clientY === 'number' && doc) {
+      const hit = this.hitTest(options.clientX, options.clientY);
+      if (hit) {
+        try {
+          const selection = this.#createCollapsedSelectionNearInlineContent(doc, hit.pos);
+          const tr = session.editor.state.tr.setSelection(selection);
+          session.editor.view?.dispatch(tr);
+        } catch {
+          // Ignore stale pointer hits during activation races.
+        }
       }
     }
 
@@ -9044,6 +9049,16 @@ export class PresentationEditor extends EventEmitter {
     this.#shouldScrollSelectionIntoView = true;
     this.#scheduleSelectionUpdate({ immediate: true });
     return true;
+  }
+
+  /**
+   * SD-3400: programmatically open a footnote/endnote note session without a
+   * pointer. Focuses the note and scrolls it into view with the caret at the
+   * note's start. Used by insert-footnote (and any non-pointer navigation) so
+   * the user can immediately type in the new note.
+   */
+  activateNoteSession(target: RenderedNoteTarget): boolean {
+    return this.#activateRenderedNoteSession(target, {});
   }
 
   #exitActiveStorySession(): void {

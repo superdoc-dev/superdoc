@@ -55,8 +55,14 @@ function getSurfaceLocator(page: Page, surface: SurfaceKind) {
 
 async function clickBodySurface(page: Page) {
   const bodyLine = page.locator('.superdoc-line').first();
-  await bodyLine.scrollIntoViewIfNeeded();
-  await bodyLine.click();
+  // After a tracked header/footer edit (plus the comments-panel update) the body
+  // lines keep repainting, so on WebKit the element can detach between grabbing it
+  // and the scroll/click. Retry the scroll+click as a unit — each attempt
+  // re-resolves a fresh element instead of failing on a stale, detached handle.
+  await expect(async () => {
+    await bodyLine.scrollIntoViewIfNeeded({ timeout: 2_000 });
+    await bodyLine.click({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
 }
 
 async function activateBlankDocumentHeader(superdoc: SuperDocFixture) {

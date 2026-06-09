@@ -218,6 +218,39 @@ describe('computeDirtyRegions', () => {
     expect(result.stableBlockIds.has('0-paragraph')).toBe(true);
   });
 
+  it('detects textboxShape content changes as dirty', () => {
+    const prev = [
+      drawing({
+        drawingKind: 'textboxShape',
+        textContent: { parts: [{ text: 'Alpha', fontFamily: 'Arial', fontSize: 16 }] },
+        contentBlocks: [
+          {
+            kind: 'paragraph',
+            id: 'textbox-para-1',
+            runs: [{ text: 'Alpha', fontFamily: 'Arial', fontSize: 16 }],
+          },
+        ],
+      }),
+    ];
+    const next = [
+      drawing({
+        drawingKind: 'textboxShape',
+        textContent: { parts: [{ text: 'Beta', fontFamily: 'Arial', fontSize: 16 }] },
+        contentBlocks: [
+          {
+            kind: 'paragraph',
+            id: 'textbox-para-1',
+            runs: [{ text: 'Beta', fontFamily: 'Arial', fontSize: 16 }],
+          },
+        ],
+      }),
+    ];
+
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+    expect(result.stableBlockIds.has('drawing-0')).toBe(false);
+  });
+
   it.each([
     ['src', { src: 'other.png' }],
     ['alt', { alt: 'Diagram' }],

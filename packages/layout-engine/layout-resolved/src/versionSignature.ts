@@ -18,6 +18,7 @@ import {
   type TableAttrs,
   type TableBlock,
   type TableCellAttrs,
+  type TextboxDrawing,
   type TrackedChangeMeta,
   type TextRun,
   type VectorShapeDrawing,
@@ -117,6 +118,21 @@ const imageHyperlinkVersion = (hyperlink: ImageBlock['hyperlink'] | undefined): 
 const imageLuminanceVersion = (lum: ImageBlock['lum'] | undefined): string => {
   if (!lum) return '';
   return [lum.bright ?? '', lum.contrast ?? ''].join(':');
+};
+
+const drawingTextVersion = (block: VectorShapeDrawing | TextboxDrawing): string => {
+  const textboxContentBlocks =
+    'contentBlocks' in block && Array.isArray(block.contentBlocks)
+      ? block.contentBlocks.map((contentBlock: ParagraphBlock) => deriveBlockVersion(contentBlock)).join(';')
+      : '';
+
+  return JSON.stringify([
+    block.textAlign ?? '',
+    block.textVerticalAlign ?? '',
+    block.textInsets ?? null,
+    block.textContent ?? null,
+    textboxContentBlocks,
+  ]);
 };
 
 const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
@@ -447,6 +463,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         vector.geometry.rotation ?? 0,
         vector.geometry.flipH ? 1 : 0,
         vector.geometry.flipV ? 1 : 0,
+        drawingTextVersion(vector),
       ].join('|');
     }
     if (block.drawingKind === 'shapeGroup') {

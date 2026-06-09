@@ -2490,6 +2490,7 @@ export class EditorInputManager {
   ): boolean {
     if (!fragmentHit) return false;
     if (fragmentHit.fragment.kind !== 'image' && fragmentHit.fragment.kind !== 'drawing') return false;
+    // Textboxes use text selection (caret), not image-style anchor drag selection.
     if (fragmentHit.fragment.kind === 'drawing' && fragmentHit.fragment.drawingKind === 'textboxShape') {
       return false;
     }

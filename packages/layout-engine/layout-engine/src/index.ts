@@ -2735,7 +2735,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         };
 
         if (contentMeasures) {
-          (fragment as DrawingFragment & { contentMeasures?: ParagraphMeasure[] }).contentMeasures = contentMeasures;
+          fragment.contentMeasures = contentMeasures;
         }
 
         const attrs = drawBlock.attrs as Record<string, unknown> | undefined;

@@ -2043,6 +2043,23 @@ export class DomPainter {
     return block.anchor?.vRelativeFrom === 'page';
   }
 
+  private isHeaderFooterAbsoluteOverlayFragment(
+    fragment: Fragment,
+    kind: 'header' | 'footer',
+    resolvedItem: ResolvedPaintItem | undefined,
+  ): boolean {
+    if (kind !== 'header' && kind !== 'footer') return false;
+    if (fragment.kind !== 'image' && fragment.kind !== 'drawing') return false;
+    if (fragment.isAnchored !== true) return false;
+    const block = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
+    if (!block || (block.kind !== 'image' && block.kind !== 'drawing')) return false;
+    if (block.anchor?.isAnchored !== true) return false;
+    if (block.wrap?.type !== 'None') return false;
+    if (fragment.behindDoc === true || block.anchor?.behindDoc === true) return false;
+
+    return true;
+  }
+
   /**
    * Header/footer layout emits normalized anchor Y coordinates:
    * - headers: local to the header container origin
@@ -2098,9 +2115,13 @@ export class DomPainter {
     const className = kind === 'header' ? CLASS_NAMES.pageHeader : CLASS_NAMES.pageFooter;
     const existing = pageEl.querySelector(`.${className}`);
     const data = provider ? provider(page.number, page.margins, page) : null;
+    const behindDocSelector = `[data-behind-doc-section="${kind}"]`;
+    const overlaySelector = `[data-header-footer-overlay-section="${kind}"]`;
 
     if (!data || data.fragments.length === 0) {
       existing?.remove();
+      pageEl.querySelectorAll(behindDocSelector).forEach((el) => el.remove());
+      pageEl.querySelectorAll(overlaySelector).forEach((el) => el.remove());
       return;
     }
 
@@ -2190,35 +2211,41 @@ export class DomPainter {
     const decorationItems = data.items ?? [];
     const betweenBorderFlags = computeBetweenBorderFlags(decorationItems);
 
-    // Separate behindDoc fragments from normal fragments.
+    // Separate page-level behindDoc and foreground wrapNone overlay fragments
+    // from normal header/footer container content.
     // Prefer explicit fragment.behindDoc when present. Keep zIndex===0 as a
     // compatibility fallback for older layouts that predate explicit metadata.
     // Track original index for between-border flag lookup.
     const behindDocFragments: { fragment: (typeof data.fragments)[number]; originalIndex: number }[] = [];
+    const absoluteOverlayFragments: { fragment: (typeof data.fragments)[number]; originalIndex: number }[] = [];
     const normalFragments: { fragment: (typeof data.fragments)[number]; originalIndex: number }[] = [];
 
     for (let fi = 0; fi < data.fragments.length; fi += 1) {
       const fragment = data.fragments[fi];
+      const resolvedItem = decorationItems[fi];
       let isBehindDoc = false;
       if (fragment.kind === 'image' || fragment.kind === 'drawing') {
-        const resolvedItem = decorationItems[fi] as ResolvedDrawingItem | undefined;
+        const resolvedMediaItem = resolvedItem as ResolvedImageItem | ResolvedDrawingItem | undefined;
         isBehindDoc =
           fragment.behindDoc === true ||
           (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0) ||
-          this.shouldRenderBehindPageContent(fragment, kind, resolvedItem);
+          this.shouldRenderBehindPageContent(fragment, kind, resolvedMediaItem);
       }
       if (isBehindDoc) {
         behindDocFragments.push({ fragment, originalIndex: fi });
+      } else if (this.isHeaderFooterAbsoluteOverlayFragment(fragment, kind, resolvedItem)) {
+        absoluteOverlayFragments.push({ fragment, originalIndex: fi });
       } else {
         normalFragments.push({ fragment, originalIndex: fi });
       }
     }
 
-    // Remove any previously rendered behindDoc fragments for this section before re-rendering.
-    // Unlike the header/footer container (which uses innerHTML = '' to clear), behindDoc
-    // fragments are placed directly on the page element and must be explicitly removed.
-    const behindDocSelector = `[data-behind-doc-section="${kind}"]`;
+    // Remove any previously rendered page-level decoration fragments for this
+    // section before re-rendering. Unlike the header/footer container (which
+    // uses innerHTML = '' to clear), these fragments are placed directly on
+    // the page element and must be explicitly removed.
     pageEl.querySelectorAll(behindDocSelector).forEach((el) => el.remove());
+    pageEl.querySelectorAll(overlaySelector).forEach((el) => el.remove());
 
     // Render behindDoc fragments directly on the page with z-index: 0
     // and insert them at the beginning of the page so they render behind body content.
@@ -2287,6 +2314,34 @@ export class DomPainter {
     if (!existing) {
       pageEl.appendChild(container);
     }
+
+    absoluteOverlayFragments.forEach(({ fragment, originalIndex }) => {
+      const resolvedItem = data.items?.[originalIndex];
+      const fragEl = this.renderFragment(
+        fragment,
+        context,
+        undefined,
+        betweenBorderFlags.get(originalIndex),
+        resolvedItem,
+      );
+      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment, resolvedItem);
+      this.applyHeaderFooterTextWatermarkPreviewOpacity(fragEl, data.isActiveHeaderFooter === true);
+
+      let pageY: number;
+      if (isPageRelative && kind === 'footer') {
+        pageY = footerAnchorPageOriginY + fragment.y;
+      } else {
+        pageY = fragment.y;
+      }
+
+      fragEl.style.top = `${pageY}px`;
+      fragEl.style.left = `${marginLeft + fragment.x}px`;
+      const zIndex = fragment.kind === 'image' || fragment.kind === 'drawing' ? fragment.zIndex : undefined;
+      fragEl.style.zIndex = String(zIndex ?? 1);
+      fragEl.style.pointerEvents = 'none';
+      fragEl.dataset.headerFooterOverlaySection = kind;
+      pageEl.appendChild(fragEl);
+    });
   }
 
   private resetState(): void {

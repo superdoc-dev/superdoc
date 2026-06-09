@@ -3402,6 +3402,15 @@ function getPageRelativeMeasurementBand(
   };
 }
 
+function isHeaderFooterAbsoluteOverlay(
+  block: ImageBlock | DrawingBlock,
+  kind: 'header' | 'footer' | undefined,
+): boolean {
+  if (!kind) return false;
+  if (block.anchor?.isAnchored !== true) return false;
+  return block.wrap?.type === 'None';
+}
+
 /**
  * Determine whether a fragment should be excluded from measurement (pagination) bounds.
  *
@@ -3413,12 +3422,10 @@ function getPageRelativeMeasurementBand(
  * 3. Page-relative header/footer overlays that do not intersect the region's
  *    reserved margin band — they should still render, but must not reserve
  *    body space like true header/footer content.
- * 4. Header/footer anchored overlays with wrap=None that cover the full
- *    measurement canvas — `wrap=None` is OOXML's "absolute overlay, no flow
- *    exclusion zone", so by definition such fragments must not reserve body
- *    space. Combined with full-canvas bounds this catches page-covering
- *    background shapes regardless of vRelativeFrom/hRelativeFrom (which the
- *    authoring tool is free to set to column/paragraph for cover pages).
+ * 4. Header/footer anchored overlays with wrap=None. OOXML wrapNone creates no
+ *    text exclusion zone, so these objects render as absolute story overlays
+ *    but do not reserve header/footer text-band height. This is limited to
+ *    header/footer layout; body wrapNone behavior is out of scope.
  */
 function shouldExcludeFromMeasurement(
   fragment: Fragment,
@@ -3445,6 +3452,10 @@ function shouldExcludeFromMeasurement(
   // behindDoc fragments never affect measurement
   if (anchoredBlock.anchor?.behindDoc) return true;
 
+  if (isHeaderFooterAbsoluteOverlay(anchoredBlock, kind)) {
+    return true;
+  }
+
   // Page-relative anchored fragments that sit entirely outside the measurement band
   // should not inflate pagination height.
   if (isPageRelativeAnchor(anchoredBlock)) {
@@ -3460,24 +3471,6 @@ function shouldExcludeFromMeasurement(
     if (measurementBand && !rangesIntersect(fragment.y, fragmentBottom, measurementBand.start, measurementBand.end)) {
       return true;
     }
-  }
-
-  // Only treat anchored content as a non-measurement overlay when it is
-  // unambiguously a page-covering decoration: wrap=None (no exclusion zone,
-  // so by definition the shape never reserves body space) AND fragment size
-  // covers the measurement canvas in both dimensions. Real anchored
-  // header/footer content uses wrap modes that affect flow (Square / Tight /
-  // TopAndBottom / Through), so it continues to reserve space.
-  const fragmentHeight = typeof fragment.height === 'number' ? fragment.height : fragmentBottom - fragment.y;
-  const fragmentWidth = typeof fragment.width === 'number' ? fragment.width : 0;
-  const heightCoversCanvas = Number.isFinite(fragmentHeight) && fragmentHeight >= canvasHeight;
-  const widthCoversCanvas =
-    Number.isFinite(constraints.width) && constraints.width > 0 && fragmentWidth >= constraints.width;
-  const wrapType = anchoredBlock.wrap?.type;
-  const isOverlayWrap = wrapType === 'None';
-
-  if (kind && heightCoversCanvas && widthCoversCanvas && isOverlayWrap) {
-    return true;
   }
 
   return false;

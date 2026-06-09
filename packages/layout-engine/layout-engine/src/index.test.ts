@@ -5028,6 +5028,124 @@ describe('layoutHeaderFooter', () => {
     expect(layout.renderHeight).toBeGreaterThan(layout.height);
   });
 
+  it('excludes footer wrap=None foreground media from measured text-band height', () => {
+    const disclaimerBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'footer-disclaimer',
+      runs: [{ text: 'This document is an insurance summary...', fontFamily: 'Arial', fontSize: 7 }],
+    };
+    const foregroundLogo: FlowBlock = {
+      kind: 'image',
+      id: 'footer-logo',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 575,
+        offsetV: 126,
+        behindDoc: false,
+      },
+      wrap: { type: 'None' },
+    };
+    const background: FlowBlock = {
+      kind: 'drawing',
+      id: 'footer-background',
+      drawingKind: 'vectorShape',
+      geometry: { width: 960, height: 540 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: -46,
+        offsetV: 41,
+        behindDoc: true,
+      },
+      wrap: { type: 'None' },
+      shapeKind: 'Rectangle',
+    };
+    const disclaimerMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 40, width: 500, ascent: 6, descent: 2, lineHeight: 8 }],
+      totalHeight: 8,
+    };
+    const logoMeasure: Measure = { kind: 'image', width: 533, height: 408 };
+    const backgroundMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 960,
+      height: 540,
+      scale: 1,
+      naturalWidth: 960,
+      naturalHeight: 540,
+      geometry: { width: 960, height: 540, rotation: 0, flipH: false, flipV: false },
+    };
+    const constraints = {
+      width: 909.133,
+      height: 521.733,
+      pageWidth: 960,
+      pageHeight: 540,
+      margins: { left: 44.133, right: 6.733, top: 60.467, bottom: 18.267, header: 28.8, footer: 9.6 },
+    };
+
+    const layout = layoutHeaderFooter(
+      [disclaimerBlock, foregroundLogo, background],
+      [disclaimerMeasure, logoMeasure, backgroundMeasure],
+      constraints,
+      'footer',
+    );
+
+    const text = layout.pages[0].fragments.find((fragment) => fragment.blockId === 'footer-disclaimer');
+    const logo = layout.pages[0].fragments.find((fragment) => fragment.blockId === 'footer-logo');
+
+    expect(layout.height).toBeCloseTo(8);
+    expect(layout.renderHeight).toBeGreaterThan(500);
+    expect(text?.y).toBe(0);
+    expect(logo?.y).toBeCloseTo(126);
+  });
+
+  it('keeps non-None footer anchored media in measured text-band height', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'footer-text',
+      runs: [{ text: 'Footer text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    const wrappedImage: FlowBlock = {
+      kind: 'image',
+      id: 'footer-square-image',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetV: 126,
+        behindDoc: false,
+      },
+      wrap: { type: 'Square' },
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 180, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const imageMeasure: Measure = { kind: 'image', width: 533, height: 408 };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, wrappedImage],
+      [paragraphMeasure, imageMeasure],
+      {
+        width: 909.133,
+        height: 521.733,
+        pageWidth: 960,
+        pageHeight: 540,
+        margins: { left: 44.133, right: 6.733, top: 60.467, bottom: 18.267, header: 28.8, footer: 9.6 },
+      },
+      'footer',
+    );
+
+    expect(layout.height).toBeGreaterThan(400);
+  });
+
   it('keeps tall anchored shape in measurement when wrap reserves flow space', () => {
     // Anchored content with a non-None wrap (e.g. Square) is real header
     // content with an exclusion zone — it must continue to reserve body

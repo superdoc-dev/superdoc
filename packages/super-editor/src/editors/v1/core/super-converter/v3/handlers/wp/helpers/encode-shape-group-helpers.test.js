@@ -26,6 +26,7 @@ vi.mock('./vector-shape-helpers.js', () => ({
   extractStrokeWidth: vi.fn(() => 1),
   extractLineEnds: vi.fn(() => null),
   extractCustomGeometry: vi.fn(() => null),
+  extractShapeEffects: vi.fn(() => null),
 }));
 
 vi.mock('@core/utilities/carbonCopy.js', () => ({
@@ -508,7 +509,7 @@ describe('handleImageNode - Shape Group Support', () => {
     expect(shape.attrs.flipV).toBe(true);
   });
 
-  it('should preserve group-level rotation and flips on flattened children', () => {
+  it('should preserve group-level rotation and flips on the group transform', () => {
     const shape = createShape('2', 'Shape 1', '0', '0', '100', '100');
     const node = createShapeGroupNode([shape], {
       x: '0',
@@ -539,9 +540,9 @@ describe('handleImageNode - Shape Group Support', () => {
       flipH: true,
       flipV: true,
     });
-    expect(importedShape.attrs.rotation).toBe(90);
-    expect(importedShape.attrs.flipH).toBe(true);
-    expect(importedShape.attrs.flipV).toBe(true);
+    expect(importedShape.attrs.rotation).toBe(0);
+    expect(importedShape.attrs.flipH).toBe(false);
+    expect(importedShape.attrs.flipV).toBe(false);
   });
 
   it('should preserve grouped picture srcRect and ellipse geometry as image clipping attrs', () => {

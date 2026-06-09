@@ -861,6 +861,23 @@ const decomposeMatrixOrientation = (matrix) => {
   };
 };
 
+const getVisualOrientationMatrix = ({ rotation = 0, flipH = false, flipV = false } = {}) => {
+  const radians = (rotation * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const flipScaleX = flipH ? -1 : 1;
+  const flipScaleY = flipV ? -1 : 1;
+
+  return {
+    a: cos * flipScaleX,
+    b: sin * flipScaleX,
+    c: -sin * flipScaleY,
+    d: cos * flipScaleY,
+    e: 0,
+    f: 0,
+  };
+};
+
 const getGroupAffineTransform = (xfrm, { includeVisualTransform = false } = {}) => {
   if (!xfrm) {
     return { matrix: identityMatrix(), rotation: 0, flipH: false, flipV: false };
@@ -924,6 +941,21 @@ const composeShapeGroupTransform = (parent, child) => {
   };
 };
 
+const composeShapeGroupChildOrientation = (rect, xfrm) => {
+  const parentMatrix = getVisualOrientationMatrix({
+    rotation: rect.rotation ?? 0,
+    flipH: Boolean(rect.flipH),
+    flipV: Boolean(rect.flipV),
+  });
+  const childMatrix = getVisualOrientationMatrix({
+    rotation: xfrm?.attributes?.['rot'] ? rotToDegrees(xfrm.attributes['rot']) : 0,
+    flipH: xfrm?.attributes?.['flipH'] === '1',
+    flipV: xfrm?.attributes?.['flipV'] === '1',
+  });
+
+  return decomposeMatrixOrientation(multiplyMatrix(parentMatrix, childMatrix));
+};
+
 const transformShapeGroupChildRect = (transform, rawX, rawY, rawWidth, rawHeight) => {
   const matrix = transform.matrix ?? identityMatrix();
   const width = Math.hypot(matrix.a, matrix.b) * rawWidth;
@@ -976,10 +1008,7 @@ const parseShapeGroupVectorChild = (wsp, transform, params) => {
   const rawWidth = parseEmuNumber(shapeExt?.attributes?.['cx'], 914400);
   const rawHeight = parseEmuNumber(shapeExt?.attributes?.['cy'], 914400);
   const rect = transformShapeGroupChildRect(transform, rawX, rawY, rawWidth, rawHeight);
-  const shapeRotation = shapeXfrm?.attributes?.['rot'] ? rotToDegrees(shapeXfrm.attributes['rot']) : 0;
-  const rotation = (rect.rotation ?? 0) + shapeRotation;
-  const flipH = Boolean(rect.flipH) !== (shapeXfrm?.attributes?.['flipH'] === '1');
-  const flipV = Boolean(rect.flipV) !== (shapeXfrm?.attributes?.['flipV'] === '1');
+  const orientation = composeShapeGroupChildOrientation(rect, shapeXfrm);
   const style = findChildByLocalName(wsp.elements, 'style');
   const fillColor = extractFillColor(spPr, style);
   const strokeColor = extractStrokeColor(spPr, style);
@@ -1001,9 +1030,7 @@ const parseShapeGroupVectorChild = (wsp, transform, params) => {
       kind: shapeKind,
       customGeometry: customGeom || undefined,
       ...rect,
-      rotation,
-      flipH,
-      flipV,
+      ...orientation,
       fillColor,
       strokeColor,
       strokeWidth,
@@ -1031,10 +1058,7 @@ const parseShapeGroupImageChild = (pic, transform, params) => {
   const rawWidth = parseEmuNumber(ext?.attributes?.['cx'], 914400);
   const rawHeight = parseEmuNumber(ext?.attributes?.['cy'], 914400);
   const rect = transformShapeGroupChildRect(transform, rawX, rawY, rawWidth, rawHeight);
-  const pictureRotation = xfrm?.attributes?.['rot'] ? rotToDegrees(xfrm.attributes['rot']) : 0;
-  const rotation = (rect.rotation ?? 0) + pictureRotation;
-  const flipH = Boolean(rect.flipH) !== (xfrm?.attributes?.['flipH'] === '1');
-  const flipV = Boolean(rect.flipV) !== (xfrm?.attributes?.['flipV'] === '1');
+  const orientation = composeShapeGroupChildOrientation(rect, xfrm);
   const path = resolveShapeGroupPicturePath(pic, params);
   if (!path) return null;
 
@@ -1052,9 +1076,7 @@ const parseShapeGroupImageChild = (pic, transform, params) => {
     shapeType: 'image',
     attrs: {
       ...rect,
-      rotation,
-      flipH,
-      flipV,
+      ...orientation,
       src: path,
       imageId: picId,
       imageName: picName,

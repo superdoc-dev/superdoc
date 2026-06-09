@@ -87,7 +87,9 @@ test('font family dropdown changes font', async ({ superdoc }) => {
   await superdoc.snapshot('font family dropdown open');
 
   // Select "Times New Roman" from the dropdown
-  const fontOption = superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Times New Roman' });
+  const fontOption = superdoc.page
+    .locator('[data-item="btn-fontFamily-option"]')
+    .filter({ hasText: 'Times New Roman' });
   await fontOption.click();
   await superdoc.waitForStable();
 

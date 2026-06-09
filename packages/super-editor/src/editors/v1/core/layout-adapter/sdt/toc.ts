@@ -33,6 +33,7 @@ export function applyTocMetadata(
     gallery?: string | null;
     uniqueId?: string | null;
     instruction?: string | null;
+    tocId?: string | null;
   },
 ): void {
   blocks.forEach((block) => {
@@ -52,6 +53,9 @@ export function applyTocMetadata(
       }
       if (metadata.instruction) {
         block.attrs.tocInstruction = metadata.instruction;
+      }
+      if (metadata.tocId) {
+        block.attrs.tocId = metadata.tocId;
       }
     }
   });
@@ -95,6 +99,11 @@ export function processTocChildren(
     docPartObjectId?: string;
     tocInstruction?: string;
     sdtMetadata?: SdtMetadata;
+    /**
+     * Stable id shared by every paragraph in the TOC. Used by the
+     * painter/presentation editor to coordinate hover across all entries.
+     */
+    tocId?: string;
   },
   context: {
     nextBlockId: BlockIdGenerator;
@@ -114,7 +123,7 @@ export function processTocChildren(
   },
 ): void {
   const paragraphConverter = context.converters.paragraphToFlowBlocks;
-  const { docPartGallery, docPartObjectId, tocInstruction } = metadata;
+  const { docPartGallery, docPartObjectId, tocInstruction, tocId } = metadata;
   const { blocks, recordBlockKind } = outputArrays;
 
   children.forEach((child) => {
@@ -147,6 +156,7 @@ export function processTocChildren(
         gallery: docPartGallery,
         uniqueId: docPartObjectId,
         instruction: tocInstruction,
+        tocId,
       });
       applySdtMetadataToParagraphBlocks(
         paragraphBlocks.filter((b) => b.kind === 'paragraph') as ParagraphBlock[],
@@ -166,7 +176,13 @@ export function processTocChildren(
 
       processTocChildren(
         child.content,
-        { docPartGallery, docPartObjectId, tocInstruction: finalInstruction, sdtMetadata: metadata.sdtMetadata },
+        {
+          docPartGallery,
+          docPartObjectId,
+          tocInstruction: finalInstruction,
+          sdtMetadata: metadata.sdtMetadata,
+          tocId,
+        },
         context,
         outputArrays,
       );
@@ -189,12 +205,14 @@ export function processTocChildren(
 export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerContext): void {
   if (!Array.isArray(node.content)) return;
 
+  // Direct tableOfContents nodes have no enclosing SDT — use sdBlockId as the
+  // hover group key, and omit gallery so applyTocMetadata doesn't fabricate one.
+  const sdBlockId = (node.attrs as { sdBlockId?: unknown } | undefined)?.sdBlockId;
   processTocChildren(
     node.content,
     {
-      // No enclosing SDT — omit gallery so applyTocMetadata does not fabricate
-      // a docPartObject sdt entry on each TOC paragraph.
       tocInstruction: getNodeInstruction(node),
+      tocId: typeof sdBlockId === 'string' ? sdBlockId : undefined,
     },
     {
       nextBlockId: context.nextBlockId,

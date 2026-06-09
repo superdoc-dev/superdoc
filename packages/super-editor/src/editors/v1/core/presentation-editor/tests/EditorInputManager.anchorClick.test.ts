@@ -21,6 +21,22 @@ import {
   type EditorInputCallbacks,
 } from '../pointer-events/EditorInputManager.js';
 
+vi.mock('../input/PositionHitResolver.js', () => ({
+  resolvePointerPositionHit: vi.fn(() => ({
+    pos: 12,
+    layoutEpoch: 1,
+    pageIndex: 0,
+    blockId: '',
+    column: 0,
+    lineIndex: -1,
+  })),
+}));
+
+vi.mock('@superdoc/layout-bridge', () => ({
+  clickToPosition: vi.fn(() => ({ pos: 12, layoutEpoch: 1, pageIndex: 0 })),
+  getFragmentAtPosition: vi.fn(() => null),
+}));
+
 describe('EditorInputManager — anchor-href click routing (SD-2537)', () => {
   let manager: EditorInputManager;
   let viewportHost: HTMLElement;
@@ -73,7 +89,15 @@ describe('EditorInputManager — anchor-href click routing (SD-2537)', () => {
 
     goToAnchor = vi.fn();
     const callbacks: EditorInputCallbacks = {
-      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({ x: clientX, y: clientY })),
+      // Return a finite pageIndex so pointerdown enters the selection/drag setup branch
+      // instead of bailing as "off any page" — required for the drag-threshold guard
+      // path to be exercised.
+      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({
+        x: clientX,
+        y: clientY,
+        pageIndex: 0,
+        pageLocalY: clientY,
+      })),
       scheduleSelectionUpdate: vi.fn(),
       updateSelectionDebugHud: vi.fn(),
       goToAnchor,
@@ -115,6 +139,36 @@ describe('EditorInputManager — anchor-href click routing (SD-2537)', () => {
     );
   };
 
+  const firePointerUp = (el: HTMLElement, opts: { clientX?: number; clientY?: number } = {}) => {
+    const PointerEventImpl =
+      (globalThis as unknown as { PointerEvent?: typeof PointerEvent }).PointerEvent ?? globalThis.MouseEvent;
+    el.dispatchEvent(
+      new PointerEventImpl('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX: opts.clientX ?? 10,
+        clientY: opts.clientY ?? 10,
+      } as PointerEventInit),
+    );
+  };
+
+  const firePointerMove = (el: HTMLElement, opts: { clientX: number; clientY: number }) => {
+    const PointerEventImpl =
+      (globalThis as unknown as { PointerEvent?: typeof PointerEvent }).PointerEvent ?? globalThis.MouseEvent;
+    el.dispatchEvent(
+      new PointerEventImpl('pointermove', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: opts.clientX,
+        clientY: opts.clientY,
+      } as PointerEventInit),
+    );
+  };
+
   it('routes `#<bookmark>` anchor clicks through goToAnchor', () => {
     const a = makeAnchor('#_Ref506192326');
     firePointerDown(a);
@@ -124,6 +178,10 @@ describe('EditorInputManager — anchor-href click routing (SD-2537)', () => {
   it('routes TOC-inside `#…` anchor clicks through goToAnchor (backward compat)', () => {
     // The pre-PR behavior was TOC-only. Make sure generalizing the branch
     // didn't accidentally exclude TOC entries.
+    //
+    // update: TOC links now defer navigation from pointerdown to
+    // pointerup so the user can drag-select inside the TOC. A clean click
+    // (pointerdown + pointerup with no movement) must still navigate.
     const tocWrapper = document.createElement('span');
     tocWrapper.className = 'superdoc-toc-entry';
     const a = document.createElement('a');
@@ -133,7 +191,44 @@ describe('EditorInputManager — anchor-href click routing (SD-2537)', () => {
     viewportHost.appendChild(tocWrapper);
 
     firePointerDown(a);
+    expect(goToAnchor).not.toHaveBeenCalled();
+    firePointerUp(a);
     expect(goToAnchor).toHaveBeenCalledWith('#_Toc123');
+  });
+
+  it('does not navigate on TOC pointerdown alone — deferral guard', () => {
+    // A bare pointerdown on a TOC entry must NOT navigate, so that the user
+    // has a chance to drag-select before the click resolves. Navigation only
+    // fires on the matching pointerup (covered by the test above).
+    const tocWrapper = document.createElement('span');
+    tocWrapper.className = 'superdoc-toc-entry';
+    const a = document.createElement('a');
+    a.className = 'superdoc-link';
+    a.setAttribute('href', '#_Toc123');
+    tocWrapper.appendChild(a);
+    viewportHost.appendChild(tocWrapper);
+
+    firePointerDown(a);
+    expect(goToAnchor).not.toHaveBeenCalled();
+  });
+
+  it('does not navigate when TOC pointer drags past the threshold before release', () => {
+    // The whole point of deferring TOC navigation to pointerup is to let the
+    // user drag-select inside the TOC without triggering goToAnchor. Once the
+    // pointer moves past the drag threshold, the pending nav must be dropped.
+    const tocWrapper = document.createElement('span');
+    tocWrapper.className = 'superdoc-toc-entry';
+    const a = document.createElement('a');
+    a.className = 'superdoc-link';
+    a.setAttribute('href', '#_Toc123');
+    tocWrapper.appendChild(a);
+    viewportHost.appendChild(tocWrapper);
+
+    firePointerDown(a);
+    // Move well past the 5px drag-selection threshold.
+    firePointerMove(viewportHost, { clientX: 200, clientY: 200 });
+    firePointerUp(a, { clientX: 200, clientY: 200 });
+    expect(goToAnchor).not.toHaveBeenCalled();
   });
 
   it('does not route external hrefs through goToAnchor', () => {

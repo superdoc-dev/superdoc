@@ -562,6 +562,11 @@ export type ImageLuminanceAdjustment = {
   contrast?: number;
 };
 
+export type ImageAlphaModFix = {
+  /** OOXML a:alphaModFix/@amt in raw fixed-percentage units (0..100000). */
+  amt: number;
+};
+
 /** Hyperlink metadata from OOXML a:hlinkClick on a DrawingML image. */
 export type ImageHyperlink = { url: string; tooltip?: string };
 
@@ -639,6 +644,7 @@ export type ImageRun = {
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
   lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
+  alphaModFix?: ImageAlphaModFix; // DrawingML fixed alpha adjustment from a:alphaModFix
   /** Image hyperlink from OOXML a:hlinkClick. When set, clicking the image opens the URL. */
   hyperlink?: ImageHyperlink;
 };
@@ -957,6 +963,7 @@ export type ImageBlock = {
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
   lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
+  alphaModFix?: ImageAlphaModFix; // DrawingML fixed alpha adjustment from a:alphaModFix
   // Image transformations from OOXML a:xfrm (applies to both inline and anchored images)
   rotation?: number; // Rotation angle in degrees
   flipH?: boolean; // Horizontal flip

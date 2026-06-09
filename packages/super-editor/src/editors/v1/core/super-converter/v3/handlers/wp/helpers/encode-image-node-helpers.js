@@ -126,6 +126,12 @@ const buildClipPathFromSrcRect = (srcRectAttrs = {}) => {
   return `inset(${top}% ${right}% ${bottom}% ${left}%)`;
 };
 
+const extractAlphaModFix = (blip) => {
+  const alphaModFix = findChildByLocalName(blip?.elements, 'alphaModFix');
+  const amt = Number(alphaModFix?.attributes?.amt);
+  return Number.isFinite(amt) ? { amt } : undefined;
+};
+
 /**
  * Fill wrap.attrs distance fields from wp:anchor dist* when the wrap element omits them.
  * Only merges sides each wp:wrap* element may carry (ECMA-376 CT_WrapSquare / Tight / Through / TopBottom).
@@ -373,6 +379,7 @@ export function handleImageNode(node, params, isAnchor) {
           ...(Number.isFinite(rawContrast) ? { contrast: rawContrast } : {}),
         }
       : undefined;
+  const alphaModFix = extractAlphaModFix(blip);
 
   // Check for stretch mode: <a:stretch><a:fillRect/></a:stretch>
   // This tells Word to scale the image to fill the extent rectangle.
@@ -597,6 +604,7 @@ export function handleImageNode(node, params, isAnchor) {
     ...(originalChildren.length ? { originalDrawingChildren: originalChildren } : {}),
     ...(hasGrayscale ? { grayscale: true } : {}),
     ...(lum ? { lum } : {}),
+    ...(alphaModFix ? { alphaModFix } : {}),
   };
 
   return {
@@ -930,6 +938,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
       const blipFill = pic.elements?.find((el) => el.name === 'pic:blipFill');
       const blip = findChildByLocalName(blipFill?.elements, 'blip');
       if (!blip) return null;
+      const alphaModFix = extractAlphaModFix(blip);
 
       const rEmbed = blip.attributes?.['r:embed'];
       if (!rEmbed) return null;
@@ -963,6 +972,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
           src: path,
           imageId: picId,
           imageName: picName,
+          ...(alphaModFix ? { alphaModFix } : {}),
         },
       };
     })

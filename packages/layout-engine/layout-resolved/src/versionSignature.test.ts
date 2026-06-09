@@ -197,6 +197,13 @@ describe('deriveBlockVersion - table image content', () => {
     expect(filtered).not.toBe(plain);
   });
 
+  it('changes when a table image fixed alpha changes', () => {
+    const plain = deriveBlockVersion(makeTableWithImage(baseImage));
+    const transparent = deriveBlockVersion(makeTableWithImage({ ...baseImage, alphaModFix: { amt: 9000 } }));
+
+    expect(transparent).not.toBe(plain);
+  });
+
   it('changes when a table image hyperlink changes', () => {
     const unlinked = deriveBlockVersion(makeTableWithImage(baseImage));
     const linked = deriveBlockVersion(
@@ -301,6 +308,13 @@ describe('deriveBlockVersion - inline image runs', () => {
     );
 
     expect(filtered).not.toBe(plain);
+  });
+
+  it('changes when an inline image fixed alpha changes', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImageRun(baseImageRun));
+    const transparent = deriveBlockVersion(makeParagraphWithImageRun({ ...baseImageRun, alphaModFix: { amt: 9000 } }));
+
+    expect(transparent).not.toBe(plain);
   });
 
   it('changes when an inline image transform changes', () => {

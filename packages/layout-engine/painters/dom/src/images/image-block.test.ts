@@ -35,6 +35,7 @@ describe('createDrawingImageElement', () => {
       src: 'data:image/png;base64,AAA',
       grayscale: true,
       gain: 2,
+      alphaModFix: { amt: 9000 },
     } as DrawingBlock;
 
     const imgEl = createDrawingImageElement(doc, drawing, (imageEl) => imageEl) as HTMLImageElement;
@@ -42,6 +43,7 @@ describe('createDrawingImageElement', () => {
     expect(imgEl.style.display).toBe('block');
     expect(imgEl.style.filter).toContain('grayscale(100%)');
     expect(imgEl.style.filter).toContain('contrast(2)');
+    expect(imgEl.style.opacity).toBe('0.09');
   });
 
   it('wraps drawing images with unified hyperlink anchors', () => {

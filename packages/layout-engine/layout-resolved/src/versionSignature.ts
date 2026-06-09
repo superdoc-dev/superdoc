@@ -135,6 +135,11 @@ const drawingTextVersion = (block: VectorShapeDrawing | TextboxDrawing): string 
   ]);
 };
 
+const imageAlphaModFixVersion = (alphaModFix: ImageBlock['alphaModFix'] | undefined): string => {
+  if (!alphaModFix) return '';
+  return String(alphaModFix.amt ?? '');
+};
+
 const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
   [
     image.src ?? '',
@@ -148,6 +153,7 @@ const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
     image.blacklevel ?? '',
     image.grayscale ? 1 : 0,
     imageLuminanceVersion(image.lum),
+    imageAlphaModFixVersion(image.alphaModFix),
     image.rotation ?? '',
     image.flipH ? 1 : 0,
     image.flipV ? 1 : 0,
@@ -173,6 +179,7 @@ const renderedInlineImageRunVersion = (image: ImageRun): string =>
     image.blacklevel ?? '',
     image.grayscale ? 1 : 0,
     imageLuminanceVersion(image.lum),
+    imageAlphaModFixVersion(image.alphaModFix),
     image.rotation ?? '',
     image.flipH ? 1 : 0,
     image.flipV ? 1 : 0,

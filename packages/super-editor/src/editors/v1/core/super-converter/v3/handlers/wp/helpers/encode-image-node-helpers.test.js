@@ -1268,13 +1268,30 @@ describe('handleImageNode', () => {
     expect(result.attrs.lum).toEqual({ bright: 70000, contrast: -70000 });
   });
 
-  it('does not set grayscale when effect is not present', () => {
+  it('extracts fixed alpha adjustment from a:blip element', () => {
+    const node = makeNode();
+    const graphic = node.elements.find((el) => el.name === 'a:graphic');
+    const graphicData = graphic.elements[0];
+    const pic = graphicData.elements[0];
+    const blipFill = pic.elements[0];
+    const blip = blipFill.elements[0];
+
+    blip.elements = [{ name: 'a:alphaModFix', attributes: { amt: '9000' } }];
+
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result).not.toBeNull();
+    expect(result.attrs.alphaModFix).toEqual({ amt: 9000 });
+  });
+
+  it('does not set image effects when they are not present', () => {
     const node = makeNode();
     const result = handleImageNode(node, makeParams(), false);
 
     expect(result).not.toBeNull();
     expect(result.attrs.grayscale).toBeUndefined();
     expect(result.attrs.lum).toBeUndefined();
+    expect(result.attrs.alphaModFix).toBeUndefined();
   });
 
   describe('lockAspectRatio / noChangeAspect import defaults', () => {

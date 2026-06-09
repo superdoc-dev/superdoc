@@ -8860,6 +8860,20 @@ describe('DomPainter', () => {
       expect((img as HTMLElement).style.filter).toContain('brightness(0)');
     });
 
+    it('renders DrawingML fixed alpha as image opacity', () => {
+      renderInlineImageRun({
+        kind: 'image',
+        src: inlineImageSrc,
+        width: 100,
+        height: 100,
+        alphaModFix: { amt: 9000 },
+      });
+
+      const img = mount.querySelector('img');
+      expect(img).toBeTruthy();
+      expect((img as HTMLElement).style.opacity).toBe('0.09');
+    });
+
     it('renders VML gain and blacklevel using fixed-fraction units', () => {
       const dataUrl =
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

@@ -8,6 +8,7 @@ import type {
 import { applyImageClipPath } from './image-clip-path.js';
 import { createBlockImageContent } from './image-block.js';
 import type { BuildImageHyperlinkAnchor } from './types.js';
+import { resolveImageOpacity } from '../runs/image-run.js';
 
 export const createDrawingImageElement = (
   doc: Document,
@@ -29,6 +30,7 @@ export const createShapeGroupImageElement = (doc: Document, child: ShapeGroupChi
     src: string;
     alt?: string;
     clipPath?: string;
+    alphaModFix?: { amt: number };
   };
   const img = doc.createElement('img');
   img.src = attrs.src;
@@ -36,6 +38,10 @@ export const createShapeGroupImageElement = (doc: Document, child: ShapeGroupChi
   img.style.objectFit = 'contain';
   img.style.display = 'block';
   applyImageClipPath(img, attrs.clipPath);
+  const opacity = resolveImageOpacity(attrs);
+  if (opacity != null) {
+    img.style.opacity = opacity;
+  }
   return img;
 };
 

@@ -165,6 +165,11 @@ export function imageNodeToRun({ node, positions, sdtMetadata }: InlineConverter
       ...(contrast != null ? { contrast } : {}),
     };
   }
+  const alphaModFix = isPlainObject(attrs.alphaModFix) ? attrs.alphaModFix : undefined;
+  const alphaModFixAmt = pickNumber(alphaModFix?.amt);
+  if (alphaModFixAmt != null) {
+    run.alphaModFix = { amt: alphaModFixAmt };
+  }
 
   const hyperlink = readImageHyperlink(attrs.hyperlink);
   if (hyperlink) {

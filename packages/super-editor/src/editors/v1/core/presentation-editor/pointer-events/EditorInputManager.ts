@@ -602,6 +602,7 @@ export class EditorInputManager {
 
   // Image selection state
   #lastSelectedImageBlockId: string | null = null;
+  #lastSelectedTextboxBlockId: string | null = null;
 
   // Focus suppression (for draggable annotations)
   #suppressFocusInFromDraggable = false;
@@ -1597,6 +1598,40 @@ export class EditorInputManager {
       event.preventDefault();
     }
 
+    const textboxBorderSelection = this.#resolveTextboxBorderSelection({
+      event,
+      editor,
+      doc,
+      hitPos: hit?.pos ?? null,
+      rawHitPos: rawHit?.pos ?? null,
+      pageIndex: normalizedPoint.pageIndex,
+    });
+    if (textboxBorderSelection) {
+      const { editor: selectionEditor, fragmentEl, shapeContainerPos, blockId } = textboxBorderSelection;
+      try {
+        const tr = selectionEditor.state.tr.setSelection(NodeSelection.create(doc, shapeContainerPos));
+        selectionEditor.view?.dispatch(tr);
+
+        if (this.#lastSelectedImageBlockId) {
+          this.#callbacks.emit?.('imageDeselected', { blockId: this.#lastSelectedImageBlockId });
+          this.#lastSelectedImageBlockId = null;
+        }
+        if (this.#lastSelectedTextboxBlockId && this.#lastSelectedTextboxBlockId !== blockId) {
+          this.#callbacks.emit?.('textboxDeselected', { blockId: this.#lastSelectedTextboxBlockId });
+        }
+
+        this.#callbacks.emit?.('textboxSelected', { element: fragmentEl, blockId });
+        this.#lastSelectedTextboxBlockId = blockId;
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[EditorInputManager] Failed to create NodeSelection for textbox container:', error);
+        }
+      }
+
+      this.#callbacks.focusEditorAfterImageSelection?.();
+      return;
+    }
+
     // Handle click outside text content — keep cursor and scroll position unchanged.
     if (!rawHit) {
       this.#focusEditor();
@@ -1647,6 +1682,10 @@ export class EditorInputManager {
     if (this.#lastSelectedImageBlockId) {
       this.#callbacks.emit?.('imageDeselected', { blockId: this.#lastSelectedImageBlockId });
       this.#lastSelectedImageBlockId = null;
+    }
+    if (this.#lastSelectedTextboxBlockId) {
+      this.#callbacks.emit?.('textboxDeselected', { blockId: this.#lastSelectedTextboxBlockId });
+      this.#lastSelectedTextboxBlockId = null;
     }
 
     // Handle shift+click to extend selection
@@ -2507,6 +2546,10 @@ export class EditorInputManager {
     if (this.#lastSelectedImageBlockId && this.#lastSelectedImageBlockId !== newSelectionId) {
       this.#callbacks.emit?.('imageDeselected', { blockId: this.#lastSelectedImageBlockId });
     }
+    if (this.#lastSelectedTextboxBlockId && this.#lastSelectedTextboxBlockId !== newSelectionId) {
+      this.#callbacks.emit?.('textboxDeselected', { blockId: this.#lastSelectedTextboxBlockId });
+      this.#lastSelectedTextboxBlockId = null;
+    }
 
     const editor = this.#deps?.getEditor();
     try {
@@ -2555,6 +2598,10 @@ export class EditorInputManager {
       if (this.#lastSelectedImageBlockId && this.#lastSelectedImageBlockId !== fragmentHit.fragment.blockId) {
         this.#callbacks.emit?.('imageDeselected', { blockId: this.#lastSelectedImageBlockId });
       }
+      if (this.#lastSelectedTextboxBlockId) {
+        this.#callbacks.emit?.('textboxDeselected', { blockId: this.#lastSelectedTextboxBlockId });
+        this.#lastSelectedTextboxBlockId = null;
+      }
 
       if (fragmentHit.fragment.kind === 'image') {
         const targetElement =
@@ -2578,6 +2625,164 @@ export class EditorInputManager {
 
     this.#callbacks.focusEditorAfterImageSelection?.();
     return true;
+  }
+
+  #resolveTextboxBorderSelection({
+    event,
+    editor,
+    doc,
+    hitPos,
+    rawHitPos,
+    pageIndex,
+  }: {
+    event: PointerEvent;
+    editor: Editor;
+    doc: ProseMirrorNode | null | undefined;
+    hitPos: number | null;
+    rawHitPos: number | null;
+    pageIndex?: number;
+  }): { editor: Editor; fragmentEl: HTMLElement; shapeContainerPos: number; blockId: string | null } | null {
+    if (!doc) {
+      return null;
+    }
+
+    const fragmentEl = this.#resolveTextboxFragmentElement(event.target, event.clientX, event.clientY, pageIndex);
+    if (!fragmentEl) {
+      return null;
+    }
+
+    const BORDER_HIT_MARGIN = 6;
+    const rect = fragmentEl.getBoundingClientRect();
+    const isNearBorder =
+      event.clientX - rect.left <= BORDER_HIT_MARGIN ||
+      rect.right - event.clientX <= BORDER_HIT_MARGIN ||
+      event.clientY - rect.top <= BORDER_HIT_MARGIN ||
+      rect.bottom - event.clientY <= BORDER_HIT_MARGIN;
+    if (!isNearBorder) {
+      return null;
+    }
+
+    const shapeContainerPos = this.#resolveShapeContainerPos(doc, fragmentEl, [hitPos, rawHitPos]);
+    if (shapeContainerPos == null) {
+      return null;
+    }
+
+    return {
+      editor,
+      fragmentEl,
+      shapeContainerPos,
+      blockId: fragmentEl.dataset.blockId ?? null,
+    };
+  }
+
+  #resolveTextboxFragmentElement(
+    target: EventTarget | null,
+    clientX: number,
+    clientY: number,
+    pageIndex?: number,
+  ): HTMLElement | null {
+    const candidates: HTMLElement[] = [];
+    const seen = new Set<HTMLElement>();
+    const addCandidate = (element: HTMLElement | null): void => {
+      if (!element || seen.has(element)) {
+        return;
+      }
+      seen.add(element);
+      candidates.push(element);
+    };
+
+    const resolveCandidate = (element: Element | null): HTMLElement | null => {
+      if (!(element instanceof HTMLElement)) {
+        return null;
+      }
+
+      const pageLevelFragment = element.closest<HTMLElement>('.superdoc-drawing-fragment');
+      if (pageLevelFragment) {
+        return pageLevelFragment;
+      }
+
+      const tableDrawing = element.closest<HTMLElement>('.superdoc-table-drawing');
+      if (tableDrawing?.parentElement instanceof HTMLElement && tableDrawing.parentElement.dataset.blockId) {
+        return tableDrawing.parentElement;
+      }
+
+      const blockWrapper = element.closest<HTMLElement>('[data-block-id]');
+      return blockWrapper ?? null;
+    };
+
+    addCandidate(resolveCandidate(target as Element | null));
+
+    const ownerDocument = target instanceof Element ? target.ownerDocument : document;
+    if (typeof ownerDocument.elementsFromPoint === 'function') {
+      for (const element of ownerDocument.elementsFromPoint(clientX, clientY)) {
+        addCandidate(resolveCandidate(element));
+      }
+    }
+
+    if (Number.isFinite(pageIndex)) {
+      const pageElement = this.#deps
+        ?.getViewportHost()
+        ?.querySelector(`[data-page-index="${pageIndex}"]`) as HTMLElement | null;
+      const pageCandidates = pageElement?.querySelectorAll<HTMLElement>('[data-block-id]');
+      if (pageCandidates) {
+        for (const candidate of pageCandidates) {
+          const rect = candidate.getBoundingClientRect();
+          if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+            addCandidate(candidate);
+          }
+        }
+      }
+    }
+
+    for (const candidate of candidates) {
+      if (
+        candidate.classList.contains('superdoc-textbox-shape') ||
+        candidate.querySelector('.superdoc-textbox-shape') != null
+      ) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  #resolveShapeContainerPos(
+    doc: ProseMirrorNode,
+    fragmentEl: HTMLElement,
+    candidatePositions: Array<number | null | undefined>,
+  ): number | null {
+    const fragmentPmStart = fragmentEl.querySelector<HTMLElement>('[data-pm-start]')?.dataset.pmStart;
+    const positions = [...candidatePositions];
+    if (fragmentPmStart != null) {
+      positions.push(Number(fragmentPmStart));
+    }
+
+    for (const pos of positions) {
+      if (!Number.isFinite(pos)) {
+        continue;
+      }
+      const resolvedPos = this.#findAncestorShapeContainerPos(doc, Number(pos));
+      if (resolvedPos != null) {
+        return resolvedPos;
+      }
+    }
+
+    return null;
+  }
+
+  #findAncestorShapeContainerPos(doc: ProseMirrorNode, pos: number): number | null {
+    try {
+      const $pos = doc.resolve(pos);
+      for (let depth = $pos.depth; depth >= 0; depth -= 1) {
+        if ($pos.node(depth).type.name === 'shapeContainer') {
+          return $pos.before(depth);
+        }
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
   }
 
   #handleShiftClick(event: PointerEvent, headPos: number): void {

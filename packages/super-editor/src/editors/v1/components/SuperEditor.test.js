@@ -1606,6 +1606,35 @@ describe('SuperEditor.vue', () => {
         wrapper.unmount();
         vi.useRealTimers();
       });
+
+      it('should clear textbox selection state', async () => {
+        vi.useFakeTimers();
+        EditorConstructor.loadXmlData.mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+        const wrapper = mount(SuperEditor, {
+          props: {
+            documentId: 'doc-textbox-selection',
+            options: {},
+          },
+        });
+
+        await flushPromises();
+        await flushPromises();
+
+        const textboxEl = document.createElement('div');
+        textboxEl.classList.add('superdoc-textbox-selected');
+        wrapper.vm.selectedTextboxState.element = textboxEl;
+        wrapper.vm.selectedTextboxState.blockId = 'textbox-1';
+
+        wrapper.vm.clearSelectedTextbox();
+
+        expect(textboxEl.classList.contains('superdoc-textbox-selected')).toBe(false);
+        expect(wrapper.vm.selectedTextboxState.element).toBe(null);
+        expect(wrapper.vm.selectedTextboxState.blockId).toBe(null);
+
+        wrapper.unmount();
+        vi.useRealTimers();
+      });
     });
   });
 });

@@ -104,10 +104,22 @@ const resolveClipPathFromAttrs = (attrs: unknown): string => {
   return readClipPathValue(record.clipPath);
 };
 
+const resolveShapeClipPathFromAttrs = (attrs: unknown): string => {
+  if (!attrs || typeof attrs !== 'object') return '';
+  const record = attrs as Record<string, unknown>;
+  return readClipPathValue(record.shapeClipPath);
+};
+
 const resolveBlockClipPath = (block: unknown): string => {
   if (!block || typeof block !== 'object') return '';
   const record = block as Record<string, unknown>;
   return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
+};
+
+const resolveBlockShapeClipPath = (block: unknown): string => {
+  if (!block || typeof block !== 'object') return '';
+  const record = block as Record<string, unknown>;
+  return readClipPathValue(record.shapeClipPath) || resolveShapeClipPathFromAttrs(record.attrs);
 };
 
 const imageHyperlinkVersion = (hyperlink: ImageBlock['hyperlink'] | undefined): string => {
@@ -159,6 +171,7 @@ const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
     image.flipV ? 1 : 0,
     imageHyperlinkVersion(image.hyperlink),
     resolveBlockClipPath(image),
+    resolveBlockShapeClipPath(image),
   ].join('|');
 
 const renderedInlineImageRunVersion = (image: ImageRun): string =>

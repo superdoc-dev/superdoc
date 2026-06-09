@@ -232,6 +232,26 @@ describe('deriveBlockVersion - table image content', () => {
 
     expect(second).not.toBe(first);
   });
+
+  it('changes when a table image shape clip path changes', () => {
+    const ellipse = deriveBlockVersion(
+      makeTableWithImage({ ...baseImage, shapeClipPath: 'ellipse(50% 50% at 50% 50%)' }),
+    );
+    const circle = deriveBlockVersion(makeTableWithImage({ ...baseImage, shapeClipPath: 'circle(50% at 50% 50%)' }));
+
+    expect(circle).not.toBe(ellipse);
+  });
+
+  it('changes when a table image attrs shape clip path changes', () => {
+    const ellipse = deriveBlockVersion(
+      makeTableWithImage({ ...baseImage, attrs: { shapeClipPath: 'ellipse(50% 50% at 50% 50%)' } }),
+    );
+    const circle = deriveBlockVersion(
+      makeTableWithImage({ ...baseImage, attrs: { shapeClipPath: 'circle(50% at 50% 50%)' } }),
+    );
+
+    expect(circle).not.toBe(ellipse);
+  });
 });
 
 describe('deriveBlockVersion - textboxShape content', () => {

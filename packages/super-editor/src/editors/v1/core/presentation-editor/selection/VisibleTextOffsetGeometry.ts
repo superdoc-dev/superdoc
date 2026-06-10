@@ -30,6 +30,22 @@ export type VisibleTextOffsetGeometryOptions = {
 };
 
 /**
+ * Anchors a ProseMirror position to its paragraph block so resolution can
+ * survive stale painted pm ranges (SD-3400). The painter skips repainting
+ * unchanged note paragraphs, so their data-pm-* attributes drift after
+ * upstream edits shift positions. Within one unchanged block the ranges stay
+ * internally consistent, so translating the position by the block-start
+ * delta (current first-leaf position minus the fragment's first painted
+ * pmStart) makes resolution exact per block.
+ */
+export type PmBlockAnchor = {
+  /** The paragraph's sdBlockId — painted fragment block ids end with it. */
+  sdBlockId: string;
+  /** Current document position of the block's first inline leaf. */
+  currentStart: number;
+};
+
+/**
  * Measures a visible-text offset within a DOM root from a concrete DOM boundary.
  *
  * This is used for note overlays because `EditorView.domAtPos()` can resolve the
@@ -300,21 +316,54 @@ type ResolvedPmPoint = {
  * Returns null when no painted line covers the position (e.g., a structural
  * gap or unpainted content) so callers can fall back to the offset bridge.
  */
-function resolvePmPoint(containers: readonly HTMLElement[], pos: number): ResolvedPmPoint | null {
+function resolvePmPoint(
+  containers: readonly HTMLElement[],
+  pos: number,
+  anchor?: PmBlockAnchor | null,
+): ResolvedPmPoint | null {
   if (!Number.isFinite(pos)) {
     return null;
   }
 
-  const lines = collectRenderedLineElements(containers);
+  // Block-anchored resolution: scope to the paragraph's own fragment(s) and
+  // translate the position into the fragment's painted coordinate space.
+  if (anchor?.sdBlockId) {
+    const blockContainers = containers.filter((el) =>
+      (el.getAttribute('data-block-id') ?? '').endsWith(anchor.sdBlockId),
+    );
+    if (blockContainers.length) {
+      const blockLines = collectRenderedLineElements(blockContainers)
+        .map((line) => ({ line, pmStart: getPmStart(line), pmEnd: getPmEnd(line) }))
+        .filter((entry): entry is { line: HTMLElement; pmStart: number; pmEnd: number } =>
+          entry.pmStart != null && entry.pmEnd != null)
+        .sort((a, b) => a.pmStart - b.pmStart || a.pmEnd - b.pmEnd);
+      if (blockLines.length) {
+        const delta = anchor.currentStart - blockLines[0].pmStart;
+        const translated = Math.max(
+          blockLines[0].pmStart,
+          Math.min(pos - delta, blockLines[blockLines.length - 1].pmEnd),
+        );
+        const resolved = resolvePmPoint(blockContainers, translated);
+        if (resolved) {
+          return resolved;
+        }
+      }
+    }
+    return null;
+  }
+
+  // Painted fragments come back in DOM insertion order, which after
+  // incremental repaints is NOT document order — sort by pm range so the
+  // forward-affinity scan and the gap snap pick the right line (SD-3400).
+  const lines = collectRenderedLineElements(containers)
+    .map((line) => ({ line, pmStart: getPmStart(line), pmEnd: getPmEnd(line) }))
+    .filter((entry): entry is { line: HTMLElement; pmStart: number; pmEnd: number } =>
+      entry.pmStart != null && entry.pmEnd != null)
+    .sort((a, b) => a.pmStart - b.pmStart || a.pmEnd - b.pmEnd);
   let lineElement: HTMLElement | null = null;
   let resolvedPos = pos;
   let sawEarlierLine = false;
-  for (const line of lines) {
-    const pmStart = getPmStart(line);
-    const pmEnd = getPmEnd(line);
-    if (pmStart == null || pmEnd == null) {
-      continue;
-    }
+  for (const { line, pmStart, pmEnd } of lines) {
     if (pos > pmEnd) {
       sawEarlierLine = true;
       continue;
@@ -404,8 +453,9 @@ function resolvePmPoint(containers: readonly HTMLElement[], pos: number): Resolv
 export function computeCaretRectFromPmPosition(
   options: VisibleTextOffsetGeometryOptions,
   pos: number,
+  anchor?: PmBlockAnchor | null,
 ): LayoutRect | null {
-  const point = resolvePmPoint(options.containers, pos);
+  const point = resolvePmPoint(options.containers, pos, anchor);
   if (!point) {
     return null;
   }
@@ -446,6 +496,7 @@ export function computeSelectionRectsFromPmRange(
   options: VisibleTextOffsetGeometryOptions,
   from: number,
   to: number,
+  anchors?: { from?: PmBlockAnchor | null; to?: PmBlockAnchor | null },
 ): LayoutRect[] | null {
   if (!Number.isFinite(from) || !Number.isFinite(to)) {
     return null;
@@ -457,8 +508,8 @@ export function computeSelectionRectsFromPmRange(
     return [];
   }
 
-  const startPoint = resolvePmPoint(options.containers, startPos);
-  const endPoint = resolvePmPoint(options.containers, endPos);
+  const startPoint = resolvePmPoint(options.containers, startPos, from <= to ? anchors?.from : anchors?.to);
+  const endPoint = resolvePmPoint(options.containers, endPos, from <= to ? anchors?.to : anchors?.from);
   if (!startPoint || !endPoint) {
     return null;
   }

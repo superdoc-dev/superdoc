@@ -10279,8 +10279,11 @@ export class PresentationEditor extends EventEmitter {
       pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
     };
 
-    // Same pm-first strategy as #computeNoteDomCaretRect (SD-3400).
-    const pmRects = computeSelectionRectsFromPmRangeFromHelper(geometryOptions, from, to);
+    // Same block-anchored pm-first strategy as #computeNoteDomCaretRect (SD-3400).
+    const pmRects = computeSelectionRectsFromPmRangeFromHelper(geometryOptions, from, to, {
+      from: this.#resolveNoteBlockAnchor(from),
+      to: this.#resolveNoteBlockAnchor(to),
+    });
     if (pmRects != null) {
       return pmRects;
     }
@@ -10322,6 +10325,46 @@ export class PresentationEditor extends EventEmitter {
     return selectionToRects(layout, context.blocks, context.measures, from, to, this.#pageGeometryHelper ?? undefined);
   }
 
+  /**
+   * Anchors a session position to its paragraph block for stale-tolerant
+   * caret resolution (SD-3400): painted pm ranges of unchanged note
+   * paragraphs drift after edits, but block identity (sdBlockId) plus the
+   * block's current first-leaf position let the geometry helper translate
+   * into the fragment's coordinate space.
+   */
+  #resolveNoteBlockAnchor(pos: number): { sdBlockId: string; currentStart: number } | null {
+    const doc = this.getActiveEditor()?.state?.doc;
+    if (!doc || !Number.isFinite(pos)) return null;
+    try {
+      const clamped = Math.max(0, Math.min(pos, doc.content.size));
+      const $pos = doc.resolve(clamped);
+      let blockDepth = 0;
+      for (let depth = $pos.depth; depth >= 1; depth -= 1) {
+        if ($pos.node(depth).isBlock) blockDepth = depth;
+      }
+      if (!blockDepth) return null;
+      const blockNode = $pos.node(blockDepth);
+      const sdBlockId = blockNode.attrs?.sdBlockId;
+      if (typeof sdBlockId !== 'string' || !sdBlockId) return null;
+      const blockPos = $pos.before(blockDepth);
+      let currentStart: number | null = null;
+      doc.nodesBetween(blockPos, blockPos + blockNode.nodeSize, (node, nodePos) => {
+        if (currentStart != null) return false;
+        if (node.isInline && (node.isLeaf || node.isText)) {
+          currentStart = nodePos;
+          return false;
+        }
+        return true;
+      });
+      // Empty paragraph: no inline leaf exists, its only caret position is
+      // the block's content start. The painted placeholder line anchors there.
+      if (currentStart == null) currentStart = blockPos + 1;
+      return { sdBlockId, currentStart };
+    } catch {
+      return null;
+    }
+  }
+
   #computeNoteDomCaretRect(context: NoteLayoutContext, pos: number): LayoutRect | null {
     const layout = this.#layoutState.layout;
     if (!layout) {
@@ -10345,9 +10388,14 @@ export class PresentationEditor extends EventEmitter {
       pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
     };
 
-    // Painted note lines carry session-coordinate pm ranges, so resolve the
-    // caret by pm position first — exact across paragraph boundaries, where
-    // the visible-text bridge drifts (SD-3400 multi-paragraph note caret).
+    // Resolve by block identity first (stale-tolerant), then by global pm
+    // ranges. Painted pm ranges of unchanged note paragraphs drift after
+    // edits, so absolute resolution alone picks wrong lines (SD-3400).
+    const anchor = this.#resolveNoteBlockAnchor(pos);
+    const anchoredRect = anchor ? computeCaretRectFromPmPositionFromHelper(geometryOptions, pos, anchor) : null;
+    if (anchoredRect) {
+      return anchoredRect;
+    }
     const pmRect = computeCaretRectFromPmPositionFromHelper(geometryOptions, pos);
     if (pmRect) {
       return pmRect;

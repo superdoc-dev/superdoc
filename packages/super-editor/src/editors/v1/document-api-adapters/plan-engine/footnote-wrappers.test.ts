@@ -318,6 +318,50 @@ describe('footnote-wrappers', () => {
     expect(getFootnoteElements(editor)).toHaveLength(1);
   });
 
+  it('stamps w:pStyle FootnoteText on generated note paragraphs (Word fidelity, SD-3400)', () => {
+    // Word always styles footnote body paragraphs with FootnoteText; without
+    // it, exported new footnotes render at Normal/11pt in Word.
+    const editor = makeEditor([], []);
+
+    footnotesInsertWrapper(editor, { type: 'footnote', content: 'Styled note' });
+
+    const note = getFootnoteElements(editor)[0] as unknown as {
+      elements: Array<{ name: string; elements?: Array<{ name: string; attributes?: Record<string, string> }> }>;
+    };
+    const paragraph = note.elements.find((el) => el.name === 'w:p');
+    const pPr = paragraph?.elements?.find((el) => el.name === 'w:pPr');
+    const pStyle = (pPr as { elements?: Array<{ name: string; attributes?: Record<string, string> }> })?.elements?.find(
+      (el) => el.name === 'w:pStyle',
+    );
+    expect(pStyle?.attributes?.['w:val']).toBe('FootnoteText');
+  });
+
+  it('bootstrap writes the special-footnote list to settings.xml (17.11.9, SD-3400)', () => {
+    const editor = makeEditor([], [], { omitFootnotesPart: true });
+
+    footnotesInsertWrapper(editor, { type: 'footnote', content: 'First footnote' });
+
+    const converter = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter;
+    const settingsRoot = (converter.convertedXml['word/settings.xml'] as XmlDoc).elements[0];
+    const pr = settingsRoot.elements.find((el) => el.name === 'w:footnotePr') as unknown as {
+      elements: Array<{ name: string; attributes: Record<string, string> }>;
+    };
+    const ids = pr.elements.filter((el) => el.name === 'w:footnote').map((el) => el.attributes['w:id']);
+    expect(ids).toEqual(['-1', '0']);
+  });
+
+  it('bootstrap leaves settings.xml untouched when the notes part already exists', () => {
+    // Imported documents own their settings; the special list is only seeded
+    // alongside a freshly bootstrapped notes part.
+    const editor = makeEditor([{ id: '1', text: 'Existing' }], ['1']);
+
+    footnotesInsertWrapper(editor, { type: 'footnote', content: 'Second' });
+
+    const converter = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter;
+    const settingsRoot = (converter.convertedXml['word/settings.xml'] as XmlDoc).elements[0];
+    expect(settingsRoot.elements.find((el) => el.name === 'w:footnotePr')).toBeUndefined();
+  });
+
   it('allocates a note id that avoids all existing ids', () => {
     const editor = makeEditor([], ['7', '3']);
 

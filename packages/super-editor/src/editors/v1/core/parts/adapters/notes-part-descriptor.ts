@@ -128,13 +128,25 @@ export function getNoteElements(part: unknown, childElementName: string): OoxmlE
  * Used during insert/update to write text content directly into the
  * canonical OOXML part. The result is valid w:p elements that can be
  * re-imported by the standard footnote importer.
+ *
+ * Each paragraph carries the FootnoteText/EndnoteText paragraph style —
+ * Word always stamps it on note body paragraphs, and without it exported
+ * new notes render at the Normal style's size in Word.
  */
-export function textToNoteOoxmlParagraphs(text: string): OoxmlElement[] {
+export function textToNoteOoxmlParagraphs(text: string, childElementName: string): OoxmlElement[] {
+  const styleName = childElementName === 'w:endnote' ? 'EndnoteText' : 'FootnoteText';
+  const pPr: OoxmlElement = {
+    type: 'element',
+    name: 'w:pPr',
+    elements: [{ type: 'element', name: 'w:pStyle', attributes: { 'w:val': styleName } }],
+  };
+
   return text.split(/\r?\n/).map((line) => ({
     type: 'element',
     name: 'w:p',
-    elements:
-      line.length > 0
+    elements: [
+      structuredClone(pPr),
+      ...(line.length > 0
         ? [
             {
               type: 'element',
@@ -149,7 +161,8 @@ export function textToNoteOoxmlParagraphs(text: string): OoxmlElement[] {
               ],
             },
           ]
-        : [],
+        : []),
+    ],
   }));
 }
 
@@ -220,7 +233,7 @@ export function addNoteElement(part: unknown, config: NotePartConfig, noteId: st
     throw new Error(`addNoteElement: note id "${noteId}" already exists in ${config.partId}`);
   }
 
-  const paragraphs = textToNoteOoxmlParagraphs(text);
+  const paragraphs = textToNoteOoxmlParagraphs(text, config.childElementName);
   ensureFootnoteRefRun(paragraphs, config.childElementName);
 
   const noteElement: OoxmlElement = {
@@ -245,7 +258,7 @@ export function updateNoteElement(part: unknown, config: NotePartConfig, noteId:
   const target = notes.find((el) => el.attributes?.['w:id'] === noteId);
   if (!target) return false;
 
-  const paragraphs = textToNoteOoxmlParagraphs(text);
+  const paragraphs = textToNoteOoxmlParagraphs(text, config.childElementName);
   ensureFootnoteRefRun(paragraphs, config.childElementName);
   target.elements = paragraphs;
   return true;
@@ -457,4 +470,35 @@ export function bootstrapNotesPart(editor: Editor, type: 'footnote' | 'endnote')
   if (converter.convertedXml[config.partId] !== undefined) return;
 
   converter.convertedXml[config.partId] = createInitialNotesPart(config);
+  ensureSpecialNotesListInSettings(converter.convertedXml, config);
+}
+
+/**
+ * Write the special-note list to `word/settings.xml` alongside a freshly
+ * bootstrapped notes part (§17.11.9): `w:footnotePr`/`w:endnotePr` listing
+ * the separator (-1) and continuation separator (0) ids. Strict consumers
+ * do not load separators that are not listed here.
+ *
+ * Imported documents own their settings — this runs only on bootstrap, and
+ * preserves any existing properties element (it just adds the missing ids).
+ */
+function ensureSpecialNotesListInSettings(convertedXml: Record<string, unknown>, config: NotePartConfig): void {
+  const settingsRoot = getRootElement(convertedXml['word/settings.xml']);
+  if (!settingsRoot) return;
+  if (!settingsRoot.elements) settingsRoot.elements = [];
+
+  const prName = config.childElementName === 'w:endnote' ? 'w:endnotePr' : 'w:footnotePr';
+  let pr = settingsRoot.elements.find((el) => el.name === prName);
+  if (!pr) {
+    pr = { type: 'element', name: prName, elements: [] };
+    settingsRoot.elements.push(pr);
+  }
+  if (!pr.elements) pr.elements = [];
+
+  for (const id of ['-1', '0']) {
+    const listed = pr.elements.some((el) => el.name === config.childElementName && el.attributes?.['w:id'] === id);
+    if (!listed) {
+      pr.elements.push({ type: 'element', name: config.childElementName, attributes: { 'w:id': id } });
+    }
+  }
 }

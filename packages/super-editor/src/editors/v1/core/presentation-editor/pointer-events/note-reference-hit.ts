@@ -47,6 +47,13 @@ function noteTargetFromPmStartElement(
   const pmStart = Number(refEl.getAttribute('data-pm-start'));
   if (!Number.isFinite(pmStart)) return null;
   const node = doc.nodeAt(pmStart);
+  if (node?.type?.name === 'crossReference') {
+    return noteTargetFromCrossReference(doc, node.attrs?.target);
+  }
+  return noteTargetFromReferenceNode(node);
+}
+
+function noteTargetFromReferenceNode(node: ProseMirrorNode | null | undefined): RenderedNoteTarget | null {
   const nodeType = node?.type?.name;
   if (nodeType !== 'footnoteReference' && nodeType !== 'endnoteReference') return null;
   const noteId = node?.attrs?.id;
@@ -55,4 +62,29 @@ function noteTargetFromPmStartElement(
     storyType: nodeType === 'endnoteReference' ? 'endnote' : 'footnote',
     noteId: String(noteId),
   };
+}
+
+/**
+ * Resolves a REF/NOTEREF cross-reference to the note it points at. Word's
+ * cross-reference bookmark (`_RefXXXX`) wraps the ORIGINAL note reference in
+ * the body, so the note is found by locating the bookmarkStart with the
+ * field's target name and scanning its content for a note reference. Returns
+ * null for cross-references to anything other than a note (headings, tables),
+ * letting the double-click fall through to default text behavior.
+ */
+function noteTargetFromCrossReference(doc: ProseMirrorNode, bookmarkName: unknown): RenderedNoteTarget | null {
+  if (typeof bookmarkName !== 'string' || bookmarkName.length === 0) return null;
+
+  let result: RenderedNoteTarget | null = null;
+  doc.descendants((node) => {
+    if (result) return false;
+    if (node.type?.name !== 'bookmarkStart' || node.attrs?.name !== bookmarkName) return true;
+    node.descendants((child) => {
+      if (result) return false;
+      result = noteTargetFromReferenceNode(child);
+      return !result;
+    });
+    return false;
+  });
+  return result;
 }

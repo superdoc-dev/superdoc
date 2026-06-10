@@ -862,7 +862,8 @@ function normalizeOuterShadowEffect(value: unknown): ShapeEffects['outerShadow']
 /**
  * Normalizes and validates shape group children from an array.
  *
- * Filters out invalid entries, keeping only objects that have a string 'shapeType' property.
+ * Filters out invalid entries, keeping only objects that have a string 'shapeType' property,
+ * and normalizes grouped vector shape attrs that are read directly by the painter.
  * Returns an empty array if input is not an array.
  *
  * @param value - Value to extract shape group children from
@@ -871,18 +872,18 @@ function normalizeOuterShadowEffect(value: unknown): ShapeEffects['outerShadow']
  * @example
  * ```typescript
  * normalizeShapeGroupChildren([
- *   { shapeType: 'rect', x: 0, y: 0 },
- *   { shapeType: 'circle', cx: 50, cy: 50 }
+ *   { shapeType: 'vectorShape', attrs: { fillColor: '#FF0000' } },
+ *   { shapeType: 'image', attrs: { src: 'word/media/image1.png' } }
  * ]);
- * // [{ shapeType: 'rect', x: 0, y: 0 }, { shapeType: 'circle', cx: 50, cy: 50 }]
+ * // [{ shapeType: 'vectorShape', attrs: { fillColor: '#FF0000' } }, { shapeType: 'image', attrs: { src: 'word/media/image1.png' } }]
  *
  * normalizeShapeGroupChildren([
- *   { shapeType: 'rect' },
+ *   { shapeType: 'vectorShape' },
  *   null,
  *   { invalid: true },
- *   { shapeType: 'line' }
+ *   { shapeType: 'image' }
  * ]);
- * // [{ shapeType: 'rect' }, { shapeType: 'line' }]
+ * // [{ shapeType: 'vectorShape' }, { shapeType: 'image' }]
  *
  * normalizeShapeGroupChildren(null);
  * // []
@@ -901,15 +902,29 @@ export function normalizeShapeGroupChildren(value: unknown): ShapeGroupChild[] {
     if (shapeChild.shapeType !== 'vectorShape') return [shapeChild];
 
     const attrs = (shapeChild as { attrs?: unknown }).attrs;
-    if (!attrs || typeof attrs !== 'object' || !('effects' in attrs)) return [shapeChild];
+    if (!attrs || typeof attrs !== 'object') return [shapeChild];
 
-    const normalizedEffects = normalizeShapeEffects((attrs as { effects?: unknown }).effects);
-    const normalizedAttrs = { ...(attrs as Record<string, unknown>) };
-    if (normalizedEffects) {
-      normalizedAttrs.effects = normalizedEffects;
-    } else {
-      delete normalizedAttrs.effects;
-    }
+    const rawAttrs = attrs as Record<string, unknown>;
+    const normalizedAttrs = { ...rawAttrs };
+    const normalizeAttr = <T>(key: string, normalize: (value: unknown) => T | undefined) => {
+      if (!(key in rawAttrs)) return;
+      const normalized = normalize(rawAttrs[key]);
+      if (normalized !== undefined) {
+        normalizedAttrs[key] = normalized;
+      } else {
+        delete normalizedAttrs[key];
+      }
+    };
+
+    normalizeAttr('fillColor', normalizeFillColor);
+    normalizeAttr('strokeColor', normalizeStrokeColor);
+    normalizeAttr('strokeWidth', coerceNumber);
+    normalizeAttr('lineEnds', normalizeLineEnds);
+    normalizeAttr('effects', normalizeShapeEffects);
+    normalizeAttr('textContent', normalizeTextContent);
+    normalizeAttr('textAlign', (value) => (typeof value === 'string' ? value : undefined));
+    normalizeAttr('textVerticalAlign', normalizeTextVerticalAlign);
+    normalizeAttr('textInsets', normalizeTextInsets);
 
     return [{ ...shapeChild, attrs: normalizedAttrs } as ShapeGroupChild];
   });

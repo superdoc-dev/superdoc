@@ -1349,6 +1349,37 @@ describe('Drawing/Shape Utilities', () => {
       expect(result[0]?.attrs.effects?.outerShadow.opacity).toBe(1);
       expect(result[1]?.attrs).not.toHaveProperty('effects');
     });
+
+    it('normalizes vector child style and text attrs consistently with standalone shapes', () => {
+      const result = normalizeShapeGroupChildren([
+        {
+          shapeType: 'vectorShape',
+          attrs: {
+            fillColor: 123,
+            strokeColor: '#123456',
+            strokeWidth: '2.5',
+            textContent: {
+              parts: [{ text: 'A' }, null, { ignored: true }, { text: 'B' }],
+              horizontalAlign: 'center',
+            },
+            textAlign: 'right',
+            textVerticalAlign: 'middle',
+            textInsets: { top: '1', right: '2', bottom: '3', left: '4' },
+          },
+        },
+      ]);
+
+      expect(result[0]?.attrs).not.toHaveProperty('fillColor');
+      expect(result[0]?.attrs.strokeColor).toBe('#123456');
+      expect(result[0]?.attrs.strokeWidth).toBe(2.5);
+      expect(result[0]?.attrs.textContent).toEqual({
+        parts: [{ text: 'A' }, { text: 'B' }],
+        horizontalAlign: 'center',
+      });
+      expect(result[0]?.attrs.textAlign).toBe('right');
+      expect(result[0]?.attrs).not.toHaveProperty('textVerticalAlign');
+      expect(result[0]?.attrs.textInsets).toEqual({ top: 1, right: 2, bottom: 3, left: 4 });
+    });
   });
 });
 

@@ -9,9 +9,11 @@ import { applyRowTrackedChangeResolution } from '../track-changes/trackChangesHe
  *
  * Pattern: consumer computes `StructuralHunk[]` (e.g. via `computeStructuralDiff`)
  * and dispatches via `editor.commands.setStructuralDiff(hunks)`. The extension
- * stamps a `trackChange` PM attribute on each affected `tableRow`. Rendering is
- * handled by the painter (reads `data-track-change` data attrs from row.trackedChange).
- * The review bubble appears via the comments-plugin's block-level walk.
+ * stamps a `trackChange` PM attribute on each affected `tableRow` in the
+ * OOXML-aligned `{ type: 'rowInsert' | 'rowDelete', id, operationId }` shape.
+ * The v1 layout-adapter propagates that to `row.attrs.trackedChange` on the
+ * FlowBlock, where the painter reads it and applies the row-cell decoration
+ * classes. The review bubble appears via the comments-plugin's block-level walk.
  *
  * Accept/reject is identity-agnostic — operates on PM attrs, not an in-memory
  * hunk store. The same `acceptTrackedChangeById` entry point inline tracked

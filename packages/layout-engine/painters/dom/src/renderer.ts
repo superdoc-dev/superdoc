@@ -5213,15 +5213,18 @@ const deriveBlockVersion = (block: FlowBlock): string => {
     for (const row of rows) {
       if (!row || !Array.isArray(row.cells)) continue;
       hash = hashNumber(hash, row.cells.length);
-      // Row-level tracked change (block-level diff replay sets `trackedChange` on
-      // a tableRow). Without this, applyHunks-style transactions that only mutate
-      // the row's `trackChange` attr don't invalidate the page cache, so the
-      // visible cells never receive their `data-track-change` attribute and the
-      // row stays unmarked.
-      if (row.trackedChange) {
-        hash = hashString(hash, row.trackedChange.kind ?? '');
-        hash = hashString(hash, row.trackedChange.id ?? '');
-        hash = hashString(hash, row.trackedChange.operationId ?? '');
+      // Row-level tracked change (block-level diff replay sets `trackedChange`
+      // on a tableRow's attrs). Without folding it into the page fingerprint,
+      // applyHunks-style transactions that only mutate the row's `trackChange`
+      // attr don't invalidate the page cache, so the visible cells never receive
+      // their decoration classes and the row stays unmarked. Read from
+      // `row.attrs.trackedChange` — the canonical location written by the v1
+      // layout-adapter from the OOXML-aligned `attrs.trackChange.type` shape.
+      const rowTC = row.attrs?.trackedChange;
+      if (rowTC) {
+        hash = hashString(hash, rowTC.kind ?? '');
+        hash = hashString(hash, rowTC.id ?? '');
+        hash = hashString(hash, rowTC.operationId ?? '');
       }
       for (const cell of row.cells) {
         if (!cell) continue;

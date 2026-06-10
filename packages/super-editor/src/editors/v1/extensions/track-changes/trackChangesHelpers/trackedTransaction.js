@@ -376,7 +376,10 @@ const sliceContainsPreMarkedBlockTrackedChange = (slice) => {
   let found = false;
   slice.content.descendants((node) => {
     if (found) return false;
-    if (node?.attrs?.trackChange?.kind) {
+    // Accept both the legacy `{ kind }` shape and the OOXML-aligned
+    // `{ type: 'rowInsert' | 'rowDelete' }` shape that applyHunks writes.
+    const tc = node?.attrs?.trackChange;
+    if (tc && (tc.kind || tc.type === 'rowInsert' || tc.type === 'rowDelete')) {
       found = true;
       return false;
     }

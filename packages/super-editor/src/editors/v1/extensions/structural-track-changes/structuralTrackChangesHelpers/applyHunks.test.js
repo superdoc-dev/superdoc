@@ -37,7 +37,7 @@ describe('applyHunks', () => {
     expect(next.childCount).toBe(3);
     const opIds = new Set();
     next.forEach((row) => {
-      expect(row.attrs.trackChange?.kind).toBe('delete');
+      expect(row.attrs.trackChange?.type).toBe('rowDelete');
       opIds.add(row.attrs.trackChange?.operationId);
     });
     expect(opIds.size).toBe(1);
@@ -59,7 +59,7 @@ describe('applyHunks', () => {
     const insertedTable = nextDoc.child(nextDoc.childCount - 1);
     expect(insertedTable.type.name).toBe('table');
     insertedTable.forEach((row) => {
-      expect(row.attrs.trackChange?.kind).toBe('insert');
+      expect(row.attrs.trackChange?.type).toBe('rowInsert');
     });
   });
 

@@ -806,35 +806,12 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
     sourceAnchor: sourceAnchorFromNode(rowNode),
   };
 
-  // Row-level tracked change (block-level diff replay sets this on the PM node).
-  // See packages/super-editor/src/editors/v1/extensions/track-changes/blockTrackedChangeAttr.js
-  const trackChangeAttr = rowNode.attrs?.trackChange as
-    | {
-        kind?: 'insert' | 'delete';
-        id?: string;
-        operationId?: string;
-        author?: string;
-        authorEmail?: string;
-        date?: string;
-        storyKey?: string;
-      }
-    | null
-    | undefined;
-  if (
-    trackChangeAttr &&
-    (trackChangeAttr.kind === 'insert' || trackChangeAttr.kind === 'delete') &&
-    trackChangeAttr.id
-  ) {
-    row.trackedChange = {
-      kind: trackChangeAttr.kind,
-      id: trackChangeAttr.id,
-      operationId: trackChangeAttr.operationId,
-      author: trackChangeAttr.author,
-      authorEmail: trackChangeAttr.authorEmail,
-      date: trackChangeAttr.date,
-      storyKey: trackChangeAttr.storyKey,
-    };
-  }
+  // Row-level tracked changes flow through `row.attrs.trackedChange`, populated
+  // above via `buildRowTrackedChangeMeta` from the OOXML-aligned
+  // `attrs.trackChange.type` shape. The legacy top-level `row.trackedChange`
+  // copy this block used to populate from the old `{ kind }` shape is gone now
+  // that applyHunks writes the OOXML format; the painter and cache layers all
+  // read `row.attrs.trackedChange`.
 
   return row;
 };

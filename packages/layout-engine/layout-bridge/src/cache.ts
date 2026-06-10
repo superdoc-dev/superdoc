@@ -307,15 +307,18 @@ const hashRuns = (block: FlowBlock): string => {
       }
 
       // Row-level tracked change (block-level diff replay sets `trackedChange`
-      // on a tableRow). Without this, applyHunks-style transactions that only
-      // mutate the row's `trackChange` attr don't invalidate the measure
-      // cache, so the page is never re-measured and the visible cells never
-      // receive their `data-track-change` attribute. Mirror of the painter
-      // page-fingerprint fix in renderer.ts.
-      if (row.trackedChange) {
-        cellHashes.push(
-          `rtc:${row.trackedChange.kind ?? ''}:${row.trackedChange.id ?? ''}:${row.trackedChange.operationId ?? ''}`,
-        );
+      // on a tableRow's attrs). Without folding it into the measure-cache
+      // fingerprint, applyHunks-style transactions that only mutate the row's
+      // `trackChange` attr don't invalidate the cache, so the page is never
+      // re-measured and the visible cells never receive their decoration
+      // classes. Read from `row.attrs.trackedChange` — the canonical location
+      // written by the v1 layout-adapter from the OOXML-aligned
+      // `attrs.trackChange.type` shape. Mirror of the painter page-fingerprint
+      // fix in renderer.ts and the canonical-version fix in
+      // layout-resolved/versionSignature.ts.
+      const rowTC = row.attrs?.trackedChange;
+      if (rowTC) {
+        cellHashes.push(`rtc:${rowTC.kind ?? ''}:${rowTC.id ?? ''}:${rowTC.operationId ?? ''}`);
       }
 
       for (const cell of row.cells) {

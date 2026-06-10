@@ -805,13 +805,19 @@ export const CommentsPlugin = Extension.create({
               // Block-level tracked changes (e.g. tableRow with trackChange attr).
               // Surface the same bubble UX inline tracked changes have. Rows that
               // share an operationId collapse to one entry (one bubble per
-              // operation, not per row).
+              // operation, not per row). Accept both the legacy `{kind}` shape
+              // and the upstream OOXML-aligned `{type: 'rowInsert'|'rowDelete'}`
+              // shape.
               const blockTrackChange = node?.attrs?.trackChange;
-              if (
-                blockTrackChange &&
-                (blockTrackChange.kind === 'insert' || blockTrackChange.kind === 'delete') &&
-                blockTrackChange.id
-              ) {
+              const blockKind =
+                blockTrackChange?.kind === 'insert' || blockTrackChange?.kind === 'delete'
+                  ? blockTrackChange.kind
+                  : blockTrackChange?.type === 'rowInsert'
+                    ? 'insert'
+                    : blockTrackChange?.type === 'rowDelete'
+                      ? 'delete'
+                      : null;
+              if (blockTrackChange && blockKind && blockTrackChange.id) {
                 const threadId = blockTrackChange.operationId || blockTrackChange.id;
                 if (!onlyActiveThreadChanged) {
                   let currentBounds;

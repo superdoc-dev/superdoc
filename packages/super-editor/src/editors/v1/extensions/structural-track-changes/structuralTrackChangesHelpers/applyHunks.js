@@ -44,7 +44,7 @@ export const applyHunks = ({ tr, state, hunks }) => {
         if (row.type.name === 'tableRow') {
           tr.setNodeMarkup(rowPos, null, {
             ...row.attrs,
-            trackChange: { kind: 'delete', id: uuidv4(), operationId },
+            trackChange: { type: 'rowDelete', id: uuidv4(), operationId },
           });
         }
         rowPos += row.nodeSize;
@@ -67,7 +67,7 @@ export const applyHunks = ({ tr, state, hunks }) => {
         }
         trackedRows.push(
           row.type.create(
-            { ...row.attrs, trackChange: { kind: 'insert', id: uuidv4(), operationId } },
+            { ...row.attrs, trackChange: { type: 'rowInsert', id: uuidv4(), operationId } },
             row.content,
             row.marks,
           ),

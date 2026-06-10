@@ -465,6 +465,8 @@ const imageRunsEqual = (a: ImageRun, b: ImageRun): boolean => {
     a.alt === b.alt &&
     a.title === b.title &&
     a.clipPath === b.clipPath &&
+    a.shapeClipPath === b.shapeClipPath &&
+    a.objectFit === b.objectFit &&
     a.distTop === b.distTop &&
     a.distBottom === b.distBottom &&
     a.distLeft === b.distLeft &&

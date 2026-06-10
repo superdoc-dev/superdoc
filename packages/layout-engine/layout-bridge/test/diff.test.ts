@@ -256,6 +256,8 @@ describe('computeDirtyRegions', () => {
     ['alt', { alt: 'Diagram' }],
     ['title', { title: 'Title' }],
     ['clipPath', { clipPath: 'inset(1px)' }],
+    ['shapeClipPath', { shapeClipPath: 'ellipse(50% 50% at 50% 50%)' }],
+    ['objectFit', { objectFit: 'cover' as const }],
     ['distTop', { distTop: 1 }],
     ['distBottom', { distBottom: 2 }],
     ['distLeft', { distLeft: 3 }],

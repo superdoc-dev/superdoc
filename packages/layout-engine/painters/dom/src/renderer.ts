@@ -3836,9 +3836,6 @@ export class DomPainter {
     filterId: string,
     shadow: ShapeOuterShadowEffect,
   ): void {
-    const existingClone = svgElement.querySelector(`[data-sd-shadow-clone="${filterId}"]`);
-    if (existingClone) return;
-
     this.ensureOuterShadowOnlyFilter(defs, filterId, shadow);
 
     const clone = target.cloneNode(false) as SVGElement;

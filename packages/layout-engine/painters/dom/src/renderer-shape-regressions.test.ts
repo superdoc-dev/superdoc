@@ -348,6 +348,51 @@ describe('DomPainter shape regressions', () => {
     expect(originalPath?.hasAttribute('filter')).toBe(false);
   });
 
+  it('renders a filled shadow clone for each no-fill closed custom path', () => {
+    const geometry: DrawingGeometry = { width: 130, height: 80, rotation: 0, flipH: false, flipV: false };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'nofill-multipath-shadow-shape',
+      drawingKind: 'vectorShape',
+      geometry,
+      customGeometry: {
+        paths: [
+          { d: 'M 0 0 L 50 0 L 50 40 L 0 40 Z', w: 130, h: 80 },
+          { d: 'M 80 20 L 130 20 L 130 80 L 80 80 Z', w: 130, h: 80 },
+        ],
+      },
+      fillColor: null,
+      strokeColor: '#126A59',
+      strokeWidth: 1.5,
+      effectExtent: { left: 2, top: 2, right: 14, bottom: 14 },
+      effects: {
+        outerShadow: {
+          type: 'outerShadow',
+          blurRadius: 6.6667,
+          distance: 6.6667,
+          direction: 45,
+          color: '#a6a6a6',
+          opacity: 0.4,
+        },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+    const shadowClones = svg?.querySelectorAll('[data-sd-shadow-clone]');
+
+    expect(svg?.querySelectorAll('path')).toHaveLength(4);
+    expect(shadowClones).toHaveLength(2);
+    shadowClones?.forEach((clone) => {
+      expect(clone.getAttribute('fill')).toBe('#000000');
+      expect(clone.getAttribute('stroke')).toBe('none');
+    });
+  });
+
   it('does not inverse-scale shape-group text when child geometry is already pre-scaled', () => {
     const geometry: DrawingGeometry = { width: 200, height: 100, rotation: 0, flipH: false, flipV: false };
 

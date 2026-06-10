@@ -61,6 +61,26 @@ test(`fuzz(seed=${seed}): real keystroke ops never lose the note style or the ca
     expect(bad, `style lost after ops: ${opLog}`).toEqual([]);
   };
 
+  // Root-fix invariant (SD-3400): painted note line pm ranges must never
+  // overlap across paragraphs once paint settles — the painter refreshes
+  // position attributes on reused story fragments.
+  const checkPaintedRanges = async (opLog: string) => {
+    const overlaps = await superdoc.page.evaluate(() => {
+      const ranges = (Array.from(
+        document.querySelectorAll('[data-block-id^="footnote-1-"] .superdoc-line[data-pm-start][data-pm-end]'),
+      ) as HTMLElement[])
+        .map((l) => ({ s: Number(l.dataset.pmStart), e: Number(l.dataset.pmEnd) }))
+        .filter((r) => Number.isFinite(r.s) && Number.isFinite(r.e))
+        .sort((a, b) => a.s - b.s);
+      const bad: string[] = [];
+      for (let i = 1; i < ranges.length; i += 1) {
+        if (ranges[i].s < ranges[i - 1].e) bad.push(`${ranges[i - 1].s}-${ranges[i - 1].e} overlaps ${ranges[i].s}-${ranges[i].e}`);
+      }
+      return bad;
+    });
+    expect(overlaps, `stale painted ranges after ops: ${opLog}`).toEqual([]);
+  };
+
   const checkCaret = async (opLog: string) => {
     const evalCheck = () =>
       superdoc.page.evaluate(() => {
@@ -176,6 +196,7 @@ test(`fuzz(seed=${seed}): real keystroke ops never lose the note style or the ca
     if (i % 5 === 4) {
       await superdoc.waitForStable(400);
       await checkCaret(ops.slice(-12).join(' > '));
+      await checkPaintedRanges(ops.slice(-12).join(' > '));
     }
   }
 

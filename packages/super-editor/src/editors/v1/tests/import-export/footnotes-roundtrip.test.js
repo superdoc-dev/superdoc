@@ -187,6 +187,64 @@ describe('footnotes import/export roundtrip', () => {
       });
     });
 
+    it('preserves separator config and footnote linkage in the variant fixture (SD-3400)', async () => {
+      // footnote-tests-B carries explicit separator/continuationSeparator notes
+      // and the settings.xml special-footnote list — the configuration variants
+      // from the SD-3400 Observatory check.
+      const docxPath = join(__dirname, '../data', 'footnote-tests-B.docx');
+      const docxBuffer = await fs.readFile(docxPath);
+
+      const originalZipper = new DocxZipper();
+      const originalFiles = await originalZipper.getDocxData(docxBuffer, true);
+      const originalFootnotesJson = parseXmlToJson(
+        originalFiles.find((f) => f.name === 'word/footnotes.xml').content,
+      );
+      const originalRoot = findFootnotesRoot(originalFootnotesJson);
+      const regularIds = collectFootnoteIds(originalRoot).filter((id) => {
+        const type = findFootnoteById(originalRoot, id)?.attributes?.['w:type'];
+        return !type || (type !== 'separator' && type !== 'continuationSeparator');
+      });
+      expect(regularIds.length).toBeGreaterThan(0);
+
+      const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(docxBuffer, true);
+      const { editor: testEditor } = initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
+      editor = testEditor;
+
+      const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
+      const exportedZipper = new DocxZipper();
+      const exportedFiles = await exportedZipper.getDocxData(exportedBuffer, true);
+      const exportedRoot = findFootnotesRoot(
+        parseXmlToJson(exportedFiles.find((f) => f.name === 'word/footnotes.xml').content),
+      );
+
+      // Every regular footnote survives with its id.
+      regularIds.forEach((id) => {
+        expect(findFootnoteById(exportedRoot, id)).toBeTruthy();
+      });
+      // Separator notes survive with their types and reserved ids.
+      expect(findFootnotesByType(exportedRoot, 'separator').map((el) => el.attributes['w:id'])).toEqual(['-1']);
+      expect(findFootnotesByType(exportedRoot, 'continuationSeparator').map((el) => el.attributes['w:id'])).toEqual([
+        '0',
+      ]);
+      // The settings.xml special-footnote list (§17.11.9) survives export.
+      const settingsPr = findFootnotePrInSettings(findSettingsXml(exportedFiles));
+      expect(settingsPr).toBeTruthy();
+      const listedIds = (settingsPr.elements ?? [])
+        .filter((el) => el.name === 'w:footnote')
+        .map((el) => el.attributes?.['w:id']);
+      expect(listedIds).toContain('-1');
+      expect(listedIds).toContain('0');
+      // Body references survive in document order.
+      const exportedBody = parseXmlToJson(exportedFiles.find((f) => f.name === 'word/document.xml').content);
+      const refIds = [];
+      const walk = (node) => {
+        if (node?.name === 'w:footnoteReference') refIds.push(node.attributes?.['w:id']);
+        (node?.elements ?? []).forEach(walk);
+      };
+      walk(exportedBody.elements?.[0]);
+      expect(refIds).toEqual(regularIds);
+    });
+
     it('preserves footnoteReference nodes in document body', async () => {
       const docxPath = join(__dirname, '../data', DOCX_FIXTURE_NAME);
       const docxBuffer = await fs.readFile(docxPath);

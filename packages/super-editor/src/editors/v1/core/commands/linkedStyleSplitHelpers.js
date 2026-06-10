@@ -18,6 +18,12 @@ export const isLinkedCharacterStyleId = (editor, styleId) => {
 
 export const clearInheritedLinkedStyleId = (attrs, editor, { emptyParagraph = false } = {}) => {
   if (!emptyParagraph) return attrs;
+  // SD-3400: note story sessions keep their paragraph style on split. Word's
+  // FootnoteText/EndnoteText have no w:next, so pressing Enter in a footnote
+  // continues with the note style; clearing it here made new note paragraphs
+  // render at the document default size. The clearing heuristic targets body
+  // heading-like flows, so it stays active for the body and header/footer.
+  if (editor?.options?.parentEditor && !editor?.options?.isHeaderOrFooter) return attrs;
   if (!attrs || typeof attrs !== 'object') return attrs;
   const paragraphProperties = attrs.paragraphProperties;
   const styleId = paragraphProperties?.styleId;

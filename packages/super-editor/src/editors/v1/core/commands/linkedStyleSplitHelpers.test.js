@@ -104,6 +104,30 @@ describe('linkedStyleSplitHelpers', () => {
   });
 
   describe('clearInheritedLinkedStyleId', () => {
+    it('keeps the linked paragraph style inside a note story session (SD-3400)', () => {
+      // FootnoteText is a linked style (w:link FootnoteTextChar) but has no
+      // w:next: Word keeps it on Enter inside a footnote. Clearing it made
+      // new note paragraphs render at the document default size once the
+      // linked-styles cache was populated.
+      const editor = {
+        options: { parentEditor: {}, isHeaderOrFooter: false },
+        converter: {
+          translatedLinkedStyles: {
+            styles: {
+              FootnoteText: { styleId: 'FootnoteText', type: 'paragraph', link: 'FootnoteTextChar' },
+            },
+          },
+        },
+      };
+      const attrs = {
+        paragraphProperties: { styleId: 'FootnoteText' },
+      };
+
+      const result = clearInheritedLinkedStyleId(attrs, editor, { emptyParagraph: true });
+
+      expect(result).toBe(attrs);
+    });
+
     it('removes styleId when it belongs to a linked paragraph style', () => {
       const editor = {
         converter: {

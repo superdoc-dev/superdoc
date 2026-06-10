@@ -262,10 +262,66 @@ function resolveLineBoundaryPosition(editor, selection, key) {
   const lineEl = findLineElementAtPoint(doc, caretX, caretY);
   if (!lineEl) return null;
 
-  const pmStart = Number(lineEl.dataset?.pmStart);
-  const pmEnd = Number(lineEl.dataset?.pmEnd);
+  let pmStart = Number(lineEl.dataset?.pmStart);
+  let pmEnd = Number(lineEl.dataset?.pmEnd);
   if (!Number.isFinite(pmStart) || !Number.isFinite(pmEnd)) return null;
+  // SD-3400: translate stale note ranges into current coordinates.
+  ({ pmStart, pmEnd } = translateStaleNoteLineRange(editor, lineEl, pmStart, pmEnd));
   return key === 'Home' ? pmStart : pmEnd;
+}
+
+/**
+ * SD-3400: painted pm ranges of unchanged note paragraphs drift after edits
+ * (the painter skips repainting them), so the adjacent line's data-pm range
+ * can be stale. Translate it into CURRENT session coordinates by anchoring on
+ * the line's paragraph block: find the block in the live doc by sdBlockId and
+ * shift the range by (current block content start - fragment first pmStart).
+ * Returns the input range unchanged when translation is not applicable.
+ *
+ * @param {Object} editor
+ * @param {Element} lineEl
+ * @param {number} pmStart
+ * @param {number} pmEnd
+ * @returns {{ pmStart: number, pmEnd: number }}
+ */
+function translateStaleNoteLineRange(editor, lineEl, pmStart, pmEnd) {
+  const isNoteSession = Boolean(editor?.options?.parentEditor && !editor?.options?.isHeaderOrFooter);
+  if (!isNoteSession) return { pmStart, pmEnd };
+
+  const fragEl = lineEl.closest?.('[data-block-id]');
+  const blockIdAttr = fragEl?.getAttribute?.('data-block-id') ?? '';
+  const doc = editor.state?.doc;
+  if (!fragEl || !blockIdAttr || !doc) return { pmStart, pmEnd };
+
+  // Anchor: the smallest painted pmStart across the fragment's lines.
+  let fragmentFirstStart = Infinity;
+  for (const line of fragEl.querySelectorAll('.superdoc-line[data-pm-start]')) {
+    const start = Number(line.dataset?.pmStart);
+    if (Number.isFinite(start)) fragmentFirstStart = Math.min(fragmentFirstStart, start);
+  }
+  if (!Number.isFinite(fragmentFirstStart)) return { pmStart, pmEnd };
+
+  let delta = null;
+  doc.descendants((node, pos) => {
+    if (delta != null) return false;
+    if (!node.isBlock) return true;
+    const id = node.attrs?.sdBlockId;
+    if (typeof id !== 'string' || !id || !blockIdAttr.endsWith(id)) return true;
+    let firstLeaf = null;
+    node.descendants((child, childPos) => {
+      if (firstLeaf != null) return false;
+      if (child.isInline && (child.isLeaf || child.isText)) {
+        firstLeaf = pos + 1 + childPos;
+        return false;
+      }
+      return true;
+    });
+    const currentStart = firstLeaf ?? pos + 1;
+    delta = currentStart - fragmentFirstStart;
+    return false;
+  });
+  if (delta == null || delta === 0) return { pmStart, pmEnd };
+  return { pmStart: pmStart + delta, pmEnd: pmEnd + delta };
 }
 
 /**
@@ -295,9 +351,13 @@ function getAdjacentLineClientTarget(editor, coords, direction) {
   const clientY = rect.top + rect.height / 2;
   if (!Number.isFinite(clientY)) return null;
 
-  // Read PM position range from data attributes for layout-based fallback
-  const pmStart = Number(adjacentLine.dataset?.pmStart);
-  const pmEnd = Number(adjacentLine.dataset?.pmEnd);
+  // Read PM position range from data attributes for layout-based fallback.
+  // SD-3400: translate stale note ranges into current coordinates.
+  let pmStart = Number(adjacentLine.dataset?.pmStart);
+  let pmEnd = Number(adjacentLine.dataset?.pmEnd);
+  if (Number.isFinite(pmStart) && Number.isFinite(pmEnd)) {
+    ({ pmStart, pmEnd } = translateStaleNoteLineRange(editor, adjacentLine, pmStart, pmEnd));
+  }
 
   // Read direction from the visual DOM — DomPainter sets dir="rtl" on RTL lines
   // using fully resolved properties (style cascade, not just inline attrs).

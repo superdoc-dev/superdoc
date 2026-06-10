@@ -242,3 +242,70 @@ test('arrow navigation and caret tracking across paragraphs in a note session', 
   expect(text).toContain('tail');
   expect(text.find((t: string) => t.includes('middletail') || t.includes('tailmiddle'))).toBeUndefined();
 });
+
+test('ArrowUp walks one visual line at a time after edits drift painted ranges', async ({ superdoc }) => {
+  // SD-3400: the painter skips repainting unchanged note paragraphs, so
+  // their painted pm ranges drift after edits above them. Vertical arrow
+  // navigation validated its hit against those stale ranges and skipped
+  // lines (user repro: ArrowUp jumped two lines).
+  await superdoc.loadDocument(BASIC_FOOTNOTES_DOC_PATH);
+  await superdoc.waitForStable();
+
+  const note = superdoc.page.locator('[data-block-id^="footnote-1-"]').first();
+  await note.scrollIntoViewIfNeeded();
+  const box = await note.boundingBox();
+  await superdoc.page.mouse.dblclick(box!.x + 40, box!.y + box!.height / 2);
+  await superdoc.waitForStable();
+  await expect
+    .poll(() => getActiveStorySession(superdoc.page))
+    .toEqual({ kind: 'story', storyType: 'footnote', noteId: '1' });
+
+  // Build 6 paragraphs.
+  await superdoc.page.keyboard.press('End');
+  for (const line of ['sdfasdfasdfdsfdas', 'sadfsadfsdafdsafasd dsfdasf dsf', 'asdfsadf sdaf sdfs', 'sdfsdf sdf sdfsd fsdfd', 'sdfsdafsadfssdfdsaf']) {
+    await superdoc.page.keyboard.press('Enter');
+    await superdoc.page.keyboard.type(line);
+  }
+  await superdoc.waitForStable(800);
+
+  // Edit paragraph 1 (shifts all later paragraphs' positions; the painter
+  // keeps their old painted ranges).
+  await superdoc.page.evaluate(() => {
+    const sed = (window as any).editor?.presentationEditor?.getActiveEditor?.();
+    const TS = sed.state.selection.constructor;
+    sed.view.dispatch(sed.state.tr.setSelection(TS.create(sed.state.doc, 3)));
+  });
+  await superdoc.page.keyboard.type('pri');
+  await superdoc.waitForStable(800);
+
+  // Caret to the very end, then walk up one line per press.
+  await superdoc.page.evaluate(() => {
+    const sed = (window as any).editor?.presentationEditor?.getActiveEditor?.();
+    const TS = sed.state.selection.constructor;
+    sed.view.dispatch(sed.state.tr.setSelection(TS.create(sed.state.doc, sed.state.doc.content.size - 2)));
+  });
+  await superdoc.waitForStable(600);
+
+  const readCaretTop = () =>
+    superdoc.page.evaluate(() => {
+      const cr = document.querySelector('.presentation-editor__selection-caret')?.getBoundingClientRect();
+      return cr ? Math.round(cr.top) : null;
+    });
+  const lineTops = await superdoc.page.evaluate(() =>
+    (Array.from(document.querySelectorAll('[data-block-id^="footnote-1-"] .superdoc-line')) as HTMLElement[])
+      .map((l) => Math.round(l.getBoundingClientRect().top))
+      .sort((a, b) => a - b),
+  );
+  expect(lineTops.length).toBe(6);
+
+  let currentTop = await readCaretTop();
+  expect(currentTop).toBe(lineTops[5]);
+  for (let expectedIndex = 4; expectedIndex >= 0; expectedIndex -= 1) {
+    await superdoc.page.keyboard.press('ArrowUp');
+    await superdoc.waitForStable(500);
+    const top = await readCaretTop();
+    expect(top, `ArrowUp should land on line ${expectedIndex} (top ${lineTops[expectedIndex]}), got ${top}`).toBe(
+      lineTops[expectedIndex],
+    );
+  }
+});

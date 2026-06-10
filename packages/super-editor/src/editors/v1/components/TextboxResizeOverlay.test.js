@@ -12,7 +12,7 @@ vi.mock('@superdoc/layout-bridge', () => ({
 function createMockEditor(overrides = {}) {
   const shapeNode = {
     type: { name: 'shapeContainer' },
-    attrs: { width: 120, height: 60 },
+    attrs: { width: 120, height: 60, marginOffset: { horizontal: 50, top: 80 } },
     marks: [],
   };
   const paragraphNode = {
@@ -125,6 +125,47 @@ describe('TextboxResizeOverlay', () => {
     expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'width', 180);
     expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'height', 100);
     expect(editor.view.dispatch).toHaveBeenCalledWith(editor.state.tr);
+
+    wrapper.unmount();
+    remove();
+  });
+
+  it('dispatches marginOffset update when dragging overlay body', async () => {
+    const editor = createMockEditor();
+    const { textboxEl, remove } = createTextboxElement();
+
+    const wrapper = mount(TextboxResizeOverlay, {
+      attachTo: document.body,
+      props: { editor, visible: true, textboxElement: textboxEl },
+    });
+
+    // Mousedown on overlay body (not a handle)
+    await wrapper.trigger('mousedown', { clientX: 50, clientY: 50 });
+
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 80, clientY: 60 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 80, clientY: 60 }));
+
+    // marginOffset.horizontal += 30, marginOffset.top += 10
+    expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'marginOffset', { horizontal: 80, top: 90 });
+    expect(editor.view.dispatch).toHaveBeenCalledWith(editor.state.tr);
+
+    wrapper.unmount();
+    remove();
+  });
+
+  it('skips move dispatch when drag delta is below threshold', async () => {
+    const editor = createMockEditor();
+    const { textboxEl, remove } = createTextboxElement();
+
+    const wrapper = mount(TextboxResizeOverlay, {
+      attachTo: document.body,
+      props: { editor, visible: true, textboxElement: textboxEl },
+    });
+
+    await wrapper.trigger('mousedown', { clientX: 50, clientY: 50 });
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 51, clientY: 51 }));
+
+    expect(editor.state.tr.setNodeAttribute).not.toHaveBeenCalledWith(10, 'marginOffset', expect.anything());
 
     wrapper.unmount();
     remove();

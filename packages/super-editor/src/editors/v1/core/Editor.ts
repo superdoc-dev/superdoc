@@ -3351,7 +3351,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * DOM compositionend/blur handler on the editor view. Stable reference so
    * unmount() can remove it.
    */
-  #handleDomCompositionEnd = (): void => {
+  #handleDomCompositionEnd = (event?: Event): void => {
+    const forceFlush = event?.type === 'blur';
     queueMicrotask(() => {
       // Nothing deferred — common for blur events outside composition. A
       // pending trailing composition read will reschedule via the dispatch
@@ -3359,7 +3360,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (!this.#deferredCompositionRange) return;
       // A new composition can chain immediately after the previous commit
       // (common with CJK IMEs); keep deferring until that one ends too.
-      if (this.view?.composing) return;
+      if (this.view?.composing && !forceFlush) return;
       // The final composition DOM read can still be pending in ProseMirror's
       // observer; force it so the commit transaction (deferred, extends the
       // range) applies before the range is converted to a tracked insert.
@@ -3368,7 +3369,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       } catch {
         // A failed forced flush only risks marking the range one tick early.
       }
-      if (this.view?.composing) return;
+      if (this.view?.composing && !forceFlush) return;
       this.#flushDeferredCompositionTracking();
     });
   };

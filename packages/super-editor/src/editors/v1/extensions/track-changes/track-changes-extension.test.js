@@ -1272,6 +1272,36 @@ describe('TrackChanges extension commands', () => {
     }
   });
 
+  it('interaction: IME composition blur flushes even when ProseMirror stays composing', async () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.setDocumentMode('suggesting');
+
+      const view = interactionEditor.view;
+      view.focus();
+      view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+      view.dispatch(interactionEditor.state.tr.insertText('é').setMeta('composition', 1));
+      await Promise.resolve();
+
+      expect(interactionEditor.state.doc.textContent).toBe('é');
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('');
+
+      Object.defineProperty(view, 'composing', { value: true, configurable: true });
+      view.dom.dispatchEvent(new FocusEvent('blur'));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('é');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
   it('interaction: IME composition maps deferred deletion through appended cleanup transactions', async () => {
     const { editor: interactionEditor } = initTestEditor({
       mode: 'text',

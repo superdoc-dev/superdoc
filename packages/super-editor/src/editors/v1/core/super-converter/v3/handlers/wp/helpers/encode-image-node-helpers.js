@@ -1441,8 +1441,9 @@ function extractInlineNodesFromRun(run, paragraphProperties, params) {
 }
 
 function paragraphToPmParagraph(paragraph, params) {
-  const processed = preProcessTextBoxContent({ name: 'w:txbxContent', elements: [paragraph] }, params);
-  const paragraphNode = collectTextBoxParagraphs(processed?.elements || [])[0];
+  // `paragraph` is already preprocessed by importDrawingMLTextbox — do not call
+  // preProcessTextBoxContent again here or field nodes (sd:autoPageNumber, etc.) get processed twice.
+  const paragraphNode = collectTextBoxParagraphs([paragraph])[0];
   if (!paragraphNode) return null;
 
   const paragraphProperties = resolveParagraphPropertiesForTextBox(paragraphNode, params);

@@ -156,6 +156,14 @@ export const ShapeContainer = Node.create({
         default: false,
         rendered: false,
       },
+      isTextBox: {
+        default: false,
+        rendered: false,
+      },
+      isWordArt: {
+        default: false,
+        rendered: false,
+      },
     };
   },
 

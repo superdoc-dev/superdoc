@@ -822,6 +822,10 @@ export interface ShapeContainerAttrs extends BlockNodeAttributes {
   lineEnds?: Record<string, unknown> | null;
   /** Whether the shape is hidden */
   hidden?: boolean;
+  /** Whether this shape is a textbox (txBox="1") */
+  isTextBox?: boolean;
+  /** Whether this shape is WordArt */
+  isWordArt?: boolean;
 }
 
 // ============================================

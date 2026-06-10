@@ -2073,26 +2073,25 @@ export class DomPainter {
 
   private getPageBackgroundDecorationZOrder(fragment: Fragment, resolvedItem: ResolvedPaintItem | undefined): number {
     const block = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
+    const isDrawingBlock = block?.kind === 'image' || block?.kind === 'drawing';
+    const originalAttributes = isDrawingBlock
+      ? (block.attrs as { originalAttributes?: unknown } | undefined)?.originalAttributes
+      : undefined;
+    const normalizedZIndex = normalizeZIndex(originalAttributes);
     const isBehindDoc =
       ((fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.behindDoc === true) ||
-      (block && (block.kind === 'image' || block.kind === 'drawing') && block.anchor?.behindDoc === true);
+      (isDrawingBlock && block.anchor?.behindDoc === true);
 
-    if (block && (block.kind === 'image' || block.kind === 'drawing')) {
-      const attrs = block.attrs as { originalAttributes?: unknown } | undefined;
-      const normalizedZIndex = normalizeZIndex(attrs?.originalAttributes);
-      if (isBehindDoc && normalizedZIndex != null) return normalizedZIndex;
+    if (isBehindDoc && normalizedZIndex != null) {
+      return normalizedZIndex;
     }
 
     if ((fragment.kind === 'image' || fragment.kind === 'drawing') && typeof fragment.zIndex === 'number') {
       return isBehindDoc ? fragment.zIndex : PAGE_BACKGROUND_OVERLAY_Z_ORDER_OFFSET + Math.max(1, fragment.zIndex);
     }
 
-    if (block && (block.kind === 'image' || block.kind === 'drawing')) {
-      const attrs = block.attrs as { originalAttributes?: unknown } | undefined;
-      const normalizedZIndex = normalizeZIndex(attrs?.originalAttributes);
-      if (normalizedZIndex != null) {
-        return PAGE_BACKGROUND_OVERLAY_Z_ORDER_OFFSET + Math.max(1, normalizedZIndex);
-      }
+    if (normalizedZIndex != null) {
+      return PAGE_BACKGROUND_OVERLAY_Z_ORDER_OFFSET + Math.max(1, normalizedZIndex);
     }
 
     return 0;

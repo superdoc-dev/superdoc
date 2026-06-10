@@ -73,6 +73,18 @@ describe('TrackChanges extension commands', () => {
 
     return attrs;
   };
+  const getMarkIds = (doc, markName) => {
+    const ids = new Set();
+
+    doc.descendants((node) => {
+      if (!node.isText) return;
+      node.marks.forEach((mark) => {
+        if (mark.type.name === markName && mark.attrs?.id) ids.add(mark.attrs.id);
+      });
+    });
+
+    return ids;
+  };
 
   beforeEach(() => {
     ({ editor } = initTestEditor({ mode: 'text', content: '<p></p>' }));
@@ -1297,6 +1309,54 @@ describe('TrackChanges extension commands', () => {
       await Promise.resolve();
 
       expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('é');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: IME composition inside an existing insertion does not create a nested revision', async () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      const { schema } = interactionEditor;
+      const existingInsertMark = schema.marks[TrackInsertMarkName].create({
+        id: 'existing-insertion',
+        author: 'Track Tester',
+        authorEmail: 'track@example.com',
+      });
+      const markedState = EditorState.create({
+        schema,
+        doc: schema.nodes.doc.create(null, [
+          schema.nodes.paragraph.create(null, schema.text('existing', [existingInsertMark])),
+        ]),
+        plugins: interactionEditor.state.plugins,
+      });
+      interactionEditor._state = markedState;
+      interactionEditor.view.updateState(markedState);
+      interactionEditor.setDocumentMode('suggesting');
+
+      const view = interactionEditor.view;
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      view.dispatch(
+        interactionEditor.state.tr.setSelection(TextSelection.create(interactionEditor.state.doc, textRange.from + 2)),
+      );
+      view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+      view.dispatch(interactionEditor.state.tr.insertText('é').setMeta('composition', 1));
+      await Promise.resolve();
+
+      view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: 'é', bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(interactionEditor.state.doc.textContent).toBe('exéisting');
+      expect(getMarkAttrsForText(interactionEditor.state.doc, TrackInsertMarkName, 'é')?.id).toBe('existing-insertion');
+      expect(getMarkIds(interactionEditor.state.doc, TrackInsertMarkName)).toEqual(new Set(['existing-insertion']));
     } finally {
       interactionEditor.destroy();
     }

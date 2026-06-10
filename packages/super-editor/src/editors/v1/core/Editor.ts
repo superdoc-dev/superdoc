@@ -3174,7 +3174,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (!this.#canRestoreDeferredCompositionDeletion(step, sourceDoc)) return;
       const rest = tr.mapping.slice(index + 1);
       deletions.push({
-        pos: rest.map(step.from, -1),
+        pos: rest.map(step.from + step.slice.size, 1),
         slice: sourceDoc.slice(step.from, step.to),
       });
     });
@@ -3228,7 +3228,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   #mapDeferredCompositionDeletions(applied: readonly Transaction[]): void {
     if (!this.#deferredCompositionDeletions.length) return;
-    this.#deferredCompositionDeletions = this.#deferredCompositionDeletions.map((deletion) => {
+    this.#deferredCompositionDeletions = this.#mapCompositionDeletions(this.#deferredCompositionDeletions, applied);
+  }
+
+  #mapCompositionDeletions(
+    deletions: Array<{ pos: number; slice: PmSlice }>,
+    applied: readonly Transaction[],
+  ): Array<{ pos: number; slice: PmSlice }> {
+    if (!deletions.length || !applied.length) return deletions;
+    return deletions.map((deletion) => {
       let pos = deletion.pos;
       for (const tr of applied) {
         pos = tr.mapping.map(pos, -1);
@@ -3406,7 +3414,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       );
       this.#mapDeferredCompositionDeletions(appliedTransactions);
       if (deferredCompositionDeletions.length) {
-        this.#deferredCompositionDeletions.push(...deferredCompositionDeletions);
+        this.#deferredCompositionDeletions.push(
+          ...this.#mapCompositionDeletions(deferredCompositionDeletions, appliedTransactions.slice(1)),
+        );
       }
       if (deferTrackingForComposition && this.view?.composing !== true) {
         // Trailing composition read landed after compositionend (possibly after

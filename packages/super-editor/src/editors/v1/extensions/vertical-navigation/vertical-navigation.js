@@ -309,9 +309,33 @@ function resolveLineBoundaryPosition(editor, selection, key) {
 }
 
 /**
+ * Browser-portable caret-from-point: WebKit/Blink expose caretRangeFromPoint,
+ * Firefox exposes caretPositionFromPoint. Normalizes both to {node, offset}.
+ * Without the Firefox branch, note sessions silently fell back to the
+ * mixed-coordinate hitTest path and the goal column drifted.
+ *
+ * @param {Document} ownerDoc
+ * @param {number} x
+ * @param {number} y
+ * @returns {{ node: Node, offset: number } | null}
+ */
+function caretPointFromClientPoint(ownerDoc, x, y) {
+  if (typeof ownerDoc.caretRangeFromPoint === 'function') {
+    const range = ownerDoc.caretRangeFromPoint(x, y);
+    if (range?.startContainer) return { node: range.startContainer, offset: range.startOffset };
+  }
+  if (typeof ownerDoc.caretPositionFromPoint === 'function') {
+    const caret = ownerDoc.caretPositionFromPoint(x, y);
+    if (caret?.offsetNode) return { node: caret.offsetNode, offset: caret.offset };
+  }
+  return null;
+}
+
+/**
  * Resolves the ProseMirror position at a client X on a painted line using the
- * browser's native point-to-text mapping (caretRangeFromPoint) and the line's
- * leaf pm attributes. Pure client space — no layout/client conversions.
+ * browser's native point-to-text mapping ({@link caretPointFromClientPoint})
+ * and the line's leaf pm attributes. Pure client space — no layout/client
+ * conversions.
  *
  * @param {Document} ownerDoc
  * @param {Element} lineEl
@@ -329,9 +353,9 @@ function resolvePositionAtClientPoint(ownerDoc, lineEl, clientX) {
   const win = ownerDoc.defaultView;
   if (!win) return null;
 
-  const range = typeof ownerDoc.caretRangeFromPoint === 'function' ? ownerDoc.caretRangeFromPoint(x, y) : null;
-  if (range?.startContainer) {
-    const node = range.startContainer;
+  const hit = caretPointFromClientPoint(ownerDoc, x, y);
+  if (hit?.node) {
+    const node = hit.node;
     const host = node.nodeType === win.Node.TEXT_NODE ? node.parentElement : node;
     const leaf = host?.closest?.('[data-pm-start][data-pm-end]');
     if (leaf && lineEl.contains(leaf)) {
@@ -343,7 +367,7 @@ function resolvePositionAtClientPoint(ownerDoc, lineEl, clientX) {
         let current = walker.nextNode();
         while (current) {
           if (current === node) {
-            offset += range.startOffset;
+            offset += hit.offset;
             break;
           }
           offset += current.textContent?.length ?? 0;

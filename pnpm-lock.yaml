@@ -243,9 +243,6 @@ catalogs:
     semantic-release-commit-filter:
       specifier: ^1.0.2
       version: 1.0.2
-    semantic-release-linear-app:
-      specifier: ^0.7.1
-      version: 0.7.1
     sirv:
       specifier: ^3.0.2
       version: 3.0.2
@@ -417,9 +414,6 @@ importers:
       semantic-release-commit-filter:
         specifier: 'catalog:'
         version: 1.0.2
-      semantic-release-linear-app:
-        specifier: 'catalog:'
-        version: 0.7.1(semantic-release@24.2.9(typescript@5.9.3))
       semantic-release-pnpm:
         specifier: ^1.0.2
         version: 1.0.2(semantic-release@24.2.9(typescript@5.9.3))
@@ -541,9 +535,6 @@ importers:
       semantic-release-commit-filter:
         specifier: 'catalog:'
         version: 1.0.2
-      semantic-release-linear-app:
-        specifier: 'catalog:'
-        version: 0.7.1(semantic-release@24.2.9(typescript@5.9.3))
 
   apps/docs:
     devDependencies:
@@ -6572,7 +6563,6 @@ packages:
   '@microsoft/teamsapp-cli@3.0.2':
     resolution: {integrity: sha512-AowuJwrrUxeF9Bq/frxuy9YZjK/ECk3pi0UBXl3CQLZ4XNWfgWatiFi/UWpyHDLccFs+0Za3nNYATFvgsxEFwQ==}
     engines: {node: '>=12'}
-    deprecated: This package is deprecated and supported Node.js version is 18-22. Please use @microsoft/m365agentstoolkit-cli instead.
     hasBin: true
 
   '@microsoft/teamsfx-api@0.23.1':
@@ -20586,12 +20576,6 @@ packages:
 
   semantic-release-commit-filter@1.0.2:
     resolution: {integrity: sha512-LpIB1UN78oRmJnqgPdvA/qRgVitih5V1Ybyszv8GcOBAJWJBHGWI1PmSrOfdEmbf1ZvGkdK/NNDdBHbuSQqSyQ==}
-
-  semantic-release-linear-app@0.7.1:
-    resolution: {integrity: sha512-UmFCNIFySR/6ZZ2t0RYUwBTLQrLwp9c5eEgePwN7PAU9wLC0Oc3KgZ+bElpyhl9rPOhvhBJhSGsoPNt8Sa2tBw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      semantic-release: '>=20.0.0'
 
   semantic-release-pnpm@1.0.2:
     resolution: {integrity: sha512-jYG+287heOL/uAp8mgwx3wSe+9K9J3RNSnbDNoOd2kcmEDM9HLfA2VnOmv6fx/X3/KijBNITPXQogYcNjLvf3Q==}
@@ -45782,13 +45766,6 @@ snapshots:
       - zod
 
   semantic-release-commit-filter@1.0.2: {}
-
-  semantic-release-linear-app@0.7.1(semantic-release@24.2.9(typescript@5.9.3)):
-    dependencies:
-      '@semantic-release/error': 4.0.0
-      execa: 9.6.1
-      node-fetch: 3.3.2
-      semantic-release: 24.2.9(typescript@5.9.3)
 
   semantic-release-pnpm@1.0.2(semantic-release@24.2.9(typescript@5.9.3)):
     dependencies:

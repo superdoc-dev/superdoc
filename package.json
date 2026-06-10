@@ -129,7 +129,6 @@
     "semantic-release": "catalog:",
     "semantic-release-ai-notes": "catalog:",
     "semantic-release-commit-filter": "catalog:",
-    "semantic-release-linear-app": "catalog:",
     "semantic-release-pnpm": "^1.0.2",
     "tsx": "catalog:",
     "typescript": "catalog:",

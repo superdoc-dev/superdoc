@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ImageRun, ParagraphBlock, VectorShapeDrawing } from '@superdoc/contracts';
+import type { ImageRun, ParagraphBlock, ShapeGroupDrawing, VectorShapeDrawing } from '@superdoc/contracts';
 import { computeDirtyRegions } from '../src/diff';
 
 const block = (id: string, text: string) => ({
@@ -37,6 +37,21 @@ const drawing = (overrides?: Partial<VectorShapeDrawing>): VectorShapeDrawing =>
   fillColor: '#f00',
   strokeColor: '#000',
   strokeWidth: 2,
+  ...overrides,
+});
+
+const shapeGroup = (overrides?: Partial<ShapeGroupDrawing>): ShapeGroupDrawing => ({
+  kind: 'drawing',
+  id: 'shape-group-0',
+  drawingKind: 'shapeGroup',
+  geometry: { width: 100, height: 80, rotation: 0, flipH: false, flipV: false },
+  groupTransform: {
+    width: 100,
+    height: 80,
+    childWidth: 100,
+    childHeight: 80,
+  },
+  shapes: [],
   ...overrides,
 });
 
@@ -360,6 +375,73 @@ describe('computeDirtyRegions', () => {
       drawing({
         id: 'drawing-0',
         fillColor: '#0f0',
+      }),
+    ];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+  });
+
+  it('detects vector shape effect changes', () => {
+    const prev = [
+      drawing({
+        effects: {
+          outerShadow: {
+            type: 'outerShadow',
+            blurRadius: 6,
+            distance: 4,
+            direction: 45,
+            color: '#999999',
+            opacity: 0.4,
+          },
+        },
+      }),
+    ];
+    const next = [
+      drawing({
+        effects: {
+          outerShadow: {
+            type: 'outerShadow',
+            blurRadius: 6,
+            distance: 4,
+            direction: 45,
+            color: '#999999',
+            opacity: 0.7,
+          },
+        },
+      }),
+    ];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+  });
+
+  it('detects shape group transform rotation changes', () => {
+    const prev = [shapeGroup()];
+    const next = [
+      shapeGroup({
+        groupTransform: {
+          width: 100,
+          height: 80,
+          childWidth: 100,
+          childHeight: 80,
+          rotation: 30,
+        },
+      }),
+    ];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+  });
+
+  it('detects shape group transform flip changes', () => {
+    const prev = [shapeGroup()];
+    const next = [
+      shapeGroup({
+        groupTransform: {
+          width: 100,
+          height: 80,
+          childWidth: 100,
+          childHeight: 80,
+          flipH: true,
+        },
       }),
     ];
     const result = computeDirtyRegions(prev, next);

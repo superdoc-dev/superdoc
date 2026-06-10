@@ -529,6 +529,7 @@ const drawingBlocksEqual = (a: DrawingBlock, b: DrawingBlock): boolean => {
     return (
       drawingGeometryEqual(a.geometry, b.geometry) &&
       a.shapeKind === b.shapeKind &&
+      jsonEqual(a.customGeometry, b.customGeometry) &&
       a.fillColor === b.fillColor &&
       a.strokeColor === b.strokeColor &&
       a.strokeWidth === b.strokeWidth &&
@@ -536,8 +537,8 @@ const drawingBlocksEqual = (a: DrawingBlock, b: DrawingBlock): boolean => {
       a.textVerticalAlign === b.textVerticalAlign &&
       jsonEqual(a.textInsets, b.textInsets) &&
       jsonEqual(a.textContent, b.textContent) &&
-      jsonEqual(a.customGeometry, b.customGeometry) &&
       jsonEqual(a.lineEnds, b.lineEnds) &&
+      jsonEqual(a.effects, b.effects) &&
       jsonEqual(a.effectExtent, b.effectExtent) &&
       textboxContentEqual
     );
@@ -546,6 +547,7 @@ const drawingBlocksEqual = (a: DrawingBlock, b: DrawingBlock): boolean => {
   if (a.drawingKind === 'shapeGroup' && b.drawingKind === 'shapeGroup') {
     return (
       drawingGeometryEqual(a.geometry, b.geometry) &&
+      jsonEqual(a.effectExtent, b.effectExtent) &&
       shapeGroupTransformEqual(a.groupTransform, b.groupTransform) &&
       shapeGroupSizeEqual(a.size, b.size) &&
       shapeGroupChildrenEqual(a.shapes, b.shapes)
@@ -642,7 +644,10 @@ const shapeGroupTransformEqual = (a?: ShapeGroupTransform, b?: ShapeGroupTransfo
     a.childWidth === b.childWidth &&
     a.childHeight === b.childHeight &&
     a.childOriginXEmu === b.childOriginXEmu &&
-    a.childOriginYEmu === b.childOriginYEmu
+    a.childOriginYEmu === b.childOriginYEmu &&
+    (a.rotation ?? 0) === (b.rotation ?? 0) &&
+    Boolean(a.flipH) === Boolean(b.flipH) &&
+    Boolean(a.flipV) === Boolean(b.flipV)
   );
 };
 

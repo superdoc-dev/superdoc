@@ -116,12 +116,7 @@ export function SelectionPopover() {
     }
     const update = () => setRect(ui.selection.getAnchorRect({ placement: 'start' }));
     update();
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
-    return () => {
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
-    };
+    return ui.viewport.observe(update);
   }, [ui, selection.empty, selection.target, selection.quotedText]);
 
   if (!rect) return null;
@@ -181,6 +176,17 @@ document.addEventListener('contextmenu', (event) => {
 ```
 
 The painted host is separate from the offscreen ProseMirror DOM. Reach for `getHost()` when you need the element a `MouseEvent.target` would resolve to inside the editor.
+
+## Get the scroll container
+
+Use `ui.viewport.getScrollContainer()` when your UI needs to scroll the editor or attach scroll listeners. It returns `null` when the page window is the scroller.
+
+```ts
+const scroller = ui.viewport.getScrollContainer();
+(scroller ?? window).scrollTo({ top: 0, behavior: 'smooth' });
+```
+
+If you cache rects from `getRect`, subscribe to `ui.viewport.observe(() => remeasure())` and re-query them when geometry changes.
 
 ## The right-click bundle
 

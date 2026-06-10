@@ -65,13 +65,9 @@ describe('importDrawingMLTextbox', () => {
         {
           type: 'shapeTextbox',
           attrs: {
-            attributes: {
-              verticalAlign: 'center',
-              lIns: 9.6,
-              tIns: 4.8,
-              rIns: 9.6,
-              bIns: 4.8,
-            },
+            textInsets: { top: 4.8, right: 9.6, bottom: 4.8, left: 9.6 },
+            textVerticalAlign: 'center',
+            attributes: {},
           },
           content: [
             { type: 'paragraph', content: [{ type: 'text', text: 'First' }] },

@@ -324,17 +324,22 @@ function resolvePositionAtClientPoint(ownerDoc, lineEl, clientX) {
   const y = lineRect.top + lineRect.height / 2;
   const x = Math.max(lineRect.left, Math.min(clientX, lineRect.right - 1));
 
+  // Browser globals via the document's own window (also keeps the file free
+  // of DOM globals for lint environments without them).
+  const win = ownerDoc.defaultView;
+  if (!win) return null;
+
   const range = typeof ownerDoc.caretRangeFromPoint === 'function' ? ownerDoc.caretRangeFromPoint(x, y) : null;
   if (range?.startContainer) {
     const node = range.startContainer;
-    const host = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    const host = node.nodeType === win.Node.TEXT_NODE ? node.parentElement : node;
     const leaf = host?.closest?.('[data-pm-start][data-pm-end]');
     if (leaf && lineEl.contains(leaf)) {
       const pmStart = Number(leaf.dataset?.pmStart);
       const pmEnd = Number(leaf.dataset?.pmEnd);
       if (Number.isFinite(pmStart)) {
         let offset = 0;
-        const walker = ownerDoc.createTreeWalker(leaf, NodeFilter.SHOW_TEXT);
+        const walker = ownerDoc.createTreeWalker(leaf, win.NodeFilter.SHOW_TEXT);
         let current = walker.nextNode();
         while (current) {
           if (current === node) {

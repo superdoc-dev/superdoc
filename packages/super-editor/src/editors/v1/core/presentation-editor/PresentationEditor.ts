@@ -6777,6 +6777,12 @@ export class PresentationEditor extends EventEmitter {
     this.#isComposing = false;
   }
 
+  #handleNonComposingInputForCompositionDeferral = (event: Event): void => {
+    if ('isComposing' in event && (event as InputEvent).isComposing === false) {
+      this.#endCompositionDeferral();
+    }
+  };
+
   /**
    * SD-2368: defer visible layout repaints while an IME composition is active.
    * Visible-host listeners are permanent; the active hidden target's listeners
@@ -6793,16 +6799,11 @@ export class PresentationEditor extends EventEmitter {
 
     const begin = () => this.#beginCompositionDeferral();
     const end = () => this.#endCompositionDeferral();
-    const endOnNonComposingInput = (event: Event) => {
-      if ('isComposing' in event && (event as InputEvent).isComposing === false) {
-        this.#endCompositionDeferral();
-      }
-    };
 
     add(this.#visibleHost, 'compositionstart', begin);
     add(this.#visibleHost, 'compositionend', end);
-    add(this.#visibleHost, 'input', endOnNonComposingInput);
-    add(this.#visibleHost, 'beforeinput', endOnNonComposingInput);
+    add(this.#visibleHost, 'input', this.#handleNonComposingInputForCompositionDeferral);
+    add(this.#visibleHost, 'beforeinput', this.#handleNonComposingInputForCompositionDeferral);
   }
 
   #teardownCompositionDeferral(): void {
@@ -6840,10 +6841,18 @@ export class PresentationEditor extends EventEmitter {
     nextTarget.addEventListener('compositionend', end);
     nextTarget.addEventListener('blur', end);
     nextTarget.addEventListener('focusout', end);
+    nextTarget.addEventListener('input', this.#handleNonComposingInputForCompositionDeferral);
+    nextTarget.addEventListener('beforeinput', this.#handleNonComposingInputForCompositionDeferral);
     this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('compositionstart', begin));
     this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('compositionend', end));
     this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('blur', end));
     this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('focusout', end));
+    this.#compositionTargetCleanup.push(() =>
+      nextTarget.removeEventListener('input', this.#handleNonComposingInputForCompositionDeferral),
+    );
+    this.#compositionTargetCleanup.push(() =>
+      nextTarget.removeEventListener('beforeinput', this.#handleNonComposingInputForCompositionDeferral),
+    );
   }
 
   #scheduleRerender() {

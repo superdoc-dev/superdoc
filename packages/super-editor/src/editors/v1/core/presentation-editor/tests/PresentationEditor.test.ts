@@ -2398,6 +2398,22 @@ describe('PresentationEditor', () => {
 
       await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalledTimes(1));
     });
+
+    it('recovers from a lost compositionend via non-composing beforeinput on the hidden editor', async () => {
+      const { mockEditorInstance, triggerDocChange } = await setupSettledEditor();
+      const hiddenDom = mockEditorInstance.view.dom as HTMLElement;
+
+      hiddenDom.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      triggerDocChange();
+      await settle();
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+
+      const event = new InputEvent('beforeinput', { inputType: 'insertText', data: 'a', bubbles: true });
+      Object.defineProperty(event, 'isComposing', { value: false, writable: false });
+      hiddenDom.dispatchEvent(event);
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalledTimes(1));
+    });
   });
 
   describe('editable state integration', () => {

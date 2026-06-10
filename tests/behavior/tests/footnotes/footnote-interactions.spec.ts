@@ -286,11 +286,12 @@ test('ArrowUp walks one visual line at a time after edits drift painted ranges',
   });
   await superdoc.waitForStable(600);
 
-  const readCaretTop = () =>
+  const readCaret = () =>
     superdoc.page.evaluate(() => {
       const cr = document.querySelector('.presentation-editor__selection-caret')?.getBoundingClientRect();
-      return cr ? Math.round(cr.top) : null;
+      return cr ? { top: Math.round(cr.top), left: Math.round(cr.left) } : null;
     });
+  const readCaretTop = async () => (await readCaret())?.top ?? null;
   const lineTops = await superdoc.page.evaluate(() =>
     (Array.from(document.querySelectorAll('[data-block-id^="footnote-1-"] .superdoc-line')) as HTMLElement[])
       .map((l) => Math.round(l.getBoundingClientRect().top))
@@ -298,14 +299,20 @@ test('ArrowUp walks one visual line at a time after edits drift painted ranges',
   );
   expect(lineTops.length).toBe(6);
 
-  let currentTop = await readCaretTop();
-  expect(currentTop).toBe(lineTops[5]);
+  const start = await readCaret();
+  expect(start?.top).toBe(lineTops[5]);
   for (let expectedIndex = 4; expectedIndex >= 0; expectedIndex -= 1) {
     await superdoc.page.keyboard.press('ArrowUp');
     await superdoc.waitForStable(500);
-    const top = await readCaretTop();
-    expect(top, `ArrowUp should land on line ${expectedIndex} (top ${lineTops[expectedIndex]}), got ${top}`).toBe(
+    const caret = await readCaret();
+    expect(caret?.top, `ArrowUp should land on line ${expectedIndex} (top ${lineTops[expectedIndex]}), got ${caret?.top}`).toBe(
       lineTops[expectedIndex],
     );
+    // Goal column: the caret must stay near the starting column while
+    // arrowing vertically (SD-3400: notes drifted ~50px right per press).
+    expect(
+      Math.abs((caret?.left ?? 0) - (start?.left ?? 0)),
+      `goal-x drift on line ${expectedIndex}: ${start?.left} -> ${caret?.left}`,
+    ).toBeLessThan(12);
   }
 });

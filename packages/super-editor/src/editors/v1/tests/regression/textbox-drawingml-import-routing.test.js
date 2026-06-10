@@ -16,9 +16,9 @@ function collectNodesByType(node, type, acc = []) {
   return acc;
 }
 
-describe('sd-1331 textbox import routing', () => {
-  it('produces schema-valid PM JSON for the sd-1331 textbox fixture', async () => {
-    const docx = await getTestDataByFileName('sd-1331-text-boxes.docx');
+describe('textbox drawingml import routing', () => {
+  it('produces schema-valid PM JSON for the text-boxes fixture', async () => {
+    const docx = await getTestDataByFileName('text-boxes.docx');
     const { editor } = initTestEditor({
       loadFromSchema: true,
       content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
@@ -54,7 +54,7 @@ describe('sd-1331 textbox import routing', () => {
   });
 
   it('preserves imported shapeContainer geometry through schema node creation', async () => {
-    const docx = await getTestDataByFileName('sd-1331-text-boxes.docx');
+    const docx = await getTestDataByFileName('text-boxes.docx');
     const { editor } = initTestEditor({
       loadFromSchema: true,
       content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
@@ -95,8 +95,8 @@ describe('sd-1331 textbox import routing', () => {
     }
   });
 
-  it('full editor loads sd-1331-text-boxes.docx without PM view crash', async () => {
-    const filePath = join(__dirname, '../data/sd-1331-text-boxes.docx');
+  it('full editor loads text-boxes.docx without PM view crash', async () => {
+    const filePath = join(__dirname, '../data/text-boxes.docx');
     const fileSource = await readFile(filePath);
     const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(fileSource, true);
     const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });

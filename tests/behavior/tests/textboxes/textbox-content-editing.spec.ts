@@ -2,7 +2,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 import { activateFooter } from '../../helpers/story-surfaces.js';
 import path from 'node:path';
 
-const SD_1331 = path.resolve(import.meta.dirname, 'fixtures/sd-1331-text-boxes.docx');
+const TEXT_BOXES = path.resolve(import.meta.dirname, 'fixtures/text-boxes.docx');
 const CONTRACT_ACC = path.resolve(import.meta.dirname, 'fixtures/contract-acc-tbl-padding.docx');
 
 // ---------------------------------------------------------------------------
@@ -44,12 +44,12 @@ async function selectionIsInsideTextbox(page: any): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// Tests: sd-1331-text-boxes.docx
+// Tests: text-boxes.docx
 // ---------------------------------------------------------------------------
 
-test.describe('Textbox content editing — sd-1331', () => {
+test.describe('Textbox content editing — text-boxes', () => {
   test.beforeEach(async ({ superdoc }) => {
-    await superdoc.loadDocument(SD_1331);
+    await superdoc.loadDocument(TEXT_BOXES);
   });
 
   test('@behavior textbox: clicking inside a textbox places caret inside textbox content', async ({ superdoc }) => {
@@ -211,12 +211,12 @@ test.describe('Textbox content editing — contract-acc (table cell)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: footer textbox (sd-1331-text-boxes.docx)
+// Tests: footer textbox (text-boxes.docx)
 // ---------------------------------------------------------------------------
 
-test.describe('Textbox content editing — footer (sd-1331)', () => {
+test.describe('Textbox content editing — footer (text-boxes)', () => {
   test.beforeEach(async ({ superdoc }) => {
-    await superdoc.loadDocument(SD_1331);
+    await superdoc.loadDocument(TEXT_BOXES);
   });
 
   test('@behavior textbox: clicking inside a footer textbox places caret inside it', async ({ superdoc }) => {
@@ -236,7 +236,9 @@ test.describe('Textbox content editing — footer (sd-1331)', () => {
 
     const el = line.asElement();
     if (!el) {
-      throw new Error('No footer textbox with superdoc-line found in sd-1331 — textbox rendering may have regressed');
+      throw new Error(
+        'No footer textbox with superdoc-line found in text-boxes — textbox rendering may have regressed',
+      );
       return;
     }
 
@@ -273,7 +275,9 @@ test.describe('Textbox content editing — footer (sd-1331)', () => {
 
     const el = line.asElement();
     if (!el) {
-      throw new Error('No footer textbox with superdoc-line found in sd-1331 — textbox rendering may have regressed');
+      throw new Error(
+        'No footer textbox with superdoc-line found in text-boxes — textbox rendering may have regressed',
+      );
       return;
     }
 

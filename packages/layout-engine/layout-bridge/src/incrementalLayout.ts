@@ -94,30 +94,57 @@ const headerFooterCacheState = new HeaderFooterCacheState();
  * The key is a stable signature of footnote IDs (not positions, which shift on every keystroke).
  * When the same footnotes exist, we can skip the expensive multi-pass convergence loop.
  */
-type FootnoteConvergenceCache = {
-  /** Sorted, pipe-delimited footnote IDs that produced these reserves */
-  footnoteIds: string;
-  /** The converged reserve values per page index */
-  reserves: number[];
-  /** Separator spacing used during convergence */
-  separatorSpacingBefore: number;
-};
+class FootnoteConvergenceCache {
+  private footnoteIds: string = '';
+  private reserves: number[] = [];
+  private separatorSpacingBefore: number = 0;
 
-let footnoteConvergenceCache: FootnoteConvergenceCache | null = null;
+  /**
+   * Compute a stable signature from footnote IDs only.
+   * Positions change on every keystroke, but IDs remain stable until footnotes are added/removed.
+   */
+  private static computeSignature(refs: Array<{ id: string; pos: number }>): string {
+    if (!refs || refs.length === 0) return '';
+    const ids = refs.map((r) => r.id).sort();
+    return ids.join('|');
+  }
+
+  /** Check if the cache has a valid hit for the given footnote refs. */
+  checkHit(refs: Array<{ id: string; pos: number }>): boolean {
+    const signature = FootnoteConvergenceCache.computeSignature(refs);
+    return signature !== '' && signature === this.footnoteIds && this.reserves.some((h) => h > 0);
+  }
+
+  /** Get cached reserves (returns a copy). */
+  getReserves(): number[] {
+    return this.reserves.slice();
+  }
+
+  /** Get cached separator spacing. */
+  getSeparatorSpacingBefore(): number {
+    return this.separatorSpacingBefore;
+  }
+
+  /** Update the cache with new converged values. */
+  update(refs: Array<{ id: string; pos: number }>, reserves: number[], separatorSpacingBefore: number): void {
+    this.footnoteIds = FootnoteConvergenceCache.computeSignature(refs);
+    this.reserves = reserves.slice();
+    this.separatorSpacingBefore = separatorSpacingBefore;
+  }
+
+  /** Clear the cache. */
+  clear(): void {
+    this.footnoteIds = '';
+    this.reserves = [];
+    this.separatorSpacingBefore = 0;
+  }
+}
+
+const footnoteConvergenceCache = new FootnoteConvergenceCache();
 
 /** Clear the footnote convergence cache (e.g., on document reload). */
 export const clearFootnoteConvergenceCache = (): void => {
-  footnoteConvergenceCache = null;
-};
-
-/**
- * Compute a stable signature from footnote IDs only.
- * Positions change on every keystroke, but IDs remain stable until footnotes are added/removed.
- */
-const computeFootnoteIdSignature = (refs: Array<{ id: string; pos: number }>): string => {
-  if (!refs || refs.length === 0) return '';
-  const ids = refs.map((r) => r.id).sort();
-  return ids.join('|');
+  footnoteConvergenceCache.clear();
 };
 
 const layoutDebugEnabled =
@@ -2370,12 +2397,7 @@ export async function incrementalLayout(
       const allFootnoteIds = new Set(footnotesInput.refs.map((ref) => ref.id));
 
       // Check footnote convergence cache - skip expensive multi-pass loop if footnotes unchanged
-      const currentIdSignature = computeFootnoteIdSignature(footnotesInput.refs);
-      const cacheHit =
-        footnoteConvergenceCache !== null &&
-        footnoteConvergenceCache.footnoteIds === currentIdSignature &&
-        currentIdSignature !== '' &&
-        footnoteConvergenceCache.reserves.some((h) => h > 0);
+      const cacheHit = footnoteConvergenceCache.checkHit(footnotesInput.refs);
       let usedCachedReserves = false;
 
       // Declare variables used by both cache hit and miss paths
@@ -2386,9 +2408,9 @@ export async function incrementalLayout(
       let reserves: number[];
 
       // Cache hit fast path: skip Pass 1 entirely, use cached reserves directly
-      if (cacheHit && footnoteConvergenceCache) {
-        reserves = footnoteConvergenceCache.reserves.slice();
-        const separatorSpacingBefore = footnoteConvergenceCache.separatorSpacingBefore;
+      if (cacheHit) {
+        reserves = footnoteConvergenceCache.getReserves();
+        const separatorSpacingBefore = footnoteConvergenceCache.getSeparatorSpacingBefore();
         layout = relayout(reserves, separatorSpacingBefore);
         ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
         const measured = await measureFootnoteBlocks(allFootnoteIds);
@@ -2472,11 +2494,7 @@ export async function incrementalLayout(
           }
 
           // Update cache with converged values
-          footnoteConvergenceCache = {
-            footnoteIds: currentIdSignature,
-            reserves: reserves.slice(),
-            separatorSpacingBefore: plan.separatorSpacingBefore ?? 0,
-          };
+          footnoteConvergenceCache.update(footnotesInput.refs, reserves, plan.separatorSpacingBefore ?? 0);
           console.log('[layout] Footnote convergence cache MISS - updated cache');
 
           ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));

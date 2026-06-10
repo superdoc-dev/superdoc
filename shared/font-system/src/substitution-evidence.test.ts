@@ -242,6 +242,66 @@ describe('substitution evidence -> resolver derivation', () => {
         boldItalic: { kind: 'synthetic', from: 'bold' },
       },
     });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'ms-mincho')).toMatchObject({
+      logicalFamily: 'MS Mincho',
+      physicalFamily: 'BIZ UDMincho',
+      policyAction: 'category_fallback',
+      verdict: 'visual_only',
+      faces: { regular: true, bold: true, italic: false, boldItalic: false },
+      faceVerdicts: {
+        regular: 'cell_width_only',
+        bold: 'visual_only',
+        italic: 'visual_only',
+        boldItalic: 'visual_only',
+      },
+      faceSources: {
+        italic: { kind: 'synthetic', from: 'regular' },
+        boldItalic: { kind: 'synthetic', from: 'bold' },
+      },
+      advance: { basis: 'cjk_jp_text', meanDelta: 0, maxDelta: 0 },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'yu-mincho')).toMatchObject({
+      logicalFamily: 'Yu Mincho',
+      physicalFamily: 'BIZ UDMincho',
+      policyAction: 'category_fallback',
+      verdict: 'visual_only',
+      faces: { regular: true, bold: true, italic: false, boldItalic: false },
+      faceSources: {
+        italic: { kind: 'synthetic', from: 'regular' },
+        boldItalic: { kind: 'synthetic', from: 'bold' },
+      },
+      advance: { basis: 'cjk_jp_text', meanDelta: 0.0425, maxDelta: 0.4829 },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'ms-gothic')).toMatchObject({
+      logicalFamily: 'MS Gothic',
+      physicalFamily: 'BIZ UDGothic',
+      policyAction: 'category_fallback',
+      verdict: 'visual_only',
+      faces: { regular: true, bold: true, italic: false, boldItalic: false },
+      faceVerdicts: {
+        regular: 'cell_width_only',
+        bold: 'visual_only',
+        italic: 'visual_only',
+        boldItalic: 'visual_only',
+      },
+      faceSources: {
+        italic: { kind: 'synthetic', from: 'regular' },
+        boldItalic: { kind: 'synthetic', from: 'bold' },
+      },
+      advance: { basis: 'cjk_jp_text', meanDelta: 0, maxDelta: 0 },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'yu-gothic')).toMatchObject({
+      logicalFamily: 'Yu Gothic',
+      physicalFamily: 'BIZ UDGothic',
+      policyAction: 'category_fallback',
+      verdict: 'visual_only',
+      faces: { regular: true, bold: true, italic: false, boldItalic: false },
+      faceSources: {
+        italic: { kind: 'synthetic', from: 'regular' },
+        boldItalic: { kind: 'synthetic', from: 'bold' },
+      },
+      advance: { basis: 'cjk_jp_text', meanDelta: 0.0415, maxDelta: 0.4521 },
+    });
     expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'arial-mt')).toMatchObject({
       logicalFamily: 'Arial MT',
       physicalFamily: 'Liberation Sans',
@@ -269,5 +329,9 @@ describe('substitution evidence -> resolver derivation', () => {
     expect(resolveFontFamily('Verdana').reason).toBe('category_fallback');
     expect(resolveFontFamily('Century Gothic').reason).toBe('category_fallback');
     expect(resolveFontFamily('Segoe UI').reason).toBe('category_fallback');
+    expect(resolveFontFamily('Yu Mincho').reason).toBe('as_requested');
+    expect(resolveFontFamily('MS Mincho').reason).toBe('as_requested');
+    expect(resolveFontFamily('Yu Gothic').reason).toBe('as_requested');
+    expect(resolveFontFamily('MS Gothic').reason).toBe('as_requested');
   });
 });

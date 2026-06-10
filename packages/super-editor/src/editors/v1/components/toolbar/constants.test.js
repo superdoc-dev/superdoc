@@ -31,7 +31,19 @@ describe('TOOLBAR_FONTS (built-in font dropdown, derived from the font-offering 
 
   it('does not leak non-advertised fonts into the default dropdown', () => {
     const labels = new Set(TOOLBAR_FONTS.map((f) => f.label));
-    for (const name of ['Aptos', 'Cambria', 'Calibri Light', 'Century Schoolbook', 'Arial MT', 'Courier', 'Times']) {
+    for (const name of [
+      'Aptos',
+      'Cambria',
+      'Calibri Light',
+      'Century Schoolbook',
+      'Arial MT',
+      'Courier',
+      'Times',
+      'Yu Mincho',
+      'MS Mincho',
+      'Yu Gothic',
+      'MS Gothic',
+    ]) {
       expect(labels.has(name)).toBe(false);
     }
   });

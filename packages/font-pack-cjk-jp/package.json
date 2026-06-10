@@ -1,0 +1,49 @@
+{
+  "name": "@superdoc-dev/font-pack-cjk-jp",
+  "version": "0.1.0",
+  "description": "Optional Japanese CJK font pack for SuperDoc font fallback rendering",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    },
+    "./assets/*": "./assets/*",
+    "./font-assets.manifest.json": "./font-assets.manifest.json",
+    "./LICENSES.md": "./LICENSES.md",
+    "./OFL.txt": "./OFL.txt",
+    "./THIRD_PARTY_LICENSES.md": "./THIRD_PARTY_LICENSES.md"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "assets",
+    "font-assets.manifest.json",
+    "LICENSES.md",
+    "OFL.txt",
+    "THIRD_PARTY_LICENSES.md",
+    "scripts",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "node scripts/check.mjs"
+  },
+  "license": "AGPL-3.0",
+  "peerDependencies": {
+    "superdoc": ">=1.39.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/superdoc-dev/superdoc.git",
+    "directory": "packages/font-pack-cjk-jp"
+  },
+  "bugs": {
+    "url": "https://github.com/superdoc-dev/superdoc/issues"
+  },
+  "homepage": "https://github.com/superdoc-dev/superdoc/tree/main/packages/font-pack-cjk-jp#readme"
+}

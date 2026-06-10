@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "spdxExpression": "OFL-1.1",
+  "generatedFrom": "BIZ UDMincho and BIZ UDGothic added from DocFonts Google Fonts provenance, 2026-06-10",
+  "families": [
+    {
+      "family": "BIZ UDMincho",
+      "replaces": ["Yu Mincho", "MS Mincho"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "1.06",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/bizudmincho",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2022 The BIZ UDMincho Project Authors (https://github.com/googlefonts/morisawa-biz-ud-mincho)",
+      "trademarkNotice": "BIZ UDMincho is a trademark of Morisawa Inc.",
+      "sourceFiles": [
+        {
+          "file": "BIZUDMincho-Regular.ttf",
+          "sha256": "468ee6d9b149ca144809e03841bf18740ecf014e055a00da6ecaf1aaf4165af2"
+        },
+        {
+          "file": "BIZUDMincho-Bold.ttf",
+          "sha256": "1f077f8f84c1e09d5c4acdd6828048180c2f733ae5ae13271f48cf01bee4ae83"
+        }
+      ],
+      "faces": [
+        {
+          "file": "BIZUDMincho-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "efe2a76e5de2f71eafb45bbeb571b6867d2b5d80647e17dab53e280f8b67fc68"
+        },
+        {
+          "file": "BIZUDMincho-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "5e6613ee17a350d075d820c7c11a81496895d6ce8461d100416643b54d4222a7"
+        }
+      ]
+    },
+    {
+      "family": "BIZ UDGothic",
+      "replaces": ["Yu Gothic", "MS Gothic"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "1.05",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/bizudgothic",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2022 The BIZ UDGothic Project Authors (https://github.com/googlefonts/morisawa-biz-ud-gothic)",
+      "trademarkNotice": "BIZ UDGothic is a trademark of Morisawa Inc.",
+      "sourceFiles": [
+        {
+          "file": "BIZUDGothic-Regular.ttf",
+          "sha256": "709fcd41e3209fb765da750472f55ccdf925653e9fa7e1eb007cb65c8f749c75"
+        },
+        {
+          "file": "BIZUDGothic-Bold.ttf",
+          "sha256": "98a528b6b638463041968783cc0f63adaf4cdc26f5398afed68bab712d1113f3"
+        }
+      ],
+      "faces": [
+        {
+          "file": "BIZUDGothic-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "4d5c37021f86be1288dabce4d51f0e80729742129b3264b6ec741fdc8b1694ab"
+        },
+        {
+          "file": "BIZUDGothic-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "a78ef5b3ee33bc70e12a8d924034fddd132d62f07433b009a5a784c621cde0ce"
+        }
+      ]
+    }
+  ]
+}

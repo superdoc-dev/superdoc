@@ -40,8 +40,8 @@ const EXPECTED_BUILT_IN_TOOLBAR = [
  * Baskerville Old Face/Arial Black/Arial Narrow/Century/Century Gothic/Century Schoolbook/ITC
  * Bookman are qualified/category rows, Arial MT/Courier/Times are supported aliases, and Calibri
  * Light/Tahoma/Trebuchet MS/Garamond/Comic Sans MS/Brush Script MT/Gill Sans MT Condensed/Lucida
- * Console/Consolas/Verdana/Segoe UI are category fallbacks. Some may be explicit built-in picker
- * choices, but none should become silent strict defaults.
+ * Console/Consolas/Verdana/Segoe UI/Yu Mincho/MS Mincho/Yu Gothic/MS Gothic are category fallbacks.
+ * Some may be explicit built-in picker choices, but none should become silent strict defaults.
  */
 const NOT_DEFAULT_YET = [
   'Aptos',
@@ -70,6 +70,10 @@ const NOT_DEFAULT_YET = [
   'ITC Bookman',
   'Verdana',
   'Segoe UI',
+  'Yu Mincho',
+  'MS Mincho',
+  'Yu Gothic',
+  'MS Gothic',
 ];
 
 describe('font offerings', () => {
@@ -193,6 +197,26 @@ describe('font offerings', () => {
       offering: 'category_fallback',
       bundled: true,
       physicalFamily: 'Selawik',
+    });
+    expect(byName('Yu Mincho')).toMatchObject({
+      offering: 'category_fallback',
+      bundled: false,
+      physicalFamily: 'BIZ UDMincho',
+    });
+    expect(byName('MS Mincho')).toMatchObject({
+      offering: 'category_fallback',
+      bundled: false,
+      physicalFamily: 'BIZ UDMincho',
+    });
+    expect(byName('Yu Gothic')).toMatchObject({
+      offering: 'category_fallback',
+      bundled: false,
+      physicalFamily: 'BIZ UDGothic',
+    });
+    expect(byName('MS Gothic')).toMatchObject({
+      offering: 'category_fallback',
+      bundled: false,
+      physicalFamily: 'BIZ UDGothic',
     });
     expect(byName('Arial MT')).toMatchObject({
       offering: 'supported_alias',

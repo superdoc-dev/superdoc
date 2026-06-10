@@ -2579,6 +2579,12 @@ importers:
         specifier: ^4.19.2
         version: 4.22.1
 
+  packages/font-pack-cjk-jp:
+    dependencies:
+      superdoc:
+        specifier: workspace:*
+        version: link:../superdoc
+
   packages/layout-engine: {}
 
   packages/layout-engine/contracts: {}

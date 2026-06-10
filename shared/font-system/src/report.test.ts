@@ -372,6 +372,49 @@ describe('buildFaceReport (face-level)', () => {
     // The face loaded, but it is a non-metric fallback (wrong weight), so it is still reported missing.
     expect(rows[0]?.missing).toBe(true);
   });
+
+  it('optional Japanese CJK pack faces activate category fallbacks in face reports', () => {
+    const reg = new FaceRegistry();
+    reg.setFace('BIZ UDMincho', '400', 'normal', 'loaded');
+    reg.setFace('BIZ UDMincho', '700', 'normal', 'loaded');
+    const rows = buildFaceReport(
+      [
+        { logicalFamily: 'MS Mincho', weight: '400', style: 'normal' },
+        { logicalFamily: 'MS Mincho', weight: '700', style: 'italic' },
+      ],
+      reg.asRegistry(),
+    );
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      logicalFamily: 'MS Mincho',
+      physicalFamily: 'BIZ UDMincho',
+      reason: 'category_fallback',
+      loadStatus: 'loaded',
+      missing: true,
+      face: { weight: '400', style: 'normal' },
+      evidence: {
+        evidenceId: 'ms-mincho',
+        policyAction: 'category_fallback',
+        verdict: 'cell_width_only',
+        lineBreakSafe: true,
+      },
+    });
+    expect(rows[1]).toMatchObject({
+      logicalFamily: 'MS Mincho',
+      physicalFamily: 'BIZ UDMincho',
+      reason: 'category_fallback',
+      loadStatus: 'loaded',
+      missing: true,
+      face: { weight: '700', style: 'italic' },
+      evidence: {
+        evidenceId: 'ms-mincho',
+        policyAction: 'category_fallback',
+        verdict: 'visual_only',
+        lineBreakSafe: false,
+      },
+    });
+  });
 });
 
 describe('verdict-aware evidence (rendered substitutes only)', () => {

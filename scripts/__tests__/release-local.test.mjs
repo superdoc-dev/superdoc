@@ -236,6 +236,7 @@ test('stable release workflows serialize on the shared release-stable concurrenc
     '.github/workflows/release-react.yml',
     '.github/workflows/release-esign.yml',
     '.github/workflows/release-template-builder.yml',
+    '.github/workflows/release-font-pack-cjk-jp.yml',
     '.github/workflows/release-vscode-ext.yml',
   ];
 
@@ -275,6 +276,7 @@ test('stable release workflows serialize on the shared release-stable concurrenc
   const perPackageStableWorkflows = [
     '.github/workflows/release-esign.yml',
     '.github/workflows/release-template-builder.yml',
+    '.github/workflows/release-font-pack-cjk-jp.yml',
   ];
   for (const file of perPackageStableWorkflows) {
     const content = await readRepoFile(file);
@@ -314,6 +316,7 @@ test('release workflows queue (do not cancel) and use queue: max so multi-packag
     '.github/workflows/release-cli.yml',
     '.github/workflows/release-create.yml',
     '.github/workflows/release-esign.yml',
+    '.github/workflows/release-font-pack-cjk-jp.yml',
     '.github/workflows/release-mcp.yml',
     '.github/workflows/release-react.yml',
     '.github/workflows/release-sdk.yml',
@@ -390,7 +393,8 @@ test('stable-to-main sync waits for stable release completion', async () => {
   assert.ok(
     workflow.includes('Wait for stable release lane to drain') &&
       workflow.includes('"📦 Release esign"') &&
-      workflow.includes('"📦 Release template-builder"'),
+      workflow.includes('"📦 Release template-builder"') &&
+      workflow.includes('"📦 Release font-pack-cjk-jp"'),
     '.github/workflows/sync-patches.yml: must wait for the remaining stable release workflows before syncing origin/stable',
   );
 });
@@ -600,7 +604,7 @@ test('docs promotion is keyed to a real superdoc tag from the orchestrator run',
     '.github/workflows/promote-stable-docs.yml: must trigger off the stable orchestrator workflow',
   );
   assert.equal(
-    /"📦 Release CLI"|"📦 Release SDK"|"📦 Release MCP"|"📦 Release react"|"📦 Release esign"|"📦 Release template-builder"|"📦 Release vscode-ext"/.test(workflowRunBlock),
+    /"📦 Release CLI"|"📦 Release SDK"|"📦 Release MCP"|"📦 Release react"|"📦 Release esign"|"📦 Release template-builder"|"📦 Release font-pack-cjk-jp"|"📦 Release vscode-ext"/.test(workflowRunBlock),
     false,
     '.github/workflows/promote-stable-docs.yml: must trigger only off the orchestrator, not per-package workflows',
   );
@@ -618,7 +622,7 @@ test('docs promotion is keyed to a real superdoc tag from the orchestrator run',
   assert.ok(
     promoteWorkflow.includes('Wait for stable release lane to drain') &&
       promoteWorkflow.includes('gh run list') &&
-      promoteWorkflow.includes('"📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder"'),
+      promoteWorkflow.includes('"📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder" or .name == "📦 Release font-pack-cjk-jp"'),
     '.github/workflows/promote-stable-docs.yml: must wait for the stable release lane to drain before inspecting origin/stable',
   );
   assert.ok(

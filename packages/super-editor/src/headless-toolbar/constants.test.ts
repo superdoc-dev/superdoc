@@ -38,5 +38,9 @@ describe('DEFAULT_FONT_FAMILY_OPTIONS (headless default font options, derived fr
     expect(labels.has('Arial MT')).toBe(false);
     expect(labels.has('Courier')).toBe(false);
     expect(labels.has('Times')).toBe(false);
+    expect(labels.has('Yu Mincho')).toBe(false);
+    expect(labels.has('MS Mincho')).toBe(false);
+    expect(labels.has('Yu Gothic')).toBe(false);
+    expect(labels.has('MS Gothic')).toBe(false);
   });
 });

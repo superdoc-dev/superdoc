@@ -97,14 +97,23 @@ function sortPairs(pairs: Array<[string, string]>): Array<[string, string]> {
 }
 
 /**
- * Asset gate: a docfonts fallback activates only when SuperDoc actually ships its physical clone. The
- * evidence registry carries more substitutes than the bundled pack covers (e.g. Arial Rounded MT Bold), so
- * `canRenderFamily` keeps an un-shipped candidate OUT of the resolver until its `.woff2` lands. The
- * predicate checks the SUBSTITUTE (physical) family against `bundled-manifest`, matching the package's
- * `getRenderableFallback` contract.
+ * Core asset gate: a docfonts fallback activates by default only when SuperDoc ships its physical clone.
+ * The evidence registry carries more substitutes than the bundled pack covers (e.g. Arial Rounded MT
+ * Bold), so `canRenderFamily` keeps an un-shipped candidate out of the static resolver until its
+ * `.woff2` lands. The document face resolver widens this with registry availability, which lets optional
+ * font packs activate rows after `fonts.add()` registers their physical faces.
  */
 const bundledFamilies: ReadonlySet<string> = new Set(BUNDLED_MANIFEST.map((f) => f.family));
 const canRenderFamily = (family: string): boolean => bundledFamilies.has(family);
+
+function hasAnyRegisteredFace(family: string, hasFace: HasFace): boolean {
+  return (
+    hasFace(family, '400', 'normal') ||
+    hasFace(family, '700', 'normal') ||
+    hasFace(family, '400', 'italic') ||
+    hasFace(family, '700', 'italic')
+  );
+}
 
 function faceSlotFor({ weight, style }: FaceKey): FaceSlot {
   const bold = weight === '700';
@@ -135,7 +144,9 @@ function reasonForFallback(policyAction: 'substitute' | 'category_fallback'): Fo
 type FaceResolution = { physical: string; reason: FontResolutionReason; sourceFace?: FaceKey };
 
 function resolveDocfontsFace(primary: string, face: FaceKey, hasFace: HasFace): FaceResolution | null {
-  const decision = getFallbackDecisionForFace(primary, faceSlotFor(face), { canRenderFamily });
+  const canRenderForDocument = (family: string): boolean =>
+    canRenderFamily(family) || hasAnyRegisteredFace(family, hasFace);
+  const decision = getFallbackDecisionForFace(primary, faceSlotFor(face), { canRenderFamily: canRenderForDocument });
   if (decision.kind === 'face_missing') {
     return { physical: primary, reason: 'fallback_face_absent' };
   }

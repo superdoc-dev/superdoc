@@ -76,7 +76,7 @@ jobs:
               --branch stable \
               --limit 100 \
               --json databaseId,name,status,url \
-              --jq '[.[] | select((.name == "📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder") and .status != "completed")] | length')
+              --jq '[.[] | select((.name == "📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder" or .name == "📦 Release font-pack-cjk-jp") and .status != "completed")] | length')
 
             if [ "$active_runs" -eq 0 ]; then
               echo "Stable release lane is idle."
@@ -90,7 +90,7 @@ jobs:
                 --branch stable \
                 --limit 100 \
                 --json databaseId,name,status,url \
-                --jq '.[] | select((.name == "📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder") and .status != "completed") | "\(.databaseId)\t\(.name)\t\(.status)\t\(.url)"'
+                --jq '.[] | select((.name == "📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder" or .name == "📦 Release font-pack-cjk-jp") and .status != "completed") | "\(.databaseId)\t\(.name)\t\(.status)\t\(.url)"'
               exit 1
             fi
 
@@ -124,18 +124,18 @@ jobs:
 
           if [ -z "${new_tags}" ]; then
             echo "released=false" >> "${GITHUB_OUTPUT}"
-            echo "No new v* tag between ${HEAD_SHA} and origin/stable — release-superdoc was a no-op."
+            echo "No new v* tag between ${HEAD_SHA} and origin/stable - release-superdoc was a no-op."
           else
             for tag in ${new_tags}; do
               version="${tag#v}"
               if ! npm view "superdoc@${version}" version >/dev/null 2>&1; then
                 echo "released=false" >> "${GITHUB_OUTPUT}"
-                echo "Tag ${tag} exists but superdoc@${version} is not on npm — orchestrator publish did not complete; docs-stable will not advance."
+                echo "Tag ${tag} exists but superdoc@${version} is not on npm - orchestrator publish did not complete; docs-stable will not advance."
                 exit 0
               fi
               if ! npm view "@harbour-enterprises/superdoc@${version}" version >/dev/null 2>&1; then
                 echo "released=false" >> "${GITHUB_OUTPUT}"
-                echo "Tag ${tag} exists but @harbour-enterprises/superdoc@${version} is not on npm — orchestrator publish did not complete; docs-stable will not advance."
+                echo "Tag ${tag} exists but @harbour-enterprises/superdoc@${version} is not on npm - orchestrator publish did not complete; docs-stable will not advance."
                 exit 0
               fi
             done

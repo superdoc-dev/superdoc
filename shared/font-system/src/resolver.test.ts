@@ -163,6 +163,26 @@ describe('font resolver', () => {
       physicalFamily: 'Noto Sans',
       reason: 'category_fallback',
     });
+    expect(resolveFontFamily('Yu Mincho')).toEqual({
+      logicalFamily: 'Yu Mincho',
+      physicalFamily: 'Yu Mincho',
+      reason: 'as_requested',
+    });
+    expect(resolveFontFamily('MS Mincho')).toEqual({
+      logicalFamily: 'MS Mincho',
+      physicalFamily: 'MS Mincho',
+      reason: 'as_requested',
+    });
+    expect(resolveFontFamily('Yu Gothic')).toEqual({
+      logicalFamily: 'Yu Gothic',
+      physicalFamily: 'Yu Gothic',
+      reason: 'as_requested',
+    });
+    expect(resolveFontFamily('MS Gothic')).toEqual({
+      logicalFamily: 'MS Gothic',
+      physicalFamily: 'MS Gothic',
+      reason: 'as_requested',
+    });
     expect(resolveFontFamily('Calibri, sans-serif').logicalFamily).toBe('Calibri, sans-serif');
   });
 
@@ -560,6 +580,34 @@ describe('face-aware resolution (resolveFace / resolvePhysicalFamilyForFace)', (
       r.resolveFace('Gill Sans MT Condensed', { weight: '700', style: 'italic' }, reviewedBatchFaces),
     ).toMatchObject({
       physicalFamily: 'PT Sans Narrow',
+      reason: 'category_fallback',
+      sourceFace: { weight: '700', style: 'normal' },
+    });
+  });
+
+  it('optional CJK font packs activate DocFonts rows through registered faces', () => {
+    const r = createFontResolver();
+    const bizFaces = (f: string, w: '400' | '700', s: 'normal' | 'italic') => {
+      if (norm(f) === 'biz udmincho') return s === 'normal' && (w === '400' || w === '700');
+      if (norm(f) === 'biz udgothic') return s === 'normal' && (w === '400' || w === '700');
+      return false;
+    };
+
+    expect(r.resolveFace('MS Mincho', { weight: '400', style: 'normal' }, noFaces)).toMatchObject({
+      physicalFamily: 'MS Mincho',
+      reason: 'as_requested',
+    });
+    expect(r.resolveFace('MS Mincho', { weight: '400', style: 'normal' }, bizFaces)).toMatchObject({
+      physicalFamily: 'BIZ UDMincho',
+      reason: 'category_fallback',
+    });
+    expect(r.resolveFace('MS Mincho', { weight: '700', style: 'italic' }, bizFaces)).toMatchObject({
+      physicalFamily: 'BIZ UDMincho',
+      reason: 'category_fallback',
+      sourceFace: { weight: '700', style: 'normal' },
+    });
+    expect(r.resolveFace('MS Gothic', { weight: '700', style: 'italic' }, bizFaces)).toMatchObject({
+      physicalFamily: 'BIZ UDGothic',
       reason: 'category_fallback',
       sourceFace: { weight: '700', style: 'normal' },
     });

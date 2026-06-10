@@ -176,3 +176,69 @@ test('insertFootnote places a marker at the cursor and focuses the new note', as
     .poll(() => getActiveStorySession(superdoc.page))
     .toEqual({ kind: 'story', storyType: 'footnote', noteId: refs[0].id });
 });
+
+test('arrow navigation and caret tracking across paragraphs in a note session', async ({ superdoc }) => {
+  // Regression for the SD-3400 caret drift: typing Enter inside a note made
+  // the caret render on the previous paragraph's line, so arrow movement
+  // looked broken even though the selection moved correctly.
+  await superdoc.loadDocument(BASIC_FOOTNOTES_DOC_PATH);
+  await superdoc.waitForStable();
+
+  const note = superdoc.page.locator('[data-block-id^="footnote-1-"]').first();
+  await note.scrollIntoViewIfNeeded();
+  const box = await note.boundingBox();
+  expect(box).toBeTruthy();
+  await superdoc.page.mouse.dblclick(box!.x + 60, box!.y + box!.height / 2);
+  await superdoc.waitForStable();
+  await expect
+    .poll(() => getActiveStorySession(superdoc.page))
+    .toEqual({ kind: 'story', storyType: 'footnote', noteId: '1' });
+
+  // Build: original line, empty paragraph, "tail".
+  await superdoc.page.keyboard.press('End');
+  await superdoc.page.keyboard.press('Enter');
+  await superdoc.page.keyboard.press('Enter');
+  await superdoc.page.keyboard.type('tail');
+  await superdoc.waitForStable(800);
+
+  const readCaret = () =>
+    superdoc.page.evaluate(() => {
+      const sed = (window as any).editor?.presentationEditor?.getActiveEditor?.();
+      const caret = document.querySelector('.presentation-editor__selection-caret');
+      const rect = caret?.getBoundingClientRect();
+      const lineTops = Array.from(document.querySelectorAll('[data-block-id^="footnote-1-"] .superdoc-line')).map(
+        (line) => Math.round(line.getBoundingClientRect().top),
+      );
+      return { sel: sed?.state?.selection?.head ?? -1, caretTop: rect ? Math.round(rect.top) : null, lineTops };
+    });
+
+  const atTail = await readCaret();
+  expect(atTail.caretTop).toBe(atTail.lineTops[2]); // caret on the "tail" line
+
+  await superdoc.page.keyboard.press('ArrowUp');
+  await superdoc.waitForStable(600);
+  const atEmpty = await readCaret();
+  expect(atEmpty.sel).toBeLessThan(atTail.sel); // selection moved up
+  expect(atEmpty.caretTop).toBe(atEmpty.lineTops[1]); // caret on the empty line
+
+  await superdoc.page.keyboard.press('ArrowUp');
+  await superdoc.waitForStable(600);
+  const atFirst = await readCaret();
+  expect(atFirst.sel).toBeLessThan(atEmpty.sel);
+  expect(atFirst.caretTop).toBe(atFirst.lineTops[0]); // caret on the first line
+
+  // Typing where the caret points must land in the empty paragraph, not "tail".
+  await superdoc.page.keyboard.press('ArrowDown');
+  await superdoc.waitForStable(600);
+  await superdoc.page.keyboard.type('middle');
+  await superdoc.waitForStable(800);
+  const text = await superdoc.page.evaluate(() => {
+    const sed = (window as any).editor?.presentationEditor?.getActiveEditor?.();
+    const paras: string[] = [];
+    sed?.state?.doc?.forEach((n: any) => paras.push(n.textContent || ''));
+    return paras;
+  });
+  expect(text).toContain('middle');
+  expect(text).toContain('tail');
+  expect(text.find((t: string) => t.includes('middletail') || t.includes('tailmiddle'))).toBeUndefined();
+});

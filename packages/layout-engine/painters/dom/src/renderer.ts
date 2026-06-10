@@ -54,9 +54,12 @@ import {
   getCellSpacingPx,
   getColumnGeometry,
   getColumnSeparatorPositions as getColumnSeparatorPositionsFromGeometry,
+  getOuterShadowPaintExtent as getSharedOuterShadowPaintExtent,
+  getOuterShadowStdDeviation,
   normalizeColumnLayout,
   normalizeZIndex,
   resolveColumnMode,
+  resolveOuterShadowOffset,
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
@@ -3781,11 +3784,11 @@ export class DomPainter {
       filter.setAttribute('width', '200%');
       filter.setAttribute('height', '200%');
 
-      const { dx, dy } = this.computeShadowOffset(shadow);
+      const { dx, dy } = resolveOuterShadowOffset(shadow);
       const dropShadow = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feDropShadow');
       dropShadow.setAttribute('dx', this.formatSvgNumber(dx));
       dropShadow.setAttribute('dy', this.formatSvgNumber(dy));
-      dropShadow.setAttribute('stdDeviation', this.formatSvgNumber(this.getShadowStdDeviation(shadow)));
+      dropShadow.setAttribute('stdDeviation', this.formatSvgNumber(getOuterShadowStdDeviation(shadow)));
       dropShadow.setAttribute('flood-color', shadow.color);
       dropShadow.setAttribute('flood-opacity', this.formatSvgNumber(shadow.opacity));
 
@@ -3800,18 +3803,6 @@ export class DomPainter {
       }
       target.setAttribute('filter', `url(#${filterId})`);
     });
-  }
-
-  private computeShadowOffset(shadow: ShapeOuterShadowEffect): { dx: number; dy: number } {
-    const radians = (shadow.direction * Math.PI) / 180;
-    return {
-      dx: shadow.distance * Math.cos(radians),
-      dy: shadow.distance * Math.sin(radians),
-    };
-  }
-
-  private getShadowStdDeviation(shadow: ShapeOuterShadowEffect): number {
-    return Math.max(0, shadow.blurRadius / 2);
   }
 
   private findShapeEffectTargets(svgElement: SVGElement): SVGElement[] {
@@ -3859,10 +3850,10 @@ export class DomPainter {
 
     const blur = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feGaussianBlur');
     blur.setAttribute('in', 'SourceAlpha');
-    blur.setAttribute('stdDeviation', this.formatSvgNumber(this.getShadowStdDeviation(shadow)));
+    blur.setAttribute('stdDeviation', this.formatSvgNumber(getOuterShadowStdDeviation(shadow)));
     blur.setAttribute('result', 'blur');
 
-    const { dx, dy } = this.computeShadowOffset(shadow);
+    const { dx, dy } = resolveOuterShadowOffset(shadow);
     const offset = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feOffset');
     offset.setAttribute('in', 'blur');
     offset.setAttribute('dx', this.formatSvgNumber(dx));
@@ -4113,7 +4104,9 @@ export class DomPainter {
     const attrs = child.attrs as VectorShapeStyle;
     // Producers must include equivalent group-level effectExtent for edge children so the fragment can grow.
     // Line-end markers use effectExtent for marker sizing; do not overload it with stroke paint room.
-    const shadowExtent = this.getOuterShadowPaintExtent(attrs.effects?.outerShadow);
+    const shadowExtent = attrs.effects?.outerShadow
+      ? getSharedOuterShadowPaintExtent(attrs.effects.outerShadow)
+      : { left: 0, top: 0, right: 0, bottom: 0 };
     if (attrs.lineEnds) {
       return { left: 0, top: 0, right: 0, bottom: 0 };
     }
@@ -4137,18 +4130,6 @@ export class DomPainter {
       top: Math.max(extent, shadowExtent.top),
       right: Math.max(extent, shadowExtent.right),
       bottom: Math.max(extent, shadowExtent.bottom),
-    };
-  }
-
-  private getOuterShadowPaintExtent(shadow?: ShapeOuterShadowEffect): EffectExtent {
-    if (!shadow) return { left: 0, top: 0, right: 0, bottom: 0 };
-    const { dx, dy } = this.computeShadowOffset(shadow);
-    const spread = this.getShadowStdDeviation(shadow) * 3;
-    return {
-      left: Math.max(0, spread - dx),
-      top: Math.max(0, spread - dy),
-      right: Math.max(0, spread + dx),
-      bottom: Math.max(0, spread + dy),
     };
   }
 

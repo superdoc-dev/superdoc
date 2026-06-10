@@ -63,6 +63,14 @@ export {
   getFragmentZIndex,
 } from './ooxml-z-index.js';
 
+export {
+  resolveOuterShadowOffset,
+  getOuterShadowStdDeviation,
+  getOuterShadowPaintExtent,
+  type OuterShadowPaintEffect,
+  type PaintEffectExtent,
+} from './shape-effects.js';
+
 // Export justify utilities
 export {
   shouldApplyJustify,

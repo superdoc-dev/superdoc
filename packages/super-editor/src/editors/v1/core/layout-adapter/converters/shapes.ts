@@ -19,6 +19,7 @@ import type {
   ShapeTextContent,
   TextPart,
 } from '@superdoc/contracts';
+import { getOuterShadowPaintExtent as getSharedOuterShadowPaintExtent } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext, BlockIdGenerator, PositionMap } from '../types.js';
 import type { EffectExtent, LineEnds } from '../utilities.js';
 import {
@@ -692,16 +693,7 @@ const getOuterShadowPaintExtent = (attrs: Record<string, unknown>): EffectExtent
   const shadow = normalizeShapeEffects(attrs.effects)?.outerShadow;
   if (!shadow) return undefined;
 
-  const radians = (shadow.direction * Math.PI) / 180;
-  const dx = shadow.distance * Math.cos(radians);
-  const dy = shadow.distance * Math.sin(radians);
-  const spread = Math.max(0, shadow.blurRadius / 2) * 3;
-  const extent = {
-    left: Math.max(0, spread - dx),
-    top: Math.max(0, spread - dy),
-    right: Math.max(0, spread + dx),
-    bottom: Math.max(0, spread + dy),
-  };
+  const extent = getSharedOuterShadowPaintExtent(shadow);
 
   return hasEffectExtent(extent) ? extent : undefined;
 };

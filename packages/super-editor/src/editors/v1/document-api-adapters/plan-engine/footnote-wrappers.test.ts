@@ -74,6 +74,7 @@ import {
   footnotesRemoveWrapper,
   footnotesConfigureWrapper,
   removeNoteEverywhere,
+  removeNoteReferenceAt,
 } from './footnote-wrappers.js';
 
 // ---------------------------------------------------------------------------
@@ -251,6 +252,31 @@ describe('footnote-wrappers', () => {
     // Only the footnote reference (pos 1) is deleted; the endnote ref survives.
     expect(editor.state.tr.delete).toHaveBeenCalledTimes(1);
     expect(editor.state.tr.delete).toHaveBeenCalledWith(1, 2);
+    expect(getFootnoteElements(editor)).toHaveLength(0);
+  });
+
+  it('removeNoteReferenceAt deletes the reference at the exact position, not the first id match (SD-3400)', () => {
+    // Two references to footnote id '2' at positions 1 and 2; the staged
+    // delete targets the SECOND one. The element survives because the first
+    // reference still exists.
+    const editor = makeEditor([{ id: '2', text: 'Shared note' }], ['2', '2'], { refsAfterDispatch: ['2'] });
+
+    const removed = removeNoteReferenceAt(editor, { pos: 2, noteId: '2', type: 'footnote' });
+
+    expect(removed).toBe(true);
+    expect(editor.state.tr.delete).toHaveBeenCalledTimes(1);
+    expect(editor.state.tr.delete).toHaveBeenCalledWith(2, 3);
+    expect(getFootnoteElements(editor)).toHaveLength(1);
+  });
+
+  it('removeNoteReferenceAt prunes the OOXML element when the last reference is deleted (SD-3400)', () => {
+    // Body-side staged delete symmetry: the second Backspace must not leave
+    // an orphaned w:footnote element behind.
+    const editor = makeEditor([{ id: '2', text: 'Note 2' }], ['2'], { refsAfterDispatch: [] });
+
+    const removed = removeNoteReferenceAt(editor, { pos: 1, noteId: '2', type: 'footnote' });
+
+    expect(removed).toBe(true);
     expect(getFootnoteElements(editor)).toHaveLength(0);
   });
 

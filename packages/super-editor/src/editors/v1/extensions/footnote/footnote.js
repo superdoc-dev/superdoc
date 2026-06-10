@@ -1,6 +1,7 @@
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
 import { insertFootnoteAtCursor } from './insert-footnote.js';
+import { getSelectedNoteMarker, deleteSelectedNoteMarker } from './delete-note-marker.js';
 
 const toSuperscriptDigits = (value) => {
   const map = {
@@ -135,6 +136,21 @@ export const FootnoteReference = Node.create({
           // would leave the CommandService transaction stale — suppress it.
           tr.setMeta('preventDispatch', true);
           return insertFootnoteAtCursor(editor);
+        },
+
+      /**
+       * SD-3400: thin command shim over {@link deleteSelectedNoteMarker}.
+       * Runs before `deleteSelection` in the Backspace/Delete chains so the
+       * second stage of the staged marker delete also prunes the OOXML note
+       * element ("remove on both sides").
+       */
+      deleteSelectedNoteMarker:
+        () =>
+        ({ editor, state, tr }) => {
+          if (!getSelectedNoteMarker(state)) return false;
+          // Same preventDispatch reason as insertFootnote above.
+          tr.setMeta('preventDispatch', true);
+          return deleteSelectedNoteMarker(editor);
         },
     };
   },

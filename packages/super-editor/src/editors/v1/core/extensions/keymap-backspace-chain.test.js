@@ -39,6 +39,7 @@ describe('handleBackspace chain ordering', () => {
       deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
       selectInlineSdtBeforeRunStart: make('selectInlineSdtBeforeRunStart'),
       selectFootnoteMarkerBefore: make('selectFootnoteMarkerBefore'),
+      deleteSelectedNoteMarker: make('deleteSelectedNoteMarker'),
       selectBlockSdtBeforeTextBlockStart: make('selectBlockSdtBeforeTextBlockStart'),
       moveIntoBlockSdtBeforeTextBlockStart: make('moveIntoBlockSdtBeforeTextBlockStart'),
       backspaceEmptyRunParagraph: make('backspaceEmptyRunParagraph'),
@@ -79,6 +80,7 @@ describe('handleBackspace chain ordering', () => {
       'deleteBlockSdtAtTextBlockStart',
       'selectInlineSdtBeforeRunStart',
       'selectFootnoteMarkerBefore',
+      'deleteSelectedNoteMarker',
       'selectBlockSdtBeforeTextBlockStart',
       'moveIntoBlockSdtBeforeTextBlockStart',
       'backspaceEmptyRunParagraph',
@@ -112,8 +114,9 @@ describe('handleBackspace chain ordering', () => {
     expect(callLog[1]).toBe('deleteBlockSdtAtTextBlockStart');
     expect(callLog[2]).toBe('selectInlineSdtBeforeRunStart');
     expect(callLog[3]).toBe('selectFootnoteMarkerBefore');
-    expect(callLog[4]).toBe('selectBlockSdtBeforeTextBlockStart');
-    expect(callLog[5]).toBe('moveIntoBlockSdtBeforeTextBlockStart');
+    expect(callLog[4]).toBe('deleteSelectedNoteMarker');
+    expect(callLog[5]).toBe('selectBlockSdtBeforeTextBlockStart');
+    expect(callLog[6]).toBe('moveIntoBlockSdtBeforeTextBlockStart');
   });
 
   it('places mixedBidiBackspace after backspaceAcrossRuns and before deleteSelection', () => {
@@ -186,6 +189,7 @@ describe('handleDelete chain ordering', () => {
       deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
       selectInlineSdtAfterRunEnd: make('selectInlineSdtAfterRunEnd'),
       selectFootnoteMarkerAfter: make('selectFootnoteMarkerAfter'),
+      deleteSelectedNoteMarker: make('deleteSelectedNoteMarker'),
       selectBlockSdtAfterTextBlockEnd: make('selectBlockSdtAfterTextBlockEnd'),
       moveIntoBlockSdtAfterTextBlockEnd: make('moveIntoBlockSdtAfterTextBlockEnd'),
       deleteSkipEmptyRun: make('deleteSkipEmptyRun'),
@@ -221,6 +225,7 @@ describe('handleDelete chain ordering', () => {
       'deleteBlockSdtAtTextBlockStart',
       'selectInlineSdtAfterRunEnd',
       'selectFootnoteMarkerAfter',
+      'deleteSelectedNoteMarker',
       'selectBlockSdtAfterTextBlockEnd',
       'moveIntoBlockSdtAfterTextBlockEnd',
       'deleteSkipEmptyRun',

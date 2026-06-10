@@ -325,34 +325,58 @@ export function footnotesRemoveWrapper(
     return footnoteSuccess(address);
   }
 
-  const notesConfig = getNotesConfig(resolved.type);
+  const removed = removeNoteReferenceAt(editor, {
+    pos: resolved.pos,
+    noteId: resolved.noteId,
+    type: resolved.type,
+  });
+
+  if (!removed) {
+    return footnoteFailure('NO_OP', 'Remove operation produced no change.');
+  }
+
+  return footnoteSuccess(address);
+}
+
+/**
+ * Remove the single note reference at an exact document position, pruning the
+ * OOXML note element when no other reference of the same type remains.
+ *
+ * Position-addressed (not id-addressed) so callers that already hold the node
+ * — the staged Backspace/Delete on a selected marker (SD-3400) — remove
+ * exactly that reference even when the same id appears multiple times.
+ * {@link footnotesRemoveWrapper} delegates here after resolving its target.
+ */
+export function removeNoteReferenceAt(
+  editor: Editor,
+  ref: { pos: number; noteId: string; type: 'footnote' | 'endnote' },
+): boolean {
+  const notesConfig = getNotesConfig(ref.type);
 
   const { success } = compoundMutation({
     editor,
-    source: `footnotes.remove:${resolved.type}`,
+    source: `footnotes.remove:${ref.type}`,
     affectedParts: [notesConfig.partId],
     execute: () => {
       // 1. Delete the reference node from the PM document
       const { tr } = editor.state;
-      const node = tr.doc.nodeAt(resolved.pos);
+      const node = tr.doc.nodeAt(ref.pos);
       if (!node) return false;
 
-      tr.delete(resolved.pos, resolved.pos + node.nodeSize);
+      tr.delete(ref.pos, ref.pos + node.nodeSize);
       editor.dispatch(tr);
 
       // 2. Remove from the OOXML part if no other references remain
-      const stillReferenced = findAllFootnotes(editor.state.doc, resolved.type).some(
-        (f) => f.noteId === resolved.noteId,
-      );
+      const stillReferenced = findAllFootnotes(editor.state.doc, ref.type).some((f) => f.noteId === ref.noteId);
 
       if (!stillReferenced) {
         mutatePart({
           editor,
           partId: notesConfig.partId,
           operation: 'mutate',
-          source: `footnotes.remove:${resolved.type}`,
+          source: `footnotes.remove:${ref.type}`,
           mutate({ part }) {
-            removeNoteElement(part, notesConfig, resolved.noteId);
+            removeNoteElement(part, notesConfig, ref.noteId);
           },
         });
       }
@@ -362,11 +386,7 @@ export function footnotesRemoveWrapper(
     },
   });
 
-  if (!success) {
-    return footnoteFailure('NO_OP', 'Remove operation produced no change.');
-  }
-
-  return footnoteSuccess(address);
+  return success;
 }
 
 /**

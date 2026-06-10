@@ -11,7 +11,16 @@
  */
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import type { RenderedNoteTarget } from '../notes/note-target.js';
+import { isRenderedNoteBlockId, type RenderedNoteTarget } from '../notes/note-target.js';
+
+/**
+ * Painted header/footer content lives inside these containers and carries
+ * `data-pm-start` values in the header/footer part's OWN coordinate space.
+ * Resolving those against the body document is meaningless and, for positions
+ * past the body size, makes `nodeAt` throw — which would abort the caller's
+ * double-click handling before header/footer activation runs.
+ */
+const HEADER_FOOTER_CONTAINER_SELECTOR = '.superdoc-page-header, .superdoc-page-footer';
 
 export type NoteReferenceHitOptions = {
   /** The pointer event's target. */
@@ -44,8 +53,13 @@ function noteTargetFromPmStartElement(
   doc: ProseMirrorNode | null | undefined,
 ): RenderedNoteTarget | null {
   if (!refEl || !doc) return null;
+  // Only BODY fragments carry body-space pm positions. Header/footer and
+  // rendered-note fragments use their own story's coordinate space.
+  if (refEl.closest(HEADER_FOOTER_CONTAINER_SELECTOR)) return null;
+  const blockId = refEl.closest('[data-block-id]')?.getAttribute('data-block-id') ?? '';
+  if (isRenderedNoteBlockId(blockId)) return null;
   const pmStart = Number(refEl.getAttribute('data-pm-start'));
-  if (!Number.isFinite(pmStart)) return null;
+  if (!Number.isFinite(pmStart) || pmStart < 0 || pmStart >= doc.content.size) return null;
   const node = doc.nodeAt(pmStart);
   if (node?.type?.name === 'crossReference') {
     return noteTargetFromCrossReference(doc, node.attrs?.target);

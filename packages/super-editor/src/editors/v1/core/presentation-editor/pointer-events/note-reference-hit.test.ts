@@ -191,3 +191,47 @@ describe('resolveNoteReferenceAtPointer — cross-reference navigation (SD-3400)
     expect(target).toEqual({ storyType: 'footnote', noteId: '8' });
   });
 });
+
+describe('resolveNoteReferenceAtPointer — story-space guards (footer dblclick regression)', () => {
+  function resolveTarget(doc: ProseMirrorNode, target: HTMLElement) {
+    return resolveNoteReferenceAtPointer({ target, clientX: 5, clientY: 5, doc, ownerDocument: document });
+  }
+
+  it.each(['superdoc-page-header', 'superdoc-page-footer'])(
+    'ignores pm-start elements inside a %s container (header/footer story space)',
+    (containerClass) => {
+      const doc = makeDoc('footnoteReference');
+      const container = document.createElement('div');
+      container.className = containerClass;
+      const span = document.createElement('span');
+      // A footer-local position that HAPPENS to resolve to a body note ref.
+      span.setAttribute('data-pm-start', String(findPos(doc, 'footnoteReference')));
+      container.appendChild(span);
+      document.body.appendChild(container);
+
+      expect(resolveTarget(doc, span)).toBeNull();
+    },
+  );
+
+  it('ignores pm-start elements inside a rendered-note fragment (note story space)', () => {
+    const doc = makeDoc('footnoteReference');
+    const fragment = document.createElement('div');
+    fragment.setAttribute('data-block-id', 'footnote-8-p0');
+    const span = document.createElement('span');
+    span.setAttribute('data-pm-start', String(findPos(doc, 'footnoteReference')));
+    fragment.appendChild(span);
+    document.body.appendChild(fragment);
+
+    expect(resolveTarget(doc, span)).toBeNull();
+  });
+
+  it('returns null instead of throwing for a pm-start beyond the body document', () => {
+    const doc = makeDoc('footnoteReference');
+    const span = document.createElement('span');
+    // Story-local offsets can exceed the body size; nodeAt would throw.
+    span.setAttribute('data-pm-start', String(doc.content.size + 50));
+    document.body.appendChild(span);
+
+    expect(resolveTarget(doc, span)).toBeNull();
+  });
+});

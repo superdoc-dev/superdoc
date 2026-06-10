@@ -1037,6 +1037,87 @@ describe('handleImageNode', () => {
     expect(importedPicture.attrs.flipV).toBe(false);
   });
 
+  it('preserves grouped picture ellipse geometry without cover fit for negative srcRect', () => {
+    const picture = {
+      name: 'pic:pic',
+      elements: [
+        {
+          name: 'pic:blipFill',
+          elements: [
+            { name: 'a:blip', attributes: { 'r:embed': 'rId1' } },
+            { name: 'a:stretch', elements: [{ name: 'a:fillRect' }] },
+            { name: 'a:srcRect', attributes: { l: '398', t: '6700', r: '-398', b: '15436' } },
+          ],
+        },
+        {
+          name: 'pic:spPr',
+          elements: [
+            {
+              name: 'a:xfrm',
+              elements: [
+                { name: 'a:off', attributes: { x: '0', y: '0' } },
+                { name: 'a:ext', attributes: { cx: '50000', cy: '50000' } },
+              ],
+            },
+            {
+              name: 'a:prstGeom',
+              attributes: { prst: 'ellipse' },
+            },
+          ],
+        },
+        {
+          name: 'pic:nvPicPr',
+          elements: [{ name: 'pic:cNvPr', attributes: { id: '2', name: 'Picture 2' } }],
+        },
+      ],
+    };
+
+    const node = {
+      attributes: {},
+      elements: [
+        { name: 'wp:extent', attributes: { cx: '100000', cy: '100000' } },
+        {
+          name: 'a:graphic',
+          elements: [
+            {
+              name: 'a:graphicData',
+              attributes: { uri: 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup' },
+              elements: [
+                {
+                  name: 'wpg:wgp',
+                  elements: [
+                    {
+                      name: 'wpg:grpSpPr',
+                      elements: [
+                        {
+                          name: 'a:xfrm',
+                          elements: [
+                            { name: 'a:off', attributes: { x: '0', y: '0' } },
+                            { name: 'a:ext', attributes: { cx: '100000', cy: '100000' } },
+                            { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                            { name: 'a:chExt', attributes: { cx: '100000', cy: '100000' } },
+                          ],
+                        },
+                      ],
+                    },
+                    picture,
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = handleImageNode(node, makeParams(), false);
+    const importedPicture = result.attrs.shapes[0];
+
+    expect(importedPicture.attrs.clipPath).toBeUndefined();
+    expect(importedPicture.attrs.shapeClipPath).toBe('ellipse(50% 50% at 50% 50%)');
+    expect(importedPicture.attrs.objectFit).toBeUndefined();
+  });
+
   describe('wrap types', () => {
     it('handles wrap type None', () => {
       const node = makeNode();
@@ -1438,7 +1519,7 @@ describe('handleImageNode', () => {
       expect(result.attrs.clipPath).toBe('inset(0% 84.8% 0% 0%)');
     });
 
-    it('preserves standalone picture ellipse geometry and cover fit for negative srcRect', () => {
+    it('preserves standalone picture ellipse geometry without cover fit for negative srcRect', () => {
       const node = makeNodeWithBlipFill(
         [
           {
@@ -1468,7 +1549,7 @@ describe('handleImageNode', () => {
       expect(result).not.toBeNull();
       expect(result.attrs.clipPath).toBeUndefined();
       expect(result.attrs.shapeClipPath).toBe('ellipse(50% 50% at 50% 50%)');
-      expect(result.attrs.objectFit).toBe('cover');
+      expect(result.attrs.objectFit).toBeUndefined();
     });
 
     it('disables shouldCover when srcRect emits clipPath cropping', () => {

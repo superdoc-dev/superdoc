@@ -157,7 +157,7 @@ const extractPicturePresentation = (picture) => {
   const shouldStretch = Boolean(stretch && fillRect);
   const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
   const shouldFillClippedStretch = shouldStretch && !srcRectHasNegativeValues && Boolean(clipPath);
-  const shouldCoverShapeStretch = shouldStretch && Boolean(shapeClipPath) && !clipPath;
+  const shouldCoverShapeStretch = shouldStretch && !srcRectHasNegativeValues && Boolean(shapeClipPath) && !clipPath;
 
   return {
     clipPath,

@@ -39,6 +39,7 @@ import {
 } from '@extensions/track-changes/trackChangesHelpers/trackedTransaction.js';
 import { markInsertion } from '@extensions/track-changes/trackChangesHelpers/markInsertion.js';
 import { markDeletion } from '@extensions/track-changes/trackChangesHelpers/markDeletion.js';
+import { CanonicalChangeType } from '@extensions/track-changes/review-model/mark-metadata.js';
 import {
   createWordIdAllocator,
   isDecimalWordId,
@@ -3281,7 +3282,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const fixedTimeTo10Mins = Math.floor(Date.now() / 600000) * 600000;
     const date = new Date(fixedTimeTo10Mins).toISOString();
     const user = (this.options.user ?? {}) as User;
-    const insertedMark = fullyMarked ? null : markInsertion({ tr, from, to, user, date });
+    let insertedMark = fullyMarked ? null : markInsertion({ tr, from, to, user, date });
+    const replacementGroupId =
+      insertedMark && deletions.length && this.options.trackedChanges?.replacements !== 'independent'
+        ? insertedMark.attrs.id
+        : '';
+    if (insertedMark && replacementGroupId) {
+      const replacementInsertMark = insertedMark.type.create({
+        ...insertedMark.attrs,
+        changeType: CanonicalChangeType.Replacement,
+        replacementGroupId,
+        replacementSideId: `${replacementGroupId}#inserted`,
+      });
+      tr.removeMark(from, to, insertedMark);
+      tr.addMark(from, to, replacementInsertMark);
+      insertedMark = replacementInsertMark;
+    }
     let deletionMeta: {
       deletionMark: ReturnType<typeof markDeletion>['deletionMark'];
       deletionNodes: ReturnType<typeof markDeletion>['nodes'];
@@ -3293,9 +3309,28 @@ export class Editor extends EventEmitter<EditorEventMap> {
       tr.replace(deleteFrom, deleteFrom, deletion.slice);
       const deleteTo = deleteFrom + (tr.doc.content.size - beforeSize);
       if (deleteTo <= deleteFrom) return;
-      const deletionResult = markDeletion({ tr, from: deleteFrom, to: deleteTo, user, date });
+      const deletionResult = markDeletion({
+        tr,
+        from: deleteFrom,
+        to: deleteTo,
+        user,
+        date,
+        id: replacementGroupId || undefined,
+      });
+      const deletionMark = replacementGroupId
+        ? deletionResult.deletionMark.type.create({
+            ...deletionResult.deletionMark.attrs,
+            changeType: CanonicalChangeType.Replacement,
+            replacementGroupId,
+            replacementSideId: `${replacementGroupId}#deleted`,
+          })
+        : deletionResult.deletionMark;
+      if (deletionMark !== deletionResult.deletionMark) {
+        tr.removeMark(deleteFrom, deleteTo, deletionResult.deletionMark);
+        tr.addMark(deleteFrom, deleteTo, deletionMark);
+      }
       deletionMeta = {
-        deletionMark: deletionResult.deletionMark,
+        deletionMark,
         deletionNodes: deletionResult.nodes,
       };
     });

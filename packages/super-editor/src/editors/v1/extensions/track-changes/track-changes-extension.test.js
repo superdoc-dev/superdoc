@@ -3,6 +3,7 @@ import { EditorState, TextSelection } from 'prosemirror-state';
 import { TrackChanges } from './track-changes.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from './constants.js';
 import { TrackChangesBasePlugin, TrackChangesBasePluginKey } from './plugins/trackChangesBasePlugin.js';
+import { CanonicalChangeType } from './review-model/mark-metadata.js';
 import { initTestEditor, hasAnyMark } from '@tests/helpers/helpers.js';
 
 const commands = TrackChanges.config.addCommands();
@@ -60,6 +61,17 @@ describe('TrackChanges extension commands', () => {
     });
 
     return text;
+  };
+  const getMarkAttrsForText = (doc, markName, text) => {
+    let attrs = null;
+
+    doc.descendants((node) => {
+      if (!node.isText || attrs || !node.text?.includes(text)) return;
+      const mark = node.marks.find((candidate) => candidate.type.name === markName);
+      if (mark) attrs = mark.attrs;
+    });
+
+    return attrs;
   };
 
   beforeEach(() => {
@@ -1244,6 +1256,17 @@ describe('TrackChanges extension commands', () => {
 
       expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('你');
       expect(getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName)).toBe('replace me');
+
+      const insertedAttrs = getMarkAttrsForText(interactionEditor.state.doc, TrackInsertMarkName, '你');
+      const deletedAttrs = getMarkAttrsForText(interactionEditor.state.doc, TrackDeleteMarkName, 'replace me');
+      expect(insertedAttrs?.id).toBeTruthy();
+      expect(deletedAttrs?.id).toBe(insertedAttrs.id);
+      expect(insertedAttrs?.changeType).toBe(CanonicalChangeType.Replacement);
+      expect(deletedAttrs?.changeType).toBe(CanonicalChangeType.Replacement);
+      expect(insertedAttrs?.replacementGroupId).toBe(insertedAttrs.id);
+      expect(deletedAttrs?.replacementGroupId).toBe(insertedAttrs.id);
+      expect(insertedAttrs?.replacementSideId).toBe(`${insertedAttrs.id}#inserted`);
+      expect(deletedAttrs?.replacementSideId).toBe(`${insertedAttrs.id}#deleted`);
     } finally {
       interactionEditor.destroy();
     }

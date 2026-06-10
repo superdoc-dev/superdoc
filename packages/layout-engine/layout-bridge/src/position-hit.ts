@@ -749,7 +749,9 @@ export const hitTestTextboxFragment = (
     const fragmentWithContent = fragment as DrawingFragment & { contentMeasures?: ParagraphMeasure[] };
     const contentMeasures = Array.isArray(fragmentWithContent.contentMeasures)
       ? fragmentWithContent.contentMeasures
-      : [];
+      : Array.isArray(block.contentMeasures)
+        ? block.contentMeasures
+        : [];
     const contentBlocks = Array.isArray(block.contentBlocks) ? block.contentBlocks : [];
     if (contentMeasures.length === 0 || contentBlocks.length === 0) continue;
 
@@ -1059,6 +1061,8 @@ export function clickToPositionGeometry(
             );
           }
 
+          // Textboxes are page-contained and never split across pages, so lineIndex === 0
+          // is sufficient — no continuesFromPrev guard needed (unlike body paragraphs).
           const isFirstLineOfParagraph = lineIndex === 0;
           if (isFirstLineOfParagraph) {
             const suppressFLI = (contentBlock.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;

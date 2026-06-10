@@ -3083,7 +3083,7 @@ export class DomPainter {
 
     block.contentBlocks.forEach((paragraphBlock, paragraphIndex) => {
       const measure = contentMeasures[paragraphIndex];
-      if (!measure) return;
+      if (!measure?.lines) return;
       measure.lines.forEach((line, lineIndex) => {
         linesHost.appendChild(this.renderLine(paragraphBlock, line, renderContext, availableWidth, lineIndex));
       });

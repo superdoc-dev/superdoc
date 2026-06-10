@@ -20,8 +20,7 @@ import {
   updateNoteElement,
 } from '../../core/parts/adapters/notes-part-descriptor.js';
 import { normalizeNotePmJson } from '../helpers/note-pm-json.js';
-import { footnotesRemoveWrapper } from '../plan-engine/footnote-wrappers.js';
-import { findAllFootnotes } from '../helpers/footnote-resolver.js';
+import { removeNoteEverywhere } from '../plan-engine/footnote-wrappers.js';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 
 type NoteStoryLocator = FootnoteStoryLocator | EndnoteStoryLocator;
@@ -144,18 +143,32 @@ function commitNoteRuntime(
 
 /**
  * SD-3400: clearing all content in the note area deletes the footnote on BOTH
- * sides — the note element in the notes part AND the body reference — and the
- * document renumbers. This mirrors the body-side staged delete; deleting from
- * either side removes the whole footnote. footnotesRemoveWrapper deletes the
- * body reference node and removes the OOXML element when no other reference
- * remains. Guard on the reference still existing so a stale commit is a no-op.
+ * sides — the note element in the notes part AND every body reference — and
+ * the document renumbers. This mirrors the body-side staged delete; deleting
+ * from either side removes the whole footnote. Multi-reference notes lose all
+ * their markers (the emptied note no longer exists for any of them), and
+ * resolution is type-aware so emptying endnote "2" never touches footnote "2".
  */
 function removeEmptiedNote(hostEditor: Editor, locator: NoteStoryLocator): void {
-  const referenceExists = findAllFootnotes(hostEditor.state.doc).some((f) => f.noteId === locator.noteId);
-  if (!referenceExists) return;
-  footnotesRemoveWrapper(hostEditor, {
-    target: { kind: 'entity', entityType: 'footnote', noteId: locator.noteId },
-  });
+  removeNoteEverywhere(hostEditor, { noteId: locator.noteId, type: locator.storyType });
+}
+
+const NOTE_REFERENCE_NODE_TYPES = new Set(['footnoteReference', 'endnoteReference']);
+
+/**
+ * §17.11.14: a footnote reference inside a footnote or endnote makes the
+ * document non-conformant. Reference nodes can reach a note story through
+ * paste (HTML containing `sup[data-footnote-id]` parses to footnoteReference);
+ * strip them before the note content is exported to the OOXML part.
+ */
+function stripNoteReferenceNodes<T extends { type?: string; content?: T[] }>(node: T): T {
+  if (!Array.isArray(node.content)) return node;
+  return {
+    ...node,
+    content: node.content
+      .filter((child) => !NOTE_REFERENCE_NODE_TYPES.has(child?.type ?? ''))
+      .map((child) => stripNoteReferenceNodes(child)),
+  };
 }
 
 /**
@@ -170,9 +183,10 @@ function commitRichNoteContent(
   notesConfig: NotesConfig,
 ): boolean {
   const conv = (hostEditor as unknown as { converter?: ConverterWithNoteExport }).converter;
-  const pmJson =
+  const rawPmJson =
     typeof storyEditor.getUpdatedJson === 'function' ? storyEditor.getUpdatedJson() : storyEditor.getJSON();
-  if (!conv?.exportToXmlJson || !pmJson) return false;
+  if (!conv?.exportToXmlJson || !rawPmJson) return false;
+  const pmJson = stripNoteReferenceNodes(rawPmJson);
 
   let ooxmlElements: unknown[] | null = null;
   try {

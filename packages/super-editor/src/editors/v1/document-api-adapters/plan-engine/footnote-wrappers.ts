@@ -192,6 +192,18 @@ export function footnotesInsertWrapper(
   rejectTrackedMode('footnotes.insert', options);
   checkRevision(editor, options?.expectedRevision);
 
+  // §17.11.14: a footnote reference inside a footnote or endnote makes the
+  // document non-conformant (and Word also forbids footnotes in headers and
+  // footers). Story editors carry options.parentEditor — reject insertion
+  // there so toolbar actions wired to the ACTIVE editor cannot write a
+  // footnoteReference into a note story; callers must use the host editor.
+  if ((editor.options as { parentEditor?: unknown } | undefined)?.parentEditor) {
+    return footnoteFailure(
+      'INVALID_TARGET',
+      'footnotes.insert: footnotes can only be inserted into the document body, not inside a footnote, endnote, header, or footer.',
+    );
+  }
+
   const converter = getConverter(editor);
   const notesConfig = getNotesConfig(input.type);
   const noteId = allocateNextNoteId(editor, converter, input.type);
@@ -344,6 +356,66 @@ export function footnotesRemoveWrapper(
           },
         });
       }
+
+      clearIndexCache(editor);
+      return true;
+    },
+  });
+
+  if (!success) {
+    return footnoteFailure('NO_OP', 'Remove operation produced no change.');
+  }
+
+  return footnoteSuccess(address);
+}
+
+/**
+ * SD-3400: remove a note and EVERY body reference to it ("remove on both
+ * sides"). Used by the note-area emptied-note commit, where the whole footnote
+ * ceases to exist — including multi-reference notes, whose surviving markers
+ * would otherwise keep the old (un-emptied) content.
+ *
+ * Type-aware: footnote and endnote ids are independent OOXML namespaces, so
+ * resolution filters by note type — emptying endnote "2" must never touch
+ * footnote "2". The address-based {@link footnotesRemoveWrapper} keeps its
+ * single-reference semantics for the document API.
+ */
+export function removeNoteEverywhere(
+  editor: Editor,
+  input: { noteId: string; type: 'footnote' | 'endnote' },
+): FootnoteMutationResult {
+  const refs = findAllFootnotes(editor.state.doc, input.type).filter((f) => f.noteId === input.noteId);
+  if (refs.length === 0) {
+    return footnoteFailure('NO_OP', `No ${input.type} reference with id "${input.noteId}" found.`);
+  }
+
+  const notesConfig = getNotesConfig(input.type);
+  const address: FootnoteAddress = { kind: 'entity', entityType: 'footnote', noteId: input.noteId };
+
+  const { success } = compoundMutation({
+    editor,
+    source: `footnotes.removeEverywhere:${input.type}`,
+    affectedParts: [notesConfig.partId],
+    execute: () => {
+      const { tr } = editor.state;
+      // Descending positions keep earlier offsets valid as later refs go.
+      [...refs]
+        .sort((a, b) => b.pos - a.pos)
+        .forEach((ref) => {
+          const node = tr.doc.nodeAt(ref.pos);
+          if (node) tr.delete(ref.pos, ref.pos + node.nodeSize);
+        });
+      editor.dispatch(tr);
+
+      mutatePart({
+        editor,
+        partId: notesConfig.partId,
+        operation: 'mutate',
+        source: `footnotes.removeEverywhere:${input.type}`,
+        mutate({ part }) {
+          removeNoteElement(part, notesConfig, input.noteId);
+        },
+      });
 
       clearIndexCache(editor);
       return true;

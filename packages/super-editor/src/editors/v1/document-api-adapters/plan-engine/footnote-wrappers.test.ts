@@ -73,6 +73,7 @@ import {
   footnotesUpdateWrapper,
   footnotesRemoveWrapper,
   footnotesConfigureWrapper,
+  removeNoteEverywhere,
 } from './footnote-wrappers.js';
 
 // ---------------------------------------------------------------------------
@@ -216,6 +217,68 @@ describe('footnote-wrappers', () => {
     const noteElements = getFootnoteElements(editor);
     expect(noteElements).toHaveLength(1);
     expect(noteElements[0].attributes['w:id']).toBe('1');
+  });
+
+  it('removeNoteEverywhere deletes ALL references to the note and the OOXML element (SD-3400)', () => {
+    // Two references to footnote id '2' (multi-ref note emptied in the area):
+    // both markers and the element must go.
+    const editor = makeEditor([{ id: '2', text: 'Shared note' }], ['2', '2']);
+
+    const result = removeNoteEverywhere(editor, { noteId: '2', type: 'footnote' });
+
+    expect(result.success).toBe(true);
+    expect(editor.state.tr.delete).toHaveBeenCalledTimes(2);
+    expect(getFootnoteElements(editor)).toHaveLength(0);
+  });
+
+  it('removeNoteEverywhere is type-aware: endnote id N never touches footnote id N (SD-3400)', () => {
+    const editor = makeEditor([{ id: '2', text: 'Footnote two' }], []);
+    // Document carries BOTH a footnote ref and an endnote ref with id '2'.
+    const mixedDoc = {
+      descendants: (cb: (node: unknown, pos: number) => boolean | void) => {
+        cb({ type: { name: 'footnoteReference' }, attrs: { id: '2' } }, 1);
+        cb({ type: { name: 'endnoteReference' }, attrs: { id: '2' } }, 5);
+        return true;
+      },
+      nodeAt: vi.fn(() => ({ nodeSize: 1 })),
+    };
+    (editor.state as unknown as { doc: unknown }).doc = mixedDoc;
+    (editor.state.tr as unknown as { doc: unknown }).doc = mixedDoc;
+
+    const result = removeNoteEverywhere(editor, { noteId: '2', type: 'footnote' });
+
+    expect(result.success).toBe(true);
+    // Only the footnote reference (pos 1) is deleted; the endnote ref survives.
+    expect(editor.state.tr.delete).toHaveBeenCalledTimes(1);
+    expect(editor.state.tr.delete).toHaveBeenCalledWith(1, 2);
+    expect(getFootnoteElements(editor)).toHaveLength(0);
+  });
+
+  it('removeNoteEverywhere is a NO_OP failure when no reference of that type exists', () => {
+    const editor = makeEditor([{ id: '3', text: 'Orphan' }], []);
+
+    const result = removeNoteEverywhere(editor, { noteId: '3', type: 'footnote' });
+
+    expect(result.success).toBe(false);
+    expect(editor.state.tr.delete).not.toHaveBeenCalled();
+    expect(getFootnoteElements(editor)).toHaveLength(1);
+  });
+
+  it('rejects insertion from a story editor (footnote inside a note is non-conformant, SD-3400)', () => {
+    // §17.11.14: a footnoteReference inside a footnote/endnote makes the
+    // document non-conformant. Story editors carry options.parentEditor.
+    const editor = makeEditor([], []);
+    (editor as unknown as { options: Record<string, unknown> }).options = { parentEditor: makeEditor([], []) };
+
+    const result = footnotesInsertWrapper(editor, { type: 'footnote', content: '' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.failure.code).toBe('INVALID_TARGET');
+    }
+    // Nothing was inserted anywhere.
+    expect(editor.state.tr.insert).not.toHaveBeenCalled();
+    expect(getFootnoteElements(editor)).toHaveLength(0);
   });
 
   it('inserts at the current selection head when at is omitted (SD-3400 toolbar path)', () => {

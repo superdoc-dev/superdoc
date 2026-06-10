@@ -37,11 +37,11 @@ vi.mock('../../core/parts/adapters/notes-part-descriptor.js', () => ({
 }));
 
 // SD-3400: mock the removal boundary so the commit-on-empty wiring can be
-// asserted without exercising footnotesRemoveWrapper's internals (covered by
+// asserted without exercising removeNoteEverywhere's internals (covered by
 // footnote-wrappers.test.ts).
-const mockFootnotesRemoveWrapper = vi.fn(() => ({ success: true }));
+const mockRemoveNoteEverywhere = vi.fn(() => ({ success: true }));
 vi.mock('../plan-engine/footnote-wrappers.js', () => ({
-  footnotesRemoveWrapper: (...args: unknown[]) => mockFootnotesRemoveWrapper(...args),
+  removeNoteEverywhere: (...args: unknown[]) => mockRemoveNoteEverywhere(...args),
 }));
 
 // Import after mocks are set up
@@ -263,11 +263,63 @@ describe('resolveNoteRuntime — empty note content', () => {
   });
 });
 
-describe('SD-3400: clearing a note in the area removes the footnote on both sides', () => {
-  beforeEach(() => mockFootnotesRemoveWrapper.mockClear());
+describe('SD-3400: note commits strip footnote references (17.11.14)', () => {
+  it('removes pasted footnoteReference nodes from the exported note content', () => {
+    const exportToXmlJson = vi.fn(() => ({
+      result: { elements: [{ elements: [{ type: 'element', name: 'w:p' }] }] },
+    }));
+    // Story doc has real text (not empty) plus a pasted footnoteReference node.
+    mockCreateStoryEditor.mockReturnValueOnce({
+      state: {
+        doc: {
+          content: { size: 8 },
+          textBetween: () => 'kept',
+          descendants: (cb: (n: unknown) => boolean | void) => {
+            cb({ isText: true, isAtom: true, text: 'kept', type: { name: 'text' } });
+          },
+        },
+      },
+      schema: {},
+      getJSON: () => ({ type: 'doc', content: [] }),
+      getUpdatedJson: () => ({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'kept' },
+              { type: 'footnoteReference', attrs: { id: '9' } },
+            ],
+          },
+        ],
+      }),
+      destroy: vi.fn(),
+      on: vi.fn(),
+    } as never);
+    const host = {
+      converter: { footnotes: [{ id: '1', content: [{ type: 'paragraph' }] }], endnotes: [], exportToXmlJson },
+      state: {
+        doc: {
+          descendants: (cb: (n: unknown, p: number) => void) =>
+            cb({ type: { name: 'footnoteReference' }, attrs: { id: '1' } }, 5),
+        },
+      },
+      on: vi.fn(),
+    } as any;
 
-  // Host editor whose body contains a footnoteReference id '1' (so real
-  // findAllFootnotes confirms the reference exists before removal).
+    const runtime = resolveNoteRuntime(host, footnoteLocator);
+    runtime.commit?.(host);
+
+    expect(exportToXmlJson).toHaveBeenCalledTimes(1);
+    const exported = JSON.stringify(exportToXmlJson.mock.calls[0][0].data);
+    expect(exported).not.toContain('footnoteReference');
+    expect(exported).toContain('kept');
+  });
+});
+
+describe('SD-3400: clearing a note in the area removes the footnote on both sides', () => {
+  beforeEach(() => mockRemoveNoteEverywhere.mockClear());
+
   const makeHost = () =>
     ({
       converter: { footnotes: [{ id: '1', content: [{ type: 'paragraph' }] }], endnotes: [] },
@@ -296,9 +348,7 @@ describe('SD-3400: clearing a note in the area removes the footnote on both side
 
     runtime.commit?.(host);
 
-    expect(mockFootnotesRemoveWrapper).toHaveBeenCalledWith(host, {
-      target: { kind: 'entity', entityType: 'footnote', noteId: '1' },
-    });
+    expect(mockRemoveNoteEverywhere).toHaveBeenCalledWith(host, { noteId: '1', type: 'footnote' });
   });
 
   it('does not remove the footnote when the committed note still has content', () => {
@@ -313,6 +363,6 @@ describe('SD-3400: clearing a note in the area removes the footnote on both side
 
     runtime.commit?.(host);
 
-    expect(mockFootnotesRemoveWrapper).not.toHaveBeenCalled();
+    expect(mockRemoveNoteEverywhere).not.toHaveBeenCalled();
   });
 });

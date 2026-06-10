@@ -5162,7 +5162,7 @@ export class PresentationEditor extends EventEmitter {
         this.#editorInputManager?.clearCellAnchor();
       }
     };
-    const handleSelection = () => {
+    const handleSelection = ({ transaction }: { transaction?: Transaction } = {}) => {
       // User-initiated selection change — scroll caret/head into view once, except during
       // pointer drag: EditorInputManager edge auto-scroll must not fight #scrollActiveEndIntoView.
       if (!this.#editorInputManager?.isDragging) {
@@ -5174,7 +5174,13 @@ export class PresentationEditor extends EventEmitter {
       // setDocEpoch → cancelScheduledRender. Immediate rendering is safe here:
       // if layout is updating (due to a concurrent doc change), flushNow()
       // is a no-op and the render will be picked up after layout completes.
-      this.#scheduleSelectionUpdate({ immediate: true });
+      //
+      // SD-3400: NOT safe for doc-changing transactions. 'selectionUpdate'
+      // fires BEFORE 'update', so the epoch/layout gates are not armed yet
+      // and an immediate flush renders the caret against the PRE-change
+      // paint (visibly stale caret on every Enter/Backspace). Defer those to
+      // the post-paint flush.
+      this.#scheduleSelectionUpdate({ immediate: !transaction?.docChanged });
       // Update local cursor in awareness for collaboration
       // This bypasses y-prosemirror's focus check which may fail for hidden PM views
       this.#updateLocalAwarenessCursor();
@@ -10279,6 +10285,12 @@ export class PresentationEditor extends EventEmitter {
       return pmRects;
     }
 
+    // Same in-flight-rerender guard as #computeNoteDomCaretRect (SD-3400).
+    if (this.#renderScheduled || this.#isRerendering || this.#pendingDocChange) {
+      this.#scheduleSelectionUpdate({ immediate: false });
+      return null;
+    }
+
     const startOffset = this.#measureActiveEditorVisibleTextOffset(Math.min(from, to));
     const endOffset = this.#measureActiveEditorVisibleTextOffset(Math.max(from, to));
     if (startOffset == null || endOffset == null) {
@@ -10339,6 +10351,15 @@ export class PresentationEditor extends EventEmitter {
     const pmRect = computeCaretRectFromPmPositionFromHelper(geometryOptions, pos);
     if (pmRect) {
       return pmRect;
+    }
+
+    // Position not painted yet (fresh paragraph) while a rerender is in
+    // flight: bridging now would measure STALE paint and the wrong caret
+    // would stick until the next selection change. Defer to the post-paint
+    // flush instead (SD-3400).
+    if (this.#renderScheduled || this.#isRerendering || this.#pendingDocChange) {
+      this.#scheduleSelectionUpdate({ immediate: false });
+      return null;
     }
 
     const textOffset = this.#measureActiveEditorVisibleTextOffset(pos);

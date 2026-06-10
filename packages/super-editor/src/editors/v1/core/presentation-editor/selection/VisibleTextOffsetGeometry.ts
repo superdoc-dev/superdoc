@@ -307,13 +307,31 @@ function resolvePmPoint(containers: readonly HTMLElement[], pos: number): Resolv
 
   const lines = collectRenderedLineElements(containers);
   let lineElement: HTMLElement | null = null;
+  let resolvedPos = pos;
+  let sawEarlierLine = false;
   for (const line of lines) {
     const pmStart = getPmStart(line);
     const pmEnd = getPmEnd(line);
-    if (pmStart == null || pmEnd == null || pos < pmStart || pos > pmEnd) {
+    if (pmStart == null || pmEnd == null) {
       continue;
     }
+    if (pos > pmEnd) {
+      sawEarlierLine = true;
+      continue;
+    }
+    if (pos < pmStart) {
+      // Interior structural gap (paragraph boundary tokens between painted
+      // lines): the position is a valid caret position in the doc, so snap
+      // forward to this line's start instead of failing into the offset
+      // bridge. Positions BEFORE the first painted line stay unresolved.
+      if (sawEarlierLine && !lineElement) {
+        lineElement = line;
+        resolvedPos = pmStart;
+      }
+      break;
+    }
     lineElement = line;
+    resolvedPos = pos;
     // Forward affinity: a position at this line's end that also starts the
     // next line belongs to the next line, so keep scanning while pos == pmEnd.
     if (pos < pmEnd) {
@@ -334,11 +352,11 @@ function resolvePmPoint(containers: readonly HTMLElement[], pos: number): Resolv
   for (const candidate of leaves) {
     const pmStart = getPmStart(candidate);
     const pmEnd = getPmEnd(candidate);
-    if (pmStart == null || pmEnd == null || pos < pmStart || pos > pmEnd) {
+    if (pmStart == null || pmEnd == null || resolvedPos < pmStart || resolvedPos > pmEnd) {
       continue;
     }
     leaf = candidate;
-    if (pos < pmEnd) {
+    if (resolvedPos < pmEnd) {
       break;
     }
   }
@@ -349,7 +367,7 @@ function resolvePmPoint(containers: readonly HTMLElement[], pos: number): Resolv
   const leafPmStart = getPmStart(leaf) ?? 0;
   const doc = leaf.ownerDocument ?? document;
   const walker = doc.createTreeWalker(leaf, NodeFilter.SHOW_TEXT);
-  let remaining = Math.max(0, pos - leafPmStart);
+  let remaining = Math.max(0, resolvedPos - leafPmStart);
   let lastTextNode: Text | null = null;
 
   let currentNode = walker.nextNode();

@@ -175,10 +175,31 @@ describe('computeCaretRectFromPmPosition (SD-3400 multi-paragraph note caret)', 
     expect(rect).toMatchObject({ pageIndex: 0, x: 50, y: 515, height: 15 });
   });
 
-  it('returns null for a position inside a structural gap so callers can fall back', () => {
+  it('snaps a position inside an interior structural gap forward to the next line (SD-3400)', () => {
+    // Positions on paragraph-boundary tokens (e.g. 36 in the 34->38 gap) are
+    // valid caret positions in the session doc. Returning null here forced the
+    // drift-prone visible-text bridge; snap forward to the next painted line.
+    const { fragments, textNodeOf } = buildThreeParagraphNote();
+    const thankTextNode = textNodeOf('thank you for this');
+
+    vi.spyOn(Range.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.startContainer === thankTextNode && this.startOffset === 0) {
+        return createRect(10, 515, 0, 15);
+      }
+      return createRect(0, 0, 0, 0);
+    });
+
+    const rect = computeCaretRectFromPmPosition(createGeometryOptions(fragments), 36);
+
+    expect(rect).toMatchObject({ pageIndex: 0, x: 10, y: 515, height: 15 });
+  });
+
+  it('returns null for a position beyond the painted lines so callers can retry after paint', () => {
+    // A brand-new paragraph that has not painted yet has positions past every
+    // painted line: that must stay null (the caller reschedules post-paint).
     const { fragments } = buildThreeParagraphNote();
 
-    expect(computeCaretRectFromPmPosition(createGeometryOptions(fragments), 36)).toBeNull();
+    expect(computeCaretRectFromPmPosition(createGeometryOptions(fragments), 70)).toBeNull();
   });
 
   it('ignores the pm-less synthetic marker text', () => {

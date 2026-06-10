@@ -4007,6 +4007,21 @@ describe('paragraph converters', () => {
       });
     });
 
+    it('includes DrawingML fixed alpha adjustment when provided', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.png',
+          inline: true,
+          alphaModFix: { amt: 9000 },
+        },
+      };
+
+      const result = imageNodeToRun(buildImageParams(node, positions));
+
+      expect(result?.alphaModFix).toEqual({ amt: 9000 });
+    });
+
     it('returns null when src is missing', () => {
       const node: PMNode = {
         type: 'image',

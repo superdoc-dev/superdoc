@@ -1154,6 +1154,7 @@ export type ShapeGroupImageChild = {
     src: string;
     alt?: string;
     clipPath?: string;
+    alphaModFix?: ImageAlphaModFix;
     imageId?: string;
     imageName?: string;
   };

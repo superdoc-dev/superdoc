@@ -3,8 +3,11 @@ import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model';
 import { resolveNoteReferenceAtPointer } from './note-reference-hit.js';
 
 // Mirrors the real document shape: note references are inline atoms wrapped in
-// runs; Word's cross-reference bookmark (`_RefXXXX`) WRAPS the original note
-// reference, and bookmarkStart is a container node (content: 'inline*').
+// runs. Word's cross-reference bookmark (`_RefXXXX`) wraps the original note
+// reference; the importer emits it as a FLAT bookmarkStart/bookmarkEnd marker
+// pair (matched by id, both empty) with the reference between them — verified
+// against the NVCA fixture. The schema also permits bookmarkStart to hold
+// content, so the resolver supports both shapes.
 const schema = new Schema({
   nodes: {
     doc: { content: 'block+' },
@@ -15,6 +18,12 @@ const schema = new Schema({
       group: 'inline',
       content: 'inline*',
       attrs: { name: { default: null }, id: { default: null } },
+    },
+    bookmarkEnd: {
+      inline: true,
+      group: 'inline',
+      atom: true,
+      attrs: { id: { default: null } },
     },
     footnoteReference: {
       inline: true,
@@ -92,7 +101,55 @@ function resolveAt(doc: ProseMirrorNode, pmStart: number) {
   });
 }
 
+/**
+ * The shape real imports produce (NVCA fixture):
+ *   p1: "Dividends." + bookmarkStart(_Ref1, id=69) + run[<noteRef id=8>] + bookmarkEnd(id=69)
+ *   p2: "as noted in" + crossReference(target=_Ref1)
+ */
+function makeFlatMarkerDoc(noteRefType: 'footnoteReference' | 'endnoteReference' = 'footnoteReference') {
+  const noteRef = schema.nodes[noteRefType].create({ id: '8' });
+  const p1 = schema.node('paragraph', null, [
+    schema.nodes.run.create(null, schema.text('Dividends.')),
+    schema.nodes.bookmarkStart.create({ name: '_Ref1', id: '69' }),
+    schema.nodes.run.create(null, noteRef),
+    schema.nodes.bookmarkEnd.create({ id: '69' }),
+  ]);
+  const crossRef = schema.nodes.crossReference.create({ target: '_Ref1', resolvedText: '1' });
+  const p2 = schema.node('paragraph', null, [schema.nodes.run.create(null, schema.text('as noted in')), crossRef]);
+  return schema.node('doc', null, [p1, p2]);
+}
+
 describe('resolveNoteReferenceAtPointer — cross-reference navigation (SD-3400)', () => {
+  it.each([
+    ['footnoteReference', 'footnote'],
+    ['endnoteReference', 'endnote'],
+  ])('resolves a crossReference across a flat %s bookmark marker pair (real import shape)', (refType, storyType) => {
+    const doc = makeFlatMarkerDoc(refType as 'footnoteReference' | 'endnoteReference');
+
+    const target = resolveAt(doc, findPos(doc, 'crossReference'));
+
+    expect(target).toEqual({ storyType, noteId: '8' });
+  });
+
+  it('does not resolve a note that sits OUTSIDE the flat marker pair', () => {
+    // The footnote ref here precedes the bookmarkStart — the bookmark range
+    // holds plain text only, so the cross-ref is not a note reference.
+    const noteRef = schema.nodes.footnoteReference.create({ id: '8' });
+    const p1 = schema.node('paragraph', null, [
+      schema.nodes.run.create(null, noteRef),
+      schema.nodes.bookmarkStart.create({ name: '_Ref1', id: '69' }),
+      schema.nodes.run.create(null, schema.text('Section 2')),
+      schema.nodes.bookmarkEnd.create({ id: '69' }),
+    ]);
+    const crossRef = schema.nodes.crossReference.create({ target: '_Ref1', resolvedText: 'Section 2' });
+    const p2 = schema.node('paragraph', null, [crossRef]);
+    const doc = schema.node('doc', null, [p1, p2]);
+
+    const target = resolveAt(doc, findPos(doc, 'crossReference'));
+
+    expect(target).toBeNull();
+  });
+
   it('resolves a crossReference to the footnote wrapped by its target bookmark', () => {
     const doc = makeDoc('footnoteReference');
 

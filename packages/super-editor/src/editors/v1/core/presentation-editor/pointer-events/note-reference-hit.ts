@@ -67,24 +67,45 @@ function noteTargetFromReferenceNode(node: ProseMirrorNode | null | undefined): 
 /**
  * Resolves a REF/NOTEREF cross-reference to the note it points at. Word's
  * cross-reference bookmark (`_RefXXXX`) wraps the ORIGINAL note reference in
- * the body, so the note is found by locating the bookmarkStart with the
- * field's target name and scanning its content for a note reference. Returns
- * null for cross-references to anything other than a note (headings, tables),
- * letting the double-click fall through to default text behavior.
+ * the body. The importer emits the bookmark as a flat bookmarkStart/bookmarkEnd
+ * marker pair matched by id, so the note is found by scanning the document
+ * range from the named bookmarkStart to its matching bookmarkEnd. (The schema
+ * also permits bookmarkStart to hold content; scanning to at least the end of
+ * the start node covers that shape too.) Returns null for cross-references to
+ * anything other than a note (headings, tables), letting the double-click fall
+ * through to default text behavior.
  */
 function noteTargetFromCrossReference(doc: ProseMirrorNode, bookmarkName: unknown): RenderedNoteTarget | null {
   if (typeof bookmarkName !== 'string' || bookmarkName.length === 0) return null;
 
+  let startPos = -1;
+  let rangeEnd = -1;
+  let bookmarkId: unknown = null;
+  let foundEnd = false;
+  doc.descendants((node, pos) => {
+    if (foundEnd) return false;
+    if (startPos < 0) {
+      if (node.type?.name === 'bookmarkStart' && node.attrs?.name === bookmarkName) {
+        startPos = pos;
+        rangeEnd = pos + node.nodeSize;
+        bookmarkId = node.attrs?.id;
+      }
+      return true;
+    }
+    if (node.type?.name === 'bookmarkEnd' && bookmarkId != null && node.attrs?.id === bookmarkId) {
+      rangeEnd = pos;
+      foundEnd = true;
+      return false;
+    }
+    return true;
+  });
+  if (startPos < 0) return null;
+
   let result: RenderedNoteTarget | null = null;
-  doc.descendants((node) => {
+  doc.nodesBetween(startPos, rangeEnd, (node) => {
     if (result) return false;
-    if (node.type?.name !== 'bookmarkStart' || node.attrs?.name !== bookmarkName) return true;
-    node.descendants((child) => {
-      if (result) return false;
-      result = noteTargetFromReferenceNode(child);
-      return !result;
-    });
-    return false;
+    result = noteTargetFromReferenceNode(node);
+    return !result;
   });
   return result;
 }

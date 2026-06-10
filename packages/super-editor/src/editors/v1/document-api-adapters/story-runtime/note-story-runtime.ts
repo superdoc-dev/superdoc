@@ -32,10 +32,6 @@ type NoteStoryLocator = FootnoteStoryLocator | EndnoteStoryLocator;
  * Exported so PresentationEditor's note-session watcher applies the same rule.
  */
 export function isNoteContentEmpty(doc: ProseMirrorNode): boolean {
-  // Defensive: emptiness triggers REMOVAL of the footnote, so a doc that
-  // cannot be inspected (detached/mocked session editors without a real PM
-  // doc) must read as NOT empty — never delete on uncertainty.
-  if (!doc || typeof (doc as { descendants?: unknown }).descendants !== 'function') return false;
   let hasContent = false;
   doc.descendants((node) => {
     if (hasContent) return false;

@@ -109,6 +109,13 @@ const {
             size: 10,
           },
           textBetween: vi.fn(() => 'Lazy note session'),
+          // Mirror the real PM doc contract: this stub doc reports text via
+          // textBetween, so descendants must walk a matching text node (the
+          // note-session empty watch inspects it via isNoteContentEmpty).
+          descendants: vi.fn((cb: (node: unknown) => boolean | void) => {
+            cb({ isText: false, isAtom: false, type: { name: 'paragraph' } });
+            cb({ isText: true, isAtom: true, text: 'Lazy note session', type: { name: 'text' } });
+          }),
         },
       },
       options: {},

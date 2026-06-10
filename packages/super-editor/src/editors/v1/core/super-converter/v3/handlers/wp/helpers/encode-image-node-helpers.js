@@ -1405,7 +1405,7 @@ function extractFieldInlineNodes(node) {
   return [];
 }
 
-function extractInlineNodesFromRun(run, paragraphProperties, params) {
+function extractInlineNodesFromRun(run, params) {
   if (!run?.elements) return [];
 
   const nodes = [];
@@ -1459,7 +1459,7 @@ function paragraphToPmParagraph(paragraph, params) {
 
   (paragraphNode.elements || []).forEach((element) => {
     if (element?.name === 'w:r') {
-      const inlineParts = extractInlineNodesFromRun(element, paragraphProperties, params);
+      const inlineParts = extractInlineNodesFromRun(element, params);
       inlineParts.forEach((part) => {
         if (part?.type === 'image') {
           flushPendingRun();

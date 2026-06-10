@@ -534,6 +534,9 @@ const drawingBlocksEqual = (a: DrawingBlock, b: DrawingBlock): boolean => {
       a.textVerticalAlign === b.textVerticalAlign &&
       jsonEqual(a.textInsets, b.textInsets) &&
       jsonEqual(a.textContent, b.textContent) &&
+      jsonEqual(a.customGeometry, b.customGeometry) &&
+      jsonEqual(a.lineEnds, b.lineEnds) &&
+      jsonEqual(a.effectExtent, b.effectExtent) &&
       textboxContentEqual
     );
   }

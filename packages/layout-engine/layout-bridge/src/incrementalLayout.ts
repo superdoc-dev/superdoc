@@ -2781,7 +2781,11 @@ export async function incrementalLayout(
         }
       : undefined;
 
+    const hfRemeasure = (block: ParagraphBlock, maxWidth: number) => remeasureParagraph(block, maxWidth);
     if (headerFooter.headerBlocks) {
+      for (const blocks of Object.values(headerFooter.headerBlocks)) {
+        hydrateTableTextboxMeasures(blocks, hfRemeasure);
+      }
       const headerLayouts = await layoutHeaderFooterWithCache(
         headerFooter.headerBlocks,
         headerFooter.constraints,
@@ -2796,6 +2800,9 @@ export async function incrementalLayout(
       headers = serializeHeaderFooterResults('header', headerLayouts);
     }
     if (headerFooter.footerBlocks) {
+      for (const blocks of Object.values(headerFooter.footerBlocks)) {
+        hydrateTableTextboxMeasures(blocks, hfRemeasure);
+      }
       const footerLayouts = await layoutHeaderFooterWithCache(
         headerFooter.footerBlocks,
         headerFooter.constraints,

@@ -29,18 +29,25 @@ export function computeTextboxCaretLayoutRectFromDom(
   const lineEls = Array.from(fragmentEl.querySelectorAll<HTMLElement>('.superdoc-line[data-pm-start][data-pm-end]'));
   if (lineEls.length === 0) return null;
 
-  for (const lineEl of lineEls) {
+  for (let lineIdx = 0; lineIdx < lineEls.length; lineIdx++) {
+    const lineEl = lineEls[lineIdx];
     const pmStart = Number(lineEl.dataset.pmStart ?? 'NaN');
     const pmEnd = Number(lineEl.dataset.pmEnd ?? 'NaN');
     if (!Number.isFinite(pmStart) || !Number.isFinite(pmEnd)) continue;
-    if (pos < pmStart || pos > pmEnd) continue;
+    // Use exclusive pmEnd for all but the last line so that a position exactly at
+    // a soft-wrap boundary (where lineN.pmEnd === lineN+1.pmStart) resolves to the
+    // start of the next visual line rather than the end of the previous one.
+    const isLastLine = lineIdx === lineEls.length - 1;
+    if (pos < pmStart || (isLastLine ? pos > pmEnd : pos >= pmEnd)) continue;
 
     const spanEls = Array.from(lineEl.querySelectorAll<HTMLElement>('span[data-pm-start][data-pm-end]'));
-    for (const spanEl of spanEls) {
+    for (let spanIdx = 0; spanIdx < spanEls.length; spanIdx++) {
+      const spanEl = spanEls[spanIdx];
       const spanStart = Number(spanEl.dataset.pmStart ?? 'NaN');
       const spanEnd = Number(spanEl.dataset.pmEnd ?? 'NaN');
       if (!Number.isFinite(spanStart) || !Number.isFinite(spanEnd)) continue;
-      if (pos < spanStart || pos > spanEnd) continue;
+      const isLastSpan = spanIdx === spanEls.length - 1;
+      if (pos < spanStart || (isLastSpan ? pos > spanEnd : pos >= spanEnd)) continue;
 
       const textNode = spanEl.firstChild;
       if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {

@@ -5,6 +5,7 @@ import { DOM_CLASS_NAMES } from '../constants.js';
 import { assertPmPositions } from '../pm-position-validation.js';
 import type { RunRenderContext } from './types.js';
 import { BROWSER_DEFAULT_FONT_SIZE } from './text-run.js';
+import { allowFontSynthesis } from './font-synthesis.js';
 
 /**
  * Renders a FieldAnnotationRun as an inline "pill" element matching super-editor's visual appearance.
@@ -109,6 +110,7 @@ export const renderFieldAnnotationRun = (run: FieldAnnotationRun, context: RunRe
   if (run.textColor) {
     annotation.style.color = run.textColor;
   }
+  allowFontSynthesis(annotation);
   if (run.bold) {
     annotation.style.fontWeight = 'bold';
   }

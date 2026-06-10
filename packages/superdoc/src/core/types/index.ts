@@ -2044,10 +2044,10 @@ export interface Config {
   /** Proofing / spellcheck configuration. */
   proofing?: ProofingConfig;
   /**
-   * Font system configuration. Currently the served location of the bundled
-   * metric-compatible substitute pack: set `fonts.assetBaseUrl` (e.g. `/fonts/` or a CDN
-   * URL) for npm/SSR/framework deploys, or `fonts.resolveAssetUrl` for signed/versioned
-   * hosting. The CDN `<script>` build auto-detects a script-relative default.
+   * Font system configuration. Currently the served location of the bundled reviewed fallback
+   * pack: set `fonts.assetBaseUrl` (e.g. `/fonts/` or a CDN URL) for npm/SSR/framework deploys,
+   * or `fonts.resolveAssetUrl` for signed/versioned hosting. The CDN `<script>` build
+   * auto-detects a script-relative default.
    */
   fonts?: FontsConfig;
   /**

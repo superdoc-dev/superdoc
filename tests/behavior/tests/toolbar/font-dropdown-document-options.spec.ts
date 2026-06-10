@@ -44,15 +44,30 @@ async function stubDocumentFontsAndNotify(
   await superdoc.waitForStable();
 }
 
-test('font dropdown opens immediately with the clean default list and an enabled control', async ({ superdoc }) => {
+test('font dropdown opens immediately with the built-in font list and an enabled control', async ({ superdoc }) => {
   const fontFamily = superdoc.page.locator('[data-item="btn-fontFamily"]');
   await expect(fontFamily).not.toHaveClass(/sd-disabled/);
 
   await openFontFamilyDropdown(superdoc);
 
   const labels = await fontOptionLabels(superdoc);
-  expect(labels).toEqual(['Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman']);
-  for (const absent of ['Aptos', 'Georgia', 'Cambria', 'Calibri Light']) {
+  expect(labels).toEqual([
+    'Arial',
+    'Baskerville Old Face',
+    'Brush Script MT',
+    'Calibri',
+    'Comic Sans MS',
+    'Cooper Black',
+    'Courier New',
+    'Garamond',
+    'Georgia',
+    'Helvetica',
+    'Lucida Console',
+    'Tahoma',
+    'Times New Roman',
+    'Trebuchet MS',
+  ]);
+  for (const absent of ['Aptos', 'Cambria', 'Calibri Light', 'Arial Narrow']) {
     expect(labels).not.toContain(absent);
   }
 });
@@ -94,10 +109,19 @@ test('a document-specific font reaches the live dropdown without status text and
     'Aptos',
     'Arial',
     'Bangla MN',
+    'Baskerville Old Face',
+    'Brush Script MT',
     'Calibri',
+    'Comic Sans MS',
+    'Cooper Black',
     'Courier New',
+    'Garamond',
+    'Georgia',
     'Helvetica',
+    'Lucida Console',
+    'Tahoma',
     'Times New Roman',
+    'Trebuchet MS',
   ]);
 
   const aptosOption = superdoc.page

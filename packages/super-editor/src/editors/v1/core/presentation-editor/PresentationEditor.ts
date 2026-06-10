@@ -564,7 +564,7 @@ export class PresentationEditor extends EventEmitter {
    * mappings do not share a measure or reuse each other's content paint. (Editor chrome such as
    * formatting marks is not document content and is out of scope.) `superdoc.fonts.map` mutates this
    * resolver at runtime through that controller (the only writer): the changed resolution re-measures
-   * and repaints THIS document while others are left untouched. Seeded with the bundled clean-clone map.
+   * and repaints THIS document while others are left untouched. Seeded with bundled DocFonts fallbacks.
    */
   readonly #fontResolver = createFontResolver();
   /**
@@ -1049,8 +1049,8 @@ export class PresentationEditor extends EventEmitter {
         // content-paint paths resolve through this same instance, so load, measure, paint, and
         // diagnostics stay consistent.
         fontResolver: this.#fontResolver,
-        // Register the bundled substitute pack (Carlito) into the document's registry the
-        // first time it resolves, so the substitute is available with no manual setup.
+        // Register the bundled fallback pack into the document's registry the first time it resolves,
+        // so reviewed fallback faces are available with no manual setup.
         onRegistryResolved: (registry) =>
           installBundledSubstitutes(registry, {
             assetBaseUrl: this.#options.fontAssets?.assetBaseUrl,

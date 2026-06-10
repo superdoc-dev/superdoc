@@ -11,6 +11,7 @@ import {
   type ResolvedListMarkerGeometry,
 } from '@superdoc/common/list-marker-utils';
 import { applySourceAnchorDataset } from '../utils/source-anchor.js';
+import { allowFontSynthesis } from '../runs/font-synthesis.js';
 
 type PainterListTextStartParams = {
   wordLayout: MinimalWordLayout | undefined;
@@ -113,6 +114,7 @@ export const createListMarkerElement = (
   if (run.fontSize != null) {
     markerEl.style.fontSize = `${run.fontSize}px`;
   }
+  allowFontSynthesis(markerEl);
   markerEl.style.fontWeight = run.bold ? 'bold' : '';
   markerEl.style.fontStyle = run.italic ? 'italic' : '';
 

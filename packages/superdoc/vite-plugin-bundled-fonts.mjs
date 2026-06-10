@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The bundled metric-compatible substitute pack lives in @superdoc/font-system as raw
-// assets. This plugin serves them at /fonts/* in dev and emits them as SEPARATE output
-// assets (dist/fonts/*) in build - so the font bytes are never inlined into the JS
-// bundle (Vite lib mode otherwise base64-inlines imported assets, which busts the size
-// budget). The provider registers `url(/fonts/<file>)` faces against this same path.
+// The bundled reviewed fallback pack lives in @superdoc/font-system as raw assets.
+// This plugin serves them at /fonts/* in dev and emits them as SEPARATE output assets
+// (dist/fonts/*) in build, so the font bytes are never inlined into the JS bundle
+// (Vite lib mode otherwise base64-inlines imported assets, which busts the size budget).
+// The provider registers `url(/fonts/<file>)` faces against this same path.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ASSETS_DIR = path.resolve(here, '../../shared/font-system/assets');
 const THIRD_PARTY_LICENSES_PATH = path.resolve(here, '../../THIRD_PARTY_LICENSES.md');

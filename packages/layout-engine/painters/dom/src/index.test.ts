@@ -7347,7 +7347,8 @@ describe('DomPainter', () => {
 
       const dropCapEl = mount.querySelector('.superdoc-drop-cap') as HTMLElement;
       expect(dropCapEl.textContent).toBe('H');
-      expect(dropCapEl.style.fontFamily).toBe('Georgia');
+      // Drop caps paint the physical render family: Georgia's bundled substitute is Gelasio.
+      expect(dropCapEl.style.fontFamily).toBe('Gelasio');
       expect(dropCapEl.style.fontSize).toBe('72px');
       expect(dropCapEl.style.fontWeight).toBe('bold');
       expect(dropCapEl.style.width).toBe('50px');

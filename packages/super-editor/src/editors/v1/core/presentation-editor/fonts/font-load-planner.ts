@@ -13,16 +13,17 @@ import type { FlowBlock, ParagraphBlock, TableBlock, ListBlock, Run } from '@sup
  *
  * Walks the layout input ONCE and produces the single render font plan that drives loading,
  * diagnostics, paint/measure resolution, and cache identity:
- *  - `requiredFaces`: the exact physical FACES the load gate must await - the substitute, or the
- *    logical family when the substitute lacks that face (so a fallback face still loads/falls back),
- *    never a phantom `{substitute, 700}` for a face the substitute does not provide.
+ *  - `requiredFaces`: the exact physical FACES the load gate must await - the substitute, a synthetic
+ *    source face explicitly allowed by DocFonts, or the logical family when the substitute lacks that
+ *    face. It never awaits a phantom `{substitute, 700}` for a face the substitute does not provide.
  *  - `usedFaces`: the logical faces the document renders, for the face-level report.
  *  - `effectiveSignature`: the render/measure CACHE identity (see {@link FontPlan}).
  *
  * Why face-aware: `document.fonts.load('16px "Carlito"')` loads only the regular face, and a
  * single-face substitute (or a customer `fonts.map` to one) must NOT be faux-styled onto a
- * weight/style it lacks. Resolution therefore consults `hasFace` - the registry's
- * registered-face oracle (bundled faces + `fonts.add()` faces) - via the document's resolver.
+ * weight/style it lacks unless docfonts explicitly names a synthetic source face. Resolution therefore
+ * consults `hasFace` - the registry's registered-face oracle (bundled faces + `fonts.add()` faces) -
+ * via the document's resolver.
  */
 
 /** Face-availability oracle: does the PHYSICAL family provide this face? Registry-backed. */
@@ -36,7 +37,8 @@ export interface FontPlan {
   usedFaces: UsedFace[];
   /**
    * Render/measure CACHE IDENTITY: a stable, sorted, collision-safe JSON serialization of the
-   * document's resolved faces - sorted tuples `[logicalLower, weight, style, physicalLower, reason]`
+   * document's resolved faces - sorted tuples
+   * `[logicalLower, weight, style, physicalLower, sourceWeight, sourceStyle, reason]`
    * (empty `''` when no faces are used). This (NOT `resolver.signature`, which
    * captures only the family map) is what measure/paint/layout cache keys must fold in: a
    * `fonts.add()` that makes a face available changes a face's resolution for the SAME family map, so
@@ -65,13 +67,16 @@ function primaryFamily(css: string): string {
 }
 
 /** Resolve a logical family + face to its physical render family and reason, for this document. */
-type ResolveFace = (logicalFamily: string, face: FaceKey) => { physicalFamily: string; reason: FontResolutionReason };
+type ResolveFace = (
+  logicalFamily: string,
+  face: FaceKey,
+) => { physicalFamily: string; reason: FontResolutionReason; sourceFace?: FaceKey };
 
 function makeResolveFace(resolver: FontResolver | undefined, hasFace: HasFace | undefined): ResolveFace {
   if (resolver && hasFace) {
     return (logical, face) => {
       const r = resolver.resolveFace(logical, face, hasFace);
-      return { physicalFamily: r.physicalFamily, reason: r.reason };
+      return { physicalFamily: r.physicalFamily, reason: r.reason, sourceFace: r.sourceFace };
     };
   }
   // No face oracle: fall back to family-level resolution (legacy behaviour, e.g. context-free tests).
@@ -94,13 +99,17 @@ interface Acc {
   requiredFaces: Map<string, FontFaceRequest>;
   usedFaces: Map<string, UsedFace>;
   /**
-   * usedKey -> the structured resolution tuple `[logicalLower, weight, style, physicalLower, reason]`.
+   * usedKey -> the structured resolution tuple with requested face, physical family, source face, and
+   * reason.
    * Serialized to the effective signature as JSON (NOT a delimited join): a font family is a free
    * ST_String that may contain `;`, `|`, or `=>`, so a delimited form could serialize two distinct
    * resolution sets to the same key and cause wrong cache reuse. JSON of structured tuples is
    * collision-safe, matching {@link FontResolver.signature}.
    */
-  sigEntries: Map<string, [string, '400' | '700', 'normal' | 'italic', string, string]>;
+  sigEntries: Map<
+    string,
+    [string, '400' | '700', 'normal' | 'italic', string, '400' | '700', 'normal' | 'italic', string]
+  >;
 }
 
 /** Collect a face from any font-bearing object into the dedup maps + signature entries. */
@@ -112,18 +121,27 @@ function collect(acc: Acc, node: FontBearing | null | undefined, resolveFace: Re
   if (!logicalPrimary) return;
   const usedKey = `${logicalPrimary.toLowerCase()}|${weight}|${style}`;
   if (acc.usedFaces.has(usedKey)) return; // already collected this used face
-  const { physicalFamily, reason } = resolveFace(node.fontFamily, { weight, style });
+  const { physicalFamily, reason, sourceFace } = resolveFace(node.fontFamily, { weight, style });
+  const requiredFace = sourceFace ?? { weight, style };
   acc.usedFaces.set(usedKey, { logicalFamily: logicalPrimary, weight, style });
   acc.sigEntries.set(usedKey, [
     logicalPrimary.toLowerCase(),
     weight,
     style,
     (physicalFamily || '').toLowerCase(),
+    requiredFace.weight,
+    requiredFace.style,
     reason,
   ]);
   if (physicalFamily) {
-    const reqKey = `${physicalFamily.toLowerCase()}|${weight}|${style}`;
-    if (!acc.requiredFaces.has(reqKey)) acc.requiredFaces.set(reqKey, { family: physicalFamily, weight, style });
+    const reqKey = `${physicalFamily.toLowerCase()}|${requiredFace.weight}|${requiredFace.style}`;
+    if (!acc.requiredFaces.has(reqKey)) {
+      acc.requiredFaces.set(reqKey, {
+        family: physicalFamily,
+        weight: requiredFace.weight,
+        style: requiredFace.style,
+      });
+    }
   }
 }
 

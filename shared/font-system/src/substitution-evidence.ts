@@ -11,6 +11,14 @@
  * against `bundled-manifest`) and how they load, render, and report.
  */
 import { SUBSTITUTION_EVIDENCE as DOCFONTS_EVIDENCE } from '@docfonts/fallbacks';
+import type {
+  AdvanceDelta as DocFontsAdvanceDelta,
+  FaceCoverage as DocFontsFaceCoverage,
+  FallbackFaceSource as DocFontsFallbackFaceSource,
+  GlyphException as DocFontsGlyphException,
+  SubstituteGates as DocFontsSubstituteGates,
+  SubstitutionEvidence as DocFontsSubstitutionEvidence,
+} from '@docfonts/fallbacks';
 
 /** docfonts fidelity verdict, best to worst. */
 export type SubstituteVerdict =
@@ -44,6 +52,8 @@ export type FaceSlot = 'regular' | 'bold' | 'italic' | 'boldItalic';
 
 /** Advance-width divergence vs the proprietary oracle, as fractions (0 = identical advances). */
 export interface AdvanceDelta {
+  /** sample/model used for the advance comparison, e.g. Latin glyph advances vs monospace cell width. */
+  basis: 'latin_full' | 'latin_text' | 'monospace_cell';
   meanDelta: number;
   /** the worst-case delta, not the mean, is what gates line-break fidelity. */
   maxDelta: number;
@@ -56,6 +66,11 @@ export interface FaceCoverage {
   italic: boolean;
   boldItalic: boolean;
 }
+
+/** How a reviewed fallback renders a requested RIBBI face. Only synthetic sources change loading. */
+export type FallbackFaceSource = { kind: 'real' } | { kind: 'synthetic'; from: FaceSlot };
+
+export type FallbackFaceSources = Partial<Record<FaceSlot, FallbackFaceSource>>;
 
 /** The four derived gate statuses behind a verdict; the proof is the referenced measurements. */
 export interface SubstituteGates {
@@ -102,6 +117,8 @@ export interface SubstitutionEvidence {
    * fidelity must show this breakdown, not the rolled-up verdict alone.
    */
   faceVerdicts?: Partial<Record<FaceSlot, SubstituteVerdict>>;
+  /** Synthetic face instructions for reviewed fallback faces. Real faces stay represented by `faces`. */
+  faceSources?: FallbackFaceSources;
   /** named glyph-level divergences that qualify a face (e.g. one codepoint reflows). */
   glyphExceptions?: readonly GlyphException[];
   faces: FaceCoverage;
@@ -111,11 +128,26 @@ export interface SubstitutionEvidence {
   policyAction: SubstitutePolicyAction;
   /** proof pointers back into docfonts, by MeasurementId. */
   measurementRefs: readonly string[];
-  /** SPDX id of the substitute's license. */
+  /** Candidate license id or expression. SPDX when exact, stable docfonts label otherwise. */
   candidateLicense?: string | null;
   /** SuperDoc renders substitutes but always exports the original name. Always this for now. */
   exportRule: 'preserve_original_name';
 }
+
+type AssertNoMissingDocFontsKeys<Upstream, Local> = Exclude<keyof Upstream, keyof Local> extends never ? true : never;
+type SyntheticFaceSource<T> = Extract<T, { kind: 'synthetic' }>;
+type RealFaceSource<T> = Extract<T, { kind: 'real' }>;
+type DocFontsEvidenceDriftGuards = [
+  AssertNoMissingDocFontsKeys<DocFontsSubstitutionEvidence, SubstitutionEvidence>,
+  AssertNoMissingDocFontsKeys<DocFontsAdvanceDelta, AdvanceDelta>,
+  AssertNoMissingDocFontsKeys<DocFontsFaceCoverage, FaceCoverage>,
+  AssertNoMissingDocFontsKeys<DocFontsSubstituteGates, SubstituteGates>,
+  AssertNoMissingDocFontsKeys<DocFontsGlyphException, GlyphException>,
+  AssertNoMissingDocFontsKeys<SyntheticFaceSource<DocFontsFallbackFaceSource>, SyntheticFaceSource<FallbackFaceSource>>,
+  AssertNoMissingDocFontsKeys<RealFaceSource<DocFontsFallbackFaceSource>, RealFaceSource<FallbackFaceSource>>,
+];
+const _docFontsEvidenceDriftGuards: DocFontsEvidenceDriftGuards = [true, true, true, true, true, true, true];
+void _docFontsEvidenceDriftGuards;
 
 /**
  * The reviewed substitution evidence, sourced from `@docfonts/fallbacks` and pinned to SuperDoc's

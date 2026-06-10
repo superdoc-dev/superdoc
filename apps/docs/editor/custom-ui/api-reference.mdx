@@ -175,6 +175,8 @@ ui.comments.reply(parentCommentId, { text });
 ui.comments.resolve(commentId);
 ui.comments.reopen(commentId);
 ui.comments.delete(commentId);
+ui.comments.setActive(commentId); // highlight without scrolling or moving selection
+ui.comments.setActive(null); // clear active highlight
 ui.comments.scrollTo(commentId);
 ```
 

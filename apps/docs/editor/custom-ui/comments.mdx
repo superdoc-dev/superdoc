@@ -136,6 +136,17 @@ ui.comments.delete(commentId);
 
 All three return a Document API receipt. The next snapshot from `useSuperDocComments()` reflects the change.
 
+## Activate a comment highlight without scrolling
+
+Use `setActive` when your UI handles scrolling and only needs SuperDoc to highlight the comment.
+
+```tsx
+scrollYourSidebarOrEditor(commentId);
+const activated = ui.comments.setActive(commentId);
+```
+
+Pass `null` to clear the highlight. Reply ids activate their anchored thread root, unknown ids return `false`, and a later editor selection change can clear the highlight because `setActive` does not move the caret.
+
 ## Scroll to a comment
 
 ```tsx

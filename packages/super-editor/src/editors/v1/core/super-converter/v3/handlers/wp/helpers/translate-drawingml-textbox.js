@@ -17,12 +17,21 @@ export function translateDrawingMLTextbox(params) {
   // Two elements carry the size in EMU (1 px = 9525 EMU at 96 DPI):
   //   <wp:extent cx cy>  — anchor bounding box (child of wp:anchor)
   //   <a:ext cx cy>      — shape transform geometry (inside wps:spPr/a:xfrm)
-  const { width: pxWidth, height: pxHeight } = node.attrs ?? {};
+  const { width: pxWidth, height: pxHeight, marginOffset } = node.attrs ?? {};
   if (pxWidth != null || pxHeight != null) {
     const emuCx = pxWidth != null ? String(Math.round(pxWidth * 9525)) : null;
     const emuCy = pxHeight != null ? String(Math.round(pxHeight * 9525)) : null;
     patchNodeAttributes(drawing, 'wp:extent', emuCx, emuCy);
     patchNodeAttributes(drawing, 'a:ext', emuCx, emuCy);
+  }
+
+  // Patch position when the user moved the textbox (marginOffset.horizontal/top are in px).
+  // wp:positionH > wp:posOffset and wp:positionV > wp:posOffset carry the offset in EMU.
+  if (marginOffset?.horizontal != null) {
+    patchPositionOffset(drawing, 'wp:positionH', String(Math.round(marginOffset.horizontal * 9525)));
+  }
+  if (marginOffset?.top != null) {
+    patchPositionOffset(drawing, 'wp:positionV', String(Math.round(marginOffset.top * 9525)));
   }
 
   const liveParagraphs = translateChildNodes({
@@ -62,6 +71,25 @@ function findTextboxContentNode(node) {
   }
 
   return null;
+}
+
+// Patches the text content of wp:posOffset inside the first posNodeName element found in the tree.
+// Only patches when wp:posOffset already exists (i.e. the shape uses absolute, not align, positioning).
+function patchPositionOffset(node, posNodeName, emuValue) {
+  if (!node || typeof node !== 'object') return false;
+  if (node.name === posNodeName && Array.isArray(node.elements)) {
+    const offsetEl = node.elements.find((el) => el.name === 'wp:posOffset');
+    if (offsetEl && Array.isArray(offsetEl.elements) && offsetEl.elements.length > 0) {
+      offsetEl.elements[0].text = emuValue;
+      return true;
+    }
+    return false;
+  }
+  if (!Array.isArray(node.elements)) return false;
+  for (const child of node.elements) {
+    if (patchPositionOffset(child, posNodeName, emuValue)) return true;
+  }
+  return false;
 }
 
 // Patches cx/cy on the first element matching targetName found anywhere in the tree.

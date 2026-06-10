@@ -4,7 +4,7 @@
     class="superdoc-textbox-resize-overlay"
     :style="overlayStyle"
     @pointerdown.stop
-    @mousedown.stop
+    @mousedown="onOverlayMouseDown"
   >
     <div
       v-for="handle in resizeHandles"
@@ -60,6 +60,7 @@ const isResizeDisabled = computed(
 );
 
 const dragState = ref(null);
+const moveState = ref(null);
 const forcedCleanup = ref(false);
 
 function resolveEditorState(editor) {
@@ -125,7 +126,7 @@ const overlayStyle = computed(() => {
       top: `${props.textboxElement.offsetTop}px`,
       width: `${textboxRect.width}px`,
       height: `${textboxRect.height}px`,
-      pointerEvents: dragState.value ? 'auto' : 'none',
+      pointerEvents: 'auto',
       zIndex: Z_INDEX_OVERLAY,
     };
   }
@@ -148,13 +149,19 @@ const overlayStyle = computed(() => {
     offsetY = -OVERLAY_EXPANSION_PX;
   }
 
+  // Read delta properties so the computed re-runs on each mousemove tick.
+  // getBoundingClientRect() includes CSS transforms, so once these deps fire
+  // the overlay and handles follow the element as it translates.
+  void moveState.value?.deltaX;
+  void moveState.value?.deltaY;
+
   return {
     position: 'absolute',
     left: `${relativeLeft + offsetX}px`,
     top: `${relativeTop + offsetY}px`,
     width: `${overlayWidth}px`,
     height: `${overlayHeight}px`,
-    pointerEvents: dragState.value ? 'auto' : 'none',
+    pointerEvents: 'auto',
     zIndex: Z_INDEX_OVERLAY,
   };
 });
@@ -165,6 +172,7 @@ const resizeHandles = computed(() => {
   const rect = props.textboxElement.getBoundingClientRect();
   const offset = RESIZE_HANDLE_SIZE_PX / 2;
   const expansion = dragState.value ? OVERLAY_EXPANSION_PX : 0;
+  void moveState.value; // re-run when move delta changes so handles follow the textbox
 
   return [
     {
@@ -288,6 +296,103 @@ function onDocumentMouseUp() {
   dragState.value = null;
 }
 
+function onOverlayMouseDown(event) {
+  event.stopPropagation();
+  // Resize handles call stopPropagation themselves, so this fires only on the overlay body.
+  if (event.target.closest('.resize-handle')) return;
+  if (isResizeDisabled.value || !props.textboxElement) return;
+
+  event.preventDefault();
+
+  const editor = getResizeEditor();
+  const resolvedShape = resolveShapeContainer(editor, props.textboxElement);
+  if (!editor?.view || !resolvedShape) return;
+
+  const existingOffset = resolvedShape.node.attrs?.marginOffset;
+  if (!existingOffset || (existingOffset.horizontal == null && existingOffset.top == null)) return;
+
+  moveState.value = {
+    initialX: event.clientX,
+    initialY: event.clientY,
+    initialHorizontal: existingOffset.horizontal ?? 0,
+    initialTop: existingOffset.top ?? 0,
+    deltaX: 0,
+    deltaY: 0,
+  };
+
+  document.addEventListener('mousemove', onDocumentMouseMoveForMove);
+  document.addEventListener('mouseup', onDocumentMouseUpForMove);
+  document.addEventListener('keydown', onEscapeKeyForMove);
+}
+
+function onDocumentMouseMoveForMove(event) {
+  if (!moveState.value) return;
+  moveState.value.deltaX = event.clientX - moveState.value.initialX;
+  moveState.value.deltaY = event.clientY - moveState.value.initialY;
+  if (props.textboxElement) {
+    props.textboxElement.style.transform = `translate(${moveState.value.deltaX}px, ${moveState.value.deltaY}px)`;
+  }
+}
+
+function onEscapeKeyForMove(event) {
+  if (event.key !== 'Escape' || !moveState.value) return;
+  if (props.textboxElement) props.textboxElement.style.transform = '';
+  cleanupMoveListeners();
+}
+
+function cleanupMoveListeners() {
+  document.removeEventListener('mousemove', onDocumentMouseMoveForMove);
+  document.removeEventListener('mouseup', onDocumentMouseUpForMove);
+  document.removeEventListener('keydown', onEscapeKeyForMove);
+  moveState.value = null;
+}
+
+function onDocumentMouseUpForMove() {
+  if (!moveState.value) return;
+
+  const { deltaX, deltaY, initialHorizontal, initialTop } = moveState.value;
+
+  if (props.textboxElement) props.textboxElement.style.transform = '';
+
+  const MOVE_THRESHOLD_PX = 2;
+  if (Math.abs(deltaX) > MOVE_THRESHOLD_PX || Math.abs(deltaY) > MOVE_THRESHOLD_PX) {
+    dispatchMoveTransaction(Math.round(initialHorizontal + deltaX), Math.round(initialTop + deltaY));
+  }
+
+  cleanupMoveListeners();
+}
+
+function dispatchMoveTransaction(newHorizontal, newTop) {
+  const editor = getResizeEditor();
+  const resolvedShape = resolveShapeContainer(editor, props.textboxElement);
+  if (!editor?.view || !resolvedShape) return;
+
+  const { state, node, pos } = resolvedShape;
+  const tr = state.tr;
+  tr.setNodeAttribute(pos, 'marginOffset', {
+    ...node.attrs.marginOffset,
+    horizontal: newHorizontal,
+    top: newTop,
+  });
+
+  const $shapePos = state.doc.resolve(pos);
+  for (let depth = $shapePos.depth; depth > 0; depth -= 1) {
+    const ancestor = $shapePos.node(depth);
+    if (!nodeAllowsSdBlockRevAttr(ancestor)) continue;
+    const currentRev = Number.parseInt(ancestor.attrs?.sdBlockRev, 10);
+    if (!Number.isFinite(currentRev)) continue;
+    tr.setNodeAttribute($shapePos.before(depth), 'sdBlockRev', currentRev + 1);
+  }
+
+  editor.view.dispatch(tr);
+
+  const blockId = resolveTextboxBlockId(props.textboxElement);
+  if (blockId) {
+    measureCache.invalidate([blockId]);
+    invalidateHeaderFooterMeasureCache([blockId]);
+  }
+}
+
 function dispatchResizeTransaction(newWidth, newHeight) {
   const editor = getResizeEditor();
   const resolvedShape = resolveShapeContainer(editor, props.textboxElement);
@@ -322,22 +427,35 @@ function dispatchResizeTransaction(newWidth, newHeight) {
 watch(
   () => props.visible,
   (visible) => {
-    if (!visible && dragState.value) {
-      forcedCleanup.value = true;
-      onDocumentMouseUp();
-      forcedCleanup.value = false;
+    if (!visible) {
+      if (dragState.value) {
+        forcedCleanup.value = true;
+        onDocumentMouseUp();
+        forcedCleanup.value = false;
+      }
+      if (moveState.value) {
+        if (props.textboxElement) props.textboxElement.style.transform = '';
+        cleanupMoveListeners();
+      }
     }
   },
 );
 
 onBeforeUnmount(() => {
-  if (!dragState.value) return;
-  document.removeEventListener('mousemove', onDocumentMouseMove);
-  document.removeEventListener('mouseup', onDocumentMouseUp);
-  document.removeEventListener('keydown', onEscapeKey);
-  const editor = getResizeEditor();
-  if (editor?.view?.dom) {
-    editor.view.dom.style.pointerEvents = 'auto';
+  if (dragState.value) {
+    document.removeEventListener('mousemove', onDocumentMouseMove);
+    document.removeEventListener('mouseup', onDocumentMouseUp);
+    document.removeEventListener('keydown', onEscapeKey);
+    const editor = getResizeEditor();
+    if (editor?.view?.dom) {
+      editor.view.dom.style.pointerEvents = 'auto';
+    }
+  }
+  if (moveState.value) {
+    document.removeEventListener('mousemove', onDocumentMouseMoveForMove);
+    document.removeEventListener('mouseup', onDocumentMouseUpForMove);
+    document.removeEventListener('keydown', onEscapeKeyForMove);
+    moveState.value = null;
   }
 });
 </script>
@@ -345,9 +463,10 @@ onBeforeUnmount(() => {
 <style scoped>
 .superdoc-textbox-resize-overlay {
   position: absolute;
-  pointer-events: none;
+  pointer-events: auto;
   user-select: none;
   overflow: visible;
+  cursor: move;
 }
 
 .resize-handle {

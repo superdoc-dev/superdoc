@@ -1249,6 +1249,60 @@ describe('TrackChanges extension commands', () => {
     }
   });
 
+  it('interaction: IME composition in editing mode preserves existing tracked review state', async () => {
+    const replaceTrackedDeletion = async ({ composition }) => {
+      const { editor: interactionEditor } = initTestEditor({
+        mode: 'text',
+        content: '<p>ABCDE</p>',
+        user: { name: 'Track Tester', email: 'track@example.com' },
+      });
+
+      try {
+        const fullTextRange = getFirstTextRange(interactionEditor.state.doc);
+        interactionEditor.commands.insertTrackedChange({ from: fullTextRange.from, to: fullTextRange.to, text: '' });
+
+        const deletionRange = getSubstringRange(interactionEditor.state.doc, 'ABCDE');
+        interactionEditor.view.dispatch(
+          interactionEditor.state.tr.setSelection(
+            TextSelection.create(interactionEditor.state.doc, deletionRange.from, deletionRange.to),
+          ),
+        );
+
+        if (composition) {
+          interactionEditor.view.dom.dispatchEvent(
+            new CompositionEvent('compositionstart', { data: '', bubbles: true }),
+          );
+        }
+
+        const tr = interactionEditor.state.tr.replaceSelectionWith(interactionEditor.schema.text('你'));
+        if (composition) tr.setMeta('composition', 1);
+        interactionEditor.view.dispatch(tr);
+
+        if (composition) {
+          interactionEditor.view.dom.dispatchEvent(
+            new CompositionEvent('compositionend', { data: '你', bubbles: true }),
+          );
+          await Promise.resolve();
+          await Promise.resolve();
+        }
+
+        return {
+          text: interactionEditor.state.doc.textContent,
+          deletedText: getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName),
+          insertedText: getMarkedText(interactionEditor.state.doc, TrackInsertMarkName),
+        };
+      } finally {
+        interactionEditor.destroy();
+      }
+    };
+
+    const expected = await replaceTrackedDeletion({ composition: false });
+    const actual = await replaceTrackedDeletion({ composition: true });
+
+    expect(actual).toEqual(expected);
+    expect(actual.deletedText).toBe('ABCDE');
+  });
+
   it('interaction: setLink in suggesting mode emits hyperlink-specific tracked change messaging', () => {
     const { editor: interactionEditor } = initTestEditor({
       mode: 'text',

@@ -3359,8 +3359,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
         transactionToApply.setMeta('protectTrackedReviewState', true);
       }
 
-      const shouldTrack =
-        ((isTrackChangesActive || forceTrackChanges) && !skipTrackChanges) || protectsExistingTrackedReviewState;
+      const shouldTrackForComposition = (isTrackChangesActive || forceTrackChanges) && !skipTrackChanges;
+      const shouldTrack = shouldTrackForComposition || protectsExistingTrackedReviewState;
       if (
         !shouldTrack &&
         directInsertionMutationCommentMeta &&
@@ -3379,7 +3379,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // flushes the final DOM read asynchronously), so composition transactions
       // are deferred regardless of the live composing flag.
       const deferTrackingForComposition =
-        shouldTrack &&
+        shouldTrackForComposition &&
         (isCompositionTransaction(transactionToApply) ||
           (this.view?.composing === true && this.#replacesWithinDeferredRange(transactionToApply))) &&
         this.#canDeferCompositionTracking(transactionToApply, prevState);

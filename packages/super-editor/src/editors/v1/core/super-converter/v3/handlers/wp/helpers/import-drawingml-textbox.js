@@ -85,13 +85,9 @@ export function importDrawingMLTextbox({
       {
         type: 'shapeTextbox',
         attrs: {
-          attributes: {
-            verticalAlign,
-            lIns: insets.left,
-            tIns: insets.top,
-            rIns: insets.right,
-            bIns: insets.bottom,
-          },
+          textInsets: { top: insets.top, right: insets.right, bottom: insets.bottom, left: insets.left },
+          textVerticalAlign: verticalAlign,
+          attributes: {},
         },
         content: contentNodes,
       },

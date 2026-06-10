@@ -89,6 +89,37 @@ export const measureCache = new MeasureCache<Measure>();
 const headerMeasureCache = new HeaderFooterLayoutCache();
 const headerFooterCacheState = new HeaderFooterCacheState();
 
+/**
+ * Cache for footnote convergence loop results.
+ * The key is a stable signature of footnote IDs (not positions, which shift on every keystroke).
+ * When the same footnotes exist, we can skip the expensive multi-pass convergence loop.
+ */
+type FootnoteConvergenceCache = {
+  /** Sorted, pipe-delimited footnote IDs that produced these reserves */
+  footnoteIds: string;
+  /** The converged reserve values per page index */
+  reserves: number[];
+  /** Separator spacing used during convergence */
+  separatorSpacingBefore: number;
+};
+
+let footnoteConvergenceCache: FootnoteConvergenceCache | null = null;
+
+/** Clear the footnote convergence cache (e.g., on document reload). */
+export const clearFootnoteConvergenceCache = (): void => {
+  footnoteConvergenceCache = null;
+};
+
+/**
+ * Compute a stable signature from footnote IDs only.
+ * Positions change on every keystroke, but IDs remain stable until footnotes are added/removed.
+ */
+const computeFootnoteIdSignature = (refs: Array<{ id: string; pos: number }>): string => {
+  if (!refs || refs.length === 0) return '';
+  const ids = refs.map((r) => r.id).sort();
+  return ids.join('|');
+};
+
 const layoutDebugEnabled =
   typeof process !== 'undefined' && typeof process.env !== 'undefined' && Boolean(process.env.SD_DEBUG_LAYOUT);
 
@@ -2338,6 +2369,14 @@ export async function incrementalLayout(
       // mid-loop, which would zero their entries and cause oscillation.
       const allFootnoteIds = new Set(footnotesInput.refs.map((ref) => ref.id));
 
+      // Check footnote convergence cache - skip expensive multi-pass loop if footnotes unchanged
+      const currentIdSignature = computeFootnoteIdSignature(footnotesInput.refs);
+      const cacheHit =
+        footnoteConvergenceCache !== null &&
+        footnoteConvergenceCache.footnoteIds === currentIdSignature &&
+        currentIdSignature !== '';
+      let usedCachedReserves = false;
+
       // Pass 1: assign + reserve from current layout. Pre-measure ALL footnote
       // bodies (the cache makes the assigned-only subset essentially free).
       let { columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout);
@@ -2349,60 +2388,98 @@ export async function incrementalLayout(
       // Relayout with footnote reserves and iterate until reserves and page count stabilize,
       // so each page gets the correct reserve (avoids "too much" on one page and "not enough" on another).
       if (reserves.some((h) => h > 0)) {
-        let reservesStabilized = false;
-        const seenReserveVectors: number[][] = [reserves.slice()];
-        for (let pass = 0; pass < MAX_FOOTNOTE_LAYOUT_PASSES; pass += 1) {
+        // Declare final* variables that will be set by either cache hit or convergence loop
+        let finalPageColumns: Map<number, PageColumns>;
+        let finalIdsByColumn: Map<number, Map<number, string[]>>;
+        let finalBlocks: FlowBlock[];
+        let finalMeasuresById: Map<string, Measure>;
+        let finalPlan: FootnoteLayoutPlan;
+        let reservesAppliedToLayout: number[];
+
+        // Cache hit: skip expensive convergence loop
+        if (cacheHit && footnoteConvergenceCache) {
+          reserves = footnoteConvergenceCache.reserves.slice();
+          plan.separatorSpacingBefore = footnoteConvergenceCache.separatorSpacingBefore;
           layout = relayout(reserves, plan.separatorSpacingBefore);
           ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
-          // SD-3049: measure the full set each iteration so `bodyHeightById`
-          // stays complete; refs migrating between pages must not drop their
-          // measured demand from the per-block lookup.
-          ({ measuresById } = await measureFootnoteBlocks(allFootnoteIds));
+          const measured = await measureFootnoteBlocks(allFootnoteIds);
+          measuresById = measured.measuresById;
+          finalBlocks = measured.blocks;
           refreshBodyHeights(measuresById);
           plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
-          const nextReserves = plan.reserves;
-          const reservesStable =
-            nextReserves.length === reserves.length &&
-            nextReserves.every((h, i) => (reserves[i] ?? 0) === h) &&
-            reserves.every((h, i) => (nextReserves[i] ?? 0) === h);
-          if (reservesStable) {
-            reserves = nextReserves;
-            reservesStabilized = true;
-            break;
-          }
-          // Reserves are oscillating. Break out; the post-reserve grow loop
-          // below (which is monotonic and has its own cycle detector) will
-          // bump any under-reserved pages to the current plan's demand.
-          // Merging history here would carry over large demands from early
-          // passes that the current layout no longer anchors, leading to
-          // wasted reserved space on pages that never get any footnote.
-          if (seenReserveVectors.some((v) => v.join(',') === nextReserves.join(','))) break;
-          seenReserveVectors.push(nextReserves.slice());
-          // Only update reserves when we will do another layout pass; otherwise layout
-          // would be built with the previous reserves while reserves would be nextReserves,
-          // and the plan/injection phase could place footnotes in the wrong band.
-          if (pass < MAX_FOOTNOTE_LAYOUT_PASSES - 1) {
-            reserves = nextReserves;
-          }
-        }
-        if (!reservesStabilized) {
-          console.warn(
-            `[incrementalLayout] Footnote reserve loop did not converge (max ${MAX_FOOTNOTE_LAYOUT_PASSES} passes); layout may have suboptimal footnote placement.`,
-          );
-        }
 
-        let { columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout);
-        let { blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
-          collectFootnoteIdsByColumn(finalIdsByColumn),
-        );
-        let finalPlan = computeFootnoteLayoutPlan(
-          layout,
-          finalIdsByColumn,
-          finalMeasuresById,
-          reserves,
-          finalPageColumns,
-        );
-        let reservesAppliedToLayout = reserves;
+          finalPageColumns = pageColumns;
+          finalIdsByColumn = idsByColumn;
+          finalMeasuresById = measuresById;
+          finalPlan = plan;
+          reservesAppliedToLayout = reserves;
+          usedCachedReserves = true;
+          console.log('[layout] Footnote convergence cache HIT - skipped loop');
+        } else {
+          // Cache miss: run full convergence loop
+          let reservesStabilized = false;
+          const seenReserveVectors: number[][] = [reserves.slice()];
+          for (let pass = 0; pass < MAX_FOOTNOTE_LAYOUT_PASSES; pass += 1) {
+            layout = relayout(reserves, plan.separatorSpacingBefore);
+            ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
+            // SD-3049: measure the full set each iteration so `bodyHeightById`
+            // stays complete; refs migrating between pages must not drop their
+            // measured demand from the per-block lookup.
+            ({ measuresById } = await measureFootnoteBlocks(allFootnoteIds));
+            refreshBodyHeights(measuresById);
+            plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
+            const nextReserves = plan.reserves;
+            const reservesStable =
+              nextReserves.length === reserves.length &&
+              nextReserves.every((h, i) => (reserves[i] ?? 0) === h) &&
+              reserves.every((h, i) => (nextReserves[i] ?? 0) === h);
+            if (reservesStable) {
+              reserves = nextReserves;
+              reservesStabilized = true;
+              break;
+            }
+            // Reserves are oscillating. Break out; the post-reserve grow loop
+            // below (which is monotonic and has its own cycle detector) will
+            // bump any under-reserved pages to the current plan's demand.
+            // Merging history here would carry over large demands from early
+            // passes that the current layout no longer anchors, leading to
+            // wasted reserved space on pages that never get any footnote.
+            if (seenReserveVectors.some((v) => v.join(',') === nextReserves.join(','))) break;
+            seenReserveVectors.push(nextReserves.slice());
+            // Only update reserves when we will do another layout pass; otherwise layout
+            // would be built with the previous reserves while reserves would be nextReserves,
+            // and the plan/injection phase could place footnotes in the wrong band.
+            if (pass < MAX_FOOTNOTE_LAYOUT_PASSES - 1) {
+              reserves = nextReserves;
+            }
+          }
+          if (!reservesStabilized) {
+            console.warn(
+              `[incrementalLayout] Footnote reserve loop did not converge (max ${MAX_FOOTNOTE_LAYOUT_PASSES} passes); layout may have suboptimal footnote placement.`,
+            );
+          }
+
+          // Update cache with converged values
+          footnoteConvergenceCache = {
+            footnoteIds: currentIdSignature,
+            reserves: reserves.slice(),
+            separatorSpacingBefore: plan.separatorSpacingBefore ?? 0,
+          };
+          console.log('[layout] Footnote convergence cache MISS - updated cache');
+
+          ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));
+          ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
+            collectFootnoteIdsByColumn(finalIdsByColumn),
+          ));
+          finalPlan = computeFootnoteLayoutPlan(
+            layout,
+            finalIdsByColumn,
+            finalMeasuresById,
+            reserves,
+            finalPageColumns,
+          );
+          reservesAppliedToLayout = reserves;
+        }
 
         const vectorsEqual = (a: number[], b: number[]): boolean => {
           for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
@@ -2610,6 +2687,11 @@ export async function incrementalLayout(
         // up to ~20 unnecessary relayouts on documents without oscillation.
         const TIGHTEN_SLACK_PX = 8;
         const needsWork = (() => {
+          // Cache hit: skip grow/tighten loops entirely — reserves are already optimal
+          if (usedCachedReserves) {
+            console.log('[layout] Skipping grow/tighten loops (using cached reserves)');
+            return false;
+          }
           const plan = finalPlan.reserves;
           const applied = reservesAppliedToLayout;
           const len = Math.max(plan.length, applied.length);
@@ -2702,8 +2784,11 @@ export async function incrementalLayout(
             await applyReserves(safeApplied);
           }
         };
-        await runWidowOrphanAbsorb();
-        await runPreferredReserveTrials();
+        // Skip post-processing when using cached reserves — already optimal
+        if (!usedCachedReserves) {
+          await runWidowOrphanAbsorb();
+          await runPreferredReserveTrials();
+        }
 
         const blockById = new Map<string, FlowBlock>();
         finalBlocks.forEach((block) => {

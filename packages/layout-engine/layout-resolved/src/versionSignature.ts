@@ -487,6 +487,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         vector.geometry.flipV ? 1 : 0,
         drawingTextVersion(vector),
         vector.effects ? JSON.stringify(vector.effects) : '',
+        vector.effectExtent ? JSON.stringify(vector.effectExtent) : '',
       ].join('|');
     }
     if (block.drawingKind === 'shapeGroup') {

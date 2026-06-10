@@ -200,6 +200,14 @@ describe('deriveBlockVersion - vector shape effects', () => {
   ] as const)('changes when outer shadow %s changes', (_field, overrides) => {
     expect(deriveBlockVersion(makeVectorShape(overrides))).not.toBe(deriveBlockVersion(makeVectorShape()));
   });
+
+  it('changes when the vector shape effect extent changes', () => {
+    const base = makeVectorShape();
+    const withExtent = makeVectorShape();
+    withExtent.effectExtent = { left: 2, top: 2, right: 14, bottom: 14 };
+
+    expect(deriveBlockVersion(withExtent)).not.toBe(deriveBlockVersion(base));
+  });
 });
 
 describe('deriveBlockVersion - table image content', () => {

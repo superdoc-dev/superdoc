@@ -1146,12 +1146,6 @@ export type ShapeOuterShadowEffect = {
   direction: number;
   color: string;
   opacity: number;
-  alignment?: string;
-  rotateWithShape?: boolean;
-  scaleX?: number;
-  scaleY?: number;
-  skewX?: number;
-  skewY?: number;
 };
 
 export type ShapeEffects = {

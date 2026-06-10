@@ -846,12 +846,6 @@ function normalizeOuterShadowEffect(value: unknown): ShapeEffects['outerShadow']
     direction,
     color: maybe.color,
     opacity: clamp(opacity),
-    alignment: typeof maybe.alignment === 'string' ? maybe.alignment : undefined,
-    rotateWithShape: typeof maybe.rotateWithShape === 'boolean' ? maybe.rotateWithShape : undefined,
-    scaleX: coerceNumber(maybe.scaleX),
-    scaleY: coerceNumber(maybe.scaleY),
-    skewX: coerceNumber(maybe.skewX),
-    skewY: coerceNumber(maybe.skewY),
   };
 
   return Object.fromEntries(

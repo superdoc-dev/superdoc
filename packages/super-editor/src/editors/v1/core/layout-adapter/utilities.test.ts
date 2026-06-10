@@ -1736,12 +1736,6 @@ describe('normalizeShapeEffects', () => {
         direction: 45,
         color: '#a6a6a6',
         opacity: 0.4,
-        alignment: 'tl',
-        rotateWithShape: false,
-        scaleX: 1.2,
-        scaleY: 0.8,
-        skewX: 3,
-        skewY: 4,
       },
     });
   });

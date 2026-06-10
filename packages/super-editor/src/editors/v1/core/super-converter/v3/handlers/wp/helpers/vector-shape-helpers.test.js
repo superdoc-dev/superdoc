@@ -10,10 +10,11 @@ import {
   extractShapeEffects,
   extractCustomGeometry,
 } from './vector-shape-helpers.js';
-import { emuToPixels } from '@converter/helpers.js';
+import { emuToPixels, rotToDegrees } from '@converter/helpers.js';
 
 vi.mock('@converter/helpers.js', () => ({
   emuToPixels: vi.fn(),
+  rotToDegrees: vi.fn(),
 }));
 
 describe('getThemeColor', () => {
@@ -518,6 +519,12 @@ describe('extractFillColor', () => {
 });
 
 describe('extractShapeEffects', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    emuToPixels.mockImplementation((emu) => Number(emu) / 9525);
+    rotToDegrees.mockImplementation((rot) => Number(rot) / 60000);
+  });
+
   it('returns null when effectLst is missing', () => {
     expect(extractShapeEffects({ elements: [] })).toBeNull();
   });
@@ -563,8 +570,6 @@ describe('extractShapeEffects', () => {
         direction: 45,
         color: '#a6a6a6',
         opacity: 0.4,
-        alignment: 'tl',
-        rotateWithShape: false,
       }),
     );
     expect(result?.outerShadow.blurRadius).toBeCloseTo(6.6667, 4);
@@ -594,11 +599,10 @@ describe('extractShapeEffects', () => {
       direction: 90,
       color: '#112233',
       opacity: 1,
-      rotateWithShape: true,
     });
   });
 
-  it('parses rotWithShape="1" as true', () => {
+  it('omits unused outer shadow transform fields', () => {
     const spPr = {
       elements: [
         {
@@ -606,7 +610,7 @@ describe('extractShapeEffects', () => {
           elements: [
             {
               name: 'a:outerShdw',
-              attributes: { rotWithShape: '1' },
+              attributes: { algn: 'tl', rotWithShape: '1', sx: '120000', sy: '80000', kx: '180000', ky: '240000' },
               elements: [{ name: 'a:srgbClr', attributes: { val: '000000' } }],
             },
           ],
@@ -614,7 +618,14 @@ describe('extractShapeEffects', () => {
       ],
     };
 
-    expect(extractShapeEffects(spPr)?.outerShadow.rotateWithShape).toBe(true);
+    expect(extractShapeEffects(spPr)?.outerShadow).toEqual({
+      type: 'outerShadow',
+      blurRadius: 0,
+      distance: 0,
+      direction: 0,
+      color: '#000000',
+      opacity: 1,
+    });
   });
 });
 
@@ -622,6 +633,7 @@ describe('namespace prefix tolerance', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     emuToPixels.mockImplementation((emu) => parseInt(emu, 10) / 12700);
+    rotToDegrees.mockImplementation((rot) => parseInt(rot, 10) / 60000);
   });
 
   // Recursively rewrite every DrawingML node prefix from `a:` to the given replacement.

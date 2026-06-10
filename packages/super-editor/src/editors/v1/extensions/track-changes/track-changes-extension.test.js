@@ -1207,6 +1207,48 @@ describe('TrackChanges extension commands', () => {
     }
   });
 
+  it('interaction: IME composition replacing a selection stays untracked until compositionend', async () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p>replace me</p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.setDocumentMode('suggesting');
+
+      const view = interactionEditor.view;
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, textRange.from, textRange.to),
+        ),
+      );
+      view.focus();
+      view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+
+      view.dispatch(
+        interactionEditor.state.tr.replaceSelectionWith(interactionEditor.schema.text('你')).setMeta('composition', 1),
+      );
+      await Promise.resolve();
+
+      expect(interactionEditor.state.doc.textContent).toBe('你');
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('');
+      expect(getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName)).toBe('');
+
+      view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: '你', bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('你');
+      expect(getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName)).toBe('replace me');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
   it('interaction: setLink in suggesting mode emits hyperlink-specific tracked change messaging', () => {
     const { editor: interactionEditor } = initTestEditor({
       mode: 'text',

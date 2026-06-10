@@ -83,7 +83,12 @@ for (const mode of ['editing', 'suggesting'] as const) {
   });
 }
 
-test('Chinese IME composition does not repaint the visible layout before compositionend', async ({ superdoc }) => {
+test('Chinese IME composition does not repaint the visible layout before compositionend', async ({
+  superdoc,
+  browserName,
+}) => {
+  test.skip(browserName === 'webkit', 'synthetic composition plumbing differs on WebKit');
+
   await superdoc.setDocumentMode('suggesting');
   await superdoc.waitForStable();
 

@@ -1,7 +1,7 @@
 import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
 import { AddMarkStep, RemoveMarkStep, ReplaceAroundStep, ReplaceStep, Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
-import type { Mark as PmMark, Node as PmNode, Schema } from 'prosemirror-model';
+import type { Mark as PmMark, Node as PmNode, Schema, Slice as PmSlice } from 'prosemirror-model';
 import type { Doc as YDoc, XmlFragment as YXmlFragment } from 'yjs';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
 import type { EditorHelpers, ExtensionStorage, ProseMirrorJSON, PageStyles, Toolbar } from './types/EditorTypes.js';
@@ -38,6 +38,7 @@ import {
   isCompositionTransaction,
 } from '@extensions/track-changes/trackChangesHelpers/trackedTransaction.js';
 import { markInsertion } from '@extensions/track-changes/trackChangesHelpers/markInsertion.js';
+import { markDeletion } from '@extensions/track-changes/trackChangesHelpers/markDeletion.js';
 import {
   createWordIdAllocator,
   isDecimalWordId,
@@ -1644,6 +1645,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.view?.dom?.removeEventListener('compositionend', this.#handleDomCompositionEnd);
     this.view?.dom?.removeEventListener('blur', this.#handleDomCompositionEnd);
     this.#deferredCompositionRange = null;
+    this.#deferredCompositionDeletions = [];
     if (this.#renderer) {
       this.#renderer.destroy();
     } else if (this.view) {
@@ -3117,6 +3119,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * {@link #flushDeferredCompositionTracking} after compositionend.
    */
   #deferredCompositionRange: { from: number; to: number } | null = null;
+  #deferredCompositionDeletions: Array<{ pos: number; slice: PmSlice }> = [];
 
   /**
    * Whether tracked-transaction rewriting of this composition transaction can
@@ -3124,21 +3127,58 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * wraps the composing DOM text node in mark spans and decoration elements,
    * which kills the native composition on every keystroke (SD-2368).
    *
-   * Deferral requires every deletion in the transaction to stay inside the
-   * already-composed range: a composition that starts by replacing a user
-   * selection must keep the immediate tracked rewrite so the replaced text
-   * becomes a tracked deletion instead of being lost.
+   * Deletions outside the already-composed range are deferred only when the
+   * deleted content can be restored as a tracked deletion at compositionend.
    */
-  #canDeferCompositionTracking(tr: Transaction): boolean {
+  #canDeferCompositionTracking(tr: Transaction, state: EditorState): boolean {
     if (!tr.steps.length) return false;
     const range = this.#deferredCompositionRange;
-    for (const step of tr.steps) {
+    for (let index = 0; index < tr.steps.length; index += 1) {
+      const step = tr.steps[index];
       if (!(step instanceof ReplaceStep)) return false;
       if (step.from < step.to && (!range || step.from < range.from || step.to > range.to)) {
-        return false;
+        const sourceDoc = tr.docs[index] ?? state.doc;
+        if (!this.#canRestoreDeferredCompositionDeletion(step, sourceDoc)) return false;
       }
     }
     return true;
+  }
+
+  #canRestoreDeferredCompositionDeletion(step: ReplaceStep, doc: PmNode): boolean {
+    if (step.slice.size === 0) return false;
+
+    let hasText = false;
+    let hasUnsupportedContent = false;
+    doc.nodesBetween(step.from, step.to, (node) => {
+      if (hasUnsupportedContent) return false;
+      if (node.type.name.includes('table') || (node.isLeaf && !node.isText)) {
+        hasUnsupportedContent = true;
+        return false;
+      }
+      if (node.isText && node.text) {
+        hasText = true;
+      }
+      return true;
+    });
+
+    return hasText && !hasUnsupportedContent;
+  }
+
+  #collectDeferredCompositionDeletions(tr: Transaction): Array<{ pos: number; slice: PmSlice }> {
+    const deletions: Array<{ pos: number; slice: PmSlice }> = [];
+    const range = this.#deferredCompositionRange;
+    tr.steps.forEach((step, index) => {
+      if (!(step instanceof ReplaceStep) || step.from >= step.to) return;
+      if (range && step.from >= range.from && step.to <= range.to) return;
+      const sourceDoc = tr.docs[index] ?? this.state.doc;
+      if (!this.#canRestoreDeferredCompositionDeletion(step, sourceDoc)) return;
+      const rest = tr.mapping.slice(index + 1);
+      deletions.push({
+        pos: rest.map(step.from, -1),
+        slice: sourceDoc.slice(step.from, step.to),
+      });
+    });
+    return deletions;
   }
 
   /**
@@ -3186,6 +3226,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#deferredCompositionRange = range;
   }
 
+  #mapDeferredCompositionDeletions(applied: readonly Transaction[]): void {
+    if (!this.#deferredCompositionDeletions.length) return;
+    this.#deferredCompositionDeletions = this.#deferredCompositionDeletions.map((deletion) => {
+      let pos = deletion.pos;
+      for (const tr of applied) {
+        pos = tr.mapping.map(pos, -1);
+      }
+      return { ...deletion, pos };
+    });
+  }
+
   /**
    * Converts the deferred composition range into a tracked insertion. Runs
    * after compositionend (microtask-deferred so ProseMirror's own
@@ -3193,7 +3244,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #flushDeferredCompositionTracking(): void {
     const range = this.#deferredCompositionRange;
+    const deletions = this.#deferredCompositionDeletions;
     this.#deferredCompositionRange = null;
+    this.#deferredCompositionDeletions = [];
     if (!range || this.isDestroyed || !this.view) return;
 
     const state = this.state;
@@ -3214,18 +3267,40 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (node.isText && !insertMarkType.isInSet(node.marks)) fullyMarked = false;
       return !node.isText;
     });
-    if (fullyMarked) return;
+    if (fullyMarked && !deletions.length) return;
 
     const tr = state.tr;
     const fixedTimeTo10Mins = Math.floor(Date.now() / 600000) * 600000;
     const date = new Date(fixedTimeTo10Mins).toISOString();
-    const insertedMark = markInsertion({ tr, from, to, user: (this.options.user ?? {}) as User, date });
+    const user = (this.options.user ?? {}) as User;
+    const insertedMark = fullyMarked ? null : markInsertion({ tr, from, to, user, date });
+    let deletionMeta: {
+      deletionMark: ReturnType<typeof markDeletion>['deletionMark'];
+      deletionNodes: ReturnType<typeof markDeletion>['nodes'];
+    } | null = null;
+
+    deletions.forEach((deletion) => {
+      const deleteFrom = tr.mapping.map(deletion.pos, -1);
+      const beforeSize = tr.doc.content.size;
+      tr.replace(deleteFrom, deleteFrom, deletion.slice);
+      const deleteTo = deleteFrom + (tr.doc.content.size - beforeSize);
+      if (deleteTo <= deleteFrom) return;
+      const deletionResult = markDeletion({ tr, from: deleteFrom, to: deleteTo, user, date });
+      deletionMeta = {
+        deletionMark: deletionResult.deletionMark,
+        deletionNodes: deletionResult.nodes,
+      };
+    });
+
     tr.setMeta('skipTrackChanges', true);
     tr.setMeta('compositionTrackingFlush', true);
     // Surface the insertion to the sidebar bubble pipeline: mark-only steps
     // have empty step maps, so collectTouchedTrackedChangeIds can only learn
     // the new change id from this meta (same contract as replaceStep).
-    tr.setMeta(TrackChangesBasePluginKey, { insertedMark });
+    tr.setMeta(TrackChangesBasePluginKey, {
+      ...(insertedMark ? { insertedMark } : {}),
+      ...(deletionMeta ?? {}),
+    });
     this.view.dispatch(tr);
   }
 
@@ -3307,7 +3382,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
         shouldTrack &&
         (isCompositionTransaction(transactionToApply) ||
           (this.view?.composing === true && this.#replacesWithinDeferredRange(transactionToApply))) &&
-        this.#canDeferCompositionTracking(transactionToApply);
+        this.#canDeferCompositionTracking(transactionToApply, prevState);
+      const deferredCompositionDeletions = deferTrackingForComposition
+        ? this.#collectDeferredCompositionDeletions(transactionToApply)
+        : [];
 
       const trackedUser = this.options.user ?? {};
       transactionToApply =
@@ -3326,6 +3404,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
         appliedTransactions,
         deferTrackingForComposition ? transactionToApply : null,
       );
+      this.#mapDeferredCompositionDeletions(appliedTransactions);
+      if (deferredCompositionDeletions.length) {
+        this.#deferredCompositionDeletions.push(...deferredCompositionDeletions);
+      }
       if (deferTrackingForComposition && this.view?.composing !== true) {
         // Trailing composition read landed after compositionend (possibly after
         // the flush already ran) — schedule another flush for the new range.

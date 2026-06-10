@@ -6841,15 +6841,11 @@ export class PresentationEditor extends EventEmitter {
     nextTarget.addEventListener('compositionend', end);
     nextTarget.addEventListener('blur', end);
     nextTarget.addEventListener('focusout', end);
-    nextTarget.addEventListener('input', this.#handleNonComposingInputForCompositionDeferral);
     nextTarget.addEventListener('beforeinput', this.#handleNonComposingInputForCompositionDeferral);
     this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('compositionstart', begin));
     this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('compositionend', end));
     this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('blur', end));
     this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('focusout', end));
-    this.#compositionTargetCleanup.push(() =>
-      nextTarget.removeEventListener('input', this.#handleNonComposingInputForCompositionDeferral),
-    );
     this.#compositionTargetCleanup.push(() =>
       nextTarget.removeEventListener('beforeinput', this.#handleNonComposingInputForCompositionDeferral),
     );

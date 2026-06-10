@@ -126,34 +126,49 @@ async function testConnection(token) {
 }
 
 async function ensureLabel(token, name, color) {
-  const existing = await linearRequest(token, `
-    query FindLabel($name: String!) {
-      issueLabels(filter: { name: { eq: $name } }) {
-        nodes {
-          id
-          name
+  const findLabel = async () => {
+    const existing = await linearRequest(token, `
+      query FindLabel($name: String!) {
+        issueLabels(filter: { name: { eq: $name } }) {
+          nodes {
+            id
+            name
+          }
         }
       }
-    }
-  `, { name });
-  const label = existing.issueLabels.nodes[0];
+    `, { name });
+    return existing.issueLabels.nodes[0] || null;
+  };
+
+  const label = await findLabel();
   if (label) {
     return label;
   }
-  const created = await linearRequest(token, `
-    mutation CreateLabel($name: String!, $color: String!) {
-      issueLabelCreate(input: { name: $name, color: $color }) {
-        issueLabel {
-          id
-          name
+
+  try {
+    const created = await linearRequest(token, `
+      mutation CreateLabel($name: String!, $color: String!) {
+        issueLabelCreate(input: { name: $name, color: $color }) {
+          issueLabel {
+            id
+            name
+          }
         }
       }
+    `, { name, color });
+    return created.issueLabelCreate.issueLabel;
+  } catch (error) {
+    // Two package releases can race to create the same version label. Re-query
+    // once before treating the create failure as fatal.
+    const existingAfterRace = await findLabel();
+    if (existingAfterRace) {
+      return existingAfterRace;
     }
-  `, { name, color });
-  return created.issueLabelCreate.issueLabel;
+    throw error;
+  }
 }
 
-async function getIssue(token, identifier) {
+async function getIssue(token, identifier, options = {}) {
   try {
     const data = await linearRequest(token, `
       query GetIssue($identifier: String!) {
@@ -171,14 +186,23 @@ async function getIssue(token, identifier) {
       }
     `, { identifier });
     return data.issue || null;
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) {
+      throw error;
+    }
     return null;
   }
 }
 
 async function addLabelToIssue(token, issueId, labelId) {
-  const issue = await getIssue(token, issueId);
-  const existingLabelIds = issue?.labels.nodes.map((label) => label.id) ?? [];
+  const issue = await getIssue(token, issueId, { throwOnError: true });
+  if (!issue) {
+    throw new Error(`Linear issue ${issueId} not found while adding label`);
+  }
+  const existingLabelIds = issue.labels.nodes.map((label) => label.id);
+  if (existingLabelIds.includes(labelId)) {
+    return issue;
+  }
   const labelIds = [...new Set([...existingLabelIds, labelId])];
   const data = await linearRequest(token, `
     mutation AddLabel($issueId: String!, $labelIds: [String!]!) {
@@ -192,12 +216,16 @@ async function addLabelToIssue(token, issueId, labelId) {
   return data.issueUpdate.issue;
 }
 
+function isVersionLabel(labelName, labelPrefix) {
+  return new RegExp(`^${escapeRegex(labelPrefix)}\\d`).test(labelName);
+}
+
 async function removeVersionLabels(token, issueId, labelPrefix) {
   const issue = await getIssue(token, issueId);
   if (!issue) {
     return null;
   }
-  const versionLabels = issue.labels.nodes.filter((label) => label.name.startsWith(labelPrefix));
+  const versionLabels = issue.labels.nodes.filter((label) => isVersionLabel(label.name, labelPrefix));
   for (const label of versionLabels) {
     await linearRequest(token, `
       mutation RemoveLabel($issueId: String!, $labelId: String!) {
@@ -364,6 +392,7 @@ module.exports = {
   collectIssueIdsFromCommits,
   extractIssueIdsFromText,
   formatComment,
+  isVersionLabel,
   isReleaseAutomationCommit,
   success,
   verifyConditions,

@@ -33,7 +33,11 @@ import {
 } from './extensions/index.js';
 import { createDocument } from './helpers/createDocument.js';
 import { isActive } from './helpers/isActive.js';
-import { trackedTransaction } from '@extensions/track-changes/trackChangesHelpers/trackedTransaction.js';
+import {
+  trackedTransaction,
+  isCompositionTransaction,
+} from '@extensions/track-changes/trackChangesHelpers/trackedTransaction.js';
+import { markInsertion } from '@extensions/track-changes/trackChangesHelpers/markInsertion.js';
 import {
   createWordIdAllocator,
   isDecimalWordId,
@@ -1637,6 +1641,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   unmount(): void {
+    this.view?.dom?.removeEventListener('compositionend', this.#handleDomCompositionEnd);
+    this.view?.dom?.removeEventListener('blur', this.#handleDomCompositionEnd);
+    this.#deferredCompositionRange = null;
     if (this.#renderer) {
       this.#renderer.destroy();
     } else if (this.view) {
@@ -2915,6 +2922,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
       handleClick: this.#handleNodeSelection.bind(this),
     });
 
+    // SD-2368: flush deferred composition tracking once the IME commits.
+    // blur covers compositions abandoned without a compositionend.
+    this.view?.dom?.addEventListener('compositionend', this.#handleDomCompositionEnd);
+    this.view?.dom?.addEventListener('blur', this.#handleDomCompositionEnd);
+
     this.createNodeViews();
   }
 
@@ -3098,6 +3110,151 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * Dispatch a transaction to update the editor state
    */
+  /**
+   * SD-2368: doc range inserted by the in-flight IME composition while
+   * tracked-transaction rewriting is deferred. Mapped through every applied
+   * transaction; converted into a tracked insert by
+   * {@link #flushDeferredCompositionTracking} after compositionend.
+   */
+  #deferredCompositionRange: { from: number; to: number } | null = null;
+
+  /**
+   * Whether tracked-transaction rewriting of this composition transaction can
+   * be deferred until compositionend. Rewriting preedit updates immediately
+   * wraps the composing DOM text node in mark spans and decoration elements,
+   * which kills the native composition on every keystroke (SD-2368).
+   *
+   * Deferral requires every deletion in the transaction to stay inside the
+   * already-composed range: a composition that starts by replacing a user
+   * selection must keep the immediate tracked rewrite so the replaced text
+   * becomes a tracked deletion instead of being lost.
+   */
+  #canDeferCompositionTracking(tr: Transaction): boolean {
+    if (!tr.steps.length) return false;
+    const range = this.#deferredCompositionRange;
+    for (const step of tr.steps) {
+      if (!(step instanceof ReplaceStep)) return false;
+      if (step.from < step.to && (!range || step.from < range.from || step.to > range.to)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * True when every step replaces content strictly inside the deferred
+   * composition range. Such transactions rewrite this user's raw, not-yet-
+   * tracked composed text, so they are part of the composition even when they
+   * were built by an input handler instead of ProseMirror's DOM reader (e.g.
+   * editable.js's beforeinput insertText path replacing the preedit at
+   * commit). Tracking them immediately would turn the raw preedit into a
+   * tracked deletion.
+   */
+  #replacesWithinDeferredRange(tr: Transaction): boolean {
+    const range = this.#deferredCompositionRange;
+    if (!range || !tr.steps.length) return false;
+    return tr.steps.every(
+      (step) => step instanceof ReplaceStep && step.from < step.to && step.from >= range.from && step.to <= range.to,
+    );
+  }
+
+  /**
+   * Maps {@link #deferredCompositionRange} through the transactions just
+   * applied and unions in the content inserted by a deferred composition
+   * transaction.
+   */
+  #updateDeferredCompositionRange(applied: readonly Transaction[], deferredSource: Transaction | null): void {
+    if (!this.#deferredCompositionRange && !deferredSource) return;
+
+    let range = this.#deferredCompositionRange;
+    for (const tr of applied) {
+      if (range) {
+        const from = tr.mapping.map(range.from, -1);
+        const to = tr.mapping.map(range.to, 1);
+        range = from < to ? { from, to } : null;
+      }
+      if (tr === deferredSource) {
+        tr.steps.forEach((step, index) => {
+          if (!(step instanceof ReplaceStep) || step.slice.size === 0) return;
+          const rest = tr.mapping.slice(index + 1);
+          const from = rest.map(step.from, -1);
+          const to = rest.map(step.from + step.slice.size, 1);
+          range = range ? { from: Math.min(range.from, from), to: Math.max(range.to, to) } : { from, to };
+        });
+      }
+    }
+    this.#deferredCompositionRange = range;
+  }
+
+  /**
+   * Converts the deferred composition range into a tracked insertion. Runs
+   * after compositionend (microtask-deferred so ProseMirror's own
+   * compositionend handling and the run-wrapping flush land first).
+   */
+  #flushDeferredCompositionTracking(): void {
+    const range = this.#deferredCompositionRange;
+    this.#deferredCompositionRange = null;
+    if (!range || this.isDestroyed || !this.view) return;
+
+    const state = this.state;
+    const trackChangesState = TrackChangesBasePluginKey.getState(state);
+    if (!trackChangesState?.isTrackChangesActive) return;
+
+    const from = Math.max(0, Math.min(range.from, state.doc.content.size));
+    const to = Math.max(from, Math.min(range.to, state.doc.content.size));
+    if (from >= to) return;
+
+    // Text composed inside an existing insertion inherits the trackInsert
+    // mark via mark inheritance; re-marking it would split the parent
+    // suggestion with a new revision id.
+    const insertMarkType = state.schema.marks[TrackInsertMarkName];
+    if (!insertMarkType) return;
+    let fullyMarked = true;
+    state.doc.nodesBetween(from, to, (node) => {
+      if (node.isText && !insertMarkType.isInSet(node.marks)) fullyMarked = false;
+      return !node.isText;
+    });
+    if (fullyMarked) return;
+
+    const tr = state.tr;
+    const fixedTimeTo10Mins = Math.floor(Date.now() / 600000) * 600000;
+    const date = new Date(fixedTimeTo10Mins).toISOString();
+    const insertedMark = markInsertion({ tr, from, to, user: (this.options.user ?? {}) as User, date });
+    tr.setMeta('skipTrackChanges', true);
+    tr.setMeta('compositionTrackingFlush', true);
+    // Surface the insertion to the sidebar bubble pipeline: mark-only steps
+    // have empty step maps, so collectTouchedTrackedChangeIds can only learn
+    // the new change id from this meta (same contract as replaceStep).
+    tr.setMeta(TrackChangesBasePluginKey, { insertedMark });
+    this.view.dispatch(tr);
+  }
+
+  /**
+   * DOM compositionend/blur handler on the editor view. Stable reference so
+   * unmount() can remove it.
+   */
+  #handleDomCompositionEnd = (): void => {
+    queueMicrotask(() => {
+      // Nothing deferred — common for blur events outside composition. A
+      // pending trailing composition read will reschedule via the dispatch
+      // path once it applies.
+      if (!this.#deferredCompositionRange) return;
+      // A new composition can chain immediately after the previous commit
+      // (common with CJK IMEs); keep deferring until that one ends too.
+      if (this.view?.composing) return;
+      // The final composition DOM read can still be pending in ProseMirror's
+      // observer; force it so the commit transaction (deferred, extends the
+      // range) applies before the range is converted to a tracked insert.
+      try {
+        (this.view as unknown as { domObserver?: { flush?: () => void } })?.domObserver?.flush?.();
+      } catch {
+        // A failed forced flush only risks marking the range one tick early.
+      }
+      if (this.view?.composing) return;
+      this.#flushDeferredCompositionTracking();
+    });
+  };
+
   #dispatchTransaction(transaction: Transaction): void {
     if (this.isDestroyed) return;
     const perf = this.view?.dom?.ownerDocument?.defaultView?.performance ?? globalThis.performance;
@@ -3140,18 +3297,40 @@ export class Editor extends EventEmitter<EditorEventMap> {
         throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
       }
 
+      // SD-2368: while a native IME composition is in flight, apply
+      // composition transactions raw and convert the composed range into a
+      // tracked insert after compositionend (#flushDeferredCompositionTracking).
+      // Composition-meta transactions can land after compositionend (ProseMirror
+      // flushes the final DOM read asynchronously), so composition transactions
+      // are deferred regardless of the live composing flag.
+      const deferTrackingForComposition =
+        shouldTrack &&
+        (isCompositionTransaction(transactionToApply) ||
+          (this.view?.composing === true && this.#replacesWithinDeferredRange(transactionToApply))) &&
+        this.#canDeferCompositionTracking(transactionToApply);
+
       const trackedUser = this.options.user ?? {};
-      transactionToApply = shouldTrack
-        ? trackedTransaction({
-            tr: transactionToApply,
-            state: prevState,
-            user: trackedUser,
-            replacements: this.options.trackedChanges?.replacements === 'independent' ? 'independent' : 'paired',
-          })
-        : transactionToApply;
+      transactionToApply =
+        shouldTrack && !deferTrackingForComposition
+          ? trackedTransaction({
+              tr: transactionToApply,
+              state: prevState,
+              user: trackedUser,
+              replacements: this.options.trackedChanges?.replacements === 'independent' ? 'independent' : 'paired',
+            })
+          : transactionToApply;
 
       const { state: appliedState, transactions: appliedTransactions } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
+      this.#updateDeferredCompositionRange(
+        appliedTransactions,
+        deferTrackingForComposition ? transactionToApply : null,
+      );
+      if (deferTrackingForComposition && this.view?.composing !== true) {
+        // Trailing composition read landed after compositionend (possibly after
+        // the flush already ran) — schedule another flush for the new range.
+        this.#handleDomCompositionEnd();
+      }
       // Pick whichever applied tr carries the doc delta — when the input tr is empty an
       // appendTransaction plugin (e.g. numberingPlugin) may have produced the real change,
       // and downstream listeners read `transaction.docChanged`/`mapping` off this tr.

@@ -280,10 +280,19 @@ vi.mock('../../Editor', () => {
           },
         },
         view: {
-          dom: {
-            dispatchEvent: vi.fn(() => true),
-            focus: vi.fn(),
-          },
+          // Real element (matching createSectionEditor) so addEventListener-based
+          // wiring such as SD-2368 composition deferral works; dispatchEvent stays
+          // a spy but performs real dispatch so attached listeners fire.
+          dom: (() => {
+            const dom = document.createElement('div');
+            // The bridge refuses to forward to disconnected targets; pretend the
+            // hidden editor DOM is mounted without attaching it (keeps dispatched
+            // events from bubbling to the bridge's window-fallback listeners).
+            Object.defineProperty(dom, 'isConnected', { value: true });
+            vi.spyOn(dom, 'dispatchEvent');
+            vi.spyOn(dom, 'focus').mockImplementation(() => {});
+            return dom;
+          })(),
           focus: vi.fn(),
           dispatch: vi.fn(),
         },
@@ -2261,6 +2270,133 @@ describe('PresentationEditor', () => {
       container.dispatchEvent(event);
 
       expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'compositionstart' }));
+    });
+  });
+
+  describe('IME composition rerender deferral (SD-2368)', () => {
+    let rafSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+    beforeEach(() => {
+      rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        cb(0);
+        return 1;
+      });
+    });
+
+    afterEach(() => {
+      rafSpy?.mockRestore();
+      rafSpy = null;
+    });
+
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+    /**
+     * Creates the editor, waits for the initial layout pass to finish, and
+     * returns a doc-change trigger (the registered pageStyleUpdate handler,
+     * which sets pendingDocChange and schedules a rerender).
+     */
+    const setupSettledEditor = async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await settle();
+
+      const mockEditorInstance = getLastEditorInstance();
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const pageStyleUpdateCall = onCalls.mock.calls.find((call) => call[0] === 'pageStyleUpdate');
+      expect(pageStyleUpdateCall).toBeDefined();
+      const handlePageStyleUpdate = pageStyleUpdateCall![1] as (payload: {
+        pageMargins?: unknown;
+        pageStyles?: unknown;
+      }) => void;
+      const triggerDocChange = () =>
+        handlePageStyleUpdate({ pageMargins: { left: 1.5, right: 1.5, top: 1, bottom: 1 }, pageStyles: {} });
+
+      mockIncrementalLayout.mockClear();
+      return { mockEditorInstance, triggerDocChange };
+    };
+
+    it('defers pending rerender while composition is active', async () => {
+      const { triggerDocChange } = await setupSettledEditor();
+
+      container.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      triggerDocChange();
+      await settle();
+
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+    });
+
+    it('flushes deferred rerender once after compositionend', async () => {
+      const { triggerDocChange } = await setupSettledEditor();
+
+      container.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      triggerDocChange();
+      triggerDocChange();
+      triggerDocChange();
+      await settle();
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+
+      container.dispatchEvent(new CompositionEvent('compositionend', { data: '你好', bubbles: true }));
+      await settle();
+
+      expect(mockIncrementalLayout).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not drop pendingDocChange when composition defers a flush', async () => {
+      const { triggerDocChange } = await setupSettledEditor();
+
+      container.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      // The synchronous RAF stub runs the flush immediately; it must
+      // early-return without consuming the pending doc change.
+      triggerDocChange();
+      await settle();
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+
+      container.dispatchEvent(new CompositionEvent('compositionend', { data: '你', bubbles: true }));
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalledTimes(1));
+    });
+
+    it('compositionend without pending doc changes does not schedule rerender', async () => {
+      await setupSettledEditor();
+
+      container.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      container.dispatchEvent(new CompositionEvent('compositionend', { data: '', bubbles: true }));
+      await settle();
+
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+    });
+
+    it('recovers from a lost compositionend via blur on the hidden editor', async () => {
+      const { mockEditorInstance, triggerDocChange } = await setupSettledEditor();
+      const hiddenDom = mockEditorInstance.view.dom as HTMLElement;
+
+      hiddenDom.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      triggerDocChange();
+      await settle();
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+
+      // User clicks away mid-composition; the browser never delivers compositionend.
+      hiddenDom.dispatchEvent(new FocusEvent('blur'));
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalledTimes(1));
+    });
+
+    it('recovers from a lost compositionend via a non-composing beforeinput', async () => {
+      const { triggerDocChange } = await setupSettledEditor();
+
+      container.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      triggerDocChange();
+      await settle();
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+
+      const event = new InputEvent('beforeinput', { inputType: 'insertText', data: 'a', bubbles: true });
+      Object.defineProperty(event, 'isComposing', { value: false, writable: false });
+      container.dispatchEvent(event);
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalledTimes(1));
     });
   });
 

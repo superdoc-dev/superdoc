@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { handleBackspace, handleDelete } from './keymap.js';
+import { handleBackspace, handleDelete, handleEnter } from './keymap.js';
 
 /**
  * Pins the ordering of commands in the Backspace chain.
@@ -226,4 +226,45 @@ describe('handleDelete chain ordering', () => {
       'selectNodeForward',
     ]);
   });
+});
+
+/**
+ * SD-2368: while an IME composition is active, the key handlers must decline
+ * so prosemirror-view's synthesized key events (readDOMChange's
+ * looksLikeBackspace/Enter heuristics during composition commits) fall
+ * through and the composition's DOM change is applied as-is. A succeeding
+ * handler here makes ProseMirror discard committed IME text (e.g. 你好) and
+ * delete a preedit character instead.
+ */
+describe('composition guard (SD-2368)', () => {
+  const makeComposingEditor = () => {
+    const tr = { setMeta: vi.fn(() => tr) };
+    const dispatch = vi.fn();
+    const first = vi.fn(() => true);
+    const editor = {
+      view: { state: { tr }, dispatch, composing: true },
+      commands: { first },
+    };
+    return { editor, dispatch, first };
+  };
+
+  it.each([
+    ['handleBackspace', handleBackspace],
+    ['handleDelete', handleDelete],
+    ['handleEnter', handleEnter],
+  ])('%s declines without dispatching while view.composing', (_name, handler) => {
+    const { editor, dispatch, first } = makeComposingEditor();
+
+    expect(handler(editor)).toBe(false);
+    // No history-boundary transaction and no command chain mid-composition.
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  // NOTE: an integration-level reproduction of the trigger (prosemirror-view's
+  // readDOMChange synthesizing a Backspace from a shrinking composition
+  // commit) was attempted and is not reachable under happy-dom — the
+  // heuristic's preconditions depend on browser-specific DOM parse/selection
+  // behavior, so such a test passes even with the guard removed. The contract
+  // tests above are the effective lock: they fail when the guard is removed.
 });

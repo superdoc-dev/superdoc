@@ -181,7 +181,14 @@ const createNormalizedSlice = ({ step, normalizedText, doc }) => {
   return null;
 };
 
-const isCompositionTransaction = (tr) =>
+/**
+ * True for transactions produced by IME composition input. Exported so the
+ * editor dispatch path can defer tracked-transaction rewriting while a
+ * composition is in flight (SD-2368): rewriting preedit updates into tracked
+ * inserts restructures the composing DOM text node (mark spans + decorations),
+ * which makes Chrome abort the composition on every keystroke.
+ */
+export const isCompositionTransaction = (tr) =>
   tr.getMeta('composition') !== undefined || COMPOSITION_INPUT_TYPES.has(tr.getMeta('inputType'));
 
 const getCandidatePlaceholderPositions = ({ step, pendingDeadKeyPlaceholder, isReplacement }) => {
@@ -389,7 +396,10 @@ export const trackedTransaction = ({ tr, state, user, replacements = 'paired' })
     !tr.steps.length ||
     (hasDisallowedMeta && !isProgrammaticInput) ||
     notAllowedMeta.includes(tr.getMeta('inputType')) ||
-    tr.getMeta(CommentsPluginKey) // Skip if it's a comment transaction.
+    tr.getMeta(CommentsPluginKey) || // Skip if it's a comment transaction.
+    // SD-2368: the post-composition flush applies trackInsert marks itself;
+    // re-rewriting it here would corrupt the marks it carries.
+    tr.getMeta('compositionTrackingFlush') === true
   ) {
     if (pendingDeadKeyPlaceholder && !isCompositionTransaction(tr)) {
       mergeTrackChangesMeta(tr, { pendingDeadKeyPlaceholder: null });

@@ -547,6 +547,11 @@ export class PresentationEditor extends EventEmitter {
   #focusScrollRafId: number | null = null;
   #pendingMapping: Mapping | null = null;
   #isRerendering = false;
+  /** SD-2368: while true, #flushRerenderQueue defers visible repaints until composition ends. */
+  #isComposing = false;
+  #compositionDeferralCleanup: Array<() => void> = [];
+  #compositionTargetCleanup: Array<() => void> = [];
+  #compositionTargetDom: HTMLElement | null = null;
   #selectionSync = new SelectionSyncCoordinator();
   /** Load-before-measure gate: awaits required fonts before measurement, reflows on late load. */
   #fontGate: FontReadinessGate | null = null;
@@ -1081,6 +1086,8 @@ export class PresentationEditor extends EventEmitter {
       this.#setupPointerHandlers();
       this.#setupDragHandlers();
       this.#setupInputBridge();
+      this.#setupCompositionDeferral();
+      this.#refreshCompositionDeferralTarget();
       this.#syncTrackedChangesPreferences();
       this.#syncHeaderFooterTrackedChangesRenderConfig();
       this.#setupSemanticResizeObserver();
@@ -4831,6 +4838,7 @@ export class PresentationEditor extends EventEmitter {
     this.#inputBridge?.notifyTargetChanged();
     this.#inputBridge?.destroy();
     this.#inputBridge = null;
+    this.#teardownCompositionDeferral();
 
     if (this.#a11ySelectionAnnounceTimeout != null) {
       clearTimeout(this.#a11ySelectionAnnounceTimeout);
@@ -5773,7 +5781,10 @@ export class PresentationEditor extends EventEmitter {
       this.#visibleHost,
       () => this.#getActiveDomTarget(),
       () => !this.#isViewLocked(),
-      () => this.#editorInputManager?.notifyTargetChanged(),
+      () => {
+        this.#refreshCompositionDeferralTarget();
+        this.#editorInputManager?.notifyTargetChanged();
+      },
       {
         useWindowFallback: true,
         getTargetEditor: () => this.getActiveEditor(),
@@ -6749,6 +6760,92 @@ export class PresentationEditor extends EventEmitter {
     this.#scheduleRerender();
   }
 
+  #beginCompositionDeferral(): void {
+    this.#isComposing = true;
+  }
+
+  #endCompositionDeferral(): void {
+    if (!this.#isComposing) return;
+    this.#isComposing = false;
+
+    if (this.#pendingDocChange && !this.#renderScheduled && !this.#isRerendering) {
+      this.#scheduleRerender();
+    }
+  }
+
+  #resetCompositionDeferral(): void {
+    this.#isComposing = false;
+  }
+
+  /**
+   * SD-2368: defer visible layout repaints while an IME composition is active.
+   * Visible-host listeners are permanent; the active hidden target's listeners
+   * are swapped by #refreshCompositionDeferralTarget() on target changes.
+   */
+  #setupCompositionDeferral(): void {
+    this.#teardownCompositionDeferral();
+
+    const add = (target: EventTarget | null | undefined, type: string, handler: EventListener) => {
+      if (!target) return;
+      target.addEventListener(type, handler);
+      this.#compositionDeferralCleanup.push(() => target.removeEventListener(type, handler));
+    };
+
+    const begin = () => this.#beginCompositionDeferral();
+    const end = () => this.#endCompositionDeferral();
+    const endOnNonComposingInput = (event: Event) => {
+      if ('isComposing' in event && (event as InputEvent).isComposing === false) {
+        this.#endCompositionDeferral();
+      }
+    };
+
+    add(this.#visibleHost, 'compositionstart', begin);
+    add(this.#visibleHost, 'compositionend', end);
+    add(this.#visibleHost, 'input', endOnNonComposingInput);
+    add(this.#visibleHost, 'beforeinput', endOnNonComposingInput);
+  }
+
+  #teardownCompositionDeferral(): void {
+    this.#compositionTargetCleanup.forEach((cleanup) => cleanup());
+    this.#compositionTargetCleanup = [];
+    this.#compositionTargetDom = null;
+    this.#compositionDeferralCleanup.forEach((cleanup) => cleanup());
+    this.#compositionDeferralCleanup = [];
+    this.#resetCompositionDeferral();
+  }
+
+  /**
+   * Re-points composition deferral listeners at the current active hidden editor
+   * DOM (body, header/footer, or story session). The input bridge dispatches a
+   * synthetic compositionend to the old target before this runs, so pending
+   * deferred work resumes before listeners move.
+   */
+  #refreshCompositionDeferralTarget(): void {
+    const nextTarget = this.#getActiveDomTarget();
+    if (nextTarget === this.#compositionTargetDom) return;
+
+    this.#compositionTargetCleanup.forEach((cleanup) => cleanup());
+    this.#compositionTargetCleanup = [];
+    this.#compositionTargetDom = nextTarget;
+
+    if (!nextTarget) {
+      this.#endCompositionDeferral();
+      return;
+    }
+
+    const begin = () => this.#beginCompositionDeferral();
+    const end = () => this.#endCompositionDeferral();
+
+    nextTarget.addEventListener('compositionstart', begin);
+    nextTarget.addEventListener('compositionend', end);
+    nextTarget.addEventListener('blur', end);
+    nextTarget.addEventListener('focusout', end);
+    this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('compositionstart', begin));
+    this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('compositionend', end));
+    this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('blur', end));
+    this.#compositionTargetCleanup.push(() => nextTarget.removeEventListener('focusout', end));
+  }
+
   #scheduleRerender() {
     if (this.#renderScheduled) {
       return;
@@ -6769,6 +6866,11 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
     if (!this.#pendingDocChange) {
+      return;
+    }
+    // SD-2368: keep #pendingDocChange/#pendingMapping intact while composing;
+    // #endCompositionDeferral() schedules the post-composition rerender.
+    if (this.#isComposing) {
       return;
     }
     this.#pendingDocChange = false;

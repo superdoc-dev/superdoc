@@ -1136,7 +1136,20 @@ describe('TrackChanges extension commands', () => {
     }
   });
 
-  it('interaction: composition at paragraph start replaces a dead-key placeholder in suggesting mode', async () => {
+  /**
+   * SD-2368: tracked-transaction rewriting is deferred while an IME
+   * composition is in flight (rewriting preedit updates into tracked inserts
+   * restructures the composing DOM node and Chrome aborts the composition).
+   * During composition the text applies raw; after compositionend the
+   * composed range is converted into a single tracked insertion.
+   *
+   * This replaces the earlier dead-key-placeholder simulation: the leftover
+   * `´` placeholder was a symptom of the mid-composition rewrite losing
+   * Chrome's composition range. With deferral the DOM is never rewritten
+   * mid-composition, so Chrome replaces the preedit in place (simulated here
+   * via the characterData update).
+   */
+  it('interaction: IME composition in suggesting mode defers tracking until compositionend', async () => {
     const { editor: interactionEditor } = initTestEditor({
       mode: 'text',
       content: '<p></p>',
@@ -1152,25 +1165,43 @@ describe('TrackChanges extension commands', () => {
         return paragraph?.querySelector('.sd-paragraph-content') ?? paragraph;
       };
       const getBreak = () => getContainer()?.querySelector('br.ProseMirror-trailingBreak');
+      const hasTrackInsert = () => {
+        let marked = false;
+        interactionEditor.state.doc.descendants((node) => {
+          if (node.isText && node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) marked = true;
+        });
+        return marked;
+      };
 
       view.focus();
       view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
 
       expect(getContainer()).toBeTruthy();
 
-      getContainer().insertBefore(document.createTextNode('´'), getBreak() ?? null);
+      const preedit = document.createTextNode('´');
+      getContainer().insertBefore(preedit, getBreak() ?? null);
       view.domObserver.flush();
       await Promise.resolve();
 
-      getContainer().insertBefore(document.createTextNode('é'), getBreak() ?? null);
+      // Mid-composition: raw text, no tracked insert yet (deferral active).
+      expect(interactionEditor.state.doc.textContent).toBe('´');
+      expect(hasTrackInsert()).toBe(false);
+
+      // Chrome replaces the preedit in place when the dead key resolves.
+      const liveText = getContainer().firstChild;
+      liveText.textContent = 'é';
       view.domObserver.flush();
       await Promise.resolve();
+
+      expect(interactionEditor.state.doc.textContent).toBe('é');
 
       view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: 'é', bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
 
+      // Post-composition flush converts the composed range into a tracked insert.
       expect(interactionEditor.state.doc.textContent).toBe('é');
+      expect(hasTrackInsert()).toBe(true);
     } finally {
       interactionEditor.destroy();
     }

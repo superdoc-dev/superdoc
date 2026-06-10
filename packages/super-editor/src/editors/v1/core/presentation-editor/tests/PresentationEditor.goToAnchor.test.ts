@@ -166,10 +166,12 @@ vi.mock('../../Editor', () => {
         },
       },
       view: {
-        dom: {
+        // Real element so listener-based wiring (e.g. SD-2368 composition
+        // deferral) can attach; dispatchEvent/focus stay non-dispatching stubs.
+        dom: Object.assign(document.createElement('div'), {
           dispatchEvent: vi.fn(() => true),
           focus: vi.fn(),
-        },
+        }),
         focus: vi.fn(),
         dispatch: vi.fn(),
       },

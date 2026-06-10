@@ -47,7 +47,37 @@ export type HiddenHostElements = {
  * - Sets `user-select: none` to prevent text selection in the hidden editor.
  * - Sets `overflow-anchor: none` to prevent scroll anchoring issues when content changes.
  */
+const HIDDEN_HOST_STYLE_ID = 'sd-presentation-hidden-host-styles';
+
+/**
+ * Injects (once per document) CSS required for IME composition to survive in
+ * hidden editors.
+ *
+ * SD-2368: paragraphs render their content inside an inline
+ * `span.sd-paragraph-content` (the NodeView's contentDOM). Chrome's IME
+ * updates preedit text by deleting it and re-inserting the new preedit; when
+ * the deletion empties that span, Blink's editing cleanup removes the
+ * "redundant" empty inline element entirely and rewrites the preedit as bare
+ * text in the `<p>`. ProseMirror then loses its contentDOM, parses the
+ * paragraph as empty, and redraws — detaching Chrome's composition anchor and
+ * killing the composition (first keystrokes of CJK input in an empty
+ * paragraph vanish). Emptied *block* containers get a placeholder `<br>`
+ * instead of being removed, so forcing the span to `display: block` keeps the
+ * contentDOM alive through the preedit rewrite. Scoped to hidden hosts only:
+ * they are never displayed, while visible editors render list markers inline
+ * before the span and would change appearance.
+ */
+function ensureHiddenHostStylesheet(doc: Document): void {
+  if (doc.getElementById(HIDDEN_HOST_STYLE_ID)) return;
+  const style = doc.createElement('style');
+  style.id = HIDDEN_HOST_STYLE_ID;
+  style.textContent = '.presentation-editor__hidden-host .sd-paragraph-content { display: block; }';
+  (doc.head ?? doc.documentElement)?.appendChild(style);
+}
+
 export function createHiddenHost(doc: Document, widthPx: number): HiddenHostElements {
+  ensureHiddenHostStylesheet(doc);
+
   // --- Scroll-isolation wrapper ---
   const wrapper = doc.createElement('div');
   wrapper.className = 'presentation-editor__hidden-host-wrapper';

@@ -2374,16 +2374,37 @@ export async function incrementalLayout(
       const cacheHit =
         footnoteConvergenceCache !== null &&
         footnoteConvergenceCache.footnoteIds === currentIdSignature &&
-        currentIdSignature !== '';
+        currentIdSignature !== '' &&
+        footnoteConvergenceCache.reserves.some((h) => h > 0);
       let usedCachedReserves = false;
 
-      // Pass 1: assign + reserve from current layout. Pre-measure ALL footnote
-      // bodies (the cache makes the assigned-only subset essentially free).
-      let { columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout);
-      let { measuresById } = await measureFootnoteBlocks(allFootnoteIds);
-      refreshBodyHeights(measuresById);
-      let plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, [], pageColumns);
-      let reserves = plan.reserves;
+      // Declare variables used by both cache hit and miss paths
+      let pageColumns: Map<number, PageColumns>;
+      let idsByColumn: Map<number, Map<number, string[]>>;
+      let measuresById: Map<string, Measure>;
+      let plan: FootnoteLayoutPlan;
+      let reserves: number[];
+
+      // Cache hit fast path: skip Pass 1 entirely, use cached reserves directly
+      if (cacheHit && footnoteConvergenceCache) {
+        reserves = footnoteConvergenceCache.reserves.slice();
+        const separatorSpacingBefore = footnoteConvergenceCache.separatorSpacingBefore;
+        layout = relayout(reserves, separatorSpacingBefore);
+        ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
+        const measured = await measureFootnoteBlocks(allFootnoteIds);
+        measuresById = measured.measuresById;
+        refreshBodyHeights(measuresById);
+        plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
+        usedCachedReserves = true;
+        console.log('[layout] Footnote convergence cache HIT - skipped Pass 1 and loop');
+      } else {
+        // Cache miss: do Pass 1 to get initial reserves
+        ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
+        ({ measuresById } = await measureFootnoteBlocks(allFootnoteIds));
+        refreshBodyHeights(measuresById);
+        plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, [], pageColumns);
+        reserves = plan.reserves;
+      }
 
       // Relayout with footnote reserves and iterate until reserves and page count stabilize,
       // so each page gets the correct reserve (avoids "too much" on one page and "not enough" on another).
@@ -2396,25 +2417,16 @@ export async function incrementalLayout(
         let finalPlan: FootnoteLayoutPlan;
         let reservesAppliedToLayout: number[];
 
-        // Cache hit: skip expensive convergence loop
-        if (cacheHit && footnoteConvergenceCache) {
-          reserves = footnoteConvergenceCache.reserves.slice();
-          plan.separatorSpacingBefore = footnoteConvergenceCache.separatorSpacingBefore;
-          layout = relayout(reserves, plan.separatorSpacingBefore);
-          ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
+        // Cache hit: use already-computed values from fast path above
+        if (usedCachedReserves) {
           const measured = await measureFootnoteBlocks(allFootnoteIds);
-          measuresById = measured.measuresById;
           finalBlocks = measured.blocks;
-          refreshBodyHeights(measuresById);
-          plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
-
           finalPageColumns = pageColumns;
           finalIdsByColumn = idsByColumn;
           finalMeasuresById = measuresById;
           finalPlan = plan;
           reservesAppliedToLayout = reserves;
-          usedCachedReserves = true;
-          console.log('[layout] Footnote convergence cache HIT - skipped loop');
+          console.log('[layout] Footnote convergence cache HIT - skipped convergence loop');
         } else {
           // Cache miss: run full convergence loop
           let reservesStabilized = false;

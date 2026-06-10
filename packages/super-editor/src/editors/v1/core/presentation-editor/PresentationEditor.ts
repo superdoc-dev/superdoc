@@ -112,7 +112,9 @@ import { renderCaretOverlay, renderSelectionRects } from './selection/LocalSelec
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from './selection/CaretGeometry.js';
 import { shouldUseNativeCaretFallback } from './selection/native-caret-fallback.js';
 import {
+  computeCaretRectFromPmPosition as computeCaretRectFromPmPositionFromHelper,
   computeCaretRectFromVisibleTextOffset as computeCaretRectFromVisibleTextOffsetFromHelper,
+  computeSelectionRectsFromPmRange as computeSelectionRectsFromPmRangeFromHelper,
   computeSelectionRectsFromVisibleTextOffsets as computeSelectionRectsFromVisibleTextOffsetsFromHelper,
   measureVisibleTextOffset as measureVisibleTextOffsetFromHelper,
   measureVisibleTextOffsetInContainers as measureVisibleTextOffsetInContainersFromHelper,
@@ -10259,14 +10261,27 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const startOffset = this.#measureActiveEditorVisibleTextOffset(Math.min(from, to));
-    const endOffset = this.#measureActiveEditorVisibleTextOffset(Math.max(from, to));
-    if (startOffset == null || endOffset == null) {
+    const noteFragments = this.#getRenderedNoteFragmentElements(this.#collectNoteBlockIds(context));
+    if (!noteFragments.length) {
       return null;
     }
 
-    const noteFragments = this.#getRenderedNoteFragmentElements(this.#collectNoteBlockIds(context));
-    if (!noteFragments.length) {
+    const geometryOptions = {
+      containers: noteFragments,
+      zoom: this.#layoutOptions.zoom ?? 1,
+      pageHeight: this.#getBodyPageHeight(),
+      pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
+    };
+
+    // Same pm-first strategy as #computeNoteDomCaretRect (SD-3400).
+    const pmRects = computeSelectionRectsFromPmRangeFromHelper(geometryOptions, from, to);
+    if (pmRects != null) {
+      return pmRects;
+    }
+
+    const startOffset = this.#measureActiveEditorVisibleTextOffset(Math.min(from, to));
+    const endOffset = this.#measureActiveEditorVisibleTextOffset(Math.max(from, to));
+    if (startOffset == null || endOffset == null) {
       return null;
     }
 
@@ -10274,12 +10289,7 @@ export class PresentationEditor extends EventEmitter {
     const renderedEndOffset = this.#toRenderedNoteVisibleTextOffset(noteFragments, endOffset);
 
     return computeSelectionRectsFromVisibleTextOffsetsFromHelper(
-      {
-        containers: noteFragments,
-        zoom: this.#layoutOptions.zoom ?? 1,
-        pageHeight: this.#getBodyPageHeight(),
-        pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
-      },
+      geometryOptions,
       renderedStartOffset,
       renderedEndOffset,
     );
@@ -10311,27 +10321,34 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const textOffset = this.#measureActiveEditorVisibleTextOffset(pos);
-    if (textOffset == null) {
-      return null;
-    }
-
     const noteFragments = this.#getRenderedNoteFragmentElements(noteBlockIds);
     if (!noteFragments.length) {
       return null;
     }
 
+    const geometryOptions = {
+      containers: noteFragments,
+      zoom: this.#layoutOptions.zoom ?? 1,
+      pageHeight: this.#getBodyPageHeight(),
+      pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
+    };
+
+    // Painted note lines carry session-coordinate pm ranges, so resolve the
+    // caret by pm position first — exact across paragraph boundaries, where
+    // the visible-text bridge drifts (SD-3400 multi-paragraph note caret).
+    const pmRect = computeCaretRectFromPmPositionFromHelper(geometryOptions, pos);
+    if (pmRect) {
+      return pmRect;
+    }
+
+    const textOffset = this.#measureActiveEditorVisibleTextOffset(pos);
+    if (textOffset == null) {
+      return null;
+    }
+
     const renderedTextOffset = this.#toRenderedNoteVisibleTextOffset(noteFragments, textOffset);
 
-    return computeCaretRectFromVisibleTextOffsetFromHelper(
-      {
-        containers: noteFragments,
-        zoom: this.#layoutOptions.zoom ?? 1,
-        pageHeight: this.#getBodyPageHeight(),
-        pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
-      },
-      renderedTextOffset,
-    );
+    return computeCaretRectFromVisibleTextOffsetFromHelper(geometryOptions, renderedTextOffset);
   }
 
   #computeNoteCaretRect(pos: number): LayoutRect | null {

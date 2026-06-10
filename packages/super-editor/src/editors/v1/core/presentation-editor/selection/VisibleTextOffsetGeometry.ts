@@ -282,6 +282,222 @@ export function computeSelectionRectsFromVisibleTextOffsets(
   return layoutRects;
 }
 
+type ResolvedPmPoint = {
+  node: Text;
+  offset: number;
+  pageElement: HTMLElement;
+  lineElement: HTMLElement;
+};
+
+/**
+ * Resolves a ProseMirror position directly against the painted lines' pm
+ * ranges (`data-pm-start`/`data-pm-end`), bypassing the visible-text-offset
+ * bridge. Painted note fragments carry SESSION-coordinate pm ranges, so this
+ * is exact across paragraph boundaries — the offset bridge counts structural
+ * paragraph tokens on the painted side but not on the hidden-editor side,
+ * which drifted the caret backwards in multi-paragraph notes (SD-3400).
+ *
+ * Returns null when no painted line covers the position (e.g., a structural
+ * gap or unpainted content) so callers can fall back to the offset bridge.
+ */
+function resolvePmPoint(containers: readonly HTMLElement[], pos: number): ResolvedPmPoint | null {
+  if (!Number.isFinite(pos)) {
+    return null;
+  }
+
+  const lines = collectRenderedLineElements(containers);
+  let lineElement: HTMLElement | null = null;
+  for (const line of lines) {
+    const pmStart = getPmStart(line);
+    const pmEnd = getPmEnd(line);
+    if (pmStart == null || pmEnd == null || pos < pmStart || pos > pmEnd) {
+      continue;
+    }
+    lineElement = line;
+    // Forward affinity: a position at this line's end that also starts the
+    // next line belongs to the next line, so keep scanning while pos == pmEnd.
+    if (pos < pmEnd) {
+      break;
+    }
+  }
+  if (!lineElement) {
+    return null;
+  }
+
+  const pageElement = lineElement.closest<HTMLElement>(`.${DOM_CLASS_NAMES.PAGE}[data-page-index]`);
+  if (!pageElement) {
+    return null;
+  }
+
+  const leaves = collectLeafPmElements(lineElement);
+  let leaf: HTMLElement | null = null;
+  for (const candidate of leaves) {
+    const pmStart = getPmStart(candidate);
+    const pmEnd = getPmEnd(candidate);
+    if (pmStart == null || pmEnd == null || pos < pmStart || pos > pmEnd) {
+      continue;
+    }
+    leaf = candidate;
+    if (pos < pmEnd) {
+      break;
+    }
+  }
+  if (!leaf) {
+    return null;
+  }
+
+  const leafPmStart = getPmStart(leaf) ?? 0;
+  const doc = leaf.ownerDocument ?? document;
+  const walker = doc.createTreeWalker(leaf, NodeFilter.SHOW_TEXT);
+  let remaining = Math.max(0, pos - leafPmStart);
+  let lastTextNode: Text | null = null;
+
+  let currentNode = walker.nextNode();
+  while (currentNode) {
+    const textNode = currentNode as Text;
+    const textLength = textNode.textContent?.length ?? 0;
+    if (textLength > 0) {
+      lastTextNode = textNode;
+      if (remaining <= textLength) {
+        return { node: textNode, offset: remaining, pageElement, lineElement };
+      }
+      remaining -= textLength;
+    }
+    currentNode = walker.nextNode();
+  }
+
+  if (!lastTextNode) {
+    return null;
+  }
+  // Position past the leaf's painted text (pm range wider than visible text,
+  // e.g. tracked wrapper structure): clamp to the leaf's end.
+  return {
+    node: lastTextNode,
+    offset: lastTextNode.textContent?.length ?? 0,
+    pageElement,
+    lineElement,
+  };
+}
+
+/**
+ * Caret rect for a ProseMirror position resolved via painted pm ranges.
+ * See {@link resolvePmPoint}; returns null so callers can fall back.
+ */
+export function computeCaretRectFromPmPosition(
+  options: VisibleTextOffsetGeometryOptions,
+  pos: number,
+): LayoutRect | null {
+  const point = resolvePmPoint(options.containers, pos);
+  if (!point) {
+    return null;
+  }
+
+  const doc = point.node.ownerDocument ?? document;
+  const range = doc.createRange();
+  range.setStart(point.node, point.offset);
+  range.setEnd(point.node, point.offset);
+
+  const rangeRect = range.getBoundingClientRect();
+  const lineRect = point.lineElement.getBoundingClientRect();
+  const pageRect = point.pageElement.getBoundingClientRect();
+  const pageIndex = Number(point.pageElement.dataset.pageIndex ?? 'NaN');
+  if (!Number.isFinite(pageIndex)) {
+    return null;
+  }
+
+  const localX = (rangeRect.left - pageRect.left) / options.zoom;
+  const localY = (lineRect.top - pageRect.top) / options.zoom;
+  if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
+    return null;
+  }
+
+  return {
+    pageIndex,
+    x: localX,
+    y: pageIndex * (options.pageHeight + options.pageGap) + localY,
+    width: 1,
+    height: Math.max(1, lineRect.height / options.zoom),
+  };
+}
+
+/**
+ * Selection rects for a ProseMirror range resolved via painted pm ranges.
+ * See {@link resolvePmPoint}; returns null so callers can fall back.
+ */
+export function computeSelectionRectsFromPmRange(
+  options: VisibleTextOffsetGeometryOptions,
+  from: number,
+  to: number,
+): LayoutRect[] | null {
+  if (!Number.isFinite(from) || !Number.isFinite(to)) {
+    return null;
+  }
+
+  const startPos = Math.min(from, to);
+  const endPos = Math.max(from, to);
+  if (startPos === endPos) {
+    return [];
+  }
+
+  const startPoint = resolvePmPoint(options.containers, startPos);
+  const endPoint = resolvePmPoint(options.containers, endPos);
+  if (!startPoint || !endPoint) {
+    return null;
+  }
+
+  const doc = startPoint.node.ownerDocument ?? document;
+  const range = doc.createRange();
+  try {
+    range.setStart(startPoint.node, startPoint.offset);
+    range.setEnd(endPoint.node, endPoint.offset);
+  } catch {
+    return null;
+  }
+
+  const rawRects = Array.from(range.getClientRects()) as unknown as DOMRect[];
+  const pageElements: HTMLElement[] = [];
+  for (const pageElement of [startPoint.pageElement, endPoint.pageElement]) {
+    if (!pageElements.includes(pageElement)) {
+      pageElements.push(pageElement);
+    }
+  }
+  const rects = deduplicateOverlappingRects(rawRects);
+  const layoutRects: LayoutRect[] = [];
+
+  for (const rect of rects) {
+    if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
+      continue;
+    }
+
+    const pageElement = findPageElementForRect(rect, pageElements);
+    if (!pageElement) {
+      continue;
+    }
+
+    const pageRect = pageElement.getBoundingClientRect();
+    const pageIndex = Number(pageElement.dataset.pageIndex ?? 'NaN');
+    if (!Number.isFinite(pageIndex)) {
+      continue;
+    }
+
+    const localX = (rect.left - pageRect.left) / options.zoom;
+    const localY = (rect.top - pageRect.top) / options.zoom;
+    if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
+      continue;
+    }
+
+    layoutRects.push({
+      pageIndex,
+      x: localX,
+      y: pageIndex * (options.pageHeight + options.pageGap) + localY,
+      width: Math.max(1, rect.width / options.zoom),
+      height: Math.max(1, rect.height / options.zoom),
+    });
+  }
+
+  return layoutRects;
+}
+
 function collectVisibleTextModel(containers: readonly HTMLElement[]): VisibleTextModel {
   const lines = collectRenderedLineElements(containers);
   if (!lines.length) {

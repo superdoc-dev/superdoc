@@ -1037,7 +1037,7 @@ describe('handleImageNode', () => {
     expect(importedPicture.attrs.flipV).toBe(false);
   });
 
-  it('preserves grouped picture ellipse geometry without cover fit for negative srcRect', () => {
+  it('fills grouped picture ellipse geometry for negative srcRect stretch', () => {
     const picture = {
       name: 'pic:pic',
       elements: [
@@ -1115,7 +1115,7 @@ describe('handleImageNode', () => {
 
     expect(importedPicture.attrs.clipPath).toBeUndefined();
     expect(importedPicture.attrs.shapeClipPath).toBe('ellipse(50% 50% at 50% 50%)');
-    expect(importedPicture.attrs.objectFit).toBeUndefined();
+    expect(importedPicture.attrs.objectFit).toBe('cover');
   });
 
   describe('wrap types', () => {
@@ -1519,7 +1519,7 @@ describe('handleImageNode', () => {
       expect(result.attrs.clipPath).toBe('inset(0% 84.8% 0% 0%)');
     });
 
-    it('preserves standalone picture ellipse geometry without cover fit for negative srcRect', () => {
+    it('fills standalone picture ellipse geometry for negative srcRect stretch', () => {
       const node = makeNodeWithBlipFill(
         [
           {
@@ -1549,7 +1549,7 @@ describe('handleImageNode', () => {
       expect(result).not.toBeNull();
       expect(result.attrs.clipPath).toBeUndefined();
       expect(result.attrs.shapeClipPath).toBe('ellipse(50% 50% at 50% 50%)');
-      expect(result.attrs.objectFit).toBeUndefined();
+      expect(result.attrs.objectFit).toBe('cover');
     });
 
     it('disables shouldCover when srcRect emits clipPath cropping', () => {

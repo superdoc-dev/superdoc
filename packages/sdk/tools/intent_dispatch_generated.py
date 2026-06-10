@@ -36,6 +36,10 @@ def dispatch_intent_tool(
             return execute('doc.replace', rest)
         elif action == 'delete':
             return execute('doc.delete', rest)
+        elif action == 'delete_block':
+            return execute('doc.blocks.delete', rest)
+        elif action == 'delete_block_range':
+            return execute('doc.blocks.deleteRange', rest)
         elif action == 'undo':
             return execute('doc.history.undo', rest)
         elif action == 'redo':

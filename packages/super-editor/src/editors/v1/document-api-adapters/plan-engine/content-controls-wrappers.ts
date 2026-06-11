@@ -92,6 +92,7 @@ import { executeDomainCommand } from './plan-wrappers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { buildTextWithTabs, parentAllowsNodeAt } from '../helpers/text-with-tabs.js';
 import { resolveSelectionTarget } from '../helpers/selection-target-resolver.js';
+import { getGroup } from '../../extensions/structured-content/structuredContentHelpers/tagUtils.js';
 
 // Shared helpers — single source of truth for SDT logic
 import {
@@ -391,21 +392,15 @@ function replaceSdtTextContent(editor: Editor, target: ContentControlTarget, tex
 /**
  * Match a tag value against a query, handling both plain strings and JSON-encoded
  * tags from the StructuredContent extension (which stores `{group: "..."}` format).
+ * Uses the canonical getGroup() helper from tagUtils to avoid duplicating decode logic.
  */
 function matchesTag(storedTag: string | undefined, queryTag: string): boolean {
   if (!storedTag) return false;
   // Direct match (Document API style)
   if (storedTag === queryTag) return true;
-  // JSON fallback (StructuredContent extension style)
-  if (storedTag.startsWith('{')) {
-    try {
-      const parsed = JSON.parse(storedTag) as Record<string, unknown>;
-      return parsed?.group === queryTag;
-    } catch {
-      return false;
-    }
-  }
-  return false;
+  // JSON fallback (StructuredContent extension style) - use canonical helper
+  const group = getGroup(storedTag);
+  return group === queryTag;
 }
 
 // ---------------------------------------------------------------------------

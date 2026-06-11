@@ -1315,3 +1315,81 @@ describe('contentControls.setType default sdtPr seeding', () => {
     expect(checkbox?.elements?.some((el) => el.name === 'w14:uncheckedState')).toBe(true);
   });
 });
+
+// SD-3428 regression: SDTs created via the StructuredContent extension store their
+// tag in JSON format {"group":"tagValue"} while the Document API stores plain strings.
+// Before the fix, list({tag}) and selectByTag({tag}) used strict equality and would
+// miss JSON-encoded tags. The fix introduces matchesTag() which handles both formats.
+describe('SD-3428: JSON-encoded tag matching in list and selectByTag', () => {
+  it('list({tag}) matches SDTs with JSON-encoded tags from StructuredContent extension', () => {
+    // Simulate an SDT created via insertStructuredContentInline which stores
+    // tags as JSON: {"group":"my-tag"}
+    const editor = makeSdtEditor({ tag: '{"group":"my-tag"}' });
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.list({ tag: 'my-tag' });
+
+    expect(result.items.length).toBe(1);
+    expect(result.items[0].id).toBe('sdt-1');
+  });
+
+  it('list({tag}) still matches SDTs with plain string tags from Document API', () => {
+    // SDTs created via Document API store tags as plain strings
+    const editor = makeSdtEditor({ tag: 'plain-tag' });
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.list({ tag: 'plain-tag' });
+
+    expect(result.items.length).toBe(1);
+    expect(result.items[0].id).toBe('sdt-1');
+  });
+
+  it('selectByTag matches SDTs with JSON-encoded tags', () => {
+    const editor = makeSdtEditor({ tag: '{"group":"json-tag"}' });
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.selectByTag({ tag: 'json-tag' });
+
+    expect(result.items.length).toBe(1);
+    expect(result.items[0].id).toBe('sdt-1');
+  });
+
+  it('selectByTag still matches SDTs with plain string tags', () => {
+    const editor = makeSdtEditor({ tag: 'plain-tag' });
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.selectByTag({ tag: 'plain-tag' });
+
+    expect(result.items.length).toBe(1);
+    expect(result.items[0].id).toBe('sdt-1');
+  });
+
+  it('list({tag}) excludes SDTs when JSON group does not match', () => {
+    const editor = makeSdtEditor({ tag: '{"group":"other-tag"}' });
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.list({ tag: 'my-tag' });
+
+    expect(result.items.length).toBe(0);
+  });
+
+  it('handles malformed JSON tags gracefully (no match, no throw)', () => {
+    // If someone stores invalid JSON starting with '{', it should not throw
+    const editor = makeSdtEditor({ tag: '{invalid-json' });
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.list({ tag: 'some-tag' });
+
+    expect(result.items.length).toBe(0);
+  });
+
+  it('handles JSON without group property (no match)', () => {
+    // Valid JSON but missing the 'group' property
+    const editor = makeSdtEditor({ tag: '{"other":"value"}' });
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.list({ tag: 'value' });
+
+    expect(result.items.length).toBe(0);
+  });
+});

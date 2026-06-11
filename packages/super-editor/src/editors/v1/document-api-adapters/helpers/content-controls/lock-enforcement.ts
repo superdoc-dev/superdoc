@@ -45,6 +45,32 @@ export function assertNotContentLocked(sdt: ResolvedSdt, operation: string): voi
   }
 }
 
+/**
+ * Assert that the SDT is not fully locked (sdtContentLocked).
+ * Used before operations that modify content — allows `contentLocked` SDTs
+ * to be updated via whole-node replacement (which the lock plugin permits).
+ */
+export function assertNotFullyLocked(sdt: ResolvedSdt, operation: string): void {
+  const mode = resolveLockMode(sdt.node.attrs as Record<string, unknown>);
+  if (mode === 'sdtContentLocked') {
+    throw new DocumentApiAdapterError(
+      'LOCK_VIOLATION',
+      `Content control "${sdt.node.attrs.id}" has lock mode "${mode}" which prevents ${operation}.`,
+      { lockMode: mode, operation },
+    );
+  }
+}
+
+/**
+ * Check if the SDT requires whole-node replacement for content updates.
+ * `contentLocked` SDTs block inner-content modifications but allow replacing
+ * the entire node (wrapper + content), which preserves attrs including id.
+ */
+export function requiresWholeNodeReplacement(sdt: ResolvedSdt): boolean {
+  const mode = resolveLockMode(sdt.node.attrs as Record<string, unknown>);
+  return mode === 'contentLocked';
+}
+
 // ---------------------------------------------------------------------------
 // Type guard
 // ---------------------------------------------------------------------------

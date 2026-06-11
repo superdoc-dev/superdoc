@@ -26,7 +26,13 @@ export {
   readChoiceListData,
 } from './sdt-info-builder.js';
 
-export { assertNotSdtLocked, assertNotContentLocked, assertControlType } from './lock-enforcement.js';
+export {
+  assertNotSdtLocked,
+  assertNotContentLocked,
+  assertNotFullyLocked,
+  assertControlType,
+  requiresWholeNodeReplacement,
+} from './lock-enforcement.js';
 
 export { buildMutationSuccess, buildMutationFailure, applyPagination } from './result-builders.js';
 

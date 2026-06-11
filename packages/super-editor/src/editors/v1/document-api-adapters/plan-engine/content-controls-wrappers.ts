@@ -107,7 +107,9 @@ import {
   buildContentControlInfoFromNode,
   assertNotSdtLocked,
   assertNotContentLocked,
+  assertNotFullyLocked,
   assertControlType,
+  requiresWholeNodeReplacement,
   buildMutationSuccess,
   buildMutationFailure,
   applyPagination,
@@ -382,6 +384,49 @@ function replaceSdtTextContent(editor: Editor, target: ContentControlTarget, tex
   tr.replaceWith(innerFrom, innerTo, updatedParagraph);
   dispatchTransaction(editor, tr);
   return true;
+}
+
+/**
+ * Replace the entire SDT node (wrapper + content) while preserving all attrs.
+ * Used for `contentLocked` SDTs where inner-content modification is blocked
+ * by the lock plugin, but whole-node replacement is allowed.
+ */
+function replaceEntireSdt(editor: Editor, target: ContentControlTarget, text: string): boolean {
+  const resolved = resolveSdtByTarget(editor.state.doc, target);
+
+  // 1. Capture original node state FIRST for potential recovery
+  const originalNode = resolved.node;
+  const originalPos = resolved.pos;
+  const originalAttrs = { ...resolved.node.attrs };
+
+  // 2. Build the new content
+  let newContent;
+  if (resolved.kind === 'inline') {
+    newContent = text.length > 0 ? editor.schema.text(text) : null;
+  } else {
+    const paragraph = buildEmptyBlockContent(editor, resolved.node);
+    if (!paragraph) return false;
+    const paragraphText = text.length > 0 ? buildTextWithTabs(editor.schema, text, undefined) : null;
+    newContent = paragraph.type.create(paragraph.attrs ?? null, paragraphText, paragraph.marks);
+  }
+
+  // 3. Create the replacement node preserving all original attributes (including id)
+  const updatedNode = originalNode.type.create(originalAttrs, newContent, originalNode.marks);
+
+  // 4. Perform the replacement - if this fails, original doc state is unchanged
+  //    (ProseMirror transactions are atomic - either fully applied or not at all)
+  try {
+    const { tr } = editor.state;
+    const from = originalPos;
+    const to = originalPos + originalNode.nodeSize;
+    tr.replaceWith(from, to, updatedNode);
+    dispatchTransaction(editor, tr);
+    return true;
+  } catch (err) {
+    // Transaction failed - document state is unchanged, original node still exists
+    console.error('[replaceEntireSdt] Replacement failed, original node preserved:', err);
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -920,14 +965,17 @@ function replaceContentWrapper(
   options?: MutationOptions,
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
-  assertNotContentLocked(sdt, 'replaceContent');
+  assertNotFullyLocked(sdt, 'replaceContent');
   if ((input.format ?? 'text') === 'text' && alreadyMatchesPlainTextReplacement(sdt, input.content)) {
     return buildMutationFailure('NO_OP', 'Content control already contains the requested text.');
   }
   const target = buildTarget(sdt);
+  const useWholeNode = requiresWholeNodeReplacement(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return replaceSdtTextContent(editor, input.target, input.content);
+    return useWholeNode
+      ? replaceEntireSdt(editor, input.target, input.content)
+      : replaceSdtTextContent(editor, input.target, input.content);
   });
 }
 
@@ -937,14 +985,15 @@ function clearContentWrapper(
   options?: MutationOptions,
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
-  assertNotContentLocked(sdt, 'clearContent');
+  assertNotFullyLocked(sdt, 'clearContent');
   if (alreadyMatchesPlainTextReplacement(sdt, '')) {
     return buildMutationFailure('NO_OP', 'Content control is already empty.');
   }
   const target = buildTarget(sdt);
+  const useWholeNode = requiresWholeNodeReplacement(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return replaceSdtTextContent(editor, input.target, '');
+    return useWholeNode ? replaceEntireSdt(editor, input.target, '') : replaceSdtTextContent(editor, input.target, '');
   });
 }
 
@@ -954,16 +1003,20 @@ function appendContentWrapper(
   options?: MutationOptions,
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
-  assertNotContentLocked(sdt, 'appendContent');
+  assertNotFullyLocked(sdt, 'appendContent');
   if (input.content.length === 0) {
     return buildMutationFailure('NO_OP', 'Appended content is empty.');
   }
   const target = buildTarget(sdt);
+  const useWholeNode = requiresWholeNodeReplacement(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
     const resolved = resolveSdtByTarget(editor.state.doc, input.target);
     const currentText = resolved.node.textContent;
-    return replaceSdtTextContent(editor, input.target, currentText + input.content);
+    const newText = currentText + input.content;
+    return useWholeNode
+      ? replaceEntireSdt(editor, input.target, newText)
+      : replaceSdtTextContent(editor, input.target, newText);
   });
 }
 
@@ -973,16 +1026,20 @@ function prependContentWrapper(
   options?: MutationOptions,
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
-  assertNotContentLocked(sdt, 'prependContent');
+  assertNotFullyLocked(sdt, 'prependContent');
   if (input.content.length === 0) {
     return buildMutationFailure('NO_OP', 'Prepended content is empty.');
   }
   const target = buildTarget(sdt);
+  const useWholeNode = requiresWholeNodeReplacement(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
     const resolved = resolveSdtByTarget(editor.state.doc, input.target);
     const currentText = resolved.node.textContent;
-    return replaceSdtTextContent(editor, input.target, input.content + currentText);
+    const newText = input.content + currentText;
+    return useWholeNode
+      ? replaceEntireSdt(editor, input.target, newText)
+      : replaceSdtTextContent(editor, input.target, newText);
   });
 }
 
@@ -1269,14 +1326,17 @@ function textSetValueWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertControlType(sdt, 'text', 'text.setValue');
-  assertNotContentLocked(sdt, 'text.setValue');
+  assertNotFullyLocked(sdt, 'text.setValue');
   if (alreadyMatchesPlainTextReplacement(sdt, input.value)) {
     return buildMutationFailure('NO_OP', 'Content control text already matches the requested value.');
   }
   const target = buildTarget(sdt);
+  const useWholeNode = requiresWholeNodeReplacement(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return replaceSdtTextContent(editor, input.target, input.value);
+    return useWholeNode
+      ? replaceEntireSdt(editor, input.target, input.value)
+      : replaceSdtTextContent(editor, input.target, input.value);
   });
 }
 
@@ -1287,14 +1347,15 @@ function textClearValueWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertControlType(sdt, 'text', 'text.clearValue');
-  assertNotContentLocked(sdt, 'text.clearValue');
+  assertNotFullyLocked(sdt, 'text.clearValue');
   if (alreadyMatchesPlainTextReplacement(sdt, '')) {
     return buildMutationFailure('NO_OP', 'Content control text is already empty.');
   }
   const target = buildTarget(sdt);
+  const useWholeNode = requiresWholeNodeReplacement(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return replaceSdtTextContent(editor, input.target, '');
+    return useWholeNode ? replaceEntireSdt(editor, input.target, '') : replaceSdtTextContent(editor, input.target, '');
   });
 }
 

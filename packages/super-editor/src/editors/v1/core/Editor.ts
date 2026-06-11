@@ -1647,6 +1647,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.view?.dom?.removeEventListener('blur', this.#handleDomCompositionEnd);
     this.#deferredCompositionRange = null;
     this.#deferredCompositionDeletions = [];
+    this.#deferredCompositionId = undefined;
     if (this.#renderer) {
       this.#renderer.destroy();
     } else if (this.view) {
@@ -3121,6 +3122,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #deferredCompositionRange: { from: number; to: number } | null = null;
   #deferredCompositionDeletions: Array<{ pos: number; slice: PmSlice }> = [];
+  /**
+   * `composition` meta of the most recent deferred composition transaction
+   * (prosemirror-view's composition id). Re-stamped onto the flush transaction
+   * so prosemirror-history groups it with the composed text into one undo
+   * event — the flush's mark-only steps have empty step maps, so without the
+   * shared id the adjacency check fails and the flush becomes its own undo
+   * step (first undo would strip suggestion marks but keep the text).
+   */
+  #deferredCompositionId: unknown = undefined;
 
   /**
    * Whether tracked-transaction rewriting of this composition transaction can
@@ -3254,8 +3264,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #flushDeferredCompositionTracking(): void {
     const range = this.#deferredCompositionRange;
     const deletions = this.#deferredCompositionDeletions;
+    const compositionId = this.#deferredCompositionId;
     this.#deferredCompositionRange = null;
     this.#deferredCompositionDeletions = [];
+    this.#deferredCompositionId = undefined;
     if (!range || this.isDestroyed || !this.view) return;
 
     const state = this.state;
@@ -3337,6 +3349,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     tr.setMeta('skipTrackChanges', true);
     tr.setMeta('compositionTrackingFlush', true);
+    // Share the composition id with the deferred text transactions so
+    // prosemirror-history merges this flush into the same undo event — undo
+    // must remove the composed text and its suggestion marks together, and the
+    // unified history coordinator must not see a second undoable event.
+    if (compositionId !== undefined) tr.setMeta('composition', compositionId);
     // Surface the insertion to the sidebar bubble pipeline: mark-only steps
     // have empty step maps, so collectTouchedTrackedChangeIds can only learn
     // the new change id from this meta (same contract as replaceStep).
@@ -3430,6 +3447,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const deferredCompositionDeletions = deferTrackingForComposition
         ? this.#collectDeferredCompositionDeletions(transactionToApply)
         : [];
+      if (deferTrackingForComposition) {
+        const compositionMeta = transactionToApply.getMeta('composition');
+        if (compositionMeta !== undefined) this.#deferredCompositionId = compositionMeta;
+      }
 
       const trackedUser = this.options.user ?? {};
       transactionToApply =

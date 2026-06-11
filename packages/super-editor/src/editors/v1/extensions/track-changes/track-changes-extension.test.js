@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
+import { undoDepth } from 'prosemirror-history';
 import { TrackChanges } from './track-changes.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from './constants.js';
 import { TrackChangesBasePlugin, TrackChangesBasePluginKey } from './plugins/trackChangesBasePlugin.js';
@@ -1226,6 +1227,42 @@ describe('TrackChanges extension commands', () => {
       // Post-composition flush converts the composed range into a tracked insert.
       expect(interactionEditor.state.doc.textContent).toBe('é');
       expect(hasTrackInsert()).toBe(true);
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: deferred IME tracking flush merges into the composition undo event', async () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.setDocumentMode('suggesting');
+
+      const view = interactionEditor.view;
+      const baselineUndoDepth = undoDepth(interactionEditor.state);
+      view.focus();
+      view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+      view.dispatch(interactionEditor.state.tr.insertText('你').setMeta('composition', 1));
+      await Promise.resolve();
+
+      view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: '你', bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('你');
+      // The mark flush must share the composition's undo event: a first undo
+      // that only strips suggestion marks would leave the text behind as an
+      // untracked edit (and desync the unified history coordinator).
+      expect(undoDepth(interactionEditor.state)).toBe(baselineUndoDepth + 1);
+
+      interactionEditor.commands.undo();
+
+      expect(interactionEditor.state.doc.textContent).toBe('');
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('');
     } finally {
       interactionEditor.destroy();
     }

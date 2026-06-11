@@ -2973,8 +2973,12 @@ export class DomPainter {
       innerWrapper.style.transformOrigin = 'center';
       if (block.drawingKind === 'shapeGroup' && block.groupTransform) {
         const effectExtent = block.effectExtent ?? { left: 0, top: 0, right: 0, bottom: 0 };
-        const originX = effectExtent.left + (block.groupTransform.width ?? fragment.geometry.width) / 2;
-        const originY = effectExtent.top + (block.groupTransform.height ?? fragment.geometry.height) / 2;
+        const groupWidth =
+          block.groupTransform.width ?? Math.max(0, block.geometry.width - effectExtent.left - effectExtent.right);
+        const groupHeight =
+          block.groupTransform.height ?? Math.max(0, block.geometry.height - effectExtent.top - effectExtent.bottom);
+        const originX = effectExtent.left + groupWidth / 2;
+        const originY = effectExtent.top + groupHeight / 2;
         innerWrapper.style.transformOrigin = `${originX}px ${originY}px`;
       }
 

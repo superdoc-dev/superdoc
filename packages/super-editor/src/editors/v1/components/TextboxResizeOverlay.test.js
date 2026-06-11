@@ -130,6 +130,100 @@ describe('TextboxResizeOverlay', () => {
     remove();
   });
 
+  it('NW resize: shifts marginOffset origin up-left by the same delta as the size growth', async () => {
+    const editor = createMockEditor();
+    const { textboxEl, remove } = createTextboxElement();
+
+    const wrapper = mount(TextboxResizeOverlay, {
+      attachTo: document.body,
+      props: { editor, visible: true, textboxElement: textboxEl },
+    });
+
+    // textboxEl is 120×60 at clientRect (10,20). NW handle is top-left corner.
+    // Drag NW by (-30, -20): cursor moves upper-left → shape grows to 150×80.
+    const handle = wrapper.find('.resize-handle--nw');
+    await handle.trigger('mousedown', { clientX: 10, clientY: 20 });
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: -20, clientY: 0 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: -20, clientY: 0 }));
+
+    // width grows by 30 → horizontal shifts left by 30: 50 - 30 = 20
+    // height grows by 20 → top shifts up by 20: 80 - 20 = 60
+    expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'width', 150);
+    expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'height', 80);
+    expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'marginOffset', { horizontal: 20, top: 60 });
+
+    wrapper.unmount();
+    remove();
+  });
+
+  it('SW resize: shifts only horizontal origin, top stays fixed', async () => {
+    const editor = createMockEditor();
+    const { textboxEl, remove } = createTextboxElement();
+
+    const wrapper = mount(TextboxResizeOverlay, {
+      attachTo: document.body,
+      props: { editor, visible: true, textboxElement: textboxEl },
+    });
+
+    // SW handle: drag left by 20, down by 15 → width grows 20, height grows 15.
+    const handle = wrapper.find('.resize-handle--sw');
+    await handle.trigger('mousedown', { clientX: 10, clientY: 80 });
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: -10, clientY: 95 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: -10, clientY: 95 }));
+
+    // horizontal: 50 - 20 = 30, top stays 80
+    expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'width', 140);
+    expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'height', 75);
+    expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'marginOffset', { horizontal: 30, top: 80 });
+
+    wrapper.unmount();
+    remove();
+  });
+
+  it('NE resize: shifts only top origin, horizontal stays fixed', async () => {
+    const editor = createMockEditor();
+    const { textboxEl, remove } = createTextboxElement();
+
+    const wrapper = mount(TextboxResizeOverlay, {
+      attachTo: document.body,
+      props: { editor, visible: true, textboxElement: textboxEl },
+    });
+
+    // NE handle: drag right by 25, up by 10 → width grows 25, height grows 10.
+    const handle = wrapper.find('.resize-handle--ne');
+    await handle.trigger('mousedown', { clientX: 130, clientY: 20 });
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 155, clientY: 10 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 155, clientY: 10 }));
+
+    // horizontal stays 50, top: 80 - 10 = 70
+    expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'width', 145);
+    expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'height', 70);
+    expect(editor.state.tr.setNodeAttribute).toHaveBeenCalledWith(10, 'marginOffset', { horizontal: 50, top: 70 });
+
+    wrapper.unmount();
+    remove();
+  });
+
+  it('SE resize: does not modify marginOffset', async () => {
+    const editor = createMockEditor();
+    const { textboxEl, remove } = createTextboxElement();
+
+    const wrapper = mount(TextboxResizeOverlay, {
+      attachTo: document.body,
+      props: { editor, visible: true, textboxElement: textboxEl },
+    });
+
+    const handle = wrapper.find('.resize-handle--se');
+    await handle.trigger('mousedown', { clientX: 130, clientY: 80 });
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 190, clientY: 120 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 190, clientY: 120 }));
+
+    expect(editor.state.tr.setNodeAttribute).not.toHaveBeenCalledWith(10, 'marginOffset', expect.anything());
+
+    wrapper.unmount();
+    remove();
+  });
+
   it('dispatches marginOffset update when dragging overlay body', async () => {
     const editor = createMockEditor();
     const { textboxEl, remove } = createTextboxElement();
